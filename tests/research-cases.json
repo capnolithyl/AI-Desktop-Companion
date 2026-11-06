@@ -1,0 +1,242 @@
+[
+  {
+    "id": "science-supported",
+    "category": "science",
+    "source": "The Helios II mission will test docking systems in Earth orbit in 2027.",
+    "candidate": {
+      "source": 1,
+      "subject": "Helios II",
+      "claim": "Helios II will test docking in 2027.",
+      "quote": "The Helios II mission will test docking systems in Earth orbit in 2027."
+    },
+    "accept": true
+  },
+  {
+    "id": "science-invented-number",
+    "category": "science",
+    "source": "The Helios II mission will test docking systems in Earth orbit in 2027.",
+    "candidate": {
+      "source": 1,
+      "subject": "Helios II",
+      "claim": "Helios II will test docking in 2028.",
+      "quote": "The Helios II mission will test docking systems in Earth orbit in 2027."
+    },
+    "accept": false
+  },
+  {
+    "id": "software-supported",
+    "category": "software",
+    "source": "The Northstar 3 application released a public beta in October 2026 with no stable date confirmed.",
+    "candidate": {
+      "source": 1,
+      "subject": "Northstar 3",
+      "claim": "Northstar 3 released a public beta in 2026.",
+      "quote": "The Northstar 3 application released a public beta in October 2026 with no stable date confirmed."
+    },
+    "accept": true
+  },
+  {
+    "id": "software-invented-number",
+    "category": "software",
+    "source": "The Northstar 3 application released a public beta in October 2026 with no stable date confirmed.",
+    "candidate": {
+      "source": 1,
+      "subject": "Northstar 3",
+      "claim": "Northstar 3 released a beta in 2025.",
+      "quote": "The Northstar 3 application released a public beta in October 2026 with no stable date confirmed."
+    },
+    "accept": false
+  },
+  {
+    "id": "music-supported",
+    "category": "music",
+    "source": "The band Ember Tide announced in September 2026 that its third album is still in production.",
+    "candidate": {
+      "source": 1,
+      "subject": "Ember Tide",
+      "claim": "Ember Tide announced album production in 2026.",
+      "quote": "The band Ember Tide announced in September 2026 that its third album is still in production."
+    },
+    "accept": true
+  },
+  {
+    "id": "music-invented-number",
+    "category": "music",
+    "source": "The band Ember Tide announced in September 2026 that its third album is still in production.",
+    "candidate": {
+      "source": 1,
+      "subject": "Ember Tide",
+      "claim": "Ember Tide announced album production in 2027.",
+      "quote": "The band Ember Tide announced in September 2026 that its third album is still in production."
+    },
+    "accept": false
+  },
+  {
+    "id": "civics-supported",
+    "category": "civics",
+    "source": "The committee approved the proposal in 2026 but the measure has not passed the legislature.",
+    "candidate": {
+      "source": 1,
+      "subject": "the proposal",
+      "claim": "The proposal was approved by committee in 2026.",
+      "quote": "The committee approved the proposal in 2026 but the measure has not passed the legislature."
+    },
+    "accept": true
+  },
+  {
+    "id": "civics-invented-number",
+    "category": "civics",
+    "source": "The committee approved the proposal in 2026 but the measure has not passed the legislature.",
+    "candidate": {
+      "source": 1,
+      "subject": "the proposal",
+      "claim": "The proposal was approved by committee in 2028.",
+      "quote": "The committee approved the proposal in 2026 but the measure has not passed the legislature."
+    },
+    "accept": false
+  },
+  {
+    "id": "history-supported",
+    "category": "history",
+    "source": "The expedition led by Captain Arlen departed the coastal fortress in 1642 and returned the next spring.",
+    "candidate": {
+      "source": 1,
+      "subject": "Captain Arlen",
+      "claim": "Captain Arlen departed in 1642.",
+      "quote": "The expedition led by Captain Arlen departed the coastal fortress in 1642 and returned the next spring."
+    },
+    "accept": true
+  },
+  {
+    "id": "history-invented-number",
+    "category": "history",
+    "source": "The expedition led by Captain Arlen departed the coastal fortress in 1642 and returned the next spring.",
+    "candidate": {
+      "source": 1,
+      "subject": "Captain Arlen",
+      "claim": "Captain Arlen departed in 1649.",
+      "quote": "The expedition led by Captain Arlen departed the coastal fortress in 1642 and returned the next spring."
+    },
+    "accept": false
+  },
+  {
+    "id": "hardware-supported",
+    "category": "hardware",
+    "source": "The Pixelite workstation has 16 GB of graphics memory and can run local workloads.",
+    "candidate": {
+      "source": 1,
+      "subject": "Pixelite",
+      "claim": "Pixelite has 16 GB of graphics memory.",
+      "quote": "The Pixelite workstation has 16 GB of graphics memory and can run local workloads."
+    },
+    "accept": true
+  },
+  {
+    "id": "hardware-invented-number",
+    "category": "hardware",
+    "source": "The Pixelite workstation has 16 GB of graphics memory and can run local workloads.",
+    "candidate": {
+      "source": 1,
+      "subject": "Pixelite",
+      "claim": "Pixelite has 24 GB of graphics memory.",
+      "quote": "The Pixelite workstation has 16 GB of graphics memory and can run local workloads."
+    },
+    "accept": false
+  },
+  {
+    "id": "research-supported",
+    "category": "research",
+    "source": "The observational study enrolled 128 adults in 2025 and established no causal relationship.",
+    "candidate": {
+      "source": 1,
+      "subject": "the observational study",
+      "claim": "The observational study enrolled 128 adults in 2025.",
+      "quote": "The observational study enrolled 128 adults in 2025 and established no causal relationship."
+    },
+    "accept": true
+  },
+  {
+    "id": "research-invented-number",
+    "category": "research",
+    "source": "The observational study enrolled 128 adults in 2025 and established no causal relationship.",
+    "candidate": {
+      "source": 1,
+      "subject": "the observational study",
+      "claim": "The observational study enrolled 200 adults in 2025.",
+      "quote": "The observational study enrolled 128 adults in 2025 and established no causal relationship."
+    },
+    "accept": false
+  },
+  {
+    "id": "sports-supported",
+    "category": "sports",
+    "source": "The Harbor FC club announced that its championship match is scheduled for November 28, 2026.",
+    "candidate": {
+      "source": 1,
+      "subject": "Harbor FC",
+      "claim": "Harbor FC has a match scheduled for 28 November 2026.",
+      "quote": "The Harbor FC club announced that its championship match is scheduled for November 28, 2026."
+    },
+    "accept": true
+  },
+  {
+    "id": "sports-invented-number",
+    "category": "sports",
+    "source": "The Harbor FC club announced that its championship match is scheduled for November 28, 2026.",
+    "candidate": {
+      "source": 1,
+      "subject": "Harbor FC",
+      "claim": "Harbor FC has a match scheduled for 29 November 2026.",
+      "quote": "The Harbor FC club announced that its championship match is scheduled for November 28, 2026."
+    },
+    "accept": false
+  },
+  {
+    "id": "entertainment-supported",
+    "category": "entertainment",
+    "source": "The animated series Skytree Tales was announced for 2027 and has no confirmed release month.",
+    "candidate": {
+      "source": 1,
+      "subject": "Skytree Tales",
+      "claim": "Skytree Tales was announced for 2027.",
+      "quote": "The animated series Skytree Tales was announced for 2027 and has no confirmed release month."
+    },
+    "accept": true
+  },
+  {
+    "id": "entertainment-invented-number",
+    "category": "entertainment",
+    "source": "The animated series Skytree Tales was announced for 2027 and has no confirmed release month.",
+    "candidate": {
+      "source": 1,
+      "subject": "Skytree Tales",
+      "claim": "Skytree Tales was announced for 2029.",
+      "quote": "The animated series Skytree Tales was announced for 2027 and has no confirmed release month."
+    },
+    "accept": false
+  },
+  {
+    "id": "business-supported",
+    "category": "business",
+    "source": "The Orchard Works company reported revenue of 12 million dollars for fiscal year 2025, not profit.",
+    "candidate": {
+      "source": 1,
+      "subject": "Orchard Works",
+      "claim": "Orchard Works reported revenue of 12 million in 2025.",
+      "quote": "The Orchard Works company reported revenue of 12 million dollars for fiscal year 2025, not profit."
+    },
+    "accept": true
+  },
+  {
+    "id": "business-invented-number",
+    "category": "business",
+    "source": "The Orchard Works company reported revenue of 12 million dollars for fiscal year 2025, not profit.",
+    "candidate": {
+      "source": 1,
+      "subject": "Orchard Works",
+      "claim": "Orchard Works reported revenue of 14 million in 2025.",
+      "quote": "The Orchard Works company reported revenue of 12 million dollars for fiscal year 2025, not profit."
+    },
+    "accept": false
+  }
+]

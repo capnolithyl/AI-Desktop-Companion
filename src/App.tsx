@@ -23,7 +23,7 @@ import {
 import { PersonalityPresets, PersonalitySliders } from "./PersonalityControls";
 import { parseSlashCommand, SLASH_HELP } from "./slash-commands";
 import { runtimeContext } from "./runtime-context";
-import { formatDebugLog, type Diagnostics, type OllamaStats } from "./debug-log";
+import { formatDebugLog, type Diagnostics, type OllamaStats, type ResearchAudit } from "./debug-log";
 import {
   memoryApi, memoryContext, characterContext, characterAnswerGuidance, readMessageMetadata,
   type MemoryConversation, type UserFact, type PersistedMessage,
@@ -38,7 +38,7 @@ type CacheInfo = { pages: number; bytes: number };
 type Activity = { requestId: string; text: string };
 type Connection = { mode: "loading" | "online" | "offline"; text: string };
 type ChatChunk = { requestId: string; content: string };
-type ChatCompletion = { content: string; stats: OllamaStats | null; sources: WebResult[]; searchQuery?: string | null; sourcesCarriedOver?: boolean };
+type ChatCompletion = { content: string; stats: OllamaStats | null; sources: WebResult[]; searchQuery?: string | null; sourcesCarriedOver?: boolean; researchAudit?: ResearchAudit | null };
 type LogMessage = Message & { createdAt: number; diagnostics?: Diagnostics; failed?: boolean; sources?: WebResult[]; searchQuery?: string; sourcesCarriedOver?: boolean };
 const HOTKEY = "Control+Alt+M";
 const BUNDLED_PORTRAIT = "/mikan.png";
@@ -153,6 +153,12 @@ function ReplyMetrics({ diagnostics }: { diagnostics?: Diagnostics }) {
     <Metric title="Model time" value={nanoseconds(s?.totalDurationNs)} />
     <Metric title="Load time" value={nanoseconds(s?.loadDurationNs)} />
     <Metric title="Prompt eval" value={nanoseconds(s?.promptEvalDurationNs)} />
+    {diagnostics.research && <>
+      <Metric title="Evidence" value={diagnostics.research.status} />
+      <Metric title="Quotes matched" value={diagnostics.research.accepted} />
+      <Metric title="Candidates rejected" value={diagnostics.research.rejected} />
+      <Metric title="Evidence pass" value={seconds(diagnostics.research.elapsedMs)} />
+    </>}
     <span className="metric model-tag" title="Model used">{diagnostics.model}</span>
   </div>;
 }
@@ -860,6 +866,7 @@ export default function App() {
           endpoint: settings.endpoint,
           model: settings.model,
           autoSearch: settings.autoSearch && !withSearch,
+          structuredResearch: settings.structuredResearch,
           searxngEndpoint: settings.searxngEndpoint,
           cacheHours: settings.cacheHours,
           contextWindow: settings.contextWindow,
@@ -876,7 +883,8 @@ export default function App() {
         elapsedMs: duration,
         firstTokenMs,
         model: settings.model,
-        stats: completion.stats
+        stats: completion.stats,
+        research: completion.researchAudit ?? undefined
       };
       const finalText = completion.content || accumulated || "(The model returned no visible text.)";
       const assistant: LogMessage = {
@@ -1337,6 +1345,13 @@ export default function App() {
               onChange={e => setDraft(current => ({ ...current, autoSearch: e.target.checked }))}/>
             <span><strong>Automatic web tools</strong>
               <small>Allow Ollama to decide when to search and read public webpages. Slower on some models; requests go to external sites. Off by default.</small>
+            </span>
+          </label>
+          <label className="settings-toggle">
+            <input type="checkbox" checked={draft.structuredResearch}
+              onChange={e => setDraft(current => ({ ...current, structuredResearch: e.target.checked }))}/>
+            <span><strong>Experimental source-anchored research</strong>
+              <small>On new automatic web research, Qwen first extracts candidate facts with source quotations. Mikan then writes the answer normally. Adds one local model pass and may slow responses. Disable to compare with the original pipeline.</small>
             </span>
           </label>
           <div className="settings-section-title"><HardDrive size={17}/> Webpage cache</div>
