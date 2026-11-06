@@ -5,6 +5,7 @@ mod agent_tools;
 mod research_intent;
 mod memory;
 mod memory_extraction;
+mod voice;
 use futures_util::{future::{AbortHandle, Abortable}, StreamExt};
 use std::{collections::HashMap, sync::Mutex};
 use serde::{Deserialize, Serialize};
@@ -472,6 +473,8 @@ pub fn run() {
             web_reader::clear_web_cache,
             chat_stream,
             cancel_chat,
+            voice::voice_health,
+            voice::voice_synthesize,
             memory::memory_list_conversations,
             memory::memory_create_conversation,
             memory::memory_list_messages,
