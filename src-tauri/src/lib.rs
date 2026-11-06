@@ -407,6 +407,10 @@ pub fn run() {
             memory::memory_add_fact,
             memory::memory_update_fact,
             memory::memory_delete_fact,
+            memory::memory_list_character_facts,
+            memory::memory_add_character_fact,
+            memory::memory_update_character_fact,
+            memory::memory_delete_character_fact,
             toggle_companion,
             hide_companion
         ])
