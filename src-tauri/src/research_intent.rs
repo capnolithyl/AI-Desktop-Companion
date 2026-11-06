@@ -180,9 +180,11 @@ mod tests {
             engine:"test".into(),
             published_date:None,
         };
-        let prompt = evidence_instruction("What's new?", &[result]);
+        let prompt = evidence_instruction();
+        let excerpts = evidence_data(&[result]);
         assert!(excerpts.contains("Terrasite was released in 2023."));
-        assert!(excerpts.contains("Published: unknown"));\n        assert!(!prompt.contains("Terrasite"));
+        assert!(excerpts.contains("Published: unknown"));
+        assert!(!prompt.contains("Terrasite"));
         assert!(prompt.contains("Prior assistant replies can be wrong"));
     }
 }
