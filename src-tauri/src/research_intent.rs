@@ -185,6 +185,6 @@ mod tests {
         assert!(excerpts.contains("Terrasite was released in 2023."));
         assert!(excerpts.contains("Published: unknown"));
         assert!(!prompt.contains("Terrasite"));
-        assert!(prompt.contains("Prior assistant replies can be wrong"));
+        assert!(prompt.contains("Prior assistant messages can be wrong"));
     }
 }
