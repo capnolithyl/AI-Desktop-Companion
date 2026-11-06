@@ -2,14 +2,14 @@ import { useCallback, useEffect, useRef, useState, type CSSProperties, type Mous
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { webContext, type WebResult } from "./web-search";
+import { webContext, pageContext, type PageDocument, type WebResult } from "./web-search";
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { register, unregister } from "@tauri-apps/plugin-global-shortcut";
 import {
   ArrowLeft, ArrowUp, Cat, Check, Clock3, History,
-  ExternalLink, LoaderCircle, MessageCircle, RotateCw, Search, Settings2, SlidersHorizontal, Sparkles, SquarePen, X
+  BookOpen, ExternalLink, HardDrive, LoaderCircle, MessageCircle, RotateCw, Search, Settings2, SlidersHorizontal, Sparkles, SquarePen, X
 } from "lucide-react";
 import {
   DEFAULT_SETTINGS, DEFAULT_APPEARANCE, loadPortrait, loadSettings, savePortrait, saveSettings,
@@ -22,7 +22,11 @@ import {
 import { PersonalityPresets, PersonalitySliders } from "./PersonalityControls";
 import { parseSlashCommand, SLASH_HELP } from "./slash-commands";
 
-type Screen = "compact" | "log" | "settings" | "search" | "personality" | "help";
+type Screen = "compact" | "log" | "settings" | "search" | "page" | "personality" | "help";
+type SettingsTab = "ai" | "internet" | "appearance";
+type SearchService = { state: string; message: string };
+type CacheInfo = { pages: number; bytes: number };
+type Activity = { requestId: string; text: string };
 type Connection = { mode: "loading" | "online" | "offline"; text: string };
 type ChatChunk = { requestId: string; content: string };
 type OllamaStats = {
@@ -33,7 +37,7 @@ type OllamaStats = {
   promptEvalDurationNs: number | null;
   evalDurationNs: number | null;
 };
-type ChatCompletion = { content: string; stats: OllamaStats | null };
+type ChatCompletion = { content: string; stats: OllamaStats | null; sources: WebResult[] };
 type Diagnostics = { elapsedMs: number; firstTokenMs: number | null; model: string; stats: OllamaStats | null };
 type LogMessage = Message & { createdAt: number; diagnostics?: Diagnostics; failed?: boolean; sources?: WebResult[] };
 const HOTKEY = "Control+Alt+M";
@@ -111,6 +115,17 @@ export default function App() {
   const [screen, setScreen] = useState<Screen>("compact");
   const [settings, setSettings] = useState<Settings>(loadSettings);
   const [draft, setDraft] = useState<Settings>(settings);
+  const [settingsTab, setSettingsTab] = useState<SettingsTab>("ai");
+  const [service, setService] = useState<SearchService | null>(null);
+  const [serviceBusy, setServiceBusy] = useState(false);
+  const [serviceError, setServiceError] = useState<string | null>(null);
+  const [cacheInfo, setCacheInfo] = useState<CacheInfo | null>(null);
+  const [page, setPage] = useState<PageDocument | null>(null);
+  const [pageUrl, setPageUrl] = useState("");
+  const [pageError, setPageError] = useState<string | null>(null);
+  const [pageBusy, setPageBusy] = useState(false);
+  const [pageReturn, setPageReturn] = useState<"search" | "compact">("compact");
+  const [activity, setActivity] = useState("Thinking…");
   const [messages, setMessages] = useState<LogMessage[]>([]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
@@ -128,6 +143,7 @@ export default function App() {
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const logRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const pageInputRef = useRef<HTMLInputElement>(null);
   const portraitUrl = useRef<string | null>(null);
 
   const focusInput = useCallback(() => {
@@ -201,6 +217,7 @@ export default function App() {
   useEffect(() => {
     if (screen === "compact") focusInput();
     if (screen === "search") requestAnimationFrame(() => searchInputRef.current?.focus());
+    if (screen === "page") requestAnimationFrame(() => pageInputRef.current?.focus());
   }, [screen, focusInput]);
 
   const clearChat = () => {
@@ -211,11 +228,38 @@ export default function App() {
     goCompact();
   };
 
-  const openSettings = () => {
+  const refreshService = async () => {
+    setServiceBusy(true);
+    setServiceError(null);
+    try { setService(await invoke<SearchService>("search_service", { action: "status" })); }
+    catch (error) { setServiceError(errorText(error)); }
+    finally { setServiceBusy(false); }
+  };
+  const manageService = async (action: "start" | "stop" | "status") => {
+    setServiceBusy(true);
+    setServiceError(null);
+    try {
+      const state = await invoke<SearchService>("search_service", { action });
+      setService(state);
+      if (screen === "compact") setFeedback(state.message);
+    } catch (error) {
+      const text = errorText(error);
+      setServiceError(text);
+      setFeedback(text);
+    } finally { setServiceBusy(false); }
+  };
+  const refreshCache = async () => {
+    try { setCacheInfo(await invoke<CacheInfo>("web_cache_info")); }
+    catch (error) { console.warn("Web cache unavailable:", error); }
+  };
+  const openSettingsTab = (tab: SettingsTab) => {
+    setSettingsTab(tab);
     setDraft(settings);
-    void refreshModels(settings.endpoint);
+    if (tab === "ai") void refreshModels(settings.endpoint);
+    if (tab === "internet") { void refreshService(); void refreshCache(); }
     setScreen("settings");
   };
+  const openSettings = () => openSettingsTab("ai");
 
   const choosePortrait = async (file?: File) => {
     if (!file) return;
@@ -252,13 +296,14 @@ export default function App() {
   };
 
   const saveConfiguration = () => {
-    const updated = {
+    const updated: Settings = {
+      ...draft,
       endpoint: draft.endpoint.trim().replace(/\/+$/, ""),
       model: draft.model.trim(),
       systemPrompt: draft.systemPrompt.trim(),
       searxngEndpoint: draft.searxngEndpoint.trim().replace(/\/+$/, ""),
       appearance: { ...draft.appearance },
-      personality: { ...draft.personality }
+      personality: { ...settings.personality }
     };
     setSettings(updated);
     saveSettings(updated);
@@ -287,6 +332,24 @@ export default function App() {
     } finally {
       setSearchBusy(false);
     }
+  };
+
+  const openPage = async (url: string, fromSearch = false, refresh = false) => {
+    setPageUrl(url);
+    setPageReturn(fromSearch ? "search" : "compact");
+    setScreen("page");
+    setPage(null);
+    setPageError(null);
+    if (!url.trim()) return;
+    setPageBusy(true);
+    try {
+      const document = await invoke<PageDocument>("read_page", {
+        url: url.trim(), refresh, ttlHours: settings.cacheHours
+      });
+      setPage(document);
+      void refreshCache();
+    } catch (error) { setPageError(errorText(error)); }
+    finally { setPageBusy(false); }
   };
 
   const runSlashCommand = (text: string): void => {
@@ -334,15 +397,25 @@ export default function App() {
       case "search":
         void performSearch(argument);
         return;
+      case "read":
+        void openPage(argument);
+        return;
+      case "search-start":
+        void manageService("start"); return;
+      case "search-stop":
+        void manageService("stop"); return;
+      case "search-status":
+        void manageService("status"); return;
+      case "internet":
+        openSettingsTab("internet"); return;
       case "log":
       case "history": setScreen("log"); return;
-      case "settings":
+      case "settings": openSettings(); return;
       case "appearance":
-      case "portrait":
+      case "portrait": openSettingsTab("appearance"); return;
       case "prompt":
       case "endpoint":
-      case "models":
-        openSettings(); return;
+      case "models": openSettingsTab("ai"); return;
       case "model":
         if (!argument) { openSettings(); return; }
         if (busy) { setFeedback("Wait until Mikan finishes her reply before switching models."); return; }
@@ -422,7 +495,7 @@ export default function App() {
     }
   };
 
-  const send = async (withSearch?: { query: string; results: WebResult[] }) => {
+  const send = async (withSearch?: { query: string; results: WebResult[]; page?: PageDocument }) => {
     const text = withSearch ? withSearch.query : input.trim();
     if (!text) return;
 
@@ -444,6 +517,7 @@ export default function App() {
     }]);
     setInput("");
     setBusy(true);
+    setActivity("Thinking…");
     goCompact();
     const started = performance.now();
     let firstTokenMs: number | null = null;
@@ -451,6 +525,9 @@ export default function App() {
     let unlisten: UnlistenFn | null = null;
 
     try {
+      const stopActivity = await listen<Activity>("mikan://activity", event => {
+        if (event.payload.requestId === requestId) setActivity(event.payload.text);
+      });
       unlisten = await listen<ChatChunk>("mikan://chat", event => {
         if (event.payload.requestId !== requestId || !event.payload.content) return;
         if (firstTokenMs == null) firstTokenMs = performance.now() - started;
@@ -466,9 +543,12 @@ export default function App() {
           requestId,
           endpoint: settings.endpoint,
           model: settings.model,
+          autoSearch: settings.autoSearch && !withSearch,
+          searxngEndpoint: settings.searxngEndpoint,
+          cacheHours: settings.cacheHours,
           messages: [
             { role: "system", content: [settings.systemPrompt.trim(), personalityGuidance(settings.personality)].filter(Boolean).join("\n\n") },
-            ...(withSearch ? [{ role: "user", content: webContext(withSearch.query, withSearch.results) }] : []),
+            ...(withSearch ? [{ role: "user", content: withSearch.page ? pageContext(withSearch.query, withSearch.page) : webContext(withSearch.query, withSearch.results) }] : []),
             ...history.map(m => ({ role: m.role, content: m.content }))
           ]
         }
@@ -482,7 +562,7 @@ export default function App() {
       };
       const finalText = completion.content || accumulated || "(The model returned no visible text.)";
       setMessages(current => current.map(m =>
-        m.id === assistantId ? { ...m, content: finalText, diagnostics } : m
+        m.id === assistantId ? { ...m, content: finalText, diagnostics, sources: completion.sources?.length ? completion.sources : m.sources } : m
       ));
     } catch (error) {
       const message = errorText(error);
@@ -503,7 +583,7 @@ export default function App() {
   };
 
   const lastReply = [...messages].reverse().find(m => m.role === "assistant");
-  const replyText = busy ? (lastReply?.content || "Thinking…") : (feedback ?? lastReply?.content ?? greeting);
+  const replyText = busy ? (lastReply?.content || activity) : (feedback ?? lastReply?.content ?? greeting);
 
   const theme = {
     "--accent": settings.appearance.accent,
