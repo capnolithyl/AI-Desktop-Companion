@@ -91,7 +91,7 @@ export function MemoryPanel({
           </> : <>
             <p>{fact.fact}</p>
             <div className="memory-actions">
-              <small>{shortDate(fact.updatedAt)}</small>
+              <small>#{fact.id} · {shortDate(fact.updatedAt)}</small>
               <button type="button" onClick={() => { setEditId(fact.id); setEditValue(fact.fact); }}>Edit</button>
               {confirmId === `fact:${fact.id}` ? <>
                 <button type="button" className="memory-danger" disabled={working}
