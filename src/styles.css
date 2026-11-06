@@ -135,6 +135,15 @@ button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px
 .secondary-action { background: #493743; border: 1px solid #73545f; border-radius: 10px; color: #f8d5c8; padding: 9px 12px; display: inline-flex; align-items: center; gap: 7px; font-size: 12px; }
 .secondary-action:hover { background: #604553; }
 
+.log-tools {
+  display: flex; align-items: center; justify-content: space-between;
+  flex-wrap: wrap; gap: 9px; padding: 9px 15px;
+  border-bottom: 1px solid #55424f;
+}
+.log-tools > span { flex: 1 1 170px; min-width: 0; color: #bbaab5; font-size: 11px; line-height: 1.35; }
+.log-tools .secondary-action { flex: 0 0 auto; }
+.log-tools .log-copy-error { color: #ffb9c0; }
+
 .log-body { display: flex; flex-direction: column; gap: 17px; padding: 17px 16px 20px; overflow-y: auto; flex: 1; min-height: 0; }
 .log-empty { margin: auto; display: flex; flex-direction: column; gap: 13px; align-items: center; color: #bbaaaf; font-size: 13px; text-align: center; }
 .log-empty strong { color: #f7d2b9; font-size: 16px; }

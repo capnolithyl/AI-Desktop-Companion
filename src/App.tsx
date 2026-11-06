@@ -9,7 +9,7 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { register, unregister } from "@tauri-apps/plugin-global-shortcut";
 import {
-  ArrowLeft, ArrowUp, Brain, Cat, Check, Clock3, History,
+  ArrowLeft, ArrowUp, Brain, Cat, Check, Clock3, Copy, History,
   BookOpen, ExternalLink, HardDrive, LoaderCircle, MessageCircle, RotateCw, Search, Settings2, SlidersHorizontal, Sparkles, Square, SquarePen, X
 } from "lucide-react";
 import {
@@ -23,6 +23,7 @@ import {
 import { PersonalityPresets, PersonalitySliders } from "./PersonalityControls";
 import { parseSlashCommand, SLASH_HELP } from "./slash-commands";
 import { runtimeContext } from "./runtime-context";
+import { formatDebugLog, type Diagnostics, type OllamaStats } from "./debug-log";
 import {
   memoryApi, memoryContext, characterContext, readMessageMetadata,
   type MemoryConversation, type UserFact, type PersistedMessage,
@@ -37,16 +38,7 @@ type CacheInfo = { pages: number; bytes: number };
 type Activity = { requestId: string; text: string };
 type Connection = { mode: "loading" | "online" | "offline"; text: string };
 type ChatChunk = { requestId: string; content: string };
-type OllamaStats = {
-  outputTokens: number | null;
-  promptTokens: number | null;
-  totalDurationNs: number | null;
-  loadDurationNs: number | null;
-  promptEvalDurationNs: number | null;
-  evalDurationNs: number | null;
-};
 type ChatCompletion = { content: string; stats: OllamaStats | null; sources: WebResult[]; searchQuery?: string | null; sourcesCarriedOver?: boolean };
-type Diagnostics = { elapsedMs: number; firstTokenMs: number | null; model: string; stats: OllamaStats | null };
 type LogMessage = Message & { createdAt: number; diagnostics?: Diagnostics; failed?: boolean; sources?: WebResult[]; searchQuery?: string; sourcesCarriedOver?: boolean };
 const HOTKEY = "Control+Alt+M";
 const BUNDLED_PORTRAIT = "/mikan.png";
@@ -96,6 +88,29 @@ async function openSource(url: string): Promise<void> {
     console.warn("Could not open external link:", error);
   }
 }
+async function copyTextToClipboard(text: string): Promise<void> {
+  if (navigator.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return;
+    } catch {
+      // Some WebView2 setups deny the modern clipboard API; use a local fallback.
+    }
+  }
+  const field = document.createElement("textarea");
+  field.value = text;
+  field.readOnly = true;
+  field.style.cssText = "position:fixed;left:-9999px;top:0;opacity:0;";
+  document.body.appendChild(field);
+  try {
+    field.focus();
+    field.select();
+    if (!document.execCommand("copy")) throw new Error("Clipboard access denied");
+  } finally {
+    field.remove();
+  }
+}
+
 function MarkdownText({ text }: { text: string }) {
   // Do not enable raw HTML. Open citations in the user's default browser.
   return <div className="markdown-text"><ReactMarkdown remarkPlugins={[remarkGfm]} components={{
@@ -179,6 +194,7 @@ export default function App() {
   const [searchHasRun, setSearchHasRun] = useState(false);
   const [greeting, setGreeting] = useState("Hey! I'm Mikan. What are we working on?");
   const [feedback, setFeedback] = useState<string | null>(null);
+  const [copyLogState, setCopyLogState] = useState<"idle" | "copied" | "failed">("idle");
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const logRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -186,6 +202,8 @@ export default function App() {
   const portraitUrl = useRef<string | null>(null);
   const activeRequestId = useRef<string | null>(null);
   const stopRequested = useRef(false);
+
+  useEffect(() => { setCopyLogState("idle"); }, [messages, screen]);
 
   const focusInput = useCallback(() => {
     requestAnimationFrame(() => inputRef.current?.focus());
@@ -865,6 +883,21 @@ export default function App() {
     }
   };
 
+  const copyFullDebugLog = async () => {
+    if (!messages.length) return;
+    try {
+      await copyTextToClipboard(formatDebugLog(messages, {
+        conversationId: activeConversationId,
+        model: settings.model,
+        contextWindow: settings.contextWindow
+      }));
+      setCopyLogState("copied");
+    } catch (error) {
+      console.warn("Failed to copy debug log:", error);
+      setCopyLogState("failed");
+    }
+  };
+
   const lastReply = [...messages].reverse().find(m => m.role === "assistant");
   const replyText = busy ? (lastReply?.content || activity) : (feedback ?? lastReply?.content ?? greeting);
 
@@ -981,6 +1014,19 @@ export default function App() {
           onClick={() => openMemory("chats")}><History size={15}/> All chats</button>
         <button className="secondary-action" disabled={busy} onClick={clearChat}><SquarePen size={15}/> New</button>
       </header>
+      <div className="log-tools">
+        <span aria-live="polite" className={copyLogState === "failed" ? "log-copy-error" : ""}>
+          {copyLogState === "failed"
+            ? "Clipboard access failed. Check Windows clipboard permissions."
+            : "Copies this chat, source excerpts and response metrics. Review before sharing."}
+        </span>
+        <button type="button" className="secondary-action" disabled={!messages.length}
+          title="Copy every message, source URL and excerpt, search query, and Ollama timing/token metric"
+          onClick={() => void copyFullDebugLog()}>
+          {copyLogState === "copied" ? <Check size={15}/> : <Copy size={15}/>}
+          {copyLogState === "copied" ? "Copied!" : "Copy debug log"}
+        </button>
+      </div>
       <div className="log-body" ref={logRef}>
         {!messages.length && <div className="log-empty">
           <MessageCircle size={39}/><strong>Nothing here yet</strong>
