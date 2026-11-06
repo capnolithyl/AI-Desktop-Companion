@@ -395,4 +395,51 @@ mod tests {
         assert_eq!(messages, 0);
         assert_eq!(facts, 1); // Deleting chat never deletes explicit personal memory.
     }
+
+    #[test]
+    fn character_canon_is_independent_and_persona_scoped() {
+        let db = Connection::open_in_memory().unwrap();
+        initialize_database(&db).unwrap();
+        db.execute("INSERT INTO user_memories(fact) VALUES ('The user loves black metal')", []).unwrap();
+
+        let insert = "INSERT INTO character_facts
+          (persona_id,category,label,normalized_label,value) VALUES (?1,?2,?3,?4,?5)";
+        db.execute(insert, params!["mikan","favorites","Favorite music","favorite music","Synthwave"]).unwrap();
+        db.execute(insert, params!["another","favorites","Favorite music","favorite music","Jazz"]).unwrap();
+        assert!(db.execute(insert, params!["mikan","favorites","favorite MUSIC","favorite music","Black metal"]).is_err());
+
+        let mikan: String = db.query_row(
+            "SELECT value FROM character_facts WHERE persona_id='mikan' AND normalized_label='favorite music'",
+            [], |row| row.get(0)
+        ).unwrap();
+        let other: String = db.query_row(
+            "SELECT value FROM character_facts WHERE persona_id='another' AND normalized_label='favorite music'",
+            [], |row| row.get(0)
+        ).unwrap();
+        assert_eq!(mikan, "Synthwave");
+        assert_eq!(other, "Jazz");
+        db.execute("DELETE FROM character_facts WHERE persona_id='mikan'", []).unwrap();
+        let user_count: i64 = db.query_row("SELECT COUNT(*) FROM user_memories", [], |row| row.get(0)).unwrap();
+        let other_count: i64 = db.query_row("SELECT COUNT(*) FROM character_facts WHERE persona_id='another'", [], |row| row.get(0)).unwrap();
+        assert_eq!(user_count, 1);
+        assert_eq!(other_count, 1);
+    }
+
+    #[test]
+    fn character_canon_validates_types_and_can_migrate_existing_data() {
+        let db = Connection::open_in_memory().unwrap();
+        initialize_database(&db).unwrap();
+        db.execute("INSERT INTO user_memories(fact) VALUES('Loves games')", []).unwrap();
+        initialize_database(&db).unwrap(); // Upgrading should not wipe an earlier memory.
+        let count: i64 = db.query_row("SELECT COUNT(*) FROM user_memories", [], |row| row.get(0)).unwrap();
+        assert_eq!(count, 1);
+        assert!(valid_persona_id("mikan"));
+        assert!(!valid_persona_id("../mikan"));
+        assert_eq!(clean_character_label(" Favorite   color ").unwrap(), "Favorite color");
+        assert!(clean_character_label("").is_err());
+        assert!(clean_character_value(&"x".repeat(501)).is_err());
+        assert!(valid_character_category("favorites"));
+        assert!(!valid_character_category("instructions"));
+    }
+
 }
