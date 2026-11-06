@@ -4,6 +4,7 @@ mod search_service;
 mod agent_tools;
 mod research_intent;
 mod memory;
+mod memory_extraction;
 use futures_util::{future::{AbortHandle, Abortable}, StreamExt};
 use std::{collections::HashMap, sync::Mutex};
 use serde::{Deserialize, Serialize};
@@ -468,6 +469,7 @@ pub fn run() {
             memory::memory_add_character_fact,
             memory::memory_update_character_fact,
             memory::memory_delete_character_fact,
+            memory_extraction::memory_process_turn,
             toggle_companion,
             hide_companion
         ])
