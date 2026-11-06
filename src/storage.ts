@@ -2,7 +2,7 @@ import { DEFAULT_PERSONALITY, readPersonality, type Personality } from "./person
 
 export type ChatRole = "user" | "assistant";
 export type Message = { id: string; role: ChatRole; content: string };
-export type Settings = { endpoint: string; model: string; systemPrompt: string; appearance: Appearance; personality: Personality; searxngEndpoint: string; autoSearch: boolean; autoManageSearch: boolean; cacheHours: number; contextWindow: number | null };
+export type Settings = { endpoint: string; model: string; systemPrompt: string; appearance: Appearance; personality: Personality; searxngEndpoint: string; autoSearch: boolean; autoManageSearch: boolean; cacheHours: number; contextWindow: number | null; autoRememberUser: boolean; autoRememberMikan: boolean };
 
 export type Appearance = {
   accent: string;
@@ -40,6 +40,8 @@ export const DEFAULT_SETTINGS: Settings = {
   autoManageSearch: false,
   cacheHours: 24,
   contextWindow: null,
+  autoRememberUser: true,
+  autoRememberMikan: true,
   appearance: { ...DEFAULT_APPEARANCE },
   personality: { ...DEFAULT_PERSONALITY },
   model: "qwen3.5:9b",
@@ -59,6 +61,8 @@ export function loadSettings(): Settings {
       cacheHours: typeof data.cacheHours === "number" && Number.isFinite(data.cacheHours) ? Math.max(1, Math.min(720, data.cacheHours)) : DEFAULT_SETTINGS.cacheHours,
       contextWindow: [4096, 8192, 16384, 32768].includes(Number(data.contextWindow)) && data.contextWindow != null
         ? Number(data.contextWindow) : null,
+      autoRememberUser: data.autoRememberUser !== false,
+      autoRememberMikan: data.autoRememberMikan !== false,
       model: typeof data.model === "string" ? data.model : DEFAULT_SETTINGS.model,
       systemPrompt: typeof data.systemPrompt === "string" ? data.systemPrompt : DEFAULT_SETTINGS.systemPrompt,
       appearance: readAppearance(data.appearance),

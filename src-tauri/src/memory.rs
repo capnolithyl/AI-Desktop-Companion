@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use std::{fs, time::Duration};
 use tauri::{AppHandle, Manager};
 
-fn open_db(app: &AppHandle) -> Result<Connection, String> {
+pub(crate) fn open_db(app: &AppHandle) -> Result<Connection, String> {
     let dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
     fs::create_dir_all(&dir).map_err(|e| format!("Cannot create local memory directory: {e}"))?;
     let connection = Connection::open(dir.join("mikan-memory.sqlite3"))
@@ -54,7 +54,19 @@ fn initialize_database(connection: &Connection) -> Result<(), String> {
            UNIQUE(persona_id,normalized_label)
          );
          CREATE INDEX IF NOT EXISTS idx_character_facts_persona
-           ON character_facts(persona_id,category,updated_at);"
+           ON character_facts(persona_id,category,updated_at);
+         CREATE TABLE IF NOT EXISTS automatic_memory_sources (
+           memory_kind TEXT NOT NULL CHECK(memory_kind IN ('user','character')),
+           memory_id INTEGER NOT NULL,
+           source_message_id TEXT REFERENCES messages(id) ON DELETE SET NULL,
+           captured_at INTEGER NOT NULL DEFAULT (unixepoch()),
+           evidence TEXT NOT NULL,
+           PRIMARY KEY(memory_kind,memory_id)
+         );
+         CREATE TABLE IF NOT EXISTS automatic_memory_runs (
+           assistant_message_id TEXT PRIMARY KEY REFERENCES messages(id) ON DELETE CASCADE,
+           processed_at INTEGER NOT NULL DEFAULT (unixepoch())
+         );"
     ).map_err(|e| format!("Cannot initialize memory database: {e}"))?;
     Ok(())
 }

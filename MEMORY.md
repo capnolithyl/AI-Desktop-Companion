@@ -1,12 +1,12 @@
 # Mikan memory foundation (first layer)
 
-The core conversation/user memory layer was introduced in v0.6.0. A separate character-canon layer is being developed on a new feature branch and is **not yet merged or released**.
+The core conversation/user memory layer shipped in v0.6.0 and manually maintained Mikan character canon in v0.7.0. **Automatic extraction is being developed on a separate PR and has not been merged or released yet.**
 
 ## What is stored
 
 - **Conversation archive:** Each chat has a unique ID, automatically generated title from the first user message, timestamps, and saved user/assistant turns. Assistant message metadata (performance and search sources where present) is stored with the message.
 - **User facts:** Explicitly saved statements about the user, such as "I like black metal" or "I work with WordPress." Each fact can be reviewed, edited or deleted.
-- **Mikan character canon (in this feature branch):** Manually established facts about Mikan herself, stored in a separate `character_facts` table by `persona_id`. Her own favorite music does not become the user's favorite music and vice versa. Existing webpage knowledge remains independent.
+- **Mikan character canon:** Manually established facts about Mikan herself, stored in a separate `character_facts` table by `persona_id`. Her own favorite music does not become the user's favorite music and vice versa. Existing webpage knowledge remains independent.
 
 Everything is stored on disk in a SQLite database called `mikan-memory.sqlite3` under the Tauri **app-data directory** for `dev.capnolithyl.mikan`. No cloud account or remote database is used. The database is **not encrypted**; local Windows account permissions still matter.
 
@@ -24,13 +24,13 @@ Everything is stored on disk in a SQLite database called `mikan-memory.sqlite3` 
 
 The app restores the most recently updated conversation on startup. The current conversation's most recent 32 turns and a compact selection of explicitly saved facts are available when composing the next local LLM request.
 
-The explicit memories are *reference facts*, not extra instructions or model training. They are not extracted automatically in this version, and Mikan must not claim that it knows old chats or facts it has not actually retrieved. Old chat archives are browsable, but global semantic search across all chats is **future work**.
+Saved memories are *reference facts*, not extra instructions or model training. On the automatic-extraction branch, some facts can now be added after completed replies, with source quote validation and explicit user switches. Mikan must not claim that it knows old chats or facts it has not actually retrieved. Old chat archives are browsable, but global semantic search across all chats is **future work**.
 
 ## Next memory layers
 
-1. Optional automatic candidate extraction with review and deduplication; no silent saving of sensitive data.
+1. **In development:** Optional automatic extraction and exact-duplicate protection, with conservative sensitive-data filtering. Owner-visible editing/deletion remains available; review queue and stronger semantic deduplication are future enhancements.
 2. SQLite full-text search for recall across archived conversations, relevance and source/date tracking.
-3. **In progress on a separate branch:** Editable persona-specific character canon, separate from user memory and knowledge documents. Automatic character-fact extraction is a later step.
+3. **Shipped v0.7.0:** Editable persona-specific character canon, separate from user memory and knowledge documents. **In development:** First automatic capture of Mikan's own explicitly stated preferences after the user asks about them.
 4. Memory retention, export/backup and more granular privacy controls.
 
 ## Testing
@@ -49,4 +49,27 @@ CI should run `npm run build` and `cargo test --lib`, then the Tauri Windows bui
 7. Delete that canon entry and confirm the app does not present it as a fixed established fact.
 8. Check that deleting an old chat or user memory does not remove Mikan's stored self-facts.
 
-There is **no automatic extraction** from Mikan's chat responses in this version: the owner deliberately adds or changes character canon. Existing persona/system-prompt prose remains the core identity source. SQLite is local and not encrypted.
+On the automatic-extraction branch, Mikan's explicit stable preferences may be saved from her answers when enabled. Existing persona/system-prompt prose remains her core identity, and automatic extraction never overwrites established canon. SQLite remains local and unencrypted.
+
+
+## Automatic retention (feature branch, not released)
+
+- Automatic **About you** and **About Mikan** switches appear separately in the Memory panel. Both default on when the feature ships. Each can be disabled independently; manual `/remember`, `/canon-set` and edit/delete always remain available.
+- After a **successfully completed** assistant response, the app queues an optional, separate `/api/chat` request to the **same locally installed Ollama model** with structured JSON output. It never sends memories to a remote service, never uses web search for extraction, and does not delay the visible reply.
+- A lightweight guard skips extraction when the user did not report anything about themselves or ask a direct question about Mikan's preferences. The model can return zero facts. It sees only the recent user message, Mikan's matching reply when relevant, and a small duplicate-prevention sample of stored facts.
+- Every automatic candidate must identify a short verbatim evidence substring from the correct speaker. Before insertion, the backend checks that quote against the actual message archived in SQLite; limits content length and categories, excludes common sensitive topics/credentials, and requires overlapping content words. An unsupported proposal is discarded. This is a useful filter, not a perfect guarantee of factual accuracy, so the Memory inspector remains the place to correct mistakes.
+- User facts must be written as **"The user ..."**, not attributed to Mikan. Mikan's canon uses the existing persona-specific keyed table and never overwrites an existing key. Exact duplicate user facts and character keys are skipped.
+- Auto-added records have a source-message reference and captured timestamp in `automatic_memory_sources`. The extractor tracks completed assistant-turn IDs in `automatic_memory_runs` so retrying the same turn is idempotent.
+- If the user deletes the source conversation, the saved memory itself remains until deliberately deleted, while its source-message reference is cleared. This preserves the no-automatic-deletion policy.
+- Extraction adds an extra local inference request per eligible completed turn. It runs separately from the visible reply but uses some GPU resources. If Ollama is unavailable or Mikan is fully quit immediately, the turn may not be processed; the chat transcript is still saved.
+- No global cross-chat search, semantic deduplication, sophisticated time-aware status resolution or autonomous rewriting of established facts yet. Those remain planned.
+
+### Practical smoke tests
+
+1. Enable both automatic toggles, say `I love black metal`, wait for Mikan to finish, then open **About you**; expect a saved third-person memory. Restart Mikan; it should remain.
+2. Ask `What's your favorite color?` with no preexisting canon. Mikan should give a specific answer. Open **About Mikan** and verify a matching "Favorite color" is saved after the extraction finishes. Restart and ask again; it should answer consistently.
+3. Set Favorite color to Blue manually, ask again. Mikan should say Blue and automatic extraction should **not** overwrite it.
+4. Talk about an unrelated factual question or joke and confirm no permanent memory gets added. Talk about sensitive health or credentials and confirm nothing automatic is saved.
+5. Turn automatic capture off for one or both categories, then repeat. No new automatic memories should appear; manual controls still work.
+6. Stop Ollama during extraction. Existing chat, saved memory and manual controls remain functional; the Memory panel should show a nonfatal extraction warning.
+7. Confirm saving a duplicate and replaying an already-processed message do not produce duplicate entries. A full app restart must preserve earlier memories.
