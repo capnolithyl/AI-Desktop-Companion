@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
+    "test:debug": "node --experimental-strip-types --test tests/debug-log.test.mjs",
     "icons": "tauri icon assets/mikan-icon.svg",
     "desktop": "npm run icons && tauri dev",
     "package:windows": "npm run icons && tauri build",

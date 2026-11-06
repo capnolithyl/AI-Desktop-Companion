@@ -27,6 +27,8 @@ jobs:
         run: npm run icons
       - name: Typecheck and build UI
         run: npm run build
+      - name: Test debug-log export
+        run: npm run test:debug
       - name: Test Rust research intent and source handling
         working-directory: src-tauri
         run: cargo test --lib
