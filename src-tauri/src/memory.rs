@@ -40,7 +40,21 @@ fn initialize_database(connection: &Connection) -> Result<(), String> {
            fact TEXT NOT NULL COLLATE NOCASE UNIQUE,
            created_at INTEGER NOT NULL DEFAULT (unixepoch()),
            updated_at INTEGER NOT NULL DEFAULT (unixepoch())
-         );"
+         );
+         CREATE TABLE IF NOT EXISTS character_facts (
+           id INTEGER PRIMARY KEY AUTOINCREMENT,
+           persona_id TEXT NOT NULL,
+           category TEXT NOT NULL CHECK(category IN
+             ('favorites','likes','dislikes','hobbies','traits','other')),
+           label TEXT NOT NULL,
+           normalized_label TEXT NOT NULL,
+           value TEXT NOT NULL,
+           created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+           updated_at INTEGER NOT NULL DEFAULT (unixepoch()),
+           UNIQUE(persona_id,normalized_label)
+         );
+         CREATE INDEX IF NOT EXISTS idx_character_facts_persona
+           ON character_facts(persona_id,category,updated_at);"
     ).map_err(|e| format!("Cannot initialize memory database: {e}"))?;
     Ok(())
 }
@@ -230,6 +244,122 @@ pub fn memory_update_fact(app: AppHandle, id: i64, fact: String) -> Result<(), S
 pub fn memory_delete_fact(app: AppHandle, id: i64) -> Result<(), String> {
     open_db(&app)?.execute("DELETE FROM user_memories WHERE id=?1", params![id])
         .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+
+/// Canon facts are Mikan's fictional self-description, never user facts or webpage knowledge.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CharacterFact {
+    id: i64,
+    persona_id: String,
+    category: String,
+    label: String,
+    value: String,
+    created_at: i64,
+    updated_at: i64,
+}
+
+fn valid_persona_id(persona_id: &str) -> bool {
+    !persona_id.is_empty() && persona_id.len() <= 64 &&
+    persona_id.bytes().all(|byte| byte.is_ascii_lowercase() ||
+        byte.is_ascii_digit() || byte == b'_' || byte == b'-')
+}
+
+fn clean_character_label(label: &str) -> Result<String, String> {
+    let clean = label.split_whitespace().collect::<Vec<_>>().join(" ");
+    if clean.is_empty() || clean.chars().count() > 80 {
+        return Err("Character detail names must be 1–80 characters".into());
+    }
+    Ok(clean)
+}
+
+fn clean_character_value(value: &str) -> Result<String, String> {
+    let clean = value.split_whitespace().collect::<Vec<_>>().join(" ");
+    if clean.is_empty() || clean.chars().count() > 500 {
+        return Err("Character detail values must be 1–500 characters".into());
+    }
+    Ok(clean)
+}
+
+fn valid_character_category(category: &str) -> bool {
+    matches!(category, "favorites" | "likes" | "dislikes" | "hobbies" | "traits" | "other")
+}
+
+fn read_character_fact(row: &rusqlite::Row<'_>) -> rusqlite::Result<CharacterFact> {
+    Ok(CharacterFact {
+        id: row.get(0)?, persona_id: row.get(1)?, category: row.get(2)?,
+        label: row.get(3)?, value: row.get(4)?,
+        created_at: row.get(5)?, updated_at: row.get(6)?
+    })
+}
+
+#[tauri::command]
+pub fn memory_list_character_facts(app: AppHandle, persona_id: String) -> Result<Vec<CharacterFact>, String> {
+    if !valid_persona_id(&persona_id) { return Err("Invalid persona ID".into()); }
+    let db = open_db(&app)?;
+    let mut statement = db.prepare(
+        "SELECT id,persona_id,category,label,value,created_at,updated_at
+         FROM character_facts WHERE persona_id=?1
+         ORDER BY category ASC, label COLLATE NOCASE ASC LIMIT 500"
+    ).map_err(|e| e.to_string())?;
+    let rows = statement.query_map(params![persona_id], read_character_fact).map_err(|e| e.to_string())?;
+    rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn memory_add_character_fact(
+    app: AppHandle, persona_id: String, category: String, label: String, value: String
+) -> Result<CharacterFact, String> {
+    if !valid_persona_id(&persona_id) { return Err("Invalid persona ID".into()); }
+    if !valid_character_category(&category) { return Err("Invalid character category".into()); }
+    let label = clean_character_label(&label)?;
+    let value = clean_character_value(&value)?;
+    let normalized = label.to_lowercase();
+    let db = open_db(&app)?;
+    db.execute(
+        "INSERT INTO character_facts (persona_id,category,label,normalized_label,value)
+         VALUES (?1,?2,?3,?4,?5)",
+        params![persona_id,category,label,normalized,value]
+    ).map_err(|error| {
+        if matches!(error, rusqlite::Error::SqliteFailure(ref e, _)
+            if e.code == rusqlite::ErrorCode::ConstraintViolation) {
+            "That character detail already exists. Edit its existing entry instead.".to_string()
+        } else { error.to_string() }
+    })?;
+    db.query_row(
+        "SELECT id,persona_id,category,label,value,created_at,updated_at
+         FROM character_facts WHERE persona_id=?1 AND normalized_label=?2",
+        params![persona_id, normalized], read_character_fact
+    ).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn memory_update_character_fact(
+    app: AppHandle, id: i64, persona_id: String, category: String, label: String, value: String
+) -> Result<(), String> {
+    if !valid_persona_id(&persona_id) { return Err("Invalid persona ID".into()); }
+    if !valid_character_category(&category) { return Err("Invalid character category".into()); }
+    let label = clean_character_label(&label)?;
+    let value = clean_character_value(&value)?;
+    let normalized = label.to_lowercase();
+    let changed = open_db(&app)?.execute(
+        "UPDATE character_facts SET category=?1,label=?2,normalized_label=?3,
+         value=?4,updated_at=unixepoch() WHERE id=?5 AND persona_id=?6",
+        params![category,label,normalized,value,id,persona_id]
+    ).map_err(|e| e.to_string())?;
+    if changed == 0 { return Err("Character detail not found".into()); }
+    Ok(())
+}
+
+#[tauri::command]
+pub fn memory_delete_character_fact(app: AppHandle, id: i64, persona_id: String) -> Result<(), String> {
+    if !valid_persona_id(&persona_id) { return Err("Invalid persona ID".into()); }
+    let changed = open_db(&app)?.execute(
+        "DELETE FROM character_facts WHERE id=?1 AND persona_id=?2", params![id,persona_id]
+    ).map_err(|e| e.to_string())?;
+    if changed == 0 { return Err("Character detail not found".into()); }
     Ok(())
 }
 
