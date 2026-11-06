@@ -271,13 +271,15 @@ export default function App() {
     finally { setServiceBusy(false); }
   };
   const manageService = async (action: "start" | "stop" | "status") => {
-    // An explicit Stop must stick. Otherwise the background monitor would
-    // immediately undo the user's request on its next check.
-    if (action === "stop" && settings.autoManageSearch) {
-      const updated = { ...settings, autoManageSearch: false };
+    // Start enables recovery so a Docker Desktop cold start finishes booting
+    // SearXNG; Stop disables it so the monitor cannot undo a manual stop.
+    if ((action === "start" && !settings.autoManageSearch) ||
+        (action === "stop" && settings.autoManageSearch)) {
+      const autoManageSearch = action === "start";
+      const updated = { ...settings, autoManageSearch };
       setSettings(updated);
       saveSettings(updated);
-      setDraft(current => ({ ...current, autoManageSearch: false }));
+      setDraft(current => ({ ...current, autoManageSearch }));
     }
     setServiceBusy(true);
     setServiceError(null);
