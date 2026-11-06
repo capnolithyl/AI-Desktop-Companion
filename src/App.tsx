@@ -285,7 +285,6 @@ export default function App() {
     <div className="floating-controls">
       <div
         className="drag-handle"
-        data-tauri-drag-region
         title="Drag to move Mikan"
         onMouseDown={event => {
           if (event.button === 0) void getCurrentWindow().startDragging().catch(console.warn);
