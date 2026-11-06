@@ -215,6 +215,37 @@ export default function App() {
     }
   }, []);
   useEffect(() => { void refreshModels(settings.endpoint); }, [refreshModels, settings.endpoint]);
+
+  // Check the real HTTP endpoint, not just Docker's container flag. Polling
+  // uses a one-shot timer so slow starts can't overlap or spin in the tray.
+  useEffect(() => {
+    let disposed = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const check = async () => {
+      let delay = 45_000;
+      try {
+        const status = await invoke<SearchService>("search_service", {
+          action: settings.autoManageSearch ? "ensure" : "status",
+          endpoint: settings.searxngEndpoint
+        });
+        if (disposed) return;
+        setService(status);
+        setServiceError(null);
+        if (status.state === "starting") delay = 8_000;
+        else if (status.state !== "ready") delay = 30_000;
+      } catch (error) {
+        if (disposed) return;
+        const message = errorText(error);
+        setService({ state: "unavailable", message });
+        setServiceError(message);
+        delay = 60_000;
+      }
+      if (!disposed) timer = setTimeout(() => { void check(); }, delay);
+    };
+    void check();
+    return () => { disposed = true; if (timer) clearTimeout(timer); };
+  }, [settings.autoManageSearch, settings.searxngEndpoint]);
+
   useEffect(() => {
     if (screen === "log") logRef.current?.scrollTo({ top: logRef.current.scrollHeight, behavior: "smooth" });
   }, [screen, messages]);
@@ -235,20 +266,29 @@ export default function App() {
   const refreshService = async () => {
     setServiceBusy(true);
     setServiceError(null);
-    try { setService(await invoke<SearchService>("search_service", { action: "status" })); }
+    try { setService(await invoke<SearchService>("search_service", { action: "status", endpoint: settings.searxngEndpoint })); }
     catch (error) { setServiceError(errorText(error)); }
     finally { setServiceBusy(false); }
   };
   const manageService = async (action: "start" | "stop" | "status") => {
+    // An explicit Stop must stick. Otherwise the background monitor would
+    // immediately undo the user's request on its next check.
+    if (action === "stop" && settings.autoManageSearch) {
+      const updated = { ...settings, autoManageSearch: false };
+      setSettings(updated);
+      saveSettings(updated);
+      setDraft(current => ({ ...current, autoManageSearch: false }));
+    }
     setServiceBusy(true);
     setServiceError(null);
     try {
-      const state = await invoke<SearchService>("search_service", { action });
+      const state = await invoke<SearchService>("search_service", { action, endpoint: settings.searxngEndpoint });
       setService(state);
       if (screen === "compact") setFeedback(state.message);
     } catch (error) {
       const text = errorText(error);
       setServiceError(text);
+      setService({ state: "unavailable", message: text });
       setFeedback(text);
     } finally { setServiceBusy(false); }
   };
@@ -649,8 +689,12 @@ export default function App() {
             {!busy && lastReply?.failed && <span className="error-caption">Error</span>}
           </div>
           <div className="dock-actions">
-            <button className="dock-icon" title="Web search (/search)" aria-label="Web search"
-              onClick={() => setScreen("search")}><Search size={17}/></button>
+            <button className="dock-icon search-dock-action" title={service?.message || "Checking search service…"}
+              aria-label={`Web search: ${service?.message || "Checking search service"}`}
+              onClick={() => setScreen("search")}>
+              <Search size={17}/>
+              <span aria-hidden="true" className={`search-health-dot ${service?.state || "checking"}`}/>
+            </button>
             <button className="dock-icon" title="Quick personality presets (/personality)" aria-label="Personality presets"
               onClick={() => setScreen("personality")}><SlidersHorizontal size={17}/></button>
             <button className="dock-icon" title="Conversation log (/log)" aria-label="Conversation log" onClick={() => setScreen("log")}><History size={17}/></button>
@@ -945,7 +989,7 @@ export default function App() {
           </label>
           <div className="service-panel">
             <div><strong>SearXNG container</strong>
-              <span className={service?.state === "running" ? "service-running" : "service-muted"}>
+              <span className={service?.state === "ready" ? "service-running" : "service-muted"}>
                 {service?.message || "Checking Docker status…"}
               </span>
             </div>
@@ -958,8 +1002,15 @@ export default function App() {
                 onClick={() => void manageService("status")}><RotateCw size={14}/> Status</button>
             </div>
             {serviceError && <small className="field-error">{serviceError}</small>}
-            <small>Start also enables Docker's unless-stopped restart policy. To start after reboot, enable Docker Desktop launch at login. Initial Docker setup is still required once.</small>
+            <small>Start enables Docker's unless-stopped policy. First-time SearXNG setup is still manual; custom ports can be monitored but not automatically restarted.</small>
           </div>
+          <label className="settings-toggle">
+            <input type="checkbox" checked={draft.autoManageSearch}
+              onChange={e => setDraft(current => ({ ...current, autoManageSearch: e.target.checked }))}/>
+            <span><strong>Automatic search startup &amp; recovery</strong>
+              <small>Check SearXNG every 45 seconds, start Docker Desktop if needed, and recover a stopped or unresponsive container. Turning this off leaves services alone. Pressing Stop also disables recovery.</small>
+            </span>
+          </label>
           <label className="settings-toggle">
             <input type="checkbox" checked={draft.autoSearch}
               onChange={e => setDraft(current => ({ ...current, autoSearch: e.target.checked }))}/>
