@@ -10,6 +10,7 @@ type Props = {
   characterFacts: CharacterFact[];
   autoRememberUser: boolean;
   autoRememberMikan: boolean;
+  automaticError: string | null;
   onAutoRememberUserChange: (enabled: boolean) => void;
   onAutoRememberMikanChange: (enabled: boolean) => void;
   currentId: string | null;
@@ -35,7 +36,7 @@ function shortDate(seconds: number): string {
 /** Separate fact and conversation controls; no automatic memory extraction in phase one. */
 export function MemoryPanel({
   initialTab = "facts", conversations, facts, characterFacts,
-  autoRememberUser, autoRememberMikan, onAutoRememberUserChange, onAutoRememberMikanChange,
+  autoRememberUser, autoRememberMikan, automaticError, onAutoRememberUserChange, onAutoRememberMikanChange,
   currentId, busy, error, onClose, onNew,
   onOpen, onDeleteChat, onAddFact, onEditFact, onDeleteFact, onRefresh,
   onAddCharacter, onEditCharacter, onDeleteCharacter
@@ -77,6 +78,8 @@ export function MemoryPanel({
     </nav>
     <div className="memory-body">
       {(error || actionError) && <div className="memory-error" role="alert">{actionError || error}</div>}
+      {automaticError && (autoRememberUser || autoRememberMikan) &&
+        <p className="memory-auto-warning" role="status">{automaticError}</p>}
       {tab === "facts" ? <>
         <p className="memory-explainer">Facts about you that Mikan can refer to across conversations. You can save, correct, or delete any entry.</p>
         <label className="memory-auto-toggle">
