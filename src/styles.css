@@ -102,6 +102,8 @@ button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px
 .input-row textarea::placeholder { color: #c3a9b6; }
 .send-button { width: 43px; height: 43px; flex: 0 0 43px; display: grid; place-items: center; border: 0; border-radius: 12px; color: #3a2731; background: #ffad7e; }
 .send-button:not(:disabled):hover { background: #ffd0ad; }
+.send-button.stop-button { background: #a95167; color: #fff4f0; }
+.send-button.stop-button:not(:disabled):hover { background: #c2687e; }
 .dock-footer {
   font-size: 10px; color: #c9b5c4; display: flex; justify-content: space-between; gap: 8px;
   margin: 10px 1px 0; align-items: center;
