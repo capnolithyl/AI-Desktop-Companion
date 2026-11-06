@@ -9,6 +9,7 @@ use std::{
 const CONTAINER: &str = "mikan-searxng";
 const DEFAULT_ENDPOINT: &str = "http://127.0.0.1:8888";
 const RECOVERY_COOLDOWN: Duration = Duration::from_secs(90);
+const STARTUP_GRACE: Duration = Duration::from_secs(20);
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -27,6 +28,7 @@ fn state(name: &str, message: &str) -> SearchServiceStatus {
 struct RecoveryAttempts {
     docker: Option<Instant>,
     container: Option<Instant>,
+    unhealthy_since: Option<Instant>,
 }
 
 fn attempts() -> &'static Mutex<RecoveryAttempts> {
@@ -42,6 +44,17 @@ fn claim_recovery(docker: bool) -> bool {
     }
     *last = Some(Instant::now());
     true
+}
+
+// Don't restart SearXNG while it is simply booting after Docker starts.
+fn allow_unresponsive_restart() -> bool {
+    let mut guard = attempts().lock().unwrap_or_else(|e| e.into_inner());
+    let started = guard.unhealthy_since.get_or_insert_with(Instant::now);
+    started.elapsed() >= STARTUP_GRACE
+}
+
+fn clear_unhealthy() {
+    attempts().lock().unwrap_or_else(|e| e.into_inner()).unhealthy_since = None;
 }
 
 fn docker_path() -> PathBuf {
@@ -136,6 +149,7 @@ fn start_container() -> Result<SearchServiceStatus, String> {
     result(docker(&["update", "--restart", "unless-stopped", CONTAINER])?, "Updating container restart policy")?;
     result(docker(&["start", CONTAINER])?, "Starting SearXNG")?;
     // Allow the container to boot before treating an unready HTTP service as hung.
+    clear_unhealthy();
     let _ = claim_recovery(false);
     Ok(state("starting", "Starting SearXNG; waiting for HTTP readiness…"))
 }
@@ -163,12 +177,14 @@ fn ensure_service() -> Result<SearchServiceStatus, String> {
     let current = inspect();
     match current.state.as_str() {
         "docker-offline" => {
+            clear_unhealthy();
             if claim_recovery(true) {
                 launch_docker_desktop()?;
             }
             Ok(state("starting", "Waiting for Docker Desktop to start…"))
         },
         "stopped" => {
+            clear_unhealthy();
             if claim_recovery(false) {
                 start_container()
             } else {
@@ -176,8 +192,9 @@ fn ensure_service() -> Result<SearchServiceStatus, String> {
             }
         },
         "running" => {
-            if claim_recovery(false) {
+            if allow_unresponsive_restart() && claim_recovery(false) {
                 result(docker(&["restart", CONTAINER])?, "Restarting unresponsive SearXNG")?;
+                clear_unhealthy();
                 Ok(state("starting", "SearXNG was unresponsive; restarting container…"))
             } else {
                 Ok(state("starting", "Waiting for SearXNG HTTP readiness…"))
@@ -196,6 +213,7 @@ pub async fn search_service(action: String, endpoint: Option<String>) -> Result<
 
     if matches!(action.as_str(), "status" | "ensure") {
         if endpoint_healthy(&endpoint).await {
+            clear_unhealthy();
             return Ok(state("ready", "Search ready. SearXNG is responding."));
         }
         if !manages_endpoint(&endpoint) {
