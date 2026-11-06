@@ -486,7 +486,7 @@ mod tests {
         assert!(rules.contains("Prior assistant messages may be wrong"));
         assert!(rules.contains("REASONABLE SPECULATION IS WELCOME"));
         assert!(rules.contains("official announcement"));
-        assert!(rules.contains("don't ask whether they meant something else"));
+        assert!(rules.contains("don't ask again what it meant"));
         assert!(rules.contains("Cite the relevant source number immediately"));
         assert!(rules.contains("TEMPORAL CHECK"));
         assert!(rules.contains("scheduled event dated before today"));
