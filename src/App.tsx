@@ -731,6 +731,8 @@ export default function App() {
             <time>{new Date(m.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</time>
           </div>
           <div className={m.failed ? "message-error message-content" : "message-content"}><MarkdownText text={m.content || (busy ? "Thinking…" : "")}/></div>
+          {m.role === "assistant" && m.sources?.length && m.diagnostics && !m.sources.some((_, index) => m.content.includes(`[${index + 1}]`)) &&
+            <div className="research-warning">This answer does not cite any individual retrieved sources. Verify factual claims in the excerpts below.</div>}
           {(m.sources?.length || m.searchQuery) && <div className="message-sources">
             {m.searchQuery && <div className="research-query"><Search size={13}/> SearXNG query: <code>{m.searchQuery}</code></div>}
             <strong>Retrieved sources (claims are not independently verified)</strong>
