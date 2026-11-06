@@ -2,7 +2,7 @@
 
 A free, local-first AI catgirl companion for Windows. Built with Tauri 2, React, TypeScript, and Ollama.
 
-**v0.4:** Seamless frameless portrait with native shadow disabled, portrait dragging, dock-integrated controls, configurable colors/typography, Markdown messages, expandable log/settings, slash commands, Ollama model dropdowns and instant model switching, and Ollama response diagnostics.
+**v0.4.1:** Seamless frameless portrait with native shadow disabled, portrait dragging, dock-integrated controls, configurable colors/typography, Markdown messages, expandable log/settings, slash commands, Ollama model dropdowns and instant model switching, Ollama response diagnostics, five personality presets, randomizer, and expanded slash commands.
 
 See [SETUP.md](SETUP.md) for Windows installation, commands, and known limitations.
 

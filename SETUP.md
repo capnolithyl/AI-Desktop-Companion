@@ -1,11 +1,11 @@
-# Mikan Desktop Companion v0.4 (Windows)
+# Mikan Desktop Companion v0.4.1 (Windows)
 
 A free, local-first personal AI companion. This is an experimental build for one Windows 11 PC.
 
 ## Install / update
 
 1. Open the latest successful [Windows installer workflow](https://github.com/capnolithyl/AI-Desktop-Companion/actions/workflows/windows.yml).
-2. Download the `mikan-windows-installer` artifact, extract it and run the NSIS setup executable. Install over v0.2.
+2. Download the `mikan-windows-installer` artifact, extract it and run the NSIS setup executable. Install over your existing version.
 3. Keep Ollama running with one or more locally downloaded models. Endpoint: `http://127.0.0.1:11434`.
 4. Your previous settings and selected portrait should persist across upgrades in the Tauri WebView data. If the avatar is missing, choose your existing Mikan PNG under Settings.
 
