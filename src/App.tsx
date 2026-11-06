@@ -503,7 +503,7 @@ export default function App() {
   };
 
   const lastReply = [...messages].reverse().find(m => m.role === "assistant");
-  const replyText = feedback ?? lastReply?.content ?? (busy ? "Thinking…" : greeting);
+  const replyText = busy ? (lastReply?.content || "Thinking…") : (feedback ?? lastReply?.content ?? greeting);
 
   const theme = {
     "--accent": settings.appearance.accent,
