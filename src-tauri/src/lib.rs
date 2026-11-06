@@ -297,6 +297,16 @@ async fn chat_stream_impl(
                 selected_context
             ).await?;
             let newly_fetched = !plan.sources.is_empty();
+            if newly_fetched {
+                // Source indexes must map to the sources displayed for THIS
+                // answer. Drop carried snippets when new live tool results
+                // supersede them to prevent ambiguous [1]/[2] citations.
+                messages.retain(|message| {
+                    let content = message["content"].as_str().unwrap_or("");
+                    content != research_intent::prior_evidence_instruction()
+                        && !content.starts_with("Previously retrieved evidence, NOT freshly searched.")
+                });
+            }
             sources = plan.sources;
             if !newly_fetched && !previous_sources.is_empty() {
                 sources = previous_sources.clone();
