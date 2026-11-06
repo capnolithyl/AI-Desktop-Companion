@@ -351,7 +351,8 @@ export default function App() {
     if (!captureUser && !captureCharacter) return;
     const request = {
       endpoint: settings.endpoint, model: settings.model, conversationId,
-      userMessageId, assistantMessageId, captureUser, captureCharacter
+      userMessageId, assistantMessageId, captureUser, captureCharacter,
+      contextWindow: settings.contextWindow
     };
     // Save only after the visible answer is finished. Serialize extraction calls
     // so several quick chats don't launch several competing Ollama analyses.
