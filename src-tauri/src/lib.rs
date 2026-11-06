@@ -215,9 +215,6 @@ async fn chat_stream_impl(
     let mut sources = Vec::new();
     let mut search_query: Option<String> = None;
     if request.auto_search {
-        let question = messages.iter().rev().find(|m| m["role"] == "user")
-            .and_then(|m| m["content"].as_str()).unwrap_or("").to_owned();
-
         if let Some(query) = research_intent::explicit_research_query(&messages) {
             // Explicit research intent: search the user's actual subject before the
             // model can reinterpret "Cattle Decapitation" as a slaughter procedure.
