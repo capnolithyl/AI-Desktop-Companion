@@ -2,7 +2,7 @@
 
 A local-first, personal Windows AI desktop companion powered by Tauri 2, React, TypeScript, and Ollama. Free hobby project for one PC.
 
-**v0.5.3:** expanded web-research triggers and recent-album queries; evidence-first search with transparent queries and source excerpts, per-turn Eastern date/time context, stronger search chronology/disambiguation, integrated Docker/SearXNG lifecycle controls, organized Settings tabs (AI, Internet, Appearance), separate personality presets, optional model-directed web tools, safe public HTTPS reader, and on-disk webpage caching.
+**v0.5.4:** Conversational, explicitly labeled speculation grounded in evidence; continuity across follow-ups and improved inline citation guidance; expanded web-research triggers and recent-album queries; evidence-first search with transparent queries and source excerpts, per-turn Eastern date/time context, stronger search chronology/disambiguation, integrated Docker/SearXNG lifecycle controls, organized Settings tabs (AI, Internet, Appearance), separate personality presets, optional model-directed web tools, safe public HTTPS reader, and on-disk webpage caching.
 
 ## Getting started
 
