@@ -223,7 +223,11 @@ async fn chat_stream_impl(
                 "requestId": request.request_id,
                 "text": format!("Searching: {query}")
             }));
-            sources = web_search::web_search(request.searxng_endpoint.clone(), query.clone()).await?;
+            sources = if research_intent::is_album_research(&messages) {
+                web_search::web_search_recent(request.searxng_endpoint.clone(), query.clone()).await?
+            } else {
+                web_search::web_search(request.searxng_endpoint.clone(), query.clone()).await?
+            };
             search_query = Some(query.clone());
             if sources.is_empty() {
                 let content = format!("I searched for {query}, but SearXNG returned no results. Try a more specific search query.");
