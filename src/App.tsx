@@ -277,39 +277,99 @@ export default function App() {
     }
   };
 
+  const runSlashCommand = (text: string): void => {
+    setInput("");
+    const parsed = parseSlashCommand(text);
+    if (!parsed) {
+      setFeedback("Invalid slash command. Type /help to see available commands.");
+      return;
+    }
+    const { name, argument } = parsed;
+    const trait = PERSONALITY_TRAITS.find(item => item.key === name);
+    if (trait) {
+      if (!argument) {
+        setFeedback(`${trait.label}: ${settings.personality[trait.key]}%. Try /${name} 80 to change it.`);
+      } else if (!/^\d{1,3}$/.test(argument) || Number(argument) > 100) {
+        setFeedback(`Use /${name} with a number from 0 to 100.`);
+      } else {
+        const value = Number(argument);
+        updatePersonality({ ...settings.personality, [trait.key]: value });
+        setFeedback(`${trait.label} set to ${value}%. The next reply will use this setting.`);
+      }
+      return;
+    }
+    switch (name) {
+      case "help": setScreen("help"); return;
+      case "personality":
+      case "presets": setScreen("personality"); return;
+      case "preset": {
+        if (!argument) { setScreen("personality"); return; }
+        const preset = findPreset(argument);
+        if (!preset) {
+          setFeedback(`Unknown preset "${argument}". Choose: ${PERSONALITY_PRESETS.map(p => p.id).join(", ")}.`);
+          return;
+        }
+        updatePersonality({ ...preset.values });
+        setFeedback(`Personality: ${preset.name}. ${preset.description}.`);
+        return;
+      }
+      case "random":
+      case "randomize":
+        updatePersonality(randomPersonality());
+        setFeedback("New personality mix rolled! Use /personality to see the results.");
+        return;
+      case "search":
+        void performSearch(argument);
+        return;
+      case "log":
+      case "history": setScreen("log"); return;
+      case "settings":
+      case "appearance":
+      case "portrait":
+      case "prompt":
+      case "endpoint":
+      case "models":
+        openSettings(); return;
+      case "model":
+        if (!argument) { openSettings(); return; }
+        if (busy) { setFeedback("Wait until Mikan finishes her reply before switching models."); return; }
+        if (!availableModels.includes(argument)) {
+          setFeedback(`Model "${argument}" wasn't found in Ollama. Use /models to check installed models.`);
+          return;
+        }
+        switchModel(argument);
+        setFeedback(`Model selected: ${argument}.`);
+        return;
+      case "refresh":
+        void refreshModels(settings.endpoint);
+        setFeedback("Refreshing the installed Ollama model list…");
+        return;
+      case "chat": goCompact(); return;
+      case "new":
+      case "clear":
+        if (busy) { setFeedback("Wait until the current reply finishes before clearing the chat."); return; }
+        clearChat();
+        return;
+      case "hide":
+        void invoke("hide_companion");
+        return;
+      default:
+        setFeedback(`Unknown command /${name}. Type /help to see available commands.`);
+    }
+  };
+
   const send = async (withSearch?: { query: string; results: WebResult[] }) => {
     const text = withSearch ? withSearch.query : input.trim();
     if (!text) return;
 
-    // Commands are local UI actions, never sent to the LLM.
-    const command = withSearch ? "" : text.toLowerCase();
-    if (command === "/search" || command.startsWith("/search ")) {
-      setInput("");
-      void performSearch(text.slice(7).trim());
-      return;
-    }
-    if (command === "/log" || command === "/history") {
-      setInput("");
-      setScreen("log");
-      return;
-    }
-    if (command === "/settings") {
-      setInput("");
-      openSettings();
-      return;
-    }
-    if (command === "/chat") {
-      setInput("");
-      goCompact();
-      return;
-    }
-    if (command === "/new" || command === "/clear") {
-      setInput("");
-      clearChat();
+    // Slash commands stay inside the app and never reach the language model.
+    if (!withSearch && text.startsWith("/")) {
+      runSlashCommand(text);
       return;
     }
 
     if (busy) return;
+    setFeedback(null);
     const user: LogMessage = { id: crypto.randomUUID(), role: "user", content: text, createdAt: Date.now() };
     const assistantId = crypto.randomUUID();
     const history = [...messages, user];
