@@ -2,7 +2,7 @@ import { DEFAULT_PERSONALITY, readPersonality, type Personality } from "./person
 
 export type ChatRole = "user" | "assistant";
 export type Message = { id: string; role: ChatRole; content: string };
-export type Settings = { endpoint: string; model: string; systemPrompt: string; appearance: Appearance; personality: Personality; searxngEndpoint: string; autoSearch: boolean; cacheHours: number };
+export type Settings = { endpoint: string; model: string; systemPrompt: string; appearance: Appearance; personality: Personality; searxngEndpoint: string; autoSearch: boolean; autoManageSearch: boolean; cacheHours: number };
 
 export type Appearance = {
   accent: string;
@@ -37,6 +37,7 @@ export const DEFAULT_SETTINGS: Settings = {
   endpoint: "http://127.0.0.1:11434",
   searxngEndpoint: "http://127.0.0.1:8888",
   autoSearch: false,
+  autoManageSearch: true,
   cacheHours: 24,
   appearance: { ...DEFAULT_APPEARANCE },
   personality: { ...DEFAULT_PERSONALITY },
@@ -53,6 +54,7 @@ export function loadSettings(): Settings {
       endpoint: typeof data.endpoint === "string" ? data.endpoint : DEFAULT_SETTINGS.endpoint,
       searxngEndpoint: typeof data.searxngEndpoint === "string" ? data.searxngEndpoint : DEFAULT_SETTINGS.searxngEndpoint,
       autoSearch: data.autoSearch === true,
+      autoManageSearch: data.autoManageSearch !== false,
       cacheHours: typeof data.cacheHours === "number" && Number.isFinite(data.cacheHours) ? Math.max(1, Math.min(720, data.cacheHours)) : DEFAULT_SETTINGS.cacheHours,
       model: typeof data.model === "string" ? data.model : DEFAULT_SETTINGS.model,
       systemPrompt: typeof data.systemPrompt === "string" ? data.systemPrompt : DEFAULT_SETTINGS.systemPrompt,
