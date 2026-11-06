@@ -444,3 +444,38 @@ button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px
   overflow-wrap: anywhere;
 }
 .source-link svg { flex: 0 0 auto; }
+
+
+/* Quick mood presets and slash-command discovery. */
+.preset-section { margin: 3px 0 12px; }
+.preset-heading { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin-bottom: 12px; }
+.preset-heading strong { font-size: 13px; color: #ffdbc6; }
+.preset-heading span { color: #cdb1bc; font-size: 11px; }
+.preset-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.preset-button {
+  display: flex; flex-direction: column; align-items: flex-start; text-align: left; gap: 5px;
+  min-height: 64px; padding: 10px 11px; border-radius: 11px; background: #40333e;
+  border: 1px solid #654e5d; color: #ffddd0;
+}
+.preset-button strong { font-size: 12px; }
+.preset-button small { font-size: 10px; line-height: 1.3; font-weight: 400; color: #c9b6c1; }
+.preset-button:hover { background: #5b4050; }
+.preset-button.active { border-color: var(--accent, #ffad7e); background: rgb(var(--accent-rgb, 255 173 126) / .14); }
+.preset-button.active strong { color: var(--accent, #ffad7e); }
+.randomize-button {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  margin-top: 10px; padding: 11px; width: 100%; border: 1px dashed #a27d7c;
+  border-radius: 10px; color: #ffd8c4; background: #463540; font-size: 12px; font-weight: 600;
+}
+.randomize-button:hover { background: #694755; }
+.personality-slider-group { margin-top: 6px; }
+.help-command-list { padding: 11px 14px; overflow-y: auto; flex: 1; min-height: 0; }
+.help-command {
+  width: 100%; display: flex; gap: 12px; align-items: baseline; text-align: left;
+  border: none; border-bottom: 1px solid #594650; background: transparent;
+  padding: 12px 8px; color: #e9d3dc;
+}
+.help-command:last-child { border-bottom: 0; }
+.help-command:hover { background: rgb(var(--accent-rgb, 255 173 126) / .12); border-radius: 8px; }
+.help-command code { flex: 0 0 44%; font-family: Consolas, monospace; font-size: 11px; color: var(--accent, #ffad7e); }
+.help-command span { flex: 1; font-size: 11px; line-height: 1.45; }
