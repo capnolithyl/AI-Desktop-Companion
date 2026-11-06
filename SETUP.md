@@ -1,4 +1,4 @@
-# Mikan Desktop Companion v0.5.2 · Windows setup
+# Mikan Desktop Companion v0.5.3 · Windows setup
 
 This is a local-first, single-PC prototype. User-specific settings and the selected character portrait remain saved locally across upgrades.
 
@@ -83,3 +83,11 @@ Search answers receive a strict evidence-only instruction with numbered source s
 The **Conversation Log** shows the exact SearXNG query and expandable evidence snippets alongside the model's response. These are *retrieved sources*, not independently fact-checked citations: the model can still make mistakes. Review important claims against the source excerpts. Manual searches using `/search` remain available regardless of the auto-search setting. Casual offline conversation remains unchanged.
 
 A source link beneath a reply means that source was returned by SearXNG; it does not prove every statement in the reply is supported.
+
+## v0.5.3: research intent and recency
+
+With Automatic web tools enabled, everyday information questions such as `Can you tell me more about Cattle Decapitation?` and `Can you give me info on the band Cattle Decapitation?` are routed to SearXNG before the local model answers. Previously only explicit `find`/`search`/news requests were reliably routed.
+
+Search query construction treats `the band` as an entity type, not part of the exact-quoted artist name. An album follow-up searches for *next album / recording / studio / announcement*, and checks both recent results (SearXNG's past-year filter, where supported) and general results, avoiding unrelated pages where possible.
+
+The model is still not a fact-checking engine, and independent source verification may be necessary. If no reliable upcoming-album confirmation is retrieved, it should admit the release date is unconfirmed rather than turning a historical release into an upcoming one. The source excerpts and exact query remain visible in `/log`.
