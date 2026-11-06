@@ -34,8 +34,15 @@ struct ChatRequest {
     searxng_endpoint: String,
     #[serde(default = "default_cache_hours")]
     cache_hours: u64,
+    #[serde(default)]
+    context_window: Option<u32>,
+    #[serde(default)]
+    prior_sources: Vec<web_search::SearchResult>,
 }
 fn default_cache_hours() -> u64 { 24 }
+fn valid_context_window(context: Option<u32>) -> Option<u32> {
+    context.filter(|v| matches!(*v, 4096 | 8192 | 16384 | 32768))
+}
 
 #[derive(Default)]
 struct ChatCancellation(Mutex<HashMap<String, AbortHandle>>);
@@ -65,6 +72,7 @@ struct ChatCompletion {
     stats: Option<ChatStats>,
     sources: Vec<web_search::SearchResult>,
     search_query: Option<String>,
+    sources_carried_over: bool,
 }
 
 fn local_origin(endpoint: &str) -> Result<String, String> {
@@ -215,8 +223,30 @@ async fn chat_stream_impl(
     }).collect();
     let mut sources = Vec::new();
     let mut search_query: Option<String> = None;
+    let mut sources_carried_over = false;
+    let selected_context = valid_context_window(request.context_window);
+    let previous_sources = research_intent::clean_prior_sources(&request.prior_sources);
+    let explicit_query = request.auto_search
+        .then(|| research_intent::explicit_research_query(&messages))
+        .flatten();
+
+    if explicit_query.is_none() && !previous_sources.is_empty() {
+        // Place carried evidence AFTER research-intent extraction so the extra
+        // user-level data cannot be mistaken for a new topic in conversation.
+        let insert_at = usize::from(messages.first().is_some_and(|m| m["role"] == "system"));
+        messages.insert(insert_at, json!({
+            "role": "system",
+            "content": research_intent::prior_evidence_instruction()
+        }));
+        let last_user = messages.iter().rposition(|m| m["role"] == "user").unwrap_or(messages.len());
+        messages.insert(last_user, json!({
+            "role": "user",
+            "content": format!("Previously retrieved evidence, NOT freshly searched.\n{}",
+                research_intent::evidence_data(&previous_sources))
+        }));
+    }
     if request.auto_search {
-        if let Some(query) = research_intent::explicit_research_query(&messages) {
+        if let Some(query) = explicit_query {
             // Explicit research intent: search the user's actual subject before the
             // model can reinterpret "Cattle Decapitation" as a slaughter procedure.
             // This path works for models without Ollama tool-calling support.
@@ -245,7 +275,7 @@ async fn chat_stream_impl(
             if sources.is_empty() {
                 let content = "SearXNG couldn't find relevant sources, even after a broader search. Try a shorter topic or search manually with /search.".to_owned();
                 return Ok(ChatCompletion {
-                    content, stats: None, sources, search_query
+                    content, stats: None, sources, search_query, sources_carried_over
                 });
             }
 
@@ -263,10 +293,26 @@ async fn chat_stream_impl(
         } else {
             let plan = agent_tools::prepare(
                 &app, &client, &url, &request.model, &request.request_id,
-                &mut messages, &request.searxng_endpoint, request.cache_hours
+                &mut messages, &request.searxng_endpoint, request.cache_hours,
+                selected_context
             ).await?;
+            let newly_fetched = !plan.sources.is_empty();
+            if newly_fetched {
+                // Source indexes must map to the sources displayed for THIS
+                // answer. Drop carried snippets when new live tool results
+                // supersede them to prevent ambiguous [1]/[2] citations.
+                messages.retain(|message| {
+                    let content = message["content"].as_str().unwrap_or("");
+                    content != research_intent::prior_evidence_instruction()
+                        && !content.starts_with("Previously retrieved evidence, NOT freshly searched.")
+                });
+            }
             sources = plan.sources;
-            if sources.is_empty() {
+            if !newly_fetched && !previous_sources.is_empty() {
+                sources = previous_sources.clone();
+                sources_carried_over = true;
+            }
+            if !newly_fetched {
                 if let Some((content, data)) = plan.answer {
                     if content.trim().is_empty() {
                         return Err("The model returned no answer or tool requests".into());
@@ -283,7 +329,7 @@ async fn chat_stream_impl(
                         prompt_eval_duration_ns: data["prompt_eval_duration"].as_u64(),
                         eval_duration_ns: data["eval_duration"].as_u64(),
                     };
-                    return Ok(ChatCompletion { content, stats: Some(stats), sources, search_query });
+                    return Ok(ChatCompletion { content, stats: Some(stats), sources, search_query, sources_carried_over });
                 }
             } else {
                 // Even a model-initiated tool call must end with a source-focused
@@ -296,16 +342,27 @@ async fn chat_stream_impl(
             }
         }
     }
+    if !request.auto_search && !previous_sources.is_empty() {
+        sources = previous_sources;
+        sources_carried_over = true;
+    }
     let mut payload = json!({
         "model": request.model,
         "messages": messages,
         "stream": true,
         "think": false
     });
-    // Keep normal conversational creativity intact. Use a lower sampling
-    // temperature only for web-grounded factual answers.
+    let mut options = json!({});
+    if let Some(num_ctx) = selected_context {
+        options["num_ctx"] = json!(num_ctx);
+    }
+    // Keep normal conversational creativity intact; use lower temperature
+    // for source-grounded replies (including evidence carried between turns).
     if !sources.is_empty() {
-        payload["options"] = json!({"temperature": 0.2});
+        options["temperature"] = json!(0.2);
+    }
+    if options.as_object().is_some_and(|items| !items.is_empty()) {
+        payload["options"] = options;
     }
     let response = client.post(url)
         .json(&payload)
@@ -358,7 +415,7 @@ async fn chat_stream_impl(
     }
     // The final text is returned as well as streamed so that no event-ordering
     // race can lose the last characters when the frontend removes its listener.
-    Ok(ChatCompletion { content, stats, sources, search_query })
+    Ok(ChatCompletion { content, stats, sources, search_query, sources_carried_over })
 }
 
 fn toggle_window(app: &tauri::AppHandle) {

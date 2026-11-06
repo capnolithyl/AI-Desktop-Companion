@@ -17,6 +17,7 @@ pub async fn prepare(
     messages: &mut Vec<Value>,
     search_endpoint: &str,
     cache_hours: u64,
+    context_window: Option<u32>,
 ) -> Result<PreparedTools, String> {
     let mut sources = Vec::new();
     let tools = json!([
@@ -30,8 +31,12 @@ pub async fn prepare(
         }}
     ]);
     for _ in 0..2 {
+        let mut payload = json!({"model":model,"messages":messages,"tools":tools,"stream":false,"think":false});
+        if let Some(num_ctx) = context_window {
+            payload["options"] = json!({"num_ctx":num_ctx});
+        }
         let response = client.post(ollama_url)
-            .json(&json!({"model":model,"messages":messages,"tools":tools,"stream":false,"think":false}))
+            .json(&payload)
             .timeout(Duration::from_secs(150)).send().await.map_err(|e| e.to_string())?;
         if !response.status().is_success() {
             return Err(format!("Ollama tool calling returned {}. Disable auto search or use a model that supports tools.", response.status()));
