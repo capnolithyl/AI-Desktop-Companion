@@ -88,7 +88,7 @@ fn sensitive(text: &str) -> bool {
 }
 
 fn user_fact_candidate(text: &str) -> bool {
-    let lower = format!(" {} ", text.to_lowercase().replace(['\n','\r','\t'], " "));
+    let lower = format!(" {} ", text.to_lowercase().replace('\n', " ").replace('\r', " ").replace('\t', " "));
     [" i ", " i'm ", " i've ", " my ", " we ", " we're ", " our "]
         .iter().any(|term| lower.contains(term))
 }
