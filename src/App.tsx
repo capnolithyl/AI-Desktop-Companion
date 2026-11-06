@@ -1004,7 +1004,7 @@ export default function App() {
                 onClick={() => void manageService("status")}><RotateCw size={14}/> Status</button>
             </div>
             {serviceError && <small className="field-error">{serviceError}</small>}
-            <small>Start enables Docker's unless-stopped policy. First-time SearXNG setup is still manual; custom ports can be monitored but not automatically restarted.</small>
+            <small>Start enables automatic recovery and Docker's unless-stopped policy; Stop disables recovery. First-time SearXNG setup is still manual; custom ports are monitored but not automatically restarted.</small>
           </div>
           <label className="settings-toggle">
             <input type="checkbox" checked={draft.autoManageSearch}
