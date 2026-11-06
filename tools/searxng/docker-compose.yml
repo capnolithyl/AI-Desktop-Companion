@@ -1,0 +1,14 @@
+# Single-machine, API-enabled SearXNG for Mikan. Not reachable from your LAN.
+services:
+  searxng:
+    image: docker.io/searxng/searxng:latest
+    container_name: mikan-searxng
+    restart: "no"
+    ports:
+      - "127.0.0.1:8888:8080"
+    environment:
+      SEARXNG_BASE_URL: "http://127.0.0.1:8888/"
+      SEARXNG_SECRET: "${SEARXNG_SECRET:?Run start.ps1 to generate a secret first}"
+    volumes:
+      - ./config:/etc/searxng
+      - ./cache:/var/cache/searxng

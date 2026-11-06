@@ -2,7 +2,7 @@ import { DEFAULT_PERSONALITY, readPersonality, type Personality } from "./person
 
 export type ChatRole = "user" | "assistant";
 export type Message = { id: string; role: ChatRole; content: string };
-export type Settings = { endpoint: string; model: string; systemPrompt: string; appearance: Appearance; personality: Personality };
+export type Settings = { endpoint: string; model: string; systemPrompt: string; appearance: Appearance; personality: Personality; searxngEndpoint: string };
 
 export type Appearance = {
   accent: string;
@@ -35,6 +35,7 @@ function readAppearance(value: unknown): Appearance {
 
 export const DEFAULT_SETTINGS: Settings = {
   endpoint: "http://127.0.0.1:11434",
+  searxngEndpoint: "http://127.0.0.1:8888",
   appearance: { ...DEFAULT_APPEARANCE },
   personality: { ...DEFAULT_PERSONALITY },
   model: "qwen3.5:9b",
@@ -48,6 +49,7 @@ export function loadSettings(): Settings {
     const data = JSON.parse(localStorage.getItem(SETTINGS_KEY) ?? "{}") as Partial<Settings>;
     return {
       endpoint: typeof data.endpoint === "string" ? data.endpoint : DEFAULT_SETTINGS.endpoint,
+      searxngEndpoint: typeof data.searxngEndpoint === "string" ? data.searxngEndpoint : DEFAULT_SETTINGS.searxngEndpoint,
       model: typeof data.model === "string" ? data.model : DEFAULT_SETTINGS.model,
       systemPrompt: typeof data.systemPrompt === "string" ? data.systemPrompt : DEFAULT_SETTINGS.systemPrompt,
       appearance: readAppearance(data.appearance),
