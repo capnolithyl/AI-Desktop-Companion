@@ -257,9 +257,9 @@ export default function App() {
     let disposed = false;
     void (async () => {
       try {
-        const [archive, facts] = await Promise.all([
-          memoryApi.listConversations(), memoryApi.listFacts()
-        ]);
+        // Initialize the SQLite schema on one connection before reading facts.
+        const archive = await memoryApi.listConversations();
+        const facts = await memoryApi.listFacts();
         if (disposed) return;
         setConversations(archive);
         setUserFacts(facts);
@@ -332,7 +332,7 @@ export default function App() {
   };
 
   const clearChat = () => {
-    if (busy) return;
+    if (busy || !memoryReady) return;
     setMessages([]);
     setActiveConversationId(null);
     setFeedback(null);
