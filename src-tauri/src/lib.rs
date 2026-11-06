@@ -238,7 +238,7 @@ async fn chat_stream_impl(
             // Previous assistant text can contain hallucinations. For web research
             // retain only the user's conversation context, not prior model claims.
             messages.retain(|m| m["role"] == "system" || m["role"] == "user");
-            let rules = research_intent::evidence_instruction(&question);
+            let rules = research_intent::evidence_instruction();
             let excerpts = research_intent::evidence_data(&sources);
             let insert_at = usize::from(messages.first().is_some_and(|m| m["role"] == "system"));
             messages.insert(insert_at, json!({"role":"system","content": rules}));
@@ -274,7 +274,7 @@ async fn chat_stream_impl(
             } else {
                 // Even a model-initiated tool call must end with a source-focused
                 // generation step, not an unchecked pre-generated answer.
-                let rules = research_intent::evidence_instruction(&question);
+                let rules = research_intent::evidence_instruction();
                 let insert_at = usize::from(messages.first().is_some_and(|m| m["role"] == "system"));
                 messages.insert(insert_at, json!({"role":"system","content": rules}));
                 // These sources are already provided in the lower-trust tool messages.
