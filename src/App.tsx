@@ -1,14 +1,16 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { register, unregister } from "@tauri-apps/plugin-global-shortcut";
 import {
-  ArrowLeft, ArrowUp, Cat, Check, Clock3, GripHorizontal, History,
+  ArrowLeft, ArrowUp, Cat, Check, Clock3, History,
   LoaderCircle, MessageCircle, RotateCw, Settings2, Sparkles, SquarePen, X
 } from "lucide-react";
 import {
-  DEFAULT_SETTINGS, loadPortrait, loadSettings, savePortrait, saveSettings,
+  DEFAULT_SETTINGS, DEFAULT_APPEARANCE, loadPortrait, loadSettings, savePortrait, saveSettings,
   type Message, type Settings
 } from "./storage";
 
@@ -28,6 +30,17 @@ type Diagnostics = { elapsedMs: number; firstTokenMs: number | null; model: stri
 type LogMessage = Message & { createdAt: number; diagnostics?: Diagnostics; failed?: boolean };
 const HOTKEY = "Control+Alt+M";
 const BUNDLED_PORTRAIT = "/mikan.png";
+
+function rgbOf(hex: string): string {
+  return [1, 3, 5].map(index => parseInt(hex.slice(index, index + 2), 16)).join(" ");
+}
+function MarkdownText({ text }: { text: string }) {
+  // No raw HTML plugin is enabled, so response markup cannot inject HTML.
+  return <div className="markdown-text"><ReactMarkdown remarkPlugins={[remarkGfm]}>{text}</ReactMarkdown></div>;
+}
+const FONTS = ["Segoe UI", "Arial", "Verdana", "Georgia"] as const;
+const ACCENTS = ["#ffad7e", "#f28bb6", "#ae9dff", "#80d6c5", "#8dbbff"];
+const PANELS = ["#211b25", "#18191f", "#2b2020", "#152336"];
 
 function errorText(error: unknown): string {
   return typeof error === "string" ? error : error instanceof Error ? error.message : String(error);
@@ -179,7 +192,8 @@ export default function App() {
     const updated = {
       endpoint: draft.endpoint.trim().replace(/\/+$/, ""),
       model: draft.model.trim(),
-      systemPrompt: draft.systemPrompt.trim()
+      systemPrompt: draft.systemPrompt.trim(),
+      appearance: { ...draft.appearance }
     };
     setSettings(updated);
     saveSettings(updated);
@@ -281,24 +295,20 @@ export default function App() {
   const lastReply = [...messages].reverse().find(m => m.role === "assistant");
   const replyText = lastReply?.content || (busy ? "Thinking…" : greeting);
 
-  return <main className="companion">
-    <div className="floating-controls">
-      <div
-        className="drag-handle"
-        title="Drag to move Mikan"
-        onMouseDown={event => {
-          if (event.button === 0) void getCurrentWindow().startDragging().catch(console.warn);
-        }}
-      ><GripHorizontal size={22} /><span>DRAG MIKAN</span></div>
-      <div className="control-buttons">
-        <button className="circle-button" title="Chat history (/log)" aria-label="Chat history" onClick={() => setScreen("log")}><History size={18}/></button>
-        <button className="circle-button" title="Settings (/settings)" aria-label="Settings" onClick={openSettings}><Settings2 size={18}/></button>
-        <button className="circle-button close-button" title="Hide Mikan (Ctrl+Alt+M)" aria-label="Hide Mikan"
-          onClick={() => void invoke("hide_companion")}><X size={19}/></button>
-      </div>
-    </div>
+  const theme = {
+    "--accent": settings.appearance.accent,
+    "--accent-rgb": rgbOf(settings.appearance.accent),
+    "--panel-rgb": rgbOf(settings.appearance.panel),
+    "--panel-opacity": String(settings.appearance.opacity),
+    "--mikan-font": `"${settings.appearance.fontFamily}", system-ui, sans-serif`,
+    "--mikan-font-size": `${settings.appearance.fontSize}px`
+  } as CSSProperties;
+  const dragPortrait = (event: ReactMouseEvent<HTMLElement>) => {
+    if (event.button === 0) void getCurrentWindow().startDragging().catch(console.warn);
+  };
 
-    <div className="portrait-space">
+  return <main className="companion" style={theme}>
+    <div className="portrait-space" title="Drag Mikan to move the window" onMouseDown={dragPortrait}>
       {portrait ? (
         <img className="character-portrait" src={portrait} alt="Mikan, your desktop companion" draggable={false}
           onError={() => setPortrait(null)}/>
@@ -314,11 +324,17 @@ export default function App() {
     <section className="dock" aria-label="Chat with Mikan">
       <div className="reply-panel" aria-live="polite">
         <div className="reply-header">
-          <div><span className="cat-dot" /> <strong>MIKAN</strong></div>
-          {busy && <LoaderCircle size={15} className="spin" />}
-          {!busy && lastReply?.failed && <span className="error-caption">Error</span>}
+          <div className="reply-title"><span className="cat-dot" /> <strong>MIKAN</strong>
+            {busy && <LoaderCircle size={15} className="spin" />}
+            {!busy && lastReply?.failed && <span className="error-caption">Error</span>}
+          </div>
+          <div className="dock-actions">
+            <button className="dock-icon" title="Conversation log (/log)" aria-label="Conversation log" onClick={() => setScreen("log")}><History size={17}/></button>
+            <button className="dock-icon" title="Settings (/settings)" aria-label="Settings" onClick={openSettings}><Settings2 size={17}/></button>
+            <button className="dock-icon" title="Hide Mikan" aria-label="Hide Mikan" onClick={() => void invoke("hide_companion")}><X size={18}/></button>
+          </div>
         </div>
-        <div className="latest-reply">{replyText}</div>
+        <div className="latest-reply"><MarkdownText text={replyText}/></div>
       </div>
       <div className="input-row">
         <textarea
@@ -367,7 +383,7 @@ export default function App() {
             <strong>{m.role === "user" ? "YOU" : "MIKAN"}</strong>
             <time>{new Date(m.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</time>
           </div>
-          <p className={m.failed ? "message-error" : ""}>{m.content || (busy ? "Thinking…" : "")}</p>
+          <div className={m.failed ? "message-error message-content" : "message-content"}><MarkdownText text={m.content || (busy ? "Thinking…" : "")}/></div>
           {m.role === "assistant" && <ReplyMetrics diagnostics={m.diagnostics}/>}
         </article>)}
       </div>
@@ -377,8 +393,8 @@ export default function App() {
     {screen === "settings" && <section className="drawer" role="dialog" aria-label="Mikan settings">
       <header className="drawer-header">
         <button className="back-button" title="Back to companion" onClick={goCompact}><ArrowLeft size={19}/></button>
-        <div className="drawer-title"><strong>Settings</strong><span>Mikan v0.2 · Local only</span></div>
-        <button className="secondary-action" onClick={() => setDraft({ ...DEFAULT_SETTINGS })}><RotateCw size={14}/> Reset</button>
+        <div className="drawer-title"><strong>Settings</strong><span>Mikan v0.3 · Local only</span></div>
+        <button className="secondary-action" onClick={() => setDraft({ ...DEFAULT_SETTINGS, appearance: { ...DEFAULT_APPEARANCE } })}><RotateCw size={14}/> Reset</button>
       </header>
       <div className="settings-body">
         <label className="setting-field">Ollama endpoint
@@ -398,6 +414,50 @@ export default function App() {
           <small>The included portrait is the default. You can still replace it here.</small>
           {imageError && <small className="field-error">{imageError}</small>}
           {portrait && <span className="portrait-ready"><Check size={15}/> Portrait ready</span>}
+        </label>
+        <div className="appearance-heading">
+          <strong>Appearance</strong>
+          <small>Customize Mikan's colors and typography.</small>
+        </div>
+        <div className="setting-field">
+          <span>Accent color</span>
+          <div className="color-choices">
+            {ACCENTS.map(color => <button key={color} type="button"
+              className={draft.appearance.accent.toLowerCase() === color ? "color-swatch selected" : "color-swatch"}
+              style={{backgroundColor: color}} aria-label={`Select accent ${color}`}
+              title={color} onClick={() => setDraft({ ...draft, appearance: { ...draft.appearance, accent: color } })} />)}
+            <label className="custom-color">Custom
+              <input type="color" value={draft.appearance.accent}
+                onChange={e => setDraft({ ...draft, appearance: { ...draft.appearance, accent: e.target.value } })}/>
+            </label>
+          </div>
+        </div>
+        <div className="setting-field">
+          <span>Panel color</span>
+          <div className="color-choices">
+            {PANELS.map(color => <button key={color} type="button"
+              className={draft.appearance.panel.toLowerCase() === color ? "color-swatch selected" : "color-swatch"}
+              style={{backgroundColor: color}} aria-label={`Select panel ${color}`}
+              title={color} onClick={() => setDraft({ ...draft, appearance: { ...draft.appearance, panel: color } })} />)}
+            <label className="custom-color">Custom
+              <input type="color" value={draft.appearance.panel}
+                onChange={e => setDraft({ ...draft, appearance: { ...draft.appearance, panel: e.target.value } })}/>
+            </label>
+          </div>
+        </div>
+        <label className="setting-field">Panel opacity: {Math.round(draft.appearance.opacity * 100)}%
+          <input type="range" min="65" max="100" step="5" value={Math.round(draft.appearance.opacity * 100)}
+            onChange={e => setDraft({ ...draft, appearance: { ...draft.appearance, opacity: Number(e.target.value) / 100 } })}/>
+        </label>
+        <label className="setting-field">Font family
+          <select value={draft.appearance.fontFamily}
+            onChange={e => setDraft({ ...draft, appearance: { ...draft.appearance, fontFamily: e.target.value as typeof draft.appearance.fontFamily } })}>
+            {FONTS.map(font => <option key={font} value={font}>{font}</option>)}
+          </select>
+        </label>
+        <label className="setting-field">Message font size: {draft.appearance.fontSize}px
+          <input type="range" min="11" max="20" step="1" value={draft.appearance.fontSize}
+            onChange={e => setDraft({ ...draft, appearance: { ...draft.appearance, fontSize: Number(e.target.value) } })}/>
         </label>
         <p className="settings-note"><Sparkles size={16}/> Chats currently last until you quit the app. Persistence and voice are coming later.</p>
       </div>

@@ -1,9 +1,39 @@
 export type ChatRole = "user" | "assistant";
 export type Message = { id: string; role: ChatRole; content: string };
-export type Settings = { endpoint: string; model: string; systemPrompt: string };
+export type Settings = { endpoint: string; model: string; systemPrompt: string; appearance: Appearance };
+
+export type Appearance = {
+  accent: string;
+  panel: string;
+  opacity: number;
+  fontFamily: "Segoe UI" | "Arial" | "Verdana" | "Georgia";
+  fontSize: number;
+};
+export const DEFAULT_APPEARANCE: Appearance = {
+  accent: "#ffad7e",
+  panel: "#211b25",
+  opacity: 0.94,
+  fontFamily: "Segoe UI",
+  fontSize: 13
+};
+function safeHex(value: unknown, fallback: string): string {
+  return typeof value === "string" && /^#[0-9a-fA-F]{6}$/.test(value) ? value : fallback;
+}
+function readAppearance(value: unknown): Appearance {
+  const v = value && typeof value === "object" ? value as Partial<Appearance> : {};
+  const fonts = ["Segoe UI", "Arial", "Verdana", "Georgia"];
+  return {
+    accent: safeHex(v.accent, DEFAULT_APPEARANCE.accent),
+    panel: safeHex(v.panel, DEFAULT_APPEARANCE.panel),
+    opacity: typeof v.opacity === "number" && Number.isFinite(v.opacity) ? Math.max(0.65, Math.min(1, v.opacity)) : DEFAULT_APPEARANCE.opacity,
+    fontFamily: fonts.includes(String(v.fontFamily)) ? v.fontFamily as Appearance["fontFamily"] : DEFAULT_APPEARANCE.fontFamily,
+    fontSize: typeof v.fontSize === "number" && Number.isFinite(v.fontSize) ? Math.max(11, Math.min(20, Math.round(v.fontSize))) : DEFAULT_APPEARANCE.fontSize
+  };
+}
 
 export const DEFAULT_SETTINGS: Settings = {
   endpoint: "http://127.0.0.1:11434",
+  appearance: { ...DEFAULT_APPEARANCE },
   model: "qwen3.5:9b",
   systemPrompt: "You are Mikan, a witty, curious, warm and occasionally teasing desktop AI companion. Keep replies conversational and reasonably concise. Be genuinely useful and admit when you are uncertain. Never claim to have seen the user's screen or accessed the web unless you actually have."
 };
@@ -16,7 +46,8 @@ export function loadSettings(): Settings {
     return {
       endpoint: typeof data.endpoint === "string" ? data.endpoint : DEFAULT_SETTINGS.endpoint,
       model: typeof data.model === "string" ? data.model : DEFAULT_SETTINGS.model,
-      systemPrompt: typeof data.systemPrompt === "string" ? data.systemPrompt : DEFAULT_SETTINGS.systemPrompt
+      systemPrompt: typeof data.systemPrompt === "string" ? data.systemPrompt : DEFAULT_SETTINGS.systemPrompt,
+      appearance: readAppearance(data.appearance)
     };
   } catch {
     return { ...DEFAULT_SETTINGS };

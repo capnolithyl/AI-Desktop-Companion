@@ -1,48 +1,42 @@
-# Mikan Desktop Companion v0.2 (Windows)
+# Mikan Desktop Companion v0.3 (Windows)
 
-A free local-first personal AI companion. **This is an experimental development build.**
+A free, local-first personal AI companion. This is an experimental build for one Windows 11 PC.
 
 ## Install / update
 
-1. In [GitHub Actions](https://github.com/capnolithyl/AI-Desktop-Companion/actions/workflows/windows.yml), open the newest **successful** Windows installer run.
-2. Download its `mikan-windows-installer` artifact, extract the ZIP, and run the Windows installer. Install over v0.1 if it is already installed.
-3. Keep Ollama running. Install and pull a model if needed: `ollama pull qwen3.5:9b`.
-4. Mikan connects to Ollama on `http://127.0.0.1:11434`; choose your installed model in Settings.
-5. The app loads a bundled `public/mikan.png` by default **if present in the build**. If not bundled, choose the original portrait once in Settings. Saved custom portraits are kept across app upgrades in WebView IndexedDB.
+1. Open the latest successful [Windows installer workflow](https://github.com/capnolithyl/AI-Desktop-Companion/actions/workflows/windows.yml).
+2. Download the `mikan-windows-installer` artifact, extract it and run the NSIS setup executable. Install over v0.2.
+3. Keep Ollama running with an installed local model such as `qwen3.5:9b`. Endpoint: `http://127.0.0.1:11434`.
+4. Your previous settings and selected portrait should persist across upgrades in the Tauri WebView data. If the avatar is missing, choose your existing Mikan PNG under Settings.
 
-Model storage on Windows defaults to `%USERPROFILE%\.ollama\models`. Ollama is free, requires no API key for local operation, and runs separately from Mikan.
+Unsigned personal builds may trigger Windows SmartScreen. Examine the GitHub workflow/source before running.
 
-If Windows shows a SmartScreen unknown-publisher warning, this is because the personal hobby build is unsigned. Check the workflow and commit before deciding to run it.
+## Interaction
 
-## Everyday controls
+- Hold left mouse on the portrait and drag to move the companion. The old floating **Drag Mikan** button is gone.
+- History, settings and hide buttons are inside the compact chat dock.
+- **Ctrl+Alt+M** toggles Mikan and always restores compact chat when showing.
+- Enter sends; Shift+Enter inserts newline.
+- `/log` or `/history` opens the complete session chat, with per-assistant-message timing, token counts, and model throughput.
+- `/settings` opens settings; `/chat` returns to compact; `/new` and `/clear` start a new in-memory conversation.
+- Replies and conversation history are rendered as Markdown (italic `*actions*`, bold, lists, code, links, and tables), not as plain text.
+- Under Settings > Appearance, change accent color, panel color, panel opacity, font family, and message font size. These persist locally.
 
-- **Ctrl + Alt + M:** show/hide the companion. Whenever shown, it returns to the compact chat view, including when hidden from Settings or the log.
-- **Drag Mikan:** use the grip labeled "DRAG MIKAN" above the portrait to move the frameless window.
-- **Enter:** send; **Shift+Enter:** new line.
-- **History / settings icon:** opens the corresponding drawer.
-- **`/log`** or **`/history`**: open the full conversation log.
-- **`/settings`**: open settings.
-- **`/chat`**: go back to the compact companion.
-- **`/new`** or **`/clear`**: start a new in-memory conversation.
+The model's stage directions remain in the **displayed** response and chat history. When local voice synthesis is implemented, we should exclude those descriptions from spoken output rather than reading them aloud. This feature has not been implemented yet.
 
-Slash commands are interpreted by the local UI and are never sent to Ollama.
+## Technical notes
 
-## Conversation log diagnostics
+The window is `transparent: true` / `decorations: false` / `shadow: false`. Tauri's Windows shadow setting can add a 1px border and rounded corners to undecorated windows when enabled; disabling it should eliminate the remaining native frame. Some GPU/window-compositor quirks may still need hands-on Windows validation. Transparent areas of the native window can still intercept mouse clicks; pixel-perfect click-through is a separate feature.
 
-Each completed assistant reply has an optional diagnostics row:
+The color themes use CSS variables; no themes or font downloads are required. The default font is Segoe UI, with installed Arial, Verdana, and Georgia alternatives. The Markdown renderer does not enable raw HTML injection.
 
-- **Wall time:** app-observed elapsed time from sending request to completion.
-- **First token:** app-observed time until first streamed reply text, when observed.
-- **Output:** Ollama's `eval_count` (generated tokens).
-- **Speed:** `eval_count / (eval_duration / 1e9)`, tokens per second.
-- **Prompt:** Ollama's `prompt_eval_count`.
-- **Model time, load time, prompt eval:** durations from Ollama, converted from nanoseconds.
+Chats and diagnostics are session-only; they disappear after quitting the application. No web access, VRM model, TTS, screen capture, or long-term memory yet.
 
-Some models/providers may omit counters, so missing metrics are not estimated. Diagnostics appear **only in the log**, not on the live portrait/bubble.
+The original bundled Mikan PNG is only included once `public/mikan.png` is added to GitHub. Previous user-selected portraits remain in local IndexedDB.
 
-## Build from source
+## Local development
 
-Install Node.js 22+, Rust, MSVC C++ build tools, and WebView2 according to https://v2.tauri.app/start/prerequisites/.
+Install Node.js 22+, Rust, Windows MSVC C++ build tools, and WebView2 as instructed at https://v2.tauri.app/start/prerequisites/.
 
 ```powershell
 git clone https://github.com/capnolithyl/AI-Desktop-Companion.git
@@ -51,19 +45,6 @@ npm install
 npm run desktop
 ```
 
-Build the NSIS installer locally with `npm run package:windows`.
-
-## Current boundaries
-
-- v0.2 supports text and Ollama streaming only.
-- Conversations and per-message metrics last until the app exits. Durable conversation history is a future feature.
-- Voice, screen capture, web search, and VRM animation are not implemented yet.
-- Only loopback Ollama endpoints are supported. No cloud API keys in this release.
-- The window is visually transparent, but transparent space may still intercept mouse input. True pixel-perfect click-through would require a future native hit-testing feature.
-- The bundled original Mikan image will only be included when `public/mikan.png` is committed. A manually selected local portrait still works and persists.
-
-## Project
-
-Source: https://github.com/capnolithyl/AI-Desktop-Companion
+Build locally using `npm run package:windows`. GitHub Actions builds and uploads the unsigned Windows NSIS installer after pushes to main.
 
 Roadmap: https://trello.com/b/bLO0mXJM/ai-desktop-companion
