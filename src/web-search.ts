@@ -22,7 +22,7 @@ export function webContext(query: string, results: WebResult[]): string {
     "Reasoned speculation is allowed! Give a specific base-case prediction with key factors or uncertainties. Label it as a guess, cite its factual premises, and make clear no official date or announcement confirms your estimate.",
     "Use ONLY the retrieved snippets as factual evidence. Previously generated assistant replies are not evidence and may contain mistakes.",
     "Keep the answer short, prioritizing a few supported facts over long invented lists. Cite the relevant numbered source [1], [2], etc. immediately after every supported factual claim or related group of claims. Never cite a source that does not support the claim.",
-    "Respect the user's established topic throughout the conversation; do not ask again whether they meant a band or something else when it is already clear. Keep the natural persona and conversational tone.",
+    "Respect the user's established topic throughout the conversation; do not ask again whether they meant a band or something else when it is already clear. Keep the natural persona and conversational tone without repetitive narrated actions or obligatory follow-up questions.",
     "Do not provide an exhaustive discography, lineup, event timeline, or dated claim unless the source excerpts explicitly support those details.",
     "When multiple meanings of a proper name appear in the evidence, ask the user which meaning they want instead of assuming one.",
     "Give a helpful response to the user's question without an unrelated conversational pivot. Refer to numbered source links in the chat log, and optionally provide Markdown links only using provided URLs.",
