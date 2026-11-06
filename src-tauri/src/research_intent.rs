@@ -96,7 +96,7 @@ fn extract_subject(text: &str) -> Option<String> {
         if let Some(index) = lower.rfind(prefix) {
             let rest = text[index + prefix.len()..]
                 .split(['?', '!', '\n']).next().unwrap_or("")
-                .trim().trim_end_matches(['.', ',', ';', ':']).trim();
+                .trim().trim_end_matches(|c: char| matches!(c, '.' | ',' | ';' | ':')).trim();
             let subject = canonical_subject(strip_type_prefix(rest));
             if !subject.is_empty() {
                 return Some(subject);
