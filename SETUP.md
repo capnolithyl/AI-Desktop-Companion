@@ -1,22 +1,48 @@
-# Mikan v0.1: Windows setup
+# Mikan Desktop Companion v0.2 (Windows)
 
-This is a first local-chat prototype. No subscriptions, remote API keys, speech or memory yet.
+A free local-first personal AI companion. **This is an experimental development build.**
 
-## Fastest route: prebuilt Windows installer
+## Install / update
 
-1. Open the repository's **Actions** tab, select **Windows installer**, and choose the most recent successful run. If needed, choose **Run workflow**.
-2. Download the `mikan-windows-installer` artifact, unzip it, and run the `-setup.exe` file. The installer is not code-signed; Windows SmartScreen may warn about unknown publishers.
-3. Install Ollama for Windows: https://ollama.com/download/windows
-4. Open PowerShell and run: `ollama pull qwen3.5:9b`
-5. Start Mikan and open **Settings**. The default local endpoint is `http://127.0.0.1:11434`. Click **Refresh models** and choose one.
-6. Mikan's bundled portrait is loaded automatically when `public/mikan.png` is present at build time. The optional portrait picker in Settings lets you override it with an image stored locally in IndexedDB. **The original portrait asset is still pending addition to GitHub, so current builds continue to show the picker.**
-7. Type a message and press Enter. Shift+Enter inserts a newline.
+1. In [GitHub Actions](https://github.com/capnolithyl/AI-Desktop-Companion/actions/workflows/windows.yml), open the newest **successful** Windows installer run.
+2. Download its `mikan-windows-installer` artifact, extract the ZIP, and run the Windows installer. Install over v0.1 if it is already installed.
+3. Keep Ollama running. Install and pull a model if needed: `ollama pull qwen3.5:9b`.
+4. Mikan connects to Ollama on `http://127.0.0.1:11434`; choose your installed model in Settings.
+5. The app loads a bundled `public/mikan.png` by default **if present in the build**. If not bundled, choose the original portrait once in Settings. Saved custom portraits are kept across app upgrades in WebView IndexedDB.
 
-The default model is only a starting point. AMD RX 9070 acceleration on Windows depends on the installed Ollama version and backend. If performance is poor, benchmark llama.cpp with Vulkan later.
+Model storage on Windows defaults to `%USERPROFILE%\.ollama\models`. Ollama is free, requires no API key for local operation, and runs separately from Mikan.
 
-## Development setup
+If Windows shows a SmartScreen unknown-publisher warning, this is because the personal hobby build is unsigned. Check the workflow and commit before deciding to run it.
 
-Install Node.js 22+, Rust, MSVC C++ build tools, and WebView2 per https://v2.tauri.app/start/prerequisites/.
+## Everyday controls
+
+- **Ctrl + Alt + M:** show/hide the companion. Whenever shown, it returns to the compact chat view, including when hidden from Settings or the log.
+- **Drag Mikan:** use the grip labeled "DRAG MIKAN" above the portrait to move the frameless window.
+- **Enter:** send; **Shift+Enter:** new line.
+- **History / settings icon:** opens the corresponding drawer.
+- **`/log`** or **`/history`**: open the full conversation log.
+- **`/settings`**: open settings.
+- **`/chat`**: go back to the compact companion.
+- **`/new`** or **`/clear`**: start a new in-memory conversation.
+
+Slash commands are interpreted by the local UI and are never sent to Ollama.
+
+## Conversation log diagnostics
+
+Each completed assistant reply has an optional diagnostics row:
+
+- **Wall time:** app-observed elapsed time from sending request to completion.
+- **First token:** app-observed time until first streamed reply text, when observed.
+- **Output:** Ollama's `eval_count` (generated tokens).
+- **Speed:** `eval_count / (eval_duration / 1e9)`, tokens per second.
+- **Prompt:** Ollama's `prompt_eval_count`.
+- **Model time, load time, prompt eval:** durations from Ollama, converted from nanoseconds.
+
+Some models/providers may omit counters, so missing metrics are not estimated. Diagnostics appear **only in the log**, not on the live portrait/bubble.
+
+## Build from source
+
+Install Node.js 22+, Rust, MSVC C++ build tools, and WebView2 according to https://v2.tauri.app/start/prerequisites/.
 
 ```powershell
 git clone https://github.com/capnolithyl/AI-Desktop-Companion.git
@@ -25,27 +51,19 @@ npm install
 npm run desktop
 ```
 
-The desktop script generates icons from `assets/mikan-icon.svg` and starts Tauri dev mode. To build an installer locally, run `npm run package:windows`.
+Build the NSIS installer locally with `npm run package:windows`.
 
-## Current capabilities
+## Current boundaries
 
-- Typed, streamed multi-turn conversation with local Ollama
-- Adjustable model, loopback endpoint, and character system prompt
-- In-session chat history, New chat, connection status, error feedback
-- Custom local still portrait and speech bubble
-- Windows tray icon and Ctrl+Alt+M toggle (may conflict with another shortcut)
-- No API keys required for Ollama
+- v0.2 supports text and Ollama streaming only.
+- Conversations and per-message metrics last until the app exits. Durable conversation history is a future feature.
+- Voice, screen capture, web search, and VRM animation are not implemented yet.
+- Only loopback Ollama endpoints are supported. No cloud API keys in this release.
+- The window is visually transparent, but transparent space may still intercept mouse input. True pixel-perfect click-through would require a future native hit-testing feature.
+- The bundled original Mikan image will only be included when `public/mikan.png` is committed. A manually selected local portrait still works and persists.
 
-## Limitations / next steps
+## Project
 
-- Voice, screen vision, internet access, persistent conversations and long-term memory are not implemented yet.
-- Model, endpoint and prompt settings persist locally. Chats do not persist after closing.
-- Ollama runs separately and is not bundled with Mikan.
-- Only loopback HTTP Ollama endpoints are supported. Remote API keys and remote endpoints are intentionally not supported in this first version.
-- Closing the window hides it to the tray; use **Quit Mikan** in the tray menu to exit.
-- Initial install may depend on WebView2 availability.
-- This is an experimental build. The GitHub workflow must complete successfully to prove the Windows installer works.
+Source: https://github.com/capnolithyl/AI-Desktop-Companion
 
-## Bundling the default portrait
-
-Place the original Mikan portrait at `public/mikan.png` (not a replacement or a generated approximation) and commit it. Vite copies assets from `public` into the packaged app automatically. The app uses that asset by default, but any manually chosen portrait stored in IndexedDB takes precedence. This is a pending asset, not yet included in the repository.
+Roadmap: https://trello.com/b/bLO0mXJM/ai-desktop-companion

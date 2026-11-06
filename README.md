@@ -1,7 +1,9 @@
 # Mikan Desktop Companion
 
-A personal, local-first Windows AI desktop companion, built with Tauri 2, React and TypeScript.
+A free, local-first AI catgirl companion for Windows. Built with Tauri 2, React, TypeScript, and Ollama.
 
-Initial prototype: text chat with Ollama, a customizable still avatar, and settings.
+**v0.2:** Floating transparent character overlay, latest-answer bubble, compact message dock, optional full log/settings drawers, slash commands, real Ollama response diagnostics, and global hotkey/tray controls.
 
-See [SETUP.md](SETUP.md) for Windows installation and first-run instructions.
+See [SETUP.md](SETUP.md) for Windows installation, commands, and known limitations.
+
+Roadmap: https://trello.com/b/bLO0mXJM/ai-desktop-companion
