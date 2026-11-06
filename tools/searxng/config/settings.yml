@@ -1,0 +1,18 @@
+# Inherit SearXNG engine defaults; this is a private, single-PC instance.
+use_default_settings: true
+
+general:
+  instance_name: "Mikan Search"
+  debug: false
+
+search:
+  safe_search: 1
+  formats:
+    - html
+    - json
+
+server:
+  # This value is replaced by the generated SEARXNG_SECRET from .env.
+  secret_key: "local-placeholder-overridden-by-env"
+  limiter: false
+  image_proxy: false

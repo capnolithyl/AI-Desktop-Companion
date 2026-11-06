@@ -8,3 +8,7 @@ src-tauri/gen/schemas/
 src-tauri/icons/
 .DS_Store
 *.log
+
+# Local-only SearXNG secrets and writable container cache
+tools/searxng/.env
+tools/searxng/cache/

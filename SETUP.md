@@ -1,4 +1,4 @@
-# Mikan Desktop Companion v0.3.1 (Windows)
+# Mikan Desktop Companion v0.4 (Windows)
 
 A free, local-first personal AI companion. This is an experimental build for one Windows 11 PC.
 
@@ -11,6 +11,10 @@ A free, local-first personal AI companion. This is an experimental build for one
 
 Unsigned personal builds may trigger Windows SmartScreen. Examine the GitHub workflow/source before running.
 
+## Internet access (SearXNG)
+
+See [tools/searxng/README.md](tools/searxng/README.md) for the Windows Docker Desktop setup. After starting SearXNG, enter `http://127.0.0.1:8888` in Settings. `/search query` or the search icon opens results; **Ask Mikan** passes snippets to the selected Ollama model with source links. Regular chat does not search automatically yet.
+
 ## Interaction
 
 - Hold left mouse on the portrait and drag to move the companion. The old floating **Drag Mikan** button is gone.
@@ -18,7 +22,7 @@ Unsigned personal builds may trigger Windows SmartScreen. Examine the GitHub wor
 - **Ctrl+Alt+M** toggles Mikan and always restores compact chat when showing.
 - Enter sends; Shift+Enter inserts newline.
 - `/log` or `/history` opens the complete session chat, with per-assistant-message timing, token counts, and model throughput.
-- `/settings` opens settings; `/chat` returns to compact; `/new` and `/clear` start a new in-memory conversation.
+- `/search your query` searches through locally running SearXNG; `/settings` opens settings; `/chat` returns to compact; `/new` and `/clear` start a new in-memory conversation.
 - Models installed through Ollama appear automatically in the model dropdown in Settings and in the compact dock footer. Use the refresh icon after pulling a model while Mikan is open. Selecting a model in the dock saves it immediately; choosing one in Settings takes effect when you click Save. No restart or API key needed. The current conversation remains intact after switching, so start a new chat if you want an apples-to-apples comparison. If Ollama is offline or a model is missing, Settings also accepts manually typed model names.
 - Replies and conversation history are rendered as Markdown (italic `*actions*`, bold, lists, code, links, and tables), not as plain text.
 - Under Settings > Appearance, change accent color, panel color, panel opacity, font family, and message font size. These persist locally.

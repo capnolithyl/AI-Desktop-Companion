@@ -1,13 +1,15 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { openUrl } from "@tauri-apps/plugin-opener";
+import { webContext, type WebResult } from "./web-search";
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { register, unregister } from "@tauri-apps/plugin-global-shortcut";
 import {
   ArrowLeft, ArrowUp, Cat, Check, Clock3, History,
-  LoaderCircle, MessageCircle, RotateCw, Settings2, Sparkles, SquarePen, X
+  ExternalLink, LoaderCircle, MessageCircle, RotateCw, Search, Settings2, Sparkles, SquarePen, X
 } from "lucide-react";
 import {
   DEFAULT_SETTINGS, DEFAULT_APPEARANCE, loadPortrait, loadSettings, savePortrait, saveSettings,
@@ -15,7 +17,7 @@ import {
 } from "./storage";
 import { DEFAULT_PERSONALITY, PERSONALITY_TRAITS, personalityGuidance } from "./personality";
 
-type Screen = "compact" | "log" | "settings";
+type Screen = "compact" | "log" | "settings" | "search";
 type Connection = { mode: "loading" | "online" | "offline"; text: string };
 type ChatChunk = { requestId: string; content: string };
 type OllamaStats = {
@@ -28,16 +30,30 @@ type OllamaStats = {
 };
 type ChatCompletion = { content: string; stats: OllamaStats | null };
 type Diagnostics = { elapsedMs: number; firstTokenMs: number | null; model: string; stats: OllamaStats | null };
-type LogMessage = Message & { createdAt: number; diagnostics?: Diagnostics; failed?: boolean };
+type LogMessage = Message & { createdAt: number; diagnostics?: Diagnostics; failed?: boolean; sources?: WebResult[] };
 const HOTKEY = "Control+Alt+M";
 const BUNDLED_PORTRAIT = "/mikan.png";
 
 function rgbOf(hex: string): string {
   return [1, 3, 5].map(index => parseInt(hex.slice(index, index + 2), 16)).join(" ");
 }
+async function openSource(url: string): Promise<void> {
+  try {
+    const target = new URL(url);
+    if (target.protocol !== "https:" && target.protocol !== "http:") return;
+    await openUrl(target.href);
+  } catch (error) {
+    console.warn("Could not open external link:", error);
+  }
+}
 function MarkdownText({ text }: { text: string }) {
-  // No raw HTML plugin is enabled, so response markup cannot inject HTML.
-  return <div className="markdown-text"><ReactMarkdown remarkPlugins={[remarkGfm]}>{text}</ReactMarkdown></div>;
+  // Do not enable raw HTML. Open citations in the user's default browser.
+  return <div className="markdown-text"><ReactMarkdown remarkPlugins={[remarkGfm]} components={{
+    a: ({ href, children }) => <a href={href} onClick={event => {
+      event.preventDefault();
+      if (href) void openSource(href);
+    }}>{children}</a>
+  }}>{text}</ReactMarkdown></div>;
 }
 const FONTS = ["Segoe UI", "Arial", "Verdana", "Georgia"] as const;
 const ACCENTS = ["#ffad7e", "#f28bb6", "#ae9dff", "#80d6c5", "#8dbbff"];
@@ -87,9 +103,15 @@ export default function App() {
   const [imageError, setImageError] = useState<string | null>(null);
   const [availableModels, setAvailableModels] = useState<string[]>([]);
   const [connection, setConnection] = useState<Connection>({ mode: "loading", text: "Checking Ollama…" });
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<WebResult[]>([]);
+  const [searchBusy, setSearchBusy] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
+  const [searchHasRun, setSearchHasRun] = useState(false);
   const [greeting, setGreeting] = useState("Hey! I'm Mikan. What are we working on?");
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const logRef = useRef<HTMLDivElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
   const portraitUrl = useRef<string | null>(null);
 
   const focusInput = useCallback(() => {
@@ -160,7 +182,10 @@ export default function App() {
   useEffect(() => {
     if (screen === "log") logRef.current?.scrollTo({ top: logRef.current.scrollHeight, behavior: "smooth" });
   }, [screen, messages]);
-  useEffect(() => { if (screen === "compact") focusInput(); }, [screen, focusInput]);
+  useEffect(() => {
+    if (screen === "compact") focusInput();
+    if (screen === "search") requestAnimationFrame(() => searchInputRef.current?.focus());
+  }, [screen, focusInput]);
 
   const clearChat = () => {
     if (busy) return;
@@ -205,6 +230,7 @@ export default function App() {
       endpoint: draft.endpoint.trim().replace(/\/+$/, ""),
       model: draft.model.trim(),
       systemPrompt: draft.systemPrompt.trim(),
+      searxngEndpoint: draft.searxngEndpoint.trim().replace(/\/+$/, ""),
       appearance: { ...draft.appearance },
       personality: { ...draft.personality }
     };
@@ -213,12 +239,41 @@ export default function App() {
     goCompact();
   };
 
-  const send = async () => {
-    const text = input.trim();
+  const performSearch = async (query: string) => {
+    const trimmed = query.trim();
+    setScreen("search");
+    setSearchQuery(trimmed);
+    setSearchResults([]);
+    setSearchError(null);
+    setSearchHasRun(false);
+    if (!trimmed) return;
+    setSearchBusy(true);
+    try {
+      const results = await invoke<WebResult[]>("web_search", {
+        endpoint: settings.searxngEndpoint,
+        query: trimmed
+      });
+      setSearchResults(results);
+      setSearchHasRun(true);
+    } catch (error) {
+      setSearchError(errorText(error));
+      setSearchHasRun(true);
+    } finally {
+      setSearchBusy(false);
+    }
+  };
+
+  const send = async (withSearch?: { query: string; results: WebResult[] }) => {
+    const text = withSearch ? withSearch.query : input.trim();
     if (!text) return;
 
     // Commands are local UI actions, never sent to the LLM.
-    const command = text.toLowerCase();
+    const command = withSearch ? "" : text.toLowerCase();
+    if (command === "/search" || command.startsWith("/search ")) {
+      setInput("");
+      void performSearch(text.slice(7).trim());
+      return;
+    }
     if (command === "/log" || command === "/history") {
       setInput("");
       setScreen("log");
@@ -245,7 +300,10 @@ export default function App() {
     const assistantId = crypto.randomUUID();
     const history = [...messages, user];
     const requestId = crypto.randomUUID();
-    setMessages([...history, { id: assistantId, role: "assistant", content: "", createdAt: Date.now() }]);
+    setMessages([...history, {
+      id: assistantId, role: "assistant", content: "", createdAt: Date.now(),
+      ...(withSearch ? { sources: withSearch.results } : {})
+    }]);
     setInput("");
     setBusy(true);
     goCompact();
@@ -272,6 +330,7 @@ export default function App() {
           model: settings.model,
           messages: [
             { role: "system", content: [settings.systemPrompt.trim(), personalityGuidance(settings.personality)].filter(Boolean).join("\n\n") },
+            ...(withSearch ? [{ role: "user", content: webContext(withSearch.query, withSearch.results) }] : []),
             ...history.map(m => ({ role: m.role, content: m.content }))
           ]
         }
@@ -342,6 +401,8 @@ export default function App() {
             {!busy && lastReply?.failed && <span className="error-caption">Error</span>}
           </div>
           <div className="dock-actions">
+            <button className="dock-icon" title="Web search (/search)" aria-label="Web search"
+              onClick={() => setScreen("search")}><Search size={17}/></button>
             <button className="dock-icon" title="Conversation log (/log)" aria-label="Conversation log" onClick={() => setScreen("log")}><History size={17}/></button>
             <button className="dock-icon" title="Settings (/settings)" aria-label="Settings" onClick={openSettings}><Settings2 size={17}/></button>
             <button className="dock-icon" title="Hide Mikan" aria-label="Hide Mikan" onClick={() => void invoke("hide_companion")}><X size={18}/></button>
@@ -354,7 +415,7 @@ export default function App() {
           ref={inputRef}
           aria-label="Message Mikan"
           rows={2}
-          placeholder="Message Mikan…  /log  /settings"
+          placeholder="Message Mikan…  /search  /log"
           value={input}
           onChange={event => setInput(event.target.value)}
           onKeyDown={event => {
@@ -410,16 +471,72 @@ export default function App() {
             <time>{new Date(m.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</time>
           </div>
           <div className={m.failed ? "message-error message-content" : "message-content"}><MarkdownText text={m.content || (busy ? "Thinking…" : "")}/></div>
+          {m.sources && m.sources.length > 0 && <div className="message-sources">
+            <strong>Web sources</strong>
+            {m.sources.map((source, index) => <button key={source.url} className="source-link" type="button"
+              onClick={() => void openSource(source.url)} title={source.url}>
+              [{index + 1}] {source.title} <ExternalLink size={13}/>
+            </button>)}
+          </div>}
           {m.role === "assistant" && <ReplyMetrics diagnostics={m.diagnostics}/>}
         </article>)}
       </div>
       <footer className="drawer-footer"><Clock3 size={14}/> Token counts and timings come from Ollama; wall time includes app overhead.</footer>
     </section>}
 
+    {screen === "search" && <section className="drawer" role="dialog" aria-label="SearXNG web search">
+      <header className="drawer-header">
+        <button className="back-button" title="Back to companion" onClick={goCompact}><ArrowLeft size={19}/></button>
+        <div className="drawer-title"><strong>Web search</strong><span>Local SearXNG · {settings.searxngEndpoint}</span></div>
+      </header>
+      <form className="search-form" onSubmit={event => {
+        event.preventDefault();
+        if (!searchBusy) void performSearch(searchQuery);
+      }}>
+        <input ref={searchInputRef} aria-label="Search query" value={searchQuery}
+          onChange={event => {
+            setSearchQuery(event.target.value);
+            setSearchResults([]);
+            setSearchHasRun(false);
+          }}
+          placeholder="Search the web…" maxLength={250}/>
+        <button className="secondary-action" type="submit" disabled={searchBusy || !searchQuery.trim()}>
+          {searchBusy ? <LoaderCircle size={16} className="spin"/> : <Search size={16}/>} Search
+        </button>
+      </form>
+      <div className="search-body">
+        {searchBusy && <div className="search-empty"><LoaderCircle size={32} className="spin"/> Searching SearXNG…</div>}
+        {!searchBusy && searchError && <div className="search-error">
+          <strong>Search unavailable</strong><p>{searchError}</p>
+          <span>Check Docker Desktop, tools/searxng/start.ps1, and the SearXNG URL in Settings.</span>
+        </div>}
+        {!searchBusy && !searchError && !searchHasRun && <div className="search-empty">
+          <Search size={32}/> Search is on demand. No automatic web requests yet.
+        </div>}
+        {!searchBusy && !searchError && searchHasRun && searchResults.length === 0 &&
+          <div className="search-empty">No results returned. Try another query or check SearXNG's enabled search engines.</div>}
+        {!searchBusy && !searchError && searchResults.map((result,index) => <article key={result.url} className="search-result">
+          <button type="button" className="search-result-title" title={result.url}
+            onClick={() => void openSource(result.url)}>
+            <span>[{index + 1}] {result.title}</span><ExternalLink size={15}/>
+          </button>
+          {result.content && <p>{result.content}</p>}
+          <small>{result.engine || new URL(result.url).hostname}</small>
+        </article>)}
+      </div>
+      <footer className="search-footer">
+        <span>Results are snippets, not full webpages. Verify important claims at the source.</span>
+        <button type="button" className="save-button" disabled={busy || searchBusy || !searchResults.length}
+          onClick={() => void send({ query: searchQuery, results: searchResults })}>
+          <Sparkles size={16}/> Ask Mikan
+        </button>
+      </footer>
+    </section>}
+
     {screen === "settings" && <section className="drawer" role="dialog" aria-label="Mikan settings">
       <header className="drawer-header">
         <button className="back-button" title="Back to companion" onClick={goCompact}><ArrowLeft size={19}/></button>
-        <div className="drawer-title"><strong>Settings</strong><span>Mikan v0.3.2 · Local only</span></div>
+        <div className="drawer-title"><strong>Settings</strong><span>Mikan v0.4 · Local first</span></div>
         <button className="secondary-action" onClick={() => setDraft({ ...DEFAULT_SETTINGS, appearance: { ...DEFAULT_APPEARANCE }, personality: { ...DEFAULT_PERSONALITY } })}><RotateCw size={14}/> Reset</button>
       </header>
       <div className="settings-body">
@@ -451,6 +568,16 @@ export default function App() {
         </label>
         <button className="inline-action" disabled={connection.mode === "loading"}
           onClick={() => void refreshModels(draft.endpoint)}><RotateCw size={14}/> Refresh installed models</button>
+        <div className="appearance-heading">
+          <strong>Internet search</strong>
+          <small>Self-hosted SearXNG. No paid API key needed. Searching is on demand.</small>
+        </div>
+        <label className="setting-field">SearXNG URL
+          <input spellCheck={false} value={draft.searxngEndpoint}
+            onChange={event => setDraft({ ...draft, searxngEndpoint: event.target.value })}
+            placeholder="http://127.0.0.1:8888"/>
+          <small>Start the SearXNG Docker container first. Only localhost is supported.</small>
+        </label>
         <label className="setting-field">Personality prompt
           <textarea rows={6} value={draft.systemPrompt} onChange={event => setDraft({ ...draft, systemPrompt: event.target.value })}/>
           <small>The sliders below add short behavioral guidance without replacing this prompt.</small>

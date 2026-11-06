@@ -1,3 +1,4 @@
+mod web_search;
 use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -245,8 +246,10 @@ fn hide_companion(window: tauri::WebviewWindow) {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
+        .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
             list_models,
+            web_search::web_search,
             chat_stream,
             toggle_companion,
             hide_companion
