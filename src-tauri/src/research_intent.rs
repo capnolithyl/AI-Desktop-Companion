@@ -50,7 +50,7 @@ pub fn explicit_research_query(messages: &[Value]) -> Option<String> {
     });
 
     let mut query = match subject {
-        Some(topic) if topic.split_whitespace().count() >= 2 && topic.len() < 80 => format!("\"{topic}\""),
+        Some(topic) if should_quote_subject(&topic) => format!("\"{topic}\""),
         Some(topic) => topic,
         None => last.to_owned(),
     };
@@ -59,8 +59,20 @@ pub fn explicit_research_query(messages: &[Value]) -> Option<String> {
         // announcement. Search for plans/recording as well, then request
         // fresh results in web_search::web_search_recent.
         query.push_str(" next album recording studio announcement");
-    } else if music_context && !query.to_lowercase().contains(" band") {
-        query.push_str(" band");
+    } else {
+        if music_context && !query.to_lowercase().contains(" band") {
+            query.push_str(" band");
+        }
+        if let Some(year) = explicit_year(last) {
+            if !query.contains(&year) {
+                query.push(' ');
+                query.push_str(&year);
+            }
+        }
+        if lower.contains("latest") || lower.contains("recent")
+            || lower.contains("news") || lower.contains("developments") {
+            query.push_str(" latest news");
+        }
     }
     if query.chars().count() > 250 {
         query = query.chars().take(250).collect();
@@ -76,20 +88,92 @@ pub fn is_album_research(messages: &[Value]) -> bool {
      .iter().any(|word| last.contains(word))
 }
 
+/// Take only the entity phrase from the first clause. Quoting an entire
+/// multipart question is an almost guaranteed zero-result SearXNG query.
 fn extract_subject(text: &str) -> Option<String> {
     let lower = text.to_lowercase();
     for prefix in [" about ", " on ", " for ", " regarding "] {
         if let Some(index) = lower.rfind(prefix) {
-            let rest = text[index + prefix.len()..].trim()
-                .trim_end_matches(|c: char| matches!(c, '?' | '!' | '.' | ',' | ';' | ':'))
-                .trim();
-            let subject = strip_type_prefix(rest);
+            let rest = text[index + prefix.len()..]
+                .split(['?', '!', '\n']).next().unwrap_or("")
+                .trim().trim_end_matches(|c: char| matches!(c, '.' | ',' | ';' | ':')).trim();
+            let subject = canonical_subject(strip_type_prefix(rest));
             if !subject.is_empty() {
-                return Some(subject.to_owned());
+                return Some(subject);
             }
         }
     }
     None
+}
+
+/// Strip a possessive from all-caps organization acronyms, such as NASA's.
+/// Leave regular proper names alone (e.g. McDonald's).
+fn canonical_subject(subject: &str) -> String {
+    subject.split_whitespace().map(|word| {
+        if let Some(base) = word.strip_suffix("'s").or_else(|| word.strip_suffix("’s")) {
+            if base.len() >= 2 && base.chars().all(|c| c.is_ascii_uppercase()) {
+                return base;
+            }
+        }
+        word
+    }).collect::<Vec<_>>().join(" ")
+}
+
+fn should_quote_subject(subject: &str) -> bool {
+    let words: Vec<_> = subject.split_whitespace().collect();
+    let count = words.len();
+    if !(2..=4).contains(&count) || subject.len() > 72 {
+        return false;
+    }
+    // Descriptive research subjects do better as search keywords.
+    !matches!(
+        words.last().unwrap_or(&"").to_lowercase().as_str(),
+        "mission" | "missions" | "program" | "programme" | "project" |
+        "projects" | "launch" | "launches" | "spacecraft" |
+        "news" | "development" | "developments"
+    )
+}
+
+fn explicit_year(text: &str) -> Option<String> {
+    text.split(|c: char| !c.is_ascii_digit())
+        .find(|part| part.len() == 4 && part.parse::<u16>()
+            .is_ok_and(|year| (1900..=2100).contains(&year)))
+        .map(str::to_owned)
+}
+
+/// A second, less restrictive query to try if SearXNG finds nothing.
+/// This fallback is based on the user's subject rather than the first query's
+/// incidental adjectives and long-form question wording.
+pub fn fallback_research_query(messages: &[Value], primary: &str) -> Option<String> {
+    let turns: Vec<_> = messages.iter()
+        .filter(|m| m["role"] == "user")
+        .filter_map(|m| m["content"].as_str()).collect();
+    let last = *turns.last()?;
+    let subject = extract_subject(last)
+        .filter(|s| is_specific(s))
+        .or_else(|| turns.iter().rev().skip(1)
+            .filter_map(|text| extract_subject(text))
+            .find(|s| is_specific(s)))
+        .or_else(|| {
+            // For an unstructured query (no "about X"), drop precision
+            // modifiers and exact-match quotes instead of giving up.
+            let broad = primary.replace('"', "")
+                .replace(" latest news", "")
+                .replace(" next album recording studio announcement", "")
+                .trim().to_owned();
+            (broad != primary && is_specific(&broad)).then_some(broad)
+        })?;
+    let mut fallback = subject;
+    if let Some(year) = explicit_year(last) {
+        if !fallback.contains(&year) {
+            fallback.push(' ');
+            fallback.push_str(&year);
+        }
+    }
+    if fallback == primary {
+        return None;
+    }
+    Some(fallback)
 }
 
 fn strip_type_prefix(text: &str) -> &str {
@@ -166,6 +250,47 @@ mod tests {
     use super::*;
     fn messages(turns: &[&str]) -> Vec<Value> {
         turns.iter().map(|text| serde_json::json!({"role":"user","content":text})).collect()
+    }
+
+    #[test]
+    fn multipart_nasa_question_extracts_topic_and_preserves_year() {
+        let turns=messages(&["What's the latest news about NASA's Artemis missions? Have there been any major developments in 2026?"]);
+        assert_eq!(
+            explicit_research_query(&turns).as_deref(),
+            Some("NASA Artemis missions 2026 latest news")
+        );
+        assert_eq!(
+            fallback_research_query(&turns, "NASA Artemis missions 2026 latest news").as_deref(),
+            Some("NASA Artemis missions 2026")
+        );
+    }
+
+    #[test]
+    fn no_quoted_full_question_for_multiple_clauses() {
+        let turns=messages(&["Could you find info about SpaceX Starship? Are launches planned in 2026?"]);
+        assert_eq!(
+            explicit_research_query(&turns).as_deref(),
+            Some("\"SpaceX Starship\" 2026")
+        );
+        assert_eq!(
+            fallback_research_query(&turns, "\"SpaceX Starship\" 2026").as_deref(),
+            Some("SpaceX Starship 2026")
+        );
+    }
+
+    #[test]
+    fn fallback_can_relax_unstructured_news_queries() {
+        let turns=messages(&["Latest Artemis mission updates"]);
+        assert_eq!(
+            fallback_research_query(&turns, "\"Artemis missions\" latest news").as_deref(),
+            Some("Artemis missions")
+        );
+    }
+
+    #[test]
+    fn retains_regular_proper_name_possessives() {
+        assert_eq!(canonical_subject("McDonald's new menu"), "McDonald's new menu");
+        assert_eq!(canonical_subject("NASA's Artemis missions"), "NASA Artemis missions");
     }
 
     #[test]

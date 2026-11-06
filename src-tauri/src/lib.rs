@@ -231,7 +231,19 @@ async fn chat_stream_impl(
             };
             search_query = Some(query.clone());
             if sources.is_empty() {
-                let content = format!("I searched for {query}, but SearXNG returned no results. Try a more specific search query.");
+                if let Some(fallback) = research_intent::fallback_research_query(&messages, &query) {
+                    let _ = app.emit("mikan://activity", json!({
+                        "requestId": request.request_id,
+                        "text": format!("Trying a broader search: {fallback}")
+                    }));
+                    sources = web_search::web_search(request.searxng_endpoint.clone(), fallback.clone()).await?;
+                    // Log both actual search requests rather than pretending
+                    // the narrower query found the final source results.
+                    search_query = Some(format!("{query} → {fallback}"));
+                }
+            }
+            if sources.is_empty() {
+                let content = "SearXNG couldn't find relevant sources, even after a broader search. Try a shorter topic or search manually with /search.".to_owned();
                 return Ok(ChatCompletion {
                     content, stats: None, sources, search_query
                 });
