@@ -373,7 +373,7 @@ export default function App() {
       }
       case "opacity": {
         const value = Number(argument);
-        if (!/^\\d{2,3}$/.test(argument) || value < 65 || value > 100) {
+        if (!/^\d{2,3}$/.test(argument) || value < 65 || value > 100) {
           setFeedback("Use /opacity with a percentage from 65 to 100.");
           return;
         }
@@ -383,7 +383,7 @@ export default function App() {
       }
       case "fontsize": {
         const value = Number(argument);
-        if (!/^\\d{2}$/.test(argument) || value < 11 || value > 20) {
+        if (!/^\d{2}$/.test(argument) || value < 11 || value > 20) {
           setFeedback("Use /fontsize with a size from 11 to 20.");
           return;
         }
