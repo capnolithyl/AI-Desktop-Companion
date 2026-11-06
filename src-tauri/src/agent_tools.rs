@@ -21,11 +21,11 @@ pub async fn prepare(
     let mut sources = Vec::new();
     let tools = json!([
         {"type":"function","function":{
-            "name":"search_web","description":"Search public web for recent facts when needed, not for ordinary conversation",
+            "name":"search_web","description":"Search the live public web. Call this for requests to find/look up/research information, named entities you are unsure about, recent news, newest releases, upcoming albums, announcements, tours, software updates, or any time-sensitive claim. Do not guess that an old event is upcoming. Skip for casual chat and simple timeless questions.",
             "parameters":{"type":"object","properties":{"query":{"type":"string"}},"required":["query"]}
         }},
         {"type":"function","function":{
-            "name":"read_webpage","description":"Read public HTTPS page main text to verify search sources",
+            "name":"read_webpage","description":"Read public HTTPS page main text when search snippets are incomplete or you need to verify an announcement's publication and release dates. Prefer official sources and recent dated reporting.",
             "parameters":{"type":"object","properties":{"url":{"type":"string"}},"required":["url"]}
         }}
     ]);
@@ -76,7 +76,8 @@ pub async fn prepare(
                                 sources.push(web_search::SearchResult {
                                     title: page.title.clone(), url: page.url.clone(),
                                     content: page.content.chars().take(400).collect(),
-                                    engine: "webpage".into()
+                                    engine: "webpage".into(),
+                                    published_date: None
                                 });
                             }
                             serde_json::to_string(&page).unwrap_or_default()

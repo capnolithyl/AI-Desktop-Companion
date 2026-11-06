@@ -2,7 +2,7 @@
 
 A local-first, personal Windows AI desktop companion powered by Tauri 2, React, TypeScript, and Ollama. Free hobby project for one PC.
 
-**v0.5 (pending Windows validation):** integrated Docker/SearXNG lifecycle controls, organized Settings tabs (AI, Internet, Appearance), separate personality presets, optional model-directed web tools, safe public HTTPS reader, and on-disk webpage caching.
+**v0.5.1:** per-turn Eastern date/time context, stronger search chronology/disambiguation, integrated Docker/SearXNG lifecycle controls, organized Settings tabs (AI, Internet, Appearance), separate personality presets, optional model-directed web tools, safe public HTTPS reader, and on-disk webpage caching.
 
 ## Getting started
 

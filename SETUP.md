@@ -1,4 +1,4 @@
-# Mikan Desktop Companion v0.5 · Windows setup
+# Mikan Desktop Companion v0.5.1 · Windows setup
 
 This is a local-first, single-PC prototype. User-specific settings and the selected character portrait remain saved locally across upgrades.
 
@@ -44,6 +44,12 @@ Web requests go through the Rust backend, not the browser UI. Search queries go 
 The webpage reader is intentionally limited to public **HTTPS URLs on port 443**, with pinned public IP address resolution, no proxies or redirects, no cookies, a maximum 1.25 MB response and 16,000 characters of extracted text. Sites that require login, rely heavily on JavaScript, block automated access, or redirect may fail. Only article/main content or paragraph text is extracted; images and PDFs are not read in this iteration.
 
 The local page cache expires after the TTL you set (default: 24 hours). At most 150 page files are retained, stored in Mikan's local app-data directory rather than in model training weights. You can inspect the page count and clear it under Internet. Clearing or refreshing does not affect your conversations.
+
+## Date awareness and time-sensitive search (v0.5.1)
+
+Every Ollama chat turn includes a fresh system context with the current host-computer clock, shown in **America/Detroit** (Eastern Time, correctly using EST in winter and EDT in summer), plus a UTC timestamp. This is automatic, not something you need to add manually to each persona's system prompt.
+
+The app also guides the model to disambiguate unusual proper nouns based on the conversation, use automatic web tools when someone asks it to find current information, and avoid interpreting past album releases or old announcements as upcoming news. On-demand search summaries now emphasize source dates and verification of future releases. Model mistakes can still happen, so the chat log preserves source links for checking.
 
 ## Chat and other shortcuts
 
