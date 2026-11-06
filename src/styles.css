@@ -281,3 +281,6 @@ button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px
   color: #baa7b4; font-size: 11px; font-weight: 400;
 }
 .personality-reset { margin: 1px 0 22px; }
+
+/* Inherit the selected message size inside Markdown log paragraphs. */
+.log-message .message-content p { font-size: inherit; line-height: inherit; }
