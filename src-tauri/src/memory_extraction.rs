@@ -186,6 +186,7 @@ fn persist(
     assistant_message_id: &str,
     capture_user: bool,
     capture_character: bool,
+    context_window: Option<u32>,
 ) -> Result<MemoryProcessingResult, String> {
     let tx = db.transaction().map_err(|e| e.to_string())?;
     // The assistant reply must still exist. Avoid resurrecting memories after
@@ -318,12 +319,16 @@ If the text doesn't contain a supported durable memory, return both arrays empty
         "already_saved_user_facts": existing_user,
         "already_saved_mikan_canon": existing_canon
     });
+    let mut options = json!({"temperature": 0, "num_predict": 520});
+    if let Some(ctx) = context_window.filter(|value| matches!(*value, 4096 | 8192 | 16384 | 32768)) {
+        options["num_ctx"] = json!(ctx);
+    }
     let payload = json!({
         "model": model,
         "stream": false,
         "think": false,
         "format": response_schema(),
-        "options": {"temperature": 0, "num_ctx": 4096, "num_predict": 520},
+        "options": options,
         "messages": [
             {"role":"system","content":system},
             {"role":"user","content":input.to_string()}
