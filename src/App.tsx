@@ -171,6 +171,7 @@ export default function App() {
 
   const openSettings = () => {
     setDraft(settings);
+    void refreshModels(settings.endpoint);
     setScreen("settings");
   };
 
@@ -187,6 +188,16 @@ export default function App() {
     } catch (error) {
       setImageError(errorText(error));
     }
+  };
+
+  // Switch between local models without reopening Settings or restarting Mikan.
+  // Existing chat context is retained; choose New chat for a fresh comparison.
+  const switchModel = (model: string) => {
+    if (busy || !model || model === settings.model) return;
+    const updated = { ...settings, model };
+    setSettings(updated);
+    saveSettings(updated);
+    setDraft(current => ({ ...current, model }));
   };
 
   const saveConfiguration = () => {
@@ -359,11 +370,24 @@ export default function App() {
         </button>
       </div>
       <div className="dock-footer">
-        <span className="connection-status" title={connection.text}>
+        <div className="model-switcher" title={connection.text}>
           <span className={`status-dot ${connection.mode}`} />
-          {connection.mode === "online" ? settings.model : connection.mode === "loading" ? "Connecting…" : "Ollama offline"}
-        </span>
-        <span>Ctrl + Alt + M to show/hide</span>
+          <select
+            aria-label="Active Ollama model"
+            title="Switch Ollama model"
+            value={availableModels.includes(settings.model) ? settings.model : "__current__"}
+            disabled={busy || connection.mode !== "online" || !availableModels.length}
+            onChange={event => switchModel(event.target.value)}
+          >
+            {!availableModels.includes(settings.model) &&
+              <option value="__current__">{settings.model || "No model selected"} (not detected)</option>}
+            {availableModels.map(name => <option key={name} value={name}>{name}</option>)}
+          </select>
+          <button type="button" className="refresh-model-button" title="Refresh installed Ollama models"
+            aria-label="Refresh installed models" disabled={busy || connection.mode === "loading"}
+            onClick={() => void refreshModels(settings.endpoint)}><RotateCw size={13}/></button>
+        </div>
+        <span>Ctrl + Alt + M</span>
       </div>
     </section>
 
@@ -395,7 +419,7 @@ export default function App() {
     {screen === "settings" && <section className="drawer" role="dialog" aria-label="Mikan settings">
       <header className="drawer-header">
         <button className="back-button" title="Back to companion" onClick={goCompact}><ArrowLeft size={19}/></button>
-        <div className="drawer-title"><strong>Settings</strong><span>Mikan v0.3 · Local only</span></div>
+        <div className="drawer-title"><strong>Settings</strong><span>Mikan v0.3.1 · Local only</span></div>
         <button className="secondary-action" onClick={() => setDraft({ ...DEFAULT_SETTINGS, appearance: { ...DEFAULT_APPEARANCE }, personality: { ...DEFAULT_PERSONALITY } })}><RotateCw size={14}/> Reset</button>
       </header>
       <div className="settings-body">
@@ -403,11 +427,30 @@ export default function App() {
           <input spellCheck={false} value={draft.endpoint} onChange={event => setDraft({ ...draft, endpoint: event.target.value })}/>
           <small>Local HTTP only. No API key required.</small>
         </label>
-        <label className="setting-field">Model
-          <input list="model-list" spellCheck={false} value={draft.model} onChange={event => setDraft({ ...draft, model: event.target.value })}/>
-          <datalist id="model-list">{availableModels.map(name => <option key={name} value={name}/>)}</datalist>
+        <label className="setting-field">Ollama model
+          <select
+            aria-label="Installed Ollama models"
+            value={availableModels.includes(draft.model) ? draft.model : "__custom__"}
+            onChange={event => setDraft({ ...draft, model: event.target.value === "__custom__" ? "" : event.target.value })}
+          >
+            {availableModels.map(name => <option key={name} value={name}>{name}</option>)}
+            <option value="__custom__">Other / enter model name manually</option>
+          </select>
+          {!availableModels.includes(draft.model) && <input
+            aria-label="Manual Ollama model name"
+            spellCheck={false}
+            placeholder="model-name:tag"
+            value={draft.model}
+            onChange={event => setDraft({ ...draft, model: event.target.value })}
+          />}
+          <small>{availableModels.length
+            ? `${availableModels.length} locally installed model${availableModels.length === 1 ? "" : "s"} detected. Choose one or enter a name manually.`
+            : connection.mode === "loading"
+              ? "Checking Ollama for installed models…"
+              : "No models listed. Check Ollama or enter a model name manually."}</small>
         </label>
-        <button className="inline-action" onClick={() => void refreshModels(draft.endpoint)}><RotateCw size={14}/> Refresh models</button>
+        <button className="inline-action" disabled={connection.mode === "loading"}
+          onClick={() => void refreshModels(draft.endpoint)}><RotateCw size={14}/> Refresh installed models</button>
         <label className="setting-field">Personality prompt
           <textarea rows={6} value={draft.systemPrompt} onChange={event => setDraft({ ...draft, systemPrompt: event.target.value })}/>
           <small>The sliders below add short behavioral guidance without replacing this prompt.</small>

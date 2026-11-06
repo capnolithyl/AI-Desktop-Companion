@@ -284,3 +284,47 @@ button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px
 
 /* Inherit the selected message size inside Markdown log paragraphs. */
 .log-message .message-content p { font-size: inherit; line-height: inherit; }
+
+/* Local Ollama model picker lives in the compact chat dock. */
+.model-switcher {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  flex: 1 1 auto;
+  max-width: 74%;
+}
+.model-switcher select {
+  color: #e8cfd4;
+  background: rgba(64, 49, 61, .72);
+  border: 1px solid rgba(255, 187, 158, .16);
+  border-radius: 7px;
+  font-size: 11px;
+  font-family: inherit;
+  min-width: 0;
+  width: 100%;
+  padding: 5px 7px;
+  text-overflow: ellipsis;
+}
+.model-switcher select:not(:disabled) { cursor: pointer; }
+.model-switcher select:disabled { opacity: .65; cursor: default; }
+.model-switcher select option { background: #2b2230; color: #ffe4d6; }
+.refresh-model-button {
+  flex: 0 0 25px;
+  display: grid;
+  place-items: center;
+  width: 25px;
+  height: 25px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: #cbb5bf;
+  border-radius: 6px;
+}
+.refresh-model-button:not(:disabled):hover {
+  color: var(--accent, #ffad7e);
+  background: rgba(255, 190, 158, .12);
+}
+@media (max-width: 450px) {
+  .model-switcher { max-width: 100%; }
+}
