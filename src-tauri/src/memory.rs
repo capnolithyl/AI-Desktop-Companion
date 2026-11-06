@@ -323,7 +323,7 @@ pub fn memory_add_character_fact(
          VALUES (?1,?2,?3,?4,?5)",
         params![persona_id,category,label,normalized,value]
     ).map_err(|error| {
-        if matches!(error, rusqlite::Error::SqliteFailure(ref e, _)
+        if matches!(&error, rusqlite::Error::SqliteFailure(e, _)
             if e.code == rusqlite::ErrorCode::ConstraintViolation) {
             "That character detail already exists. Edit its existing entry instead.".to_string()
         } else { error.to_string() }
