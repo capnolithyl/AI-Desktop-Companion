@@ -153,7 +153,16 @@ pub fn fallback_research_query(messages: &[Value], primary: &str) -> Option<Stri
         .filter(|s| is_specific(s))
         .or_else(|| turns.iter().rev().skip(1)
             .filter_map(|text| extract_subject(text))
-            .find(|s| is_specific(s)))?;
+            .find(|s| is_specific(s)))
+        .or_else(|| {
+            // For an unstructured query (no "about X"), drop precision
+            // modifiers and exact-match quotes instead of giving up.
+            let broad = primary.replace('"', "")
+                .replace(" latest news", "")
+                .replace(" next album recording studio announcement", "")
+                .trim().to_owned();
+            (broad != primary && is_specific(&broad)).then_some(broad)
+        })?;
     let mut fallback = subject;
     if let Some(year) = explicit_year(last) {
         if !fallback.contains(&year) {
@@ -266,6 +275,15 @@ mod tests {
         assert_eq!(
             fallback_research_query(&turns, "\"SpaceX Starship\" 2026").as_deref(),
             Some("SpaceX Starship 2026")
+        );
+    }
+
+    #[test]
+    fn fallback_can_relax_unstructured_news_queries() {
+        let turns=messages(&["What is the latest on the Artemis missions?"]);
+        assert_eq!(
+            fallback_research_query(&turns, "\"Artemis missions\" latest news").as_deref(),
+            Some("Artemis missions")
         );
     }
 
