@@ -24,7 +24,7 @@ import { PersonalityPresets, PersonalitySliders } from "./PersonalityControls";
 import { parseSlashCommand, SLASH_HELP } from "./slash-commands";
 import { runtimeContext } from "./runtime-context";
 import {
-  memoryApi, memoryContext, characterContext, readMessageMetadata,
+  memoryApi, memoryContext, characterContext, characterAnswerGuidance, readMessageMetadata,
   type MemoryConversation, type UserFact, type PersistedMessage,
   type CharacterCategory, type CharacterFact
 } from "./memory-client";
@@ -164,6 +164,7 @@ export default function App() {
   const [characterFacts, setCharacterFacts] = useState<CharacterFact[]>([]);
   const [memoryReady, setMemoryReady] = useState(false);
   const [memoryError, setMemoryError] = useState<string | null>(null);
+  const [automaticMemoryError, setAutomaticMemoryError] = useState<string | null>(null);
   const [memoryInitialTab, setMemoryInitialTab] = useState<"facts" | "chats" | "character">("facts");
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
@@ -185,6 +186,7 @@ export default function App() {
   const pageInputRef = useRef<HTMLInputElement>(null);
   const portraitUrl = useRef<string | null>(null);
   const activeRequestId = useRef<string | null>(null);
+  const automaticMemoryQueue = useRef<Promise<void>>(Promise.resolve());
   const stopRequested = useRef(false);
 
   const focusInput = useCallback(() => {
@@ -342,6 +344,32 @@ export default function App() {
   const deleteCharacter = async (id: number) => {
     await memoryApi.deleteCharacterFact(id);
     await refreshCharacter();
+  };
+  const queueAutomaticMemory = (conversationId: string, userMessageId: string, assistantMessageId: string) => {
+    const captureUser = settings.autoRememberUser;
+    const captureCharacter = settings.autoRememberMikan;
+    if (!captureUser && !captureCharacter) return;
+    const request = {
+      endpoint: settings.endpoint, model: settings.model, conversationId,
+      userMessageId, assistantMessageId, captureUser, captureCharacter
+    };
+    // Save only after the visible answer is finished. Serialize extraction calls
+    // so several quick chats don't launch several competing Ollama analyses.
+    automaticMemoryQueue.current = automaticMemoryQueue.current
+      .catch(() => {})
+      .then(async () => {
+        const result = await memoryApi.processTurn(request);
+        if (result.userSaved || result.characterSaved) {
+          await Promise.all([
+            result.userSaved ? refreshFacts() : Promise.resolve(),
+            result.characterSaved ? refreshCharacter() : Promise.resolve()
+          ]);
+        }
+        setAutomaticMemoryError(null);
+      }).catch(error => {
+        console.warn("Automatic memory extraction skipped:", error);
+        setAutomaticMemoryError(`Automatic memory extraction failed: ${errorText(error)}`);
+      });
   };
   const refreshMemory = async () => {
     const [archive, facts, canon] = await Promise.all([
@@ -818,7 +846,7 @@ export default function App() {
           contextWindow: settings.contextWindow,
           priorSources,
           messages: [
-            { role: "system", content: [settings.systemPrompt.trim(), personalityGuidance(settings.personality), runtimeContext(), memoryContext(userFacts, text), characterContext(characterFacts, text)].filter(Boolean).join("\n\n") },
+            { role: "system", content: [settings.systemPrompt.trim(), personalityGuidance(settings.personality), runtimeContext(), memoryContext(userFacts, text), characterContext(characterFacts, text), characterAnswerGuidance(text)].filter(Boolean).join("\n\n") },
             ...(withSearch ? [{ role: "user", content: withSearch.page ? pageContext(withSearch.query, withSearch.page) : webContext(withSearch.query, withSearch.results) }] : []),
             ...history.filter(m => !withSearch || m.role === "user").slice(-32).map(m => ({ role: m.role, content: m.content }))
           ]
@@ -840,6 +868,7 @@ export default function App() {
       };
       setMessages(current => current.map(m => m.id === assistantId ? assistant : m));
       await persistMessage(assistant);
+      queueAutomaticMemory(conversationId, user.id, assistant.id);
     } catch (error) {
       const message = errorText(error);
       const stopped = message === "Generation stopped" || stopRequested.current;
@@ -1115,6 +1144,10 @@ export default function App() {
 
     {screen === "memory" && <MemoryPanel key={memoryInitialTab} initialTab={memoryInitialTab}
       conversations={conversations} facts={userFacts} characterFacts={characterFacts} currentId={activeConversationId}
+      autoRememberUser={settings.autoRememberUser} autoRememberMikan={settings.autoRememberMikan}
+      onAutoRememberUserChange={enabled => applySetting({autoRememberUser: enabled})}
+      onAutoRememberMikanChange={enabled => applySetting({autoRememberMikan: enabled})}
+      automaticError={automaticMemoryError}
       busy={busy} error={memoryError} onClose={goCompact} onNew={clearChat}
       onOpen={openConversation} onDeleteChat={deleteConversation}
       onAddFact={addUserFact} onEditFact={editUserFact} onDeleteFact={deleteUserFact}
