@@ -1,6 +1,8 @@
+import { DEFAULT_PERSONALITY, readPersonality, type Personality } from "./personality";
+
 export type ChatRole = "user" | "assistant";
 export type Message = { id: string; role: ChatRole; content: string };
-export type Settings = { endpoint: string; model: string; systemPrompt: string; appearance: Appearance };
+export type Settings = { endpoint: string; model: string; systemPrompt: string; appearance: Appearance; personality: Personality };
 
 export type Appearance = {
   accent: string;
@@ -34,6 +36,7 @@ function readAppearance(value: unknown): Appearance {
 export const DEFAULT_SETTINGS: Settings = {
   endpoint: "http://127.0.0.1:11434",
   appearance: { ...DEFAULT_APPEARANCE },
+  personality: { ...DEFAULT_PERSONALITY },
   model: "qwen3.5:9b",
   systemPrompt: "You are Mikan, a witty, curious, warm and occasionally teasing desktop AI companion. Keep replies conversational and reasonably concise. Be genuinely useful and admit when you are uncertain. Never claim to have seen the user's screen or accessed the web unless you actually have."
 };
@@ -47,10 +50,11 @@ export function loadSettings(): Settings {
       endpoint: typeof data.endpoint === "string" ? data.endpoint : DEFAULT_SETTINGS.endpoint,
       model: typeof data.model === "string" ? data.model : DEFAULT_SETTINGS.model,
       systemPrompt: typeof data.systemPrompt === "string" ? data.systemPrompt : DEFAULT_SETTINGS.systemPrompt,
-      appearance: readAppearance(data.appearance)
+      appearance: readAppearance(data.appearance),
+      personality: readPersonality(data.personality)
     };
   } catch {
-    return { ...DEFAULT_SETTINGS };
+    return { ...DEFAULT_SETTINGS, appearance: { ...DEFAULT_APPEARANCE }, personality: { ...DEFAULT_PERSONALITY } };
   }
 }
 
