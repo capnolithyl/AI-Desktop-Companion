@@ -477,6 +477,8 @@ export default function App() {
           <div className="dock-actions">
             <button className="dock-icon" title="Web search (/search)" aria-label="Web search"
               onClick={() => setScreen("search")}><Search size={17}/></button>
+            <button className="dock-icon" title="Quick personality presets (/personality)" aria-label="Personality presets"
+              onClick={() => setScreen("personality")}><SlidersHorizontal size={17}/></button>
             <button className="dock-icon" title="Conversation log (/log)" aria-label="Conversation log" onClick={() => setScreen("log")}><History size={17}/></button>
             <button className="dock-icon" title="Settings (/settings)" aria-label="Settings" onClick={openSettings}><Settings2 size={17}/></button>
             <button className="dock-icon" title="Hide Mikan" aria-label="Hide Mikan" onClick={() => void invoke("hide_companion")}><X size={18}/></button>
@@ -489,7 +491,7 @@ export default function App() {
           ref={inputRef}
           aria-label="Message Mikan"
           rows={2}
-          placeholder="Message Mikan…  /search  /log"
+          placeholder="Message Mikan…  /help for commands"
           value={input}
           onChange={event => setInput(event.target.value)}
           onKeyDown={event => {
@@ -607,6 +609,39 @@ export default function App() {
       </footer>
     </section>}
 
+    {screen === "personality" && <section className="drawer" role="dialog" aria-label="Quick personality controls">
+      <header className="drawer-header">
+        <button className="back-button" title="Back to companion" onClick={goCompact}><ArrowLeft size={19}/></button>
+        <div className="drawer-title"><strong>Mikan's personality</strong><span>Change her mood in one click</span></div>
+      </header>
+      <div className="settings-body">
+        <PersonalityPresets value={settings.personality} onChange={updatePersonality}/>
+        <div className="appearance-heading personality-heading">
+          <strong>Fine-tune</strong>
+          <small>Personality settings are saved instantly. They affect future replies.</small>
+        </div>
+        <PersonalitySliders value={settings.personality} onChange={updatePersonality}/>
+        <p className="settings-note"><Sparkles size={16}/> The presets and sliders guide Mikan's tone. They don't guarantee an exact behavior in every reply.</p>
+      </div>
+      <footer className="settings-footer">
+        <button type="button" className="secondary-action" onClick={openSettings}><Settings2 size={15}/> Full settings</button>
+      </footer>
+    </section>}
+
+    {screen === "help" && <section className="drawer" role="dialog" aria-label="Slash commands">
+      <header className="drawer-header">
+        <button className="back-button" title="Back to companion" onClick={goCompact}><ArrowLeft size={19}/></button>
+        <div className="drawer-title"><strong>Slash commands</strong><span>Click one to fill the chat input</span></div>
+      </header>
+      <div className="help-command-list">
+        {SLASH_HELP.map(item => <button type="button" key={item.usage} className="help-command"
+          onClick={() => { setInput(item.insert); goCompact(); }}>
+          <code>{item.usage}</code><span>{item.description}</span>
+        </button>)}
+      </div>
+      <footer className="drawer-footer">Commands are handled locally, without sending them to Ollama.</footer>
+    </section>}
+
     {screen === "settings" && <section className="drawer" role="dialog" aria-label="Mikan settings">
       <header className="drawer-header">
         <button className="back-button" title="Back to companion" onClick={goCompact}><ArrowLeft size={19}/></button>
@@ -660,18 +695,10 @@ export default function App() {
           <strong>Personality</strong>
           <small>Tune Mikan's style. Sliders are tendencies, not exact guarantees.</small>
         </div>
-        {PERSONALITY_TRAITS.map(trait => <div key={trait.key} className="setting-field personality-field">
-          <label className="personality-label" htmlFor={`personality-${trait.key}`}>
-            <span>{trait.label}</span>
-            <output>{draft.personality[trait.key]}%</output>
-          </label>
-          <input id={`personality-${trait.key}`} type="range" min="0" max="100" step="5"
-            value={draft.personality[trait.key]}
-            onChange={event => setDraft(current => ({
-              ...current, personality: { ...current.personality, [trait.key]: Number(event.target.value) }
-            }))}/>
-          <div className="personality-extremes"><span>{trait.low}</span><span>{trait.high}</span></div>
-        </div>)}
+        <PersonalityPresets value={draft.personality}
+          onChange={personality => setDraft(current => ({ ...current, personality }))}/>
+        <PersonalitySliders value={draft.personality}
+          onChange={personality => setDraft(current => ({ ...current, personality }))}/>
         <button type="button" className="inline-action personality-reset"
           onClick={() => setDraft(current => ({ ...current, personality: { ...DEFAULT_PERSONALITY } }))}>
           <RotateCw size={14}/> Reset personality
