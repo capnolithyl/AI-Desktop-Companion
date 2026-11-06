@@ -38,7 +38,7 @@ export function PersonalitySliders({ value, onChange }: { value: Personality; on
         <span>{trait.label}</span>
         <output>{value[trait.key]}%</output>
       </label>
-      <input id={`personality-${trait.key}`} type="range" min="0" max="100" step="5"
+      <input id={`personality-${trait.key}`} type="range" min="0" max="100" step="1"
         value={value[trait.key]}
         onChange={event => onChange({ ...value, [trait.key]: Number(event.target.value) })}/>
       <div className="personality-extremes"><span>{trait.low}</span><span>{trait.high}</span></div>
