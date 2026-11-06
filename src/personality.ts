@@ -91,10 +91,10 @@ export function matchingPreset(personality: Personality): PersonalityPreset | un
 }
 
 export function findPreset(name: string): PersonalityPreset | undefined {
-  const normalized = name.toLowerCase().trim().replace(/[\\s_-]+/g, "");
+  const normalized = name.toLowerCase().trim().replace(/[\s_-]+/g, "");
   return PERSONALITY_PRESETS.find(preset =>
     preset.id === normalized ||
-    preset.name.toLowerCase().replace(/\\s+/g, "") === normalized
+    preset.name.toLowerCase().replace(/\s+/g, "") === normalized
   ) || (normalized === "chaotic" ? PERSONALITY_PRESETS.find(preset => preset.id === "chaos") : undefined);
 }
 
