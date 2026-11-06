@@ -42,6 +42,16 @@ const BUNDLED_PORTRAIT = "/mikan.png";
 function rgbOf(hex: string): string {
   return [1, 3, 5].map(index => parseInt(hex.slice(index, index + 2), 16)).join(" ");
 }
+function localEndpoint(value: string): string | null {
+  try {
+    const url = new URL(value);
+    if (url.protocol !== "http:" || !["127.0.0.1", "localhost"].includes(url.hostname)
+      || url.username || url.password || url.search || url.hash || url.pathname !== "/") return null;
+    return url.origin;
+  } catch {
+    return null;
+  }
+}
 async function openSource(url: string): Promise<void> {
   try {
     const target = new URL(url);
@@ -221,13 +231,14 @@ export default function App() {
     }
   };
 
-  // Quick controls and slash commands apply immediately, retaining the base persona prompt.
-  const updatePersonality = (personality: Personality) => {
-    const updated = { ...settings, personality };
+  // Quick controls and slash commands persist immediately without editing the system prompt.
+  const applySetting = (change: Partial<Settings>) => {
+    const updated = { ...settings, ...change };
     setSettings(updated);
     saveSettings(updated);
-    setDraft(current => ({ ...current, personality: { ...personality } }));
+    setDraft(current => ({ ...current, ...change }));
   };
+  const updatePersonality = (personality: Personality) => applySetting({ personality });
 
   // Switch between local models without reopening Settings or restarting Mikan.
   // Existing chat context is retained; choose New chat for a fresh comparison.
@@ -350,6 +361,57 @@ export default function App() {
         if (busy) { setFeedback("Wait until the current reply finishes before clearing the chat."); return; }
         clearChat();
         return;
+      case "accent":
+      case "panel": {
+        if (!/^#[0-9a-fA-F]{6}$/.test(argument)) {
+          setFeedback(`Use /${name} #RRGGBB, such as /${name} #ffad7e.`);
+          return;
+        }
+        applySetting({ appearance: { ...settings.appearance, [name]: argument } });
+        setFeedback(`${name === "accent" ? "Accent" : "Panel"} color updated to ${argument}.`);
+        return;
+      }
+      case "opacity": {
+        const value = Number(argument);
+        if (!/^\\d{2,3}$/.test(argument) || value < 65 || value > 100) {
+          setFeedback("Use /opacity with a percentage from 65 to 100.");
+          return;
+        }
+        applySetting({ appearance: { ...settings.appearance, opacity: value / 100 } });
+        setFeedback(`Panel opacity set to ${value}%.`);
+        return;
+      }
+      case "fontsize": {
+        const value = Number(argument);
+        if (!/^\\d{2}$/.test(argument) || value < 11 || value > 20) {
+          setFeedback("Use /fontsize with a size from 11 to 20.");
+          return;
+        }
+        applySetting({ appearance: { ...settings.appearance, fontSize: value } });
+        setFeedback(`Message font size set to ${value}px.`);
+        return;
+      }
+      case "font": {
+        const font = FONTS.find(item => item.toLowerCase() === argument.toLowerCase());
+        if (!font) {
+          setFeedback(`Unknown font. Try: ${FONTS.join(", ")}.`);
+          return;
+        }
+        applySetting({ appearance: { ...settings.appearance, fontFamily: font } });
+        setFeedback(`Font changed to ${font}.`);
+        return;
+      }
+      case "ollama":
+      case "searxng": {
+        const endpoint = localEndpoint(argument);
+        if (!endpoint) {
+          setFeedback(`Use /${name} with a local HTTP URL, e.g. http://127.0.0.1:${name === "ollama" ? "11434" : "8888"}.`);
+          return;
+        }
+        applySetting(name === "ollama" ? { endpoint } : { searxngEndpoint: endpoint });
+        setFeedback(`${name === "ollama" ? "Ollama" : "SearXNG"} URL updated to ${endpoint}.`);
+        return;
+      }
       case "hide":
         void invoke("hide_companion");
         return;
