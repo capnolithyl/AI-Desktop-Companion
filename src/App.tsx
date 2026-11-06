@@ -9,15 +9,20 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { register, unregister } from "@tauri-apps/plugin-global-shortcut";
 import {
   ArrowLeft, ArrowUp, Cat, Check, Clock3, History,
-  ExternalLink, LoaderCircle, MessageCircle, RotateCw, Search, Settings2, Sparkles, SquarePen, X
+  ExternalLink, LoaderCircle, MessageCircle, RotateCw, Search, Settings2, SlidersHorizontal, Sparkles, SquarePen, X
 } from "lucide-react";
 import {
   DEFAULT_SETTINGS, DEFAULT_APPEARANCE, loadPortrait, loadSettings, savePortrait, saveSettings,
   type Message, type Settings
 } from "./storage";
-import { DEFAULT_PERSONALITY, PERSONALITY_TRAITS, personalityGuidance } from "./personality";
+import {
+  DEFAULT_PERSONALITY, PERSONALITY_TRAITS, PERSONALITY_PRESETS,
+  findPreset, personalityGuidance, randomPersonality, type Personality
+} from "./personality";
+import { PersonalityPresets, PersonalitySliders } from "./PersonalityControls";
+import { parseSlashCommand, SLASH_HELP } from "./slash-commands";
 
-type Screen = "compact" | "log" | "settings" | "search";
+type Screen = "compact" | "log" | "settings" | "search" | "personality" | "help";
 type Connection = { mode: "loading" | "online" | "offline"; text: string };
 type ChatChunk = { requestId: string; content: string };
 type OllamaStats = {
@@ -36,6 +41,16 @@ const BUNDLED_PORTRAIT = "/mikan.png";
 
 function rgbOf(hex: string): string {
   return [1, 3, 5].map(index => parseInt(hex.slice(index, index + 2), 16)).join(" ");
+}
+function localEndpoint(value: string): string | null {
+  try {
+    const url = new URL(value);
+    if (url.protocol !== "http:" || !["127.0.0.1", "localhost"].includes(url.hostname)
+      || url.username || url.password || url.search || url.hash || url.pathname !== "/") return null;
+    return url.origin;
+  } catch {
+    return null;
+  }
 }
 async function openSource(url: string): Promise<void> {
   try {
@@ -109,6 +124,7 @@ export default function App() {
   const [searchError, setSearchError] = useState<string | null>(null);
   const [searchHasRun, setSearchHasRun] = useState(false);
   const [greeting, setGreeting] = useState("Hey! I'm Mikan. What are we working on?");
+  const [feedback, setFeedback] = useState<string | null>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const logRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -190,6 +206,7 @@ export default function App() {
   const clearChat = () => {
     if (busy) return;
     setMessages([]);
+    setFeedback(null);
     setGreeting("New conversation! What shall we talk about?");
     goCompact();
   };
@@ -214,6 +231,15 @@ export default function App() {
       setImageError(errorText(error));
     }
   };
+
+  // Quick controls and slash commands persist immediately without editing the system prompt.
+  const applySetting = (change: Partial<Settings>) => {
+    const updated = { ...settings, ...change };
+    setSettings(updated);
+    saveSettings(updated);
+    setDraft(current => ({ ...current, ...change }));
+  };
+  const updatePersonality = (personality: Personality) => applySetting({ personality });
 
   // Switch between local models without reopening Settings or restarting Mikan.
   // Existing chat context is retained; choose New chat for a fresh comparison.
@@ -263,39 +289,151 @@ export default function App() {
     }
   };
 
+  const runSlashCommand = (text: string): void => {
+    setInput("");
+    setFeedback(null);
+    const parsed = parseSlashCommand(text);
+    if (!parsed) {
+      setFeedback("Invalid slash command. Type /help to see available commands.");
+      return;
+    }
+    const { name, argument } = parsed;
+    const trait = PERSONALITY_TRAITS.find(item => item.key === name);
+    if (trait) {
+      if (!argument) {
+        setFeedback(`${trait.label}: ${settings.personality[trait.key]}%. Try /${name} 80 to change it.`);
+      } else if (!/^\d{1,3}$/.test(argument) || Number(argument) > 100) {
+        setFeedback(`Use /${name} with a number from 0 to 100.`);
+      } else {
+        const value = Number(argument);
+        updatePersonality({ ...settings.personality, [trait.key]: value });
+        setFeedback(`${trait.label} set to ${value}%. The next reply will use this setting.`);
+      }
+      return;
+    }
+    switch (name) {
+      case "help": setScreen("help"); return;
+      case "personality":
+      case "presets": setScreen("personality"); return;
+      case "preset": {
+        if (!argument) { setScreen("personality"); return; }
+        const preset = findPreset(argument);
+        if (!preset) {
+          setFeedback(`Unknown preset "${argument}". Choose: ${PERSONALITY_PRESETS.map(p => p.id).join(", ")}.`);
+          return;
+        }
+        updatePersonality({ ...preset.values });
+        setFeedback(`Personality: ${preset.name}. ${preset.description}.`);
+        return;
+      }
+      case "random":
+      case "randomize":
+        updatePersonality(randomPersonality());
+        setFeedback("New personality mix rolled! Use /personality to see the results.");
+        return;
+      case "search":
+        void performSearch(argument);
+        return;
+      case "log":
+      case "history": setScreen("log"); return;
+      case "settings":
+      case "appearance":
+      case "portrait":
+      case "prompt":
+      case "endpoint":
+      case "models":
+        openSettings(); return;
+      case "model":
+        if (!argument) { openSettings(); return; }
+        if (busy) { setFeedback("Wait until Mikan finishes her reply before switching models."); return; }
+        if (!availableModels.includes(argument)) {
+          setFeedback(`Model "${argument}" wasn't found in Ollama. Use /models to check installed models.`);
+          return;
+        }
+        switchModel(argument);
+        setFeedback(`Model selected: ${argument}.`);
+        return;
+      case "refresh":
+        void refreshModels(settings.endpoint);
+        setFeedback("Refreshing the installed Ollama model list…");
+        return;
+      case "chat": goCompact(); return;
+      case "new":
+      case "clear":
+        if (busy) { setFeedback("Wait until the current reply finishes before clearing the chat."); return; }
+        clearChat();
+        return;
+      case "accent":
+      case "panel": {
+        if (!/^#[0-9a-fA-F]{6}$/.test(argument)) {
+          setFeedback(`Use /${name} #RRGGBB, such as /${name} #ffad7e.`);
+          return;
+        }
+        applySetting({ appearance: { ...settings.appearance, [name]: argument } });
+        setFeedback(`${name === "accent" ? "Accent" : "Panel"} color updated to ${argument}.`);
+        return;
+      }
+      case "opacity": {
+        const value = Number(argument);
+        if (!/^\d{2,3}$/.test(argument) || value < 65 || value > 100) {
+          setFeedback("Use /opacity with a percentage from 65 to 100.");
+          return;
+        }
+        applySetting({ appearance: { ...settings.appearance, opacity: value / 100 } });
+        setFeedback(`Panel opacity set to ${value}%.`);
+        return;
+      }
+      case "fontsize": {
+        const value = Number(argument);
+        if (!/^\d{2}$/.test(argument) || value < 11 || value > 20) {
+          setFeedback("Use /fontsize with a size from 11 to 20.");
+          return;
+        }
+        applySetting({ appearance: { ...settings.appearance, fontSize: value } });
+        setFeedback(`Message font size set to ${value}px.`);
+        return;
+      }
+      case "font": {
+        const font = FONTS.find(item => item.toLowerCase() === argument.toLowerCase());
+        if (!font) {
+          setFeedback(`Unknown font. Try: ${FONTS.join(", ")}.`);
+          return;
+        }
+        applySetting({ appearance: { ...settings.appearance, fontFamily: font } });
+        setFeedback(`Font changed to ${font}.`);
+        return;
+      }
+      case "ollama":
+      case "searxng": {
+        const endpoint = localEndpoint(argument);
+        if (!endpoint) {
+          setFeedback(`Use /${name} with a local HTTP URL, e.g. http://127.0.0.1:${name === "ollama" ? "11434" : "8888"}.`);
+          return;
+        }
+        applySetting(name === "ollama" ? { endpoint } : { searxngEndpoint: endpoint });
+        setFeedback(`${name === "ollama" ? "Ollama" : "SearXNG"} URL updated to ${endpoint}.`);
+        return;
+      }
+      case "hide":
+        void invoke("hide_companion");
+        return;
+      default:
+        setFeedback(`Unknown command /${name}. Type /help to see available commands.`);
+    }
+  };
+
   const send = async (withSearch?: { query: string; results: WebResult[] }) => {
     const text = withSearch ? withSearch.query : input.trim();
     if (!text) return;
 
-    // Commands are local UI actions, never sent to the LLM.
-    const command = withSearch ? "" : text.toLowerCase();
-    if (command === "/search" || command.startsWith("/search ")) {
-      setInput("");
-      void performSearch(text.slice(7).trim());
-      return;
-    }
-    if (command === "/log" || command === "/history") {
-      setInput("");
-      setScreen("log");
-      return;
-    }
-    if (command === "/settings") {
-      setInput("");
-      openSettings();
-      return;
-    }
-    if (command === "/chat") {
-      setInput("");
-      goCompact();
-      return;
-    }
-    if (command === "/new" || command === "/clear") {
-      setInput("");
-      clearChat();
+    // Slash commands stay inside the app and never reach the language model.
+    if (!withSearch && text.startsWith("/")) {
+      runSlashCommand(text);
       return;
     }
 
     if (busy) return;
+    setFeedback(null);
     const user: LogMessage = { id: crypto.randomUUID(), role: "user", content: text, createdAt: Date.now() };
     const assistantId = crypto.randomUUID();
     const history = [...messages, user];
@@ -365,7 +503,7 @@ export default function App() {
   };
 
   const lastReply = [...messages].reverse().find(m => m.role === "assistant");
-  const replyText = lastReply?.content || (busy ? "Thinking…" : greeting);
+  const replyText = busy ? (lastReply?.content || "Thinking…") : (feedback ?? lastReply?.content ?? greeting);
 
   const theme = {
     "--accent": settings.appearance.accent,
@@ -403,6 +541,8 @@ export default function App() {
           <div className="dock-actions">
             <button className="dock-icon" title="Web search (/search)" aria-label="Web search"
               onClick={() => setScreen("search")}><Search size={17}/></button>
+            <button className="dock-icon" title="Quick personality presets (/personality)" aria-label="Personality presets"
+              onClick={() => setScreen("personality")}><SlidersHorizontal size={17}/></button>
             <button className="dock-icon" title="Conversation log (/log)" aria-label="Conversation log" onClick={() => setScreen("log")}><History size={17}/></button>
             <button className="dock-icon" title="Settings (/settings)" aria-label="Settings" onClick={openSettings}><Settings2 size={17}/></button>
             <button className="dock-icon" title="Hide Mikan" aria-label="Hide Mikan" onClick={() => void invoke("hide_companion")}><X size={18}/></button>
@@ -415,7 +555,7 @@ export default function App() {
           ref={inputRef}
           aria-label="Message Mikan"
           rows={2}
-          placeholder="Message Mikan…  /search  /log"
+          placeholder="Message Mikan…  /help for commands"
           value={input}
           onChange={event => setInput(event.target.value)}
           onKeyDown={event => {
@@ -533,6 +673,39 @@ export default function App() {
       </footer>
     </section>}
 
+    {screen === "personality" && <section className="drawer" role="dialog" aria-label="Quick personality controls">
+      <header className="drawer-header">
+        <button className="back-button" title="Back to companion" onClick={goCompact}><ArrowLeft size={19}/></button>
+        <div className="drawer-title"><strong>Mikan's personality</strong><span>Change her mood in one click</span></div>
+      </header>
+      <div className="settings-body">
+        <PersonalityPresets value={settings.personality} onChange={updatePersonality}/>
+        <div className="appearance-heading personality-heading">
+          <strong>Fine-tune</strong>
+          <small>Personality settings are saved instantly. They affect future replies.</small>
+        </div>
+        <PersonalitySliders value={settings.personality} onChange={updatePersonality}/>
+        <p className="settings-note"><Sparkles size={16}/> The presets and sliders guide Mikan's tone. They don't guarantee an exact behavior in every reply.</p>
+      </div>
+      <footer className="settings-footer">
+        <button type="button" className="secondary-action" onClick={openSettings}><Settings2 size={15}/> Full settings</button>
+      </footer>
+    </section>}
+
+    {screen === "help" && <section className="drawer" role="dialog" aria-label="Slash commands">
+      <header className="drawer-header">
+        <button className="back-button" title="Back to companion" onClick={goCompact}><ArrowLeft size={19}/></button>
+        <div className="drawer-title"><strong>Slash commands</strong><span>Click one to fill the chat input</span></div>
+      </header>
+      <div className="help-command-list">
+        {SLASH_HELP.map(item => <button type="button" key={item.usage} className="help-command"
+          onClick={() => { setInput(item.insert); goCompact(); }}>
+          <code>{item.usage}</code><span>{item.description}</span>
+        </button>)}
+      </div>
+      <footer className="drawer-footer">Commands are handled locally, without sending them to Ollama.</footer>
+    </section>}
+
     {screen === "settings" && <section className="drawer" role="dialog" aria-label="Mikan settings">
       <header className="drawer-header">
         <button className="back-button" title="Back to companion" onClick={goCompact}><ArrowLeft size={19}/></button>
@@ -586,18 +759,10 @@ export default function App() {
           <strong>Personality</strong>
           <small>Tune Mikan's style. Sliders are tendencies, not exact guarantees.</small>
         </div>
-        {PERSONALITY_TRAITS.map(trait => <div key={trait.key} className="setting-field personality-field">
-          <label className="personality-label" htmlFor={`personality-${trait.key}`}>
-            <span>{trait.label}</span>
-            <output>{draft.personality[trait.key]}%</output>
-          </label>
-          <input id={`personality-${trait.key}`} type="range" min="0" max="100" step="5"
-            value={draft.personality[trait.key]}
-            onChange={event => setDraft(current => ({
-              ...current, personality: { ...current.personality, [trait.key]: Number(event.target.value) }
-            }))}/>
-          <div className="personality-extremes"><span>{trait.low}</span><span>{trait.high}</span></div>
-        </div>)}
+        <PersonalityPresets value={draft.personality}
+          onChange={personality => setDraft(current => ({ ...current, personality }))}/>
+        <PersonalitySliders value={draft.personality}
+          onChange={personality => setDraft(current => ({ ...current, personality }))}/>
         <button type="button" className="inline-action personality-reset"
           onClick={() => setDraft(current => ({ ...current, personality: { ...DEFAULT_PERSONALITY } }))}>
           <RotateCw size={14}/> Reset personality

@@ -67,3 +67,39 @@ export function personalityGuidance(personality: Personality): string {
   );
   return `Mikan's adjustable personality tendencies: ${traits.join("; ")}. Match the user's mood; keep teasing and flirting welcome and context-appropriate. Prioritize empathy and accuracy during serious conversations or technical work.`;
 }
+
+
+export type PersonalityPreset = {
+  id: string;
+  name: string;
+  description: string;
+  values: Personality;
+};
+
+export const PERSONALITY_PRESETS: readonly PersonalityPreset[] = [
+  { id: "classic", name: "Classic Mikan", description: "Our familiar orange menace", values: { ...DEFAULT_PERSONALITY } },
+  { id: "cozy", name: "Cozy", description: "Gentle, warm and relaxed", values: { playfulness: 35, flirtiness: 25, affection: 90, sass: 15, energy: 25 } },
+  { id: "flirty", name: "Flirty", description: "Affectionate and cheeky", values: { playfulness: 70, flirtiness: 95, affection: 90, sass: 65, energy: 65 } },
+  { id: "focused", name: "Focused", description: "Calm and helpful", values: { playfulness: 15, flirtiness: 0, affection: 40, sass: 10, energy: 35 } },
+  { id: "chaos", name: "Orange Chaos", description: "One brain cell, maximum energy", values: { playfulness: 100, flirtiness: 55, affection: 70, sass: 95, energy: 100 } }
+];
+
+export function matchingPreset(personality: Personality): PersonalityPreset | undefined {
+  return PERSONALITY_PRESETS.find(preset =>
+    PERSONALITY_TRAITS.every(({ key }) => preset.values[key] === personality[key])
+  );
+}
+
+export function findPreset(name: string): PersonalityPreset | undefined {
+  const normalized = name.toLowerCase().trim().replace(/[\s_-]+/g, "");
+  return PERSONALITY_PRESETS.find(preset =>
+    preset.id === normalized ||
+    preset.name.toLowerCase().replace(/\s+/g, "") === normalized
+  ) || (normalized === "chaotic" ? PERSONALITY_PRESETS.find(preset => preset.id === "chaos") : undefined);
+}
+
+/** Uniform 0, 5, ... 100 for each trait. Injectable random source for repeatable tests. */
+export function randomPersonality(random: () => number = Math.random): Personality {
+  const score = () => Math.floor(random() * 21) * 5;
+  return { playfulness: score(), flirtiness: score(), affection: score(), sass: score(), energy: score() };
+}
