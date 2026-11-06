@@ -544,3 +544,33 @@ button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px
   font-size: var(--mikan-font-size,13px); line-height: 1.65;
   white-space: pre-wrap; overflow-wrap: anywhere;
 }
+
+/* v0.5.2: distinguish source retrieval from verified claim support. */
+.research-query {
+  display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+  font-size: 11px; color: #e7d1c1; padding-bottom: 6px;
+}
+.research-query code {
+  font-family: Consolas, monospace; font-size: 11px;
+  overflow-wrap: anywhere; background: #211c26; padding: 3px 6px; border-radius: 5px;
+}
+.source-entry { border-top: 1px solid #564351; padding: 7px 0 4px; }
+.source-entry small { display: block; font-size: 10px; color: #bfa9b6; margin: 2px 0; }
+.source-evidence summary {
+  cursor: pointer; color: #ceb9c5; font-size: 11px; padding: 6px 0;
+}
+.source-evidence p {
+  background: #302936; padding: 9px; border-radius: 8px;
+  margin: 0 0 4px; font-size: 11px; color: #eadbe2; line-height: 1.55;
+}
+
+.research-warning {
+  color: #ffd8ab;
+  background: #4b3b32;
+  border: 1px solid #97765b;
+  padding: 8px 10px;
+  border-radius: 8px;
+  font-size: 11px;
+  line-height: 1.5;
+  margin-top: 11px;
+}

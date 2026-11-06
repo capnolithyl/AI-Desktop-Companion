@@ -38,9 +38,9 @@ type OllamaStats = {
   promptEvalDurationNs: number | null;
   evalDurationNs: number | null;
 };
-type ChatCompletion = { content: string; stats: OllamaStats | null; sources: WebResult[] };
+type ChatCompletion = { content: string; stats: OllamaStats | null; sources: WebResult[]; searchQuery?: string | null };
 type Diagnostics = { elapsedMs: number; firstTokenMs: number | null; model: string; stats: OllamaStats | null };
-type LogMessage = Message & { createdAt: number; diagnostics?: Diagnostics; failed?: boolean; sources?: WebResult[] };
+type LogMessage = Message & { createdAt: number; diagnostics?: Diagnostics; failed?: boolean; sources?: WebResult[]; searchQuery?: string };
 const HOTKEY = "Control+Alt+M";
 const BUNDLED_PORTRAIT = "/mikan.png";
 
@@ -572,7 +572,7 @@ export default function App() {
           messages: [
             { role: "system", content: [settings.systemPrompt.trim(), personalityGuidance(settings.personality), runtimeContext()].filter(Boolean).join("\n\n") },
             ...(withSearch ? [{ role: "user", content: withSearch.page ? pageContext(withSearch.query, withSearch.page) : webContext(withSearch.query, withSearch.results) }] : []),
-            ...history.map(m => ({ role: m.role, content: m.content }))
+            ...history.filter(m => !withSearch || m.role === "user").map(m => ({ role: m.role, content: m.content }))
           ]
         }
       });
@@ -585,7 +585,7 @@ export default function App() {
       };
       const finalText = completion.content || accumulated || "(The model returned no visible text.)";
       setMessages(current => current.map(m =>
-        m.id === assistantId ? { ...m, content: finalText, diagnostics, sources: completion.sources?.length ? completion.sources : m.sources } : m
+        m.id === assistantId ? { ...m, content: finalText, diagnostics, sources: completion.sources?.length ? completion.sources : m.sources, searchQuery: completion.searchQuery || withSearch?.query } : m
       ));
     } catch (error) {
       const message = errorText(error);
@@ -731,12 +731,22 @@ export default function App() {
             <time>{new Date(m.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</time>
           </div>
           <div className={m.failed ? "message-error message-content" : "message-content"}><MarkdownText text={m.content || (busy ? "Thinking…" : "")}/></div>
-          {m.sources && m.sources.length > 0 && <div className="message-sources">
-            <strong>Web sources</strong>
-            {m.sources.map((source, index) => <button key={source.url} className="source-link" type="button"
-              onClick={() => void openSource(source.url)} title={source.url}>
-              [{index + 1}] {source.title} <ExternalLink size={13}/>
-            </button>)}
+          {m.role === "assistant" && m.sources?.length && m.diagnostics && !m.sources.some((_, index) => m.content.includes(`[${index + 1}]`)) &&
+            <div className="research-warning">This answer does not cite any individual retrieved sources. Verify factual claims in the excerpts below.</div>}
+          {(m.sources?.length || m.searchQuery) && <div className="message-sources">
+            {m.searchQuery && <div className="research-query"><Search size={13}/> SearXNG query: <code>{m.searchQuery}</code></div>}
+            <strong>Retrieved sources (claims are not independently verified)</strong>
+            {m.sources?.map((source, index) => <div className="source-entry" key={source.url}>
+              <button className="source-link" type="button"
+                onClick={() => void openSource(source.url)} title={source.url}>
+                [{index + 1}] {source.title} <ExternalLink size={13}/>
+              </button>
+              {source.publishedDate && <small>Published: {source.publishedDate}</small>}
+              {source.content && <details className="source-evidence">
+                <summary>See retrieved excerpt</summary>
+                <p>{source.content}</p>
+              </details>}
+            </div>)}
           </div>}
           {m.role === "assistant" && <ReplyMetrics diagnostics={m.diagnostics}/>}
         </article>)}
@@ -876,7 +886,7 @@ export default function App() {
     {screen === "settings" && <section className="drawer" role="dialog" aria-label="Mikan settings">
       <header className="drawer-header">
         <button className="back-button" title="Back to companion" onClick={goCompact}><ArrowLeft size={19}/></button>
-        <div className="drawer-title"><strong>Settings</strong><span>Mikan v0.5.1 · Local first</span></div>
+        <div className="drawer-title"><strong>Settings</strong><span>Mikan v0.5.2 · Local first</span></div>
         <button className="secondary-action" onClick={() => setDraft(current => ({
           ...current,
           ...(settingsTab === "ai" ? {
