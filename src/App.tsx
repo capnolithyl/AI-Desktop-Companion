@@ -13,6 +13,7 @@ import {
   DEFAULT_SETTINGS, DEFAULT_APPEARANCE, loadPortrait, loadSettings, savePortrait, saveSettings,
   type Message, type Settings
 } from "./storage";
+import { DEFAULT_PERSONALITY, PERSONALITY_TRAITS, personalityGuidance } from "./personality";
 
 type Screen = "compact" | "log" | "settings";
 type Connection = { mode: "loading" | "online" | "offline"; text: string };
@@ -193,7 +194,8 @@ export default function App() {
       endpoint: draft.endpoint.trim().replace(/\/+$/, ""),
       model: draft.model.trim(),
       systemPrompt: draft.systemPrompt.trim(),
-      appearance: { ...draft.appearance }
+      appearance: { ...draft.appearance },
+      personality: { ...draft.personality }
     };
     setSettings(updated);
     saveSettings(updated);
@@ -258,7 +260,7 @@ export default function App() {
           endpoint: settings.endpoint,
           model: settings.model,
           messages: [
-            { role: "system", content: settings.systemPrompt },
+            { role: "system", content: [settings.systemPrompt.trim(), personalityGuidance(settings.personality)].filter(Boolean).join("\n\n") },
             ...history.map(m => ({ role: m.role, content: m.content }))
           ]
         }
@@ -394,7 +396,7 @@ export default function App() {
       <header className="drawer-header">
         <button className="back-button" title="Back to companion" onClick={goCompact}><ArrowLeft size={19}/></button>
         <div className="drawer-title"><strong>Settings</strong><span>Mikan v0.3 · Local only</span></div>
-        <button className="secondary-action" onClick={() => setDraft({ ...DEFAULT_SETTINGS, appearance: { ...DEFAULT_APPEARANCE } })}><RotateCw size={14}/> Reset</button>
+        <button className="secondary-action" onClick={() => setDraft({ ...DEFAULT_SETTINGS, appearance: { ...DEFAULT_APPEARANCE }, personality: { ...DEFAULT_PERSONALITY } })}><RotateCw size={14}/> Reset</button>
       </header>
       <div className="settings-body">
         <label className="setting-field">Ollama endpoint
@@ -408,7 +410,28 @@ export default function App() {
         <button className="inline-action" onClick={() => void refreshModels(draft.endpoint)}><RotateCw size={14}/> Refresh models</button>
         <label className="setting-field">Personality prompt
           <textarea rows={6} value={draft.systemPrompt} onChange={event => setDraft({ ...draft, systemPrompt: event.target.value })}/>
+          <small>The sliders below add short behavioral guidance without replacing this prompt.</small>
         </label>
+        <div className="appearance-heading personality-heading">
+          <strong>Personality</strong>
+          <small>Tune Mikan's style. Sliders are tendencies, not exact guarantees.</small>
+        </div>
+        {PERSONALITY_TRAITS.map(trait => <div key={trait.key} className="setting-field personality-field">
+          <label className="personality-label" htmlFor={`personality-${trait.key}`}>
+            <span>{trait.label}</span>
+            <output>{draft.personality[trait.key]}%</output>
+          </label>
+          <input id={`personality-${trait.key}`} type="range" min="0" max="100" step="5"
+            value={draft.personality[trait.key]}
+            onChange={event => setDraft(current => ({
+              ...current, personality: { ...current.personality, [trait.key]: Number(event.target.value) }
+            }))}/>
+          <div className="personality-extremes"><span>{trait.low}</span><span>{trait.high}</span></div>
+        </div>)}
+        <button type="button" className="inline-action personality-reset"
+          onClick={() => setDraft(current => ({ ...current, personality: { ...DEFAULT_PERSONALITY } }))}>
+          <RotateCw size={14}/> Reset personality
+        </button>
         <label className="setting-field">Character portrait
           <input type="file" accept="image/png,image/jpeg,image/webp" onChange={event => void choosePortrait(event.target.files?.[0])}/>
           <small>The included portrait is the default. You can still replace it here.</small>
