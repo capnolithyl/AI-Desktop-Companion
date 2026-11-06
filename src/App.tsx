@@ -1,13 +1,15 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { openUrl } from "@tauri-apps/plugin-opener";
+import { webContext, type WebResult } from "./web-search";
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { register, unregister } from "@tauri-apps/plugin-global-shortcut";
 import {
   ArrowLeft, ArrowUp, Cat, Check, Clock3, History,
-  LoaderCircle, MessageCircle, RotateCw, Settings2, Sparkles, SquarePen, X
+  ExternalLink, LoaderCircle, MessageCircle, RotateCw, Search, Settings2, Sparkles, SquarePen, X
 } from "lucide-react";
 import {
   DEFAULT_SETTINGS, DEFAULT_APPEARANCE, loadPortrait, loadSettings, savePortrait, saveSettings,
@@ -15,7 +17,7 @@ import {
 } from "./storage";
 import { DEFAULT_PERSONALITY, PERSONALITY_TRAITS, personalityGuidance } from "./personality";
 
-type Screen = "compact" | "log" | "settings";
+type Screen = "compact" | "log" | "settings" | "search";
 type Connection = { mode: "loading" | "online" | "offline"; text: string };
 type ChatChunk = { requestId: string; content: string };
 type OllamaStats = {
@@ -28,16 +30,30 @@ type OllamaStats = {
 };
 type ChatCompletion = { content: string; stats: OllamaStats | null };
 type Diagnostics = { elapsedMs: number; firstTokenMs: number | null; model: string; stats: OllamaStats | null };
-type LogMessage = Message & { createdAt: number; diagnostics?: Diagnostics; failed?: boolean };
+type LogMessage = Message & { createdAt: number; diagnostics?: Diagnostics; failed?: boolean; sources?: WebResult[] };
 const HOTKEY = "Control+Alt+M";
 const BUNDLED_PORTRAIT = "/mikan.png";
 
 function rgbOf(hex: string): string {
   return [1, 3, 5].map(index => parseInt(hex.slice(index, index + 2), 16)).join(" ");
 }
+async function openSource(url: string): Promise<void> {
+  try {
+    const target = new URL(url);
+    if (target.protocol !== "https:" && target.protocol !== "http:") return;
+    await openUrl(target.href);
+  } catch (error) {
+    console.warn("Could not open external link:", error);
+  }
+}
 function MarkdownText({ text }: { text: string }) {
-  // No raw HTML plugin is enabled, so response markup cannot inject HTML.
-  return <div className="markdown-text"><ReactMarkdown remarkPlugins={[remarkGfm]}>{text}</ReactMarkdown></div>;
+  // Do not enable raw HTML. Open citations in the user's default browser.
+  return <div className="markdown-text"><ReactMarkdown remarkPlugins={[remarkGfm]} components={{
+    a: ({ href, children }) => <a href={href} onClick={event => {
+      event.preventDefault();
+      if (href) void openSource(href);
+    }}>{children}</a>
+  }}>{text}</ReactMarkdown></div>;
 }
 const FONTS = ["Segoe UI", "Arial", "Verdana", "Georgia"] as const;
 const ACCENTS = ["#ffad7e", "#f28bb6", "#ae9dff", "#80d6c5", "#8dbbff"];
@@ -87,9 +103,15 @@ export default function App() {
   const [imageError, setImageError] = useState<string | null>(null);
   const [availableModels, setAvailableModels] = useState<string[]>([]);
   const [connection, setConnection] = useState<Connection>({ mode: "loading", text: "Checking Ollama…" });
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<WebResult[]>([]);
+  const [searchBusy, setSearchBusy] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
+  const [searchHasRun, setSearchHasRun] = useState(false);
   const [greeting, setGreeting] = useState("Hey! I'm Mikan. What are we working on?");
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const logRef = useRef<HTMLDivElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
   const portraitUrl = useRef<string | null>(null);
 
   const focusInput = useCallback(() => {
@@ -160,7 +182,10 @@ export default function App() {
   useEffect(() => {
     if (screen === "log") logRef.current?.scrollTo({ top: logRef.current.scrollHeight, behavior: "smooth" });
   }, [screen, messages]);
-  useEffect(() => { if (screen === "compact") focusInput(); }, [screen, focusInput]);
+  useEffect(() => {
+    if (screen === "compact") focusInput();
+    if (screen === "search") requestAnimationFrame(() => searchInputRef.current?.focus());
+  }, [screen, focusInput]);
 
   const clearChat = () => {
     if (busy) return;
