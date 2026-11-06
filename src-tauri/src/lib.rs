@@ -229,6 +229,11 @@ async fn chat_stream_impl(
     let explicit_query = request.auto_search
         .then(|| research_intent::explicit_research_query(&messages))
         .flatten();
+    // A forecast about an already researched topic needs the cited evidence,
+    // not another non-streaming tool-planning pass. Explicit searches still run.
+    let reuse_prediction_evidence = explicit_query.is_none()
+        && !previous_sources.is_empty()
+        && research_intent::is_prediction_followup(&messages);
 
     if explicit_query.is_none() && !previous_sources.is_empty() {
         // Place carried evidence AFTER research-intent extraction so the extra
@@ -290,6 +295,11 @@ async fn chat_stream_impl(
             // This keeps external content out of system instructions.
             let last_user = messages.iter().rposition(|m| m["role"] == "user").unwrap_or(messages.len());
             messages.insert(last_user, json!({"role":"user","content": excerpts}));
+        } else if reuse_prediction_evidence {
+            // Stream directly from the prior excerpts with the same [n] indexes
+            // shown in the UI. Avoid an uncited answer from tool preflight.
+            sources = previous_sources.clone();
+            sources_carried_over = true;
         } else {
             let plan = agent_tools::prepare(
                 &app, &client, &url, &request.model, &request.request_id,
