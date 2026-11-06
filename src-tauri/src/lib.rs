@@ -1,4 +1,7 @@
 mod web_search;
+mod web_reader;
+mod search_service;
+mod agent_tools;
 use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -22,7 +25,14 @@ struct ChatRequest {
     endpoint: String,
     model: String,
     messages: Vec<ChatMessage>,
+    #[serde(default)]
+    auto_search: bool,
+    #[serde(default)]
+    searxng_endpoint: String,
+    #[serde(default = "default_cache_hours")]
+    cache_hours: u64,
 }
+fn default_cache_hours() -> u64 { 24 }
 
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -47,6 +57,7 @@ struct ChatStats {
 struct ChatCompletion {
     content: String,
     stats: Option<ChatStats>,
+    sources: Vec<web_search::SearchResult>,
 }
 
 fn local_origin(endpoint: &str) -> Result<String, String> {
@@ -158,17 +169,44 @@ async fn chat_stream(
         return Err("Select an installed model in Settings".into());
     }
     let url = format!("{}/api/chat", local_origin(&request.endpoint)?);
-    let response = client()?
-        .post(url)
+    let client = client()?;
+    let mut messages: Vec<Value> = request.messages.iter().map(|m| {
+        json!({"role":m.role,"content":m.content})
+    }).collect();
+    let mut sources = Vec::new();
+    if request.auto_search {
+        let plan = agent_tools::prepare(
+            &app, &client, &url, &request.model, &request.request_id,
+            &mut messages, &request.searxng_endpoint, request.cache_hours
+        ).await?;
+        sources = plan.sources;
+        if let Some((content, data)) = plan.answer {
+            if content.trim().is_empty() {
+                return Err("The model returned no answer or tool requests".into());
+            }
+            let _ = app.emit("mikan://chat", ChatChunk {
+                request_id: request.request_id,
+                content: content.clone()
+            });
+            let stats = ChatStats {
+                output_tokens: data["eval_count"].as_u64(),
+                prompt_tokens: data["prompt_eval_count"].as_u64(),
+                total_duration_ns: data["total_duration"].as_u64(),
+                load_duration_ns: data["load_duration"].as_u64(),
+                prompt_eval_duration_ns: data["prompt_eval_duration"].as_u64(),
+                eval_duration_ns: data["eval_duration"].as_u64(),
+            };
+            return Ok(ChatCompletion { content, stats: Some(stats), sources });
+        }
+    }
+    let response = client.post(url)
         .json(&json!({
             "model": request.model,
-            "messages": request.messages,
+            "messages": messages,
             "stream": true,
             "think": false
         }))
-        .send()
-        .await
-        .map_err(|e| format!("Ollama connection failed: {e}"))?;
+        .send().await.map_err(|e| format!("Ollama connection failed: {e}"))?;
 
     if !response.status().is_success() {
         let status = response.status();
@@ -217,7 +255,7 @@ async fn chat_stream(
     }
     // The final text is returned as well as streamed so that no event-ordering
     // race can lose the last characters when the frontend removes its listener.
-    Ok(ChatCompletion { content, stats })
+    Ok(ChatCompletion { content, stats, sources })
 }
 
 fn toggle_window(app: &tauri::AppHandle) {
@@ -250,6 +288,10 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             list_models,
             web_search::web_search,
+            search_service::search_service,
+            web_reader::read_page,
+            web_reader::web_cache_info,
+            web_reader::clear_web_cache,
             chat_stream,
             toggle_companion,
             hide_companion
