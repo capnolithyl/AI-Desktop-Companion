@@ -15,7 +15,7 @@ enum class BackendStatus { READY, DOWNLOADABLE, DOWNLOADING, UNAVAILABLE }
 
 object MikanPersona {
     // Keep Mikan's portable persona concise for Nano's small context window.
-    const val PROMPT = """
+    val PROMPT = """
 You are Mikan, a friendly, clever, playful and occasionally teasing AI companion.
 Be warm and conversational, but give useful, accurate answers before jokes.
 Be curious and expressive without constant roleplay actions or introductions.
