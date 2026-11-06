@@ -9,7 +9,7 @@ This is a first local-chat prototype. No subscriptions, remote API keys, speech 
 3. Install Ollama for Windows: https://ollama.com/download/windows
 4. Open PowerShell and run: `ollama pull qwen3.5:9b`
 5. Start Mikan and open **Settings**. The default local endpoint is `http://127.0.0.1:11434`. Click **Refresh models** and choose one.
-6. Click **Choose portrait** to load your existing Mikan PNG from your computer. It is stored locally in the app's IndexedDB, not uploaded to any server.
+6. Mikan's bundled portrait is loaded automatically when `public/mikan.png` is present at build time. The optional portrait picker in Settings lets you override it with an image stored locally in IndexedDB. **The original portrait asset is still pending addition to GitHub, so current builds continue to show the picker.**
 7. Type a message and press Enter. Shift+Enter inserts a newline.
 
 The default model is only a starting point. AMD RX 9070 acceleration on Windows depends on the installed Ollama version and backend. If performance is poor, benchmark llama.cpp with Vulkan later.
@@ -45,3 +45,7 @@ The desktop script generates icons from `assets/mikan-icon.svg` and starts Tauri
 - Closing the window hides it to the tray; use **Quit Mikan** in the tray menu to exit.
 - Initial install may depend on WebView2 availability.
 - This is an experimental build. The GitHub workflow must complete successfully to prove the Windows installer works.
+
+## Bundling the default portrait
+
+Place the original Mikan portrait at `public/mikan.png` (not a replacement or a generated approximation) and commit it. Vite copies assets from `public` into the packaged app automatically. The app uses that asset by default, but any manually chosen portrait stored in IndexedDB takes precedence. This is a pending asset, not yet included in the repository.

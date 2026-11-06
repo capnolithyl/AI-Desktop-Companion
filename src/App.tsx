@@ -15,6 +15,8 @@ type ChatChunk = { requestId: string; content: string; done: boolean };
 type Connection = { mode: "loading" | "online" | "offline"; message: string };
 type Screen = "chat" | "settings";
 const HOTKEY = "Control+Alt+M";
+// Vite copies public/mikan.png into the Windows application bundle when supplied.
+const BUNDLED_PORTRAIT_URL = "/mikan.png";
 
 function formatError(error: unknown): string {
   return typeof error === "string" ? error : error instanceof Error ? error.message : String(error);
@@ -28,7 +30,7 @@ export default function App() {
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [bubble, setBubble] = useState("Hey, I'm Mikan. What are we working on?");
-  const [portrait, setPortrait] = useState<string | null>(null);
+  const [portrait, setPortrait] = useState<string | null>(BUNDLED_PORTRAIT_URL);
   const [imageError, setImageError] = useState<string | null>(null);
   const [availableModels, setAvailableModels] = useState<string[]>([]);
   const [connection, setConnection] = useState<Connection>({ mode: "loading", message: "Checking Ollama…" });
@@ -38,7 +40,7 @@ export default function App() {
 
   const showPortrait = useCallback((blob: Blob | null) => {
     if (portraitUrl.current) URL.revokeObjectURL(portraitUrl.current);
-    const url = blob ? URL.createObjectURL(blob) : null;
+    const url = blob ? URL.createObjectURL(blob) : BUNDLED_PORTRAIT_URL;
     portraitUrl.current = url;
     setPortrait(url);
   }, []);
@@ -197,7 +199,7 @@ export default function App() {
           <div className="character-label"><span className="online-dot" /> YOUR DESKTOP COMPANION</div>
           <div className="character-stage">
             {portrait
-              ? <img className="portrait" src={portrait} alt="Mikan" />
+              ? <img className="portrait" src={portrait} alt="Mikan" onError={() => setPortrait(null)} />
               : <div className="portrait-placeholder">
                   <Cat size={105} strokeWidth={1} />
                   <strong>Mikan's portrait goes here</strong>
@@ -299,7 +301,7 @@ export default function App() {
               <label className="field">Character portrait
                 <input className="file-input" type="file" accept="image/png,image/jpeg,image/webp"
                   onChange={event => void choosePortrait(event.target.files?.[0])}/>
-                <small>Choose your existing Mikan PNG. Stored only on this device.</small>
+                <small>A bundled portrait appears automatically when included in the installer. You can override it here; your image stays on this device.</small>
                 {imageError && <small className="field-error">{imageError}</small>}
                 {portrait && <span className="portrait-saved"><Check size={15}/> Portrait loaded successfully</span>}
               </label>
