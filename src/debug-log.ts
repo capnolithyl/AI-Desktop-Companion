@@ -9,11 +9,20 @@ export type OllamaStats = {
   evalDurationNs: number | null;
 };
 
+export type ResearchAudit = {
+  status: "used" | "fallback";
+  accepted: number;
+  rejected: number;
+  elapsedMs: number;
+  note: string;
+};
+
 export type Diagnostics = {
   elapsedMs: number;
   firstTokenMs: number | null;
   model: string;
   stats: OllamaStats | null;
+  research?: ResearchAudit;
 };
 
 export type DebugLogMessage = {
@@ -64,7 +73,14 @@ function performanceLines(diagnostics: Diagnostics): string[] {
     "  Model time: " + fromNanoseconds(s?.totalDurationNs),
     "  Load time: " + fromNanoseconds(s?.loadDurationNs),
     "  Prompt eval: " + fromNanoseconds(s?.promptEvalDurationNs),
-    "  Model: " + diagnostics.model
+    "  Model: " + diagnostics.model,
+    ...(diagnostics.research ? [
+      "  Research evidence: " + diagnostics.research.status,
+      "  Accepted source-anchored facts: " + diagnostics.research.accepted,
+      "  Rejected candidates: " + diagnostics.research.rejected,
+      "  Extraction time: " + duration(diagnostics.research.elapsedMs),
+      "  Evidence note: " + diagnostics.research.note
+    ] : [])
   ];
 }
 

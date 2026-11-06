@@ -2,7 +2,7 @@ import { DEFAULT_PERSONALITY, readPersonality, type Personality } from "./person
 
 export type ChatRole = "user" | "assistant";
 export type Message = { id: string; role: ChatRole; content: string };
-export type Settings = { endpoint: string; model: string; systemPrompt: string; appearance: Appearance; personality: Personality; searxngEndpoint: string; autoSearch: boolean; autoManageSearch: boolean; cacheHours: number; contextWindow: number | null; autoRememberUser: boolean; autoRememberMikan: boolean };
+export type Settings = { endpoint: string; model: string; systemPrompt: string; appearance: Appearance; personality: Personality; searxngEndpoint: string; autoSearch: boolean; structuredResearch: boolean; autoManageSearch: boolean; cacheHours: number; contextWindow: number | null; autoRememberUser: boolean; autoRememberMikan: boolean };
 
 export type Appearance = {
   accent: string;
@@ -37,6 +37,7 @@ export const DEFAULT_SETTINGS: Settings = {
   endpoint: "http://127.0.0.1:11434",
   searxngEndpoint: "http://127.0.0.1:8888",
   autoSearch: false,
+  structuredResearch: true,
   autoManageSearch: false,
   cacheHours: 24,
   contextWindow: null,
@@ -59,6 +60,7 @@ export function loadSettings(): Settings {
       endpoint: typeof data.endpoint === "string" ? data.endpoint : DEFAULT_SETTINGS.endpoint,
       searxngEndpoint: typeof data.searxngEndpoint === "string" ? data.searxngEndpoint : DEFAULT_SETTINGS.searxngEndpoint,
       autoSearch: data.autoSearch === true,
+      structuredResearch: data.structuredResearch !== false,
       autoManageSearch: typeof data.autoManageSearch === "boolean" ? data.autoManageSearch : data.autoSearch === true,
       cacheHours: typeof data.cacheHours === "number" && Number.isFinite(data.cacheHours) ? Math.max(1, Math.min(720, data.cacheHours)) : DEFAULT_SETTINGS.cacheHours,
       contextWindow: [4096, 8192, 16384, 32768].includes(Number(data.contextWindow)) && data.contextWindow != null
