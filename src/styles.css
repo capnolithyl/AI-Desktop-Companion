@@ -72,7 +72,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px
   position: absolute; z-index: 2; left: 10px; right: 10px; bottom: 10px;
   background: rgba(33,27,37,.94);
   border: 1px solid rgba(255,195,161,.29); border-radius: 18px;
-  box-shadow: 0 12px 35px #100d1580, inset 0 1px 0 #ffffff16;
+  box-shadow: none;
   backdrop-filter: blur(22px);
   padding: 15px 15px 11px;
 }
@@ -98,7 +98,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px
   border: 1px solid #685360; color: #fff4f0; font-size: 13px;
   line-height: 1.4; resize: none; padding: 10px 12px; height: 64px;
 }
-.input-row textarea:focus { outline: none; border-color: #efa37e; box-shadow: 0 0 0 2px #ffa77a2a; }
+.input-row textarea:focus { outline: none; border-color: var(--accent, #efa37e); box-shadow: none; }
 .input-row textarea::placeholder { color: #c3a9b6; }
 .send-button { width: 43px; height: 43px; flex: 0 0 43px; display: grid; place-items: center; border: 0; border-radius: 12px; color: #3a2731; background: #ffad7e; }
 .send-button:not(:disabled):hover { background: #ffd0ad; }
