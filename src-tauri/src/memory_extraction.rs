@@ -288,16 +288,18 @@ pub async fn memory_process_turn(
     let existing_user: Vec<String> = if capture_user {
         let mut statement = db.prepare("SELECT fact FROM user_memories ORDER BY updated_at DESC LIMIT 25")
             .map_err(|e| e.to_string())?;
-        statement.query_map([],|row| row.get(0)).map_err(|e| e.to_string())?
-            .collect::<Result<_,_>>().map_err(|e| e.to_string())?
+        let facts = statement.query_map([], |row| row.get(0)).map_err(|e| e.to_string())?
+            .collect::<Result<_,_>>().map_err(|e| e.to_string())?;
+        facts
     } else { Vec::new() };
     let existing_canon: Vec<String> = if capture_character {
         let mut statement = db.prepare(
             "SELECT label || ': ' || value FROM character_facts
              WHERE persona_id='mikan' ORDER BY updated_at DESC LIMIT 25"
         ).map_err(|e| e.to_string())?;
-        statement.query_map([],|row| row.get(0)).map_err(|e| e.to_string())?
-            .collect::<Result<_,_>>().map_err(|e| e.to_string())?
+        let facts = statement.query_map([], |row| row.get(0)).map_err(|e| e.to_string())?
+            .collect::<Result<_,_>>().map_err(|e| e.to_string())?;
+        facts
     } else { Vec::new() };
     drop(db);
 
