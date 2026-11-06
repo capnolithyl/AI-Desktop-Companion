@@ -186,7 +186,6 @@ fn persist(
     assistant_message_id: &str,
     capture_user: bool,
     capture_character: bool,
-    context_window: Option<u32>,
 ) -> Result<MemoryProcessingResult, String> {
     let tx = db.transaction().map_err(|e| e.to_string())?;
     // The assistant reply must still exist. Avoid resurrecting memories after
@@ -249,6 +248,7 @@ pub async fn memory_process_turn(
     assistant_message_id: String,
     capture_user: bool,
     capture_character: bool,
+    context_window: Option<u32>,
 ) -> Result<MemoryProcessingResult, String> {
     if !capture_user && !capture_character {
         return Ok(MemoryProcessingResult { skipped: true, ..Default::default() });
