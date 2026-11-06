@@ -4,7 +4,7 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { register, unregister } from "@tauri-apps/plugin-global-shortcut";
 import {
-  ArrowLeft, ArrowUp, Cat, Check, Clock3, GripHorizontal, History, ImagePlus,
+  ArrowLeft, ArrowUp, Cat, Check, Clock3, GripHorizontal, History,
   LoaderCircle, MessageCircle, RotateCw, Settings2, Sparkles, SquarePen, X
 } from "lucide-react";
 import {
