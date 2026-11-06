@@ -3,11 +3,12 @@ export type WebResult = {
   url: string;
   content: string;
   engine: string;
+  publishedDate?: string;
 };
 
 export function webContext(query: string, results: WebResult[]): string {
   const snippets = results.map((item, index) =>
-    `[${index + 1}] ${item.title}\nURL: ${item.url}\nExcerpt: ${item.content}`
+    `[${index + 1}] ${item.title}\nURL: ${item.url}\nPublished date (if provided by search engine): ${item.publishedDate ?? "not supplied"}\nExcerpt: ${item.content}`
   ).join("\n\n");
 
   return [

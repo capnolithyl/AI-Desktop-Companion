@@ -13,6 +13,8 @@ pub struct SearchResult {
     pub url: String,
     pub content: String,
     pub engine: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub published_date: Option<String>,
 }
 
 fn local_searxng_url(endpoint: &str) -> Result<String, String> {
@@ -50,11 +52,16 @@ fn search_results(data: &Value) -> Vec<SearchResult> {
         let title = item["title"].as_str().unwrap_or(url).chars().take(160).collect();
         let content = item["content"].as_str().unwrap_or("").chars().take(550).collect();
         let engine = item["engine"].as_str().unwrap_or("").chars().take(60).collect();
+        let published_date = item["publishedDate"].as_str()
+            .or_else(|| item["pubdate"].as_str())
+            .filter(|date| !date.trim().is_empty())
+            .map(|date| date.chars().take(80).collect::<String>());
         results.push(SearchResult {
             title,
             url: url.to_owned(),
             content,
             engine,
+            published_date,
         });
         if results.len() == MAX_RESULTS {
             break;

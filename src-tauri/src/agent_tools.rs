@@ -76,7 +76,8 @@ pub async fn prepare(
                                 sources.push(web_search::SearchResult {
                                     title: page.title.clone(), url: page.url.clone(),
                                     content: page.content.chars().take(400).collect(),
-                                    engine: "webpage".into()
+                                    engine: "webpage".into(),
+                                    published_date: None
                                 });
                             }
                             serde_json::to_string(&page).unwrap_or_default()

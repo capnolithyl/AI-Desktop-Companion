@@ -744,7 +744,7 @@ export default function App() {
             <span>[{index + 1}] {result.title}</span><ExternalLink size={15}/>
           </button>
           {result.content && <p>{result.content}</p>}
-          <small>{result.engine || new URL(result.url).hostname}</small>
+          <small>{result.engine || new URL(result.url).hostname}{result.publishedDate ? ` · Published: ${result.publishedDate}` : ""}</small>
           {result.url.startsWith("https://") && <button className="inline-action read-result" type="button"
             onClick={() => void openPage(result.url, true)}><BookOpen size={14}/> Read full page</button>}
         </article>)}
