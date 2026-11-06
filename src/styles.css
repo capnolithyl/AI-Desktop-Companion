@@ -266,3 +266,18 @@ button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px
 .markdown-text table { display: block; overflow-x: auto; border-collapse: collapse; margin: .65em 0; }
 .markdown-text th, .markdown-text td { border: 1px solid #705c66; padding: 6px 8px; }
 .markdown-text hr { border: 0; border-top: 1px solid #705c66; margin: 1em 0; }
+
+/* Mikan's adjustable personality: compact, readable controls inside Settings. */
+.personality-heading { margin-bottom: 15px; }
+.personality-field { gap: 5px; margin-bottom: 15px; }
+.personality-label {
+  display: flex; justify-content: space-between; align-items: center;
+  gap: 12px; color: #f8d9cf; cursor: pointer;
+}
+.personality-label output { color: var(--accent, #ffad7e); font-variant-numeric: tabular-nums; }
+.personality-field input[type="range"] { cursor: pointer; margin: 2px 0; }
+.personality-extremes {
+  display: flex; justify-content: space-between; gap: 12px;
+  color: #baa7b4; font-size: 11px; font-weight: 400;
+}
+.personality-reset { margin: 1px 0 22px; }
