@@ -282,13 +282,19 @@ async fn chat_stream_impl(
             }
         }
     }
+    let mut payload = json!({
+        "model": request.model,
+        "messages": messages,
+        "stream": true,
+        "think": false
+    });
+    // Keep normal conversational creativity intact. Use a lower sampling
+    // temperature only for web-grounded factual answers.
+    if !sources.is_empty() {
+        payload["options"] = json!({"temperature": 0.2});
+    }
     let response = client.post(url)
-        .json(&json!({
-            "model": request.model,
-            "messages": messages,
-            "stream": true,
-            "think": false
-        }))
+        .json(&payload)
         .send().await.map_err(|e| format!("Ollama connection failed: {e}"))?;
 
     if !response.status().is_success() {
