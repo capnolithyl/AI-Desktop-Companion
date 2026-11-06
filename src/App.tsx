@@ -46,6 +46,27 @@ type LogMessage = Message & { createdAt: number; diagnostics?: Diagnostics; fail
 const HOTKEY = "Control+Alt+M";
 const BUNDLED_PORTRAIT = "/mikan.png";
 
+function restoreMessage(saved: PersistedMessage): LogMessage {
+  const metadata = readMessageMetadata(saved.metadataJson);
+  return {
+    id: saved.id, role: saved.role, content: saved.content, createdAt: saved.createdAt,
+    ...(metadata.failed === true ? { failed: true } : {}),
+    ...(metadata.diagnostics && typeof metadata.diagnostics === "object"
+      ? { diagnostics: metadata.diagnostics as Diagnostics } : {}),
+    ...(Array.isArray(metadata.sources) ? { sources: metadata.sources as WebResult[] } : {}),
+    ...(typeof metadata.searchQuery === "string" ? { searchQuery: metadata.searchQuery } : {})
+  };
+}
+
+function archiveMetadata(message: LogMessage): object {
+  return {
+    failed: message.failed === true,
+    diagnostics: message.diagnostics ?? null,
+    sources: message.sources ?? [],
+    searchQuery: message.searchQuery ?? null
+  };
+}
+
 function rgbOf(hex: string): string {
   return [1, 3, 5].map(index => parseInt(hex.slice(index, index + 2), 16)).join(" ");
 }
@@ -232,9 +253,88 @@ export default function App() {
     if (screen === "page") requestAnimationFrame(() => pageInputRef.current?.focus());
   }, [screen, focusInput]);
 
+  useEffect(() => {
+    let disposed = false;
+    void (async () => {
+      try {
+        const [archive, facts] = await Promise.all([
+          memoryApi.listConversations(), memoryApi.listFacts()
+        ]);
+        if (disposed) return;
+        setConversations(archive);
+        setUserFacts(facts);
+        const latest = archive[0];
+        if (latest) {
+          const restored = await memoryApi.listMessages(latest.id);
+          if (!disposed) {
+            setMessages(restored.map(restoreMessage));
+            setActiveConversationId(latest.id);
+          }
+        }
+      } catch (error) {
+        if (!disposed) setMemoryError(`Local memory unavailable: ${errorText(error)}`);
+      } finally {
+        if (!disposed) setMemoryReady(true);
+      }
+    })();
+    return () => { disposed = true; };
+  }, []);
+
+  const refreshArchive = async () => {
+    setConversations(await memoryApi.listConversations());
+  };
+  const refreshFacts = async () => {
+    setUserFacts(await memoryApi.listFacts());
+  };
+  const refreshMemory = async () => {
+    const [archive, facts] = await Promise.all([
+      memoryApi.listConversations(), memoryApi.listFacts()
+    ]);
+    setConversations(archive);
+    setUserFacts(facts);
+    setMemoryError(null);
+  };
+  const addUserFact = async (fact: string) => {
+    await memoryApi.addFact(fact);
+    await refreshFacts();
+    setMemoryError(null);
+  };
+  const editUserFact = async (id: number, fact: string) => {
+    await memoryApi.updateFact(id, fact);
+    await refreshFacts();
+  };
+  const deleteUserFact = async (id: number) => {
+    await memoryApi.deleteFact(id);
+    await refreshFacts();
+  };
+  const openConversation = async (id: string) => {
+    if (busy) return;
+    const stored = await memoryApi.listMessages(id);
+    setMessages(stored.map(restoreMessage));
+    setActiveConversationId(id);
+    setFeedback(null);
+    goCompact();
+  };
+  const deleteConversation = async (id: string) => {
+    if (busy) throw new Error("Stop the current reply before deleting a conversation");
+    await memoryApi.deleteConversation(id);
+    if (id === activeConversationId) {
+      setActiveConversationId(null);
+      setMessages([]);
+      setFeedback(null);
+    }
+    await refreshArchive();
+  };
+  const openMemory = (tab: "chats" | "facts" = "facts") => {
+    setMemoryInitialTab(tab);
+    setScreen("memory");
+    void refreshMemory().catch(error => setMemoryError(errorText(error)));
+  };
+
   const clearChat = () => {
     if (busy) return;
     setMessages([]);
+    setActiveConversationId(null);
     setFeedback(null);
     setGreeting("New conversation! What shall we talk about?");
     goCompact();
