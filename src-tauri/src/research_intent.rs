@@ -280,7 +280,7 @@ mod tests {
 
     #[test]
     fn fallback_can_relax_unstructured_news_queries() {
-        let turns=messages(&["Latest updates on spaceflight"]);
+        let turns=messages(&["Latest Artemis mission updates"]);
         assert_eq!(
             fallback_research_query(&turns, "\"Artemis missions\" latest news").as_deref(),
             Some("Artemis missions")
