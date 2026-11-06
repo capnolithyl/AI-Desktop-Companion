@@ -520,6 +520,27 @@ export default function App() {
         void manageService("status"); return;
       case "internet":
         openSettingsTab("internet"); return;
+      case "memory":
+      case "memories": openMemory("facts"); return;
+      case "chats":
+      case "conversations": openMemory("chats"); return;
+      case "remember":
+        if (!argument) { setFeedback("Use /remember followed by a fact, e.g. /remember I like metal."); return; }
+        void addUserFact(argument)
+          .then(() => setFeedback("Saved to your local memories."))
+          .catch(error => setFeedback(`Could not save memory: ${errorText(error)}`));
+        return;
+      case "forget": {
+        const id = Number(argument);
+        if (!/^\\d+$/.test(argument) || !Number.isSafeInteger(id) || id <= 0) {
+          setFeedback("Use /forget with the numeric ID from the Memory panel.");
+          return;
+        }
+        void deleteUserFact(id)
+          .then(() => setFeedback(`Deleted memory #${id} if it existed.`))
+          .catch(error => setFeedback(`Could not delete memory: ${errorText(error)}`));
+        return;
+      }
       case "log":
       case "history": setScreen("log"); return;
       case "settings": openSettings(); return;
@@ -633,6 +654,7 @@ export default function App() {
     }
 
     if (busy) return;
+    if (!memoryReady) { setFeedback("Loading conversation memory…"); return; }
     setFeedback(null);
     const user: LogMessage = { id: crypto.randomUUID(), role: "user", content: text, createdAt: Date.now() };
     const assistantId = crypto.randomUUID();
@@ -779,6 +801,8 @@ export default function App() {
               onClick={() => setScreen("search")}><Search size={17}/></button>
             <button className="dock-icon" title="Quick personality presets (/personality)" aria-label="Personality presets"
               onClick={() => setScreen("personality")}><SlidersHorizontal size={17}/></button>
+            <button className="dock-icon" title="Memory and conversations (/memories)" aria-label="Memory and conversations"
+              onClick={() => openMemory("facts")}><Brain size={17}/></button>
             <button className="dock-icon" title="Conversation log (/log)" aria-label="Conversation log" onClick={() => setScreen("log")}><History size={17}/></button>
             <button className="dock-icon" title="Settings (/settings)" aria-label="Settings" onClick={openSettings}><Settings2 size={17}/></button>
             <button className="dock-icon" title="Hide Mikan" aria-label="Hide Mikan" onClick={() => void invoke("hide_companion")}><X size={18}/></button>
@@ -813,7 +837,7 @@ export default function App() {
           </button>
         ) : (
           <button type="button" className="send-button" aria-label="Send" title="Send message"
-            disabled={!input.trim()} onClick={() => void send()}><ArrowUp size={20}/></button>
+            disabled={!memoryReady || !input.trim()} onClick={() => void send()}><ArrowUp size={20}/></button>
         )}
       </div>
       <div className="dock-footer">
@@ -834,7 +858,7 @@ export default function App() {
             aria-label="Refresh installed models" disabled={busy || connection.mode === "loading"}
             onClick={() => void refreshModels(settings.endpoint)}><RotateCw size={13}/></button>
         </div>
-        <span>Ctrl + Alt + M</span>
+        <span title={memoryError || "Memory ready"}>{memoryError ? "Memory unavailable" : !memoryReady ? "Loading memory…" : "Ctrl + Alt + M"}</span>
       </div>
     </section>
 
@@ -843,7 +867,9 @@ export default function App() {
     {screen === "log" && <section className="drawer" role="dialog" aria-label="Chat history">
       <header className="drawer-header">
         <button className="back-button" title="Back to companion" onClick={goCompact}><ArrowLeft size={19}/></button>
-        <div className="drawer-title"><strong>Conversation log</strong><span>{messages.length} messages · this session</span></div>
+        <div className="drawer-title"><strong>Conversation log</strong><span>{messages.length} messages · current conversation</span></div>
+        <button type="button" className="secondary-action" disabled={busy}
+          onClick={() => openMemory("chats")}><History size={15}/> All chats</button>
         <button className="secondary-action" disabled={busy} onClick={clearChat}><SquarePen size={15}/> New</button>
       </header>
       <div className="log-body" ref={logRef}>
@@ -975,6 +1001,13 @@ export default function App() {
           }}><Sparkles size={16}/> Ask Mikan</button>
       </footer>
     </section>}
+
+    {screen === "memory" && <MemoryPanel key={memoryInitialTab} initialTab={memoryInitialTab}
+      conversations={conversations} facts={userFacts} currentId={activeConversationId}
+      busy={busy} error={memoryError} onClose={goCompact} onNew={clearChat}
+      onOpen={openConversation} onDeleteChat={deleteConversation}
+      onAddFact={addUserFact} onEditFact={editUserFact} onDeleteFact={deleteUserFact}
+      onRefresh={refreshMemory}/>}
 
     {screen === "personality" && <section className="drawer" role="dialog" aria-label="Quick personality controls">
       <header className="drawer-header">
