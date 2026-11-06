@@ -21,6 +21,7 @@ import {
 } from "./personality";
 import { PersonalityPresets, PersonalitySliders } from "./PersonalityControls";
 import { parseSlashCommand, SLASH_HELP } from "./slash-commands";
+import { runtimeContext } from "./runtime-context";
 
 type Screen = "compact" | "log" | "settings" | "search" | "page" | "personality" | "help";
 type SettingsTab = "ai" | "internet" | "appearance";
@@ -548,7 +549,7 @@ export default function App() {
           searxngEndpoint: settings.searxngEndpoint,
           cacheHours: settings.cacheHours,
           messages: [
-            { role: "system", content: [settings.systemPrompt.trim(), personalityGuidance(settings.personality)].filter(Boolean).join("\n\n") },
+            { role: "system", content: [settings.systemPrompt.trim(), personalityGuidance(settings.personality), runtimeContext()].filter(Boolean).join("\n\n") },
             ...(withSearch ? [{ role: "user", content: withSearch.page ? pageContext(withSearch.query, withSearch.page) : webContext(withSearch.query, withSearch.results) }] : []),
             ...history.map(m => ({ role: m.role, content: m.content }))
           ]
@@ -838,7 +839,7 @@ export default function App() {
     {screen === "settings" && <section className="drawer" role="dialog" aria-label="Mikan settings">
       <header className="drawer-header">
         <button className="back-button" title="Back to companion" onClick={goCompact}><ArrowLeft size={19}/></button>
-        <div className="drawer-title"><strong>Settings</strong><span>Mikan v0.5 · Local first</span></div>
+        <div className="drawer-title"><strong>Settings</strong><span>Mikan v0.5.1 · Local first</span></div>
         <button className="secondary-action" onClick={() => setDraft(current => ({
           ...current,
           ...(settingsTab === "ai" ? {
