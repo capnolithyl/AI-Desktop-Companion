@@ -532,7 +532,7 @@ export default function App() {
         return;
       case "forget": {
         const id = Number(argument);
-        if (!/^\\d+$/.test(argument) || !Number.isSafeInteger(id) || id <= 0) {
+        if (!/^\d+$/.test(argument) || !Number.isSafeInteger(id) || id <= 0) {
           setFeedback("Use /forget with the numeric ID from the Memory panel.");
           return;
         }
