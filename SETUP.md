@@ -1,4 +1,4 @@
-# Mikan Desktop Companion v0.3 (Windows)
+# Mikan Desktop Companion v0.3.1 (Windows)
 
 A free, local-first personal AI companion. This is an experimental build for one Windows 11 PC.
 
@@ -6,7 +6,7 @@ A free, local-first personal AI companion. This is an experimental build for one
 
 1. Open the latest successful [Windows installer workflow](https://github.com/capnolithyl/AI-Desktop-Companion/actions/workflows/windows.yml).
 2. Download the `mikan-windows-installer` artifact, extract it and run the NSIS setup executable. Install over v0.2.
-3. Keep Ollama running with an installed local model such as `qwen3.5:9b`. Endpoint: `http://127.0.0.1:11434`.
+3. Keep Ollama running with one or more locally downloaded models. Endpoint: `http://127.0.0.1:11434`.
 4. Your previous settings and selected portrait should persist across upgrades in the Tauri WebView data. If the avatar is missing, choose your existing Mikan PNG under Settings.
 
 Unsigned personal builds may trigger Windows SmartScreen. Examine the GitHub workflow/source before running.
@@ -19,6 +19,7 @@ Unsigned personal builds may trigger Windows SmartScreen. Examine the GitHub wor
 - Enter sends; Shift+Enter inserts newline.
 - `/log` or `/history` opens the complete session chat, with per-assistant-message timing, token counts, and model throughput.
 - `/settings` opens settings; `/chat` returns to compact; `/new` and `/clear` start a new in-memory conversation.
+- Models installed through Ollama appear automatically in the model dropdown in Settings and in the compact dock footer. Use the refresh icon after pulling a model while Mikan is open. Selecting a model in the dock saves it immediately; choosing one in Settings takes effect when you click Save. No restart or API key needed. The current conversation remains intact after switching, so start a new chat if you want an apples-to-apples comparison. If Ollama is offline or a model is missing, Settings also accepts manually typed model names.
 - Replies and conversation history are rendered as Markdown (italic `*actions*`, bold, lists, code, links, and tables), not as plain text.
 - Under Settings > Appearance, change accent color, panel color, panel opacity, font family, and message font size. These persist locally.
 
