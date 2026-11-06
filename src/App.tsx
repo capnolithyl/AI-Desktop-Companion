@@ -230,6 +230,7 @@ export default function App() {
       endpoint: draft.endpoint.trim().replace(/\/+$/, ""),
       model: draft.model.trim(),
       systemPrompt: draft.systemPrompt.trim(),
+      searxngEndpoint: draft.searxngEndpoint.trim().replace(/\/+$/, ""),
       appearance: { ...draft.appearance },
       personality: { ...draft.personality }
     };
@@ -238,12 +239,41 @@ export default function App() {
     goCompact();
   };
 
-  const send = async () => {
-    const text = input.trim();
+  const performSearch = async (query: string) => {
+    const trimmed = query.trim();
+    setScreen("search");
+    setSearchQuery(trimmed);
+    setSearchResults([]);
+    setSearchError(null);
+    setSearchHasRun(false);
+    if (!trimmed) return;
+    setSearchBusy(true);
+    try {
+      const results = await invoke<WebResult[]>("web_search", {
+        endpoint: settings.searxngEndpoint,
+        query: trimmed
+      });
+      setSearchResults(results);
+      setSearchHasRun(true);
+    } catch (error) {
+      setSearchError(errorText(error));
+      setSearchHasRun(true);
+    } finally {
+      setSearchBusy(false);
+    }
+  };
+
+  const send = async (withSearch?: { query: string; results: WebResult[] }) => {
+    const text = withSearch ? withSearch.query : input.trim();
     if (!text) return;
 
     // Commands are local UI actions, never sent to the LLM.
-    const command = text.toLowerCase();
+    const command = withSearch ? "" : text.toLowerCase();
+    if (command === "/search" || command.startsWith("/search ")) {
+      setInput("");
+      void performSearch(text.slice(7).trim());
+      return;
+    }
     if (command === "/log" || command === "/history") {
       setInput("");
       setScreen("log");
@@ -270,7 +300,10 @@ export default function App() {
     const assistantId = crypto.randomUUID();
     const history = [...messages, user];
     const requestId = crypto.randomUUID();
-    setMessages([...history, { id: assistantId, role: "assistant", content: "", createdAt: Date.now() }]);
+    setMessages([...history, {
+      id: assistantId, role: "assistant", content: "", createdAt: Date.now(),
+      ...(withSearch ? { sources: withSearch.results } : {})
+    }]);
     setInput("");
     setBusy(true);
     goCompact();
@@ -297,6 +330,7 @@ export default function App() {
           model: settings.model,
           messages: [
             { role: "system", content: [settings.systemPrompt.trim(), personalityGuidance(settings.personality)].filter(Boolean).join("\n\n") },
+            ...(withSearch ? [{ role: "user", content: webContext(withSearch.query, withSearch.results) }] : []),
             ...history.map(m => ({ role: m.role, content: m.content }))
           ]
         }
