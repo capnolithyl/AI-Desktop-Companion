@@ -588,6 +588,39 @@ export default function App() {
         openSettingsTab("internet"); return;
       case "memory":
       case "memories": openMemory("facts"); return;
+      case "canon":
+      case "mikan-memories": openMemory("character"); return;
+      case "canon-set":
+      case "remember-mikan": {
+        // An explicit label/value pair creates a stable character fact, not a fact about the user.
+        const separator = argument.indexOf(":");
+        if (separator < 1 || !argument.slice(separator + 1).trim()) {
+          setFeedback("Use /canon-set favorite color: orange (or open /canon to choose a category).");
+          return;
+        }
+        const label = argument.slice(0, separator).trim();
+        const value = argument.slice(separator + 1).trim();
+        const lower = label.toLowerCase();
+        const category: CharacterCategory =
+          lower.startsWith("favorite") ? "favorites" :
+          lower.startsWith("dislike") ? "dislikes" :
+          lower.startsWith("hobb") ? "hobbies" : "other";
+        void addCharacter(category, label, value)
+          .then(() => setFeedback(`Saved for Mikan: ${label} = ${value}.`))
+          .catch(error => setFeedback(`Could not save Mikan's detail: ${errorText(error)}`));
+        return;
+      }
+      case "canon-forget": {
+        const id = Number(argument);
+        if (!/^\d+$/.test(argument) || !Number.isSafeInteger(id) || id <= 0) {
+          setFeedback("Use /canon-forget with the ID shown under Mikan's details.");
+          return;
+        }
+        void deleteCharacter(id)
+          .then(() => setFeedback(`Deleted Mikan's detail #${id}.`))
+          .catch(error => setFeedback(`Could not delete Mikan's detail: ${errorText(error)}`));
+        return;
+      }
       case "chats":
       case "conversations": openMemory("chats"); return;
       case "remember":
