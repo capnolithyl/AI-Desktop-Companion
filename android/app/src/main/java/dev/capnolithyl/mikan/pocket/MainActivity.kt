@@ -27,7 +27,7 @@ import kotlinx.coroutines.launch
 
 class MainActivity : Activity() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
-    private val background = Color.rgb(24, 21, 30)
+    private val backgroundColor = Color.rgb(24, 21, 30)
     private val surface = Color.rgb(42, 33, 45)
     private val orange = Color.rgb(255, 180, 130)
     private val pale = Color.rgb(255, 237, 226)
@@ -72,7 +72,7 @@ class MainActivity : Activity() {
     private fun buildUi() {
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setBackgroundColor(background)
+            setBackgroundColor(backgroundColor)
             setPadding(dp(16), dp(14), dp(16), dp(12))
         }
         setContentView(root)
@@ -116,7 +116,7 @@ class MainActivity : Activity() {
         modelButton = Button(this).apply {
             text = "Check"
             textSize = 12f
-            setTextColor(background)
+            setTextColor(backgroundColor)
             background = panel(orange, 10)
             setOnClickListener { activateModel() }
         }
@@ -125,14 +125,14 @@ class MainActivity : Activity() {
 
         scroll = ScrollView(this).apply {
             clipToPadding = false
-            fillViewport = true
+            isFillViewport = true
             setPadding(0, dp(16), 0, dp(12))
         }
         transcript = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.BOTTOM
         }
-        scroll.addView(transcript, ScrollView.LayoutParams(
+        scroll.addView(transcript, android.widget.FrameLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         root.addView(scroll, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
 
@@ -159,7 +159,7 @@ class MainActivity : Activity() {
         send = Button(this).apply {
             text = "➤"
             textSize = 22f
-            setTextColor(background)
+            setTextColor(backgroundColor)
             background = panel(orange, 12)
             setOnClickListener { sendMessage() }
         }
