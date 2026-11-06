@@ -49,8 +49,8 @@ export function CharacterCanonTab({ facts, onAdd, onEdit, onDelete }: Props) {
   return <>
     <p className="memory-explainer">
       These are <strong>Mikan's own</strong> established preferences, hobbies, and traits,
-      not yours. Add them manually for now. They remain consistent across new chats
-      and personality presets.
+      not yours. Mikan can save new preferences from her own replies automatically
+      when enabled, and you can always add or correct details here.
     </p>
     {error && <div className="memory-error" role="alert">{error}</div>}
     <form className="memory-add character-form" onSubmit={event => {
@@ -75,8 +75,8 @@ export function CharacterCanonTab({ facts, onAdd, onEdit, onDelete }: Props) {
         disabled={working || !label.trim() || !value.trim()}><Plus size={15}/> Add to Mikan's canon</button>
     </form>
     {!facts.length && <p className="memory-empty">
-      Nothing established yet. For example, add Favorite color = Orange.
-      Mikan can then recall it, even after restarting.
+      Nothing established yet. Ask Mikan about her favorites, or set Favorite color = Orange here.
+      Established details will persist after restarting.
     </p>}
     {facts.map(fact => <article className="memory-item character-item" key={fact.id}>
       {editId === fact.id ? <>
