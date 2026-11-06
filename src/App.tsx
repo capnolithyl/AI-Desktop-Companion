@@ -419,7 +419,7 @@ export default function App() {
     {screen === "settings" && <section className="drawer" role="dialog" aria-label="Mikan settings">
       <header className="drawer-header">
         <button className="back-button" title="Back to companion" onClick={goCompact}><ArrowLeft size={19}/></button>
-        <div className="drawer-title"><strong>Settings</strong><span>Mikan v0.3.1 · Local only</span></div>
+        <div className="drawer-title"><strong>Settings</strong><span>Mikan v0.3.2 · Local only</span></div>
         <button className="secondary-action" onClick={() => setDraft({ ...DEFAULT_SETTINGS, appearance: { ...DEFAULT_APPEARANCE }, personality: { ...DEFAULT_PERSONALITY } })}><RotateCw size={14}/> Reset</button>
       </header>
       <div className="settings-body">
