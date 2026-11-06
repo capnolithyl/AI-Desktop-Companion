@@ -90,8 +90,8 @@ pub async fn web_search_recent(endpoint: String, query: String) -> Result<Vec<Se
     let focus = query.split('"').nth(1).map(str::to_lowercase);
     let relevant = |item: &SearchResult| {
         focus.as_ref().is_none_or(|name| {
-            item.title.to_lowercase().contains(name)
-                || item.content.to_lowercase().contains(name)
+            item.title.to_lowercase().contains(name.as_str())
+                || item.content.to_lowercase().contains(name.as_str())
         })
     };
     let mut combined = Vec::new();
