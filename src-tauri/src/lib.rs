@@ -41,7 +41,7 @@ struct ChatRequest {
 }
 fn default_cache_hours() -> u64 { 24 }
 fn valid_context_window(context: Option<u32>) -> Option<u32> {
-    context.filter(|v| matches!(v, 4096 | 8192 | 16384 | 32768))
+    context.filter(|v| matches!(*v, 4096 | 8192 | 16384 | 32768))
 }
 
 #[derive(Default)]
