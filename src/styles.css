@@ -266,3 +266,6 @@ button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px
 .markdown-text table { display: block; overflow-x: auto; border-collapse: collapse; margin: .65em 0; }
 .markdown-text th, .markdown-text td { border: 1px solid #705c66; padding: 6px 8px; }
 .markdown-text hr { border: 0; border-top: 1px solid #705c66; margin: 1em 0; }
+
+/* Inherit the selected message size inside Markdown log paragraphs. */
+.log-message .message-content p { font-size: inherit; line-height: inherit; }
