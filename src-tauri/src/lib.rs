@@ -238,9 +238,14 @@ async fn chat_stream_impl(
             // Previous assistant text can contain hallucinations. For web research
             // retain only the user's conversation context, not prior model claims.
             messages.retain(|m| m["role"] == "system" || m["role"] == "user");
-            let evidence = research_intent::evidence_instruction(&question, &sources);
+            let rules = research_intent::evidence_instruction(&question);
+            let excerpts = research_intent::evidence_data(&sources);
             let insert_at = usize::from(messages.first().is_some_and(|m| m["role"] == "system"));
-            messages.insert(insert_at, json!({"role":"system","content": evidence}));
+            messages.insert(insert_at, json!({"role":"system","content": rules}));
+            // Put untrusted search data immediately before the latest user turn.
+            // This keeps external content out of system instructions.
+            let last_user = messages.iter().rposition(|m| m["role"] == "user").unwrap_or(messages.len());
+            messages.insert(last_user, json!({"role":"user","content": excerpts}));
         } else {
             let plan = agent_tools::prepare(
                 &app, &client, &url, &request.model, &request.request_id,
@@ -269,9 +274,11 @@ async fn chat_stream_impl(
             } else {
                 // Even a model-initiated tool call must end with a source-focused
                 // generation step, not an unchecked pre-generated answer.
-                let evidence = research_intent::evidence_instruction(&question, &sources);
+                let rules = research_intent::evidence_instruction(&question);
                 let insert_at = usize::from(messages.first().is_some_and(|m| m["role"] == "system"));
-                messages.insert(insert_at, json!({"role":"system","content": evidence}));
+                messages.insert(insert_at, json!({"role":"system","content": rules}));
+                // These sources are already provided in the lower-trust tool messages.
+                // Do not put their text into the authoritative system message.
             }
         }
     }
