@@ -389,6 +389,28 @@ mod tests {
     }
 
     #[test]
+    fn carried_evidence_is_bounded_and_explicitly_not_fresh() {
+        let source = SearchResult {
+            title: "NASA Artemis".repeat(40),
+            url: "https://nasa.gov/artemis".into(),
+            content: "Lunar program evidence. ".repeat(60),
+            engine: "search".into(), published_date: Some("2026-11-05".into()),
+        };
+        let mut sources = vec![source.clone(); 11];
+        sources.push(SearchResult {
+            title: "Bad source".into(), url: "file:///etc/passwd".into(),
+            content: "Not an allowed URL".into(), engine: "".into(),
+            published_date: None
+        });
+        let cleaned = clean_prior_sources(&sources);
+        assert_eq!(cleaned.len(), 1);
+        assert!(cleaned[0].title.chars().count() <= 180);
+        assert!(cleaned[0].content.chars().count() <= 420);
+        assert!(prior_evidence_instruction().contains("NOT been refreshed"));
+        assert!(prior_evidence_instruction().contains("previous assistant answer may be incorrect"));
+    }
+
+    #[test]
     fn external_evidence_is_never_in_system_rules() {
         let source=SearchResult {
             title:"A source".into(), url:"https://example.com".into(),
