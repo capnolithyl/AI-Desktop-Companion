@@ -72,6 +72,59 @@ fn search_results(data: &Value) -> Vec<SearchResult> {
 
 #[tauri::command]
 pub async fn web_search(endpoint: String, query: String) -> Result<Vec<SearchResult>, String> {
+    web_search_impl(endpoint, query, false).await
+}
+
+/// Look for current reporting on upcoming releases instead of blindly taking
+/// the highest-ranked, possibly years-old album announcement. If an engine
+/// ignores SearXNG's time range, normal results still provide a fallback.
+pub async fn web_search_recent(endpoint: String, query: String) -> Result<Vec<SearchResult>, String> {
+    // A focused recent query may be too restrictive for some engines. Search
+    // a broader album query concurrently, retaining a few fallback references.
+    let broad_query = album_fallback_query(&query);
+    let focus = query.split('"').nth(1).map(str::to_lowercase);
+    let (fresh, general) = futures_util::future::join(
+        web_search_impl(endpoint.clone(), query, true),
+        web_search_impl(endpoint, broad_query, false),
+    ).await;
+    if fresh.is_err() && general.is_err() {
+        return Err(fresh.err().unwrap_or_else(|| general.err().unwrap()));
+    }
+
+    let relevant = |item: &SearchResult| {
+        focus.as_ref().is_none_or(|name| {
+            item.title.to_lowercase().contains(name.as_str())
+                || item.content.to_lowercase().contains(name.as_str())
+        })
+    };
+    let mut combined = Vec::new();
+    let mut seen = HashSet::new();
+    // Prefer the recent query, while reserving room for fallback sources.
+    for item in fresh.unwrap_or_default().into_iter().filter(&relevant).take(5)
+        .chain(general.unwrap_or_default().into_iter().filter(&relevant))
+    {
+        if seen.insert(item.url.clone()) {
+            combined.push(item);
+            if combined.len() == MAX_RESULTS { break; }
+        }
+    }
+    Ok(combined)
+}
+
+fn album_fallback_query(query: &str) -> String {
+    // Keep only the canonical quoted artist name when available. Searching
+    // for too many terms can otherwise return no results at all.
+    if let Some((_, after_open)) = query.split_once('"') {
+        if let Some((name, _)) = after_open.split_once('"') {
+            if !name.trim().is_empty() {
+                return format!("\"{}\" new album", name.trim());
+            }
+        }
+    }
+    query.replace("next album recording studio announcement", "new album")
+}
+
+async fn web_search_impl(endpoint: String, query: String, recent: bool) -> Result<Vec<SearchResult>, String> {
     let query = query.trim();
     if query.is_empty() || query.chars().count() > 250 {
         return Err("Enter a search query between 1 and 250 characters".into());
@@ -84,9 +137,13 @@ pub async fn web_search(endpoint: String, query: String) -> Result<Vec<SearchRes
         .redirect(reqwest::redirect::Policy::none())
         .build()
         .map_err(|e| e.to_string())?;
+    let mut params = vec![("q", query), ("format", "json")];
+    if recent {
+        params.push(("time_range", "year"));
+    }
     let response = client
         .get(url)
-        .query(&[("q", query), ("format", "json")])
+        .query(&params)
         .send()
         .await
         .map_err(|e| format!("Cannot reach SearXNG: {e}. Start it with tools/searxng/start.ps1."))?;
@@ -118,6 +175,28 @@ pub async fn web_search(endpoint: String, query: String) -> Result<Vec<SearchRes
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn fallback_album_query_is_broad_and_canonically_quoted() {
+        assert_eq!(
+            album_fallback_query("\"cattle decapitation\" next album recording studio announcement"),
+            "\"cattle decapitation\" new album"
+        );
+    }
+
+    #[test]
+    fn recent_merge_prefers_canonical_entity_results() {
+        let items=serde_json::json!({"results":[
+            {"title":"Cattle Decapitation new material", "url":"https://example.org/1", "content":"band"},
+            {"title":"Unrelated metal news", "url":"https://example.org/2", "content":"other"},
+            {"title":"Cattle Decapitation studio plans", "url":"https://example.org/3", "content":"2026"}
+        ]});
+        let results=search_results(&items);
+        let focus="cattle decapitation";
+        let found: Vec<_> = results.iter().filter(|x| {
+            x.title.to_lowercase().contains(focus) || x.content.to_lowercase().contains(focus)
+        }).collect();
+        assert_eq!(found.len(), 2);
+    }
     #[test]
     fn reject_non_local_urls() {
         assert!(local_searxng_url("https://example.com").is_err());
