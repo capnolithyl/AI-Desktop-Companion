@@ -401,6 +401,8 @@ export default function App() {
             {!busy && lastReply?.failed && <span className="error-caption">Error</span>}
           </div>
           <div className="dock-actions">
+            <button className="dock-icon" title="Web search (/search)" aria-label="Web search"
+              onClick={() => setScreen("search")}><Search size={17}/></button>
             <button className="dock-icon" title="Conversation log (/log)" aria-label="Conversation log" onClick={() => setScreen("log")}><History size={17}/></button>
             <button className="dock-icon" title="Settings (/settings)" aria-label="Settings" onClick={openSettings}><Settings2 size={17}/></button>
             <button className="dock-icon" title="Hide Mikan" aria-label="Hide Mikan" onClick={() => void invoke("hide_companion")}><X size={18}/></button>
@@ -413,7 +415,7 @@ export default function App() {
           ref={inputRef}
           aria-label="Message Mikan"
           rows={2}
-          placeholder="Message Mikan…  /log  /settings"
+          placeholder="Message Mikan…  /search  /log"
           value={input}
           onChange={event => setInput(event.target.value)}
           onKeyDown={event => {
@@ -469,6 +471,13 @@ export default function App() {
             <time>{new Date(m.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</time>
           </div>
           <div className={m.failed ? "message-error message-content" : "message-content"}><MarkdownText text={m.content || (busy ? "Thinking…" : "")}/></div>
+          {m.sources && m.sources.length > 0 && <div className="message-sources">
+            <strong>Web sources</strong>
+            {m.sources.map((source, index) => <button key={source.url} className="source-link" type="button"
+              onClick={() => void openSource(source.url)} title={source.url}>
+              [{index + 1}] {source.title} <ExternalLink size={13}/>
+            </button>)}
+          </div>}
           {m.role === "assistant" && <ReplyMetrics diagnostics={m.diagnostics}/>}
         </article>)}
       </div>
@@ -478,7 +487,7 @@ export default function App() {
     {screen === "settings" && <section className="drawer" role="dialog" aria-label="Mikan settings">
       <header className="drawer-header">
         <button className="back-button" title="Back to companion" onClick={goCompact}><ArrowLeft size={19}/></button>
-        <div className="drawer-title"><strong>Settings</strong><span>Mikan v0.3.2 · Local only</span></div>
+        <div className="drawer-title"><strong>Settings</strong><span>Mikan v0.4 · Local first</span></div>
         <button className="secondary-action" onClick={() => setDraft({ ...DEFAULT_SETTINGS, appearance: { ...DEFAULT_APPEARANCE }, personality: { ...DEFAULT_PERSONALITY } })}><RotateCw size={14}/> Reset</button>
       </header>
       <div className="settings-body">
@@ -510,6 +519,16 @@ export default function App() {
         </label>
         <button className="inline-action" disabled={connection.mode === "loading"}
           onClick={() => void refreshModels(draft.endpoint)}><RotateCw size={14}/> Refresh installed models</button>
+        <div className="appearance-heading">
+          <strong>Internet search</strong>
+          <small>Self-hosted SearXNG. No paid API key needed. Searching is on demand.</small>
+        </div>
+        <label className="setting-field">SearXNG URL
+          <input spellCheck={false} value={draft.searxngEndpoint}
+            onChange={event => setDraft({ ...draft, searxngEndpoint: event.target.value })}
+            placeholder="http://127.0.0.1:8888"/>
+          <small>Start the SearXNG Docker container first. Only localhost is supported.</small>
+        </label>
         <label className="setting-field">Personality prompt
           <textarea rows={6} value={draft.systemPrompt} onChange={event => setDraft({ ...draft, systemPrompt: event.target.value })}/>
           <small>The sliders below add short behavioral guidance without replacing this prompt.</small>
