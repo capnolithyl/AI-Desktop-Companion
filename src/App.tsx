@@ -9,15 +9,20 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { register, unregister } from "@tauri-apps/plugin-global-shortcut";
 import {
   ArrowLeft, ArrowUp, Cat, Check, Clock3, History,
-  ExternalLink, LoaderCircle, MessageCircle, RotateCw, Search, Settings2, Sparkles, SquarePen, X
+  ExternalLink, LoaderCircle, MessageCircle, RotateCw, Search, Settings2, SlidersHorizontal, Sparkles, SquarePen, X
 } from "lucide-react";
 import {
   DEFAULT_SETTINGS, DEFAULT_APPEARANCE, loadPortrait, loadSettings, savePortrait, saveSettings,
   type Message, type Settings
 } from "./storage";
-import { DEFAULT_PERSONALITY, PERSONALITY_TRAITS, personalityGuidance } from "./personality";
+import {
+  DEFAULT_PERSONALITY, PERSONALITY_TRAITS, PERSONALITY_PRESETS,
+  findPreset, personalityGuidance, randomPersonality, type Personality
+} from "./personality";
+import { PersonalityPresets, PersonalitySliders } from "./PersonalityControls";
+import { parseSlashCommand, SLASH_HELP } from "./slash-commands";
 
-type Screen = "compact" | "log" | "settings" | "search";
+type Screen = "compact" | "log" | "settings" | "search" | "personality" | "help";
 type Connection = { mode: "loading" | "online" | "offline"; text: string };
 type ChatChunk = { requestId: string; content: string };
 type OllamaStats = {
@@ -109,6 +114,7 @@ export default function App() {
   const [searchError, setSearchError] = useState<string | null>(null);
   const [searchHasRun, setSearchHasRun] = useState(false);
   const [greeting, setGreeting] = useState("Hey! I'm Mikan. What are we working on?");
+  const [feedback, setFeedback] = useState<string | null>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const logRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -213,6 +219,14 @@ export default function App() {
     } catch (error) {
       setImageError(errorText(error));
     }
+  };
+
+  // Quick controls and slash commands apply immediately, retaining the base persona prompt.
+  const updatePersonality = (personality: Personality) => {
+    const updated = { ...settings, personality };
+    setSettings(updated);
+    saveSettings(updated);
+    setDraft(current => ({ ...current, personality: { ...personality } }));
   };
 
   // Switch between local models without reopening Settings or restarting Mikan.
@@ -365,7 +379,7 @@ export default function App() {
   };
 
   const lastReply = [...messages].reverse().find(m => m.role === "assistant");
-  const replyText = lastReply?.content || (busy ? "Thinking…" : greeting);
+  const replyText = feedback ?? lastReply?.content ?? (busy ? "Thinking…" : greeting);
 
   const theme = {
     "--accent": settings.appearance.accent,
