@@ -2,7 +2,8 @@ mod web_search;
 mod web_reader;
 mod search_service;
 mod agent_tools;
-use futures_util::StreamExt;
+use futures_util::{future::{AbortHandle, Abortable}, StreamExt};
+use std::{collections::HashMap, sync::Mutex};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::time::Duration;
@@ -33,6 +34,9 @@ struct ChatRequest {
     cache_hours: u64,
 }
 fn default_cache_hours() -> u64 { 24 }
+
+#[derive(Default)]
+struct ChatCancellation(Mutex<HashMap<String, AbortHandle>>);
 
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -165,6 +169,39 @@ async fn chat_stream(
     app: tauri::AppHandle,
     request: ChatRequest,
 ) -> Result<ChatCompletion, String> {
+    let request_id = request.request_id.clone();
+    let (handle, registration) = AbortHandle::new_pair();
+    {
+        let state = app.state::<ChatCancellation>();
+        state.0.lock().map_err(|_| "Cancellation state unavailable")?
+            .insert(request_id.clone(), handle);
+    }
+    // Aborting drops the in-flight HTTP request, including during tool preparation.
+    let result = Abortable::new(chat_stream_impl(app.clone(), request), registration).await;
+    {
+        let state = app.state::<ChatCancellation>();
+        state.0.lock().map_err(|_| "Cancellation state unavailable")?
+            .remove(&request_id);
+    }
+    match result {
+        Ok(result) => result,
+        Err(_) => Err("Generation stopped".into()),
+    }
+}
+
+#[tauri::command]
+fn cancel_chat(app: tauri::AppHandle, request_id: String) -> Result<(), String> {
+    let state = app.state::<ChatCancellation>();
+    if let Some(handle) = state.0.lock().map_err(|_| "Cancellation state unavailable")?.get(&request_id) {
+        handle.abort();
+    }
+    Ok(())
+}
+
+async fn chat_stream_impl(
+    app: tauri::AppHandle,
+    request: ChatRequest,
+) -> Result<ChatCompletion, String> {
     if request.model.trim().is_empty() {
         return Err("Select an installed model in Settings".into());
     }
@@ -283,6 +320,7 @@ fn hide_companion(window: tauri::WebviewWindow) {
 
 pub fn run() {
     tauri::Builder::default()
+        .manage(ChatCancellation::default())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
@@ -293,6 +331,7 @@ pub fn run() {
             web_reader::web_cache_info,
             web_reader::clear_web_cache,
             chat_stream,
+            cancel_chat,
             toggle_companion,
             hide_companion
         ])

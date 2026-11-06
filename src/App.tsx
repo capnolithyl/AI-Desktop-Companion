@@ -9,7 +9,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { register, unregister } from "@tauri-apps/plugin-global-shortcut";
 import {
   ArrowLeft, ArrowUp, Cat, Check, Clock3, History,
-  BookOpen, ExternalLink, HardDrive, LoaderCircle, MessageCircle, RotateCw, Search, Settings2, SlidersHorizontal, Sparkles, SquarePen, X
+  BookOpen, ExternalLink, HardDrive, LoaderCircle, MessageCircle, RotateCw, Search, Settings2, SlidersHorizontal, Sparkles, Square, SquarePen, X
 } from "lucide-react";
 import {
   DEFAULT_SETTINGS, DEFAULT_APPEARANCE, loadPortrait, loadSettings, savePortrait, saveSettings,
@@ -130,6 +130,7 @@ export default function App() {
   const [messages, setMessages] = useState<LogMessage[]>([]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
+  const [stopping, setStopping] = useState(false);
   const [portrait, setPortrait] = useState<string | null>(BUNDLED_PORTRAIT);
   const [imageError, setImageError] = useState<string | null>(null);
   const [availableModels, setAvailableModels] = useState<string[]>([]);
@@ -146,6 +147,8 @@ export default function App() {
   const searchInputRef = useRef<HTMLInputElement>(null);
   const pageInputRef = useRef<HTMLInputElement>(null);
   const portraitUrl = useRef<string | null>(null);
+  const activeRequestId = useRef<string | null>(null);
+  const stopRequested = useRef(false);
 
   const focusInput = useCallback(() => {
     requestAnimationFrame(() => inputRef.current?.focus());
@@ -496,6 +499,21 @@ export default function App() {
     }
   };
 
+  const stopGeneration = async () => {
+    const requestId = activeRequestId.current;
+    if (!requestId || stopRequested.current) return;
+    stopRequested.current = true;
+    setStopping(true);
+    setActivity("Stopping…");
+    try {
+      await invoke("cancel_chat", { requestId });
+    } catch (error) {
+      stopRequested.current = false;
+      setStopping(false);
+      setActivity(`Could not stop: ${errorText(error)}`);
+    }
+  };
+
   const send = async (withSearch?: { query: string; results: WebResult[]; page?: PageDocument }) => {
     const text = withSearch ? withSearch.query : input.trim();
     if (!text) return;
@@ -517,6 +535,9 @@ export default function App() {
       ...(withSearch ? { sources: withSearch.results } : {})
     }]);
     setInput("");
+    activeRequestId.current = requestId;
+    stopRequested.current = false;
+    setStopping(false);
     setBusy(true);
     setActivity("Thinking…");
     goCompact();
@@ -568,11 +589,14 @@ export default function App() {
       ));
     } catch (error) {
       const message = errorText(error);
+      const stopped = message === "Generation stopped" || stopRequested.current;
       setMessages(current => current.map(m => m.id === assistantId
         ? {
             ...m,
-            content: accumulated ? `${accumulated}\n\n[Interrupted: ${message}]` : `Error: ${message}`,
-            failed: true,
+            content: stopped
+              ? (accumulated ? `${accumulated}\n\n[Stopped]` : "[Generation stopped]")
+              : (accumulated ? `${accumulated}\n\n[Interrupted: ${message}]` : `Error: ${message}`),
+            failed: !stopped,
             diagnostics: { elapsedMs: performance.now() - started, firstTokenMs, model: settings.model, stats: null }
           }
         : m
@@ -580,6 +604,9 @@ export default function App() {
     } finally {
       unlistenActivity?.();
       unlisten?.();
+      activeRequestId.current = null;
+      stopRequested.current = false;
+      setStopping(false);
       setBusy(false);
       focusInput();
     }
@@ -642,16 +669,26 @@ export default function App() {
           value={input}
           onChange={event => setInput(event.target.value)}
           onKeyDown={event => {
+            if (event.key === "Escape" && busy) {
+              event.preventDefault();
+              void stopGeneration();
+              return;
+            }
             if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
               event.preventDefault();
               void send();
             }
           }}
         />
-        <button type="button" className="send-button" aria-label="Send" title="Send message"
-          disabled={busy || !input.trim()} onClick={() => void send()}>
-          {busy ? <LoaderCircle className="spin" size={20}/> : <ArrowUp size={20}/>}
-        </button>
+        {busy ? (
+          <button type="button" className="send-button stop-button" aria-label="Stop generating"
+            title="Stop generation (Esc)" disabled={stopping} onClick={() => void stopGeneration()}>
+            {stopping ? <LoaderCircle className="spin" size={20}/> : <Square size={18} fill="currentColor"/>}
+          </button>
+        ) : (
+          <button type="button" className="send-button" aria-label="Send" title="Send message"
+            disabled={!input.trim()} onClick={() => void send()}><ArrowUp size={20}/></button>
+        )}
       </div>
       <div className="dock-footer">
         <div className="model-switcher" title={connection.text}>
