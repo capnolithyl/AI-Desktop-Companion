@@ -21,6 +21,8 @@ pub fn explicit_research_query(messages: &[Value]) -> Option<String> {
         "new album", "next album", "upcoming", "new release", "release date",
         "announc", "tour dates", "discography", "what's new",
         "what is new", "currently", "right now", "as of ",
+        "next major milestone", "next milestone", "when is it scheduled",
+        "when is that scheduled", "scheduled to happen", "next scheduled",
     ];
     if !signals.iter().any(|signal| lower.contains(signal)) {
         return None;
@@ -72,6 +74,9 @@ pub fn explicit_research_query(messages: &[Value]) -> Option<String> {
         if lower.contains("latest") || lower.contains("recent")
             || lower.contains("news") || lower.contains("developments") {
             query.push_str(" latest news");
+        }
+        if lower.contains("milestone") || lower.contains("scheduled") {
+            query.push_str(" next mission schedule");
         }
     }
     if query.chars().count() > 250 {
@@ -356,6 +361,18 @@ mod tests {
             "any info on a new album?"
         ])).as_deref(), Some("\"cattle decapitation\" next album recording studio announcement"));
         assert!(is_album_research(&messages(&["any info on a new album?"])));
+    }
+
+    #[test]
+    fn mission_schedule_followup_uses_prior_user_topic() {
+        let context = messages(&[
+            "What's the latest news about NASA's Artemis missions? Have there been any major developments in 2026?",
+            "What's the next major milestone, and when is it scheduled to happen?"
+        ]);
+        assert_eq!(
+            explicit_research_query(&context).as_deref(),
+            Some("NASA Artemis missions next mission schedule")
+        );
     }
 
     #[test]
