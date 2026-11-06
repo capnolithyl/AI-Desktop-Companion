@@ -347,8 +347,14 @@ async fn chat_stream_impl(
                 let rules = research_intent::evidence_instruction();
                 let insert_at = usize::from(messages.first().is_some_and(|m| m["role"] == "system"));
                 messages.insert(insert_at, json!({"role":"system","content": rules}));
-                // These sources are already provided in the lower-trust tool messages.
-                // Do not put their text into the authoritative system message.
+                // Tool results are JSON and do not have stable [1], [2] labels.
+                // Supply an aligned numbered index as lower-trust data so the
+                // generated citations match the sources displayed in the UI.
+                messages.push(json!({
+                    "role": "user",
+                    "content": research_intent::evidence_data(&sources)
+                }));
+                // Never put external snippets into the authoritative system message.
             }
         }
     }
