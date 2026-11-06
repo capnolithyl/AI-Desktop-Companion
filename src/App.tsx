@@ -637,6 +637,19 @@ export default function App() {
     const user: LogMessage = { id: crypto.randomUUID(), role: "user", content: text, createdAt: Date.now() };
     const assistantId = crypto.randomUUID();
     const history = [...messages, user];
+    const conversationId = activeConversationId ?? crypto.randomUUID();
+    setActiveConversationId(conversationId);
+    const persistMessage = async (message: LogMessage) => {
+      try {
+        // Idempotent insert also covers the first message of a new conversation.
+        await memoryApi.createConversation(conversationId);
+        await memoryApi.saveMessage(conversationId, message, archiveMetadata(message));
+        await refreshArchive();
+        setMemoryError(null);
+      } catch (error) {
+        setMemoryError(`Chat is not being saved: ${errorText(error)}`);
+      }
+    };
     const requestId = crypto.randomUUID();
     setMessages([...history, {
       id: assistantId, role: "assistant", content: "", createdAt: Date.now(),
@@ -656,6 +669,7 @@ export default function App() {
     let unlistenActivity: UnlistenFn | null = null;
 
     try {
+      await persistMessage(user);
       unlistenActivity = await listen<Activity>("mikan://activity", event => {
         if (event.payload.requestId === requestId) setActivity(event.payload.text);
       });
@@ -678,9 +692,9 @@ export default function App() {
           searxngEndpoint: settings.searxngEndpoint,
           cacheHours: settings.cacheHours,
           messages: [
-            { role: "system", content: [settings.systemPrompt.trim(), personalityGuidance(settings.personality), runtimeContext()].filter(Boolean).join("\n\n") },
+            { role: "system", content: [settings.systemPrompt.trim(), personalityGuidance(settings.personality), runtimeContext(), memoryContext(userFacts, text)].filter(Boolean).join("\n\n") },
             ...(withSearch ? [{ role: "user", content: withSearch.page ? pageContext(withSearch.query, withSearch.page) : webContext(withSearch.query, withSearch.results) }] : []),
-            ...history.filter(m => !withSearch || m.role === "user").map(m => ({ role: m.role, content: m.content }))
+            ...history.filter(m => !withSearch || m.role === "user").slice(-32).map(m => ({ role: m.role, content: m.content }))
           ]
         }
       });
@@ -692,23 +706,27 @@ export default function App() {
         stats: completion.stats
       };
       const finalText = completion.content || accumulated || "(The model returned no visible text.)";
-      setMessages(current => current.map(m =>
-        m.id === assistantId ? { ...m, content: finalText, diagnostics, sources: completion.sources?.length ? completion.sources : m.sources, searchQuery: completion.searchQuery || withSearch?.query } : m
-      ));
+      const assistant: LogMessage = {
+        id: assistantId, role: "assistant", content: finalText, createdAt: Date.now(),
+        diagnostics, sources: completion.sources?.length ? completion.sources : withSearch?.results,
+        searchQuery: completion.searchQuery || withSearch?.query
+      };
+      setMessages(current => current.map(m => m.id === assistantId ? assistant : m));
+      await persistMessage(assistant);
     } catch (error) {
       const message = errorText(error);
       const stopped = message === "Generation stopped" || stopRequested.current;
-      setMessages(current => current.map(m => m.id === assistantId
-        ? {
-            ...m,
-            content: stopped
-              ? (accumulated ? `${accumulated}\n\n[Stopped]` : "[Generation stopped]")
-              : (accumulated ? `${accumulated}\n\n[Interrupted: ${message}]` : `Error: ${message}`),
-            failed: !stopped,
-            diagnostics: { elapsedMs: performance.now() - started, firstTokenMs, model: settings.model, stats: null }
-          }
-        : m
-      ));
+      const assistant: LogMessage = {
+        id: assistantId, role: "assistant", createdAt: Date.now(),
+        content: stopped
+          ? (accumulated ? `${accumulated}\n\n[Stopped]` : "[Generation stopped]")
+          : (accumulated ? `${accumulated}\n\n[Interrupted: ${message}]` : `Error: ${message}`),
+        failed: !stopped,
+        diagnostics: { elapsedMs: performance.now() - started, firstTokenMs, model: settings.model, stats: null },
+        sources: withSearch?.results, searchQuery: withSearch?.query
+      };
+      setMessages(current => current.map(m => m.id === assistantId ? assistant : m));
+      await persistMessage(assistant);
     } finally {
       unlistenActivity?.();
       unlisten?.();
