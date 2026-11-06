@@ -3,6 +3,7 @@ mod web_reader;
 mod search_service;
 mod agent_tools;
 mod research_intent;
+mod memory;
 use futures_util::{future::{AbortHandle, Abortable}, StreamExt};
 use std::{collections::HashMap, sync::Mutex};
 use serde::{Deserialize, Serialize};
@@ -385,6 +386,15 @@ pub fn run() {
             web_reader::clear_web_cache,
             chat_stream,
             cancel_chat,
+            memory::memory_list_conversations,
+            memory::memory_create_conversation,
+            memory::memory_list_messages,
+            memory::memory_save_message,
+            memory::memory_delete_conversation,
+            memory::memory_list_facts,
+            memory::memory_add_fact,
+            memory::memory_update_fact,
+            memory::memory_delete_fact,
             toggle_companion,
             hide_companion
         ])

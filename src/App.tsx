@@ -8,7 +8,7 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { register, unregister } from "@tauri-apps/plugin-global-shortcut";
 import {
-  ArrowLeft, ArrowUp, Cat, Check, Clock3, History,
+  ArrowLeft, ArrowUp, Brain, Cat, Check, Clock3, History,
   BookOpen, ExternalLink, HardDrive, LoaderCircle, MessageCircle, RotateCw, Search, Settings2, SlidersHorizontal, Sparkles, Square, SquarePen, X
 } from "lucide-react";
 import {
@@ -22,8 +22,10 @@ import {
 import { PersonalityPresets, PersonalitySliders } from "./PersonalityControls";
 import { parseSlashCommand, SLASH_HELP } from "./slash-commands";
 import { runtimeContext } from "./runtime-context";
+import { memoryApi, memoryContext, readMessageMetadata, type MemoryConversation, type UserFact, type PersistedMessage } from "./memory-client";
+import { MemoryPanel } from "./MemoryPanel";
 
-type Screen = "compact" | "log" | "settings" | "search" | "page" | "personality" | "help";
+type Screen = "compact" | "log" | "settings" | "search" | "page" | "personality" | "help" | "memory";
 type SettingsTab = "ai" | "internet" | "appearance";
 type SearchService = { state: string; message: string };
 type CacheInfo = { pages: number; bytes: number };
@@ -43,6 +45,27 @@ type Diagnostics = { elapsedMs: number; firstTokenMs: number | null; model: stri
 type LogMessage = Message & { createdAt: number; diagnostics?: Diagnostics; failed?: boolean; sources?: WebResult[]; searchQuery?: string };
 const HOTKEY = "Control+Alt+M";
 const BUNDLED_PORTRAIT = "/mikan.png";
+
+function restoreMessage(saved: PersistedMessage): LogMessage {
+  const metadata = readMessageMetadata(saved.metadataJson);
+  return {
+    id: saved.id, role: saved.role, content: saved.content, createdAt: saved.createdAt,
+    ...(metadata.failed === true ? { failed: true } : {}),
+    ...(metadata.diagnostics && typeof metadata.diagnostics === "object"
+      ? { diagnostics: metadata.diagnostics as Diagnostics } : {}),
+    ...(Array.isArray(metadata.sources) ? { sources: metadata.sources as WebResult[] } : {}),
+    ...(typeof metadata.searchQuery === "string" ? { searchQuery: metadata.searchQuery } : {})
+  };
+}
+
+function archiveMetadata(message: LogMessage): object {
+  return {
+    failed: message.failed === true,
+    diagnostics: message.diagnostics ?? null,
+    sources: message.sources ?? [],
+    searchQuery: message.searchQuery ?? null
+  };
+}
 
 function rgbOf(hex: string): string {
   return [1, 3, 5].map(index => parseInt(hex.slice(index, index + 2), 16)).join(" ");
@@ -128,6 +151,12 @@ export default function App() {
   const [pageReturn, setPageReturn] = useState<"search" | "compact">("compact");
   const [activity, setActivity] = useState("Thinking…");
   const [messages, setMessages] = useState<LogMessage[]>([]);
+  const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
+  const [conversations, setConversations] = useState<MemoryConversation[]>([]);
+  const [userFacts, setUserFacts] = useState<UserFact[]>([]);
+  const [memoryReady, setMemoryReady] = useState(false);
+  const [memoryError, setMemoryError] = useState<string | null>(null);
+  const [memoryInitialTab, setMemoryInitialTab] = useState<"facts" | "chats">("facts");
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [stopping, setStopping] = useState(false);
@@ -224,9 +253,88 @@ export default function App() {
     if (screen === "page") requestAnimationFrame(() => pageInputRef.current?.focus());
   }, [screen, focusInput]);
 
-  const clearChat = () => {
+  useEffect(() => {
+    let disposed = false;
+    void (async () => {
+      try {
+        // Initialize the SQLite schema on one connection before reading facts.
+        const archive = await memoryApi.listConversations();
+        const facts = await memoryApi.listFacts();
+        if (disposed) return;
+        setConversations(archive);
+        setUserFacts(facts);
+        const latest = archive[0];
+        if (latest) {
+          const restored = await memoryApi.listMessages(latest.id);
+          if (!disposed) {
+            setMessages(restored.map(restoreMessage));
+            setActiveConversationId(latest.id);
+          }
+        }
+      } catch (error) {
+        if (!disposed) setMemoryError(`Local memory unavailable: ${errorText(error)}`);
+      } finally {
+        if (!disposed) setMemoryReady(true);
+      }
+    })();
+    return () => { disposed = true; };
+  }, []);
+
+  const refreshArchive = async () => {
+    setConversations(await memoryApi.listConversations());
+  };
+  const refreshFacts = async () => {
+    setUserFacts(await memoryApi.listFacts());
+  };
+  const refreshMemory = async () => {
+    const [archive, facts] = await Promise.all([
+      memoryApi.listConversations(), memoryApi.listFacts()
+    ]);
+    setConversations(archive);
+    setUserFacts(facts);
+    setMemoryError(null);
+  };
+  const addUserFact = async (fact: string) => {
+    await memoryApi.addFact(fact);
+    await refreshFacts();
+    setMemoryError(null);
+  };
+  const editUserFact = async (id: number, fact: string) => {
+    await memoryApi.updateFact(id, fact);
+    await refreshFacts();
+  };
+  const deleteUserFact = async (id: number) => {
+    await memoryApi.deleteFact(id);
+    await refreshFacts();
+  };
+  const openConversation = async (id: string) => {
     if (busy) return;
+    const stored = await memoryApi.listMessages(id);
+    setMessages(stored.map(restoreMessage));
+    setActiveConversationId(id);
+    setFeedback(null);
+    goCompact();
+  };
+  const deleteConversation = async (id: string) => {
+    if (busy) throw new Error("Stop the current reply before deleting a conversation");
+    await memoryApi.deleteConversation(id);
+    if (id === activeConversationId) {
+      setActiveConversationId(null);
+      setMessages([]);
+      setFeedback(null);
+    }
+    await refreshArchive();
+  };
+  const openMemory = (tab: "chats" | "facts" = "facts") => {
+    setMemoryInitialTab(tab);
+    setScreen("memory");
+    void refreshMemory().catch(error => setMemoryError(errorText(error)));
+  };
+
+  const clearChat = () => {
+    if (busy || !memoryReady) return;
     setMessages([]);
+    setActiveConversationId(null);
     setFeedback(null);
     setGreeting("New conversation! What shall we talk about?");
     goCompact();
@@ -412,6 +520,27 @@ export default function App() {
         void manageService("status"); return;
       case "internet":
         openSettingsTab("internet"); return;
+      case "memory":
+      case "memories": openMemory("facts"); return;
+      case "chats":
+      case "conversations": openMemory("chats"); return;
+      case "remember":
+        if (!argument) { setFeedback("Use /remember followed by a fact, e.g. /remember I like metal."); return; }
+        void addUserFact(argument)
+          .then(() => setFeedback("Saved to your local memories."))
+          .catch(error => setFeedback(`Could not save memory: ${errorText(error)}`));
+        return;
+      case "forget": {
+        const id = Number(argument);
+        if (!/^\d+$/.test(argument) || !Number.isSafeInteger(id) || id <= 0) {
+          setFeedback("Use /forget with the numeric ID from the Memory panel.");
+          return;
+        }
+        void deleteUserFact(id)
+          .then(() => setFeedback(`Deleted memory #${id} if it existed.`))
+          .catch(error => setFeedback(`Could not delete memory: ${errorText(error)}`));
+        return;
+      }
       case "log":
       case "history": setScreen("log"); return;
       case "settings": openSettings(); return;
@@ -525,10 +654,24 @@ export default function App() {
     }
 
     if (busy) return;
+    if (!memoryReady) { setFeedback("Loading conversation memory…"); return; }
     setFeedback(null);
     const user: LogMessage = { id: crypto.randomUUID(), role: "user", content: text, createdAt: Date.now() };
     const assistantId = crypto.randomUUID();
     const history = [...messages, user];
+    const conversationId = activeConversationId ?? crypto.randomUUID();
+    setActiveConversationId(conversationId);
+    const persistMessage = async (message: LogMessage) => {
+      try {
+        // Idempotent insert also covers the first message of a new conversation.
+        await memoryApi.createConversation(conversationId);
+        await memoryApi.saveMessage(conversationId, message, archiveMetadata(message));
+        await refreshArchive();
+        setMemoryError(null);
+      } catch (error) {
+        setMemoryError(`Chat is not being saved: ${errorText(error)}`);
+      }
+    };
     const requestId = crypto.randomUUID();
     setMessages([...history, {
       id: assistantId, role: "assistant", content: "", createdAt: Date.now(),
@@ -548,6 +691,7 @@ export default function App() {
     let unlistenActivity: UnlistenFn | null = null;
 
     try {
+      await persistMessage(user);
       unlistenActivity = await listen<Activity>("mikan://activity", event => {
         if (event.payload.requestId === requestId) setActivity(event.payload.text);
       });
@@ -570,9 +714,9 @@ export default function App() {
           searxngEndpoint: settings.searxngEndpoint,
           cacheHours: settings.cacheHours,
           messages: [
-            { role: "system", content: [settings.systemPrompt.trim(), personalityGuidance(settings.personality), runtimeContext()].filter(Boolean).join("\n\n") },
+            { role: "system", content: [settings.systemPrompt.trim(), personalityGuidance(settings.personality), runtimeContext(), memoryContext(userFacts, text)].filter(Boolean).join("\n\n") },
             ...(withSearch ? [{ role: "user", content: withSearch.page ? pageContext(withSearch.query, withSearch.page) : webContext(withSearch.query, withSearch.results) }] : []),
-            ...history.filter(m => !withSearch || m.role === "user").map(m => ({ role: m.role, content: m.content }))
+            ...history.filter(m => !withSearch || m.role === "user").slice(-32).map(m => ({ role: m.role, content: m.content }))
           ]
         }
       });
@@ -584,23 +728,27 @@ export default function App() {
         stats: completion.stats
       };
       const finalText = completion.content || accumulated || "(The model returned no visible text.)";
-      setMessages(current => current.map(m =>
-        m.id === assistantId ? { ...m, content: finalText, diagnostics, sources: completion.sources?.length ? completion.sources : m.sources, searchQuery: completion.searchQuery || withSearch?.query } : m
-      ));
+      const assistant: LogMessage = {
+        id: assistantId, role: "assistant", content: finalText, createdAt: Date.now(),
+        diagnostics, sources: completion.sources?.length ? completion.sources : withSearch?.results,
+        searchQuery: completion.searchQuery || withSearch?.query
+      };
+      setMessages(current => current.map(m => m.id === assistantId ? assistant : m));
+      await persistMessage(assistant);
     } catch (error) {
       const message = errorText(error);
       const stopped = message === "Generation stopped" || stopRequested.current;
-      setMessages(current => current.map(m => m.id === assistantId
-        ? {
-            ...m,
-            content: stopped
-              ? (accumulated ? `${accumulated}\n\n[Stopped]` : "[Generation stopped]")
-              : (accumulated ? `${accumulated}\n\n[Interrupted: ${message}]` : `Error: ${message}`),
-            failed: !stopped,
-            diagnostics: { elapsedMs: performance.now() - started, firstTokenMs, model: settings.model, stats: null }
-          }
-        : m
-      ));
+      const assistant: LogMessage = {
+        id: assistantId, role: "assistant", createdAt: Date.now(),
+        content: stopped
+          ? (accumulated ? `${accumulated}\n\n[Stopped]` : "[Generation stopped]")
+          : (accumulated ? `${accumulated}\n\n[Interrupted: ${message}]` : `Error: ${message}`),
+        failed: !stopped,
+        diagnostics: { elapsedMs: performance.now() - started, firstTokenMs, model: settings.model, stats: null },
+        sources: withSearch?.results, searchQuery: withSearch?.query
+      };
+      setMessages(current => current.map(m => m.id === assistantId ? assistant : m));
+      await persistMessage(assistant);
     } finally {
       unlistenActivity?.();
       unlisten?.();
@@ -653,6 +801,8 @@ export default function App() {
               onClick={() => setScreen("search")}><Search size={17}/></button>
             <button className="dock-icon" title="Quick personality presets (/personality)" aria-label="Personality presets"
               onClick={() => setScreen("personality")}><SlidersHorizontal size={17}/></button>
+            <button className="dock-icon" title="Memory and conversations (/memories)" aria-label="Memory and conversations"
+              onClick={() => openMemory("facts")}><Brain size={17}/></button>
             <button className="dock-icon" title="Conversation log (/log)" aria-label="Conversation log" onClick={() => setScreen("log")}><History size={17}/></button>
             <button className="dock-icon" title="Settings (/settings)" aria-label="Settings" onClick={openSettings}><Settings2 size={17}/></button>
             <button className="dock-icon" title="Hide Mikan" aria-label="Hide Mikan" onClick={() => void invoke("hide_companion")}><X size={18}/></button>
@@ -687,7 +837,7 @@ export default function App() {
           </button>
         ) : (
           <button type="button" className="send-button" aria-label="Send" title="Send message"
-            disabled={!input.trim()} onClick={() => void send()}><ArrowUp size={20}/></button>
+            disabled={!memoryReady || !input.trim()} onClick={() => void send()}><ArrowUp size={20}/></button>
         )}
       </div>
       <div className="dock-footer">
@@ -708,7 +858,7 @@ export default function App() {
             aria-label="Refresh installed models" disabled={busy || connection.mode === "loading"}
             onClick={() => void refreshModels(settings.endpoint)}><RotateCw size={13}/></button>
         </div>
-        <span>Ctrl + Alt + M</span>
+        <span title={memoryError || "Memory ready"}>{memoryError ? "Memory unavailable" : !memoryReady ? "Loading memory…" : "Ctrl + Alt + M"}</span>
       </div>
     </section>
 
@@ -717,7 +867,9 @@ export default function App() {
     {screen === "log" && <section className="drawer" role="dialog" aria-label="Chat history">
       <header className="drawer-header">
         <button className="back-button" title="Back to companion" onClick={goCompact}><ArrowLeft size={19}/></button>
-        <div className="drawer-title"><strong>Conversation log</strong><span>{messages.length} messages · this session</span></div>
+        <div className="drawer-title"><strong>Conversation log</strong><span>{messages.length} messages · current conversation</span></div>
+        <button type="button" className="secondary-action" disabled={busy}
+          onClick={() => openMemory("chats")}><History size={15}/> All chats</button>
         <button className="secondary-action" disabled={busy} onClick={clearChat}><SquarePen size={15}/> New</button>
       </header>
       <div className="log-body" ref={logRef}>
@@ -850,6 +1002,13 @@ export default function App() {
       </footer>
     </section>}
 
+    {screen === "memory" && <MemoryPanel key={memoryInitialTab} initialTab={memoryInitialTab}
+      conversations={conversations} facts={userFacts} currentId={activeConversationId}
+      busy={busy} error={memoryError} onClose={goCompact} onNew={clearChat}
+      onOpen={openConversation} onDeleteChat={deleteConversation}
+      onAddFact={addUserFact} onEditFact={editUserFact} onDeleteFact={deleteUserFact}
+      onRefresh={refreshMemory}/>}
+
     {screen === "personality" && <section className="drawer" role="dialog" aria-label="Quick personality controls">
       <header className="drawer-header">
         <button className="back-button" title="Back to companion" onClick={goCompact}><ArrowLeft size={19}/></button>
@@ -886,7 +1045,7 @@ export default function App() {
     {screen === "settings" && <section className="drawer" role="dialog" aria-label="Mikan settings">
       <header className="drawer-header">
         <button className="back-button" title="Back to companion" onClick={goCompact}><ArrowLeft size={19}/></button>
-        <div className="drawer-title"><strong>Settings</strong><span>Mikan v0.5.4 · Local first</span></div>
+        <div className="drawer-title"><strong>Settings</strong><span>Mikan v0.6.0 · Local first</span></div>
         <button className="secondary-action" onClick={() => setDraft(current => ({
           ...current,
           ...(settingsTab === "ai" ? {
