@@ -813,7 +813,7 @@ export default function App() {
           searxngEndpoint: settings.searxngEndpoint,
           cacheHours: settings.cacheHours,
           messages: [
-            { role: "system", content: [settings.systemPrompt.trim(), personalityGuidance(settings.personality), runtimeContext(), characterContext(characterFacts, text), memoryContext(userFacts, text)].filter(Boolean).join("\n\n") },
+            { role: "system", content: [settings.systemPrompt.trim(), personalityGuidance(settings.personality), runtimeContext(), memoryContext(userFacts, text), characterContext(characterFacts, text)].filter(Boolean).join("\n\n") },
             ...(withSearch ? [{ role: "user", content: withSearch.page ? pageContext(withSearch.query, withSearch.page) : webContext(withSearch.query, withSearch.results) }] : []),
             ...history.filter(m => !withSearch || m.role === "user").slice(-32).map(m => ({ role: m.role, content: m.content }))
           ]
