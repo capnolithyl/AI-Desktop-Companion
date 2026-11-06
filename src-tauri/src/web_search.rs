@@ -82,6 +82,7 @@ pub async fn web_search_recent(endpoint: String, query: String) -> Result<Vec<Se
     // A focused recent query may be too restrictive for some engines. Search
     // a broader album query concurrently, retaining a few fallback references.
     let broad_query = album_fallback_query(&query);
+    let focus = query.split('"').nth(1).map(str::to_lowercase);
     let (fresh, general) = futures_util::future::join(
         web_search_impl(endpoint.clone(), query, true),
         web_search_impl(endpoint, broad_query, false),
@@ -90,7 +91,6 @@ pub async fn web_search_recent(endpoint: String, query: String) -> Result<Vec<Se
         return Err(fresh.err().unwrap_or_else(|| general.err().unwrap()));
     }
 
-    let focus = query.split('"').nth(1).map(str::to_lowercase);
     let relevant = |item: &SearchResult| {
         focus.as_ref().is_none_or(|name| {
             item.title.to_lowercase().contains(name.as_str())
