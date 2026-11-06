@@ -8,7 +8,7 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { register, unregister } from "@tauri-apps/plugin-global-shortcut";
 import {
-  ArrowLeft, ArrowUp, Cat, Check, Clock3, History,
+  ArrowLeft, ArrowUp, Brain, Cat, Check, Clock3, History,
   BookOpen, ExternalLink, HardDrive, LoaderCircle, MessageCircle, RotateCw, Search, Settings2, SlidersHorizontal, Sparkles, Square, SquarePen, X
 } from "lucide-react";
 import {
@@ -22,8 +22,10 @@ import {
 import { PersonalityPresets, PersonalitySliders } from "./PersonalityControls";
 import { parseSlashCommand, SLASH_HELP } from "./slash-commands";
 import { runtimeContext } from "./runtime-context";
+import { memoryApi, memoryContext, readMessageMetadata, type MemoryConversation, type UserFact, type PersistedMessage } from "./memory-client";
+import { MemoryPanel } from "./MemoryPanel";
 
-type Screen = "compact" | "log" | "settings" | "search" | "page" | "personality" | "help";
+type Screen = "compact" | "log" | "settings" | "search" | "page" | "personality" | "help" | "memory";
 type SettingsTab = "ai" | "internet" | "appearance";
 type SearchService = { state: string; message: string };
 type CacheInfo = { pages: number; bytes: number };
@@ -128,6 +130,12 @@ export default function App() {
   const [pageReturn, setPageReturn] = useState<"search" | "compact">("compact");
   const [activity, setActivity] = useState("Thinking…");
   const [messages, setMessages] = useState<LogMessage[]>([]);
+  const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
+  const [conversations, setConversations] = useState<MemoryConversation[]>([]);
+  const [userFacts, setUserFacts] = useState<UserFact[]>([]);
+  const [memoryReady, setMemoryReady] = useState(false);
+  const [memoryError, setMemoryError] = useState<string | null>(null);
+  const [memoryInitialTab, setMemoryInitialTab] = useState<"facts" | "chats">("facts");
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [stopping, setStopping] = useState(false);
