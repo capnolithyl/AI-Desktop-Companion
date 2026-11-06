@@ -1,0 +1,27 @@
+# Mikan research: Structured evidence experiment
+
+This uses simple prompt chaining, source quotes, and tests inspired by Anthropic's Building Effective Agents, LlamaIndex citations, and Ragas faithfulness metrics. It adds no new dependencies.
+
+## Flow
+
+1. Ordinary conversation remains unchanged. An explicit new automatic research request retrieves SearXNG results, potentially enriched by relevant public HTTPS pages.
+2. With Experimental source-anchored research enabled in Settings → Internet, Qwen makes an additional local, schema-constrained non-streaming JSON call. It proposes up to six source-numbered facts with quotes.
+3. Rust checks each source number, quote substring, subject in quote, numeric anchors, and duplicates. The exact quote is source-matched; the candidate's interpretation is NOT semantically proven.
+4. Mikan receives both original excerpts and the candidate notes in lower-trust user-level research data, then streams her conversational response. If extraction fails or returns no matching quotes, she falls back to the original excerpts.
+5. The /log view and Copy debug log show accepted/rejected candidate counts and extraction latency. The toggle makes A/B comparison straightforward.
+
+Only **newly fetched automatic research** uses the extra call. Manually pasted /search results and prediction follow-ups with carried source data stay on the baseline path. This is a first experiment, not a complete semantic entailment verifier.
+
+## How to evaluate
+
+Repeat the same question in a fresh conversation with the experimental setting OFF and ON. Compare logs for citation accuracy, source relevance, correctly distinguished entities/stages, dates and qualifiers, hedging, personality, and first-token time.
+
+Try different areas: science milestones, music album plans versus release dates, software beta versus stable releases, history dates, observational health studies, revenues versus profit, sports schedules, politics (proposal versus enacted law), streaming announcements, product specs, and ambiguous proper names. Check factual answers against current dated primary sources rather than relying on test fixture text.
+
+Offline Rust tests include 20 cross-domain quote-validation cases in tests/research-cases.json. Those fixtures exercise deterministic validation; they do **not** measure natural-language model accuracy. Any future claim-level entailment checker needs its own separate evaluation.
+
+References:
+- https://www.anthropic.com/research/building-effective-agents
+- https://docs.ollama.com/capabilities/structured-outputs
+- https://developers.llamaindex.ai/python/framework-api-reference/query_engine/citation/
+- https://docs.ragas.io/en/latest/concepts/metrics/available_metrics/faithfulness/

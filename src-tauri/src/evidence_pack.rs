@@ -282,6 +282,26 @@ mod tests {
     }
 
     #[test]
+    fn cross_domain_quote_validation_fixtures() {
+        let cases: Value = serde_json::from_str(include_str!("../../tests/research-cases.json"))
+            .expect("valid evaluation fixtures");
+        let cases = cases.as_array().expect("evaluation case array");
+        assert!(cases.len() >= 20);
+        let mut categories = HashSet::new();
+        for case in cases {
+            let id = case["id"].as_str().expect("case id");
+            categories.insert(case["category"].as_str().expect("category").to_owned());
+            let source = make_source(id, case["source"].as_str().expect("source"));
+            let proposed: FactCandidate = serde_json::from_value(case["candidate"].clone())
+                .expect("valid candidate shape");
+            let accepted = validate(proposed, &[source]).is_some();
+            assert_eq!(accepted, case["accept"].as_bool().expect("expectation"),
+                "quote validation mismatch in case {id}");
+        }
+        assert!(categories.len() >= 9);
+    }
+
+    #[test]
     fn rejects_reused_quotes_and_keeps_pack_bounded() {
         let quote = "The company released its first version in 2024 and its next version in 2025.";
         let sources = vec![make_source("Version notes", quote)];
