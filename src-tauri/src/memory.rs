@@ -11,6 +11,11 @@ fn open_db(app: &AppHandle) -> Result<Connection, String> {
     let connection = Connection::open(dir.join("mikan-memory.sqlite3"))
         .map_err(|e| format!("Cannot open memory database: {e}"))?;
     connection.busy_timeout(Duration::from_secs(5)).map_err(|e| e.to_string())?;
+    initialize_database(&connection)?;
+    Ok(connection)
+}
+
+fn initialize_database(connection: &Connection) -> Result<(), String> {
     connection.execute_batch(
         "PRAGMA foreign_keys=ON;
          PRAGMA journal_mode=WAL;
@@ -37,7 +42,7 @@ fn open_db(app: &AppHandle) -> Result<Connection, String> {
            updated_at INTEGER NOT NULL DEFAULT (unixepoch())
          );"
     ).map_err(|e| format!("Cannot initialize memory database: {e}"))?;
-    Ok(connection)
+    Ok(())
 }
 
 #[derive(Serialize)]
@@ -226,4 +231,38 @@ pub fn memory_delete_fact(app: AppHandle, id: i64) -> Result<(), String> {
     open_db(&app)?.execute("DELETE FROM user_memories WHERE id=?1", params![id])
         .map_err(|e| e.to_string())?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn memory_facts_are_normalized_and_bounded() {
+        assert_eq!(clean_fact("  I   love   metal  ").unwrap(), "I love metal");
+        assert!(clean_fact("   ").is_err());
+        assert!(clean_fact(&"x".repeat(501)).is_err());
+        assert!(valid_id("123e4567-e89b-12d3-a456-426614174000"));
+        assert!(!valid_id("../secrets"));
+    }
+
+    #[test]
+    fn archive_schema_supports_cascading_deletion_and_deduplication() {
+        let db = Connection::open_in_memory().unwrap();
+        initialize_database(&db).unwrap();
+        db.execute(
+            "INSERT INTO conversations(id,title,created_at,updated_at) VALUES('chat','test',1,1)", []
+        ).unwrap();
+        db.execute(
+            "INSERT INTO messages(id,conversation_id,role,content,created_at) VALUES('msg','chat','user','hello',1)", []
+        ).unwrap();
+        db.execute("INSERT INTO user_memories(fact) VALUES('Likes orange')", []).unwrap();
+        // The saved fact is case-insensitive unique.
+        assert!(db.execute("INSERT INTO user_memories(fact) VALUES('likes ORANGE')", []).is_err());
+        db.execute("DELETE FROM conversations WHERE id='chat'", []).unwrap();
+        let messages: i64 = db.query_row("SELECT COUNT(*) FROM messages", [], |r| r.get(0)).unwrap();
+        let facts: i64 = db.query_row("SELECT COUNT(*) FROM user_memories", [], |r| r.get(0)).unwrap();
+        assert_eq!(messages, 0);
+        assert_eq!(facts, 1); // Deleting chat never deletes explicit personal memory.
+    }
 }
