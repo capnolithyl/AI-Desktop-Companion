@@ -563,3 +563,14 @@ button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px
   background: #302936; padding: 9px; border-radius: 8px;
   margin: 0 0 4px; font-size: 11px; color: #eadbe2; line-height: 1.55;
 }
+
+.research-warning {
+  color: #ffd8ab;
+  background: #4b3b32;
+  border: 1px solid #97765b;
+  padding: 8px 10px;
+  border-radius: 8px;
+  font-size: 11px;
+  line-height: 1.5;
+  margin-top: 11px;
+}
