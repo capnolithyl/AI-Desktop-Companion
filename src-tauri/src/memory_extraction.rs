@@ -262,8 +262,11 @@ pub async fn memory_process_turn(
         return Err("Select a valid local Ollama model".into());
     }
     let url = format!("{}/api/chat", local_origin(&endpoint)?);
-    let db = memory::open_db(&app)?;
-    let read = |id: &str, role: &str| -> Result<String, String> {
+    // Complete all rusqlite work in a lexical scope. Connection and its
+    // borrowing closure must not enter the Send future across HTTP awaits.
+    let (user, assistant, capture_user, capture_character, existing_user, existing_canon) = {
+        let db = memory::open_db(&app)?;
+        let read = |id: &str, role: &str| -> Result<String, String> {
         db.query_row(
             "SELECT content FROM messages WHERE id=?1 AND conversation_id=?2 AND role=?3",
             params![id,conversation_id,role], |row| row.get(0)
@@ -301,7 +304,8 @@ pub async fn memory_process_turn(
             .collect::<Result<_,_>>().map_err(|e| e.to_string())?;
         facts
     } else { Vec::new() };
-    drop(db);
+        (user, assistant, capture_user, capture_character, existing_user, existing_canon)
+    };
 
     let system = "You are a conservative LOCAL MEMORY EXTRACTOR for an AI companion.
 Output ONLY JSON matching the schema, with arrays user_facts and character_facts. Empty arrays are normal.
