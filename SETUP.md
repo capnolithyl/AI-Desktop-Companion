@@ -1,4 +1,4 @@
-# Mikan Desktop Companion v0.5.4 · Windows setup
+# Mikan Desktop Companion v0.6.0 · Windows setup
 
 This is a local-first, single-PC prototype. User-specific settings and the selected character portrait remain saved locally across upgrades.
 
@@ -59,7 +59,7 @@ The app also guides the model to disambiguate unusual proper nouns based on the 
 - `/personality`, `/presets`, `/preset cozy`, `/randomize` customize her mood.
 - `/settings` opens Settings, `/internet` opens the Internet tab, `/appearance` opens the Appearance tab; `/new` clears the current chat.
 
-Chat history remains in memory only until quitting. Long-term memory, screen vision, voice, and documentation-library indexing are later features.
+Chat history and explicitly saved facts now persist locally. Automatic fact extraction, cross-chat search, screen vision, voice, character canon, and documentation-library indexing are later features.
 
 ## Development
 
@@ -97,3 +97,11 @@ The model is still not a fact-checking engine, and independent source verificati
 Mikan remains conversational during research. When the retrieved sources establish facts, she should cite those facts inline using source numbers. Predictions and educated guesses are welcome, but she must explicitly say they are guesses and avoid implying a projected release date is officially confirmed. She should cite the evidence that motivates a prediction, not present the prediction itself as sourced fact.
 
 Follow-up answers should retain the established topic without asking again whether you meant the same band or other entity. This update also fixes the formatting of search snippets handed to Ollama: actual line breaks now separate source numbers, URLs, publication dates and excerpts. These instructions improve behavior but cannot guarantee perfect citations from every local model.
+
+## v0.6.0: Local memory foundation
+
+Conversations now persist across app restarts in a local SQLite database. To see the archive or resume another conversation, choose the brain icon or type `/chats`. `/new` starts a fresh conversation without deleting the old one.
+
+Use `/memories` to open the saved personal-facts panel, or `/remember I enjoy strategy games` to save an explicit fact that Mikan can refer to later. Memories can be edited or deleted in the panel. This release does **not** automatically extract personal facts from ordinary messages yet.
+
+Local memory data is saved in the application's Windows AppData folder. It is not synced or encrypted. Webpage caching and Mikan's character canon remain separate. See [MEMORY.md](MEMORY.md) for current scope and privacy limitations.
