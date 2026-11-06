@@ -1,4 +1,4 @@
-# Mikan Desktop Companion v0.6.0 · Windows setup
+# Mikan Desktop Companion v0.6.1 · Windows setup
 
 This is a local-first, single-PC prototype. User-specific settings and the selected character portrait remain saved locally across upgrades.
 
@@ -109,3 +109,8 @@ Conversations now persist across app restarts in a local SQLite database. To see
 Use `/memories` to open the saved personal-facts panel, or `/remember I enjoy strategy games` to save an explicit fact that Mikan can refer to later. Memories can be edited or deleted in the panel. This release does **not** automatically extract personal facts from ordinary messages yet.
 
 Local memory data is saved in the application's Windows AppData folder. It is not synced or encrypted. Webpage caching and Mikan's character canon remain separate. See [MEMORY.md](MEMORY.md) for current scope and privacy limitations.
+
+
+## v0.6.1: Search readiness and compact replies
+
+SearXNG now has automatic health monitoring, optional Docker Desktop/container startup and recovery, and a small readiness indicator on the Search icon. The recovery toggle is independent of Automatic web tools and respects an explicit Stop. The compact reply and conversation log have tighter Markdown paragraph spacing. Existing v0.6.0 SQLite memory remains available.
