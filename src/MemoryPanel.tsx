@@ -1,11 +1,13 @@
 import { useState } from "react";
 import { ArrowLeft, Check, MessageCircle, Plus, RotateCw, Trash2, X } from "lucide-react";
-import type { MemoryConversation, UserFact } from "./memory-client";
+import type { CharacterCategory, CharacterFact, MemoryConversation, UserFact } from "./memory-client";
+import { CharacterCanonTab } from "./CharacterCanonTab";
 
 type Props = {
-  initialTab?: "chats" | "facts";
+  initialTab?: "chats" | "facts" | "character";
   conversations: MemoryConversation[];
   facts: UserFact[];
+  characterFacts: CharacterFact[];
   currentId: string | null;
   busy: boolean;
   error: string | null;
@@ -17,6 +19,9 @@ type Props = {
   onEditFact: (id: number, fact: string) => Promise<void>;
   onDeleteFact: (id: number) => Promise<void>;
   onRefresh: () => Promise<void>;
+  onAddCharacter: (category: CharacterCategory, label: string, value: string) => Promise<void>;
+  onEditCharacter: (id: number, category: CharacterCategory, label: string, value: string) => Promise<void>;
+  onDeleteCharacter: (id: number) => Promise<void>;
 };
 
 function shortDate(seconds: number): string {
@@ -25,10 +30,11 @@ function shortDate(seconds: number): string {
 
 /** Separate fact and conversation controls; no automatic memory extraction in phase one. */
 export function MemoryPanel({
-  initialTab = "facts", conversations, facts, currentId, busy, error, onClose, onNew,
-  onOpen, onDeleteChat, onAddFact, onEditFact, onDeleteFact, onRefresh
+  initialTab = "facts", conversations, facts, characterFacts, currentId, busy, error, onClose, onNew,
+  onOpen, onDeleteChat, onAddFact, onEditFact, onDeleteFact, onRefresh,
+  onAddCharacter, onEditCharacter, onDeleteCharacter
 }: Props) {
-  const [tab, setTab] = useState<"chats" | "facts">(initialTab);
+  const [tab, setTab] = useState<"chats" | "facts" | "character">(initialTab);
   const [newFact, setNewFact] = useState("");
   const [editId, setEditId] = useState<number | null>(null);
   const [editValue, setEditValue] = useState("");
@@ -55,6 +61,9 @@ export function MemoryPanel({
     <nav className="memory-tabs" aria-label="Memory categories">
       <button type="button" className={tab === "facts" ? "active" : ""} onClick={() => setTab("facts")}>
         About you ({facts.length})
+      </button>
+      <button type="button" className={tab === "character" ? "active" : ""} onClick={() => setTab("character")}>
+        About Mikan ({characterFacts.length})
       </button>
       <button type="button" className={tab === "chats" ? "active" : ""} onClick={() => setTab("chats")}>
         Chats ({conversations.length})
@@ -101,6 +110,9 @@ export function MemoryPanel({
             </div>
           </>}
         </article>)}
+      </> : tab === "character" ? <>
+        <CharacterCanonTab facts={characterFacts} onAdd={onAddCharacter}
+          onEdit={onEditCharacter} onDelete={onDeleteCharacter}/>
       </> : <>
         <div className="memory-chat-top">
           <p className="memory-explainer">Conversations persist across restarts. Open one to continue where you left off.</p>
@@ -127,6 +139,6 @@ export function MemoryPanel({
         </article>)}
       </>}
     </div>
-    <footer className="drawer-footer">User facts and chat history are separate from Mikan's character canon and webpage knowledge.</footer>
+    <footer className="drawer-footer">Your facts and Mikan's character canon are stored separately. Webpage knowledge remains independent.</footer>
   </section>;
 }

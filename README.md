@@ -2,9 +2,13 @@
 
 A local-first, personal Windows AI desktop companion powered by Tauri 2, React, TypeScript, and Ollama. Free hobby project for one PC.
 
+**v0.7.0:** Manually managed Mikan character canon, with separate About Mikan details, preferences, hobbies and traits kept independent from the user's memories.
+
 **v0.6.2:** Research follow-ups can reuse previously retrieved source excerpts, with clear stale-source labeling. Optional 4K/8K/16K/32K per-request context setting under AI & Models, preserving the Ollama default unless changed. Schedule-specific follow-ups now search for verified dates rather than extrapolating from AI summaries.
 
-**v0.6.1:** Improved search-query extraction for multipart questions and a broader SearXNG retry when research initially returns zero results.\n\n**v0.6.0:** First local SQLite memory layer: persistent conversations and explicitly saved user facts, with a memory inspector and slash commands. Previous v0.5.4 features:  Conversational, explicitly labeled speculation grounded in evidence; continuity across follow-ups and improved inline citation guidance; expanded web-research triggers and recent-album queries; evidence-first search with transparent queries and source excerpts, per-turn Eastern date/time context, stronger search chronology/disambiguation, integrated Docker/SearXNG lifecycle controls, organized Settings tabs (AI, Internet, Appearance), separate personality presets, optional model-directed web tools, safe public HTTPS reader, and on-disk webpage caching.
+**v0.6.1:** Improved search-query extraction for multipart questions and a broader SearXNG retry when research initially returns zero results.
+
+**v0.6.0:** First local SQLite memory layer: persistent conversations and explicitly saved user facts, with a memory inspector and slash commands. Previous v0.5.4 features:  Conversational, explicitly labeled speculation grounded in evidence; continuity across follow-ups and improved inline citation guidance; expanded web-research triggers and recent-album queries; evidence-first search with transparent queries and source excerpts, per-turn Eastern date/time context, stronger search chronology/disambiguation, integrated Docker/SearXNG lifecycle controls, organized Settings tabs (AI, Internet, Appearance), separate personality presets, optional model-directed web tools, safe public HTTPS reader, and on-disk webpage caching.
 
 ## Getting started
 

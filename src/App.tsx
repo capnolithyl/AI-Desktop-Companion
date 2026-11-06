@@ -23,7 +23,11 @@ import {
 import { PersonalityPresets, PersonalitySliders } from "./PersonalityControls";
 import { parseSlashCommand, SLASH_HELP } from "./slash-commands";
 import { runtimeContext } from "./runtime-context";
-import { memoryApi, memoryContext, readMessageMetadata, type MemoryConversation, type UserFact, type PersistedMessage } from "./memory-client";
+import {
+  memoryApi, memoryContext, characterContext, readMessageMetadata,
+  type MemoryConversation, type UserFact, type PersistedMessage,
+  type CharacterCategory, type CharacterFact
+} from "./memory-client";
 import { MemoryPanel } from "./MemoryPanel";
 
 type Screen = "compact" | "log" | "settings" | "search" | "page" | "personality" | "help" | "memory";
@@ -157,9 +161,10 @@ export default function App() {
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
   const [conversations, setConversations] = useState<MemoryConversation[]>([]);
   const [userFacts, setUserFacts] = useState<UserFact[]>([]);
+  const [characterFacts, setCharacterFacts] = useState<CharacterFact[]>([]);
   const [memoryReady, setMemoryReady] = useState(false);
   const [memoryError, setMemoryError] = useState<string | null>(null);
-  const [memoryInitialTab, setMemoryInitialTab] = useState<"facts" | "chats">("facts");
+  const [memoryInitialTab, setMemoryInitialTab] = useState<"facts" | "chats" | "character">("facts");
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [stopping, setStopping] = useState(false);
@@ -294,9 +299,11 @@ export default function App() {
         // Initialize the SQLite schema on one connection before reading facts.
         const archive = await memoryApi.listConversations();
         const facts = await memoryApi.listFacts();
+        const canon = await memoryApi.listCharacterFacts();
         if (disposed) return;
         setConversations(archive);
         setUserFacts(facts);
+        setCharacterFacts(canon);
         const latest = archive[0];
         if (latest) {
           const restored = await memoryApi.listMessages(latest.id);
@@ -320,12 +327,29 @@ export default function App() {
   const refreshFacts = async () => {
     setUserFacts(await memoryApi.listFacts());
   };
+  const refreshCharacter = async () => {
+    setCharacterFacts(await memoryApi.listCharacterFacts());
+  };
+  const addCharacter = async (category: CharacterCategory, label: string, value: string) => {
+    await memoryApi.addCharacterFact(category, label, value);
+    await refreshCharacter();
+    setMemoryError(null);
+  };
+  const editCharacter = async (id: number, category: CharacterCategory, label: string, value: string) => {
+    await memoryApi.updateCharacterFact(id, category, label, value);
+    await refreshCharacter();
+  };
+  const deleteCharacter = async (id: number) => {
+    await memoryApi.deleteCharacterFact(id);
+    await refreshCharacter();
+  };
   const refreshMemory = async () => {
-    const [archive, facts] = await Promise.all([
-      memoryApi.listConversations(), memoryApi.listFacts()
+    const [archive, facts, canon] = await Promise.all([
+      memoryApi.listConversations(), memoryApi.listFacts(), memoryApi.listCharacterFacts()
     ]);
     setConversations(archive);
     setUserFacts(facts);
+    setCharacterFacts(canon);
     setMemoryError(null);
   };
   const addUserFact = async (fact: string) => {
@@ -359,7 +383,7 @@ export default function App() {
     }
     await refreshArchive();
   };
-  const openMemory = (tab: "chats" | "facts" = "facts") => {
+  const openMemory = (tab: "chats" | "facts" | "character" = "facts") => {
     setMemoryInitialTab(tab);
     setScreen("memory");
     void refreshMemory().catch(error => setMemoryError(errorText(error)));
@@ -567,6 +591,38 @@ export default function App() {
         openSettingsTab("internet"); return;
       case "memory":
       case "memories": openMemory("facts"); return;
+      case "canon":
+      case "mikan-memories": openMemory("character"); return;
+      case "canon-set":
+      case "remember-mikan": {
+        const separator = argument.indexOf(":");
+        if (separator < 1 || !argument.slice(separator + 1).trim()) {
+          setFeedback("Use /canon-set favorite color: orange (or open /canon to choose a category).");
+          return;
+        }
+        const label = argument.slice(0, separator).trim();
+        const value = argument.slice(separator + 1).trim();
+        const lower = label.toLowerCase();
+        const category: CharacterCategory =
+          lower.startsWith("favorite") ? "favorites" :
+          lower.startsWith("dislike") ? "dislikes" :
+          lower.startsWith("hobb") ? "hobbies" : "other";
+        void addCharacter(category, label, value)
+          .then(() => setFeedback(`Saved for Mikan: ${label} = ${value}.`))
+          .catch(error => setFeedback(`Could not save Mikan's detail: ${errorText(error)}`));
+        return;
+      }
+      case "canon-forget": {
+        const id = Number(argument);
+        if (!/^\d+$/.test(argument) || !Number.isSafeInteger(id) || id <= 0) {
+          setFeedback("Use /canon-forget with the ID shown under Mikan's details.");
+          return;
+        }
+        void deleteCharacter(id)
+          .then(() => setFeedback(`Deleted Mikan's detail #${id}.`))
+          .catch(error => setFeedback(`Could not delete Mikan's detail: ${errorText(error)}`));
+        return;
+      }
       case "chats":
       case "conversations": openMemory("chats"); return;
       case "remember":
@@ -762,7 +818,7 @@ export default function App() {
           contextWindow: settings.contextWindow,
           priorSources,
           messages: [
-            { role: "system", content: [settings.systemPrompt.trim(), personalityGuidance(settings.personality), runtimeContext(), memoryContext(userFacts, text)].filter(Boolean).join("\n\n") },
+            { role: "system", content: [settings.systemPrompt.trim(), personalityGuidance(settings.personality), runtimeContext(), memoryContext(userFacts, text), characterContext(characterFacts, text)].filter(Boolean).join("\n\n") },
             ...(withSearch ? [{ role: "user", content: withSearch.page ? pageContext(withSearch.query, withSearch.page) : webContext(withSearch.query, withSearch.results) }] : []),
             ...history.filter(m => !withSearch || m.role === "user").slice(-32).map(m => ({ role: m.role, content: m.content }))
           ]
@@ -1058,10 +1114,11 @@ export default function App() {
     </section>}
 
     {screen === "memory" && <MemoryPanel key={memoryInitialTab} initialTab={memoryInitialTab}
-      conversations={conversations} facts={userFacts} currentId={activeConversationId}
+      conversations={conversations} facts={userFacts} characterFacts={characterFacts} currentId={activeConversationId}
       busy={busy} error={memoryError} onClose={goCompact} onNew={clearChat}
       onOpen={openConversation} onDeleteChat={deleteConversation}
       onAddFact={addUserFact} onEditFact={editUserFact} onDeleteFact={deleteUserFact}
+      onAddCharacter={addCharacter} onEditCharacter={editCharacter} onDeleteCharacter={deleteCharacter}
       onRefresh={refreshMemory}/>}
 
     {screen === "personality" && <section className="drawer" role="dialog" aria-label="Quick personality controls">
@@ -1100,7 +1157,7 @@ export default function App() {
     {screen === "settings" && <section className="drawer" role="dialog" aria-label="Mikan settings">
       <header className="drawer-header">
         <button className="back-button" title="Back to companion" onClick={goCompact}><ArrowLeft size={19}/></button>
-        <div className="drawer-title"><strong>Settings</strong><span>Mikan v0.6.2 · Local first</span></div>
+        <div className="drawer-title"><strong>Settings</strong><span>Mikan v0.7.0 · Local first</span></div>
         <button className="secondary-action" onClick={() => setDraft(current => ({
           ...current,
           ...(settingsTab === "ai" ? {

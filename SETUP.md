@@ -1,4 +1,4 @@
-# Mikan Desktop Companion v0.6.2 · Windows setup
+# Mikan Desktop Companion v0.7.0 · Windows setup
 
 This is a local-first, single-PC prototype. User-specific settings and the selected character portrait remain saved locally across upgrades.
 
@@ -121,3 +121,8 @@ For follow-up questions, Mikan carries a **bounded set of source excerpts** from
 When the question explicitly asks about a schedule or next milestone, Mikan can perform a new focused SearXNG search. Pure opinions/predictions may reuse prior evidence, citing it when it supports the premise and labeling speculation. Old source snippets are not automatic verification of present-day facts.
 
 Changing the context window can improve retention, but won't guarantee factual accuracy. With automatic web tools disabled, prior available sources can still inform immediate follow-ups without a fresh online request.
+
+
+## v0.7.0: Mikan's own memory
+
+Use `/canon` to edit Mikan's own favorites, interests, dislikes, hobbies and traits separately from **About you** and **Chats**. Use `/canon-set favorite color: orange` to save a new preference, or `/canon-forget <id>` to remove it. User facts still use `/remember`. Character canon persists locally in SQLite and is not automatically extracted from chat yet. See [MEMORY.md](MEMORY.md).
