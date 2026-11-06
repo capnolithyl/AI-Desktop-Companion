@@ -484,6 +484,55 @@ export default function App() {
       <footer className="drawer-footer"><Clock3 size={14}/> Token counts and timings come from Ollama; wall time includes app overhead.</footer>
     </section>}
 
+    {screen === "search" && <section className="drawer" role="dialog" aria-label="SearXNG web search">
+      <header className="drawer-header">
+        <button className="back-button" title="Back to companion" onClick={goCompact}><ArrowLeft size={19}/></button>
+        <div className="drawer-title"><strong>Web search</strong><span>Local SearXNG · {settings.searxngEndpoint}</span></div>
+      </header>
+      <form className="search-form" onSubmit={event => {
+        event.preventDefault();
+        if (!searchBusy) void performSearch(searchQuery);
+      }}>
+        <input ref={searchInputRef} aria-label="Search query" value={searchQuery}
+          onChange={event => {
+            setSearchQuery(event.target.value);
+            setSearchResults([]);
+            setSearchHasRun(false);
+          }}
+          placeholder="Search the web…" maxLength={250}/>
+        <button className="secondary-action" type="submit" disabled={searchBusy || !searchQuery.trim()}>
+          {searchBusy ? <LoaderCircle size={16} className="spin"/> : <Search size={16}/>} Search
+        </button>
+      </form>
+      <div className="search-body">
+        {searchBusy && <div className="search-empty"><LoaderCircle size={32} className="spin"/> Searching SearXNG…</div>}
+        {!searchBusy && searchError && <div className="search-error">
+          <strong>Search unavailable</strong><p>{searchError}</p>
+          <span>Check Docker Desktop, tools/searxng/start.ps1, and the SearXNG URL in Settings.</span>
+        </div>}
+        {!searchBusy && !searchError && !searchHasRun && <div className="search-empty">
+          <Search size={32}/> Search is on demand. No automatic web requests yet.
+        </div>}
+        {!searchBusy && !searchError && searchHasRun && searchResults.length === 0 &&
+          <div className="search-empty">No results returned. Try another query or check SearXNG's enabled search engines.</div>}
+        {!searchBusy && !searchError && searchResults.map((result,index) => <article key={result.url} className="search-result">
+          <button type="button" className="search-result-title" title={result.url}
+            onClick={() => void openSource(result.url)}>
+            <span>[{index + 1}] {result.title}</span><ExternalLink size={15}/>
+          </button>
+          {result.content && <p>{result.content}</p>}
+          <small>{result.engine || new URL(result.url).hostname}</small>
+        </article>)}
+      </div>
+      <footer className="search-footer">
+        <span>Results are snippets, not full webpages. Verify important claims at the source.</span>
+        <button type="button" className="save-button" disabled={busy || searchBusy || !searchResults.length}
+          onClick={() => void send({ query: searchQuery, results: searchResults })}>
+          <Sparkles size={16}/> Ask Mikan
+        </button>
+      </footer>
+    </section>}
+
     {screen === "settings" && <section className="drawer" role="dialog" aria-label="Mikan settings">
       <header className="drawer-header">
         <button className="back-button" title="Back to companion" onClick={goCompact}><ArrowLeft size={19}/></button>
