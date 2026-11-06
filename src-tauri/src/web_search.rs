@@ -17,7 +17,7 @@ pub struct SearchResult {
     pub published_date: Option<String>,
 }
 
-fn local_searxng_url(endpoint: &str) -> Result<String, String> {
+pub(crate) fn local_searxng_url(endpoint: &str) -> Result<String, String> {
     let parsed = reqwest::Url::parse(endpoint)
         .map_err(|_| "Enter a valid local SearXNG URL".to_owned())?;
     if parsed.scheme() != "http"

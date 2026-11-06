@@ -20,7 +20,11 @@ Manage the existing container entirely inside Mikan:
 - `/search-stop`: stop SearXNG; stopped state persists across reboot
 - `/search-status`: check Docker/container state
 
-Equivalent Start/Stop/Status buttons are at **Settings → Internet**. Initial installation of the container is still a one-time manual step, and Docker Desktop itself must be running for the controls to work. Mikan cannot start the Docker engine on your behalf.
+Equivalent Start/Stop/Status buttons are at **Settings → Internet**. Initial installation of the container is still a one-time manual step.
+
+**Automatic search startup & recovery** is a separate setting from Automatic web tools. When enabled, Mikan checks whether the configured SearXNG HTTP endpoint responds. If the built-in `mikan-searxng` service on port 8888 is unavailable, she attempts to launch Docker Desktop (if installed), start a stopped container, or restart an unresponsive container. Checks occur every 45 seconds while healthy and more frequently during startup. Failed recovery attempts are rate-limited to prevent a restart loop. A small dot on the Search icon indicates ready (green), starting (amber), or unavailable (red); hover for details.
+
+For existing installations with Automatic web tools enabled, automatic recovery is enabled on upgrade. Otherwise it stays off until you enable it under Internet settings. Pressing **Start** or typing `/search-start` also enables recovery so a Docker Desktop cold start can finish booting SearXNG. Pressing **Stop** or typing `/search-stop` disables recovery so the container stays stopped. You can also change recovery independently in settings. Custom local SearXNG endpoints are monitored but never auto-restarted. Docker Desktop may briefly open its window when launched; enabling its own login startup remains an option.
 
 ## Settings
 

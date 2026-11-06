@@ -87,7 +87,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px
 .error-caption { color: #ffc5c9; font-size: 11px; }
 .latest-reply {
   max-height: 146px; min-height: 32px; overflow: auto;
-  white-space: pre-wrap; overflow-wrap: anywhere;
+  white-space: normal; overflow-wrap: anywhere;
   color: #fff0eb; font-size: 13px; line-height: 1.55;
   padding: 0 4px 0 0;
 }
@@ -143,7 +143,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px
 .log-message-header { display: flex; justify-content: space-between; align-items: center; gap: 20px; }
 .log-message-header strong { font-size: 10px; color: #ffd0b2; letter-spacing: .08em; }
 .log-message-header time { font-size: 10px; color: #d5bdcc; white-space: nowrap; }
-.log-message p { margin: 10px 0 0; font-size: 13px; line-height: 1.58; color: #fff4f0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.log-message p { margin: 0 0 .45em; font-size: 13px; line-height: 1.58; color: #fff4f0; white-space: normal; overflow-wrap: anywhere; }
 .log-message .message-error { color: #ffb9c0; }
 .reply-metrics { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 13px; padding-top: 10px; border-top: 1px solid #735a69; }
 .metric { background: #2f2732; color: #d8bfcc; border: 1px solid #5a4351; border-radius: 6px; font-size: 10px; padding: 4px 6px; white-space: nowrap; }
@@ -206,6 +206,19 @@ button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px
   border-radius: 8px; color: #d8bfc7; background: transparent; border: none;
 }
 .dock-icon:hover { background: rgb(var(--accent-rgb, 255 173 126) / .15); color: #fff; }
+/* Tiny readiness light on Search; status details stay in the tooltip/settings. */
+.search-dock-action { position: relative; }
+.search-health-dot {
+  position: absolute; right: 2px; bottom: 2px;
+  width: 7px; height: 7px; border-radius: 50%;
+  background: #a999a7; border: 1px solid #2d222d;
+}
+.search-health-dot.ready { background: #86dfac; }
+.search-health-dot.starting { background: #efbc69; }
+.search-health-dot.stopped,
+.search-health-dot.unavailable,
+.search-health-dot.docker-offline,
+.search-health-dot.not-installed { background: #ed8294; }
 .dock-icon:last-child:hover { background: #9a4453; }
 .send-button, .save-button { background: var(--accent, #ffad7e); }
 .send-button:not(:disabled):hover, .save-button:hover { filter: brightness(1.12); background: var(--accent, #ffad7e); }
@@ -238,11 +251,10 @@ button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px
   color: #fff0eb; border-radius: 10px; padding: 10px 12px;
 }
 .setting-field input[type="range"] { padding: 4px 0; accent-color: var(--accent, #ffad7e); border: 0; }
-.markdown-text { font-size: inherit; line-height: 1.55; overflow-wrap: anywhere; }
+.markdown-text { font-size: inherit; line-height: 1.55; white-space: normal; overflow-wrap: anywhere; }
 .markdown-text > :first-child { margin-top: 0; }
 .markdown-text > :last-child { margin-bottom: 0; }
-.markdown-text p { margin: 0 0 .85em; }
-.markdown-text p + p { margin-top: .7em; }
+.markdown-text p { margin: 0 0 .45em; }
 .markdown-text em { font-style: italic; color: #ffded2; }
 .markdown-text strong { font-weight: 700; color: #fff6f0; }
 .markdown-text h1, .markdown-text h2, .markdown-text h3 {
