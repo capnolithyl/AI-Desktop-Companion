@@ -8,6 +8,10 @@ type Props = {
   conversations: MemoryConversation[];
   facts: UserFact[];
   characterFacts: CharacterFact[];
+  autoRememberUser: boolean;
+  autoRememberMikan: boolean;
+  onAutoRememberUserChange: (enabled: boolean) => void;
+  onAutoRememberMikanChange: (enabled: boolean) => void;
   currentId: string | null;
   busy: boolean;
   error: string | null;
@@ -30,7 +34,9 @@ function shortDate(seconds: number): string {
 
 /** Separate fact and conversation controls; no automatic memory extraction in phase one. */
 export function MemoryPanel({
-  initialTab = "facts", conversations, facts, characterFacts, currentId, busy, error, onClose, onNew,
+  initialTab = "facts", conversations, facts, characterFacts,
+  autoRememberUser, autoRememberMikan, onAutoRememberUserChange, onAutoRememberMikanChange,
+  currentId, busy, error, onClose, onNew,
   onOpen, onDeleteChat, onAddFact, onEditFact, onDeleteFact, onRefresh,
   onAddCharacter, onEditCharacter, onDeleteCharacter
 }: Props) {
@@ -72,7 +78,14 @@ export function MemoryPanel({
     <div className="memory-body">
       {(error || actionError) && <div className="memory-error" role="alert">{actionError || error}</div>}
       {tab === "facts" ? <>
-        <p className="memory-explainer">Facts about you that Mikan can refer to in future conversations. Only things you explicitly save are added in this first version.</p>
+        <p className="memory-explainer">Facts about you that Mikan can refer to across conversations. You can save, correct, or delete any entry.</p>
+        <label className="memory-auto-toggle">
+          <input type="checkbox" checked={autoRememberUser}
+            onChange={event => onAutoRememberUserChange(event.target.checked)}/>
+          <span><strong>Automatically remember useful facts about you</strong>
+            <small>Checks explicit, lasting details after a reply. Sensitive information is skipped by default.</small>
+          </span>
+        </label>
         <form className="memory-add" onSubmit={e => {
           e.preventDefault();
           if (!newFact.trim()) return;
@@ -111,6 +124,13 @@ export function MemoryPanel({
           </>}
         </article>)}
       </> : tab === "character" ? <>
+        <label className="memory-auto-toggle">
+          <input type="checkbox" checked={autoRememberMikan}
+            onChange={event => onAutoRememberMikanChange(event.target.checked)}/>
+          <span><strong>Automatically remember Mikan's new preferences</strong>
+            <small>When you ask about her interests, a specific answer can become part of her identity.</small>
+          </span>
+        </label>
         <CharacterCanonTab facts={characterFacts} onAdd={onAddCharacter}
           onEdit={onEditCharacter} onDelete={onDeleteCharacter}/>
       </> : <>
