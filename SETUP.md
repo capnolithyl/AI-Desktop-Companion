@@ -1,4 +1,4 @@
-# Mikan Desktop Companion v0.5.1 · Windows setup
+# Mikan Desktop Companion v0.5.2 · Windows setup
 
 This is a local-first, single-PC prototype. User-specific settings and the selected character portrait remain saved locally across upgrades.
 
@@ -73,3 +73,13 @@ npm run desktop
 ```
 
 The signed/unsigned installer is produced by GitHub Actions or `npm run package:windows`. The personal build is unsigned, so SmartScreen may show an unknown-publisher warning.
+
+## Evidence-first web research (v0.5.2)
+
+With **Automatic web tools** enabled, explicitly asking to search or find something, get recent news, or find a new album now runs a real SearXNG search **before** the local model responds. The app builds a query from the user's own topic, adding music context from earlier user turns when it helps. The LLM cannot silently reinterpret your request into an unrelated search query.
+
+Search answers receive a strict evidence-only instruction with numbered source snippets and optional publication dates, and are generated using the existing Ollama streaming API. Previous assistant statements are excluded from the factual research context; user questions and clarifications are preserved. When no results are found, Mikan says so rather than fabricating research. This forced search works even with local models that do not implement Ollama tool calling.
+
+The **Conversation Log** shows the exact SearXNG query and expandable evidence snippets alongside the model's response. These are *retrieved sources*, not independently fact-checked citations: the model can still make mistakes. Review important claims against the source excerpts. Manual searches using `/search` remain available regardless of the auto-search setting. Casual offline conversation remains unchanged.
+
+A source link beneath a reply means that source was returned by SearXNG; it does not prove every statement in the reply is supported.
