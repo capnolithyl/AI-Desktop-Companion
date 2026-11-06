@@ -1,47 +1,63 @@
-# Mikan Desktop Companion v0.4.1 (Windows)
+# Mikan Desktop Companion v0.5 · Windows setup
 
-A free, local-first personal AI companion. This is an experimental build for one Windows 11 PC.
+This is a local-first, single-PC prototype. User-specific settings and the selected character portrait remain saved locally across upgrades.
 
-## Install / update
+## Install
 
-1. Open the latest successful [Windows installer workflow](https://github.com/capnolithyl/AI-Desktop-Companion/actions/workflows/windows.yml).
-2. Download the `mikan-windows-installer` artifact, extract it and run the NSIS setup executable. Install over your existing version.
-3. Keep Ollama running with one or more locally downloaded models. Endpoint: `http://127.0.0.1:11434`.
-4. Your previous settings and selected portrait should persist across upgrades in the Tauri WebView data. If the avatar is missing, choose your existing Mikan PNG under Settings.
+- Install [Ollama for Windows](https://ollama.com/download/windows) and run `ollama pull qwen3.5:9b`, or download another model. Ollama uses `http://127.0.0.1:11434`.
+- Download the latest successful **mikan-windows-installer** artifact from [GitHub Actions](https://github.com/capnolithyl/AI-Desktop-Companion/actions/workflows/windows.yml), unzip and run the NSIS setup executable. Install over the previous Mikan version.
+- For search, install Docker Desktop with WSL2 (free for personal use) and run the SearXNG [one-time setup](tools/searxng/README.md). A model alone does not perform web requests.
 
-Unsigned personal builds may trigger Windows SmartScreen. Examine the GitHub workflow/source before running.
+## Boot behavior and SearXNG controls
 
-## Internet access (SearXNG)
+Previous releases used `restart: "no"`, which means SearXNG does not automatically start after a reboot. The v0.5 Compose file uses `restart: unless-stopped`.
 
-See [tools/searxng/README.md](tools/searxng/README.md) for the Windows Docker Desktop setup. After starting SearXNG, enter `http://127.0.0.1:8888` in Settings. `/search query` or the search icon opens results; **Ask Mikan** passes snippets to the selected Ollama model with source links. Regular chat does not search automatically yet.
+With v0.5 installed, type `/search-start` **once**. It enables Docker's `unless-stopped` restart policy on the existing named `mikan-searxng` container, then starts it. Thereafter it will restart with the Docker engine, **unless you deliberately stop it**. To make this happen automatically on Windows login, enable **Docker Desktop → Settings → General → Start Docker Desktop when you sign in**. This is optional if you prefer to keep Docker off until needed.
 
-## Interaction
+Manage the existing container entirely inside Mikan:
 
-- Hold left mouse on the portrait and drag to move the companion. The old floating **Drag Mikan** button is gone.
-- History, settings and hide buttons are inside the compact chat dock.
-- **Ctrl+Alt+M** toggles Mikan and always restores compact chat when showing.
-- Enter sends; Shift+Enter inserts newline.
-- `/log` or `/history` opens the complete session chat, with per-assistant-message timing, token counts, and model throughput.
-- `/search your query` searches through locally running SearXNG; `/settings` opens settings; `/chat` returns to compact; `/new` and `/clear` start a new in-memory conversation.
-- Models installed through Ollama appear automatically in the model dropdown in Settings and in the compact dock footer. Use the refresh icon after pulling a model while Mikan is open. Selecting a model in the dock saves it immediately; choosing one in Settings takes effect when you click Save. No restart or API key needed. The current conversation remains intact after switching, so start a new chat if you want an apples-to-apples comparison. If Ollama is offline or a model is missing, Settings also accepts manually typed model names.
-- Replies and conversation history are rendered as Markdown (italic `*actions*`, bold, lists, code, links, and tables), not as plain text.
-- Under Settings > Appearance, change accent color, panel color, panel opacity, font family, and message font size. These persist locally.
+- `/search-start`: start SearXNG; enables Docker restart policy
+- `/search-stop`: stop SearXNG; stopped state persists across reboot
+- `/search-status`: check Docker/container state
 
-The model's stage directions remain in the **displayed** response and chat history. When local voice synthesis is implemented, we should exclude those descriptions from spoken output rather than reading them aloud. This feature has not been implemented yet.
+Equivalent Start/Stop/Status buttons are at **Settings → Internet**. Initial installation of the container is still a one-time manual step, and Docker Desktop itself must be running for the controls to work. Mikan cannot start the Docker engine on your behalf.
 
-## Technical notes
+## Settings
 
-The window is `transparent: true` / `decorations: false` / `shadow: false`. Tauri's Windows shadow setting can add a 1px border and rounded corners to undecorated windows when enabled; disabling it should eliminate the remaining native frame. Some GPU/window-compositor quirks may still need hands-on Windows validation. Transparent areas of the native window can still intercept mouse clicks; pixel-perfect click-through is a separate feature.
+The Settings drawer is split into **AI & Models**, **Internet**, and **Appearance** tabs:
 
-The color themes use CSS variables; no themes or font downloads are required. The default font is Segoe UI, with installed Arial, Verdana, and Georgia alternatives. The Markdown renderer does not enable raw HTML injection.
+- **AI & Models**: Ollama endpoint, model picker, system/persona prompt. Current model can also be switched from the compact dock.
+- **Internet**: SearXNG endpoint and service management, optional automatic web tools, webpage cache TTL and clear-cache control.
+- **Appearance**: portrait, accent and panel colors, opacity, and fonts.
 
-Chats and diagnostics are session-only; they disappear after quitting the application. No web access, VRM model, TTS, screen capture, or long-term memory yet.
+Personality sliders/presets now exist **only in the separate Personality drawer**, not duplicated inside Settings. Changes to normal settings are saved using **Save settings**; the Personality drawer applies changes immediately.
 
-The original bundled Mikan PNG is only included once `public/mikan.png` is added to GitHub. Previous user-selected portraits remain in local IndexedDB.
+## Search, browsing, caching
 
-## Local development
+- `/search Fear Factory news` opens SearXNG results; **Ask Mikan** summarizes search snippets and includes links in the log.
+- `/read https://example.com/article` reads an eligible public HTTPS page and caches its article text.
+- Search results have **Read full page** actions when the URL is HTTPS. The page reader can return cached content, refresh it, and pass the page text to Mikan.
+- **Automatic web tools**, off by default under Settings → Internet, let tool-capable Ollama models decide when to call `search_web` or `read_webpage`. Normal chat remains faster with automatic tools disabled. Automatic mode adds planning work and might be slower; unsupported models will show an error so you can disable the option or choose another model.
 
-Install Node.js 22+, Rust, Windows MSVC C++ build tools, and WebView2 as instructed at https://v2.tauri.app/start/prerequisites/.
+Web requests go through the Rust backend, not the browser UI. Search queries go through your local SearXNG container to outside search providers; webpage reads contact outside hosts. Results and page text are untrusted evidence, not authoritative instructions. The model can still misinterpret sources.
+
+The webpage reader is intentionally limited to public **HTTPS URLs on port 443**, with pinned public IP address resolution, no proxies or redirects, no cookies, a maximum 1.25 MB response and 16,000 characters of extracted text. Sites that require login, rely heavily on JavaScript, block automated access, or redirect may fail. Only article/main content or paragraph text is extracted; images and PDFs are not read in this iteration.
+
+The local page cache expires after the TTL you set (default: 24 hours). At most 150 page files are retained, stored in Mikan's local app-data directory rather than in model training weights. You can inspect the page count and clear it under Internet. Clearing or refreshing does not affect your conversations.
+
+## Chat and other shortcuts
+
+- **Ctrl+Alt+M** shows/hides Mikan, returning to compact chat when shown; drag the portrait to move the window.
+- Enter sends; Shift+Enter inserts a line.
+- `/help` shows the clickable list of available commands; `/log` shows the current session history and Ollama timing/token diagnostics.
+- `/personality`, `/presets`, `/preset cozy`, `/randomize` customize her mood.
+- `/settings` opens Settings, `/internet` opens the Internet tab, `/appearance` opens the Appearance tab; `/new` clears the current chat.
+
+Chat history remains in memory only until quitting. Long-term memory, screen vision, voice, and documentation-library indexing are later features.
+
+## Development
+
+Install Node.js 22+, Rust, MSVC C++ build tools and WebView2 per https://v2.tauri.app/start/prerequisites/, then:
 
 ```powershell
 git clone https://github.com/capnolithyl/AI-Desktop-Companion.git
@@ -50,6 +66,4 @@ npm install
 npm run desktop
 ```
 
-Build locally using `npm run package:windows`. GitHub Actions builds and uploads the unsigned Windows NSIS installer after pushes to main.
-
-Roadmap: https://trello.com/b/bLO0mXJM/ai-desktop-companion
+The signed/unsigned installer is produced by GitHub Actions or `npm run package:windows`. The personal build is unsigned, so SmartScreen may show an unknown-publisher warning.

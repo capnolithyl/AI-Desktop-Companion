@@ -23,6 +23,7 @@ export const SLASH_HELP: readonly SlashHelpItem[] = [
   { usage: "/fontsize 14", description: "Change message size (11–20px)", insert: "/fontsize " },
   { usage: "/ollama <url>", description: "Update the local Ollama endpoint", insert: "/ollama " },
   { usage: "/searxng <url>", description: "Update the local web search endpoint", insert: "/searxng " },
+  { usage: "/internet", description: "Open SearXNG and cache settings", insert: "/internet" },
   { usage: "/settings", description: "Open settings", insert: "/settings" },
   { usage: "/appearance", description: "Open visual settings", insert: "/appearance" },
   { usage: "/prompt", description: "Edit the system prompt in settings", insert: "/prompt" },
