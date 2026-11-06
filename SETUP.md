@@ -1,4 +1,4 @@
-# Mikan Desktop Companion v0.5.3 · Windows setup
+# Mikan Desktop Companion v0.5.4 · Windows setup
 
 This is a local-first, single-PC prototype. User-specific settings and the selected character portrait remain saved locally across upgrades.
 
@@ -91,3 +91,9 @@ With Automatic web tools enabled, everyday information questions such as `Can yo
 Search query construction treats `the band` as an entity type, not part of the exact-quoted artist name. An album follow-up searches for *next album / recording / studio / announcement*, and checks both recent results (SearXNG's past-year filter, where supported) and general results, avoiding unrelated pages where possible.
 
 The model is still not a fact-checking engine, and independent source verification may be necessary. If no reliable upcoming-album confirmation is retrieved, it should admit the release date is unconfirmed rather than turning a historical release into an upcoming one. The source excerpts and exact query remain visible in `/log`.
+
+## v0.5.4: Clear facts, clearly labeled guesses
+
+Mikan remains conversational during research. When the retrieved sources establish facts, she should cite those facts inline using source numbers. Predictions and educated guesses are welcome, but she must explicitly say they are guesses and avoid implying a projected release date is officially confirmed. She should cite the evidence that motivates a prediction, not present the prediction itself as sourced fact.
+
+Follow-up answers should retain the established topic without asking again whether you meant the same band or other entity. This update also fixes the formatting of search snippets handed to Ollama: actual line breaks now separate source numbers, URLs, publication dates and excerpts. These instructions improve behavior but cannot guarantee perfect citations from every local model.
