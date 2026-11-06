@@ -286,15 +286,15 @@ async fn chat_stream_impl(
                 });
             }
 
-            // Time-sensitive research benefits from real article paragraphs.
-            // Search snippets can mix an intermediate test with a later goal
-            // and omit the key distinction between two similarly named stages.
+            // Time-sensitive research benefits from fuller source passages.
+            // Search previews can omit key qualifiers, dates and distinctions
+            // between related entities or separate stages of a project.
             if research_intent::needs_primary_source_verification(&messages) {
                 let _ = app.emit("mikan://activity", json!({
                     "requestId": request.request_id,
-                    "text": "Checking official sources…"
+                    "text": "Checking source pages…"
                 }));
-                source_enrichment::enrich_official_sources(
+                source_enrichment::enrich_relevant_sources(
                     &app, &mut sources, &query, request.cache_hours
                 ).await;
             }
