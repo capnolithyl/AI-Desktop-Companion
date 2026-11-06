@@ -206,6 +206,7 @@ export default function App() {
   const clearChat = () => {
     if (busy) return;
     setMessages([]);
+    setFeedback(null);
     setGreeting("New conversation! What shall we talk about?");
     goCompact();
   };
@@ -290,6 +291,7 @@ export default function App() {
 
   const runSlashCommand = (text: string): void => {
     setInput("");
+    setFeedback(null);
     const parsed = parseSlashCommand(text);
     if (!parsed) {
       setFeedback("Invalid slash command. Type /help to see available commands.");
