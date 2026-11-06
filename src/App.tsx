@@ -16,7 +16,7 @@ import {
   type Message, type Settings
 } from "./storage";
 import {
-  DEFAULT_PERSONALITY, PERSONALITY_TRAITS, PERSONALITY_PRESETS,
+  PERSONALITY_TRAITS, PERSONALITY_PRESETS,
   findPreset, personalityGuidance, randomPersonality, type Personality
 } from "./personality";
 import { PersonalityPresets, PersonalitySliders } from "./PersonalityControls";
