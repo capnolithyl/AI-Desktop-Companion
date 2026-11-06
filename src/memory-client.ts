@@ -42,6 +42,7 @@ export type AutomaticMemoryRequest = {
   assistantMessageId: string;
   captureUser: boolean;
   captureCharacter: boolean;
+  contextWindow: number | null;
 };
 export type PersistedMessage = Message & {
   createdAt: number; // Unix milliseconds (original message timestamp)
