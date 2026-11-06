@@ -644,3 +644,15 @@ button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px
 .character-item-header strong { font-size: 12px; color: #ffdecf; overflow-wrap: anywhere; }
 .character-item-header span { font-size: 10px; color: #eac2ae; opacity: .85; }
 .character-item p { margin: 0 0 12px; }
+
+/* Optional automatic capture of user facts and character canon. */
+.memory-auto-toggle {
+  display: flex; align-items: flex-start; gap: 11px; cursor: pointer;
+  padding: 11px 12px; margin: 2px 0 16px;
+  background: #443540; border-radius: 10px; border: 1px solid #68515e;
+}
+.memory-auto-toggle input { margin-top: 3px; accent-color: var(--accent, #ffad7e); }
+.memory-auto-toggle span { display: flex; flex-direction: column; gap: 5px; }
+.memory-auto-toggle strong { font-size: 12px; font-weight: 600; color: #ffdecf; }
+.memory-auto-toggle small { color: #c7b0c0; font-size: 11px; line-height: 1.5; }
+.memory-auto-warning { color: #f8c79c; font-size: 11px; line-height: 1.5; overflow-wrap: anywhere; }
