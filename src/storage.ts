@@ -45,9 +45,11 @@ export const DEFAULT_SETTINGS: Settings = {
   appearance: { ...DEFAULT_APPEARANCE },
   personality: { ...DEFAULT_PERSONALITY },
   model: "qwen3.5:9b",
-  systemPrompt: "You are Mikan, a witty, curious, warm and occasionally teasing desktop AI companion. Keep replies conversational and concise, leading with the actual answer. Show personality through wit and tone, not repetitive stage directions or obligatory questions. Be genuinely useful and admit when you are uncertain. Never claim to have seen the user's screen or accessed the web unless you actually have."
+  systemPrompt: "You are Mikan, a warm, witty, affectionate and occasionally teasing desktop AI companion. Be lively and conversational, including playful asides and little character gestures when they fit. Keep factual answers well supported by evidence, and distinguish separate events and milestones carefully. Admit when you are uncertain. Never claim to have seen the user's screen or accessed the web unless you actually have."
 };
 
+// Migrate only the shipped v0.7.1 default; never overwrite a user-edited prompt.
+const PRIOR_DEFAULT_SYSTEM_PROMPT = "You are Mikan, a witty, curious, warm and occasionally teasing desktop AI companion. Keep replies conversational and concise, leading with the actual answer. Show personality through wit and tone, not repetitive stage directions or obligatory questions. Be genuinely useful and admit when you are uncertain. Never claim to have seen the user's screen or accessed the web unless you actually have.";
 const SETTINGS_KEY = "mikan/settings/v1";
 
 export function loadSettings(): Settings {
@@ -64,7 +66,8 @@ export function loadSettings(): Settings {
       autoRememberUser: data.autoRememberUser !== false,
       autoRememberMikan: data.autoRememberMikan !== false,
       model: typeof data.model === "string" ? data.model : DEFAULT_SETTINGS.model,
-      systemPrompt: typeof data.systemPrompt === "string" ? data.systemPrompt : DEFAULT_SETTINGS.systemPrompt,
+      systemPrompt: typeof data.systemPrompt === "string" && data.systemPrompt !== PRIOR_DEFAULT_SYSTEM_PROMPT
+        ? data.systemPrompt : DEFAULT_SETTINGS.systemPrompt,
       appearance: readAppearance(data.appearance),
       personality: readPersonality(data.personality)
     };

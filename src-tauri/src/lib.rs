@@ -3,6 +3,7 @@ mod web_reader;
 mod search_service;
 mod agent_tools;
 mod research_intent;
+mod source_enrichment;
 mod memory;
 mod memory_extraction;
 use futures_util::{future::{AbortHandle, Abortable}, StreamExt};
@@ -283,6 +284,19 @@ async fn chat_stream_impl(
                 return Ok(ChatCompletion {
                     content, stats: None, sources, search_query, sources_carried_over
                 });
+            }
+
+            // Time-sensitive research benefits from real article paragraphs.
+            // Search snippets can mix an intermediate test with a later goal
+            // and omit the key distinction between two similarly named stages.
+            if research_intent::needs_primary_source_verification(&messages) {
+                let _ = app.emit("mikan://activity", json!({
+                    "requestId": request.request_id,
+                    "text": "Checking official sources…"
+                }));
+                source_enrichment::enrich_official_sources(
+                    &app, &mut sources, &query, request.cache_hours
+                ).await;
             }
 
             // Previous assistant text can contain hallucinations. For web research
