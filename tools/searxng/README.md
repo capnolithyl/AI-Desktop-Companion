@@ -63,3 +63,7 @@ To troubleshoot: `docker compose logs --tail 80`.
 - Result snippets are **untrusted external content**. The prompt tells the model not to follow instructions in results. This reduces risk, but is not a perfect prompt-injection defense.
 - External result URLs are opened in your default browser through the Tauri opener plugin, not in Mikan's app window.
 - No search result caching or persistent conversations in this first version.
+
+## Starting after Windows restarts (v0.5)
+
+Docker Desktop must itself be running. Enable **Docker Desktop → Settings → General → Start Docker Desktop when you sign in** if you want hands-free startup. The Compose file now uses `restart: unless-stopped` so the container restarts with Docker unless you explicitly stopped it. To update an existing container's policy without recreating it, Mikan's new `/search-start` command performs `docker update --restart unless-stopped mikan-searxng` first. Mikan also supports `/search-stop` and `/search-status` and Settings → Internet controls. One-time initial Docker/Compose installation is still required.

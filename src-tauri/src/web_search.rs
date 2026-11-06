@@ -9,10 +9,10 @@ const MAX_RESULTS: usize = 8;
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SearchResult {
-    title: String,
-    url: String,
-    content: String,
-    engine: String,
+    pub title: String,
+    pub url: String,
+    pub content: String,
+    pub engine: String,
 }
 
 fn local_searxng_url(endpoint: &str) -> Result<String, String> {

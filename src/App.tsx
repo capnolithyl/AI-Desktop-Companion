@@ -2,27 +2,31 @@ import { useCallback, useEffect, useRef, useState, type CSSProperties, type Mous
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { webContext, type WebResult } from "./web-search";
+import { webContext, pageContext, type PageDocument, type WebResult } from "./web-search";
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { register, unregister } from "@tauri-apps/plugin-global-shortcut";
 import {
   ArrowLeft, ArrowUp, Cat, Check, Clock3, History,
-  ExternalLink, LoaderCircle, MessageCircle, RotateCw, Search, Settings2, SlidersHorizontal, Sparkles, SquarePen, X
+  BookOpen, ExternalLink, HardDrive, LoaderCircle, MessageCircle, RotateCw, Search, Settings2, SlidersHorizontal, Sparkles, SquarePen, X
 } from "lucide-react";
 import {
   DEFAULT_SETTINGS, DEFAULT_APPEARANCE, loadPortrait, loadSettings, savePortrait, saveSettings,
   type Message, type Settings
 } from "./storage";
 import {
-  DEFAULT_PERSONALITY, PERSONALITY_TRAITS, PERSONALITY_PRESETS,
+  PERSONALITY_TRAITS, PERSONALITY_PRESETS,
   findPreset, personalityGuidance, randomPersonality, type Personality
 } from "./personality";
 import { PersonalityPresets, PersonalitySliders } from "./PersonalityControls";
 import { parseSlashCommand, SLASH_HELP } from "./slash-commands";
 
-type Screen = "compact" | "log" | "settings" | "search" | "personality" | "help";
+type Screen = "compact" | "log" | "settings" | "search" | "page" | "personality" | "help";
+type SettingsTab = "ai" | "internet" | "appearance";
+type SearchService = { state: string; message: string };
+type CacheInfo = { pages: number; bytes: number };
+type Activity = { requestId: string; text: string };
 type Connection = { mode: "loading" | "online" | "offline"; text: string };
 type ChatChunk = { requestId: string; content: string };
 type OllamaStats = {
@@ -33,7 +37,7 @@ type OllamaStats = {
   promptEvalDurationNs: number | null;
   evalDurationNs: number | null;
 };
-type ChatCompletion = { content: string; stats: OllamaStats | null };
+type ChatCompletion = { content: string; stats: OllamaStats | null; sources: WebResult[] };
 type Diagnostics = { elapsedMs: number; firstTokenMs: number | null; model: string; stats: OllamaStats | null };
 type LogMessage = Message & { createdAt: number; diagnostics?: Diagnostics; failed?: boolean; sources?: WebResult[] };
 const HOTKEY = "Control+Alt+M";
@@ -111,6 +115,17 @@ export default function App() {
   const [screen, setScreen] = useState<Screen>("compact");
   const [settings, setSettings] = useState<Settings>(loadSettings);
   const [draft, setDraft] = useState<Settings>(settings);
+  const [settingsTab, setSettingsTab] = useState<SettingsTab>("ai");
+  const [service, setService] = useState<SearchService | null>(null);
+  const [serviceBusy, setServiceBusy] = useState(false);
+  const [serviceError, setServiceError] = useState<string | null>(null);
+  const [cacheInfo, setCacheInfo] = useState<CacheInfo | null>(null);
+  const [page, setPage] = useState<PageDocument | null>(null);
+  const [pageUrl, setPageUrl] = useState("");
+  const [pageError, setPageError] = useState<string | null>(null);
+  const [pageBusy, setPageBusy] = useState(false);
+  const [pageReturn, setPageReturn] = useState<"search" | "compact">("compact");
+  const [activity, setActivity] = useState("Thinking…");
   const [messages, setMessages] = useState<LogMessage[]>([]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
@@ -128,6 +143,7 @@ export default function App() {
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const logRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const pageInputRef = useRef<HTMLInputElement>(null);
   const portraitUrl = useRef<string | null>(null);
 
   const focusInput = useCallback(() => {
@@ -201,6 +217,7 @@ export default function App() {
   useEffect(() => {
     if (screen === "compact") focusInput();
     if (screen === "search") requestAnimationFrame(() => searchInputRef.current?.focus());
+    if (screen === "page") requestAnimationFrame(() => pageInputRef.current?.focus());
   }, [screen, focusInput]);
 
   const clearChat = () => {
@@ -211,11 +228,38 @@ export default function App() {
     goCompact();
   };
 
-  const openSettings = () => {
+  const refreshService = async () => {
+    setServiceBusy(true);
+    setServiceError(null);
+    try { setService(await invoke<SearchService>("search_service", { action: "status" })); }
+    catch (error) { setServiceError(errorText(error)); }
+    finally { setServiceBusy(false); }
+  };
+  const manageService = async (action: "start" | "stop" | "status") => {
+    setServiceBusy(true);
+    setServiceError(null);
+    try {
+      const state = await invoke<SearchService>("search_service", { action });
+      setService(state);
+      if (screen === "compact") setFeedback(state.message);
+    } catch (error) {
+      const text = errorText(error);
+      setServiceError(text);
+      setFeedback(text);
+    } finally { setServiceBusy(false); }
+  };
+  const refreshCache = async () => {
+    try { setCacheInfo(await invoke<CacheInfo>("web_cache_info")); }
+    catch (error) { console.warn("Web cache unavailable:", error); }
+  };
+  const openSettingsTab = (tab: SettingsTab) => {
+    setSettingsTab(tab);
     setDraft(settings);
-    void refreshModels(settings.endpoint);
+    if (tab === "ai") void refreshModels(settings.endpoint);
+    if (tab === "internet") { void refreshService(); void refreshCache(); }
     setScreen("settings");
   };
+  const openSettings = () => openSettingsTab("ai");
 
   const choosePortrait = async (file?: File) => {
     if (!file) return;
@@ -252,13 +296,14 @@ export default function App() {
   };
 
   const saveConfiguration = () => {
-    const updated = {
+    const updated: Settings = {
+      ...draft,
       endpoint: draft.endpoint.trim().replace(/\/+$/, ""),
       model: draft.model.trim(),
       systemPrompt: draft.systemPrompt.trim(),
       searxngEndpoint: draft.searxngEndpoint.trim().replace(/\/+$/, ""),
       appearance: { ...draft.appearance },
-      personality: { ...draft.personality }
+      personality: { ...settings.personality }
     };
     setSettings(updated);
     saveSettings(updated);
@@ -287,6 +332,24 @@ export default function App() {
     } finally {
       setSearchBusy(false);
     }
+  };
+
+  const openPage = async (url: string, fromSearch = false, refresh = false) => {
+    setPageUrl(url);
+    setPageReturn(fromSearch ? "search" : "compact");
+    setScreen("page");
+    setPage(null);
+    setPageError(null);
+    if (!url.trim()) return;
+    setPageBusy(true);
+    try {
+      const document = await invoke<PageDocument>("read_page", {
+        url: url.trim(), refresh, ttlHours: settings.cacheHours
+      });
+      setPage(document);
+      void refreshCache();
+    } catch (error) { setPageError(errorText(error)); }
+    finally { setPageBusy(false); }
   };
 
   const runSlashCommand = (text: string): void => {
@@ -334,15 +397,25 @@ export default function App() {
       case "search":
         void performSearch(argument);
         return;
+      case "read":
+        void openPage(argument);
+        return;
+      case "search-start":
+        void manageService("start"); return;
+      case "search-stop":
+        void manageService("stop"); return;
+      case "search-status":
+        void manageService("status"); return;
+      case "internet":
+        openSettingsTab("internet"); return;
       case "log":
       case "history": setScreen("log"); return;
-      case "settings":
+      case "settings": openSettings(); return;
       case "appearance":
-      case "portrait":
+      case "portrait": openSettingsTab("appearance"); return;
       case "prompt":
       case "endpoint":
-      case "models":
-        openSettings(); return;
+      case "models": openSettingsTab("ai"); return;
       case "model":
         if (!argument) { openSettings(); return; }
         if (busy) { setFeedback("Wait until Mikan finishes her reply before switching models."); return; }
@@ -422,7 +495,7 @@ export default function App() {
     }
   };
 
-  const send = async (withSearch?: { query: string; results: WebResult[] }) => {
+  const send = async (withSearch?: { query: string; results: WebResult[]; page?: PageDocument }) => {
     const text = withSearch ? withSearch.query : input.trim();
     if (!text) return;
 
@@ -444,13 +517,18 @@ export default function App() {
     }]);
     setInput("");
     setBusy(true);
+    setActivity("Thinking…");
     goCompact();
     const started = performance.now();
     let firstTokenMs: number | null = null;
     let accumulated = "";
     let unlisten: UnlistenFn | null = null;
+    let unlistenActivity: UnlistenFn | null = null;
 
     try {
+      unlistenActivity = await listen<Activity>("mikan://activity", event => {
+        if (event.payload.requestId === requestId) setActivity(event.payload.text);
+      });
       unlisten = await listen<ChatChunk>("mikan://chat", event => {
         if (event.payload.requestId !== requestId || !event.payload.content) return;
         if (firstTokenMs == null) firstTokenMs = performance.now() - started;
@@ -466,9 +544,12 @@ export default function App() {
           requestId,
           endpoint: settings.endpoint,
           model: settings.model,
+          autoSearch: settings.autoSearch && !withSearch,
+          searxngEndpoint: settings.searxngEndpoint,
+          cacheHours: settings.cacheHours,
           messages: [
             { role: "system", content: [settings.systemPrompt.trim(), personalityGuidance(settings.personality)].filter(Boolean).join("\n\n") },
-            ...(withSearch ? [{ role: "user", content: webContext(withSearch.query, withSearch.results) }] : []),
+            ...(withSearch ? [{ role: "user", content: withSearch.page ? pageContext(withSearch.query, withSearch.page) : webContext(withSearch.query, withSearch.results) }] : []),
             ...history.map(m => ({ role: m.role, content: m.content }))
           ]
         }
@@ -482,7 +563,7 @@ export default function App() {
       };
       const finalText = completion.content || accumulated || "(The model returned no visible text.)";
       setMessages(current => current.map(m =>
-        m.id === assistantId ? { ...m, content: finalText, diagnostics } : m
+        m.id === assistantId ? { ...m, content: finalText, diagnostics, sources: completion.sources?.length ? completion.sources : m.sources } : m
       ));
     } catch (error) {
       const message = errorText(error);
@@ -496,6 +577,7 @@ export default function App() {
         : m
       ));
     } finally {
+      unlistenActivity?.();
       unlisten?.();
       setBusy(false);
       focusInput();
@@ -503,7 +585,7 @@ export default function App() {
   };
 
   const lastReply = [...messages].reverse().find(m => m.role === "assistant");
-  const replyText = busy ? (lastReply?.content || "Thinking…") : (feedback ?? lastReply?.content ?? greeting);
+  const replyText = busy ? (lastReply?.content || activity) : (feedback ?? lastReply?.content ?? greeting);
 
   const theme = {
     "--accent": settings.appearance.accent,
@@ -651,7 +733,7 @@ export default function App() {
           <span>Check Docker Desktop, tools/searxng/start.ps1, and the SearXNG URL in Settings.</span>
         </div>}
         {!searchBusy && !searchError && !searchHasRun && <div className="search-empty">
-          <Search size={32}/> Search is on demand. No automatic web requests yet.
+          <Search size={32}/> Search manually here, or enable Auto web search under Settings → Internet.
         </div>}
         {!searchBusy && !searchError && searchHasRun && searchResults.length === 0 &&
           <div className="search-empty">No results returned. Try another query or check SearXNG's enabled search engines.</div>}
@@ -662,6 +744,8 @@ export default function App() {
           </button>
           {result.content && <p>{result.content}</p>}
           <small>{result.engine || new URL(result.url).hostname}</small>
+          {result.url.startsWith("https://") && <button className="inline-action read-result" type="button"
+            onClick={() => void openPage(result.url, true)}><BookOpen size={14}/> Read full page</button>}
         </article>)}
       </div>
       <footer className="search-footer">
@@ -670,6 +754,51 @@ export default function App() {
           onClick={() => void send({ query: searchQuery, results: searchResults })}>
           <Sparkles size={16}/> Ask Mikan
         </button>
+      </footer>
+    </section>}
+
+    {screen === "page" && <section className="drawer" role="dialog" aria-label="Webpage reader">
+      <header className="drawer-header">
+        <button className="back-button" title="Go back" onClick={() => {
+          setScreen(pageReturn);
+          if (pageReturn === "compact") focusInput();
+        }}><ArrowLeft size={19}/></button>
+        <div className="drawer-title"><strong>Webpage reader</strong><span>Public HTTPS · local page cache</span></div>
+      </header>
+      <form className="search-form" onSubmit={event => {
+        event.preventDefault();
+        if (!pageBusy) void openPage(pageUrl, pageReturn === "search");
+      }}>
+        <input ref={pageInputRef} aria-label="Webpage URL" placeholder="https://example.com/article"
+          value={pageUrl} onChange={event => { setPageUrl(event.target.value); setPage(null); setPageError(null); }}/>
+        <button className="secondary-action" type="submit" disabled={!pageUrl.trim() || pageBusy}>
+          {pageBusy ? <LoaderCircle size={16} className="spin"/> : <BookOpen size={16}/>} Read
+        </button>
+      </form>
+      <div className="search-body">
+        {pageBusy && <div className="search-empty"><LoaderCircle size={32} className="spin"/> Reading webpage…</div>}
+        {!pageBusy && pageError && <div className="search-error"><strong>Reader unavailable</strong><p>{pageError}</p>
+          <span>Some sites block automated retrieval. Only public HTTPS HTML/text pages are allowed.</span>
+        </div>}
+        {!pageBusy && !pageError && !page && <div className="search-empty"><BookOpen size={32}/> Enter a public webpage URL to read and cache its main text.</div>}
+        {!pageBusy && page && <article className="page-document">
+          <h2>{page.title}</h2>
+          <button type="button" className="source-link" title={page.url}
+            onClick={() => void openSource(page.url)}>{page.url} <ExternalLink size={13}/></button>
+          <div className="page-meta">{page.fromCache ? "Loaded from local cache" : "Fetched and cached"} ·
+            {" "}Saved {new Date(page.fetchedAt * 1000).toLocaleString()}</div>
+          <div className="page-text">{page.content}</div>
+        </article>}
+      </div>
+      <footer className="search-footer">
+        <button type="button" className="secondary-action" disabled={pageBusy || !pageUrl.trim()}
+          onClick={() => void openPage(pageUrl, pageReturn === "search", true)}><RotateCw size={14}/> Refresh</button>
+        <button type="button" className="save-button" disabled={busy || pageBusy || !page}
+          onClick={() => {
+            if (!page) return;
+            const result: WebResult = {title: page.title,url:page.url,content:page.content.slice(0,450),engine:"webpage"};
+            void send({ query: "Summarize and explain this webpage: " + page.title, results: [result], page });
+          }}><Sparkles size={16}/> Ask Mikan</button>
       </footer>
     </section>}
 
@@ -709,115 +838,156 @@ export default function App() {
     {screen === "settings" && <section className="drawer" role="dialog" aria-label="Mikan settings">
       <header className="drawer-header">
         <button className="back-button" title="Back to companion" onClick={goCompact}><ArrowLeft size={19}/></button>
-        <div className="drawer-title"><strong>Settings</strong><span>Mikan v0.4.1 · Local first</span></div>
-        <button className="secondary-action" onClick={() => setDraft({ ...DEFAULT_SETTINGS, appearance: { ...DEFAULT_APPEARANCE }, personality: { ...DEFAULT_PERSONALITY } })}><RotateCw size={14}/> Reset</button>
+        <div className="drawer-title"><strong>Settings</strong><span>Mikan v0.5 · Local first</span></div>
+        <button className="secondary-action" onClick={() => setDraft(current => ({
+          ...current,
+          ...(settingsTab === "ai" ? {
+            endpoint: DEFAULT_SETTINGS.endpoint, model: DEFAULT_SETTINGS.model,
+            systemPrompt: DEFAULT_SETTINGS.systemPrompt
+          } : settingsTab === "internet" ? {
+            searxngEndpoint: DEFAULT_SETTINGS.searxngEndpoint, autoSearch: false, cacheHours: 24
+          } : { appearance: { ...DEFAULT_APPEARANCE } })
+        }))}><RotateCw size={14}/> Reset tab</button>
       </header>
+      <nav className="settings-tabs" aria-label="Settings categories">
+        {([["ai", "AI & Models"], ["internet", "Internet"], ["appearance", "Appearance"]] as const).map(([tab, label]) =>
+          <button type="button" key={tab} className={settingsTab === tab ? "settings-tab active" : "settings-tab"}
+            onClick={() => { setSettingsTab(tab); if (tab === "internet") { void refreshService(); void refreshCache(); } }}>
+            {label}
+          </button>
+        )}
+      </nav>
       <div className="settings-body">
-        <label className="setting-field">Ollama endpoint
-          <input spellCheck={false} value={draft.endpoint} onChange={event => setDraft({ ...draft, endpoint: event.target.value })}/>
-          <small>Local HTTP only. No API key required.</small>
-        </label>
-        <label className="setting-field">Ollama model
-          <select
-            aria-label="Installed Ollama models"
-            value={availableModels.includes(draft.model) ? draft.model : "__custom__"}
-            onChange={event => setDraft({ ...draft, model: event.target.value === "__custom__" ? "" : event.target.value })}
-          >
-            {availableModels.map(name => <option key={name} value={name}>{name}</option>)}
-            <option value="__custom__">Other / enter model name manually</option>
-          </select>
-          {!availableModels.includes(draft.model) && <input
-            aria-label="Manual Ollama model name"
-            spellCheck={false}
-            placeholder="model-name:tag"
-            value={draft.model}
-            onChange={event => setDraft({ ...draft, model: event.target.value })}
-          />}
-          <small>{availableModels.length
-            ? `${availableModels.length} locally installed model${availableModels.length === 1 ? "" : "s"} detected. Choose one or enter a name manually.`
-            : connection.mode === "loading"
-              ? "Checking Ollama for installed models…"
-              : "No models listed. Check Ollama or enter a model name manually."}</small>
-        </label>
-        <button className="inline-action" disabled={connection.mode === "loading"}
-          onClick={() => void refreshModels(draft.endpoint)}><RotateCw size={14}/> Refresh installed models</button>
-        <div className="appearance-heading">
-          <strong>Internet search</strong>
-          <small>Self-hosted SearXNG. No paid API key needed. Searching is on demand.</small>
-        </div>
-        <label className="setting-field">SearXNG URL
-          <input spellCheck={false} value={draft.searxngEndpoint}
-            onChange={event => setDraft({ ...draft, searxngEndpoint: event.target.value })}
-            placeholder="http://127.0.0.1:8888"/>
-          <small>Start the SearXNG Docker container first. Only localhost is supported.</small>
-        </label>
-        <label className="setting-field">Personality prompt
-          <textarea rows={6} value={draft.systemPrompt} onChange={event => setDraft({ ...draft, systemPrompt: event.target.value })}/>
-          <small>The sliders below add short behavioral guidance without replacing this prompt.</small>
-        </label>
-        <div className="appearance-heading personality-heading">
-          <strong>Personality</strong>
-          <small>Tune Mikan's style. Sliders are tendencies, not exact guarantees.</small>
-        </div>
-        <PersonalityPresets value={draft.personality}
-          onChange={personality => setDraft(current => ({ ...current, personality }))}/>
-        <PersonalitySliders value={draft.personality}
-          onChange={personality => setDraft(current => ({ ...current, personality }))}/>
-        <button type="button" className="inline-action personality-reset"
-          onClick={() => setDraft(current => ({ ...current, personality: { ...DEFAULT_PERSONALITY } }))}>
-          <RotateCw size={14}/> Reset personality
-        </button>
-        <label className="setting-field">Character portrait
-          <input type="file" accept="image/png,image/jpeg,image/webp" onChange={event => void choosePortrait(event.target.files?.[0])}/>
-          <small>The included portrait is the default. You can still replace it here.</small>
-          {imageError && <small className="field-error">{imageError}</small>}
-          {portrait && <span className="portrait-ready"><Check size={15}/> Portrait ready</span>}
-        </label>
-        <div className="appearance-heading">
-          <strong>Appearance</strong>
-          <small>Customize Mikan's colors and typography.</small>
-        </div>
-        <div className="setting-field">
-          <span>Accent color</span>
-          <div className="color-choices">
-            {ACCENTS.map(color => <button key={color} type="button"
-              className={draft.appearance.accent.toLowerCase() === color ? "color-swatch selected" : "color-swatch"}
-              style={{backgroundColor: color}} aria-label={`Select accent ${color}`}
-              title={color} onClick={() => setDraft({ ...draft, appearance: { ...draft.appearance, accent: color } })} />)}
-            <label className="custom-color">Custom
-              <input type="color" value={draft.appearance.accent}
-                onChange={e => setDraft({ ...draft, appearance: { ...draft.appearance, accent: e.target.value } })}/>
-            </label>
+        {settingsTab === "ai" && <>
+          <div className="settings-section-title">Local AI</div>
+          <label className="setting-field">Ollama endpoint
+            <input spellCheck={false} value={draft.endpoint}
+              onChange={event => setDraft({ ...draft, endpoint: event.target.value })}/>
+            <small>Local HTTP only. No API key required.</small>
+          </label>
+          <label className="setting-field">Ollama model
+            <select aria-label="Installed Ollama models"
+              value={availableModels.includes(draft.model) ? draft.model : "__custom__"}
+              onChange={event => setDraft({ ...draft, model: event.target.value === "__custom__" ? "" : event.target.value })}>
+              {availableModels.map(name => <option key={name} value={name}>{name}</option>)}
+              <option value="__custom__">Other / enter model name manually</option>
+            </select>
+            {!availableModels.includes(draft.model) && <input aria-label="Manual Ollama model name"
+              spellCheck={false} placeholder="model-name:tag" value={draft.model}
+              onChange={event => setDraft({ ...draft, model: event.target.value })}/>}
+            <small>{availableModels.length} local model(s) detected.</small>
+          </label>
+          <button className="inline-action" disabled={connection.mode === "loading"}
+            onClick={() => void refreshModels(draft.endpoint)}><RotateCw size={14}/> Refresh models</button>
+          <label className="setting-field">System/persona prompt
+            <textarea rows={9} value={draft.systemPrompt}
+              onChange={event => setDraft({ ...draft, systemPrompt: event.target.value })}/>
+            <small>Core personality instructions. Presets and sliders live in the separate Personality panel.</small>
+          </label>
+          <button type="button" className="secondary-action"
+            onClick={() => setScreen("personality")}><SlidersHorizontal size={15}/> Open Personality controls</button>
+        </>}
+        {settingsTab === "internet" && <>
+          <div className="settings-section-title">Local search service</div>
+          <label className="setting-field">SearXNG endpoint
+            <input spellCheck={false} value={draft.searxngEndpoint}
+              onChange={event => setDraft({ ...draft, searxngEndpoint: event.target.value })}
+              placeholder="http://127.0.0.1:8888"/>
+            <small>Only localhost endpoints. Docker Desktop must be running.</small>
+          </label>
+          <div className="service-panel">
+            <div><strong>SearXNG container</strong>
+              <span className={service?.state === "running" ? "service-running" : "service-muted"}>
+                {service?.message || "Checking Docker status…"}
+              </span>
+            </div>
+            <div className="service-buttons">
+              <button type="button" className="secondary-action" disabled={serviceBusy}
+                onClick={() => void manageService("start")}>Start</button>
+              <button type="button" className="secondary-action" disabled={serviceBusy}
+                onClick={() => void manageService("stop")}>Stop</button>
+              <button type="button" className="secondary-action" disabled={serviceBusy}
+                onClick={() => void manageService("status")}><RotateCw size={14}/> Status</button>
+            </div>
+            {serviceError && <small className="field-error">{serviceError}</small>}
+            <small>Start also enables Docker's unless-stopped restart policy. To start after reboot, enable Docker Desktop launch at login. Initial Docker setup is still required once.</small>
           </div>
-        </div>
-        <div className="setting-field">
-          <span>Panel color</span>
-          <div className="color-choices">
-            {PANELS.map(color => <button key={color} type="button"
-              className={draft.appearance.panel.toLowerCase() === color ? "color-swatch selected" : "color-swatch"}
-              style={{backgroundColor: color}} aria-label={`Select panel ${color}`}
-              title={color} onClick={() => setDraft({ ...draft, appearance: { ...draft.appearance, panel: color } })} />)}
-            <label className="custom-color">Custom
-              <input type="color" value={draft.appearance.panel}
-                onChange={e => setDraft({ ...draft, appearance: { ...draft.appearance, panel: e.target.value } })}/>
-            </label>
+          <label className="settings-toggle">
+            <input type="checkbox" checked={draft.autoSearch}
+              onChange={e => setDraft(current => ({ ...current, autoSearch: e.target.checked }))}/>
+            <span><strong>Automatic web tools</strong>
+              <small>Allow Ollama to decide when to search and read public webpages. Slower on some models; requests go to external sites. Off by default.</small>
+            </span>
+          </label>
+          <div className="settings-section-title"><HardDrive size={17}/> Webpage cache</div>
+          <label className="setting-field">Refresh cached pages after
+            <select value={draft.cacheHours} onChange={e => setDraft(current => ({ ...current, cacheHours: Number(e.target.value) }))}>
+              <option value={6}>6 hours</option>
+              <option value={24}>24 hours</option>
+              <option value={72}>3 days</option>
+              <option value={168}>7 days</option>
+              <option value={720}>30 days</option>
+            </select>
+            <small>Previously read pages are stored locally. They aren't model training data.</small>
+          </label>
+          <div className="service-panel cache-panel">
+            <span>{cacheInfo ? `${cacheInfo.pages} pages · ${Math.round(cacheInfo.bytes / 1024)} KB` : "Cache not checked"}</span>
+            <button type="button" className="secondary-action" onClick={() => {
+              void invoke<CacheInfo>("clear_web_cache")
+                .then(setCacheInfo).catch(e => setServiceError(errorText(e)));
+            }}>Clear cache</button>
           </div>
-        </div>
-        <label className="setting-field">Panel opacity: {Math.round(draft.appearance.opacity * 100)}%
-          <input type="range" min="65" max="100" step="5" value={Math.round(draft.appearance.opacity * 100)}
-            onChange={e => setDraft({ ...draft, appearance: { ...draft.appearance, opacity: Number(e.target.value) / 100 } })}/>
-        </label>
-        <label className="setting-field">Font family
-          <select value={draft.appearance.fontFamily}
-            onChange={e => setDraft({ ...draft, appearance: { ...draft.appearance, fontFamily: e.target.value as typeof draft.appearance.fontFamily } })}>
-            {FONTS.map(font => <option key={font} value={font}>{font}</option>)}
-          </select>
-        </label>
-        <label className="setting-field">Message font size: {draft.appearance.fontSize}px
-          <input type="range" min="11" max="20" step="1" value={draft.appearance.fontSize}
-            onChange={e => setDraft({ ...draft, appearance: { ...draft.appearance, fontSize: Number(e.target.value) } })}/>
-        </label>
-        <p className="settings-note"><Sparkles size={16}/> Chats currently last until you quit the app. Persistence and voice are coming later.</p>
+          <button type="button" className="inline-action" onClick={() => void openPage("")}><BookOpen size={14}/> Open webpage reader</button>
+        </>}
+        {settingsTab === "appearance" && <>
+          <div className="settings-section-title">Character</div>
+          <label className="setting-field">Portrait
+            <input type="file" accept="image/png,image/jpeg,image/webp"
+              onChange={event => void choosePortrait(event.target.files?.[0])}/>
+            <small>Your existing Mikan portrait remains stored on this device.</small>
+            {imageError && <small className="field-error">{imageError}</small>}
+            {portrait && <span className="portrait-ready"><Check size={15}/> Portrait ready</span>}
+          </label>
+          <div className="settings-section-title">Colors and typography</div>
+          <div className="setting-field"><span>Accent color</span>
+            <div className="color-choices">
+              {ACCENTS.map(color => <button key={color} type="button"
+                className={draft.appearance.accent.toLowerCase() === color ? "color-swatch selected" : "color-swatch"}
+                style={{ backgroundColor: color }} aria-label={`Select accent ${color}`}
+                onClick={() => setDraft({ ...draft, appearance: { ...draft.appearance, accent: color } })}/>)}
+              <label className="custom-color">Custom
+                <input type="color" value={draft.appearance.accent}
+                  onChange={e => setDraft({ ...draft, appearance: { ...draft.appearance, accent: e.target.value } })}/>
+              </label>
+            </div>
+          </div>
+          <div className="setting-field"><span>Panel color</span>
+            <div className="color-choices">
+              {PANELS.map(color => <button key={color} type="button"
+                className={draft.appearance.panel.toLowerCase() === color ? "color-swatch selected" : "color-swatch"}
+                style={{ backgroundColor: color }} aria-label={`Select panel ${color}`}
+                onClick={() => setDraft({ ...draft, appearance: { ...draft.appearance, panel: color } })}/>)}
+              <label className="custom-color">Custom
+                <input type="color" value={draft.appearance.panel}
+                  onChange={e => setDraft({ ...draft, appearance: { ...draft.appearance, panel: e.target.value } })}/>
+              </label>
+            </div>
+          </div>
+          <label className="setting-field">Panel opacity: {Math.round(draft.appearance.opacity * 100)}%
+            <input type="range" min="65" max="100" step="5" value={Math.round(draft.appearance.opacity * 100)}
+              onChange={e => setDraft({ ...draft, appearance: { ...draft.appearance, opacity: Number(e.target.value) / 100 } })}/>
+          </label>
+          <label className="setting-field">Font family
+            <select value={draft.appearance.fontFamily}
+              onChange={e => setDraft({ ...draft, appearance: { ...draft.appearance, fontFamily: e.target.value as typeof draft.appearance.fontFamily } })}>
+              {FONTS.map(font => <option key={font} value={font}>{font}</option>)}
+            </select>
+          </label>
+          <label className="setting-field">Message font size: {draft.appearance.fontSize}px
+            <input type="range" min="11" max="20" step="1" value={draft.appearance.fontSize}
+              onChange={e => setDraft({ ...draft, appearance: { ...draft.appearance, fontSize: Number(e.target.value) } })}/>
+          </label>
+        </>}
       </div>
       <footer className="settings-footer">
         <button className="save-button" onClick={saveConfiguration}><Check size={17}/> Save settings</button>
