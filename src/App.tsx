@@ -3,6 +3,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { webContext, pageContext, type PageDocument, type WebResult } from "./web-search";
+import { priorResearchSources } from "./research-context";
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
@@ -44,9 +45,9 @@ type OllamaStats = {
   promptEvalDurationNs: number | null;
   evalDurationNs: number | null;
 };
-type ChatCompletion = { content: string; stats: OllamaStats | null; sources: WebResult[]; searchQuery?: string | null };
+type ChatCompletion = { content: string; stats: OllamaStats | null; sources: WebResult[]; searchQuery?: string | null; sourcesCarriedOver?: boolean };
 type Diagnostics = { elapsedMs: number; firstTokenMs: number | null; model: string; stats: OllamaStats | null };
-type LogMessage = Message & { createdAt: number; diagnostics?: Diagnostics; failed?: boolean; sources?: WebResult[]; searchQuery?: string };
+type LogMessage = Message & { createdAt: number; diagnostics?: Diagnostics; failed?: boolean; sources?: WebResult[]; searchQuery?: string; sourcesCarriedOver?: boolean };
 const HOTKEY = "Control+Alt+M";
 const BUNDLED_PORTRAIT = "/mikan.png";
 
@@ -58,7 +59,8 @@ function restoreMessage(saved: PersistedMessage): LogMessage {
     ...(metadata.diagnostics && typeof metadata.diagnostics === "object"
       ? { diagnostics: metadata.diagnostics as Diagnostics } : {}),
     ...(Array.isArray(metadata.sources) ? { sources: metadata.sources as WebResult[] } : {}),
-    ...(typeof metadata.searchQuery === "string" ? { searchQuery: metadata.searchQuery } : {})
+    ...(typeof metadata.searchQuery === "string" ? { searchQuery: metadata.searchQuery } : {}),
+    ...(metadata.sourcesCarriedOver === true ? { sourcesCarriedOver: true } : {})
   };
 }
 
@@ -67,7 +69,8 @@ function archiveMetadata(message: LogMessage): object {
     failed: message.failed === true,
     diagnostics: message.diagnostics ?? null,
     sources: message.sources ?? [],
-    searchQuery: message.searchQuery ?? null
+    searchQuery: message.searchQuery ?? null,
+    sourcesCarriedOver: message.sourcesCarriedOver === true
   };
 }
 
@@ -592,7 +595,6 @@ export default function App() {
       case "mikan-memories": openMemory("character"); return;
       case "canon-set":
       case "remember-mikan": {
-        // An explicit label/value pair creates a stable character fact, not a fact about the user.
         const separator = argument.indexOf(":");
         if (separator < 1 || !argument.slice(separator + 1).trim()) {
           setFeedback("Use /canon-set favorite color: orange (or open /canon to choose a category).");
@@ -758,6 +760,7 @@ export default function App() {
     const user: LogMessage = { id: crypto.randomUUID(), role: "user", content: text, createdAt: Date.now() };
     const assistantId = crypto.randomUUID();
     const history = [...messages, user];
+    const priorSources = !withSearch ? priorResearchSources(messages, text) : [];
     const conversationId = activeConversationId ?? crypto.randomUUID();
     setActiveConversationId(conversationId);
     const persistMessage = async (message: LogMessage) => {
@@ -812,6 +815,8 @@ export default function App() {
           autoSearch: settings.autoSearch && !withSearch,
           searxngEndpoint: settings.searxngEndpoint,
           cacheHours: settings.cacheHours,
+          contextWindow: settings.contextWindow,
+          priorSources,
           messages: [
             { role: "system", content: [settings.systemPrompt.trim(), personalityGuidance(settings.personality), runtimeContext(), memoryContext(userFacts, text), characterContext(characterFacts, text)].filter(Boolean).join("\n\n") },
             ...(withSearch ? [{ role: "user", content: withSearch.page ? pageContext(withSearch.query, withSearch.page) : webContext(withSearch.query, withSearch.results) }] : []),
@@ -830,7 +835,8 @@ export default function App() {
       const assistant: LogMessage = {
         id: assistantId, role: "assistant", content: finalText, createdAt: Date.now(),
         diagnostics, sources: completion.sources?.length ? completion.sources : withSearch?.results,
-        searchQuery: completion.searchQuery || withSearch?.query
+        searchQuery: completion.searchQuery || withSearch?.query,
+        sourcesCarriedOver: completion.sourcesCarriedOver === true
       };
       setMessages(current => current.map(m => m.id === assistantId ? assistant : m));
       await persistMessage(assistant);
@@ -990,7 +996,9 @@ export default function App() {
             <div className="research-warning">This answer does not cite any individual retrieved sources. Verify factual claims in the excerpts below.</div>}
           {(m.sources?.length || m.searchQuery) && <div className="message-sources">
             {m.searchQuery && <div className="research-query"><Search size={13}/> SearXNG query: <code>{m.searchQuery}</code></div>}
-            <strong>Retrieved sources (claims are not independently verified)</strong>
+            <strong>{m.sourcesCarriedOver
+              ? "Sources carried from earlier research (not refreshed)"
+              : "Retrieved sources (claims are not independently verified)"}</strong>
             {m.sources?.map((source, index) => <div className="source-entry" key={source.url}>
               <button className="source-link" type="button"
                 onClick={() => void openSource(source.url)} title={source.url}>
@@ -1154,7 +1162,8 @@ export default function App() {
           ...current,
           ...(settingsTab === "ai" ? {
             endpoint: DEFAULT_SETTINGS.endpoint, model: DEFAULT_SETTINGS.model,
-            systemPrompt: DEFAULT_SETTINGS.systemPrompt
+            systemPrompt: DEFAULT_SETTINGS.systemPrompt,
+            contextWindow: DEFAULT_SETTINGS.contextWindow
           } : settingsTab === "internet" ? {
             searxngEndpoint: DEFAULT_SETTINGS.searxngEndpoint, autoSearch: false, cacheHours: 24
           } : { appearance: { ...DEFAULT_APPEARANCE } })
@@ -1190,6 +1199,19 @@ export default function App() {
           </label>
           <button className="inline-action" disabled={connection.mode === "loading"}
             onClick={() => void refreshModels(draft.endpoint)}><RotateCw size={14}/> Refresh models</button>
+          <label className="setting-field">Context window
+            <select aria-label="Ollama context window" value={draft.contextWindow ?? "default"}
+              onChange={event => setDraft(current => ({
+                ...current, contextWindow: event.target.value === "default" ? null : Number(event.target.value)
+              }))}>
+              <option value="default">Ollama default</option>
+              <option value="4096">4K tokens</option>
+              <option value="8192">8K tokens</option>
+              <option value="16384">16K tokens</option>
+              <option value="32768">32K tokens</option>
+            </select>
+            <small>Try 8K or 16K for research follow-ups. Larger windows use more VRAM and can slow responses. Only Mikan's Ollama requests are affected.</small>
+          </label>
           <label className="setting-field">System/persona prompt
             <textarea rows={9} value={draft.systemPrompt}
               onChange={event => setDraft({ ...draft, systemPrompt: event.target.value })}/>

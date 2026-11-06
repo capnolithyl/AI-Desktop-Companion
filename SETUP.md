@@ -110,9 +110,19 @@ Use `/memories` to open the saved personal-facts panel, or `/remember I enjoy st
 
 Local memory data is saved in the application's Windows AppData folder. It is not synced or encrypted. Webpage caching and Mikan's character canon remain separate. See [MEMORY.md](MEMORY.md) for current scope and privacy limitations.
 
+## v0.6.2: Ollama context length and research continuity
+
+In **Settings → AI & Models → Context window**, choose **Ollama default**, **4K**, **8K**, **16K** or **32K**. The default preserves Ollama's existing setting. On this 16 GB VRAM PC, test 8K first and 16K if response speed and GPU memory usage remain acceptable. A larger context uses additional VRAM; confirm full GPU offloading and the active `CONTEXT` column with `ollama ps`.
+
+The setting applies to Mikan's Ollama chat and web-tool planning requests only. It does not change other Ollama apps or override the server permanently.
+
+For follow-up questions, Mikan carries a **bounded set of source excerpts** from the latest relevant research answer (up to 8 results, limited excerpts) into the next request, rather than relying only on her own previous summary. The chat log marks these as **Sources carried from earlier research (not refreshed)**, preserving transparency and keeping external data separate from system instructions. Sources are already stored in each conversation's local SQLite message metadata, so reopening a chat can reuse them.
+
+When the question explicitly asks about a schedule or next milestone, Mikan can perform a new focused SearXNG search. Pure opinions/predictions may reuse prior evidence, citing it when it supports the premise and labeling speculation. Old source snippets are not automatic verification of present-day facts.
+
+Changing the context window can improve retention, but won't guarantee factual accuracy. With automatic web tools disabled, prior available sources can still inform immediate follow-ups without a fresh online request.
+
 
 ## v0.7.0: Mikan's own memory
 
-The **Memory** drawer now separates **About you**, **About Mikan** and **Chats**. Use `/canon` to edit Mikan's personal favorites, interests, dislikes, hobbies and traits, stored in a dedicated SQLite table. Use `/canon-set favorite color: orange` to add a specific detail; change an existing one in the editor; use `/canon-forget <id>` to delete it. `/remember` still records facts about the user instead.
-
-This release does **not** extract Mikan's preferences automatically from conversations. Existing chat history and user facts remain intact; see [MEMORY.md](MEMORY.md).
+Use `/canon` to edit Mikan's own favorites, interests, dislikes, hobbies and traits separately from **About you** and **Chats**. Use `/canon-set favorite color: orange` to save a new preference, or `/canon-forget <id>` to remove it. User facts still use `/remember`. Character canon persists locally in SQLite and is not automatically extracted from chat yet. See [MEMORY.md](MEMORY.md).

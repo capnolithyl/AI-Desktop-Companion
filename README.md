@@ -2,7 +2,9 @@
 
 A local-first, personal Windows AI desktop companion powered by Tauri 2, React, TypeScript, and Ollama. Free hobby project for one PC.
 
-**v0.7.0:** Mikan character canon: manually managed favorites, likes, dislikes, hobbies and traits kept separate from user memories, persistent across restarts, with a dedicated About Mikan editor and /canon shortcuts.
+**v0.7.0:** Manually managed Mikan character canon, with separate About Mikan details, preferences, hobbies and traits kept independent from the user's memories.
+
+**v0.6.2:** Research follow-ups can reuse previously retrieved source excerpts, with clear stale-source labeling. Optional 4K/8K/16K/32K per-request context setting under AI & Models, preserving the Ollama default unless changed. Schedule-specific follow-ups now search for verified dates rather than extrapolating from AI summaries.
 
 **v0.6.1:** Improved search-query extraction for multipart questions and a broader SearXNG retry when research initially returns zero results.
 

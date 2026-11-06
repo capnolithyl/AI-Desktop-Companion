@@ -1,12 +1,12 @@
 use futures_util::StreamExt;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::{collections::HashSet, time::Duration};
 
 const MAX_RESULT_BYTES: usize = 2_000_000;
 const MAX_RESULTS: usize = 8;
 
-#[derive(Clone, Serialize)]
+#[derive(Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SearchResult {
     pub title: String,
