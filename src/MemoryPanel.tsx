@@ -3,6 +3,7 @@ import { ArrowLeft, Check, MessageCircle, Plus, RotateCw, Trash2, X } from "luci
 import type { MemoryConversation, UserFact } from "./memory-client";
 
 type Props = {
+  initialTab?: "chats" | "facts";
   conversations: MemoryConversation[];
   facts: UserFact[];
   currentId: string | null;
@@ -24,10 +25,10 @@ function shortDate(seconds: number): string {
 
 /** Separate fact and conversation controls; no automatic memory extraction in phase one. */
 export function MemoryPanel({
-  conversations, facts, currentId, busy, error, onClose, onNew,
+  initialTab = "facts", conversations, facts, currentId, busy, error, onClose, onNew,
   onOpen, onDeleteChat, onAddFact, onEditFact, onDeleteFact, onRefresh
 }: Props) {
-  const [tab, setTab] = useState<"chats" | "facts">("facts");
+  const [tab, setTab] = useState<"chats" | "facts">(initialTab);
   const [newFact, setNewFact] = useState("");
   const [editId, setEditId] = useState<number | null>(null);
   const [editValue, setEditValue] = useState("");
