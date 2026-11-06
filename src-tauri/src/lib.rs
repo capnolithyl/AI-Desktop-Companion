@@ -2,6 +2,7 @@ mod web_search;
 mod web_reader;
 mod search_service;
 mod agent_tools;
+mod research_intent;
 use futures_util::{future::{AbortHandle, Abortable}, StreamExt};
 use std::{collections::HashMap, sync::Mutex};
 use serde::{Deserialize, Serialize};
@@ -62,6 +63,7 @@ struct ChatCompletion {
     content: String,
     stats: Option<ChatStats>,
     sources: Vec<web_search::SearchResult>,
+    search_query: Option<String>,
 }
 
 fn local_origin(endpoint: &str) -> Result<String, String> {
@@ -211,29 +213,66 @@ async fn chat_stream_impl(
         json!({"role":m.role,"content":m.content})
     }).collect();
     let mut sources = Vec::new();
+    let mut search_query: Option<String> = None;
     if request.auto_search {
-        let plan = agent_tools::prepare(
-            &app, &client, &url, &request.model, &request.request_id,
-            &mut messages, &request.searxng_endpoint, request.cache_hours
-        ).await?;
-        sources = plan.sources;
-        if let Some((content, data)) = plan.answer {
-            if content.trim().is_empty() {
-                return Err("The model returned no answer or tool requests".into());
+        let question = messages.iter().rev().find(|m| m["role"] == "user")
+            .and_then(|m| m["content"].as_str()).unwrap_or("").to_owned();
+
+        if let Some(query) = research_intent::explicit_research_query(&messages) {
+            // Explicit research intent: search the user's actual subject before the
+            // model can reinterpret "Cattle Decapitation" as a slaughter procedure.
+            // This path works for models without Ollama tool-calling support.
+            let _ = app.emit("mikan://activity", json!({
+                "requestId": request.request_id,
+                "text": format!("Searching: {query}")
+            }));
+            sources = web_search::web_search(request.searxng_endpoint.clone(), query.clone()).await?;
+            search_query = Some(query.clone());
+            if sources.is_empty() {
+                let content = format!("I searched for {query}, but SearXNG returned no results. Try a more specific search query.");
+                return Ok(ChatCompletion {
+                    content, stats: None, sources, search_query
+                });
             }
-            let _ = app.emit("mikan://chat", ChatChunk {
-                request_id: request.request_id,
-                content: content.clone()
-            });
-            let stats = ChatStats {
-                output_tokens: data["eval_count"].as_u64(),
-                prompt_tokens: data["prompt_eval_count"].as_u64(),
-                total_duration_ns: data["total_duration"].as_u64(),
-                load_duration_ns: data["load_duration"].as_u64(),
-                prompt_eval_duration_ns: data["prompt_eval_duration"].as_u64(),
-                eval_duration_ns: data["eval_duration"].as_u64(),
-            };
-            return Ok(ChatCompletion { content, stats: Some(stats), sources });
+
+            // Previous assistant text can contain hallucinations. For web research
+            // retain only the user's conversation context, not prior model claims.
+            messages.retain(|m| m["role"] == "system" || m["role"] == "user");
+            let evidence = research_intent::evidence_instruction(&question, &sources);
+            let insert_at = usize::from(messages.first().is_some_and(|m| m["role"] == "system"));
+            messages.insert(insert_at, json!({"role":"system","content": evidence}));
+        } else {
+            let plan = agent_tools::prepare(
+                &app, &client, &url, &request.model, &request.request_id,
+                &mut messages, &request.searxng_endpoint, request.cache_hours
+            ).await?;
+            sources = plan.sources;
+            if sources.is_empty() {
+                if let Some((content, data)) = plan.answer {
+                    if content.trim().is_empty() {
+                        return Err("The model returned no answer or tool requests".into());
+                    }
+                    let _ = app.emit("mikan://chat", ChatChunk {
+                        request_id: request.request_id,
+                        content: content.clone()
+                    });
+                    let stats = ChatStats {
+                        output_tokens: data["eval_count"].as_u64(),
+                        prompt_tokens: data["prompt_eval_count"].as_u64(),
+                        total_duration_ns: data["total_duration"].as_u64(),
+                        load_duration_ns: data["load_duration"].as_u64(),
+                        prompt_eval_duration_ns: data["prompt_eval_duration"].as_u64(),
+                        eval_duration_ns: data["eval_duration"].as_u64(),
+                    };
+                    return Ok(ChatCompletion { content, stats: Some(stats), sources, search_query });
+                }
+            } else {
+                // Even a model-initiated tool call must end with a source-focused
+                // generation step, not an unchecked pre-generated answer.
+                let evidence = research_intent::evidence_instruction(&question, &sources);
+                let insert_at = usize::from(messages.first().is_some_and(|m| m["role"] == "system"));
+                messages.insert(insert_at, json!({"role":"system","content": evidence}));
+            }
         }
     }
     let response = client.post(url)
@@ -292,7 +331,7 @@ async fn chat_stream_impl(
     }
     // The final text is returned as well as streamed so that no event-ordering
     // race can lose the last characters when the frontend removes its listener.
-    Ok(ChatCompletion { content, stats, sources })
+    Ok(ChatCompletion { content, stats, sources, search_query })
 }
 
 fn toggle_window(app: &tauri::AppHandle) {
