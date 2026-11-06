@@ -10,11 +10,11 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { register, unregister } from "@tauri-apps/plugin-global-shortcut";
 import {
   ArrowLeft, ArrowUp, Brain, Cat, Check, Clock3, Copy, History,
-  BookOpen, ExternalLink, HardDrive, LoaderCircle, MessageCircle, RotateCw, Search, Settings2, SlidersHorizontal, Sparkles, Square, SquarePen, X
+  BookOpen, ExternalLink, HardDrive, LoaderCircle, MessageCircle, RotateCw, Search, Settings2, SlidersHorizontal, Sparkles, Square, SquarePen, Volume2, X
 } from "lucide-react";
 import {
-  DEFAULT_SETTINGS, DEFAULT_APPEARANCE, loadPortrait, loadSettings, savePortrait, saveSettings,
-  type Message, type Settings
+  DEFAULT_SETTINGS, DEFAULT_APPEARANCE, DEFAULT_VOICE, loadPortrait, loadSettings, savePortrait, saveSettings,
+  type Message, type Settings, type VoiceSettings
 } from "./storage";
 import {
   PERSONALITY_TRAITS, PERSONALITY_PRESETS,
@@ -30,9 +30,11 @@ import {
   type CharacterCategory, type CharacterFact
 } from "./memory-client";
 import { MemoryPanel } from "./MemoryPanel";
+import { toSpeechText, VOICE_TEST_LINE } from "./speech";
 
 type Screen = "compact" | "log" | "settings" | "search" | "page" | "personality" | "help" | "memory";
-type SettingsTab = "ai" | "internet" | "appearance";
+type SettingsTab = "ai" | "internet" | "voice" | "appearance";
+type VoiceHealth = { ready: boolean; modelLoaded: boolean; device: string | null };
 type SearchService = { state: string; message: string };
 type CacheInfo = { pages: number; bytes: number };
 type Activity = { requestId: string; text: string };
@@ -204,6 +206,96 @@ export default function App() {
   const activeRequestId = useRef<string | null>(null);
   const automaticMemoryQueue = useRef<Promise<void>>(Promise.resolve());
   const stopRequested = useRef(false);
+  const [voiceState, setVoiceState] = useState<"idle" | "synthesizing" | "playing">("idle");
+  const [voiceError, setVoiceError] = useState<string | null>(null);
+  const [voiceHealth, setVoiceHealth] = useState<VoiceHealth | null>(null);
+  const [voiceChecking, setVoiceChecking] = useState(false);
+  const voiceSerial = useRef(0);
+  const voiceAudio = useRef<HTMLAudioElement | null>(null);
+  const voiceUrl = useRef<string | null>(null);
+
+  const releaseVoiceAudio = useCallback(() => {
+    if (voiceAudio.current) {
+      voiceAudio.current.onended = null;
+      voiceAudio.current.onerror = null;
+      voiceAudio.current.pause();
+      voiceAudio.current.removeAttribute("src");
+      voiceAudio.current = null;
+    }
+    if (voiceUrl.current) {
+      URL.revokeObjectURL(voiceUrl.current);
+      voiceUrl.current = null;
+    }
+  }, []);
+  const stopSpeech = useCallback(() => {
+    voiceSerial.current += 1;
+    releaseVoiceAudio();
+    setVoiceState("idle");
+  }, [releaseVoiceAudio]);
+  useEffect(() => () => {
+    voiceSerial.current += 1;
+    releaseVoiceAudio();
+  }, [releaseVoiceAudio]);
+
+  const speak = useCallback(async (source: string, voice: VoiceSettings = settings.voice) => {
+    stopSpeech();
+    const text = toSpeechText(source);
+    if (!text) {
+      setVoiceError("This reply has no speakable text.");
+      return;
+    }
+    const serial = voiceSerial.current;
+    setVoiceError(null);
+    setVoiceState("synthesizing");
+    try {
+      const encoded = await invoke<string>("voice_synthesize", {
+        endpoint: voice.endpoint, text, voicePrompt: voice.prompt
+      });
+      if (serial !== voiceSerial.current) return;
+      const bytes = Uint8Array.from(atob(encoded), character => character.charCodeAt(0));
+      const url = URL.createObjectURL(new Blob([bytes], { type: "audio/wav" }));
+      voiceUrl.current = url;
+      const player = new Audio(url);
+      voiceAudio.current = player;
+      player.playbackRate = voice.speed;
+      player.onended = () => {
+        if (serial === voiceSerial.current) {
+          releaseVoiceAudio();
+          setVoiceState("idle");
+        }
+      };
+      player.onerror = () => {
+        if (serial === voiceSerial.current) {
+          releaseVoiceAudio();
+          setVoiceState("idle");
+          setVoiceError("Windows could not play the generated WAV audio.");
+        }
+      };
+      await player.play();
+      if (serial === voiceSerial.current) setVoiceState("playing");
+    } catch (error) {
+      if (serial !== voiceSerial.current) return;
+      releaseVoiceAudio();
+      setVoiceState("idle");
+      setVoiceError(errorText(error));
+    }
+  }, [releaseVoiceAudio, settings.voice, stopSpeech]);
+
+  const checkVoice = async (endpoint: string) => {
+    setVoiceChecking(true);
+    setVoiceError(null);
+    setVoiceHealth(null);
+    try {
+      const status = await invoke<VoiceHealth>("voice_health", { endpoint });
+      if (!status.ready) throw new Error("Voice service is not ready.");
+      setVoiceHealth(status);
+    } catch (error) {
+      setVoiceError(errorText(error));
+    } finally {
+      setVoiceChecking(false);
+    }
+  };
+
 
   useEffect(() => { setCopyLogState("idle"); }, [messages, screen]);
 
@@ -414,6 +506,7 @@ export default function App() {
   };
   const openConversation = async (id: string) => {
     if (busy) return;
+    stopSpeech();
     const stored = await memoryApi.listMessages(id);
     setMessages(stored.map(restoreMessage));
     setActiveConversationId(id);
@@ -438,6 +531,7 @@ export default function App() {
 
   const clearChat = () => {
     if (busy || !memoryReady) return;
+    stopSpeech();
     setMessages([]);
     setActiveConversationId(null);
     setFeedback(null);
@@ -530,11 +624,14 @@ export default function App() {
       model: draft.model.trim(),
       systemPrompt: draft.systemPrompt.trim(),
       searxngEndpoint: draft.searxngEndpoint.trim().replace(/\/+$/, ""),
+      voice: { ...draft.voice, endpoint: draft.voice.endpoint.trim().replace(/\/+$/, "") },
       appearance: { ...draft.appearance },
       personality: { ...settings.personality }
     };
+    stopSpeech();
     setSettings(updated);
     saveSettings(updated);
+    setVoiceHealth(null);
     goCompact();
   };
 
@@ -777,6 +874,7 @@ export default function App() {
   };
 
   const stopGeneration = async () => {
+    stopSpeech();
     const requestId = activeRequestId.current;
     if (!requestId || stopRequested.current) return;
     stopRequested.current = true;
@@ -803,6 +901,7 @@ export default function App() {
 
     if (busy) return;
     if (!memoryReady) { setFeedback("Loading conversation memory…"); return; }
+    stopSpeech();
     setFeedback(null);
     const user: LogMessage = { id: crypto.randomUUID(), role: "user", content: text, createdAt: Date.now() };
     const assistantId = crypto.randomUUID();
@@ -888,6 +987,7 @@ export default function App() {
       setMessages(current => current.map(m => m.id === assistantId ? assistant : m));
       await persistMessage(assistant);
       queueAutomaticMemory(conversationId, user.id, assistant.id);
+      if (settings.voice.autoSpeak) void speak(finalText);
     } catch (error) {
       const message = errorText(error);
       const stopped = message === "Generation stopped" || stopRequested.current;
@@ -975,12 +1075,20 @@ export default function App() {
               onClick={() => setScreen("personality")}><SlidersHorizontal size={17}/></button>
             <button className="dock-icon" title="Memory and conversations (/memories)" aria-label="Memory and conversations"
               onClick={() => openMemory("facts")}><Brain size={17}/></button>
+            <button type="button" className="dock-icon" disabled={!lastReply?.content || lastReply.failed}
+              title={voiceState === "idle" ? "Speak latest reply" : voiceState === "synthesizing" ? "Cancel pending speech" : "Stop speech"}
+              aria-label={voiceState === "idle" ? "Speak latest reply" : "Stop speech"}
+              onClick={() => voiceState === "idle" ? void speak(lastReply?.content ?? "") : stopSpeech()}>
+              {voiceState === "synthesizing" ? <LoaderCircle className="spin" size={17}/> :
+                voiceState === "playing" ? <Square size={15} fill="currentColor"/> : <Volume2 size={17}/>}
+            </button>
             <button className="dock-icon" title="Conversation log (/log)" aria-label="Conversation log" onClick={() => setScreen("log")}><History size={17}/></button>
             <button className="dock-icon" title="Settings (/settings)" aria-label="Settings" onClick={openSettings}><Settings2 size={17}/></button>
             <button className="dock-icon" title="Hide Mikan" aria-label="Hide Mikan" onClick={() => void invoke("hide_companion")}><X size={18}/></button>
           </div>
         </div>
         <div className="latest-reply"><MarkdownText text={replyText}/></div>
+        {voiceError && <div className="voice-error" role="alert">Voice: {voiceError}</div>}
       </div>
       <div className="input-row">
         <textarea
@@ -1065,6 +1173,8 @@ export default function App() {
         {messages.map(m => <article key={m.id} className={`log-message ${m.role}`}>
           <div className="log-message-header">
             <strong>{m.role === "user" ? "YOU" : "MIKAN"}</strong>
+            {m.role === "assistant" && !m.failed && !!m.content && <button type="button" className="voice-log-action"
+              title="Read this message aloud" onClick={() => void speak(m.content)}><Volume2 size={13}/> Speak</button>}
             <time>{new Date(m.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</time>
           </div>
           <div className={m.failed ? "message-error message-content" : "message-content"}><MarkdownText text={m.content || (busy ? "Thinking…" : "")}/></div>
@@ -1246,11 +1356,12 @@ export default function App() {
             contextWindow: DEFAULT_SETTINGS.contextWindow
           } : settingsTab === "internet" ? {
             searxngEndpoint: DEFAULT_SETTINGS.searxngEndpoint, autoSearch: false, cacheHours: 24
-          } : { appearance: { ...DEFAULT_APPEARANCE } })
+          } : settingsTab === "voice" ? { voice: { ...DEFAULT_VOICE } }
+            : { appearance: { ...DEFAULT_APPEARANCE } })
         }))}><RotateCw size={14}/> Reset tab</button>
       </header>
       <nav className="settings-tabs" aria-label="Settings categories">
-        {([["ai", "AI & Models"], ["internet", "Internet"], ["appearance", "Appearance"]] as const).map(([tab, label]) =>
+        {([["ai", "AI & Models"], ["internet", "Internet"], ["voice", "Voice"], ["appearance", "Appearance"]] as const).map(([tab, label]) =>
           <button type="button" key={tab} className={settingsTab === tab ? "settings-tab active" : "settings-tab"}
             onClick={() => { setSettingsTab(tab); if (tab === "internet") { void refreshService(); void refreshCache(); } }}>
             {label}
@@ -1358,6 +1469,48 @@ export default function App() {
             }}>Clear cache</button>
           </div>
           <button type="button" className="inline-action" onClick={() => void openPage("")}><BookOpen size={14}/> Open webpage reader</button>
+        </>}
+        {settingsTab === "voice" && <>
+          <div className="settings-section-title"><Volume2 size={17}/> Local voice · Qwen3-TTS</div>
+          <div className="settings-note">First version requires running the optional Python service from tools/tts.
+            VoiceDesign may vary between replies; we can save a stable Mikan voice later.</div>
+          <label className="setting-field">Local speech server
+            <input spellCheck={false} value={draft.voice.endpoint}
+              onChange={event => { setDraft(current => ({ ...current, voice: { ...current.voice, endpoint: event.target.value } })); setVoiceHealth(null); }}
+              placeholder="http://127.0.0.1:8765"/>
+            <small>HTTP localhost only. Install/start instructions: tools/tts/README.md</small>
+          </label>
+          <div className="service-panel">
+            <div><strong>{voiceHealth?.ready ? "Voice server responding" : "Local voice service"}</strong>
+              <small>{voiceHealth?.ready
+                ? (voiceHealth.modelLoaded ? `Model loaded on ${voiceHealth.device || "configured device"}` : "Server online · model loads on first speech")
+                : "No connection checked yet. Starting the server is manual in this prototype."}</small></div>
+            <div className="service-buttons">
+              <button type="button" className="secondary-action" disabled={voiceChecking}
+                onClick={() => void checkVoice(draft.voice.endpoint)}>
+                {voiceChecking ? <LoaderCircle size={14} className="spin"/> : <RotateCw size={14}/>} Check connection</button>
+              <button type="button" className="secondary-action" disabled={voiceState !== "idle"}
+                onClick={() => void speak(VOICE_TEST_LINE, draft.voice)}><Volume2 size={14}/> Test voice</button>
+              {voiceState !== "idle" && <button type="button" className="secondary-action"
+                onClick={stopSpeech}><Square size={13}/> Stop</button>}
+            </div>
+            {voiceError && <small className="field-error" role="alert">{voiceError}</small>}
+          </div>
+          <label className="settings-toggle">
+            <input type="checkbox" checked={draft.voice.autoSpeak}
+              onChange={event => setDraft(current => ({ ...current, voice: { ...current.voice, autoSpeak: event.target.checked } }))}/>
+            <span><strong>Speak new replies automatically</strong>
+              <small>Off by default. You can always use the speaker icon on a reply.</small></span>
+          </label>
+          <label className="setting-field">Mikan's voice description
+            <textarea rows={6} value={draft.voice.prompt} maxLength={650}
+              onChange={event => setDraft(current => ({ ...current, voice: { ...current.voice, prompt: event.target.value } }))}/>
+            <small>Warm, playful and lower pitched rather than exaggeratedly squeaky. Model output is not perfectly repeatable.</small>
+          </label>
+          <label className="setting-field">Playback speed · {draft.voice.speed.toFixed(2)}×
+            <input type="range" min="0.8" max="1.2" step="0.05" value={draft.voice.speed}
+              onChange={event => setDraft(current => ({ ...current, voice: { ...current.voice, speed: Number(event.target.value) } }))}/>
+          </label>
         </>}
         {settingsTab === "appearance" && <>
           <div className="settings-section-title">Character</div>
