@@ -21,7 +21,7 @@ const timeSensitive = /\b(latest|recent|recently|updates?|new (?:album|single|re
 // Requests to find public information for the user are research, not self-disclosure.
 const explicitResearch = /^(?:(?:please\s+)?(?:search(?:\s+(?:for|the web))?|look up|lookup|google|find(?:\s+me)?|research|verify|fact.check|check online|browse)\b|(?:can|could|would|will)\s+you\s+(?:please\s+)?(?:search|look up|find(?:\s+me)?|research|verify|check online|browse)\b)/i;
 const factSeeking = /^(?:what(?:'s| is| are| was| were| happened| caused)|when (?:is|was|did|will)|where (?:is|are|was|did)|who (?:is|are|was|were)|how (?:many|much|long|old)|tell me (?:about|more about)|what do you know about|what can you tell me about)\b/i;
-const informationQuestion = /^(?:what(?:'s|\s)|when\b|where\b|who\b|why\b|how\b|which\b|is\b|are\b|was\b|were\b|does\b|did\b|do\b|can\b|could\b|will\b|would\b|has\b|have\b|any (?:news|updates)\b|tell me\b|give me\b)/i;
+const informationQuestion = /^(?:what(?:'s|\s)|when\b|where\b|who\b|why\b|how\b|which\b|is\b|are\b|was\b|were\b|does\b|did\b|do\b|can\b|could\b|will\b|would\b|has\b|have\b|any (?:news|updates|info|details|word)\b|tell me\b|give me\b)/i;
 const followUpQuestion = /^(?:(?:and|also|but|so)\s+)?(?:what(?:'s|\s)|when\b|where\b|why\b|how\b|who\b|which\b|is\b|are\b|does\b|did\b|do\b|can\b|could\b|will\b|would\b|any updates\b|tell me more\b)/i;
 // "me" is the recipient in "find me" and "tell me", not private context.
 const privateContext = /\b(?:my|mine|our|ours)\b|\b(?:about|with|to)\s+me\b/i;
@@ -104,7 +104,9 @@ const ambiguousTopics = new Set([
 ]);
 function specificTopic(subject: string | null): subject is string {
   return !!subject && subject.length >= 3 && subject.length < 120 &&
-    !ambiguousTopics.has(subject.trim().toLowerCase());
+    !ambiguousTopics.has(subject.trim().toLowerCase()) &&
+    // "A potential release date" is a detail, not a named search subject.
+    !/^(?:(?:a|an|the|their|its|any|some)\s+)?(?:(?:new|next|latest|upcoming|potential|possible|confirmed)\s+)*(?:album|record|release(?:\s+date|\s+window)?|title|singles?|songs?|track(?:\s*list)?|date|timeline|schedule|news|info|details)\b/i.test(subject.trim());
 }
 function quoteTopic(subject: string): string {
   const words = subject.split(/\s+/);
@@ -127,12 +129,26 @@ export function buildResearchQuery(question: string, previous: ResearchTurn[] = 
   const previousTopic = users.slice(-8).reverse().map(researchSubject).find(specificTopic);
   const albumRequest = ["new album", "next album", "upcoming album", "another album",
     "new record", "next record", "upcoming record"].some(signal => lower.includes(signal));
+  const asksAlbumDetail = /\b(?:release date|release window|album title|working title|title|singles?|track\s*list|songs?)\b/i.test(text);
+  const albumContext = [...users.slice(-4), text].some(turn =>
+    /\b(?:album|record|studio recording)\b/i.test(turn));
+  // Build a new search about the last *user-named* artist, not the
+  // generic nouns in "Any release date, title, or singles?"
+  const detailsOfPriorAlbum = asksAlbumDetail && albumContext && specificTopic(previousTopic) &&
+    !specificTopic(researchSubject(text));
   let topic = researchSubject(text);
   if (!specificTopic(topic) || albumRequest) topic = previousTopic ?? topic;
   const musicContext = [...users, text].slice(-7).some(turn =>
     /\b(?:the band|metal|music|album|musician|artist)\b/i.test(turn));
   let query = specificTopic(topic) ? quoteTopic(topic) : text;
-  if (albumRequest) {
+  if (detailsOfPriorAlbum) {
+    const requested = [
+      /\b(?:release date|release window)\b/i.test(text) ? "release date" : "",
+      /\b(?:title|named|name)\b/i.test(text) ? "title" : "",
+      /\b(?:singles?|tracks?|songs?)\b/i.test(text) ? "singles" : ""
+    ].filter(Boolean).join(" ");
+    query += " next album " + (requested || "details") + " announcement";
+  } else if (albumRequest) {
     query += " next album recording studio announcement";
   } else {
     if (musicContext && !query.toLowerCase().includes(" band")) query += " band";
@@ -150,7 +166,15 @@ export function buildResearchQuery(question: string, previous: ResearchTurn[] = 
  * can still use Ollama's existing optional tool planner.
  */
 export function planResearch(question: string, previous: ResearchTurn[] = []): ResearchPlan {
+  const detailFollowup = isResearchFollowup(question, previous) &&
+    /\b(?:release date|release window|title|singles?|track\s*list|announcement|confirmed date|launch date|tour dates)\b/i.test(question);
   const request = researchRequest(question, previous);
+  if (!request && !detailFollowup) return { mode: "chat", recent: false };
+  // New specifics need fresh evidence, not a model's recollection of an
+  // earlier snippet that may not have mentioned a date or title.
+  if (detailFollowup) {
+    return { mode: "research", query: buildResearchQuery(question, previous), recent: true };
+  }
   if (!request) return { mode: "chat", recent: false };
   const text = question.trim();
   const desktopFactResearch = /^(?:tell me (?:more )?about|what (?:can you tell me|do you know) about|what is new with|any (?:info|news) (?:on|about)|information (?:on|about))\b/i.test(text);
@@ -170,15 +194,20 @@ export function isResearchFollowup(question: string, previous: ResearchTurn[]): 
   const last = previous[previous.length - 1];
   if (text.length < 4 || text.length > 280 || last?.role !== "assistant" ||
       !last.sources?.length) return false;
+  // Elliptical detail questions count as sourced-topic follow-ups even when
+  // the user doesn't say "it" or "their". A newly named entity does not.
+  const detailFollowup = /^(?:any (?:info|details|news|updates|word|confirmation)\b|(?:what|when|how|where) (?:about|is|are)\b|(?:has|have|did|do|is|are|was|were|will)\b)/i.test(text) &&
+    /\b(?:release date|release window|title|singles?|track\s*list|songs?|timeline|schedule|launch date|tour dates)\b/i.test(text) &&
+    !specificTopic(researchSubject(text));
   // Predictions about an immediately researched topic should still cite
   // the evidence instead of trusting an old generated answer.
   const prediction = /^(?:do you think (?:they|it|he|she|this|that|we|the)\b|how likely\b|what are the odds\b|what do you expect\b|would you expect\b|your (?:prediction|take)\b)/i.test(text);
   if (!prediction && /^(?:what do you (?:think|feel)|how do you feel|do you (?:think|like|remember)|what(?:'s| is) my\b)/i.test(text)) return false;
-  if (!prediction && !followUpQuestion.test(text) && !/^(?:tell me more|elaborate|explain that|any updates)\b/i.test(text)) return false;
+  if (!detailFollowup && !prediction && !followUpQuestion.test(text) && !/^(?:tell me more|elaborate|explain that|any updates)\b/i.test(text)) return false;
   // Independent new subjects need fresh evidence, not old citation numbers.
   if (/^(?:what (?:is|are|was|were) (?!it\b|that\b|they\b|those\b)|who (?:is|was) (?!he\b|she\b|that\b)|where (?:is|are) (?!it\b|that\b))/i.test(text)) return false;
   if (/\b(?:about|regarding)\s+(?!that\b|it\b|them\b|those\b|this\b|their\b)\w+/i.test(text)) return false;
-  return prediction || /\b(?:it|its|that|those|this|these|they|them|their|there|he|she|his|her|earlier|previous|same)\b/i.test(text) ||
+  return detailFollowup || prediction || /\b(?:it|its|that|those|this|these|they|them|their|there|he|she|his|her|earlier|previous|same)\b/i.test(text) ||
     /^(?:tell me more|elaborate|any updates|and (?:when|where|how|why|what|who)|what about the (?:timeline|schedule|date|plan|mission|release|source|announcement))\b/i.test(text);
 }
 
