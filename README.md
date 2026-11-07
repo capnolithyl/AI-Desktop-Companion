@@ -2,7 +2,7 @@
 
 A local-first, personal Windows AI desktop companion powered by Tauri 2, React, TypeScript, and Ollama. Free hobby project for one PC.
 
-**v0.7.2:** Shared desktop/Pocket research intent and relevant evidence reuse. Windows still builds source-specific SearXNG queries in Rust with its existing fallback and Ollama model-directed tools, while generic chat skips unnecessary tool planning. Android keeps Tavily and Gemini Nano. Both clients use the same TypeScript routing policy and cross-platform regression tests.
+**v0.7.2:** Shared desktop/Pocket research intent and relevant evidence reuse. Both apps share the desktop-derived entity-aware query builder and source-reuse policy; Windows keeps its Rust compatibility fallback, SearXNG retries, and Ollama model-directed tools for factual questions, while ordinary chat skips unnecessary tool planning. Android keeps Tavily and Gemini Nano. Both clients use the same TypeScript routing policy and cross-platform regression tests.
 
 **v0.7.0:** Manually managed Mikan character canon, with separate About Mikan details, preferences, hobbies and traits kept independent from the user's memories.
 
