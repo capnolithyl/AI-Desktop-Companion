@@ -610,7 +610,7 @@ export default function MobileApp() {
       <div className="pocket-heading">
         <strong>{screen === "chat" ? "Mikan" : title}</strong>
         <span className="pocket-subtitle">
-          POCKET COMPANION · LOCAL · v0.4.3
+          POCKET COMPANION · LOCAL · v0.4.4
           <button type="button" className={`pocket-model-indicator ${model === "READY" ? "ready" : "attention"}`}
             onClick={() => setScreen("settings")} title="View local model status in settings"
             aria-label={`Gemini Nano: ${model.toLowerCase()}. Open model settings`}>
@@ -642,12 +642,16 @@ export default function MobileApp() {
         {active.turns.map(turn => <article className={"pocket-turn " + turn.role} key={turn.id}>
           <strong>{turn.role === "user" ? "YOU" : "MIKAN"}</strong>
           <div className="pocket-bubble">{turn.content ? <ChatMarkdown text={turn.content} onOpenLink={openLink}/> : <LoaderCircle size={16} className="spin"/>}</div>
-          {turn.sources && turn.sources.length > 0 && <div className="pocket-web-sources" aria-label="Sources used in this answer">
-            <span>Sources</span>
-            {turn.sources.slice(0, 5).map((source, index) =>
-              <button type="button" key={source.url} onClick={() => openLink(source.url)}
-                title={source.url}>{index + 1}. {source.title}</button>)}
-          </div>}
+          {turn.sources && turn.sources.length > 0 && <details className="pocket-web-sources">
+            <summary aria-label={`Sources used in this answer, ${turn.sources.length}. Expand or collapse`}>
+              Sources <span className="pocket-source-count">{turn.sources.length}</span>
+            </summary>
+            <div className="pocket-web-source-list">
+              {turn.sources.slice(0, 5).map((source, index) =>
+                <button type="button" key={source.url} onClick={() => openLink(source.url)}
+                  title={source.url}>{index + 1}. {source.title}</button>)}
+            </div>
+          </details>}
         </article>)}
         {intro && <p className="pocket-notice">{intro}</p>}
         {webActivity && <p className="pocket-web-activity" role="status"><LoaderCircle size={14} className="spin"/> {webActivity}</p>}
