@@ -17,7 +17,7 @@ export type ResearchPlan = {
 
 // "now" on its own is conversational ("Yay, it works now"), not a reason
 // to send a private chat message to an external search provider.
-const timeSensitive = /\b(latest|recent|recently|updates?|new (?:album|single|record|release|song|tour)|today|tonight|yesterday|this week|this month|right now|currently|current|upcoming|next (?:album|mission|launch|event|tour|release)|news|202[5-9]|announc\w*|release date|schedule|weather|price|stock|election|president|ceo|updated|new version|newest)\b/i;
+const timeSensitive = /\b(latest|recent|recently|updates?|new (?:album|single|record|release|song|tour)|today|tonight|yesterday|this week|this month|right now|currently|current|upcoming|next (?:album|mission|launch|event|tour|release|major milestone|milestone)|news|202[5-9]|announc\w*|release date|schedule|weather|price|stock|election|president|ceo|updated|new version|newest)\b/i;
 // Requests to find public information for the user are research, not self-disclosure.
 const explicitResearch = /^(?:(?:please\s+)?(?:search(?:\s+(?:for|the web))?|look up|lookup|google|find(?:\s+me)?|research|verify|fact.check|check online|browse)\b|(?:can|could|would|will)\s+you\s+(?:please\s+)?(?:search|look up|find(?:\s+me)?|research|verify|check online|browse)\b)/i;
 const factSeeking = /^(?:what(?:'s| is| are| was| were| happened| caused)|when (?:is|was|did|will)|where (?:is|are|was|did)|who (?:is|are|was|were)|how (?:many|much|long|old)|tell me (?:about|more about)|what do you know about|what can you tell me about)\b/i;
