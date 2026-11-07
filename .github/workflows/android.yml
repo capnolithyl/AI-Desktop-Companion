@@ -48,9 +48,12 @@ jobs:
       - name: Build debug APK
         working-directory: android
         run: gradle :app:assembleDebug :app:testDebugUnitTest --stacktrace
+      - name: Verify APK is installable beside the original
+        run: |
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging android/app/build/outputs/apk/debug/app-debug.apk | grep "package: name='dev.capnolithyl.mikan.pocket.preview'"
       - uses: actions/upload-artifact@v4
         with:
-          name: mikan-pocket-debug-apk
+          name: mikan-pocket-preview-apk
           path: android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 14
