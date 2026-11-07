@@ -73,7 +73,7 @@ function researchSubject(text: string): string | null {
     "the band ", "the group ", "the musician ", "the music artist ",
     "the artist ", "the singer ", "band ", "artist "
   ];
-  for (const prefix of [" about ", " on ", " for ", " regarding "]) {
+  for (const prefix of [" about ", " on ", " for ", " regarding ", " from "]) {
     // The last clause may say "their upcoming album" after naming a band.
     // Keep walking backward until we find a specific subject.
     let end = lower.length;
@@ -137,7 +137,7 @@ export function buildResearchQuery(question: string, previous: ResearchTurn[] = 
   const detailsOfPriorAlbum = asksAlbumDetail && albumContext && specificTopic(previousTopic) &&
     !specificTopic(researchSubject(text));
   let topic = researchSubject(text);
-  if (!specificTopic(topic) || albumRequest) topic = previousTopic ?? topic;
+  if (!specificTopic(topic)) topic = previousTopic ?? topic;
   const musicContext = [...users, text].slice(-7).some(turn =>
     /\b(?:the band|metal|music|album|musician|artist)\b/i.test(turn));
   let query = specificTopic(topic) ? quoteTopic(topic) : text;
