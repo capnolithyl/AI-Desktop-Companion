@@ -342,7 +342,7 @@ class PocketMemoryStore(private val context: Context) :
             }
             "addFact" -> JSONObject().put("fact",insertUser(db,data.getString("fact"),touchDuplicate=true))
             "updateFact" -> {
-                val id = data.getLong("id")
+                val id = data.getLong("recordId")
                 val fact = cleanFact(data.getString("fact"))
                 val changed = db.compileStatement(
                     "UPDATE user_memories SET fact=?,updated_at=unixepoch() WHERE id=?").use { st ->
@@ -352,7 +352,7 @@ class PocketMemoryStore(private val context: Context) :
                 JSONObject()
             }
             "deleteFact" -> {
-                db.delete("user_memories","id=?",arrayOf(data.getLong("id").toString())); JSONObject()
+                db.delete("user_memories","id=?",arrayOf(data.getLong("recordId").toString())); JSONObject()
             }
             "addCanon" -> JSONObject().put("fact",insertCanon(db,
                 data.optString("personaId","mikan"),data.getString("category"),
@@ -368,7 +368,7 @@ class PocketMemoryStore(private val context: Context) :
                     WHERE id=? AND persona_id=?""").use { st ->
                     st.bindString(1,category);st.bindString(2,label)
                     st.bindString(3,label.lowercase(Locale.ROOT));st.bindString(4,value)
-                    st.bindLong(5,data.getLong("id"));st.bindString(6,personaId)
+                    st.bindLong(5,data.getLong("recordId"));st.bindString(6,personaId)
                     st.executeUpdateDelete()
                 }
                 require(changed > 0) { "Character detail not found" }
@@ -378,7 +378,7 @@ class PocketMemoryStore(private val context: Context) :
                 val personaId = data.optString("personaId","mikan")
                 require(persona.matches(personaId)) { "Invalid persona ID" }
                 db.delete("character_facts","id=? AND persona_id=?",
-                    arrayOf(data.getLong("id").toString(),personaId))
+                    arrayOf(data.getLong("recordId").toString(),personaId))
                 JSONObject()
             }
             else -> error("Unsupported memory operation")
