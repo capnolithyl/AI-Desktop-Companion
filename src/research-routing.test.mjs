@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { researchRequest } from "./research-routing.ts";
+import { researchRequest, isPocketResearchFollowup, stripUnsupportedCitations } from "./research-routing.ts";
 
 test("freshness and explicit research use an online search, not a guessed reply", () => {
   assert.deepEqual(researchRequest("What's the latest news about Artemis?"),
@@ -43,4 +43,62 @@ test("personal disclosures and Mikan persona questions are never sent to search 
   ]) {
     assert.equal(researchRequest(question), null, question);
   }
+});
+
+
+test("internet access announcement and confirmations never trigger Tavily", () => {
+  for (const message of [
+    "Guess what you should have Internet access now.",
+    "Yay it works",
+    "It works sort of i guess",
+    "Cool, it actually works now!",
+    "The latest album is fantastic!",
+    "We have an internet connection now",
+    "I'm excited about today's news",
+    "Now we're talking",
+    "Nice, Mikan!"
+  ]) {
+    assert.equal(researchRequest(message), null, message);
+  }
+});
+
+test("explicit and current factual questions still search", () => {
+  for (const question of [
+    "What's the latest news about NASA?",
+    "Is there any news about Artemis?",
+    "What is the current price of gold?",
+    "What is the weather in Michigan today?",
+    "Search the web for the latest NASA mission schedule",
+    "Can you look up the Artemis mission schedule?"
+  ]) {
+    assert.ok(researchRequest(question), question);
+  }
+});
+
+test("only the most recent sourced reply can provide evidence to an informational follow-up", () => {
+  const withSources = [
+    {role:"user",content:"What's the latest news about Artemis?"},
+    {role:"assistant",content:"The launch is planned [1].",
+      sources:[{title:"NASA mission",url:"https://nasa.gov",content:"An update",engine:"Tavily"}]}
+  ];
+  for (const casual of ["Yay it works", "It works sort of i guess", "Nice!", "I like that", "How are you?"]) {
+    assert.equal(isPocketResearchFollowup(casual, withSources), false, casual);
+  }
+  assert.equal(isPocketResearchFollowup("Is that confirmed?", withSources), true);
+  assert.equal(isPocketResearchFollowup("And when is it scheduled?", withSources), true);
+  assert.equal(isPocketResearchFollowup("What is the capital of Japan?", withSources), false);
+  assert.equal(isPocketResearchFollowup("What do you think about it?", withSources), false);
+  assert.equal(isPocketResearchFollowup("Is that confirmed?", [
+    ...withSources, {role:"user",content:"Yay"}, {role:"assistant",content:"Great!"}
+  ]), false);
+  const fresh = researchRequest("And when is the next launch?", withSources);
+  assert.ok(fresh);
+  assert.equal(fresh.recent, true);
+  assert.match(fresh.query, /Artemis/);
+});
+
+test("never display fabricated [1] markers without live research sources", () => {
+  assert.equal(stripUnsupportedCitations("Wonderful! [1] It works [2]!"), "Wonderful! It works!");
+  assert.equal(stripUnsupportedCitations("No sources [1], [2] here."), "No sources, here.");
+  assert.equal(stripUnsupportedCitations("Read [this](https://example.org)"), "Read [this](https://example.org)");
 });
