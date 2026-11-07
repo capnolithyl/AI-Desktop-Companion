@@ -146,7 +146,15 @@ class PocketWebSearch(context: Context) {
             .put("include_answer", false)
             .put("include_raw_content", false)
             .put("include_images", false)
-        if (recent) body.put("time_range", "month")
+        // A generic "latest" search must cover older announcements too.
+        // Otherwise a quiet month can hide the last confirmed album update.
+        // Reserve the month filter for an explicitly short time window.
+        if (recent && Regex(
+                """\\b(today|tonight|this week|this month|past month|last month)\\b""",
+                RegexOption.IGNORE_CASE
+            ).containsMatchIn(query)) {
+            body.put("time_range", "month")
+        }
         val response = request("search", body)
         val output = JSONArray()
         val seen = HashSet<String>()
