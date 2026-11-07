@@ -150,7 +150,7 @@ class PocketWebSearch(context: Context) {
         // Otherwise a quiet month can hide the last confirmed album update.
         // Reserve the month filter for an explicitly short time window.
         if (recent && Regex(
-                """\\b(today|tonight|this week|this month|past month|last month)\\b""",
+                """\b(today|tonight|this week|this month|past month|last month)\b""",
                 RegexOption.IGNORE_CASE
             ).containsMatchIn(query)) {
             body.put("time_range", "month")
