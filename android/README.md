@@ -21,6 +21,11 @@ the `app` configuration.
   online once. After the initial setup, inference occurs on device.
 - Text chat with streaming, a lightweight Mikan personality, and up to the
   last 200 turns saved locally in app-private preferences.
+- A bundled stylized Mikan illustration is shown above chat. Tap **Change Portrait**
+  or the image to pick your original character PNG from Android's file picker.
+  The image is copied to app-private storage and restored on subsequent launches.
+- When the keyboard opens, the portrait hides to give chat room, and the
+  composer stays above the keyboard; hiding the keyboard restores the portrait.
 - No app `INTERNET` permission, account, analytics, cloud conversation backup,
   or connection to the desktop. Model readiness and downloading are handled
   by Android's AICore service, not our app.
@@ -33,9 +38,10 @@ the `app` configuration.
 ## Scope and limitations
 
 Only locally stored chat, not full memory/character canon synchronization,
-voice, screen vision, web search or PC connectivity. The cat icon is temporary
-until Mikan's licensed portrait assets are added to the repository. No fake
-replies: if AICore is unavailable or returns an error, the app shows it.
+voice, screen vision, web search or PC connectivity. The bundled illustration
+is not the original character-sheet artwork; import the original PNG from the
+phone if you want the exact portrait. No fake replies: if AICore is unavailable
+or returns an error, the app shows it.
 
 The architecture intentionally favors a quick functional phone test over
 reimplementing Tauri's Windows-oriented tray/window runtime. If we later
