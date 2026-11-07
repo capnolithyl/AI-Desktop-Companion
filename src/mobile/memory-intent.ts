@@ -64,12 +64,12 @@ function fromUserStatement(source: string, explicit: boolean): UserMemory | null
   if (name) {
     const value = clean(name[1]);
     if (!value || value.length > 80) return null;
-    fact = "The user's name is " + value;
+    fact = "The user is named " + value;
     description = "your name is " + value;
   } else if (favorite) {
     const topic = clean(favorite[1]).toLowerCase();
     const value = clean(favorite[2]);
-    fact = "The user's favorite " + topic + " is " + value;
+    fact = "The user says their favorite " + topic + " is " + value;
     description = "your favorite " + topic + " is " + value;
   } else if (verbs) {
     const action = verbs[1].toLowerCase();
