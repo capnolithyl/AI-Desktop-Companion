@@ -7,7 +7,7 @@
         android:theme="@style/Theme.MikanPocket"
         android:usesCleartextTraffic="false">
         <activity
-            android:name=".MainActivity"
+            android:name=".ReactActivity"
             android:exported="true"
             android:windowSoftInputMode="adjustResize">
             <intent-filter>
