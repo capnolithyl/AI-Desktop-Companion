@@ -45,7 +45,8 @@ function send(method: string, args: Record<string, unknown> = {}, onDelta?: (chu
   const id = "mobile-" + (++sequence);
   return new Promise((resolve, reject) => {
     pending.set(id, { resolve, reject, onDelta });
-    try { window.MikanNative!.postMessage(JSON.stringify({ id, method, ...args })); }
+    try { // Transport request ID must never be overwritten by a database record ID.
+      window.MikanNative!.postMessage(JSON.stringify({ ...args, id, method })); }
     catch (error) {
       pending.delete(id);
       reject(error instanceof Error ? error : new Error(String(error)));
