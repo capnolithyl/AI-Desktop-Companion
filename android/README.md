@@ -29,7 +29,11 @@ nothing to keep. Install a new APK signed with the persistent key. Subsequent
 updates can then install directly over it.
 
 
-## Independent web research (Pocket Mikan v0.4.1)
+## Independent web research (Pocket Mikan v0.4.2)
+
+**v0.4.2:** Fixed the Pixel regression where "Can you find me the latest info on [band]?" never reached Tavily because "me" was incorrectly classified as sensitive personal context. Research routing now recognizes generic requests to find information *for* the user, while keeping personal data local by default. Added tests for the actual Shadows Fall prompt and varied public/private cases. Generic "latest news" searches are no longer hard-limited to the past month, which had excluded older but still most recent album announcements. If automatic search is disabled, Pocket Mikan will not silently guess answers to time-sensitive questions.
+
+
 
 **v0.4.1:** Search only on real research requests, not conversational statements such as "You have internet access now." Cached evidence carries into immediately relevant factual follow-ups only. Casual chat omits old sourced assistant text and unsupported citation markers; the chat auto-scrolls as answers and source links stream in unless you scroll up yourself.
 
