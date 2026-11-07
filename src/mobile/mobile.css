@@ -114,3 +114,8 @@ button:disabled { opacity: .55; cursor: default; }
 .memory-actions .memory-danger { background: #712f42; }
 .spin { animation: pocket-spin .8s linear infinite; }
 @keyframes pocket-spin { to { transform: rotate(360deg); } }
+
+/* Automatic memory toggles mirror the desktop settings without cluttering chat. */
+.pocket-toggle { display: flex; align-items: center; gap: 11px; margin: 9px 0; padding: 12px;
+  background: #302532; border: 1px solid #614955; border-radius: 11px; font-size: 13px; line-height: 1.4; }
+.pocket-toggle input[type="checkbox"] { flex: 0 0 auto; width: 18px; height: 18px; accent-color: var(--pocket-accent); }
