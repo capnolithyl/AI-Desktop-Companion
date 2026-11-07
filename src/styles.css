@@ -505,7 +505,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px
 
 /* v0.5: categorised settings */
 .settings-tabs {
-  display: grid; grid-template-columns: repeat(3, minmax(0,1fr));
+  display: grid; grid-template-columns: repeat(4, minmax(0,1fr));
   gap: 7px; padding: 11px 15px; background: rgba(24,20,28,.66);
   border-bottom: 1px solid #55424f;
 }
@@ -665,3 +665,21 @@ button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px
 .memory-auto-toggle strong { font-size: 12px; font-weight: 600; color: #ffdecf; }
 .memory-auto-toggle small { color: #c7b0c0; font-size: 11px; line-height: 1.5; }
 .memory-auto-warning { color: #f8c79c; font-size: 11px; line-height: 1.5; overflow-wrap: anywhere; }
+
+/* First local voice prototype. Keep controls compact alongside existing dock actions. */
+.voice-error { margin: 2px 2px 8px; font-size: 11px; color: #ffb9c0; line-height: 1.35; }
+.voice-log-action {
+  margin-left: auto; display: inline-flex; align-items: center; gap: 4px;
+  border: 1px solid #725565; background: #4d3845; color: #f8d8ca;
+  border-radius: 7px; padding: 3px 6px; font-size: 10px;
+}
+.voice-log-action:hover { background: #644557; }
+.settings-tab { padding-inline: 3px; }
+
+.voice-reference-field { margin-bottom: 7px; }
+.voice-reference-transcript {
+  padding: 10px; border-radius: 9px; border: 1px solid #674d59;
+  background: #302631; overflow-wrap: anywhere;
+}
+.voice-reference-transcript strong { display: block; margin-bottom: 6px; }
+.voice-reference-transcript small { white-space: pre-wrap; }

@@ -2,7 +2,30 @@ import { DEFAULT_PERSONALITY, readPersonality, type Personality } from "./person
 
 export type ChatRole = "user" | "assistant";
 export type Message = { id: string; role: ChatRole; content: string };
-export type Settings = { endpoint: string; model: string; systemPrompt: string; appearance: Appearance; personality: Personality; searxngEndpoint: string; autoSearch: boolean; autoManageSearch: boolean; cacheHours: number; contextWindow: number | null; autoRememberUser: boolean; autoRememberMikan: boolean };
+export type Settings = { voice: VoiceSettings; endpoint: string; model: string; systemPrompt: string; appearance: Appearance; personality: Personality; searxngEndpoint: string; autoSearch: boolean; autoManageSearch: boolean; cacheHours: number; contextWindow: number | null; autoRememberUser: boolean; autoRememberMikan: boolean };
+
+export type VoiceSettings = {
+  endpoint: string;
+  autoSpeak: boolean;
+  prompt: string;
+  speed: number;
+};
+export const DEFAULT_VOICE: VoiceSettings = {
+  endpoint: "http://127.0.0.1:8765",
+  autoSpeak: false,
+  prompt: "A warm, expressive young adult anime-inspired woman's voice. Medium to slightly high pitch, gentle natural American English, softly playful and lightly teasing. Clear and relaxed, not shrill, squeaky, childlike or constantly overexcited.",
+  speed: 1
+};
+function readVoice(value: unknown): VoiceSettings {
+  const data = value && typeof value === "object" ? value as Partial<VoiceSettings> : {};
+  return {
+    endpoint: typeof data.endpoint === "string" ? data.endpoint : DEFAULT_VOICE.endpoint,
+    autoSpeak: data.autoSpeak === true,
+    prompt: typeof data.prompt === "string" && data.prompt.trim() ? data.prompt : DEFAULT_VOICE.prompt,
+    speed: typeof data.speed === "number" && Number.isFinite(data.speed)
+      ? Math.max(0.8, Math.min(1.2, data.speed)) : DEFAULT_VOICE.speed
+  };
+}
 
 export type Appearance = {
   accent: string;
@@ -35,6 +58,7 @@ function readAppearance(value: unknown): Appearance {
 
 export const DEFAULT_SETTINGS: Settings = {
   endpoint: "http://127.0.0.1:11434",
+  voice: { ...DEFAULT_VOICE },
   searxngEndpoint: "http://127.0.0.1:8888",
   autoSearch: false,
   autoManageSearch: false,
@@ -55,6 +79,7 @@ export function loadSettings(): Settings {
     const data = JSON.parse(localStorage.getItem(SETTINGS_KEY) ?? "{}") as Partial<Settings>;
     return {
       endpoint: typeof data.endpoint === "string" ? data.endpoint : DEFAULT_SETTINGS.endpoint,
+      voice: readVoice(data.voice),
       searxngEndpoint: typeof data.searxngEndpoint === "string" ? data.searxngEndpoint : DEFAULT_SETTINGS.searxngEndpoint,
       autoSearch: data.autoSearch === true,
       autoManageSearch: typeof data.autoManageSearch === "boolean" ? data.autoManageSearch : data.autoSearch === true,
@@ -69,7 +94,7 @@ export function loadSettings(): Settings {
       personality: readPersonality(data.personality)
     };
   } catch {
-    return { ...DEFAULT_SETTINGS, appearance: { ...DEFAULT_APPEARANCE }, personality: { ...DEFAULT_PERSONALITY } };
+    return { ...DEFAULT_SETTINGS, appearance: { ...DEFAULT_APPEARANCE }, voice: { ...DEFAULT_VOICE }, personality: { ...DEFAULT_PERSONALITY } };
   }
 }
 
