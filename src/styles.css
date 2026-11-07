@@ -675,3 +675,11 @@ button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px
 }
 .voice-log-action:hover { background: #644557; }
 .settings-tab { padding-inline: 3px; }
+
+.voice-reference-field { margin-bottom: 7px; }
+.voice-reference-transcript {
+  padding: 10px; border-radius: 9px; border: 1px solid #674d59;
+  background: #302631; overflow-wrap: anywhere;
+}
+.voice-reference-transcript strong { display: block; margin-bottom: 6px; }
+.voice-reference-transcript small { white-space: pre-wrap; }

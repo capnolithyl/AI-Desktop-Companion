@@ -35,6 +35,7 @@ import { toSpeechText, VOICE_TEST_LINE } from "./speech";
 type Screen = "compact" | "log" | "settings" | "search" | "page" | "personality" | "help" | "memory";
 type SettingsTab = "ai" | "internet" | "voice" | "appearance";
 type VoiceHealth = { ready: boolean; modelLoaded: boolean; device: string | null };
+type VoiceReference = { configured: boolean; transcript: string | null; durationSeconds: number | null };
 type SearchService = { state: string; message: string };
 type CacheInfo = { pages: number; bytes: number };
 type Activity = { requestId: string; text: string };
@@ -210,6 +211,10 @@ export default function App() {
   const [voiceError, setVoiceError] = useState<string | null>(null);
   const [voiceHealth, setVoiceHealth] = useState<VoiceHealth | null>(null);
   const [voiceChecking, setVoiceChecking] = useState(false);
+  const [voiceReference, setVoiceReference] = useState<VoiceReference | null>(null);
+  const [referenceFile, setReferenceFile] = useState<File | null>(null);
+  const [referenceText, setReferenceText] = useState("");
+  const [referenceBusy, setReferenceBusy] = useState(false);
   const voiceSerial = useRef(0);
   const voiceAudio = useRef<HTMLAudioElement | null>(null);
   const voiceUrl = useRef<string | null>(null);
@@ -285,10 +290,14 @@ export default function App() {
     setVoiceChecking(true);
     setVoiceError(null);
     setVoiceHealth(null);
+    setVoiceReference(null);
     try {
       const status = await invoke<VoiceHealth>("voice_health", { endpoint });
       if (!status.ready) throw new Error("Voice service is not ready.");
+      const saved = await invoke<VoiceReference>("voice_reference_status", { endpoint });
       setVoiceHealth(status);
+      setVoiceReference(saved);
+      setReferenceText(saved.transcript ?? "");
     } catch (error) {
       setVoiceError(errorText(error));
     } finally {
@@ -296,6 +305,59 @@ export default function App() {
     }
   };
 
+  const saveVoiceReference = async () => {
+    if (!referenceFile || referenceBusy) return;
+    if (referenceFile.size > 6 * 1024 * 1024 || referenceFile.size < 44) {
+      setVoiceError("Select a WAV reference under 6 MB.");
+      return;
+    }
+    if (!referenceText.trim() || referenceText.trim().length > 2000) {
+      setVoiceError("Enter the exact spoken transcript (1–2000 characters).");
+      return;
+    }
+    setReferenceBusy(true);
+    setVoiceError(null);
+    stopSpeech();
+    try {
+      const audioBase64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const data = reader.result;
+          if (typeof data !== "string" || !data.includes(",")) reject(new Error("Cannot read reference WAV."));
+          else resolve(data.slice(data.indexOf(",") + 1));
+        };
+        reader.onerror = () => reject(reader.error ?? new Error("Could not read WAV."));
+        reader.readAsDataURL(referenceFile);
+      });
+      const saved = await invoke<VoiceReference>("voice_save_reference", {
+        endpoint: draft.voice.endpoint, audioBase64, refText: referenceText
+      });
+      setVoiceReference(saved);
+      setReferenceFile(null);
+      setReferenceText(saved.transcript ?? "");
+    } catch (error) {
+      setVoiceError(errorText(error));
+    } finally {
+      setReferenceBusy(false);
+    }
+  };
+
+  const removeVoiceReference = async () => {
+    if (referenceBusy) return;
+    setReferenceBusy(true);
+    setVoiceError(null);
+    stopSpeech();
+    try {
+      const cleared = await invoke<VoiceReference>("voice_delete_reference", { endpoint: draft.voice.endpoint });
+      setVoiceReference(cleared);
+      setReferenceFile(null);
+      setReferenceText("");
+    } catch (error) {
+      setVoiceError(errorText(error));
+    } finally {
+      setReferenceBusy(false);
+    }
+  };
 
   useEffect(() => { setCopyLogState("idle"); }, [messages, screen]);
 
@@ -1363,7 +1425,7 @@ export default function App() {
       <nav className="settings-tabs" aria-label="Settings categories">
         {([["ai", "AI & Models"], ["internet", "Internet"], ["voice", "Voice"], ["appearance", "Appearance"]] as const).map(([tab, label]) =>
           <button type="button" key={tab} className={settingsTab === tab ? "settings-tab active" : "settings-tab"}
-            onClick={() => { setSettingsTab(tab); if (tab === "internet") { void refreshService(); void refreshCache(); } }}>
+            onClick={() => { setSettingsTab(tab); if (tab === "internet") { void refreshService(); void refreshCache(); } if (tab === "voice") void checkVoice(draft.voice.endpoint); }}>
             {label}
           </button>
         )}
@@ -1473,10 +1535,10 @@ export default function App() {
         {settingsTab === "voice" && <>
           <div className="settings-section-title"><Volume2 size={17}/> Local voice · Qwen3-TTS</div>
           <div className="settings-note">First version requires running the optional Python service from tools/tts.
-            VoiceDesign may vary between replies; we can save a stable Mikan voice later.</div>
+            Save one voice sample to keep Mikan recognizable. Without a reference, VoiceDesign generates a different possible speaker each time.</div>
           <label className="setting-field">Local speech server
             <input spellCheck={false} value={draft.voice.endpoint}
-              onChange={event => { setDraft(current => ({ ...current, voice: { ...current.voice, endpoint: event.target.value } })); setVoiceHealth(null); }}
+              onChange={event => { setDraft(current => ({ ...current, voice: { ...current.voice, endpoint: event.target.value } })); setVoiceHealth(null); setVoiceReference(null); }}
               placeholder="http://127.0.0.1:8765"/>
             <small>HTTP localhost only. Install/start instructions: tools/tts/README.md</small>
           </label>
@@ -1496,16 +1558,50 @@ export default function App() {
             </div>
             {voiceError && <small className="field-error" role="alert">{voiceError}</small>}
           </div>
+          <div className="settings-section-title">Saved voice identity</div>
+          <div className="service-panel">
+            <div>
+              <strong>{voiceReference?.configured ? "Mikan's reference voice is saved" : "No reference voice saved"}</strong>
+              <small>{voiceReference?.configured
+                ? `Cloning enabled with Qwen3-TTS Base · ${voiceReference.durationSeconds ?? "?"} seconds of reference audio`
+                : "VoiceDesign will be used until you save a sample and matching transcript."}</small>
+            </div>
+            {voiceReference?.configured && <div className="voice-reference-transcript">
+              <strong>Stored transcript</strong><small>{voiceReference.transcript}</small>
+            </div>}
+            <label className="setting-field voice-reference-field">Reference audio · WAV
+              <input type="file" accept=".wav,audio/wav,audio/x-wav" disabled={referenceBusy}
+                onChange={event => setReferenceFile(event.target.files?.[0] ?? null)}/>
+              <small>Prefer clean 5–15 second voice samples. Mono PCM16, 2–30 seconds, under 6 MB.</small>
+            </label>
+            <label className="setting-field voice-reference-field">Exactly what she says in the recording
+              <textarea rows={4} maxLength={2000} value={referenceText} disabled={referenceBusy}
+                placeholder="Paste the exact words spoken in the clip"
+                onChange={event => setReferenceText(event.target.value)}/>
+              <small>Matching transcript and audio improve the cloning result.</small>
+            </label>
+            <div className="service-buttons">
+              <button type="button" className="secondary-action"
+                disabled={!referenceFile || !referenceText.trim() || referenceBusy || voiceChecking}
+                onClick={() => void saveVoiceReference()}>
+                {referenceBusy ? <LoaderCircle size={14} className="spin"/> : <Check size={14}/>}
+                {voiceReference?.configured ? "Replace reference" : "Save reference"}
+              </button>
+              {voiceReference?.configured && <button type="button" className="secondary-action"
+                disabled={referenceBusy} onClick={() => void removeVoiceReference()}>Remove reference</button>}
+            </div>
+            <small>The reference stays on your PC, not in an online voice service.</small>
+          </div>
           <label className="settings-toggle">
             <input type="checkbox" checked={draft.voice.autoSpeak}
               onChange={event => setDraft(current => ({ ...current, voice: { ...current.voice, autoSpeak: event.target.checked } }))}/>
             <span><strong>Speak new replies automatically</strong>
               <small>Off by default. You can always use the speaker icon on a reply.</small></span>
           </label>
-          <label className="setting-field">Mikan's voice description
+          <label className="setting-field">VoiceDesign description (when no reference is saved)
             <textarea rows={6} value={draft.voice.prompt} maxLength={650}
               onChange={event => setDraft(current => ({ ...current, voice: { ...current.voice, prompt: event.target.value } }))}/>
-            <small>Warm, playful and lower pitched rather than exaggeratedly squeaky. Model output is not perfectly repeatable.</small>
+            <small>Once a reference is saved, Base cloning uses that voice instead of inventing a new one.</small>
           </label>
           <label className="setting-field">Playback speed · {draft.voice.speed.toFixed(2)}×
             <input type="range" min="0.8" max="1.2" step="0.05" value={draft.voice.speed}
