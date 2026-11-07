@@ -19,6 +19,7 @@ const THREAD_KEY = "mikan/mobile/threads/v1";
 const ACTIVE_KEY = "mikan/mobile/active/v1";
 const USER_KEY = "mikan/mobile/facts/v1";
 const CANON_KEY = "mikan/mobile/canon/v1";
+const IMPORT_KEY = "mikan/mobile/imported-native/v1";
 const uuid = () => typeof crypto.randomUUID === "function" ? crypto.randomUUID() : String(Date.now()) + Math.random().toString(36);
 const newThread = (): Thread => ({ id: uuid(), title: "New chat", createdAt: Date.now(), turns: [] });
 function readArray<T>(key: string): T[] {
@@ -84,6 +85,18 @@ export default function MobileApp() {
   useEffect(() => { localStorage.setItem(CANON_KEY, JSON.stringify(canon)); }, [canon]);
   useEffect(() => { saveSettings(settings); }, [settings]);
   useEffect(() => {
+    if (localStorage.getItem(IMPORT_KEY) !== "done") {
+      void mobileBackend.importLegacy().then(json => {
+        const old = JSON.parse(json) as Turn[];
+        const alreadyHasChat = readArray<Thread>(THREAD_KEY).some(thread => thread.turns.length > 0);
+        if (!alreadyHasChat && Array.isArray(old) && old.length) {
+          const migrated: Thread = { id: uuid(), title: "Earlier Pocket Mikan chat", createdAt: Date.now(), turns: old };
+          setThreads([migrated]);
+          setActiveId(migrated.id);
+        }
+        localStorage.setItem(IMPORT_KEY, "done");
+      }).catch(() => {});
+    }
     void mobileBackend.status().then(setModel).catch(failure => {
       setModel("UNAVAILABLE");
       setError(String(failure));
