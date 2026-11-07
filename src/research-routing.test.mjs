@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { researchRequest, isPocketResearchFollowup, isResearchFollowup, planResearch, stripUnsupportedCitations } from "./research-routing.ts";
+import { researchRequest, isPocketResearchFollowup, isResearchFollowup, planResearch, buildResearchQuery, stripUnsupportedCitations } from "./research-routing.ts";
 
 test("freshness and explicit research use an online search, not a guessed reply", () => {
   assert.deepEqual(researchRequest("What's the latest news about Artemis?"),
@@ -157,4 +157,31 @@ test("adjacent predictions reuse actual evidence, not stale conversation claims"
   assert.equal(isResearchFollowup("What do you think about it?", history), false);
   assert.equal(isResearchFollowup("Is it confirmed?", history), true);
   assert.equal(isResearchFollowup("It works now!", history), false);
+});
+
+
+test("shared query builder matches mature desktop Rust subjects and fallbacks", () => {
+  assert.equal(buildResearchQuery(
+    "What's the latest news about NASA's Artemis missions? Have there been any major developments in 2026?"),
+    "NASA Artemis missions 2026 latest news");
+  assert.equal(buildResearchQuery(
+    "Could you find info about SpaceX Starship? Are launches planned in 2026?"),
+    '"SpaceX Starship" 2026');
+  assert.equal(buildResearchQuery("can you find some info about cattle decapitation?"),
+    '"cattle decapitation"');
+  assert.equal(buildResearchQuery("Can you find me the latest info on Shadows Fall? Any updates on their upcoming album?"),
+    '"Shadows Fall" next album recording studio announcement');
+  const history = [
+    { role: "user", content: "can you tell me more about cattle decapitation?" },
+    { role: "assistant", content: "The band released an imaginary album!" },
+    { role: "user", content: "The band, yeah." }
+  ];
+  assert.equal(buildResearchQuery("any info on a new album?", history),
+    '"cattle decapitation" next album recording studio announcement');
+  assert.equal(buildResearchQuery("What's the next major milestone, and when is it scheduled to happen?", [
+    { role: "user", content: "What's the latest news about NASA's Artemis missions?" },
+    { role: "assistant", content: "The launch was tomorrow!" }
+  ]), "NASA Artemis missions next mission schedule");
+  assert.equal(buildResearchQuery("can you give me info on the band cattle decapitation?"),
+    '"cattle decapitation" band');
 });
