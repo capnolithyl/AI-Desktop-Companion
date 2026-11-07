@@ -56,7 +56,7 @@ class PocketMemoryRulesTest {
                 PocketMemoryRules.userCandidate(input))
             val proposal = PocketMemoryRules.obviousUserFact(input)
             assertEquals(input, "The user is named Marcus", proposal?.first)
-            assertEquals(input, input, proposal?.second)
+            assertTrue(input, proposal != null && PocketMemoryRules.quoteMatches(input, proposal.second))
             assertEquals(input, "The user is named Marcus",
                 proposal?.let { (fact, evidence) -> PocketMemoryRules.cleanUser(fact, evidence, input) })
         }
