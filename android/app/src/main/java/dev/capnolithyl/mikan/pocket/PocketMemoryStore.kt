@@ -134,10 +134,15 @@ class PocketMemoryStore(private val context: Context) :
         conversations.forEach { conversation ->
             val id = conversation.getString("id")
             val messages = JSONArray()
-            query(db, """SELECT id,role,content,created_at FROM messages WHERE conversation_id=?
+            query(db, """SELECT id,role,content,created_at,metadata_json FROM messages WHERE conversation_id=?
                 ORDER BY created_at ASC,rowid ASC LIMIT 10000""", arrayOf(id)) { c ->
-                JSONObject().put("id",c.string("id")).put("role",c.string("role"))
+                val turn = JSONObject().put("id",c.string("id")).put("role",c.string("role"))
                     .put("content",c.string("content")).put("createdAt",c.number("created_at"))
+                val metadata = try { JSONObject(c.string("metadata_json")) } catch (_: Exception) { JSONObject() }
+                metadata.optJSONArray("sources")?.let { sources ->
+                    turn.put("sources", sources)
+                }
+                turn
             }.forEach(messages::put)
             conversation.put("turns",messages)
             put(conversation)
