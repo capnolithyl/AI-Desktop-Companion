@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { researchRequest, isPocketResearchFollowup, stripUnsupportedCitations } from "./research-routing.ts";
+import { researchRequest, isPocketResearchFollowup, isResearchFollowup, planResearch, stripUnsupportedCitations } from "./research-routing.ts";
 
 test("freshness and explicit research use an online search, not a guessed reply", () => {
   assert.deepEqual(researchRequest("What's the latest news about Artemis?"),
@@ -128,4 +128,33 @@ test("find me is a recipient phrase, but private data remains private without ex
     assert.equal(researchRequest(message), null, message);
   }
   assert.ok(researchRequest("Search the web for the history of Shadows Fall"));
+});
+
+
+test("both apps share one route: chat stays local, research uses provider, timeless facts delegate on desktop", () => {
+  assert.deepEqual(planResearch("Guess what, you have internet access now!"),
+    { mode: "chat", recent: false });
+  assert.deepEqual(planResearch("Yay it works"), { mode: "chat", recent: false });
+  assert.deepEqual(planResearch("The latest album is fantastic!"), { mode: "chat", recent: false });
+  assert.deepEqual(planResearch("What is the capital of Germany?"),
+    { mode: "factual", query: "What is the capital of Germany?", recent: false });
+  const news = planResearch("Can you find me the latest info on Shadows Fall? Any updates on their upcoming album?");
+  assert.equal(news.mode, "research");
+  assert.equal(news.recent, true);
+  assert.equal(planResearch("Tell me about the band Cattle Decapitation").mode, "research");
+  assert.equal(planResearch("What's the next major milestone, and when is it scheduled?").mode, "research");
+  assert.equal(planResearch("What's my favorite band?").mode, "chat");
+});
+
+test("adjacent predictions reuse actual evidence, not stale conversation claims", () => {
+  const history = [
+    { role: "user", content: "What's the latest news about Artemis?" },
+    { role: "assistant", content: "Launch is scheduled [1]",
+      sources: [{ title: "NASA", url: "https://nasa.gov", content: "mission", engine: "Tavily" }] }
+  ];
+  assert.equal(isResearchFollowup("Do you think they'll make it on time?", history), true);
+  assert.equal(isResearchFollowup("How likely is that?", history), true);
+  assert.equal(isResearchFollowup("What do you think about it?", history), false);
+  assert.equal(isResearchFollowup("Is it confirmed?", history), true);
+  assert.equal(isResearchFollowup("It works now!", history), false);
 });
