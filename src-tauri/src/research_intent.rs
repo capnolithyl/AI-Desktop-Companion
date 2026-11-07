@@ -85,6 +85,32 @@ pub fn explicit_research_query(messages: &[Value]) -> Option<String> {
     Some(query)
 }
 
+/// Desktop uses the shared TS route to decide when to research. Preserve
+/// the mature Rust subject extraction, quoting, and retry query construction.
+pub fn routed_research_query(
+    messages: &[Value],
+    route: Option<&str>,
+    hint: Option<&str>,
+) -> Option<String> {
+    if matches!(route, Some("chat" | "factual")) {
+        return None;
+    }
+    if let Some(query) = explicit_research_query(messages) {
+        return Some(query);
+    }
+    // Only a positive, app-derived research decision may use the shared
+    // fallback query. Older clients without route hints retain Rust behavior.
+    if route != Some("research") {
+        return None;
+    }
+    let candidate = hint?.trim();
+    if candidate.len() < 3 || candidate.chars().any(char::is_control) {
+        return None;
+    }
+    let normalized: String = candidate.chars().take(250).collect();
+    (!normalized.trim().is_empty()).then_some(normalized)
+}
+
 pub fn is_album_research(messages: &[Value]) -> bool {
     let last = messages.iter().rev().find(|item| item["role"] == "user")
         .and_then(|item| item["content"].as_str()).unwrap_or("").to_lowercase();
@@ -388,6 +414,24 @@ mod tests {
             explicit_research_query(&context).as_deref(),
             Some("NASA Artemis missions next mission schedule")
         );
+    }
+
+    #[test]
+    fn shared_route_prevents_auto_search_during_casual_chat() {
+        let chat = messages(&["The latest album is fantastic!"]);
+        assert!(explicit_research_query(&chat).is_some());
+        assert!(routed_research_query(&chat, Some("chat"), None).is_none());
+        let query = messages(&["Can you find me the latest info on Shadows Fall?"]);
+        assert!(routed_research_query(&query, Some("research"), Some("fallback")).is_some());
+    }
+
+    #[test]
+    fn shared_route_fallback_only_for_positive_research() {
+        let chat = messages(&["Hello Mikan"]);
+        assert!(routed_research_query(&chat, None, Some("Metal news")).is_none());
+        assert_eq!(routed_research_query(&chat, Some("research"), Some("Metal news")).as_deref(), Some("Metal news"));
+        assert!(routed_research_query(&chat, Some("factual"), Some("Metal news")).is_none());
+        assert!(routed_research_query(&chat, Some("research"), Some("bad\nquery")).is_none());
     }
 
     #[test]
