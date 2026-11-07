@@ -117,3 +117,19 @@ export async function loadPortrait(): Promise<Blob | null> {
     db.close();
   }
 }
+
+/** Remove only the custom portrait. Bundled defaults are left untouched. */
+export async function deletePortrait(): Promise<void> {
+  const db = await openDatabase();
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const transaction = db.transaction("assets", "readwrite");
+      transaction.objectStore("assets").delete("portrait");
+      transaction.oncomplete = () => resolve();
+      transaction.onerror = () => reject(transaction.error);
+      transaction.onabort = () => reject(transaction.error);
+    });
+  } finally {
+    db.close();
+  }
+}
