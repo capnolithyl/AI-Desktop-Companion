@@ -23,6 +23,10 @@ export function researchRequest(question: string, previous: ResearchTurn[] = [])
   // Answer introspection, family history, persona chat and casual opinion from
   // conversation/memory, not a third-party search service.
   if (/^(?:what(?:'s| is) my\b|who am i\b|do you (?:remember|think|like|love)\b|what do you (?:think|feel|remember)\b|how are you\b|tell me about (?:me|yourself)\b)/i.test(text)) return null;
+  // Private disclosures and questions about Mikan/the local conversation
+  // must never be forwarded to an outside search provider implicitly.
+  if (/^(?:i(?:['’]m| am| was| have| work| live| like| love| feel| think)\b|my\s+\w+\s+(?:is|was|are)\b|we(?:['’]re| are| have| were)\b|what(?:['’]s| is| are) your\b|who are you\b|what did we\b|what did you and i\b)/i.test(text)) return null;
+
 
   const current = timeSensitive.test(text);
   const direct = explicitResearch.test(text);
