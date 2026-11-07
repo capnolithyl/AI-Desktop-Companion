@@ -50,6 +50,10 @@ If unsure, return {"user_facts":[],"character_facts":[]}.
 
 capture_user=$wantsUser
 capture_character=$wantsCharacter
+ALREADY SAVED USER FACTS (do not duplicate):
+${pair.existingUserFacts.joinToString(" | ")}
+ALREADY SAVED MIKAN CHARACTER CANON (do not duplicate or override):
+${pair.existingCanon.joinToString(" | ")}
 USER MESSAGE:
 ${pair.user.take(1500)}
 MIKAN REPLY:
