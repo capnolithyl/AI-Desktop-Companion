@@ -27,6 +27,39 @@ object PocketMemoryRules {
     fun sensitive(text: String) =
         sensitiveWords.any { text.lowercase(Locale.ROOT).contains(it) }
 
+    private val nameGreeting = Regex(
+        "^(?:hi|hey|hello|hiya|good (?:morning|afternoon|evening))\\b[!,.:\\s]*",
+        RegexOption.IGNORE_CASE
+    )
+    private val nameIntroduction = Regex(
+        "^(my name is|(?:you can |please )?call me|i go by|i['’]m|i am)\\s+(.+)$",
+        RegexOption.IGNORE_CASE
+    )
+    private val validName = Regex(
+        "^[\\p{L}][\\p{L}\\p{M}'’-]*(?:[ -][\\p{L}][\\p{L}\\p{M}'’-]*){0,3}$"
+    )
+    private val nonNameIntroductions = setOf(
+        "a","an","the","so","very","really","just","not","too",
+        "here","there","fine","good","great","okay","ok",
+        "tired","happy","sad","hungry","bored","busy","testing",
+        "working","trying","looking","feeling","going","doing",
+        "new","ready","sorry","sure","wondering"
+    )
+
+    private fun introducedName(raw: String): String? {
+        val hasGreeting = nameGreeting.containsMatchIn(raw)
+        val statement = nameGreeting.replaceFirst(raw, "").trim()
+        val match = nameIntroduction.matchEntire(statement) ?: return null
+        val name = match.groupValues[2].trim()
+        if (name.isEmpty() || name.length > 80 || !validName.matches(name)) return null
+        val informal = Regex("^(?:i['’]m|i am)$", RegexOption.IGNORE_CASE)
+            .matches(match.groupValues[1])
+        val first = name.split(Regex("[\\s-]"), limit = 2)[0]
+        if (informal && (first.lowercase(Locale.ROOT) in nonNameIntroductions ||
+            (!hasGreeting && !Character.isUpperCase(name.codePointAt(0))))) return null
+        return name
+    }
+
     fun userCandidate(text: String): Boolean {
         val lower = " " + text.lowercase(Locale.ROOT).replace(Regex("[\n\r\t]")," ") + " "
         return listOf(" i "," i'm "," i've "," my "," we "," we're "," our ")
@@ -43,14 +76,13 @@ object PocketMemoryRules {
         val source = PocketMemoryStore.normalize(message)
         if (source.isBlank() || source.length > 240 || sensitive(source)) return null
         val input = source.trimEnd(' ', '.', '!', '?')
-        val name = Regex("^my name is\\s+([\\p{L}\\p{M}'-]+(?:\\s+[\\p{L}\\p{M}'-]+){0,3})$",
-            RegexOption.IGNORE_CASE).matchEntire(input)
+        val name = introducedName(input)
         val favorite = Regex("^my favou?rite\\s+([a-z][a-z ]{1,40})\\s+is\\s+(.{1,100})$",
             RegexOption.IGNORE_CASE).matchEntire(input)
         val preference = Regex("^i\\s+(love|like|enjoy|prefer|hate|dislike)\\s+(.{1,120})$",
             RegexOption.IGNORE_CASE).matchEntire(input)
         val proposed = when {
-            name != null -> "The user is named " + name.groupValues[1]
+            name != null -> "The user is named " + name
             favorite != null -> "The user says their favorite " + favorite.groupValues[1] +
                 " is " + favorite.groupValues[2]
             preference != null -> {
