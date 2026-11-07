@@ -86,12 +86,15 @@ export function isResearchFollowup(question: string, previous: ResearchTurn[]): 
   const last = previous[previous.length - 1];
   if (text.length < 4 || text.length > 280 || last?.role !== "assistant" ||
       !last.sources?.length) return false;
-  if (/^(?:what do you (?:think|feel)|how do you feel|do you (?:think|like|remember)|what(?:'s| is) my\b)/i.test(text)) return false;
-  if (!followUpQuestion.test(text) && !/^(?:tell me more|elaborate|explain that|any updates)\b/i.test(text)) return false;
+  // Predictions about an immediately researched topic should still cite
+  // the evidence instead of trusting an old generated answer.
+  const prediction = /^(?:do you think (?:they|it|he|she|this|that|we|the)\b|how likely\b|what are the odds\b|what do you expect\b|would you expect\b|your (?:prediction|take)\b)/i.test(text);
+  if (!prediction && /^(?:what do you (?:think|feel)|how do you feel|do you (?:think|like|remember)|what(?:'s| is) my\b)/i.test(text)) return false;
+  if (!prediction && !followUpQuestion.test(text) && !/^(?:tell me more|elaborate|explain that|any updates)\b/i.test(text)) return false;
   // Independent new subjects need fresh evidence, not old citation numbers.
   if (/^(?:what (?:is|are|was|were) (?!it\b|that\b|they\b|those\b)|who (?:is|was) (?!he\b|she\b|that\b)|where (?:is|are) (?!it\b|that\b))/i.test(text)) return false;
   if (/\b(?:about|regarding)\s+(?!that\b|it\b|them\b|those\b|this\b|their\b)\w+/i.test(text)) return false;
-  return /\b(?:it|its|that|those|this|these|they|them|their|there|he|she|his|her|earlier|previous|same)\b/i.test(text) ||
+  return prediction || /\b(?:it|its|that|those|this|these|they|them|their|there|he|she|his|her|earlier|previous|same)\b/i.test(text) ||
     /^(?:tell me more|elaborate|any updates|and (?:when|where|how|why|what|who)|what about the (?:timeline|schedule|date|plan|mission|release|source|announcement))\b/i.test(text);
 }
 
