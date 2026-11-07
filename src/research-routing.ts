@@ -102,7 +102,7 @@ const ambiguousTopics = new Set([
   "their upcoming album", "an upcoming album", "the upcoming album", "the latest album",
   "an update", "updates", "them please", "that band", "a next album"
 ]);
-function specificTopic(subject: string | null): subject is string {
+function specificTopic(subject: string | null | undefined): subject is string {
   return !!subject && subject.length >= 3 && subject.length < 120 &&
     !ambiguousTopics.has(subject.trim().toLowerCase()) &&
     // "A potential release date" is a detail, not a named search subject.
