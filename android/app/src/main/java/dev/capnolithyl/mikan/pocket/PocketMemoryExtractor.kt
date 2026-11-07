@@ -23,6 +23,24 @@ class PocketMemoryExtractor(
         val wantsCharacter = captureCharacter && PocketMemoryRules.characterQuestion(pair.user)
         if (!wantsUser && !wantsCharacter) return skipped
 
+        // Exact, durable first-person statements can be captured with native
+        // parsing. This is more reliable (and faster) than expecting tiny Nano
+        // to consistently output correct JSON for "My name is Marcus".
+        if (wantsUser && !wantsCharacter) {
+            PocketMemoryRules.obviousUserFact(pair.user)?.let { (fact, evidence) ->
+                val proposal = JSONObject()
+                    .put("user_facts", org.json.JSONArray().put(
+                        JSONObject().put("fact", fact).put("evidence", evidence)))
+                    .put("character_facts", org.json.JSONArray())
+                return withContext(Dispatchers.IO) {
+                    store.persistExtraction(
+                        data, proposal, pair.user, pair.assistant,
+                        captureUser = true, captureCharacter = false
+                    )
+                }
+            }
+        }
+
         // Keep the input small to respect Gemini Nano context limits. The
         // original untruncated messages remain in SQLite for evidence checks.
         val prompt = """
