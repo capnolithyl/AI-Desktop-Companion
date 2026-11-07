@@ -35,7 +35,7 @@ updates can then install directly over it.
 - Mikan's Android model is Gemini Nano through the ML Kit GenAI Prompt API and Android AICore. It may need a first-time system-managed download. The backend streams real output to React. No synthetic replies.
 - The keyboard/IME uses Android edge-to-edge insets while CSS maintains the composer at the bottom and hides the portrait while typing.
 - v0.2.1: Gemini Nano status is now a small header indicator. To check readiness or download the model, open **Settings → AI → Local model**. If the model isn't ready, chat shows a setup notice that links to Settings. No persistent large Check button on the chat screen.
-- The original character-sheet image is not checked into the repository. Use **Change portrait** in the mobile UI to select the desired local PNG; the app stores it in IndexedDB.
+- **v0.3.3 built-in portrait:** Mikan's supplied adult orange-tabby character portrait is bundled as optimized transparent WebP at `src/mobile/assets/mikan-portrait.webp`, packaged into the APK by Vite. No import required on a fresh installation and no network calls. The chat screen shows only her portrait, without an image picker overlay. In **Settings → Appearance**, a current portrait preview provides **Choose image** and, for custom portraits, **Reset to default**. Custom portraits remain in IndexedDB and take priority over the bundled default until reset. The `/portrait` command opens Settings instead of invoking a picker over chat.
 - **v0.3.0 SQLite memory parity:** all conversations, messages, user facts and Mikan character canon are now stored in app-private `mikan-memory.sqlite3` using the same table names, constraints and timestamp units as desktop `src-tauri/src/memory.rs`.
 - Phone startup performs a one-time, transactional import from the earlier React `localStorage` facts/chats/canon **and** the original Kotlin `ChatStore`. It marks each import complete only after success and clears old React data only after the SQLite bootstrap succeeds.
 - The shared `memoryContext()` and `characterContext()` functions still generate distinct user/persona prompt context. The `pocketMemory` adapter uses desktop-compatible TypeScript data types; the actual Android storage implementation is `PocketMemoryStore.kt`.
@@ -62,10 +62,11 @@ Separate Trello backlog item records the future user-controlled **export → NAS
 2. Open `android/` in Android Studio (JDK 17 / SDK 35) or run `gradle :app:assembleDebug` there.
 3. GitHub Actions performs both steps, validates the shared TypeScript code, runs `PocketMemoryRulesTest` with JUnit, verifies the `.preview` package ID and packages the APK.
 
-## Test checklist for v0.3.0
+## Test checklist for v0.3.3
 
 - The first stable-signed APK requires uninstalling the old randomly signed APK once. Thereafter, install updates directly over Pocket Mikan using the same GitHub Actions signing secret.
 - Confirm existing conversations and manual memories survive the in-place update and are visible on reopening.
+- Verify Mikan's new default portrait appears without importing an image and there is no Change button or clickable portrait in chat. In Settings → Appearance, choose a custom image, reopen the app to verify persistence, then **Reset to default** and confirm the bundled artwork returns after restarting.
 - Reproduce the reported problem: say "My name is Marcus" (automatic capture should save it) or say "You wanna remember that?" afterward (explicit save must acknowledge only after SQLite success). Check Memory, restart, and ask "What is my name?"
 - Save, edit, delete a user fact with `/remember`, `/forget`, and Memory; do the same with Mikan canon using `/canon-set` and `/canon`.
 - In Settings, toggle both automatic memory options. Ask Mikan something about herself, then inspect canon; provide a durable first-person fact and inspect user memory. Confirm the two collections never mix.
