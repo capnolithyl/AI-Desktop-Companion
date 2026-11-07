@@ -57,6 +57,15 @@ export const mobileBackend = {
   status: async (): Promise<NativeStatus["status"]> => (await send("status")).status ?? "UNAVAILABLE",
   portrait: async (): Promise<string> => (await send("portrait")).text ?? "",
   importLegacy: async (): Promise<string> => (await send("importLegacy")).text ?? "[]",
+  memory: async <T>(action: string, args: Record<string, unknown> = {}): Promise<T> => {
+    const response = await send("memory", { action, ...args });
+    if (!response.text) throw new Error("Android SQLite returned an empty response");
+    return JSON.parse(response.text) as T;
+  },
+  extractMemory: async (args: Record<string, unknown>): Promise<{ userSaved: number; characterSaved: number; skipped: boolean }> => {
+    const response = await send("extractMemory", args);
+    return JSON.parse(response.text ?? "{}") as { userSaved: number; characterSaved: number; skipped: boolean };
+  },
   download: async (): Promise<NativeStatus["status"]> => (await send("download")).status ?? "UNAVAILABLE",
   generate: async (prompt: string, onDelta: (chunk: string) => void): Promise<string> =>
     (await send("generate", { prompt }, onDelta)).text ?? "",
