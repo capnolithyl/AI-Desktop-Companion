@@ -9,7 +9,7 @@ test("nudging Mikan after sharing a name saves the earlier user fact", () => {
   ];
   assert.deepEqual(resolveExplicitMemoryIntent("You wanna remember that?", history), {
     kind: "user",
-    fact: "The user's name is Marcus",
+    fact: "The user is named Marcus",
     description: "your name is Marcus",
     sourceText: "My name is Marcus"
   });
