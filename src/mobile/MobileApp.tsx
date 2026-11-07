@@ -496,6 +496,12 @@ export default function MobileApp() {
           setWebBusy(false);
           setWebActivity("");
         }
+      } else if (mode !== "search" && webEnabled && prior.length && !planned?.recent &&
+        !/\b(?:my|me|mine|our|ours|yourself)\b/i.test(text)) {
+        // Follow-up evidence is already stored locally in SQLite metadata.
+        // Reuse it rather than charging another search credit unnecessarily.
+        sources = prior;
+        research = compactWebContext(text, sources);
       } else if (mode === "search" || (webEnabled && webConfigured && planned)) {
         if (!webConfigured) throw new Error("Set a Tavily API key in Settings → Internet before searching.");
         const request = mode === "search" ?
@@ -511,11 +517,6 @@ export default function MobileApp() {
           setWebBusy(false);
           setWebActivity("");
         }
-      } else if (webEnabled && prior.length && !planned?.recent) {
-        sources = prior;
-        research = compactWebContext(text, sources);
-      } else if (mode === "search") {
-        throw new Error("Set up Tavily under Settings → Internet to use /search.");
       }
       const answer = await mobileBackend.generate(buildPrompt(settings, facts, canon,
         [...active.turns, user], research), chunk => {
