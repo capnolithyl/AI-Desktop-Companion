@@ -435,7 +435,7 @@ class PocketMemoryStore(private val context: Context) :
                         val row = insertUser(db,fact)
                         db.execSQL("""INSERT INTO automatic_memory_sources
                             (memory_kind,memory_id,source_message_id,evidence)
-                            VALUES('user',?,?,?)""",arrayOf(
+                            VALUES('user',?,?,?)""",arrayOf<Any>(
                             row.getLong("id"),userId,normalize(item.optString("evidence"))))
                         result.put("userSaved",result.getInt("userSaved")+1)
                     }
@@ -456,7 +456,7 @@ class PocketMemoryStore(private val context: Context) :
                         val row = insertCanon(db,"mikan",category,label,value) ?: continue
                         db.execSQL("""INSERT INTO automatic_memory_sources
                             (memory_kind,memory_id,source_message_id,evidence)
-                            VALUES('character',?,?,?)""",arrayOf(
+                            VALUES('character',?,?,?)""",arrayOf<Any>(
                             row.getLong("id"),assistantId,normalize(evidence)))
                         result.put("characterSaved",result.getInt("characterSaved")+1)
                     }
