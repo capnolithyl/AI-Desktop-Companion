@@ -256,28 +256,33 @@ export default function MobileApp() {
     }
     if (name === "remember") {
       if (!argument) commandResponse("Usage: /remember <fact>");
-      else { addFact(argument); commandResponse("Saved that fact locally on your phone."); }
+      else void addFact(argument)
+        .then(() => commandResponse("Saved to your phone's SQLite memory."))
+        .catch(failure => setMemoryError(String(failure)));
       return true;
     }
     if (name === "forget") {
       const id = Number(argument.replace(/^#/, ""));
-      if (!Number.isFinite(id)) commandResponse("Usage: /forget <fact id>");
-      else { setFacts(items => items.filter(f => f.id !== id)); commandResponse("Removed local fact #" + id + "."); }
+      if (!Number.isSafeInteger(id) || id <= 0) commandResponse("Usage: /forget <fact id>");
+      else void deleteUserFact(id).then(() => commandResponse("Removed local fact #" + id + "."))
+        .catch(failure => setMemoryError(String(failure)));
       return true;
     }
     if (name === "canon-set") {
       const colon = argument.indexOf(":");
       if (colon < 1) commandResponse("Usage: /canon-set <detail>: <value>");
       else {
-        addCanon("other", argument.slice(0, colon).trim(), argument.slice(colon + 1).trim());
-        commandResponse("Added that detail to phone-local Mikan canon.");
+        void addCanon("other", argument.slice(0, colon).trim(), argument.slice(colon + 1).trim())
+          .then(() => commandResponse("Saved Mikan's character detail in SQLite."))
+          .catch(failure => setMemoryError(String(failure)));
       }
       return true;
     }
     if (name === "canon-forget") {
       const id = Number(argument.replace(/^#/, ""));
-      setCanon(items => items.filter(f => f.id !== id));
-      commandResponse("Removed Mikan canon entry #" + id + ".");
+      if (!Number.isSafeInteger(id) || id <= 0) commandResponse("Usage: /canon-forget <detail id>");
+      else void deleteCanon(id).then(() => commandResponse("Removed Mikan canon entry #" + id + "."))
+        .catch(failure => setMemoryError(String(failure)));
       return true;
     }
     if (name === "randomize") {
@@ -334,7 +339,7 @@ export default function MobileApp() {
 
   async function send() {
     const text = draft.trim();
-    if (!text || busy) return;
+    if (!text || busy || !memoryReady) return;
     setDraft("");
     setIntro("");
     const cmd = parseSlashCommand(text);
@@ -352,11 +357,16 @@ export default function MobileApp() {
     writeTurn(threadId, assistant);
     let output = "";
     try {
+      // The message is durable before inference and can be cited as evidence.
+      await pocketMemory.saveMessage(threadId, user);
       const answer = await mobileBackend.generate(buildPrompt(settings, facts, canon, [...active.turns, user]), chunk => {
         output += chunk;
         replaceTurn(threadId, assistant.id, output);
       });
       replaceTurn(threadId, assistant.id, answer);
+      // Never mine partial or failed replies for character canon.
+      await pocketMemory.saveMessage(threadId, { ...assistant, content: answer });
+      captureAutomaticMemory(threadId, user.id, assistant.id);
     } catch (failure) {
       replaceTurn(threadId, assistant.id, output || "(No response)");
       setError(failure instanceof Error ? failure.message : String(failure));
@@ -424,14 +434,16 @@ export default function MobileApp() {
           <div className="pocket-bubble">{turn.content ? <ChatMarkdown text={turn.content} onOpenLink={openLink}/> : <LoaderCircle size={16} className="spin"/>}</div>
         </article>)}
         {intro && <p className="pocket-notice">{intro}</p>}
+        {!memoryReady && <p className="pocket-notice">{memoryError ?? "Opening local SQLite memory…"}</p>}
+        {memoryReady && memoryError && <p className="pocket-error" role="alert">{memoryError}</p>}
         {error && <p className="pocket-error" role="alert">{error}</p>}
         <div ref={bottom}/>
       </section>
       <form className="pocket-composer" onSubmit={event => { event.preventDefault(); void send(); }}>
-        <textarea value={draft} onChange={event => setDraft(event.target.value)} rows={2}
+        <textarea value={draft} onChange={event => setDraft(event.target.value)} disabled={!memoryReady} rows={2}
           placeholder="Chat with Mikan… (/help for commands)"
           onKeyDown={event => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); void send(); } }}/>
-        <button type={busy ? "button" : "submit"} aria-label={busy ? "Stop generation" : "Send message"}
+        <button type={busy ? "button" : "submit"} disabled={!memoryReady} aria-label={busy ? "Stop generation" : "Send message"}
           onClick={busy ? () => mobileBackend.cancel() : undefined}>
           {busy ? <Square size={20}/> : <ArrowUp size={21}/>}
         </button>
@@ -474,7 +486,18 @@ export default function MobileApp() {
           </button>
         </div>
         <label className="pocket-field pocket-prompt">System prompt<textarea value={settings.systemPrompt} rows={6} onChange={event => updateSettings({ systemPrompt:event.target.value })}/></label>
-        <p className="pocket-hint">Web search, automatic memory extraction, and PC connections require separate services. They aren't silently enabled here.</p>
+        <h3>Memories</h3>
+        <p className="pocket-hint">User facts and Mikan's character canon are separate SQLite records. Automatic capture runs a second, short Gemini Nano analysis after completed replies and validates exact source evidence. It uses additional on-device inference, and may skip facts Nano cannot substantiate.</p>
+        <label className="pocket-toggle"><input type="checkbox" checked={settings.autoRememberUser}
+          onChange={event => updateSettings({ autoRememberUser: event.target.checked })}/>
+          Automatically remember stable facts about me</label>
+        <label className="pocket-toggle"><input type="checkbox" checked={settings.autoRememberMikan}
+          onChange={event => updateSettings({ autoRememberMikan: event.target.checked })}/>
+          Automatically remember Mikan's stated preferences</label>
+        <p className="pocket-hint">{autoMemoryBusy ? "Analyzing the last completed turn locally…" :
+          "Both switches are optional. Saved memories can be edited or deleted from their respective panels."}</p>
+        {memoryError && <p className="pocket-error" role="alert">{memoryError}</p>}
+        <p className="pocket-hint">Web search, a knowledge library, cloud sync and PC connections are not enabled in standalone pocket mode.</p>
         <button className="pocket-wide-button" onClick={() => setScreen("help")}>See supported slash commands</button>
       </>}
       {screen === "personality" && <>
