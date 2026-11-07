@@ -23,6 +23,33 @@ const clean = (text: string) =>
   text.trim().replace(/[\s.!?]+$/u, "").trim().replace(/\s+/gu, " ");
 const truncate = (text: string) => text.slice(0, 470);
 
+/** Recognize introductions in conversational language, not just "My name is…".
+ * An "I'm ..." statement is only a name when it resembles a name, never a
+ * temporary state ("I'm tired") or a job ("I'm a developer").
+ */
+function introducedName(raw: string): string | null {
+  const text = clean(raw);
+  const greeting = /^(?:hi|hey|hello|hiya|good (?:morning|afternoon|evening))\b[!,.:\s]*/iu;
+  const hasGreeting = greeting.test(text);
+  const statement = text.replace(greeting, "").trim();
+  const match = /^(my name is|(?:you can |please )?call me|i go by|i['’]m|i am)\s+(.+)$/iu.exec(statement);
+  if (!match) return null;
+
+  const name = clean(match[2]);
+  if (!/^\p{L}[\p{L}\p{M}'’-]*(?:[ -]\p{L}[\p{L}\p{M}'’-]*){0,3}$/u.test(name) || name.length > 80) return null;
+  const informal = /^(?:i['’]m|i am)$/iu.test(match[1]);
+  const first = name.split(/[\s-]/u)[0];
+  const lowerFirst = first.toLowerCase();
+  const nonNames = new Set(["a", "an", "the", "so", "very", "really", "just", "not",
+    "too", "here", "there", "fine", "good", "great", "okay", "ok",
+    "tired", "happy", "sad", "hungry", "bored", "busy", "testing",
+    "working", "trying", "looking", "feeling", "going", "doing",
+    "new", "ready", "sorry", "sure", "wondering"]);
+  if (informal && (nonNames.has(lowerFirst) || (!hasGreeting && !/^\p{Lu}/u.test(name)))) return null;
+  return name;
+}
+
+
 function fromCharacterStatement(text: string): CharacterMemory | null {
   const statement = clean(text).replace(/^mikan[,:\s]+/i, "");
   const favorite = /^(?:your|mikan'?s)\s+favou?rite\s+([a-z][a-z ]{1,48})\s+is\s+(.+)$/i.exec(statement);
@@ -57,15 +84,13 @@ function fromUserStatement(source: string, explicit: boolean): UserMemory | null
   if (!text || text.length > 490 || /^(?:what|why|when|where|how|who|can|could|will|do|did)\b/i.test(text)) return null;
   let fact = "";
   let description = "";
-  const name = /^my name is\s+(.+)$/i.exec(text);
+  const name = introducedName(text);
   const favorite = /^my favou?rite\s+([a-z][a-z ]{1,48})\s+is\s+(.+)$/i.exec(text);
   const verbs = /^i\s+(love|like|enjoy|prefer|hate|dislike|live in|work as|work at|play|have)\s+(.+)$/i.exec(text);
   const im = /^(?:i am|i'm)\s+(.+)$/i.exec(text);
   if (name) {
-    const value = clean(name[1]);
-    if (!value || value.length > 80) return null;
-    fact = "The user is named " + value;
-    description = "your name is " + value;
+    fact = "The user is named " + name;
+    description = "your name is " + name;
   } else if (favorite) {
     const topic = clean(favorite[1]).toLowerCase();
     const value = clean(favorite[2]);
