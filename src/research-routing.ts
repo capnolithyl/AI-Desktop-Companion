@@ -30,7 +30,10 @@ export function researchRequest(question: string, previous: ResearchTurn[] = [])
   const previousResearch = previous.slice(-10).reverse().find(turn =>
     turn.role === "user" && (explicitResearch.test(turn.content) || timeSensitive.test(turn.content))
   );
-  const continuation = followUp.test(text) && previousResearch !== undefined &&
+  // A fresh self-contained factual question is not a follow-up just because
+  // it starts with "what is", "where is" or "who is".
+  const independentTopic = /^(?:what (?:is|are|was|were) (?!it\b|that\b|they\b|those\b)|who (?:is|was) (?!he\b|she\b|that\b)|where (?:is|are) (?!it\b|that\b))/i.test(text);
+  const continuation = followUp.test(text) && !independentTopic && previousResearch !== undefined &&
     !/\b(my|me|mine|your|yours|myself)\b/i.test(text);
 
   if (!direct && !current && !factual && !continuation) return null;
