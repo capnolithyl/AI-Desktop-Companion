@@ -5,6 +5,15 @@ export type ResearchTurn = {
   sources?: unknown[];
 };
 export type ResearchRequest = { query: string; recent: boolean };
+/** One routing decision, shared by the SearXNG desktop host and Tavily pocket host.
+ * Desktop retains its mature Rust query builder; this policy decides whether
+ * to force that search, delegate a timeless fact, or stay in ordinary chat.
+ */
+export type ResearchPlan = {
+  mode: "chat" | "research" | "factual";
+  query?: string;
+  recent: boolean;
+};
 
 // "now" on its own is conversational ("Yay, it works now"), not a reason
 // to send a private chat message to an external search provider.
@@ -52,20 +61,40 @@ export function researchRequest(question: string, previous: ResearchTurn[] = [])
 }
 
 /**
+ * Desktop-specific refinement keeps its successful deterministic queries:
+ * a genuine research request goes to the Rust search builder; timeless facts
+ * can still use Ollama's existing optional tool planner.
+ */
+export function planResearch(question: string, previous: ResearchTurn[] = []): ResearchPlan {
+  const request = researchRequest(question, previous);
+  if (!request) return { mode: "chat", recent: false };
+  const text = question.trim();
+  const desktopFactResearch = /^(?:tell me (?:more )?about|what (?:can you tell me|do you know) about|what is new with|any (?:info|news) (?:on|about)|information (?:on|about))\b/i.test(text);
+  if (explicitResearch.test(text) || request.recent || desktopFactResearch) {
+    return { mode: "research", query: request.query, recent: request.recent };
+  }
+  return { mode: "factual", query: request.query, recent: request.recent };
+}
+
+/**
  * Only a genuinely informational follow-up to the immediately preceding
  * sourced reply may reuse cached evidence. A casual "it works!" is not one.
  * Keep this stricter than the desktop's general-purpose context selector.
  */
-export function isPocketResearchFollowup(question: string, previous: ResearchTurn[]): boolean {
+export function isResearchFollowup(question: string, previous: ResearchTurn[]): boolean {
   const text = question.trim();
   const last = previous[previous.length - 1];
-  if (text.length < 4 || text.length > 280 || last?.role !== "assistant" || !last.sources?.length) return false;
-  if (/^(?:what do you (?:think|feel)|how do you feel|do you (?:think|like|remember)|what(?:'s| is) my\b)/i.test(text)) return false;
-  if (!followUpQuestion.test(text) && !/^(?:tell me more|elaborate|explain that|any updates)\b/i.test(text)) return false;
+  if (text.length < 4 || text.length > 280 || last?.role !== "assistant" ||
+      !last.sources?.length) return false;
+  // Predictions about an immediately researched topic should still cite
+  // the evidence instead of trusting an old generated answer.
+  const prediction = /^(?:do you think (?:they|it|he|she|this|that|we|the)\b|how likely\b|what are the odds\b|what do you expect\b|would you expect\b|your (?:prediction|take)\b)/i.test(text);
+  if (!prediction && /^(?:what do you (?:think|feel)|how do you feel|do you (?:think|like|remember)|what(?:'s| is) my\b)/i.test(text)) return false;
+  if (!prediction && !followUpQuestion.test(text) && !/^(?:tell me more|elaborate|explain that|any updates)\b/i.test(text)) return false;
   // Independent new subjects need fresh evidence, not old citation numbers.
   if (/^(?:what (?:is|are|was|were) (?!it\b|that\b|they\b|those\b)|who (?:is|was) (?!he\b|she\b|that\b)|where (?:is|are) (?!it\b|that\b))/i.test(text)) return false;
   if (/\b(?:about|regarding)\s+(?!that\b|it\b|them\b|those\b|this\b|their\b)\w+/i.test(text)) return false;
-  return /\b(?:it|its|that|those|this|these|they|them|their|there|he|she|his|her|earlier|previous|same)\b/i.test(text) ||
+  return prediction || /\b(?:it|its|that|those|this|these|they|them|their|there|he|she|his|her|earlier|previous|same)\b/i.test(text) ||
     /^(?:tell me more|elaborate|any updates|and (?:when|where|how|why|what|who)|what about the (?:timeline|schedule|date|plan|mission|release|source|announcement))\b/i.test(text);
 }
 
@@ -73,3 +102,6 @@ export function isPocketResearchFollowup(question: string, previous: ResearchTur
 export function stripUnsupportedCitations(answer: string): string {
   return answer.replace(/[ \t]*\[\d{1,2}\](?=\s|[.,!?;:]|$)/g, "").replace(/[ \t]{2,}/g, " ");
 }
+
+/** Compatibility alias for Android builds predating shared routing. */
+export const isPocketResearchFollowup = isResearchFollowup;
