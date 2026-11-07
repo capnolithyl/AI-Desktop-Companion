@@ -485,7 +485,7 @@ export default function MobileApp() {
       // Explicit commands always use the provider. Automatic search is optional.
       if (mode === "read") {
         if (!webConfigured) throw new Error("Set a Tavily API key in Settings → Internet before reading webpages.");
-        const address = text.replace(/^Read and summarize this webpage:\\s*/i, "").trim();
+        const address = text.replace(/^Read and summarize this webpage:\s*/i, "").trim();
         setWebActivity("Reading webpage…");
         setWebBusy(true);
         try {
@@ -499,7 +499,7 @@ export default function MobileApp() {
       } else if (mode === "search" || (webEnabled && webConfigured && planned)) {
         if (!webConfigured) throw new Error("Set a Tavily API key in Settings → Internet before searching.");
         const request = mode === "search" ?
-          {query:text.replace(/^Search the web for:\\s*/i,"").trim(), recent:false} : planned!;
+          {query:text.replace(/^Search the web for:\s*/i,"").trim(), recent:false} : planned!;
         setWebActivity("Searching the web…");
         setWebBusy(true);
         try {
