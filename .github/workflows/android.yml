@@ -68,7 +68,16 @@ jobs:
         run: |
           APK="android/app/build/outputs/apk/debug/app-debug.apk"
           "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | grep "package: name='dev.capnolithyl.mikan.pocket'"
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs "$APK" | grep -i "Signer #1 certificate SHA-256 digest: 0e68231585a55dba6c211949e622768de271cafc14140c1d41ba50a1f8c56cc0"
+          # Fingerprints are public; printing this digest diagnoses a mismatched
+          # signing secret without ever exposing the private keystore.
+          CERTS="$("$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs "$APK")"
+          ACTUAL="$(printf '%s\\n' "$CERTS" | sed -n 's/.*certificate SHA-256 digest: //p' | head -n1 | tr '[:upper:]' '[:lower:]' | tr -d '\\r')"
+          EXPECTED="0e68231585a55dba6c211949e622768de271cafc14140c1d41ba50a1f8c56cc0"
+          echo "Built APK signer SHA-256: $ACTUAL"
+          if [ -z "$ACTUAL" ] || [ "$ACTUAL" != "$EXPECTED" ]; then
+            echo "::error::APK signing certificate does not match pinned private key"
+            exit 1
+          fi
       - uses: actions/upload-artifact@v4
         if: env.MIKAN_SIGNING_READY == 'true'
         with:
