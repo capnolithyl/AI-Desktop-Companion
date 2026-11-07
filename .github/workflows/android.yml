@@ -34,7 +34,7 @@ jobs:
       - name: Install React dependencies
         run: npm install --no-audit --no-fund
       - name: Test conversational memory intent
-        run: node --experimental-strip-types --test src/mobile/*.test.mjs src/research-routing.test.mjs
+        run: node --experimental-strip-types --test src/mobile/*.test.mjs src/research-routing.test.mjs src/research-context.test.mjs
       - name: Build shared React mobile frontend
         run: npm run build:mobile
       - uses: actions/setup-java@v4
