@@ -185,3 +185,40 @@ test("shared query builder matches mature desktop Rust subjects and fallbacks", 
   assert.equal(buildResearchQuery("can you give me info on the band cattle decapitation?"),
     '"cattle decapitation" band');
 });
+
+
+test("Pixel regression: source-grounded album follow-up researches requested release details", () => {
+  const initial = "Can you find me the latest info on Shadows Fall? Any updates on their upcoming album?";
+  const history = [
+    {role:"user",content:initial},
+    {role:"assistant",content:"The band is finishing five songs [1].",sources:[
+      {title:"Remaining five songs",url:"https://example.org/album",content:"Recording the remaining five songs",engine:"Tavily"}
+    ]}
+  ];
+  const exact = "Any info on a potential release date, a title, or any singles off of?";
+  assert.equal(isResearchFollowup(exact, history), true);
+  assert.deepEqual(planResearch(exact, history), {
+    mode:"research", query:'"Shadows Fall" next album release date title singles announcement', recent:true
+  });
+  for (const detail of ["What's the title?", "What is the title?", "Is there a release date?", "Any word on singles?", "What about a release date?"]) {
+    assert.equal(isResearchFollowup(detail, history), true, detail);
+    assert.equal(planResearch(detail, history).mode, "research", detail);
+    assert.equal(planResearch(detail, history).recent, true, detail);
+    assert.match(planResearch(detail, history).query, /Shadows Fall/, detail);
+  }
+  assert.equal(isResearchFollowup("Any info on Taylor Swift's new album title?", history), false);
+  assert.equal(planResearch("What's the capital of Canada?", history).mode, "factual");
+  assert.equal(isResearchFollowup("Cool, that's awesome", history), false);
+});
+
+test("source-topic inheritance never trusts invented assistant claims or switches artists", () => {
+  const history = [
+    {role:"user",content:"Tell me about the band Cattle Decapitation"},
+    {role:"assistant",content:"Imaginary band released new record",sources:[
+      {title:"band update",url:"https://example.org/band",content:"band is recording",engine:"Tavily"}
+    ]}
+  ];
+  assert.match(planResearch("Any updates about the title?", history).query, /Cattle Decapitation/);
+  assert.equal(planResearch("Any info on a new album from Metallica?", history).query.includes("Cattle Decapitation"), false);
+  assert.equal(planResearch("How are you feeling today?", history).mode, "chat");
+});
