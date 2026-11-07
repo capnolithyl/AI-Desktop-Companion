@@ -28,10 +28,26 @@ upgraded in place. Uninstall the current app only after confirming you have
 nothing to keep. Install a new APK signed with the persistent key. Subsequent
 updates can then install directly over it.
 
+
+## Independent web research (Pocket Mikan v0.4.0)
+
+Pocket Mikan can search the internet without connecting to your Windows PC:
+
+1. Create a personal **free Researcher** account at https://app.tavily.com/ (currently 1,000 free API credits/month, no credit card required; confirm at https://www.tavily.com/pricing).
+2. Copy your Tavily API key from the dashboard. **Never paste it into GitHub, Trello, chat logs, screenshots or a committed settings file.**
+3. Install the same-signer v0.4.0 Android APK over your existing Pocket Mikan installation; do **not** uninstall or clear its data.
+4. Open **Settings → Internet**, paste the key in the password field, then tap **Save key**. The key is encrypted with a device-bound Android Keystore AES-GCM secret and stored privately in native Android preferences, never in React/localStorage settings or the WebView.
+5. Leave **Search automatically** enabled for news, current facts and explicit research requests. Ask "What's the latest news about Artemis?" or use **/search**. For public HTTPS pages, use **/read https://example.org/page**. Source links open in your normal browser.
+6. **Remove key** in Settings deletes the saved credential. The internet permission enables only the native pinned HTTPS Tavily client; bundled WebView assets cannot fetch arbitrary websites. Gemini Nano chat, conversations and SQLite memories stay on your phone.
+
+The app reuses shared desktop WebResult types, compact source-grounding rules from src/web-search.ts, contextual follow-up evidence from src/research-context.ts, and a portable deterministic router (src/research-routing.ts) reflecting the existing Rust desktop research intent. The Docker/SearXNG desktop implementation is unchanged.
+
+The client calls only https://api.tavily.com/search (basic depth, up to five results) and, when asked to read a URL, https://api.tavily.com/extract. Search queries/URLs and provider metadata are transmitted to Tavily; personal chat and local memories are not sent. Free provider quotas and Wi-Fi/cellular connectivity apply. Search output is untrusted data, never model instructions. Answers should cite sources, distinguish dates and state uncertainty. For follow-up questions the app stores source references in SQLite message metadata. Real provider calls require the user's key; CI verifies compilation and offline tests.
+
 ## Runtime
 
 - `ReactActivity` is currently a **minimal native Android WebView host** using the secure `WebViewAssetLoader` HTTPS-like local origin and explicit JavaScript bridge to the existing Kotlin `NanoBackend`.
-- The app requests **no INTERNET permission** and denies external resource loads. It does not use online inference.
+- The app requests INTERNET permission for the native HTTPS Tavily search/extract adapter only; WebView external requests remain blocked. Gemini Nano inference stays local.
 - Mikan's Android model is Gemini Nano through the ML Kit GenAI Prompt API and Android AICore. It may need a first-time system-managed download. The backend streams real output to React. No synthetic replies.
 - The keyboard/IME uses Android edge-to-edge insets while CSS maintains the composer at the bottom and hides the portrait while typing.
 - v0.2.1: Gemini Nano status is now a small header indicator. To check readiness or download the model, open **Settings → AI → Local model**. If the model isn't ready, chat shows a setup notice that links to Settings. No persistent large Check button on the chat screen.
