@@ -7,20 +7,22 @@ import com.google.mlkit.genai.prompt.TextPart
 import com.google.mlkit.genai.prompt.generateContentRequest
 import kotlinx.coroutines.sync.Mutex
 
+enum class BackendStatus { READY, DOWNLOADABLE, DOWNLOADING, UNAVAILABLE }
+
 /** ML Kit Gemini Nano via Android AICore: local inference, no app network calls. */
-class NanoBackend : ChatBackend {
+class NanoBackend {
     private val model = Generation.getClient()
     // User replies and background extraction must never compete for AICore.
     private val inferenceLock = Mutex()
 
-    override suspend fun checkStatus() = when (model.checkStatus()) {
+    suspend fun checkStatus() = when (model.checkStatus()) {
         FeatureStatus.AVAILABLE -> BackendStatus.READY
         FeatureStatus.DOWNLOADABLE -> BackendStatus.DOWNLOADABLE
         FeatureStatus.DOWNLOADING -> BackendStatus.DOWNLOADING
         else -> BackendStatus.UNAVAILABLE
     }
 
-    override suspend fun download(onProgress: (String) -> Unit): BackendStatus {
+    suspend fun download(onProgress: (String) -> Unit): BackendStatus {
         when (checkStatus()) {
             BackendStatus.READY -> return BackendStatus.READY
             BackendStatus.UNAVAILABLE -> return BackendStatus.UNAVAILABLE
@@ -39,9 +41,6 @@ class NanoBackend : ChatBackend {
         }
         return checkStatus()
     }
-
-    override suspend fun reply(history: List<ChatTurn>, onDelta: (String) -> Unit): String =
-        generate(MikanPersona.prompt(history), onDelta)
 
     /** React supplies the existing desktop persona/system prompt and conversation. */
     suspend fun generate(prompt: String, onDelta: (String) -> Unit): String =
@@ -77,7 +76,7 @@ class NanoBackend : ChatBackend {
         }
     }
 
-    override fun close() {
+    fun close() {
         model.close()
     }
 }
