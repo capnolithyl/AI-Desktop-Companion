@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+    <!-- Clearly distinguish the non-updatable CI preview from the original. -->
+    <application
+        android:label="Pocket Mikan Preview"
+        tools:replace="android:label" />
+</manifest>
