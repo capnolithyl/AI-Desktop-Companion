@@ -27,7 +27,7 @@ class PocketMemoryRulesTest {
 
     @Test fun stableNameAndPreferenceCaptureWithoutNanoJson() {
         assertEquals(
-            "The user's name is Marcus",
+            "The user is named Marcus",
             PocketMemoryRules.obviousUserFact("My name is Marcus")?.first
         )
         assertEquals(
@@ -39,7 +39,7 @@ class PocketMemoryRulesTest {
             PocketMemoryRules.obviousUserFact("I love metal.")?.first
         )
         assertEquals(
-            "The user's favorite color is blue",
+            "The user says their favorite color is blue",
             PocketMemoryRules.obviousUserFact("My favorite color is blue.")?.first
         )
         assertNull(PocketMemoryRules.obviousUserFact("What's your name?"))
