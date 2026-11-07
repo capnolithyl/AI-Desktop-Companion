@@ -38,15 +38,15 @@ export const pocketMemory = {
   addFact: async (fact: string): Promise<UserFact> =>
     (await mobileBackend.memory<{ fact: UserFact }>("addFact", { fact })).fact,
   updateFact: (id: number, fact: string): Promise<object> =>
-    mobileBackend.memory("updateFact", { id, fact }),
+    mobileBackend.memory("updateFact", { recordId: id, fact }),
   deleteFact: (id: number): Promise<object> =>
-    mobileBackend.memory("deleteFact", { id }),
+    mobileBackend.memory("deleteFact", { recordId: id }),
   addCanon: async (category: CharacterCategory, label: string, value: string): Promise<CharacterFact> =>
     (await mobileBackend.memory<{ fact: CharacterFact }>("addCanon", { category, label, value, personaId: "mikan" })).fact,
   updateCanon: (id: number, category: CharacterCategory, label: string, value: string): Promise<object> =>
-    mobileBackend.memory("updateCanon", { id, category, label, value, personaId: "mikan" }),
+    mobileBackend.memory("updateCanon", { recordId: id, category, label, value, personaId: "mikan" }),
   deleteCanon: (id: number): Promise<object> =>
-    mobileBackend.memory("deleteCanon", { id, personaId: "mikan" }),
+    mobileBackend.memory("deleteCanon", { recordId: id, personaId: "mikan" }),
   processTurn: (conversationId: string, userMessageId: string, assistantMessageId: string,
     captureUser: boolean, captureCharacter: boolean): Promise<AutomaticMemoryResult> =>
     mobileBackend.extractMemory({
