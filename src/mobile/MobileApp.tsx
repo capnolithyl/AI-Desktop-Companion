@@ -160,7 +160,7 @@ export default function MobileApp() {
     setThreads(items => items.map(thread => thread.id === threadId ? {
       ...thread,
       title: thread.turns.length === 0 && turn.role === "user" ? turn.content.slice(0, 48) : thread.title,
-      turns: [...thread.turns, turn].slice(-200)
+      turns: [...thread.turns, turn]
     } : thread));
   }
   function replaceTurn(threadId: string, id: string, content: string) {
@@ -520,36 +520,43 @@ export default function MobileApp() {
         <button className="pocket-wide-button" onClick={startChat}><Plus size={18}/> New conversation</button>
         {threads.map(thread => <div className="pocket-history-item" key={thread.id}>
           <button onClick={() => { setActiveId(thread.id); setScreen("chat"); }}><MessageCircle size={18}/><span>{thread.title}<small>{thread.turns.length} messages</small></span>{active.id === thread.id && <Check size={15}/>}</button>
-          <button aria-label="Delete conversation" onClick={() => {
-            if (!confirm("Delete this phone-local conversation?")) return;
-            const next = threads.filter(t => t.id !== thread.id);
-            const kept = next.length ? next : [newThread()];
-            setThreads(kept);
-            if (active.id === thread.id) setActiveId(kept[0].id);
-          }}><Trash2 size={18}/></button>
+          <button aria-label="Delete conversation" disabled={!memoryReady || busy}
+            onClick={() => { void deleteThread(thread.id); }}><Trash2 size={18}/></button>
         </div>)}
       </>}
       {screen === "memory" && <>
-        <p className="pocket-hint">These are facts about you, stored on this phone only. They are not automatically shared with desktop Mikan.</p>
-        <form onSubmit={event => { event.preventDefault(); if (memoText.trim()) { addFact(memoText); setMemoText(""); } }} className="pocket-memory-form">
+        <p className="pocket-hint">These are facts about you in this phone's SQLite database, separate from Mikan's character canon. Automatic capture is configurable in Settings. Nothing is synced to desktop yet.</p>
+        <form onSubmit={event => {
+          event.preventDefault();
+          if (!memoText.trim() || !memoryReady) return;
+          void addFact(memoText).then(() => { setMemoText(""); setMemoryError(null); })
+            .catch(failure => setMemoryError(String(failure)));
+        }} className="pocket-memory-form">
           <textarea rows={3} value={memoText} onChange={event => setMemoText(event.target.value)} placeholder="Fact to remember…" maxLength={500}/>
           <button type="submit"><Plus size={18}/> Save local memory</button>
         </form>
         {facts.map(fact => <article className="pocket-fact" key={fact.id}>
           {openFactId === fact.id ? <><textarea value={editFact} onChange={event=>setEditFact(event.target.value)}/>
-            <button onClick={() => { setFacts(items=>items.map(f=>f.id===fact.id?{...f,fact:editFact,updatedAt:Math.floor(Date.now()/1000)}:f));setOpenFactId(null);}}>Save</button></> : <p>{fact.fact}</p>}
+            <button onClick={() => {
+              void editUserFact(fact.id,editFact).then(() => { setOpenFactId(null); setMemoryError(null); })
+                .catch(failure => setMemoryError(String(failure)));
+            }}>Save</button></> : <p>{fact.fact}</p>}
           <small>#{fact.id}</small>
-          <div className="pocket-actions"><button onClick={() => { setOpenFactId(fact.id);setEditFact(fact.fact); }}>Edit</button><button onClick={() => { if(confirm("Delete this memory?")) setFacts(items=>items.filter(f=>f.id!==fact.id)); }}>Delete</button></div>
+          <div className="pocket-actions"><button onClick={() => { setOpenFactId(fact.id);setEditFact(fact.fact); }}>Edit</button><button onClick={() => {
+            if (confirm("Delete this memory?")) void deleteUserFact(fact.id).catch(failure => setMemoryError(String(failure)));
+          }}>Delete</button></div>
         </article>)}
       </>}
-      {screen === "canon" && <CharacterCanonTab facts={canon} onAdd={async (cat,label,value)=>addCanon(cat,label,value)}
-        onEdit={async (id,cat,label,value)=>setCanon(items=>items.map(f=>f.id===id?{...f,category:cat,label,value,updatedAt:Math.floor(Date.now()/1000)}:f))}
-        onDelete={async id=>setCanon(items=>items.filter(f=>f.id!==id))}/>}
+      {screen === "canon" && <CharacterCanonTab facts={canon}
+        onAdd={(cat,label,value) => addCanon(cat,label,value)}
+        onEdit={(id,cat,label,value) => editCanon(id,cat,label,value)}
+        onDelete={id => deleteCanon(id)}/>}
       {screen === "log" && <>
         <button className="pocket-wide-button" onClick={() => void navigator.clipboard.writeText(active.turns.map(t => (t.role==="user"?"YOU":"MIKAN")+": "+t.content).join("\n\n")).catch(() => setError("Clipboard unavailable"))}><Copy size={18}/> Copy conversation</button>
         {active.turns.map(turn => <article className="pocket-fact" key={turn.id}><small>{turn.role === "user" ? "YOU" : "MIKAN"}</small><p>{turn.content}</p></article>)}
       </>}
       {error && <p className="pocket-error">{error}</p>}
+      {memoryError && <p className="pocket-error">{memoryError}</p>}
     </section>}
     <input ref={fileInput} hidden type="file" accept="image/*" onChange={event => { void choosePortrait(event.target.files?.[0]); event.currentTarget.value=""; }}/>
     {screen !== "chat" && <footer className="pocket-page-footer"><button onClick={() => setScreen("chat")}><ArrowLeft size={16}/> Back to chat</button><span><Sparkles size={14}/> Mikan · local</span></footer>}
