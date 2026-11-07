@@ -10,6 +10,7 @@ import { loadSettings, saveSettings, loadPortrait, savePortrait, type Settings }
 import { memoryContext, characterContext, type UserFact, type CharacterFact, type CharacterCategory } from "../memory-client";
 import { mobileBackend, type NativeStatus } from "./mobile-backend";
 import { pocketMemory, type PocketThread, type PocketTurn } from "./mobile-memory";
+import { resolveExplicitMemoryIntent, type ExplicitMemoryIntent } from "./memory-intent";
 import "./mobile.css";
 
 type Turn = PocketTurn;
@@ -31,6 +32,7 @@ function buildPrompt(settings: Settings, facts: UserFact[], canon: CharacterFact
   const query = turns[turns.length - 1]?.content ?? "";
   const context = [settings.systemPrompt, personalityGuidance(settings.personality),
     "This is on-device Gemini Nano pocket mode. You cannot browse the web, see the user's PC, or access desktop memory. Be candid about limitations.",
+    "CRITICAL: Conversation text alone cannot save a memory. Never claim that a memory has been saved, filed away, or remembered permanently unless the application has confirmed a database write. Explicit save requests are handled by the app, not by your own text.",
     memoryContext(facts, query), characterContext(canon, query)
   ].filter(Boolean).join("\n");
   // Nano has a significantly smaller working context than the desktop model.
@@ -339,6 +341,40 @@ export default function MobileApp() {
     return true;
   }
 
+  async function saveExplicitMemory(
+    intent: ExplicitMemoryIntent,
+    threadId: string, user: Turn, assistant: Turn
+  ): Promise<void> {
+    let reply = "";
+    try {
+      // Save the new turn first, then persist the actual memory before
+      // acknowledging it. A generated "sure" is not a database commit.
+      await pocketMemory.saveMessage(threadId, user);
+      if (intent.kind === "clarify") {
+        reply = intent.description;
+      } else if (intent.kind === "user") {
+        await addFact(intent.fact);
+        reply = "Saved to your user memories: " + intent.fact + ". You can check or edit it under Memory.";
+      } else {
+        await addCanon(intent.category, intent.label, intent.value);
+        reply = "Saved to my character canon: " + intent.description + ". You can check it under /canon.";
+      }
+      setMemoryError(null);
+    } catch (failure) {
+      const detail = failure instanceof Error ? failure.message : String(failure);
+      // Don't lie about persistence and don't fall back to a model-generated
+      // assurance if SQLite rejects a write.
+      reply = "I couldn't save that memory. " + detail;
+      setMemoryError(detail);
+    }
+    replaceTurn(threadId, assistant.id, reply);
+    try {
+      await pocketMemory.saveMessage(threadId, { ...assistant, content: reply });
+    } catch (failure) {
+      setMemoryError("Could not save the conversation reply: " + String(failure));
+    }
+  }
+
   async function send() {
     const text = draft.trim();
     if (!text || busy || !memoryReady) return;
@@ -346,7 +382,8 @@ export default function MobileApp() {
     setIntro("");
     const cmd = parseSlashCommand(text);
     if (cmd) { handleCommand(cmd.name, cmd.argument); return; }
-    if (model !== "READY") {
+    const explicitMemory = resolveExplicitMemoryIntent(text, active.turns);
+    if (!explicitMemory && model !== "READY") {
       setIntro("Gemini Nano isn't ready yet. Open Settings to check or download the local model.");
       return;
     }
@@ -360,6 +397,10 @@ export default function MobileApp() {
     let output = "";
     try {
       // The message is durable before inference and can be cited as evidence.
+      if (explicitMemory) {
+        await saveExplicitMemory(explicitMemory, threadId, user, assistant);
+        return;
+      }
       await pocketMemory.saveMessage(threadId, user);
       const answer = await mobileBackend.generate(buildPrompt(settings, facts, canon, [...active.turns, user]), chunk => {
         output += chunk;
