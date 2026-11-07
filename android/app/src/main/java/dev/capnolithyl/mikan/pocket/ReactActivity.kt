@@ -36,7 +36,8 @@ import java.io.ByteArrayInputStream
 
 /**
  * Android shell for Mikan's *shared React UI*.
- * No internet permission. Only bundled assets are allowed in the WebView.
+ * Bundled WebView assets remain offline. A narrowly scoped native HTTPS
+ * adapter handles optional Tavily research; Gemini Nano inference stays local.
  *
  * The transport is deliberately isolated: it can later be replaced by the
  * Tauri 2 Android plugin without rewriting the React chat/personality/settings.
@@ -46,6 +47,7 @@ class ReactActivity : Activity() {
     private val backend = NanoBackend()
     private val memoryStore by lazy { PocketMemoryStore(this) }
     private val memoryExtractor by lazy { PocketMemoryExtractor(memoryStore,backend) }
+    private val webSearch by lazy { PocketWebSearch(this) }
     private var memoryJob: Job? = null
     private lateinit var web: WebView
     private var generation: Job? = null
@@ -197,6 +199,69 @@ class ReactActivity : Activity() {
                         } catch (e: Exception) {
                             deliver(id,"error",error=e.message ?: "Memory extraction failed")
                         }
+                    }
+                }
+                "webKeyStatus" -> scope.launch {
+                    try {
+                        deliver(id, "result", text = withContext(Dispatchers.IO) {
+                            webSearch.status().toString()
+                        })
+                    } catch (e: Exception) {
+                        deliver(id, "error", error = e.message ?: "Web provider status failed")
+                    }
+                }
+                "webSaveKey" -> scope.launch {
+                    try {
+                        val newKey = data.optString("apiKey")
+                        val result = withContext(Dispatchers.IO) { webSearch.saveKey(newKey) }
+                        deliver(id, "result", text = result.toString())
+                    } catch (e: Exception) {
+                        deliver(id, "error", error = e.message ?: "Could not save search key")
+                    }
+                }
+                "webClearKey" -> scope.launch {
+                    try {
+                        val result = withContext(Dispatchers.IO) { webSearch.clearKey() }
+                        deliver(id, "result", text = result.toString())
+                    } catch (e: Exception) {
+                        deliver(id, "error", error = e.message ?: "Could not clear search key")
+                    }
+                }
+                "webSearch" -> scope.launch {
+                    try {
+                        val result = withContext(Dispatchers.IO) {
+                            webSearch.search(data.optString("query"), data.optBoolean("recent",false))
+                        }
+                        deliver(id, "result", text = result.toString())
+                    } catch (e: Exception) {
+                        deliver(id, "error", error = e.message ?: "Web search unavailable")
+                    }
+                }
+                "webRead" -> scope.launch {
+                    try {
+                        val result = withContext(Dispatchers.IO) {
+                            webSearch.readPage(data.optString("url"))
+                        }
+                        deliver(id, "result", text = result.toString())
+                    } catch (e: Exception) {
+                        deliver(id, "error", error = e.message ?: "Webpage reading unavailable")
+                    }
+                }
+                "openLink" -> {
+                    val url = data.optString("url")
+                    try {
+                        val uri = Uri.parse(url)
+                        require(url.length in 12..1800 && uri.scheme == "https"
+                            && !uri.host.isNullOrBlank() && uri.userInfo == null
+                            && uri.port in listOf(-1,443)) {
+                            "Only public HTTPS links can open in the browser"
+                        }
+                        startActivity(Intent(Intent.ACTION_VIEW, uri).apply {
+                            addCategory(Intent.CATEGORY_BROWSABLE)
+                        })
+                        deliver(id, "result", text = "{}")
+                    } catch (e: Exception) {
+                        deliver(id, "error", error = e.message ?: "Could not open URL")
                     }
                 }
                 "status" -> scope.launch {
