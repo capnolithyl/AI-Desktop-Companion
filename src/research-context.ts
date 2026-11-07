@@ -1,5 +1,5 @@
 import type { WebResult } from "./web-search";
-import { isResearchFollowup } from "./research-routing";
+import { isResearchFollowup } from "./research-routing.ts";
 
 type PriorMessage = {
   role: "user" | "assistant";
