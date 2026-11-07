@@ -12,6 +12,13 @@ import android.view.ViewGroup
 import android.view.WindowInsets
 import android.view.inputmethod.InputMethodManager
 import android.content.Context
+import android.content.Intent
+import android.graphics.BitmapFactory
+import android.os.Build
+import android.widget.FrameLayout
+import android.widget.ImageView
+import android.widget.Toast
+import java.io.File
 import android.widget.Button
 import android.widget.EditText
 import android.widget.LinearLayout
@@ -41,6 +48,11 @@ class MainActivity : Activity() {
     private lateinit var send: Button
     private lateinit var modelButton: Button
     private lateinit var status: TextView
+    private lateinit var portraitArea: FrameLayout
+    private lateinit var portraitView: ImageView
+    private var keyboardVisible = false
+    private val portraitFile by lazy { File(filesDir, "mikan-portrait.img") }
+    private val portraitRequestCode = 4821
     private var ready = false
     private var busy = false
     private var generation: Job? = null
@@ -76,11 +88,35 @@ class MainActivity : Activity() {
             setPadding(dp(16), dp(14), dp(16), dp(12))
         }
         setContentView(root)
-        // Android 15+ edge-to-edge: preserve system bar + cutout space.
+        // Android 15+ forces edge-to-edge. IME insets must reserve room for
+        // the composer; system-bar-only padding left it behind the keyboard.
         root.setOnApplyWindowInsetsListener { view, insets ->
-            val bars = insets.getInsets(WindowInsets.Type.systemBars() or WindowInsets.Type.displayCutout())
-            view.setPadding(dp(16) + bars.left, dp(14) + bars.top,
-                dp(16) + bars.right, dp(12) + bars.bottom)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                val bars = insets.getInsets(
+                    WindowInsets.Type.systemBars() or WindowInsets.Type.displayCutout()
+                )
+                val ime = insets.getInsets(WindowInsets.Type.ime())
+                val showingKeyboard = insets.isVisible(WindowInsets.Type.ime()) &&
+                    ime.bottom > bars.bottom
+                view.setPadding(
+                    dp(16) + bars.left,
+                    dp(14) + bars.top,
+                    dp(16) + bars.right,
+                    dp(12) + maxOf(bars.bottom, ime.bottom)
+                )
+                if (showingKeyboard != keyboardVisible) {
+                    keyboardVisible = showingKeyboard
+                    if (::portraitArea.isInitialized) {
+                        portraitArea.visibility = if (showingKeyboard) View.GONE else View.VISIBLE
+                    }
+                    if (showingKeyboard && ::scroll.isInitialized) {
+                        scroll.post { scroll.fullScroll(View.FOCUS_DOWN) }
+                    }
+                }
+            } else {
+                // Pre-Android 11 receives a resized content area with adjustResize.
+                view.setPadding(dp(16), dp(14), dp(16), dp(12))
+            }
             insets
         }
 
@@ -122,6 +158,34 @@ class MainActivity : Activity() {
         }
         modelStrip.addView(modelButton, LinearLayout.LayoutParams(dp(100), dp(40)))
         root.addView(modelStrip)
+
+        portraitArea = FrameLayout(this).apply {
+            contentDescription = "Mikan portrait. Double tap to choose an image."
+            isClickable = true
+            setOnClickListener { choosePortrait() }
+        }
+        portraitView = ImageView(this).apply {
+            scaleType = ImageView.ScaleType.FIT_CENTER
+            adjustViewBounds = true
+            setImageResource(R.drawable.mikan_portrait)
+            contentDescription = "Mikan, with orange cat ears and hair, amber eyes, and a cozy sweater"
+        }
+        portraitArea.addView(portraitView, FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT
+        ))
+        val changePortrait = label("CHANGE PORTRAIT", 10f, orange, true).apply {
+            background = panel(surface, 10)
+            setPadding(dp(12), dp(7), dp(12), dp(7))
+            setOnClickListener { choosePortrait() }
+        }
+        portraitArea.addView(changePortrait, FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+            Gravity.END or Gravity.BOTTOM
+        ))
+        root.addView(portraitArea, LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, dp(250)
+        ).apply { topMargin = dp(8) })
+        loadPortrait()
 
         scroll = ScrollView(this).apply {
             clipToPadding = false
@@ -170,6 +234,74 @@ class MainActivity : Activity() {
             setPadding(0, dp(11), 0, dp(2))
         })
         refreshButtons()
+        root.requestApplyInsets()
+    }
+
+    private fun choosePortrait() {
+        val picker = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE)
+            type = "image/*"
+        }
+        @Suppress("DEPRECATION")
+        startActivityForResult(picker, portraitRequestCode)
+    }
+
+    private fun showPortrait(file: File): Boolean {
+        if (!file.isFile) return false
+        val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeFile(file.absolutePath, options)
+        if (options.outWidth <= 0 || options.outHeight <= 0) return false
+        var sampleSize = 1
+        while (maxOf(options.outWidth / sampleSize, options.outHeight / sampleSize) > 1600) {
+            sampleSize *= 2
+        }
+        options.inJustDecodeBounds = false
+        options.inSampleSize = sampleSize
+        val bitmap = BitmapFactory.decodeFile(file.absolutePath, options) ?: return false
+        portraitView.setImageBitmap(bitmap)
+        return true
+    }
+
+    private fun loadPortrait() {
+        if (!showPortrait(portraitFile)) {
+            portraitView.setImageResource(R.drawable.mikan_portrait)
+        }
+    }
+
+    @Deprecated("Android Activity result compatibility for this tiny standalone app")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode != portraitRequestCode || resultCode != RESULT_OK) return
+        val uri = data?.data ?: return
+        val candidate = File(filesDir, "mikan-portrait.tmp")
+        try {
+            val source = contentResolver.openInputStream(uri)
+                ?: throw IllegalArgumentException("Couldn't read the selected image")
+            source.use { input ->
+                candidate.outputStream().use { output ->
+                    val buffer = ByteArray(8192)
+                    var copied = 0L
+                    while (true) {
+                        val count = input.read(buffer)
+                        if (count < 0) break
+                        copied += count
+                        require(copied <= 15L * 1024 * 1024) {
+                            "Portrait is too large (15 MB maximum)"
+                        }
+                        output.write(buffer, 0, count)
+                    }
+                    require(copied > 0) { "Selected image is empty" }
+                }
+            }
+            require(showPortrait(candidate)) { "Couldn't open that image" }
+            candidate.copyTo(portraitFile, overwrite = true)
+            Toast.makeText(this, "Mikan's portrait saved on this phone", Toast.LENGTH_SHORT).show()
+        } catch (error: Exception) {
+            loadPortrait()
+            Toast.makeText(this, error.message ?: "Couldn't import portrait", Toast.LENGTH_LONG).show()
+        } finally {
+            candidate.delete()
+        }
     }
 
     private fun addIntro() {
