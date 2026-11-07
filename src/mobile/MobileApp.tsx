@@ -622,7 +622,7 @@ export default function MobileApp() {
       {screen === "memory" && <>
         <p className="pocket-hint">These are facts about you in this phone's SQLite database, separate from Mikan's character canon. Automatic capture is configurable in Settings. Nothing is synced to desktop yet.</p>
         {memoryNotice && <p className="pocket-memory-status" role="status">{memoryNotice}</p>}
-        {memoryError && <p className="pocket-error" role="alert">{memoryError}</p>
+        {memoryError && <p className="pocket-error" role="alert">{memoryError}</p>}
         <form onSubmit={event => {
           event.preventDefault();
           if (!memoText.trim() || !memoryReady || memoryBusy) return;
