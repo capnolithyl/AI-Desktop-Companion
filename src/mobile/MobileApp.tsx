@@ -11,7 +11,7 @@ import { memoryContext, characterContext, type UserFact, type CharacterFact, typ
 import { mobileBackend, type NativeStatus } from "./mobile-backend";
 import { pocketMemory, type PocketThread, type PocketTurn } from "./mobile-memory";
 import { resolveExplicitMemoryIntent, type ExplicitMemoryIntent } from "./memory-intent";
-import { researchRequest, isPocketResearchFollowup, stripUnsupportedCitations } from "../research-routing";
+import { planResearch, stripUnsupportedCitations } from "../research-routing";
 import { priorResearchSources } from "../research-context";
 import { compactWebContext, pageContext, type WebResult } from "../web-search";
 import "./mobile.css";
@@ -493,9 +493,13 @@ export default function MobileApp() {
       await pocketMemory.saveMessage(threadId, user);
       let sources: WebResult[] = [];
       let research = "";
-      const planned = researchRequest(text, active.turns);
-      const prior = isPocketResearchFollowup(text, active.turns)
-        ? priorResearchSources(active.turns, text) : [];
+      const researchPlan = planResearch(text, active.turns);
+      // Pocket uses the same research intent as desktop, then supplies Tavily
+      // instead of SearXNG; the factual tier still searches on Pocket.
+      const planned = researchPlan.mode === "chat" ? null : {
+        query: researchPlan.query ?? text, recent: researchPlan.recent
+      };
+      const prior = priorResearchSources(active.turns, text);
       // If the user requests fresh information while search is disabled, stop
       // before Nano improvises a convincing but unsourced release date.
       if (planned?.recent && !webEnabled && mode !== "search" && mode !== "read") {
@@ -606,7 +610,7 @@ export default function MobileApp() {
       <div className="pocket-heading">
         <strong>{screen === "chat" ? "Mikan" : title}</strong>
         <span className="pocket-subtitle">
-          POCKET COMPANION · LOCAL · v0.4.2
+          POCKET COMPANION · LOCAL · v0.4.3
           <button type="button" className={`pocket-model-indicator ${model === "READY" ? "ready" : "attention"}`}
             onClick={() => setScreen("settings")} title="View local model status in settings"
             aria-label={`Gemini Nano: ${model.toLowerCase()}. Open model settings`}>
