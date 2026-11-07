@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import { ArrowLeft, ArrowUp, BookOpen, Cat, Check, Copy, History, Image, LoaderCircle, MessageCircle, Plus, Settings2, SlidersHorizontal, Sparkles, Square, Trash2 } from "lucide-react";
-import mikanIcon from "../../assets/mikan-icon.svg";
+import defaultMikanPortrait from "./assets/mikan-portrait.webp";
 import { ChatMarkdown } from "../components/ChatMarkdown";
 import { PersonalityPresets, PersonalitySliders } from "../PersonalityControls";
 import { CharacterCanonTab } from "../CharacterCanonTab";
 import { personalityGuidance, findPreset, randomPersonality, PERSONALITY_TRAITS, type Personality } from "../personality";
 import { parseSlashCommand, SLASH_HELP } from "../slash-commands";
-import { loadSettings, saveSettings, loadPortrait, savePortrait, type Settings } from "../storage";
+import { loadSettings, saveSettings, loadPortrait, savePortrait, deletePortrait, type Settings } from "../storage";
 import { memoryContext, characterContext, type UserFact, type CharacterFact, type CharacterCategory } from "../memory-client";
 import { mobileBackend, type NativeStatus } from "./mobile-backend";
 import { pocketMemory, type PocketThread, type PocketTurn } from "./mobile-memory";
@@ -71,7 +71,8 @@ export default function MobileApp() {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [draft, setDraft] = useState("");
-  const [portrait, setPortrait] = useState(mikanIcon);
+  const [portrait, setPortrait] = useState(defaultMikanPortrait);
+  const [portraitIsCustom, setPortraitIsCustom] = useState(false);
   const [portraitOpen, setPortraitOpen] = useState(true);
   const [editFact, setEditFact] = useState("");
   const [openFactId, setOpenFactId] = useState<number | null>(null);
@@ -114,10 +115,7 @@ export default function MobileApp() {
         const url = URL.createObjectURL(blob);
         portraitUrl.current = url;
         setPortrait(url);
-      } else {
-        void mobileBackend.portrait().then(url => {
-          if (url && !portraitUrl.current) setPortrait(url);
-        }).catch(() => {});
+        setPortraitIsCustom(true);
       }
     }).catch(() => {});
     return () => {
@@ -252,7 +250,6 @@ export default function MobileApp() {
     if (name === "new") { startChat(); return true; }
     if (["appearance", "prompt", "portrait"].includes(name)) {
       setScreen("settings");
-      if (name === "portrait") window.setTimeout(() => fileInput.current?.click(), 50);
       return true;
     }
     if (["memories", "canon"].includes(name)) {
@@ -429,7 +426,21 @@ export default function MobileApp() {
       const url = URL.createObjectURL(file);
       portraitUrl.current = url;
       setPortrait(url);
+      setPortraitIsCustom(true);
+      setError("");
     } catch (failure) { setError(String(failure)); }
+  }
+  async function restoreDefaultPortrait() {
+    try {
+      await deletePortrait();
+      if (portraitUrl.current) URL.revokeObjectURL(portraitUrl.current);
+      portraitUrl.current = null;
+      setPortrait(defaultMikanPortrait);
+      setPortraitIsCustom(false);
+      setError("");
+    } catch (failure) {
+      setError("Couldn't reset the portrait: " + String(failure));
+    }
   }
   const mobileStyle = {
     "--pocket-accent": settings.appearance.accent,
@@ -466,9 +477,7 @@ export default function MobileApp() {
           "Gemini Nano is unavailable. Check its status in Settings."}
       </button>}
       <section className={"pocket-portrait " + (portraitOpen ? "" : "pocket-portrait-hidden")}>
-        <img src={portrait} alt="Mikan's portrait" onClick={() => fileInput.current?.click()}/>
-        {portrait === mikanIcon && <span>Tap to import Mikan's character portrait</span>}
-        <button onClick={() => fileInput.current?.click()} aria-label="Change Mikan portrait"><Image size={15}/> Change</button>
+        <img src={portrait} alt="Mikan's portrait"/>
       </section>
       <section className="pocket-transcript" aria-label="Chat history">
         {active.turns.length === 0 && <div className="pocket-welcome">Hey! Pocket Mikan reporting for duty. Let's see what this little phone-brain can do. ✨</div>}
@@ -509,7 +518,15 @@ export default function MobileApp() {
         <div className="pocket-field"><label htmlFor="panel-color">Panel</label><input id="panel-color" type="color" value={settings.appearance.panel} onChange={event => updateAppearance({panel:event.target.value})}/></div>
         <div className="pocket-field"><label htmlFor="font-size">Text size · {settings.appearance.fontSize}px</label><input id="font-size" type="range" min="11" max="20" value={settings.appearance.fontSize} onChange={event => updateAppearance({fontSize:Number(event.target.value)})}/></div>
         <div className="pocket-field"><label htmlFor="font-family">Font</label><select id="font-family" value={settings.appearance.fontFamily} onChange={event => updateAppearance({fontFamily:event.target.value as Settings["appearance"]["fontFamily"]})}>{["Segoe UI","Arial","Verdana","Georgia"].map(font => <option key={font}>{font}</option>)}</select></div>
-        <button className="pocket-wide-button" onClick={() => fileInput.current?.click()}><Image size={18}/> Choose portrait image</button>
+        <div className="pocket-portrait-settings">
+          <img src={portrait} alt="Current Mikan portrait preview" className="pocket-portrait-settings-preview"/>
+          <div className="pocket-portrait-settings-body">
+            <strong>{portraitIsCustom ? "Custom portrait" : "Mikan's default portrait"}</strong>
+            <p className="pocket-hint">Change Mikan's appearance without cluttering the chat.</p>
+            <button className="pocket-wide-button" onClick={() => fileInput.current?.click()}><Image size={18}/> Choose image</button>
+            {portraitIsCustom && <button className="pocket-portrait-reset" onClick={() => void restoreDefaultPortrait()}>Reset to default</button>}
+          </div>
+        </div>
         <h3>AI</h3>
         <p className="pocket-hint">Model: Gemini Nano (AICore), offline. Desktop Ollama models aren't installed on the phone.</p>
         <div className="pocket-model-settings">
