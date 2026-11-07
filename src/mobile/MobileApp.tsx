@@ -496,6 +496,11 @@ export default function MobileApp() {
       const planned = researchRequest(text, active.turns);
       const prior = isPocketResearchFollowup(text, active.turns)
         ? priorResearchSources(active.turns, text) : [];
+      // If the user requests fresh information while search is disabled, stop
+      // before Nano improvises a convincing but unsourced release date.
+      if (planned?.recent && !webEnabled && mode !== "search" && mode !== "read") {
+        throw new Error("I can't verify current news while automatic search is off. Enable it in Settings → Internet or use /search.");
+      }
       // Never ask Nano to guess about breaking news if the requested provider
       // hasn't been configured yet. Timeless knowledge remains available offline.
       if (webEnabled && planned?.recent && !webConfigured && mode !== "read") {
@@ -601,7 +606,7 @@ export default function MobileApp() {
       <div className="pocket-heading">
         <strong>{screen === "chat" ? "Mikan" : title}</strong>
         <span className="pocket-subtitle">
-          POCKET COMPANION · LOCAL · v0.4.1
+          POCKET COMPANION · LOCAL · v0.4.2
           <button type="button" className={`pocket-model-indicator ${model === "READY" ? "ready" : "attention"}`}
             onClick={() => setScreen("settings")} title="View local model status in settings"
             aria-label={`Gemini Nano: ${model.toLowerCase()}. Open model settings`}>
