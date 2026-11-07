@@ -13,6 +13,8 @@ on:
     branches: [main]
     paths:
       - 'android/**'
+      - 'src/**'
+      - 'package.json'
       - '.github/workflows/android.yml'
 
 jobs:
@@ -27,6 +29,8 @@ jobs:
           node-version: '22'
       - name: Install React dependencies
         run: npm install --no-audit --no-fund
+      - name: Test conversational memory intent
+        run: node --experimental-strip-types --test src/mobile/memory-intent.test.mjs
       - name: Build shared React mobile frontend
         run: npm run build:mobile
       - uses: actions/setup-java@v4
