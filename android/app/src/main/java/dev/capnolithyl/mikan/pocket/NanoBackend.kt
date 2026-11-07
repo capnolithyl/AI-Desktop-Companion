@@ -37,9 +37,12 @@ class NanoBackend : ChatBackend {
         return checkStatus()
     }
 
-    override suspend fun reply(history: List<ChatTurn>, onDelta: (String) -> Unit): String {
+    override suspend fun reply(history: List<ChatTurn>, onDelta: (String) -> Unit): String =
+        generate(MikanPersona.prompt(history), onDelta)
+
+    /** React supplies the existing desktop persona/system prompt and conversation. */
+    suspend fun generate(prompt: String, onDelta: (String) -> Unit): String {
         check(checkStatus() == BackendStatus.READY) { "Gemini Nano is not ready yet" }
-        val prompt = MikanPersona.prompt(history)
         val request = generateContentRequest(TextPart(prompt)) {
             temperature = 0.75f
             topK = 30
