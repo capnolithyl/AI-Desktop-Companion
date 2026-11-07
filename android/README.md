@@ -17,6 +17,8 @@ The app uses a **persistent private Android signing key** to support routine
 in-place updates. See [SIGNING.md](SIGNING.md) for the required one-time
 GitHub Actions secret configuration.
 
+If the run succeeds but **no APK artifact appears**, check the **Prepare persistent private signing** step: the signing secret was missing from that workflow invocation. Trigger a fresh workflow run after saving the secret. A successful compile alone does not mean a signed APK was published.
+
 After signing is configured, use the latest successful GitHub Actions run's
 `mikan-pocket-signed-apk` artifact. The package ID is
 `dev.capnolithyl.mikan.pocket`.
