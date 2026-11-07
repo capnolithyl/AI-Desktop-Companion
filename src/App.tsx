@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent } from "react";
-import { ChatMarkdown } from "./components/ChatMarkdown";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { webContext, pageContext, type PageDocument, type WebResult } from "./web-search";
 import { priorResearchSources } from "./research-context";
@@ -112,7 +113,13 @@ async function copyTextToClipboard(text: string): Promise<void> {
 }
 
 function MarkdownText({ text }: { text: string }) {
-  return <ChatMarkdown text={text} onOpenLink={openSource}/>;
+  // Do not enable raw HTML. Open citations in the user's default browser.
+  return <div className="markdown-text"><ReactMarkdown remarkPlugins={[remarkGfm]} components={{
+    a: ({ href, children }) => <a href={href} onClick={event => {
+      event.preventDefault();
+      if (href) void openSource(href);
+    }}>{children}</a>
+  }}>{text}</ReactMarkdown></div>;
 }
 const FONTS = ["Segoe UI", "Arial", "Verdana", "Georgia"] as const;
 const ACCENTS = ["#ffad7e", "#f28bb6", "#ae9dff", "#80d6c5", "#8dbbff"];
