@@ -23,6 +23,7 @@ android {
 
 dependencies {
     implementation("com.google.mlkit:genai-prompt:1.0.0-beta5")
+    implementation("androidx.webkit:webkit:1.13.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
 }
 
