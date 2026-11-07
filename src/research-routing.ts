@@ -68,23 +68,29 @@ export function researchRequest(question: string, previous: ResearchTurn[] = [])
  */
 function researchSubject(text: string): string | null {
   const lower = text.toLowerCase();
+  const typePrefixes = [
+    "the death metal band ", "the metal band ", "death metal band ",
+    "the band ", "the group ", "the musician ", "the music artist ",
+    "the artist ", "the singer ", "band ", "artist "
+  ];
   for (const prefix of [" about ", " on ", " for ", " regarding "]) {
-    const at = lower.lastIndexOf(prefix);
-    if (at < 0) continue;
-    let candidate = text.slice(at + prefix.length).split(/[?!\n]/, 1)[0].trim()
-      .replace(/[.,;:]+$/, "").trim();
-    const typePrefixes = [
-      "the death metal band ", "the metal band ", "death metal band ",
-      "the band ", "the group ", "the musician ", "the music artist ",
-      "the artist ", "the singer ", "band ", "artist "
-    ];
-    const descriptor = typePrefixes.find(value => candidate.toLowerCase().startsWith(value));
-    if (descriptor) candidate = candidate.slice(descriptor.length).trim();
-    candidate = candidate.split(/\s+/).map(word => {
-      const match = /^([A-Z]{2,})['’]s$/.exec(word);
-      return match ? match[1] : word;
-    }).join(" ");
-    if (candidate) return candidate;
+    // The last clause may say "their upcoming album" after naming a band.
+    // Keep walking backward until we find a specific subject.
+    let end = lower.length;
+    while (end > 0) {
+      const at = lower.lastIndexOf(prefix, end - 1);
+      if (at < 0) break;
+      end = at;
+      let candidate = text.slice(at + prefix.length).split(/[?!\n]/, 1)[0].trim()
+        .replace(/[.,;:]+$/, "").trim();
+      const descriptor = typePrefixes.find(value => candidate.toLowerCase().startsWith(value));
+      if (descriptor) candidate = candidate.slice(descriptor.length).trim();
+      candidate = candidate.split(/\s+/).map(word => {
+        const match = /^([A-Z]{2,})['’]s$/.exec(word);
+        return match ? match[1] : word;
+      }).join(" ");
+      if (specificTopic(candidate)) return candidate;
+    }
   }
   return null;
 }
@@ -92,7 +98,8 @@ function researchSubject(text: string): string | null {
 const ambiguousTopics = new Set([
   "them", "it", "him", "her", "that", "this", "the band", "the group",
   "the artist", "those guys", "a new album", "a new release",
-  "the new album", "an album", "their new album", "the latest album",
+  "the new album", "an album", "their new album", "their next album",
+  "their upcoming album", "an upcoming album", "the upcoming album", "the latest album",
   "an update", "updates", "them please", "that band", "a next album"
 ]);
 function specificTopic(subject: string | null): subject is string {
