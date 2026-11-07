@@ -29,7 +29,10 @@ nothing to keep. Install a new APK signed with the persistent key. Subsequent
 updates can then install directly over it.
 
 
-## Independent web research (Pocket Mikan v0.4.0)
+## Independent web research (Pocket Mikan v0.4.1)
+
+**v0.4.1:** Search only on real research requests, not conversational statements such as "You have internet access now." Cached evidence carries into immediately relevant factual follow-ups only. Casual chat omits old sourced assistant text and unsupported citation markers; the chat auto-scrolls as answers and source links stream in unless you scroll up yourself.
+
 
 Pocket Mikan can search the internet without connecting to your Windows PC:
 
