@@ -29,6 +29,11 @@ jobs:
         run: npm run build
       - name: Test debug-log export
         run: npm run test:debug
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Test local voice reference API
+        run: python -m unittest discover -s tools/tts -p "test_*.py"
       - name: Test Rust research intent and source handling
         working-directory: src-tauri
         run: cargo test --lib

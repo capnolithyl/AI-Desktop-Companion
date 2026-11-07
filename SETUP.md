@@ -142,3 +142,14 @@ for setup and AMD Windows caveats. Use **Check connection** and **Test voice**
 in Settings → Voice. The voice description and playback speed can be adjusted;
 the design model does not yet guarantee a fixed speaker from one response to
 the next. No paid speech API is used.
+
+### Reusing one consistent Mikan voice
+
+Under **Settings → Voice**, choose a VoiceDesign recording you like, upload
+its WAV (mono PCM16, 2–30 seconds, under 6 MB) and enter the exact transcript.
+Mikan then uses the Qwen3-TTS **Base** model with a cached voice clone prompt,
+instead of regenerating a new voice identity each turn. Save, replace and
+remove the reference from the Voice tab. The WAV and transcript persist in
+`%LOCALAPPDATA%\Mikan\voice`, even when Mikan or the voice service quits.
+Without a reference, VoiceDesign is used as a fallback. See
+[tools/tts/README.md](tools/tts/README.md).
