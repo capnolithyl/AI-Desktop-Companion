@@ -27,6 +27,8 @@ jobs:
         run: npm run icons
       - name: Typecheck and build UI
         run: npm run build
+      - name: Test shared desktop and Pocket research policy
+        run: node --experimental-strip-types --test src/research-routing.test.mjs src/research-context.test.mjs
       - name: Test debug-log export
         run: npm run test:debug
       - name: Test Rust research intent and source handling
