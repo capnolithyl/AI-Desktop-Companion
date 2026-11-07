@@ -150,7 +150,7 @@ class PocketMemoryStore(private val context: Context) :
                                    created: Long = now()) {
         require(validId(id)) { "Invalid conversation ID" }
         db.execSQL("INSERT OR IGNORE INTO conversations(id,title,created_at,updated_at) VALUES(?,?,?,?)",
-            arrayOf(id, title.take(70), created, created))
+            arrayOf<Any>(id, title.take(70), created, created))
     }
 
     private fun insertMessage(db: SQLiteDatabase, conversationId: String, message: JSONObject) {
@@ -175,7 +175,7 @@ class PocketMemoryStore(private val context: Context) :
         if (existing == null) {
             db.execSQL("""INSERT INTO messages
                 (id,conversation_id,role,content,created_at,metadata_json) VALUES(?,?,?,?,?,?)""",
-                arrayOf(id,conversationId,role,content,timestamp,metadata))
+                arrayOf<Any>(id,conversationId,role,content,timestamp,metadata))
         } else {
             db.execSQL("""UPDATE messages SET content=?,metadata_json=?
                 WHERE id=? AND conversation_id=?""",
@@ -185,8 +185,8 @@ class PocketMemoryStore(private val context: Context) :
         if (role == "user") {
             db.execSQL("""UPDATE conversations SET
                 title=CASE WHEN title='New conversation' THEN substr(?,1,70) ELSE title END,
-                updated_at=? WHERE id=?""",arrayOf(content.trim(),sec,conversationId))
-        } else db.execSQL("UPDATE conversations SET updated_at=? WHERE id=?",arrayOf(sec,conversationId))
+                updated_at=? WHERE id=?""",arrayOf<Any>(content.trim(),sec,conversationId))
+        } else db.execSQL("UPDATE conversations SET updated_at=? WHERE id=?",arrayOf<Any>(sec,conversationId))
     }
 
     private fun insertUser(db: SQLiteDatabase, value: String, created: Long? = null, updated: Long? = null,
@@ -194,7 +194,7 @@ class PocketMemoryStore(private val context: Context) :
         val fact = cleanFact(value)
         if (created != null && updated != null) {
             db.execSQL("""INSERT OR IGNORE INTO user_memories(fact,created_at,updated_at)
-                VALUES(?,?,?)""",arrayOf(fact,created,updated))
+                VALUES(?,?,?)""",arrayOf<Any>(fact,created,updated))
         } else {
             db.execSQL("INSERT OR IGNORE INTO user_memories(fact) VALUES(?)", arrayOf(fact))
             if (touchDuplicate) db.execSQL(
@@ -221,7 +221,7 @@ class PocketMemoryStore(private val context: Context) :
             if (created != null && updated != null) {
                 db.execSQL("""INSERT OR IGNORE INTO character_facts
                     (persona_id,category,label,normalized_label,value,created_at,updated_at)
-                    VALUES(?,?,?,?,?,?,?)""",arrayOf(personaId,category,label,normalized,value,created,updated))
+                    VALUES(?,?,?,?,?,?,?)""",arrayOf<Any>(personaId,category,label,normalized,value,created,updated))
             } else {
                 db.execSQL("""INSERT OR IGNORE INTO character_facts
                     (persona_id,category,label,normalized_label,value) VALUES(?,?,?,?,?)""",
