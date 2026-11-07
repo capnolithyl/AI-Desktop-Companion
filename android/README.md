@@ -29,7 +29,11 @@ nothing to keep. Install a new APK signed with the persistent key. Subsequent
 updates can then install directly over it.
 
 
-## Independent web research (Pocket Mikan v0.4.3)
+## Independent web research (Pocket Mikan v0.4.4)
+
+**v0.4.4:** Web research follow-ups such as "Any info on a potential release date, a title, or singles?" now inherit user-established topics, search for the newly requested details, and must avoid inventing specifics absent from sources. The source link list in chat is collapsed by default; tap Sources to expand. Shared routing tests cover both Windows and Android.
+
+
 
 **v0.4.3 shared research policy:** Pocket and desktop now import the exact same `src/research-routing.ts` for search-versus-chat decisions and `src/research-context.ts` for source follow-ups, with shared tests. The desktop-derived query builder is now shared TypeScript; Windows retains its Rust compatibility fallback, SearXNG retry and Ollama planner while Pocket uses Tavily and Gemini Nano. Only app-specific adapters remain separate. No syncing, new subscriptions, or model changes required.
 
