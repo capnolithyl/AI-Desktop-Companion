@@ -93,6 +93,10 @@ export default function MobileApp() {
         const url = URL.createObjectURL(blob);
         portraitUrl.current = url;
         setPortrait(url);
+      } else {
+        void mobileBackend.portrait().then(url => {
+          if (url && !portraitUrl.current) setPortrait(url);
+        }).catch(() => {});
       }
     }).catch(() => {});
     return () => {
