@@ -23,6 +23,7 @@ Note: GitHub-hosted debug APKs may be signed with different ephemeral debug cert
 - The app requests **no INTERNET permission** and denies external resource loads. It does not use online inference.
 - Mikan's Android model is Gemini Nano through the ML Kit GenAI Prompt API and Android AICore. It may need a first-time system-managed download. The backend streams real output to React. No synthetic replies.
 - The keyboard/IME uses Android edge-to-edge insets while CSS maintains the composer at the bottom and hides the portrait while typing.
+- v0.2.1: Gemini Nano status is now a small header indicator. To check readiness or download the model, open **Settings → AI → Local model**. If the model isn't ready, chat shows a setup notice that links to Settings. No persistent large Check button on the chat screen.
 - The original character-sheet image is not checked into the repository. Use **Change portrait** in the mobile UI to select the desired local PNG; the app stores it in IndexedDB.
 - Chat, settings, saved facts and character canon stay on the phone, using browser-local storage. User facts and character canon are separate. Automatic memory extraction is **not** active.
 - Many shared slash commands work, including `/help`, `/settings`, `/personality`, `/preset`, `/randomize`, the personality sliders, appearance changes, `/memories`, `/remember`, `/canon`, `/canon-set`, `/chats`, `/new`, `/log`. Commands requiring Windows tools or internet search explain the limitation rather than pretending to work.
