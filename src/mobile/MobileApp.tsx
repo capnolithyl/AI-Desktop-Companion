@@ -199,7 +199,7 @@ export default function MobileApp() {
     try {
       await pocketMemory.updateFact(id, fact);
       const current = await refreshUserFacts();
-      if (!current.some(item => item.id === id && item.fact === fact.trim().replace(/\\s+/g, " "))) {
+      if (!current.some(item => item.id === id && item.fact === fact.trim().replace(/\s+/g, " "))) {
         throw new Error("SQLite did not return the updated memory");
       }
       setMemoryError(null);
