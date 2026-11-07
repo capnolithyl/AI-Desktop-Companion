@@ -60,6 +60,83 @@ export function researchRequest(question: string, previous: ResearchTurn[] = [])
   return { query, recent };
 }
 
+
+/**
+ * Port of the desktop Rust subject/query builder. Keep its regression
+ * expectations as the source of truth; this now benefits Tavily too.
+ * Search engines, retries, and result validation remain platform-specific.
+ */
+function researchSubject(text: string): string | null {
+  const lower = text.toLowerCase();
+  for (const prefix of [" about ", " on ", " for ", " regarding "]) {
+    const at = lower.lastIndexOf(prefix);
+    if (at < 0) continue;
+    let candidate = text.slice(at + prefix.length).split(/[?!\n]/, 1)[0].trim()
+      .replace(/[.,;:]+$/, "").trim();
+    const typePrefixes = [
+      "the death metal band ", "the metal band ", "death metal band ",
+      "the band ", "the group ", "the musician ", "the music artist ",
+      "the artist ", "the singer ", "band ", "artist "
+    ];
+    const descriptor = typePrefixes.find(value => candidate.toLowerCase().startsWith(value));
+    if (descriptor) candidate = candidate.slice(descriptor.length).trim();
+    candidate = candidate.split(/\s+/).map(word => {
+      const match = /^([A-Z]{2,})['’]s$/.exec(word);
+      return match ? match[1] : word;
+    }).join(" ");
+    if (candidate) return candidate;
+  }
+  return null;
+}
+
+const ambiguousTopics = new Set([
+  "them", "it", "him", "her", "that", "this", "the band", "the group",
+  "the artist", "those guys", "a new album", "a new release",
+  "the new album", "an album", "their new album", "the latest album",
+  "an update", "updates", "them please", "that band", "a next album"
+]);
+function specificTopic(subject: string | null): subject is string {
+  return !!subject && subject.length >= 3 && subject.length < 120 &&
+    !ambiguousTopics.has(subject.trim().toLowerCase());
+}
+function quoteTopic(subject: string): string {
+  const words = subject.split(/\s+/);
+  const descriptiveEnds = new Set([
+    "mission", "missions", "program", "programme", "project", "projects",
+    "launch", "launches", "spacecraft", "news", "development", "developments"
+  ]);
+  return words.length >= 2 && words.length <= 4 && subject.length <= 72 &&
+    !descriptiveEnds.has(words[words.length - 1].toLowerCase())
+    ? '"' + subject + '"' : subject;
+}
+
+/** Mirrors the desktop's mature entity extraction without making assumptions
+ * based on an assistant's possibly hallucinated previous answer.
+ */
+export function buildResearchQuery(question: string, previous: ResearchTurn[] = []): string {
+  const users = previous.filter(turn => turn.role === "user").map(turn => turn.content);
+  const text = question.trim();
+  const lower = text.toLowerCase();
+  const previousTopic = users.slice(-8).reverse().map(researchSubject).find(specificTopic);
+  const albumRequest = ["new album", "next album", "upcoming album", "another album",
+    "new record", "next record", "upcoming record"].some(signal => lower.includes(signal));
+  let topic = researchSubject(text);
+  if (!specificTopic(topic) || albumRequest) topic = previousTopic ?? topic;
+  const musicContext = [...users, text].slice(-7).some(turn =>
+    /\b(?:the band|metal|music|album|musician|artist)\b/i.test(turn));
+  let query = specificTopic(topic) ? quoteTopic(topic) : text;
+  if (albumRequest) {
+    query += " next album recording studio announcement";
+  } else {
+    if (musicContext && !query.toLowerCase().includes(" band")) query += " band";
+    const year = text.match(/(?<!\d)(?:19\d{2}|20\d{2}|2100)(?!\d)/)?.[0];
+    if (year && !query.includes(year)) query += " " + year;
+    if (/\b(?:latest|recent|news|developments)\b/i.test(text)) query += " latest news";
+    if (/\b(?:milestone|scheduled)\b/i.test(text)) query += " next mission schedule";
+  }
+  return query.slice(0, 250);
+}
+
 /**
  * Desktop-specific refinement keeps its successful deterministic queries:
  * a genuine research request goes to the Rust search builder; timeless facts
@@ -71,7 +148,7 @@ export function planResearch(question: string, previous: ResearchTurn[] = []): R
   const text = question.trim();
   const desktopFactResearch = /^(?:tell me (?:more )?about|what (?:can you tell me|do you know) about|what is new with|any (?:info|news) (?:on|about)|information (?:on|about))\b/i.test(text);
   if (explicitResearch.test(text) || request.recent || desktopFactResearch) {
-    return { mode: "research", query: request.query, recent: request.recent };
+    return { mode: "research", query: buildResearchQuery(question, previous), recent: request.recent };
   }
   return { mode: "factual", query: request.query, recent: request.recent };
 }
