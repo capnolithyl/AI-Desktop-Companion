@@ -66,6 +66,7 @@ export default function MobileApp() {
   const [memoryReady, setMemoryReady] = useState(false);
   const [memoryError, setMemoryError] = useState<string | null>(null);
   const [memoryNotice, setMemoryNotice] = useState<string | null>(null);
+  const [memoryToast, setMemoryToast] = useState<{ key: number; message: string } | null>(null);
   const [memoryBusy, setMemoryBusy] = useState(false);
   const [autoMemoryBusy, setAutoMemoryBusy] = useState(false);
   const [model, setModel] = useState<NativeStatus["status"] | "CHECKING">("CHECKING");
@@ -84,9 +85,17 @@ export default function MobileApp() {
   const fileInput = useRef<HTMLInputElement>(null);
   const portraitUrl = useRef<string | null>(null);
   const memoryQueue = useRef<Promise<void>>(Promise.resolve());
+  const memoryToastId = useRef(0);
 
   useEffect(() => { if (memoryReady && active) localStorage.setItem(ACTIVE_KEY, active.id); }, [active, memoryReady]);
   useEffect(() => { saveSettings(settings); }, [settings]);
+  useEffect(() => {
+    if (!memoryToast) return;
+    const timer = window.setTimeout(() => {
+      setMemoryToast(current => current?.key === memoryToast.key ? null : current);
+    }, 3300);
+    return () => window.clearTimeout(timer);
+  }, [memoryToast]);
   useEffect(() => {
     // One-time, transactional migration. Never erase the legacy browser data
     // unless native SQLite confirms that the import completed successfully.
@@ -178,6 +187,9 @@ export default function MobileApp() {
     setScreen("chat");
     void pocketMemory.createConversation(fresh.id).catch(failure => setMemoryError(String(failure)));
   }
+  function confirmMemorySaved(message: string) {
+    setMemoryToast({ key: ++memoryToastId.current, message });
+  }
   async function refreshUserFacts(): Promise<UserFact[]> {
     const current = await pocketMemory.listFacts();
     setFacts(current);
@@ -191,6 +203,7 @@ export default function MobileApp() {
   async function addFact(fact: string): Promise<UserFact> {
     const saved = await pocketMemory.addFact(fact);
     await refreshUserFacts();
+    confirmMemorySaved("Memory saved");
     return saved;
   }
   async function editUserFact(id: number, fact: string): Promise<void> {
@@ -204,6 +217,7 @@ export default function MobileApp() {
       }
       setMemoryError(null);
       setMemoryNotice("Memory updated and verified in SQLite.");
+      confirmMemorySaved("Memory updated");
     } finally { setMemoryBusy(false); }
   }
   async function deleteUserFact(id: number): Promise<void> {
@@ -222,6 +236,7 @@ export default function MobileApp() {
   async function addCanon(category: CharacterCategory, label: string, value: string): Promise<void> {
     await pocketMemory.addCanon(category, label, value);
     await refreshCharacterFacts();
+    confirmMemorySaved("Mikan detail saved");
   }
   async function editCanon(id: number, category: CharacterCategory, label: string, value: string): Promise<void> {
     setMemoryBusy(true);
@@ -229,6 +244,7 @@ export default function MobileApp() {
       await pocketMemory.updateCanon(id, category, label, value);
       await refreshCharacterFacts();
       setMemoryError(null);
+      confirmMemorySaved("Mikan detail updated");
     } finally { setMemoryBusy(false); }
   }
   async function deleteCanon(id: number): Promise<void> {
@@ -264,6 +280,11 @@ export default function MobileApp() {
           ]);
           setFacts(savedUserFacts);
           setCanon(savedCanon);
+          const saved = [
+            result.userSaved ? `${result.userSaved} about you` : "",
+            result.characterSaved ? `${result.characterSaved} about Mikan` : ""
+          ].filter(Boolean).join(" · ");
+          confirmMemorySaved(`Remembered: ${saved}`);
         }
         setMemoryError(null);
       } catch (failure) {
@@ -491,7 +512,7 @@ export default function MobileApp() {
       <div className="pocket-heading">
         <strong>{screen === "chat" ? "Mikan" : title}</strong>
         <span className="pocket-subtitle">
-          POCKET COMPANION · LOCAL · v0.3.5
+          POCKET COMPANION · LOCAL · v0.3.6
           <button type="button" className={`pocket-model-indicator ${model === "READY" ? "ready" : "attention"}`}
             onClick={() => setScreen("settings")} title="View local model status in settings"
             aria-label={`Gemini Nano: ${model.toLowerCase()}. Open model settings`}>
@@ -676,6 +697,12 @@ export default function MobileApp() {
       {error && <p className="pocket-error">{error}</p>}
       {memoryError && <p className="pocket-error">{memoryError}</p>}
     </section>}
+    {memoryToast && <div key={memoryToast.key}
+      className={"pocket-save-toast" + (screen === "chat" ? " on-chat" : "")}
+      role="status" aria-live="polite" aria-atomic="true">
+      <Check size={15} aria-hidden="true"/>
+      <span>{memoryToast.message}</span>
+    </div>}
     <input ref={fileInput} hidden type="file" accept="image/*" onChange={event => { void choosePortrait(event.target.files?.[0]); event.currentTarget.value=""; }}/>
     {screen !== "chat" && <footer className="pocket-page-footer"><button onClick={() => setScreen("chat")}><ArrowLeft size={16}/> Back to chat</button><span><Sparkles size={14}/> Mikan · local</span></footer>}
   </main>;
