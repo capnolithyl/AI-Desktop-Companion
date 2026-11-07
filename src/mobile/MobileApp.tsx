@@ -186,9 +186,10 @@ export default function MobileApp() {
       turns: [...thread.turns, turn]
     } : thread));
   }
-  function replaceTurn(threadId: string, id: string, content: string) {
+  function replaceTurn(threadId: string, id: string, content: string, sources?: WebResult[]) {
     setThreads(items => items.map(thread => thread.id === threadId ? {
-      ...thread, turns: thread.turns.map(turn => turn.id === id ? { ...turn, content } : turn)
+      ...thread, turns: thread.turns.map(turn => turn.id === id ?
+        { ...turn, content, ...(sources ? { sources } : {}) } : turn)
     } : thread));
   }
   function startChat() {
@@ -315,6 +316,16 @@ export default function MobileApp() {
       setScreen(name === "help" ? "help" : name as Screen); return true;
     }
     if (name === "chat") { setScreen("chat"); return true; }
+    if (name === "search") {
+      if (!argument) commandResponse("Usage: /search <what to look up>");
+      else void send("Search the web for: " + argument, "search");
+      return true;
+    }
+    if (name === "read") {
+      if (!argument) commandResponse("Usage: /read <public https URL>");
+      else void send("Read and summarize this webpage: " + argument, "read");
+      return true;
+    }
     if (name === "new") { startChat(); return true; }
     if (["appearance", "prompt", "portrait"].includes(name)) {
       setScreen("settings");
@@ -397,7 +408,7 @@ export default function MobileApp() {
       commandResponse(font ? "Font updated." : "Choose Segoe UI, Arial, Verdana or Georgia.");
       return true;
     }
-    const desktopOnly = new Set(["hide", "models", "model", "search", "read", "internet", "search-status", "search-start", "search-stop", "ollama", "searxng"]);
+    const desktopOnly = new Set(["hide", "models", "model", "internet", "search-status", "search-start", "search-stop", "ollama", "searxng"]);
     if (desktopOnly.has(name)) {
       commandResponse("/" + name + " needs the desktop or a future PC-connected backend. Pocket mode is completely offline.");
       return true;
@@ -440,12 +451,12 @@ export default function MobileApp() {
     }
   }
 
-  async function send() {
-    const text = draft.trim();
+  async function send(textOverride?: string, mode?: "search" | "read") {
+    const text = (textOverride ?? draft).trim();
     if (!text || busy || !memoryReady) return;
-    setDraft("");
+    if (textOverride === undefined) setDraft("");
     setIntro("");
-    const cmd = parseSlashCommand(text);
+    const cmd = textOverride === undefined ? parseSlashCommand(text) : null;
     if (cmd) { handleCommand(cmd.name, cmd.argument); return; }
     const explicitMemory = resolveExplicitMemoryIntent(text, active.turns);
     if (!explicitMemory && model !== "READY") {
@@ -467,13 +478,53 @@ export default function MobileApp() {
         return;
       }
       await pocketMemory.saveMessage(threadId, user);
-      const answer = await mobileBackend.generate(buildPrompt(settings, facts, canon, [...active.turns, user]), chunk => {
+      let sources: WebResult[] = [];
+      let research = "";
+      const planned = researchRequest(text, active.turns);
+      const prior = priorResearchSources(active.turns, text);
+      // Explicit commands always use the provider. Automatic search is optional.
+      if (mode === "read") {
+        if (!webConfigured) throw new Error("Set a Tavily API key in Settings → Internet before reading webpages.");
+        const address = text.replace(/^Read and summarize this webpage:\\s*/i, "").trim();
+        setWebActivity("Reading webpage…");
+        setWebBusy(true);
+        try {
+          const page = await mobileBackend.readWeb(address);
+          sources = [{title:page.title, url:page.url, content:page.content.slice(0, 300), engine:"Tavily"}];
+          research = pageContext(text, { ...page, content: page.content.slice(0, 3300) });
+        } finally {
+          setWebBusy(false);
+          setWebActivity("");
+        }
+      } else if (mode === "search" || (webEnabled && webConfigured && planned)) {
+        if (!webConfigured) throw new Error("Set a Tavily API key in Settings → Internet before searching.");
+        const request = mode === "search" ?
+          {query:text.replace(/^Search the web for:\\s*/i,"").trim(), recent:false} : planned!;
+        setWebActivity("Searching the web…");
+        setWebBusy(true);
+        try {
+          const response = await mobileBackend.searchWeb(request.query,request.recent);
+          sources = response.results;
+          if (!sources.length) throw new Error("The search returned no usable sources. Try a different query.");
+          research = compactWebContext(text, sources);
+        } finally {
+          setWebBusy(false);
+          setWebActivity("");
+        }
+      } else if (webEnabled && prior.length && !planned?.recent) {
+        sources = prior;
+        research = compactWebContext(text, sources);
+      } else if (mode === "search") {
+        throw new Error("Set up Tavily under Settings → Internet to use /search.");
+      }
+      const answer = await mobileBackend.generate(buildPrompt(settings, facts, canon,
+        [...active.turns, user], research), chunk => {
         output += chunk;
-        replaceTurn(threadId, assistant.id, output);
+        replaceTurn(threadId, assistant.id, output, sources.length ? sources : undefined);
       });
-      replaceTurn(threadId, assistant.id, answer);
-      // Never mine partial or failed replies for character canon.
-      await pocketMemory.saveMessage(threadId, { ...assistant, content: answer });
+      replaceTurn(threadId, assistant.id, answer, sources.length ? sources : undefined);
+      // Persist sources as metadata. The model's own words are never trusted as citations.
+      await pocketMemory.saveMessage(threadId, { ...assistant, content: answer, ...(sources.length ? { sources } : {}) });
       captureAutomaticMemory(threadId, user.id, assistant.id);
     } catch (failure) {
       replaceTurn(threadId, assistant.id, output || "(No response)");
