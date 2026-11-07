@@ -7,6 +7,7 @@ button, textarea, select, input { font: inherit; }
 button { cursor: pointer; }
 button:disabled { opacity: .55; cursor: default; }
 .pocket {
+  position: relative;
   --pocket-accent: #ffad7e;
   --pocket-panel: #211b25;
   background: #18151e; color: #fff0e9;
@@ -130,3 +131,40 @@ button:disabled { opacity: .55; cursor: default; }
 /* Memory mutations report actual SQLite read-back, never optimistic UI state. */
 .pocket-memory-status { padding: 9px 0; margin: 5px 0 10px; color: #bdddc8; font-size: 13px; }
 .pocket-actions button:disabled, .pocket-memory-form button:disabled { opacity: .55; cursor: not-allowed; }
+
+/* Short, non-blocking feedback for confirmed SQLite memory writes. */
+.pocket-save-toast {
+  position: absolute;
+  z-index: 20;
+  left: 20px;
+  right: 20px;
+  bottom: calc(66px + env(safe-area-inset-bottom));
+  width: max-content;
+  max-width: calc(100% - 40px);
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 9px 14px;
+  background: #302936;
+  color: #e1f4e6;
+  border: 1px solid #668575;
+  border-radius: 999px;
+  box-shadow: 0 5px 15px #0005;
+  font-size: 12px;
+  line-height: 1.35;
+  pointer-events: none;
+  animation: pocket-memory-appear .18s ease-out;
+}
+.pocket-save-toast.on-chat {
+  bottom: calc(126px + env(safe-area-inset-bottom));
+}
+.pocket-save-toast svg { flex: 0 0 auto; color: #98d4ad; }
+@keyframes pocket-memory-appear {
+  from { opacity: 0; transform: translateY(7px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pocket-save-toast { animation: none; }
+}
