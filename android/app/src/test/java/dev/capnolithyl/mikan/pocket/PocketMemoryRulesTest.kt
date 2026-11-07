@@ -25,6 +25,27 @@ class PocketMemoryRulesTest {
             "My favorite color is blue","My favorite color is orange."))
     }
 
+    @Test fun stableNameAndPreferenceCaptureWithoutNanoJson() {
+        assertEquals(
+            "The user's name is Marcus",
+            PocketMemoryRules.obviousUserFact("My name is Marcus")?.first
+        )
+        assertEquals(
+            "My name is Marcus",
+            PocketMemoryRules.obviousUserFact("My name is Marcus")?.second
+        )
+        assertEquals(
+            "The user loves metal",
+            PocketMemoryRules.obviousUserFact("I love metal.")?.first
+        )
+        assertEquals(
+            "The user's favorite color is blue",
+            PocketMemoryRules.obviousUserFact("My favorite color is blue.")?.first
+        )
+        assertNull(PocketMemoryRules.obviousUserFact("What's your name?"))
+        assertNull(PocketMemoryRules.obviousUserFact("My password is 12345"))
+    }
+
     @Test fun automaticCaptureRejectsSensitiveInformation() {
         assertNull(PocketMemoryRules.cleanUser("The user has depression",
             "I have depression", "I have depression."))
