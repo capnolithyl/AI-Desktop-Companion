@@ -56,6 +56,7 @@ function send(method: string, args: Record<string, unknown> = {}, onDelta?: (chu
 export const mobileBackend = {
   status: async (): Promise<NativeStatus["status"]> => (await send("status")).status ?? "UNAVAILABLE",
   portrait: async (): Promise<string> => (await send("portrait")).text ?? "",
+  importLegacy: async (): Promise<string> => (await send("importLegacy")).text ?? "[]",
   download: async (): Promise<NativeStatus["status"]> => (await send("download")).status ?? "UNAVAILABLE",
   generate: async (prompt: string, onDelta: (chunk: string) => void): Promise<string> =>
     (await send("generate", { prompt }, onDelta)).text ?? "",
