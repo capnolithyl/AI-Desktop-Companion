@@ -38,7 +38,8 @@ export function researchRequest(question: string, previous: ResearchTurn[] = [])
     !/\b(my|me|mine|your|yours|myself)\b/i.test(text);
 
   if (!direct && !current && !factual && !continuation) return null;
-  const recent = (current || direct) && timeSensitive.test(text) || /\bupdates?\b/i.test(text);
+  const recent = timeSensitive.test(text) && (direct || informationQuestion.test(text) || continuation)
+    || /\bupdates?\b/i.test(text) && (direct || informationQuestion.test(text) || continuation);
   const query = continuation && text.length < 120
     ? (previousResearch?.content.slice(0, 175) + " " + text).trim().slice(0, 330)
     : text.slice(0, 330);
