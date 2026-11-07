@@ -482,6 +482,11 @@ export default function MobileApp() {
       let research = "";
       const planned = researchRequest(text, active.turns);
       const prior = priorResearchSources(active.turns, text);
+      // Never ask Nano to guess about breaking news if the requested provider
+      // hasn't been configured yet. Timeless knowledge remains available offline.
+      if (webEnabled && planned?.recent && !webConfigured && mode !== "read") {
+        throw new Error("Current information needs Tavily. Add your free API key in Settings → Internet, or turn off automatic search to use Nano offline.");
+      }
       // Explicit commands always use the provider. Automatic search is optional.
       if (mode === "read") {
         if (!webConfigured) throw new Error("Set a Tavily API key in Settings → Internet before reading webpages.");
@@ -528,8 +533,12 @@ export default function MobileApp() {
       await pocketMemory.saveMessage(threadId, { ...assistant, content: answer, ...(sources.length ? { sources } : {}) });
       captureAutomaticMemory(threadId, user.id, assistant.id);
     } catch (failure) {
-      replaceTurn(threadId, assistant.id, output || "(No response)");
-      setError(failure instanceof Error ? failure.message : String(failure));
+      const detail = failure instanceof Error ? failure.message : String(failure);
+      const reply = output || (mode || webEnabled ? "I couldn't verify that information right now." : "(No response)");
+      replaceTurn(threadId, assistant.id, reply);
+      setError(detail);
+      void pocketMemory.saveMessage(threadId, { ...assistant, content: reply })
+        .catch(() => {});
     } finally {
       setBusy(false);
     }
