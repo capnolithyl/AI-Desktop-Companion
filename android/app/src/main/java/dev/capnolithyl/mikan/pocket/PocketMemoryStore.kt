@@ -344,42 +344,74 @@ class PocketMemoryStore(private val context: Context) :
             "updateFact" -> {
                 val id = data.getLong("recordId")
                 val fact = cleanFact(data.getString("fact"))
-                val changed = db.compileStatement(
-                    "UPDATE user_memories SET fact=?,updated_at=unixepoch() WHERE id=?").use { st ->
-                    st.bindString(1,fact);st.bindLong(2,id);st.executeUpdateDelete()
-                }
-                require(changed > 0) { "Memory not found" }
-                JSONObject()
+                db.beginTransaction()
+                try {
+                    val changed = db.compileStatement(
+                        "UPDATE user_memories SET fact=?,updated_at=unixepoch() WHERE id=?").use { st ->
+                        st.bindString(1,fact);st.bindLong(2,id);st.executeUpdateDelete()
+                    }
+                    require(changed == 1) { "Memory not found" }
+                    // The owner has curated this value. Previous automated
+                    // evidence no longer describes its edited content.
+                    db.delete("automatic_memory_sources","memory_kind=? AND memory_id=?",
+                        arrayOf("user",id.toString()))
+                    db.setTransactionSuccessful()
+                } finally { db.endTransaction() }
+                JSONObject().put("updated",true)
             }
             "deleteFact" -> {
-                db.delete("user_memories","id=?",arrayOf(data.getLong("recordId").toString())); JSONObject()
+                val id = data.getLong("recordId")
+                db.beginTransaction()
+                try {
+                    val changed = db.delete("user_memories","id=?",arrayOf(id.toString()))
+                    require(changed == 1) { "Memory not found" }
+                    db.delete("automatic_memory_sources","memory_kind=? AND memory_id=?",
+                        arrayOf("user",id.toString()))
+                    db.setTransactionSuccessful()
+                } finally { db.endTransaction() }
+                JSONObject().put("deleted",true)
             }
             "addCanon" -> JSONObject().put("fact",insertCanon(db,
                 data.optString("personaId","mikan"),data.getString("category"),
                 data.getString("label"),data.getString("value")))
             "updateCanon" -> {
+                val id = data.getLong("recordId")
                 val personaId = data.optString("personaId","mikan")
                 val category = data.getString("category")
                 validateCharacter(personaId,category)
                 val label = cleanLabel(data.getString("label"))
                 val value = cleanValue(data.getString("value"))
-                val changed = db.compileStatement("""UPDATE character_facts SET category=?,label=?,
-                    normalized_label=?,value=?,updated_at=unixepoch()
-                    WHERE id=? AND persona_id=?""").use { st ->
-                    st.bindString(1,category);st.bindString(2,label)
-                    st.bindString(3,label.lowercase(Locale.ROOT));st.bindString(4,value)
-                    st.bindLong(5,data.getLong("recordId"));st.bindString(6,personaId)
-                    st.executeUpdateDelete()
-                }
-                require(changed > 0) { "Character detail not found" }
-                JSONObject()
+                db.beginTransaction()
+                try {
+                    val changed = db.compileStatement("""UPDATE character_facts SET category=?,label=?,
+                        normalized_label=?,value=?,updated_at=unixepoch()
+                        WHERE id=? AND persona_id=?""").use { st ->
+                        st.bindString(1,category);st.bindString(2,label)
+                        st.bindString(3,label.lowercase(Locale.ROOT));st.bindString(4,value)
+                        st.bindLong(5,id);st.bindString(6,personaId)
+                        st.executeUpdateDelete()
+                    }
+                    require(changed == 1) { "Character detail not found" }
+                    db.delete("automatic_memory_sources","memory_kind=? AND memory_id=?",
+                        arrayOf("character",id.toString()))
+                    db.setTransactionSuccessful()
+                } finally { db.endTransaction() }
+                JSONObject().put("updated",true)
             }
             "deleteCanon" -> {
+                val id = data.getLong("recordId")
                 val personaId = data.optString("personaId","mikan")
                 require(persona.matches(personaId)) { "Invalid persona ID" }
-                db.delete("character_facts","id=? AND persona_id=?",
-                    arrayOf(data.getLong("recordId").toString(),personaId))
-                JSONObject()
+                db.beginTransaction()
+                try {
+                    val changed = db.delete("character_facts","id=? AND persona_id=?",
+                        arrayOf(id.toString(),personaId))
+                    require(changed == 1) { "Character detail not found" }
+                    db.delete("automatic_memory_sources","memory_kind=? AND memory_id=?",
+                        arrayOf("character",id.toString()))
+                    db.setTransactionSuccessful()
+                } finally { db.endTransaction() }
+                JSONObject().put("deleted",true)
             }
             else -> error("Unsupported memory operation")
         }
