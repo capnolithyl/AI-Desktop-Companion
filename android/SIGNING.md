@@ -33,7 +33,7 @@ the workflow checks that the package ID and signing certificate are unchanged.
 
 Pinned expected certificate SHA-256:
 
-`f6879570f13b54e2d2f3cc3b32246a72c48e8023ec2b76088c57629fa4e5d609`
+`0e68231585a55dba6c211949e622768de271cafc14140c1d41ba50a1f8c56cc0`
 
 If the signing key is lost and the GitHub secret is deleted, Android will not
 accept updates. Keep the private bundle somewhere reliable (phone vault/NAS).
