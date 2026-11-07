@@ -150,7 +150,14 @@ class ReactActivity : Activity() {
         @JavascriptInterface
         fun postMessage(json: String) {
             // Exposed only to the single bundled app origin. Keep a narrow command allowlist.
-            if (json.length > 60_000) return
+            // A legacy localStorage migration may contain hundreds of messages.
+            // Reject unreasonable payloads explicitly so the JS Promise doesn't hang.
+            if (json.length > 2_000_000) {
+                val requestId = Regex("\\\"id\\\":\\\"(mobile-[0-9]{1,12})\\\"")
+                    .find(json.take(100))?.groupValues?.getOrNull(1)
+                if (requestId != null) deliver(requestId,"error",error="Memory migration exceeds the 2 MB request limit")
+                return
+            }
             val data = try { JSONObject(json) } catch (_: Exception) { return }
             val id = data.optString("id")
             val method = data.optString("method")
