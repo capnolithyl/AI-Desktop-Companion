@@ -66,6 +66,7 @@ export default function MobileApp() {
   const [facts, setFacts] = useState<UserFact[]>(() => readArray(USER_KEY));
   const [canon, setCanon] = useState<CharacterFact[]>(() => readArray(CANON_KEY));
   const [model, setModel] = useState<NativeStatus["status"] | "CHECKING">("CHECKING");
+  const [modelAction, setModelAction] = useState<"check" | "download" | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [draft, setDraft] = useState("");
@@ -126,6 +127,22 @@ export default function MobileApp() {
     resize();
     return () => viewport.removeEventListener("resize", resize);
   }, []);
+
+  async function manageLocalModel() {
+    if (modelAction || busy || model === "DOWNLOADING") return;
+    const download = model === "DOWNLOADABLE";
+    setModelAction(download ? "download" : "check");
+    setError("");
+    if (download) setModel("DOWNLOADING");
+    try {
+      setModel(download ? await mobileBackend.download() : await mobileBackend.status());
+    } catch (failure) {
+      setModel(download ? "DOWNLOADABLE" : "UNAVAILABLE");
+      setError(failure instanceof Error ? failure.message : String(failure));
+    } finally {
+      setModelAction(null);
+    }
+  }
 
   function updateSettings(change: Partial<Settings>) {
     setSettings(current => ({ ...current, ...change }));
@@ -267,7 +284,10 @@ export default function MobileApp() {
     setIntro("");
     const cmd = parseSlashCommand(text);
     if (cmd) { handleCommand(cmd.name, cmd.argument); return; }
-    if (model !== "READY") { setIntro("Gemini Nano isn't ready yet. Check the model status first."); return; }
+    if (model !== "READY") {
+      setIntro("Gemini Nano isn't ready yet. Open Settings to check or download the local model.");
+      return;
+    }
     setBusy(true);
     setError("");
     const threadId = active.id;
@@ -314,17 +334,29 @@ export default function MobileApp() {
   return <main className="pocket" style={mobileStyle}>
     <header className="pocket-header">
       <button className="pocket-icon-button" aria-label="Return to chat" onClick={() => setScreen("chat")}>{screen === "chat" ? <Cat size={25}/> : <ArrowLeft size={22}/>}</button>
-      <div className="pocket-heading"><strong>{screen === "chat" ? "Mikan" : title}</strong><span>POCKET COMPANION · LOCAL</span></div>
+      <div className="pocket-heading">
+        <strong>{screen === "chat" ? "Mikan" : title}</strong>
+        <span className="pocket-subtitle">
+          POCKET COMPANION · LOCAL
+          <button type="button" className={`pocket-model-indicator ${model === "READY" ? "ready" : "attention"}`}
+            onClick={() => setScreen("settings")} title="View local model status in settings"
+            aria-label={`Gemini Nano: ${model.toLowerCase()}. Open model settings`}>
+            <i className="pocket-model-dot" aria-hidden="true"/>
+            {model === "READY" ? "Nano ready" : model === "CHECKING" ? "Checking" :
+              model === "DOWNLOADABLE" ? "Download" : model === "DOWNLOADING" ? "Downloading" : "Unavailable"}
+          </button>
+        </span>
+      </div>
       <button className="pocket-icon-button" aria-label="Settings" onClick={() => setScreen("settings")}><Settings2 size={23}/></button>
     </header>
     {screen === "chat" ? <>
-      <section className="pocket-status">
-        <span>{model === "READY" ? "● Gemini Nano ready · Offline" : model === "DOWNLOADABLE" ? "Local model needs download" : model === "DOWNLOADING" ? "Downloading local model…" : model === "CHECKING" ? "Checking Gemini Nano…" : "Gemini Nano unavailable"}</span>
-        <button onClick={() => {
-          setError("");
-          void (model === "DOWNLOADABLE" ? mobileBackend.download() : mobileBackend.status()).then(setModel).catch(err => setError(String(err)));
-        }} disabled={busy}>{model === "DOWNLOADABLE" ? "Download" : "Check"}</button>
-      </section>
+      {model !== "READY" && <button type="button" className="pocket-model-warning"
+        onClick={() => setScreen("settings")}>
+        {model === "CHECKING" ? "Checking the local model…" :
+          model === "DOWNLOADABLE" ? "Gemini Nano needs a download. Open Settings." :
+          model === "DOWNLOADING" ? "Gemini Nano is downloading. View in Settings." :
+          "Gemini Nano is unavailable. Check its status in Settings."}
+      </button>}
       <section className={"pocket-portrait " + (portraitOpen ? "" : "pocket-portrait-hidden")}>
         <img src={portrait} alt="Mikan's portrait" onClick={() => fileInput.current?.click()}/>
         {portrait === mikanIcon && <span>Tap to import Mikan's character portrait</span>}
@@ -370,6 +402,22 @@ export default function MobileApp() {
         <button className="pocket-wide-button" onClick={() => fileInput.current?.click()}><Image size={18}/> Choose portrait image</button>
         <h3>AI</h3>
         <p className="pocket-hint">Model: Gemini Nano (AICore), offline. Desktop Ollama models aren't installed on the phone.</p>
+        <div className="pocket-model-settings">
+          <div className="pocket-model-details">
+            <strong>Local model</strong>
+            <span><i className={`pocket-model-dot ${model === "READY" ? "ready" : "attention"}`} aria-hidden="true"/>
+              {model === "READY" ? "Ready · Works offline" :
+                model === "CHECKING" ? "Checking availability…" :
+                model === "DOWNLOADABLE" ? "Download required before chatting" :
+                model === "DOWNLOADING" ? "Downloading model…" : "Unavailable on this device"}
+            </span>
+          </div>
+          <button type="button" onClick={() => void manageLocalModel()}
+            disabled={busy || !!modelAction || model === "DOWNLOADING"}>
+            {modelAction ? (modelAction === "download" ? "Downloading…" : "Checking…") :
+              model === "DOWNLOADABLE" ? "Download" : "Check status"}
+          </button>
+        </div>
         <label className="pocket-field pocket-prompt">System prompt<textarea value={settings.systemPrompt} rows={6} onChange={event => updateSettings({ systemPrompt:event.target.value })}/></label>
         <p className="pocket-hint">Web search, automatic memory extraction, and PC connections require separate services. They aren't silently enabled here.</p>
         <button className="pocket-wide-button" onClick={() => setScreen("help")}>See supported slash commands</button>
