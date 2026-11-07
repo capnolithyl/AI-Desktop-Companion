@@ -1,6 +1,8 @@
 # Pocket Mikan Android signing: one private identity
 
-The public GitHub repository does **not** store an Android signing key. GitHub
+The public GitHub repository does **not** store an Android signing key.
+
+**Pinned key:** The GitHub Actions secret currently holds the original Mikan keystore. The certificate digest below was verified against an actual signed CI APK. A later replacement bundle with a different certificate cannot be used interchangeably. Preserve a private backup of the **original bundle used for the secret**; never overwrite that backup with an unrelated key. GitHub
 Actions instead uses a single encrypted repository secret named
 `MIKAN_ANDROID_SIGNING_BUNDLE`.
 
@@ -33,7 +35,7 @@ the workflow checks that the package ID and signing certificate are unchanged.
 
 Pinned expected certificate SHA-256:
 
-`0e68231585a55dba6c211949e622768de271cafc14140c1d41ba50a1f8c56cc0`
+`f6879570f13b54e2d2f3cc3b32246a72c48e8023ec2b76088c57629fa4e5d609`
 
 If the signing key is lost and the GitHub secret is deleted, Android will not
 accept updates. Keep the private bundle somewhere reliable (phone vault/NAS).
