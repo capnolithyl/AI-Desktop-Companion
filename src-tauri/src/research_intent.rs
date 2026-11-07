@@ -95,20 +95,18 @@ pub fn routed_research_query(
     if matches!(route, Some("chat" | "factual")) {
         return None;
     }
-    if let Some(query) = explicit_research_query(messages) {
-        return Some(query);
+    // Shared TypeScript now implements the desktop-tested query builder and
+    // is authoritative for modern desktop and Android clients.
+    if route == Some("research") {
+        if let Some(candidate) = hint.map(str::trim) {
+            if candidate.len() >= 3 && !candidate.chars().any(char::is_control) {
+                return Some(candidate.chars().take(250).collect());
+            }
+        }
     }
-    // Only a positive, app-derived research decision may use the shared
-    // fallback query. Older clients without route hints retain Rust behavior.
-    if route != Some("research") {
-        return None;
-    }
-    let candidate = hint?.trim();
-    if candidate.len() < 3 || candidate.chars().any(char::is_control) {
-        return None;
-    }
-    let normalized: String = candidate.chars().take(250).collect();
-    (!normalized.trim().is_empty()).then_some(normalized)
+    // Retain the original Rust implementation for older desktop builds and
+    // as a safe fallback for malformed or absent query hints.
+    explicit_research_query(messages)
 }
 
 pub fn is_album_research(messages: &[Value]) -> bool {
@@ -422,7 +420,7 @@ mod tests {
         assert!(explicit_research_query(&chat).is_some());
         assert!(routed_research_query(&chat, Some("chat"), None).is_none());
         let query = messages(&["Can you find me the latest info on Shadows Fall?"]);
-        assert!(routed_research_query(&query, Some("research"), Some("fallback")).is_some());
+        assert_eq!(routed_research_query(&query, Some("research"), Some("SHARED QUERY")).as_deref(), Some("SHARED QUERY"));
     }
 
     #[test]
