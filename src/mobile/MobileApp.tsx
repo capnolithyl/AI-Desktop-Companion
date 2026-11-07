@@ -224,9 +224,11 @@ export default function MobileApp() {
         const result = await pocketMemory.processTurn(threadId, userId, assistantId,
           settings.autoRememberUser, settings.autoRememberMikan);
         if (result.userSaved || result.characterSaved) {
-          const snapshot = await pocketMemory.snapshot();
-          setFacts(snapshot.facts);
-          setCanon(snapshot.canon);
+          const [savedUserFacts, savedCanon] = await Promise.all([
+            pocketMemory.listFacts(), pocketMemory.listCanon()
+          ]);
+          setFacts(savedUserFacts);
+          setCanon(savedCanon);
         }
         setMemoryError(null);
       } catch (failure) {
