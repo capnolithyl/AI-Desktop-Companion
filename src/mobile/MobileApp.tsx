@@ -621,25 +621,48 @@ export default function MobileApp() {
       </>}
       {screen === "memory" && <>
         <p className="pocket-hint">These are facts about you in this phone's SQLite database, separate from Mikan's character canon. Automatic capture is configurable in Settings. Nothing is synced to desktop yet.</p>
+        {memoryNotice && <p className="pocket-memory-status" role="status">{memoryNotice}</p>}
+        {memoryError && <p className="pocket-error" role="alert">{memoryError}</p>
         <form onSubmit={event => {
           event.preventDefault();
-          if (!memoText.trim() || !memoryReady) return;
-          void addFact(memoText).then(() => { setMemoText(""); setMemoryError(null); })
-            .catch(failure => setMemoryError(String(failure)));
+          if (!memoText.trim() || !memoryReady || memoryBusy) return;
+          setMemoryBusy(true);
+          setMemoryNotice(null);
+          void addFact(memoText).then(() => {
+            setMemoText("");
+            setMemoryError(null);
+            setMemoryNotice("Memory saved and verified in SQLite.");
+          }).catch(failure => setMemoryError(String(failure)))
+            .finally(() => setMemoryBusy(false));
         }} className="pocket-memory-form">
-          <textarea rows={3} value={memoText} onChange={event => setMemoText(event.target.value)} placeholder="Fact to remember…" maxLength={500}/>
-          <button type="submit"><Plus size={18}/> Save local memory</button>
+          <textarea rows={3} value={memoText} onChange={event => setMemoText(event.target.value)} disabled={memoryBusy} placeholder="Fact to remember…" maxLength={500}/>
+          <button type="submit" disabled={memoryBusy || !memoryReady}><Plus size={18}/> {memoryBusy ? "Saving…" : "Save local memory"}</button>
         </form>
         {facts.map(fact => <article className="pocket-fact" key={fact.id}>
-          {openFactId === fact.id ? <><textarea value={editFact} onChange={event=>setEditFact(event.target.value)}/>
-            <button onClick={() => {
-              void editUserFact(fact.id,editFact).then(() => { setOpenFactId(null); setMemoryError(null); })
-                .catch(failure => setMemoryError(String(failure)));
-            }}>Save</button></> : <p>{fact.fact}</p>}
+          {openFactId === fact.id ? <>
+            <textarea value={editFact} disabled={memoryBusy} onChange={event=>setEditFact(event.target.value)} maxLength={500}/>
+            <div className="pocket-actions">
+              <button type="button" disabled={memoryBusy || !editFact.trim()} onClick={() => {
+                void editUserFact(fact.id,editFact).then(() => setOpenFactId(null))
+                  .catch(failure => setMemoryError(String(failure)));
+              }}>Save changes</button>
+              <button type="button" disabled={memoryBusy} onClick={() => setOpenFactId(null)}>Cancel</button>
+            </div>
+          </> : <>
+            <p>{fact.fact}</p>
+            <div className="pocket-actions">
+              <button type="button" disabled={memoryBusy} onClick={() => {
+                setOpenFactId(fact.id); setEditFact(fact.fact); setMemoryNotice(null);
+              }}>Edit</button>
+              <button type="button" disabled={memoryBusy} onClick={() => {
+                if (!confirm("Delete this memory?")) return;
+                void deleteUserFact(fact.id).then(() => {
+                  if (openFactId === fact.id) setOpenFactId(null);
+                }).catch(failure => setMemoryError(String(failure)));
+              }}>Delete</button>
+            </div>
+          </>}
           <small>#{fact.id}</small>
-          <div className="pocket-actions"><button onClick={() => { setOpenFactId(fact.id);setEditFact(fact.fact); }}>Edit</button><button onClick={() => {
-            if (confirm("Delete this memory?")) void deleteUserFact(fact.id).catch(failure => setMemoryError(String(failure)));
-          }}>Delete</button></div>
         </article>)}
       </>}
       {screen === "canon" && <CharacterCanonTab facts={canon}
