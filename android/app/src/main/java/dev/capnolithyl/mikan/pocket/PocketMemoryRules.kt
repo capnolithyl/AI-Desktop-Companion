@@ -118,7 +118,7 @@ object PocketMemoryRules {
             val fact = when {
                 name != null -> "The user is named $name"
                 favorite != null ->
-                    "The user says their ${favorite.groupValues[1]} is ${favorite.groupValues[2]}"
+                    "The user says their favorite ${favorite.groupValues[1]} is ${favorite.groupValues[2]}"
                 preference != null -> {
                     val verb = when (preference.groupValues[1].lowercase(Locale.ROOT)) {
                         "love" -> "loves"; "like" -> "likes"; "enjoy" -> "enjoys"
