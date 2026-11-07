@@ -29,7 +29,11 @@ nothing to keep. Install a new APK signed with the persistent key. Subsequent
 updates can then install directly over it.
 
 
-## Independent web research (Pocket Mikan v0.4.2)
+## Independent web research (Pocket Mikan v0.4.3)
+
+**v0.4.3 shared research policy:** Pocket and desktop now import the exact same `src/research-routing.ts` for search-versus-chat decisions and `src/research-context.ts` for source follow-ups, with shared tests. Desktop keeps its mature Rust search-query builder, SearXNG fallback and Ollama planner; Pocket uses Tavily and Gemini Nano. Only app-specific adapters remain separate. No syncing, new subscriptions, or model changes required.
+
+
 
 **v0.4.2:** Fixed the Pixel regression where "Can you find me the latest info on [band]?" never reached Tavily because "me" was incorrectly classified as sensitive personal context. Research routing now recognizes generic requests to find information *for* the user, while keeping personal data local by default. Added tests for the actual Shadows Fall prompt and varied public/private cases. Generic "latest news" searches are no longer hard-limited to the past month, which had excluded older but still most recent album announcements. If automatic search is disabled, Pocket Mikan will not silently guess answers to time-sensitive questions.
 
