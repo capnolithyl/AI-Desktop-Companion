@@ -196,7 +196,7 @@ export function isResearchFollowup(question: string, previous: ResearchTurn[]): 
       !last.sources?.length) return false;
   // Elliptical detail questions count as sourced-topic follow-ups even when
   // the user doesn't say "it" or "their". A newly named entity does not.
-  const detailFollowup = /^(?:any (?:info|details|news|updates|word|confirmation)\b|(?:what|when|how|where) (?:about|is|are)\b|(?:has|have|did|do|is|are|was|were|will)\b)/i.test(text) &&
+  const detailFollowup = /^(?:any (?:info|details|news|updates|word|confirmation)\b|what(?:'s| is| about)\b|when(?:'s| is| about)\b|(?:how|where) (?:about|is|are)\b|(?:has|have|did|do|is|are|was|were|will)\b)/i.test(text) &&
     /\b(?:release date|release window|title|singles?|track\s*list|songs?|timeline|schedule|launch date|tour dates)\b/i.test(text) &&
     !specificTopic(researchSubject(text));
   // Predictions about an immediately researched topic should still cite
@@ -205,7 +205,7 @@ export function isResearchFollowup(question: string, previous: ResearchTurn[]): 
   if (!prediction && /^(?:what do you (?:think|feel)|how do you feel|do you (?:think|like|remember)|what(?:'s| is) my\b)/i.test(text)) return false;
   if (!detailFollowup && !prediction && !followUpQuestion.test(text) && !/^(?:tell me more|elaborate|explain that|any updates)\b/i.test(text)) return false;
   // Independent new subjects need fresh evidence, not old citation numbers.
-  if (/^(?:what (?:is|are|was|were) (?!it\b|that\b|they\b|those\b)|who (?:is|was) (?!he\b|she\b|that\b)|where (?:is|are) (?!it\b|that\b))/i.test(text)) return false;
+  if (!detailFollowup && /^(?:what (?:is|are|was|were) (?!it\b|that\b|they\b|those\b)|who (?:is|was) (?!he\b|she\b|that\b)|where (?:is|are) (?!it\b|that\b))/i.test(text)) return false;
   if (/\b(?:about|regarding)\s+(?!that\b|it\b|them\b|those\b|this\b|their\b)\w+/i.test(text)) return false;
   return detailFollowup || prediction || /\b(?:it|its|that|those|this|these|they|them|their|there|he|she|his|her|earlier|previous|same)\b/i.test(text) ||
     /^(?:tell me more|elaborate|any updates|and (?:when|where|how|why|what|who)|what about the (?:timeline|schedule|date|plan|mission|release|source|announcement))\b/i.test(text);
