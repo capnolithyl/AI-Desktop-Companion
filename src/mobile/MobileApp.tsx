@@ -11,7 +11,7 @@ import { memoryContext, characterContext, type UserFact, type CharacterFact, typ
 import { mobileBackend, type NativeStatus } from "./mobile-backend";
 import { pocketMemory, type PocketThread, type PocketTurn } from "./mobile-memory";
 import { resolveExplicitMemoryIntent, type ExplicitMemoryIntent } from "./memory-intent";
-import { researchRequest } from "../research-routing";
+import { researchRequest, isPocketResearchFollowup, stripUnsupportedCitations } from "../research-routing";
 import { priorResearchSources } from "../research-context";
 import { compactWebContext, pageContext, type WebResult } from "../web-search";
 import "./mobile.css";
@@ -36,6 +36,7 @@ function buildPrompt(settings: Settings, facts: UserFact[], canon: CharacterFact
   const query = turns[turns.length - 1]?.content ?? "";
   const context = [settings.systemPrompt, personalityGuidance(settings.personality),
     "This is on-device Gemini Nano pocket mode. You cannot see the user's PC or desktop memory. You have no direct browsing abilities; when the application supplies WEB RESEARCH, use only those cited sources. Otherwise be candid about not having live data.",
+    "When no WEB RESEARCH is provided for this turn, respond conversationally without citing sources or recycling earlier research. Do not invent numbered citations. Prior chat text is not verified evidence.",
     "CRITICAL: Conversation text alone cannot save a memory. Never claim that a memory has been saved, filed away, or remembered permanently unless the application has confirmed a database write. Explicit save requests are handled by the app, not by your own text.",
     memoryContext(facts, query), characterContext(canon, query), research
   ].filter(Boolean).join("\n");
@@ -43,6 +44,9 @@ function buildPrompt(settings: Settings, facts: UserFact[], canon: CharacterFact
   const recent: string[] = [];
   let used = context.length + query.length;
   for (const turn of turns.slice(0, -1).reverse()) {
+    // Previous sourced answers can contaminate casual chat with stale [1] citations.
+    // Current research, when requested, is supplied separately as verified metadata.
+    if (turn.role === "assistant" && turn.sources?.length) continue;
     const line = (turn.role === "user" ? "User: " : "Mikan: ") + turn.content.slice(0, 1500);
     if (used + line.length > (research ? 7900 : 5400)) break;
     recent.unshift(line);
@@ -91,7 +95,8 @@ export default function MobileApp() {
   const [openFactId, setOpenFactId] = useState<number | null>(null);
   const [memoText, setMemoText] = useState("");
   const [intro, setIntro] = useState("");
-  const bottom = useRef<HTMLDivElement>(null);
+  const transcript = useRef<HTMLElement>(null);
+  const followLatest = useRef(true);
   const fileInput = useRef<HTMLInputElement>(null);
   const portraitUrl = useRef<string | null>(null);
   const memoryQueue = useRef<Promise<void>>(Promise.resolve());
@@ -145,7 +150,13 @@ export default function MobileApp() {
       if (portraitUrl.current) URL.revokeObjectURL(portraitUrl.current);
     };
   }, []);
-  useEffect(() => { if (screen === "chat") bottom.current?.scrollIntoView({ block: "end" }); }, [screen, active?.turns.length]);
+  useEffect(() => {
+    // Keep streaming replies and appended source links in view, but let the user
+    // scroll upward to read older messages without yanking the view back down.
+    if (screen === "chat" && followLatest.current && transcript.current) {
+      transcript.current.scrollTop = transcript.current.scrollHeight;
+    }
+  }, [screen, active?.turns, intro, webActivity, error]);
   useEffect(() => {
     // Shrink the artwork while the keyboard is up. CSS retains the composer in view.
     const viewport = window.visualViewport;
@@ -195,6 +206,7 @@ export default function MobileApp() {
   function startChat() {
     if (busy || !memoryReady) return;
     const fresh = newThread();
+    followLatest.current = true;
     setThreads(items => [fresh, ...items]);
     setActiveId(fresh.id);
     setScreen("chat");
@@ -463,6 +475,7 @@ export default function MobileApp() {
       setIntro("Gemini Nano isn't ready yet. Open Settings to check or download the local model.");
       return;
     }
+    followLatest.current = true;
     setBusy(true);
     setError("");
     const threadId = active.id;
@@ -481,7 +494,8 @@ export default function MobileApp() {
       let sources: WebResult[] = [];
       let research = "";
       const planned = researchRequest(text, active.turns);
-      const prior = priorResearchSources(active.turns, text);
+      const prior = isPocketResearchFollowup(text, active.turns)
+        ? priorResearchSources(active.turns, text) : [];
       // Never ask Nano to guess about breaking news if the requested provider
       // hasn't been configured yet. Timeless knowledge remains available offline.
       if (webEnabled && planned?.recent && !webConfigured && mode !== "read") {
@@ -526,11 +540,13 @@ export default function MobileApp() {
       const answer = await mobileBackend.generate(buildPrompt(settings, facts, canon,
         [...active.turns, user], research), chunk => {
         output += chunk;
-        replaceTurn(threadId, assistant.id, output, sources.length ? sources : undefined);
+        replaceTurn(threadId, assistant.id, sources.length ? output : stripUnsupportedCitations(output),
+          sources.length ? sources : undefined);
       });
-      replaceTurn(threadId, assistant.id, answer, sources.length ? sources : undefined);
-      // Persist sources as metadata. The model's own words are never trusted as citations.
-      await pocketMemory.saveMessage(threadId, { ...assistant, content: answer, ...(sources.length ? { sources } : {}) });
+      const displayedAnswer = sources.length ? answer : stripUnsupportedCitations(answer);
+      replaceTurn(threadId, assistant.id, displayedAnswer, sources.length ? sources : undefined);
+      // Keep the saved reply identical to the UI: without sources, citation numbers are unverified.
+      await pocketMemory.saveMessage(threadId, { ...assistant, content: displayedAnswer, ...(sources.length ? { sources } : {}) });
       captureAutomaticMemory(threadId, user.id, assistant.id);
     } catch (failure) {
       const detail = failure instanceof Error ? failure.message : String(failure);
@@ -585,7 +601,7 @@ export default function MobileApp() {
       <div className="pocket-heading">
         <strong>{screen === "chat" ? "Mikan" : title}</strong>
         <span className="pocket-subtitle">
-          POCKET COMPANION · LOCAL · v0.4.0
+          POCKET COMPANION · LOCAL · v0.4.1
           <button type="button" className={`pocket-model-indicator ${model === "READY" ? "ready" : "attention"}`}
             onClick={() => setScreen("settings")} title="View local model status in settings"
             aria-label={`Gemini Nano: ${model.toLowerCase()}. Open model settings`}>
@@ -608,7 +624,11 @@ export default function MobileApp() {
       <section className={"pocket-portrait " + (portraitOpen ? "" : "pocket-portrait-hidden")}>
         <img src={portrait} alt="Mikan's portrait"/>
       </section>
-      <section className="pocket-transcript" aria-label="Chat history">
+      <section ref={transcript} className="pocket-transcript" aria-label="Chat history"
+         onScroll={event => {
+           const panel = event.currentTarget;
+           followLatest.current = panel.scrollHeight - panel.scrollTop - panel.clientHeight < 96;
+         }}>
         {active.turns.length === 0 && <div className="pocket-welcome">Hey! Pocket Mikan reporting for duty. Let's see what this little phone-brain can do. ✨</div>}
         {active.turns.map(turn => <article className={"pocket-turn " + turn.role} key={turn.id}>
           <strong>{turn.role === "user" ? "YOU" : "MIKAN"}</strong>
@@ -625,7 +645,6 @@ export default function MobileApp() {
         {!memoryReady && <p className="pocket-notice">{memoryError ?? "Opening local SQLite memory…"}</p>}
         {memoryReady && memoryError && <p className="pocket-error" role="alert">{memoryError}</p>}
         {error && <p className="pocket-error" role="alert">{error}</p>}
-        <div ref={bottom}/>
       </section>
       <form className="pocket-composer" onSubmit={event => { event.preventDefault(); void send(); }}>
         <textarea value={draft} onChange={event => setDraft(event.target.value)} disabled={!memoryReady} rows={2}
@@ -750,7 +769,7 @@ export default function MobileApp() {
       {screen === "chats" && <>
         <button className="pocket-wide-button" onClick={startChat}><Plus size={18}/> New conversation</button>
         {threads.map(thread => <div className="pocket-history-item" key={thread.id}>
-          <button onClick={() => { setActiveId(thread.id); setScreen("chat"); }}><MessageCircle size={18}/><span>{thread.title}<small>{thread.turns.length} messages</small></span>{active.id === thread.id && <Check size={15}/>}</button>
+          <button onClick={() => { followLatest.current = true; setActiveId(thread.id); setScreen("chat"); }}><MessageCircle size={18}/><span>{thread.title}<small>{thread.turns.length} messages</small></span>{active.id === thread.id && <Check size={15}/>}</button>
           <button aria-label="Delete conversation" disabled={!memoryReady || busy}
             onClick={() => { void deleteThread(thread.id); }}><Trash2 size={18}/></button>
         </div>)}
