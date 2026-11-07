@@ -62,3 +62,38 @@ test("ambiguous requests ask for a detail instead of inventing it", () => {
   assert.equal(resolveExplicitMemoryIntent("Remember that?", [])?.kind, "clarify");
   assert.equal(resolveExplicitMemoryIntent("Remember this?", [])?.kind, "clarify");
 });
+
+test("natural greeting plus a follow-up saves the preceding name, not Mikan's greeting", () => {
+  const preceding = [
+    { role: "user", content: "Hi I'm Marcus" },
+    { role: "assistant", content: "Marcus, hello! Fancy meeting you here." }
+  ];
+  assert.deepEqual(resolveExplicitMemoryIntent("Can you remember that?", preceding), {
+    kind: "user",
+    fact: "The user is named Marcus",
+    description: "your name is Marcus",
+    sourceText: "Hi I'm Marcus"
+  });
+});
+
+test("names can be introduced with different common greetings and apostrophes", () => {
+  for (const text of ["Hey, I'm Alex", "Hello! My name is Alex", "I’m Alex",
+    "Hi, you can call me Alex", "Hi! I go by Alex"]) {
+    const result = resolveExplicitMemoryIntent("Remember that?", [
+      { role: "user", content: text },
+      { role: "assistant", content: "Nice to meet you." }
+    ]);
+    assert.equal(result?.kind, "user", text);
+    assert.equal(result?.fact, "The user is named Alex", text);
+  }
+});
+
+test("a passing mood or vague greeting cannot be misread as a saved name", () => {
+  for (const text of ["Hi, I'm tired", "Hi, I'm a developer", "I'm looking around", "Hello!"]) {
+    const result = resolveExplicitMemoryIntent("Remember that?", [
+      { role: "user", content: text },
+      { role: "assistant", content: "Hey!" }
+    ]);
+    assert.equal(result?.kind, "clarify", text);
+  }
+});
