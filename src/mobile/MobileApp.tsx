@@ -11,6 +11,9 @@ import { memoryContext, characterContext, type UserFact, type CharacterFact, typ
 import { mobileBackend, type NativeStatus } from "./mobile-backend";
 import { pocketMemory, type PocketThread, type PocketTurn } from "./mobile-memory";
 import { resolveExplicitMemoryIntent, type ExplicitMemoryIntent } from "./memory-intent";
+import { researchRequest } from "../research-routing";
+import { priorResearchSources } from "../research-context";
+import { compactWebContext, pageContext, type WebResult } from "../web-search";
 import "./mobile.css";
 
 type Turn = PocketTurn;
@@ -20,6 +23,7 @@ const THREAD_KEY = "mikan/mobile/threads/v1";
 const ACTIVE_KEY = "mikan/mobile/active/v1";
 const USER_KEY = "mikan/mobile/facts/v1";
 const CANON_KEY = "mikan/mobile/canon/v1";
+const AUTO_WEB_KEY = "mikan/mobile/automatic-web/v1";
 const uuid = () => typeof crypto.randomUUID === "function" ? crypto.randomUUID() : String(Date.now()) + Math.random().toString(36);
 const newThread = (): Thread => ({ id: uuid(), title: "New chat", createdAt: Date.now(), turns: [] });
 function readArray<T>(key: string): T[] {
@@ -28,19 +32,19 @@ function readArray<T>(key: string): T[] {
     return Array.isArray(value) ? value as T[] : [];
   } catch { return []; }
 }
-function buildPrompt(settings: Settings, facts: UserFact[], canon: CharacterFact[], turns: Turn[]): string {
+function buildPrompt(settings: Settings, facts: UserFact[], canon: CharacterFact[], turns: Turn[], research = ""): string {
   const query = turns[turns.length - 1]?.content ?? "";
   const context = [settings.systemPrompt, personalityGuidance(settings.personality),
-    "This is on-device Gemini Nano pocket mode. You cannot browse the web, see the user's PC, or access desktop memory. Be candid about limitations.",
+    "This is on-device Gemini Nano pocket mode. You cannot see the user's PC or desktop memory. You have no direct browsing abilities; when the application supplies WEB RESEARCH, use only those cited sources. Otherwise be candid about not having live data.",
     "CRITICAL: Conversation text alone cannot save a memory. Never claim that a memory has been saved, filed away, or remembered permanently unless the application has confirmed a database write. Explicit save requests are handled by the app, not by your own text.",
-    memoryContext(facts, query), characterContext(canon, query)
+    memoryContext(facts, query), characterContext(canon, query), research
   ].filter(Boolean).join("\n");
   // Nano has a significantly smaller working context than the desktop model.
   const recent: string[] = [];
   let used = context.length + query.length;
   for (const turn of turns.slice(0, -1).reverse()) {
     const line = (turn.role === "user" ? "User: " : "Mikan: ") + turn.content.slice(0, 1500);
-    if (used + line.length > 5400) break;
+    if (used + line.length > (research ? 7900 : 5400)) break;
     recent.unshift(line);
     used += line.length;
   }
@@ -50,8 +54,8 @@ function buildPrompt(settings: Settings, facts: UserFact[], canon: CharacterFact
 function openLink(href: string) {
   try {
     const url = new URL(href);
-    // This standalone build has no web/network permission.
-    if (url.protocol === "https:" || url.protocol === "http:") alert("Web links will be available in connected mode.\n" + url.href);
+    if (url.protocol !== "https:") return;
+    void mobileBackend.openLink(url.href).catch(failure => alert("Could not open the link: " + String(failure)));
   } catch { /* ignore malformed links */ }
 }
 
@@ -67,6 +71,12 @@ export default function MobileApp() {
   const [memoryError, setMemoryError] = useState<string | null>(null);
   const [memoryNotice, setMemoryNotice] = useState<string | null>(null);
   const [memoryToast, setMemoryToast] = useState<{ key: number; message: string } | null>(null);
+  const [webConfigured, setWebConfigured] = useState(false);
+  const [webKeyDraft, setWebKeyDraft] = useState("");
+  const [webEnabled, setWebEnabled] = useState(() => localStorage.getItem(AUTO_WEB_KEY) !== "false");
+  const [webBusy, setWebBusy] = useState(false);
+  const [webActivity, setWebActivity] = useState("");
+  const [webError, setWebError] = useState("");
   const [memoryBusy, setMemoryBusy] = useState(false);
   const [autoMemoryBusy, setAutoMemoryBusy] = useState(false);
   const [model, setModel] = useState<NativeStatus["status"] | "CHECKING">("CHECKING");
@@ -89,6 +99,7 @@ export default function MobileApp() {
 
   useEffect(() => { if (memoryReady && active) localStorage.setItem(ACTIVE_KEY, active.id); }, [active, memoryReady]);
   useEffect(() => { saveSettings(settings); }, [settings]);
+  useEffect(() => { localStorage.setItem(AUTO_WEB_KEY, String(webEnabled)); }, [webEnabled]);
   useEffect(() => {
     if (!memoryToast) return;
     const timer = window.setTimeout(() => {
@@ -117,6 +128,7 @@ export default function MobileApp() {
     }).catch(failure => {
       setMemoryError("Couldn't open SQLite memory: " + String(failure));
     });
+    void mobileBackend.webStatus().then(status => setWebConfigured(status.configured)).catch(() => {});
     void mobileBackend.status().then(setModel).catch(failure => {
       setModel("UNAVAILABLE");
       setError(String(failure));
