@@ -15,6 +15,17 @@ android {
         versionName = "0.3.1"
     }
 
+    // GitHub Actions debug APKs are signed by a new runner-local key.
+    // Give CI/dev builds their own app ID so they can be installed beside
+    // the existing Pocket Mikan without uninstalling or wiping its data.
+    // Release builds retain dev.capnolithyl.mikan.pocket.
+    buildTypes {
+        getByName("debug") {
+            applicationIdSuffix = ".preview"
+            versionNameSuffix = "-preview"
+        }
+    }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
