@@ -603,8 +603,15 @@ export default function MobileApp() {
         {active.turns.map(turn => <article className={"pocket-turn " + turn.role} key={turn.id}>
           <strong>{turn.role === "user" ? "YOU" : "MIKAN"}</strong>
           <div className="pocket-bubble">{turn.content ? <ChatMarkdown text={turn.content} onOpenLink={openLink}/> : <LoaderCircle size={16} className="spin"/>}</div>
+          {turn.sources && turn.sources.length > 0 && <div className="pocket-web-sources" aria-label="Sources used in this answer">
+            <span>Sources</span>
+            {turn.sources.slice(0, 5).map((source, index) =>
+              <button type="button" key={source.url} onClick={() => openLink(source.url)}
+                title={source.url}>{index + 1}. {source.title}</button>)}
+          </div>}
         </article>)}
         {intro && <p className="pocket-notice">{intro}</p>}
+        {webActivity && <p className="pocket-web-activity" role="status"><LoaderCircle size={14} className="spin"/> {webActivity}</p>}
         {!memoryReady && <p className="pocket-notice">{memoryError ?? "Opening local SQLite memory…"}</p>}
         {memoryReady && memoryError && <p className="pocket-error" role="alert">{memoryError}</p>}
         {error && <p className="pocket-error" role="alert">{error}</p>}
@@ -665,6 +672,41 @@ export default function MobileApp() {
           </button>
         </div>
         <label className="pocket-field pocket-prompt">System prompt<textarea value={settings.systemPrompt} rows={6} onChange={event => updateSettings({ systemPrompt:event.target.value })}/></label>
+        <h3>Internet</h3>
+        <p className="pocket-hint">Optional independent web search over Wi-Fi or mobile data. Gemini Nano still runs on your phone; search queries and page URLs are sent to Tavily. No PC required. Tavily offers a free API tier.</p>
+        <div className="pocket-web-settings">
+          <strong>{webConfigured ? "Tavily connected" : "Tavily not configured"}</strong>
+          <p className="pocket-hint">Get a free key from <button type="button" className="pocket-inline-link"
+            onClick={() => openLink("https://app.tavily.com/")}>app.tavily.com</button>. Your key stays encrypted on this phone and is never saved in the chat or GitHub.</p>
+          <label className="pocket-web-key-label" htmlFor="tavily-key">Tavily API key</label>
+          <input id="tavily-key" type="password" autoComplete="off" autoCapitalize="none"
+            spellCheck={false} placeholder={webConfigured ? "Saved securely; enter to replace" : "tvly-…"}
+            value={webKeyDraft} onChange={event => setWebKeyDraft(event.target.value)} />
+          <div className="pocket-web-key-actions">
+            <button type="button" disabled={!webKeyDraft.trim() || webBusy} onClick={() => {
+              setWebBusy(true); setWebError("");
+              void mobileBackend.saveWebKey(webKeyDraft).then(status => {
+                setWebConfigured(status.configured);
+                setWebKeyDraft("");
+                setWebError("");
+              }).catch(failure => setWebError(String(failure)))
+                .finally(() => setWebBusy(false));
+            }}>Save key</button>
+            {webConfigured && <button type="button" disabled={webBusy} onClick={() => {
+              if (!confirm("Remove the saved Tavily key from this phone?")) return;
+              setWebBusy(true); setWebError("");
+              void mobileBackend.clearWebKey().then(() => {
+                setWebConfigured(false); setWebKeyDraft("");
+              }).catch(failure => setWebError(String(failure)))
+                .finally(() => setWebBusy(false));
+            }}>Remove key</button>}
+          </div>
+          {webError && <p className="pocket-error" role="alert">{webError}</p>}
+        </div>
+        <label className="pocket-toggle"><input type="checkbox" checked={webEnabled}
+          onChange={event => setWebEnabled(event.target.checked)}/>
+          Search automatically when a question needs current or verifiable information</label>
+        <p className="pocket-hint">You can always use /search &lt;query&gt; or /read &lt;https URL&gt; even if automatic search is off. Searching consumes Tavily credits; no search runs for casual conversation.</p>
         <h3>Memories</h3>
         <p className="pocket-hint">User facts and Mikan's character canon are separate SQLite records. Automatic capture runs a second, short Gemini Nano analysis after completed replies and validates exact source evidence. It uses additional on-device inference, and may skip facts Nano cannot substantiate.</p>
         <label className="pocket-toggle"><input type="checkbox" checked={settings.autoRememberUser}
@@ -676,7 +718,7 @@ export default function MobileApp() {
         <p className="pocket-hint">{autoMemoryBusy ? "Analyzing the last completed turn locally…" :
           "Both switches are optional. Saved memories can be edited or deleted from their respective panels."}</p>
         {memoryError && <p className="pocket-error" role="alert">{memoryError}</p>}
-        <p className="pocket-hint">Web search, a knowledge library, cloud sync and PC connections are not enabled in standalone pocket mode.</p>
+        <p className="pocket-hint">Documentation caching, cloud sync and PC connections are not enabled in standalone pocket mode.</p>
         <button className="pocket-wide-button" onClick={() => setScreen("help")}>See supported slash commands</button>
       </>}
       {screen === "personality" && <>
@@ -685,10 +727,10 @@ export default function MobileApp() {
         <PersonalitySliders value={settings.personality} onChange={updatePersonality}/>
       </>}
       {screen === "help" && <>
-        <p className="pocket-hint">The same slash-command definitions as desktop Mikan. Commands requiring Windows, Ollama or search are marked accordingly.</p>
+        <p className="pocket-hint">The same slash-command definitions as desktop Mikan. /search and /read work with a configured Tavily key; Windows and Ollama commands remain desktop-only.</p>
         {SLASH_HELP.map(item => {
           const name = parseSlashCommand(item.insert.trimEnd())?.name ?? item.insert.split(" ")[0].slice(1);
-          const disabled = ["search","search-start","search-stop","search-status","read","model","models","ollama","searxng","internet","hide"].includes(name);
+          const disabled = ["search-start","search-stop","search-status","model","models","ollama","searxng","internet","hide"].includes(name);
           return <button className="pocket-command" key={item.usage} onClick={() => {
             if (disabled) { setIntro("That command needs the desktop or a future connected mode."); setScreen("chat"); }
             else { setDraft(item.insert); setScreen("chat"); }
