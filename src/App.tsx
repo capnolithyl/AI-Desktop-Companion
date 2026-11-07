@@ -4,6 +4,7 @@ import remarkGfm from "remark-gfm";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { webContext, pageContext, type PageDocument, type WebResult } from "./web-search";
 import { priorResearchSources } from "./research-context";
+import { planResearch } from "./research-routing";
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
@@ -807,6 +808,8 @@ export default function App() {
     const user: LogMessage = { id: crypto.randomUUID(), role: "user", content: text, createdAt: Date.now() };
     const assistantId = crypto.randomUUID();
     const history = [...messages, user];
+    // Shared routing policy: keep the proven desktop query construction in Rust.
+    const researchPlan = !withSearch ? planResearch(text, messages) : null;
     const priorSources = !withSearch ? priorResearchSources(messages, text) : [];
     const conversationId = activeConversationId ?? crypto.randomUUID();
     setActiveConversationId(conversationId);
@@ -860,6 +863,10 @@ export default function App() {
           endpoint: settings.endpoint,
           model: settings.model,
           autoSearch: settings.autoSearch && !withSearch,
+          // These hints come from shared TypeScript rules used by Pocket too.
+          // Rust still owns SearXNG query refinement, retries and web tools.
+          researchRoute: researchPlan?.mode,
+          researchQuery: researchPlan?.mode === "research" ? researchPlan.query : undefined,
           searxngEndpoint: settings.searxngEndpoint,
           cacheHours: settings.cacheHours,
           contextWindow: settings.contextWindow,
