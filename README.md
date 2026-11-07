@@ -2,6 +2,10 @@
 
 A local-first, personal Windows AI desktop companion powered by Tauri 2, React, TypeScript, and Ollama. Free hobby project for one PC.
 
+**v0.7.3:** Recognize short follow-up requests for missing release dates, titles, singles, and other named details. Inherit the most recent user-named topic, search for updated evidence instead of relying on an old answer, and avoid carrying unrelated names into new research. Shared regression tests also cover Pocket Mikan.
+
+**v0.7.2:** Shared desktop/Pocket research intent and relevant evidence reuse. Both apps share the desktop-derived entity-aware query builder and source-reuse policy; Windows keeps its Rust compatibility fallback, SearXNG retries, and Ollama model-directed tools for factual questions, while ordinary chat skips unnecessary tool planning. Android keeps Tavily and Gemini Nano. Both clients use the same TypeScript routing policy and cross-platform regression tests.
+
 **v0.7.0:** Manually managed Mikan character canon, with separate About Mikan details, preferences, hobbies and traits kept independent from the user's memories.
 
 **v0.6.2:** Research follow-ups can reuse previously retrieved source excerpts, with clear stale-source labeling. Optional 4K/8K/16K/32K per-request context setting under AI & Models, preserving the Ollama default unless changed. Schedule-specific follow-ups now search for verified dates rather than extrapolating from AI summaries.
