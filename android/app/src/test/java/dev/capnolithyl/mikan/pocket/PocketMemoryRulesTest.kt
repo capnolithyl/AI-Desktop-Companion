@@ -71,6 +71,51 @@ class PocketMemoryRulesTest {
         }
     }
 
+    @Test fun generalizedStableFactsWithoutNanoJson() {
+        // Not hardcoded to one particular identity, birthday, profession, or taste.
+        val examples = mapOf(
+            "My birthday is April 23 1992" to "The user says their birthday is April 23 1992",
+            "My job is web development" to "The user says their job is web development",
+            "I'm a WordPress developer" to "The user is a WordPress developer",
+            "I work as a backend engineer" to "The user works as a backend engineer",
+            "My favorite color is black" to "The user says their favorite color is black",
+            "My favorite music is metal, especially black metal" to
+                "The user says their favorite music is metal, especially black metal",
+            "I speak German" to "The user speaks German",
+            "I was born on April 23 1992" to "The user was born on April 23 1992",
+            "My dog is a Boston terrier" to "The user says their dog is a Boston terrier",
+            "I live in Michigan" to "The user lives in Michigan"
+        )
+        for ((message, expected) in examples) {
+            val actual = PocketMemoryRules.stableUserFacts(message)
+            assertEquals(message, expected, actual.firstOrNull()?.first)
+            assertEquals(message, message, actual.firstOrNull()?.second)
+            assertEquals(message, expected, PocketMemoryRules.cleanUser(
+                expected, message, message
+            ))
+        }
+    }
+
+    @Test fun multipleStableFactsAreExtractedSeparately() {
+        val result = PocketMemoryRules.stableUserFacts(
+            "I'm a developer. I speak German. My favorite color is black."
+        )
+        assertEquals(3, result.size)
+        assertEquals("The user is a developer", result[0].first)
+        assertEquals("The user speaks German", result[1].first)
+        assertEquals("The user says their favorite color is black", result[2].first)
+    }
+
+    @Test fun temporaryPrivateOrQuestionContentIsNotAutomaticallyStored() {
+        for (message in listOf(
+            "I'm tired", "My mood is terrible", "My lunch is cold",
+            "My password is 12345", "I have a headache",
+            "My favorite color is what?", "Can you tell me what my birthday is?"
+        )) {
+            assertTrue(message, PocketMemoryRules.stableUserFacts(message).isEmpty())
+        }
+    }
+
     @Test fun automaticCaptureRejectsSensitiveInformation() {
         assertNull(PocketMemoryRules.cleanUser("The user has depression",
             "I have depression", "I have depression."))
