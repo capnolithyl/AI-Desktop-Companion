@@ -9,17 +9,16 @@ import { parseSlashCommand, SLASH_HELP } from "../slash-commands";
 import { loadSettings, saveSettings, loadPortrait, savePortrait, type Settings } from "../storage";
 import { memoryContext, characterContext, type UserFact, type CharacterFact, type CharacterCategory } from "../memory-client";
 import { mobileBackend, type NativeStatus } from "./mobile-backend";
+import { pocketMemory, type PocketThread, type PocketTurn } from "./mobile-memory";
 import "./mobile.css";
 
-type Role = "user" | "assistant";
-type Turn = { id: string; role: Role; content: string; createdAt: number };
-type Thread = { id: string; title: string; createdAt: number; turns: Turn[] };
+type Turn = PocketTurn;
+type Thread = PocketThread;
 type Screen = "chat" | "settings" | "personality" | "help" | "chats" | "memory" | "canon" | "log";
 const THREAD_KEY = "mikan/mobile/threads/v1";
 const ACTIVE_KEY = "mikan/mobile/active/v1";
 const USER_KEY = "mikan/mobile/facts/v1";
 const CANON_KEY = "mikan/mobile/canon/v1";
-const IMPORT_KEY = "mikan/mobile/imported-native/v1";
 const uuid = () => typeof crypto.randomUUID === "function" ? crypto.randomUUID() : String(Date.now()) + Math.random().toString(36);
 const newThread = (): Thread => ({ id: uuid(), title: "New chat", createdAt: Date.now(), turns: [] });
 function readArray<T>(key: string): T[] {
@@ -57,14 +56,14 @@ function openLink(href: string) {
 export default function MobileApp() {
   const [settings, setSettings] = useState(loadSettings);
   const [screen, setScreen] = useState<Screen>("chat");
-  const [threads, setThreads] = useState<Thread[]>(() => {
-    const stored = readArray<Thread>(THREAD_KEY);
-    return stored.length ? stored : [newThread()];
-  });
-  const [activeId, setActiveId] = useState(() => localStorage.getItem(ACTIVE_KEY));
+  const [threads, setThreads] = useState<Thread[]>(() => [newThread()]);
+  const [activeId, setActiveId] = useState<string | null>(null);
   const active = threads.find(thread => thread.id === activeId) ?? threads[0];
-  const [facts, setFacts] = useState<UserFact[]>(() => readArray(USER_KEY));
-  const [canon, setCanon] = useState<CharacterFact[]>(() => readArray(CANON_KEY));
+  const [facts, setFacts] = useState<UserFact[]>([]);
+  const [canon, setCanon] = useState<CharacterFact[]>([]);
+  const [memoryReady, setMemoryReady] = useState(false);
+  const [memoryError, setMemoryError] = useState<string | null>(null);
+  const [autoMemoryBusy, setAutoMemoryBusy] = useState(false);
   const [model, setModel] = useState<NativeStatus["status"] | "CHECKING">("CHECKING");
   const [modelAction, setModelAction] = useState<"check" | "download" | null>(null);
   const [error, setError] = useState("");
@@ -79,25 +78,31 @@ export default function MobileApp() {
   const bottom = useRef<HTMLDivElement>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const portraitUrl = useRef<string | null>(null);
+  const memoryQueue = useRef<Promise<void>>(Promise.resolve());
 
-  useEffect(() => { localStorage.setItem(THREAD_KEY, JSON.stringify(threads)); }, [threads]);
-  useEffect(() => { if (active) localStorage.setItem(ACTIVE_KEY, active.id); }, [active]);
-  useEffect(() => { localStorage.setItem(USER_KEY, JSON.stringify(facts)); }, [facts]);
-  useEffect(() => { localStorage.setItem(CANON_KEY, JSON.stringify(canon)); }, [canon]);
+  useEffect(() => { if (memoryReady && active) localStorage.setItem(ACTIVE_KEY, active.id); }, [active, memoryReady]);
   useEffect(() => { saveSettings(settings); }, [settings]);
   useEffect(() => {
-    if (localStorage.getItem(IMPORT_KEY) !== "done") {
-      void mobileBackend.importLegacy().then(json => {
-        const old = JSON.parse(json) as Turn[];
-        const alreadyHasChat = readArray<Thread>(THREAD_KEY).some(thread => thread.turns.length > 0);
-        if (!alreadyHasChat && Array.isArray(old) && old.length) {
-          const migrated: Thread = { id: uuid(), title: "Earlier Pocket Mikan chat", createdAt: Date.now(), turns: old };
-          setThreads([migrated]);
-          setActiveId(migrated.id);
-        }
-        localStorage.setItem(IMPORT_KEY, "done");
-      }).catch(() => {});
-    }
+    // One-time, transactional migration. Never erase the legacy browser data
+    // unless native SQLite confirms that the import completed successfully.
+    const preferredId = localStorage.getItem(ACTIVE_KEY);
+    void pocketMemory.bootstrap({
+      threads: readArray<Thread>(THREAD_KEY),
+      facts: readArray<UserFact>(USER_KEY),
+      canon: readArray<CharacterFact>(CANON_KEY)
+    }).then(snapshot => {
+      const stored = snapshot.threads.length ? snapshot.threads : [newThread()];
+      setThreads(stored);
+      setFacts(snapshot.facts);
+      setCanon(snapshot.canon);
+      setActiveId(stored.some(thread => thread.id === preferredId) ? preferredId : stored[0].id);
+      setMemoryReady(true);
+      localStorage.removeItem(THREAD_KEY);
+      localStorage.removeItem(USER_KEY);
+      localStorage.removeItem(CANON_KEY);
+    }).catch(failure => {
+      setMemoryError("Couldn't open SQLite memory: " + String(failure));
+    });
     void mobileBackend.status().then(setModel).catch(failure => {
       setModel("UNAVAILABLE");
       setError(String(failure));
@@ -164,22 +169,72 @@ export default function MobileApp() {
     } : thread));
   }
   function startChat() {
-    if (busy) return;
+    if (busy || !memoryReady) return;
     const fresh = newThread();
     setThreads(items => [fresh, ...items]);
     setActiveId(fresh.id);
     setScreen("chat");
+    void pocketMemory.createConversation(fresh.id).catch(failure => setMemoryError(String(failure)));
   }
-  function addFact(fact: string): UserFact {
-    const timestamp = Math.floor(Date.now() / 1000);
-    const entry = { id: Date.now(), fact: fact.trim(), createdAt: timestamp, updatedAt: timestamp };
-    setFacts(items => [...items, entry]);
-    return entry;
+  async function addFact(fact: string): Promise<UserFact> {
+    const saved = await pocketMemory.addFact(fact);
+    setFacts(items => [saved, ...items.filter(item => item.id !== saved.id)]);
+    return saved;
   }
-  function addCanon(category: CharacterCategory, label: string, value: string) {
-    const timestamp = Math.floor(Date.now() / 1000);
-    const entry: CharacterFact = { id: Date.now(), personaId: "mikan", category, label, value, createdAt: timestamp, updatedAt: timestamp };
-    setCanon(items => [...items, entry]);
+  async function editUserFact(id: number, fact: string): Promise<void> {
+    await pocketMemory.updateFact(id, fact);
+    setFacts(items => items.map(item => item.id === id
+      ? { ...item, fact: fact.trim(), updatedAt: Math.floor(Date.now() / 1000) } : item));
+  }
+  async function deleteUserFact(id: number): Promise<void> {
+    await pocketMemory.deleteFact(id);
+    setFacts(items => items.filter(item => item.id !== id));
+  }
+  async function addCanon(category: CharacterCategory, label: string, value: string): Promise<void> {
+    const saved = await pocketMemory.addCanon(category, label, value);
+    setCanon(items => [saved, ...items.filter(item => item.id !== saved.id)]);
+  }
+  async function editCanon(id: number, category: CharacterCategory, label: string, value: string): Promise<void> {
+    await pocketMemory.updateCanon(id, category, label, value);
+    setCanon(items => items.map(item => item.id === id
+      ? { ...item, category, label: label.trim(), value: value.trim(),
+          updatedAt: Math.floor(Date.now() / 1000) } : item));
+  }
+  async function deleteCanon(id: number): Promise<void> {
+    await pocketMemory.deleteCanon(id);
+    setCanon(items => items.filter(item => item.id !== id));
+  }
+  async function deleteThread(id: string): Promise<void> {
+    if (!confirm("Delete this phone-local conversation?")) return;
+    try {
+      await pocketMemory.deleteConversation(id);
+      const next = threads.filter(thread => thread.id !== id);
+      const kept = next.length ? next : [newThread()];
+      setThreads(kept);
+      if (active.id === id) setActiveId(kept[0].id);
+    } catch (failure) {
+      setMemoryError(String(failure));
+    }
+  }
+  function captureAutomaticMemory(threadId: string, userId: string, assistantId: string) {
+    if (!settings.autoRememberUser && !settings.autoRememberMikan) return;
+    memoryQueue.current = memoryQueue.current.catch(() => {}).then(async () => {
+      setAutoMemoryBusy(true);
+      try {
+        const result = await pocketMemory.processTurn(threadId, userId, assistantId,
+          settings.autoRememberUser, settings.autoRememberMikan);
+        if (result.userSaved || result.characterSaved) {
+          const snapshot = await pocketMemory.snapshot();
+          setFacts(snapshot.facts);
+          setCanon(snapshot.canon);
+        }
+        setMemoryError(null);
+      } catch (failure) {
+        setMemoryError("Automatic memory extraction skipped: " + String(failure));
+      } finally {
+        setAutoMemoryBusy(false);
+      }
+    });
   }
   function commandResponse(text: string) {
     setIntro(text);
