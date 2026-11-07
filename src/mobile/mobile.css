@@ -19,9 +19,21 @@ button:disabled { opacity: .55; cursor: default; }
 .pocket-heading strong { font-size: 22px; line-height: 1.15; }
 .pocket-heading span { color: var(--pocket-accent); font-size: 10px; font-weight: 800; letter-spacing: .08em; margin-top: 4px; }
 .pocket-icon-button { height: 43px; width: 43px; display: grid; place-items: center; color: var(--pocket-accent); background: transparent; border: 1px solid #523c46; border-radius: 13px; }
-.pocket-status { flex: 0 0 auto; border-radius: 13px; background: #2b212d; display: flex; align-items: center; gap: 10px; padding: 9px; margin-bottom: 5px; }
-.pocket-status span { flex: 1; padding-left: 6px; font-size: 12px; color: #d5bdc5; }
-.pocket-status button, .pocket-composer button { background: var(--pocket-accent); border: 0; border-radius: 12px; color: #35202b; font-weight: 700; padding: 11px 13px; }
+.pocket-heading .pocket-subtitle { display: flex; align-items: center; flex-wrap: wrap; column-gap: 8px; row-gap: 2px; line-height: 1.4; }
+.pocket-model-indicator { display: inline-flex; align-items: center; gap: 5px; padding: 0; border: 0; background: transparent; color: #c7b2bd; font-size: 10px; font-weight: 600; letter-spacing: 0; white-space: nowrap; }
+.pocket-model-indicator.ready { color: #9ac7a8; }
+.pocket-model-indicator.attention { color: #e9b8a2; }
+.pocket-model-dot { flex: 0 0 auto; display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: #d7a16d; }
+.pocket-model-dot.ready, .pocket-model-indicator.ready .pocket-model-dot { background: #86c899; }
+.pocket-model-dot.attention { background: #d7a16d; }
+.pocket-model-indicator:focus-visible { outline: 2px solid var(--pocket-accent); outline-offset: 3px; border-radius: 3px; }
+.pocket-model-warning { flex: 0 0 auto; align-self: stretch; margin: 3px 0 7px; padding: 10px 12px; text-align: left; color: #ffe4cb; border: 1px solid #815146; border-radius: 11px; background: #493039; font-size: 12px; }
+.pocket-model-settings { display: flex; align-items: center; gap: 12px; padding: 13px; margin: 9px 0 16px; border: 1px solid #614955; border-radius: 12px; background: #2b212d; }
+.pocket-model-details { display: flex; flex: 1; flex-direction: column; gap: 7px; min-width: 0; }
+.pocket-model-details strong { font-size: 13px; }
+.pocket-model-details span { display: inline-flex; align-items: center; gap: 7px; color: #d4bbc4; font-size: 12px; line-height: 1.35; }
+.pocket-model-settings button { flex: 0 0 auto; padding: 10px 12px; border: 0; border-radius: 10px; color: #35202b; background: var(--pocket-accent); font-size: 12px; font-weight: 700; }
+.pocket-composer button { background: var(--pocket-accent); border: 0; border-radius: 12px; color: #35202b; font-weight: 700; padding: 11px 13px; }
 .pocket-portrait { flex: 0 0 auto; min-height: 0; height: min(27vh, 220px); max-height: 27%; display: grid; place-items: center; position: relative; margin: 2px 0 0; overflow: hidden; }
 .pocket-portrait img { display: block; width: 100%; max-width: 260px; height: 100%; object-fit: contain; cursor: pointer; }
 .pocket-portrait span { position: absolute; bottom: 5px; left: 2px; font-size: 10px; color: #eed0c3; }
