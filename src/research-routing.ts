@@ -73,7 +73,7 @@ function researchSubject(text: string): string | null {
     "the band ", "the group ", "the musician ", "the music artist ",
     "the artist ", "the singer ", "band ", "artist "
   ];
-  for (const prefix of [" about ", " on ", " for ", " regarding ", " from "]) {
+  for (const prefix of [" about ", " on ", " for ", " regarding ", " from ", " of "]) {
     // The last clause may say "their upcoming album" after naming a band.
     // Keep walking backward until we find a specific subject.
     let end = lower.length;
