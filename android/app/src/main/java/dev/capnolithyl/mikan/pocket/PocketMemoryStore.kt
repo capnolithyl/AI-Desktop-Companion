@@ -165,16 +165,22 @@ class PocketMemoryStore(private val context: Context) :
         require(metadata.length <= 200_000) { "Message metadata too large" }
         JSONObject(metadata) // validate, not SQL
         insertConversation(db,conversationId)
-        val changed = db.compileStatement("""INSERT INTO messages
-            (id,conversation_id,role,content,created_at,metadata_json) VALUES(?,?,?,?,?,?)
-            ON CONFLICT(id) DO UPDATE SET content=excluded.content,metadata_json=excluded.metadata_json
-            WHERE conversation_id=excluded.conversation_id""").use { statement ->
-            statement.bindString(1,id); statement.bindString(2,conversationId)
-            statement.bindString(3,role); statement.bindString(4,content)
-            statement.bindLong(5,timestamp); statement.bindString(6,metadata)
-            statement.executeUpdateDelete()
+        // Use INSERT/UPDATE rather than relying on Android's older SQLite
+        // engines supporting newer UPSERT syntax or executeUpdateDelete on INSERT.
+        val existing = query(db, "SELECT conversation_id FROM messages WHERE id=?",
+            arrayOf(id)) { it.getString(0) }.firstOrNull()
+        require(existing == null || existing == conversationId) {
+            "Message belongs to a different conversation"
         }
-        require(changed > 0) { "Message belongs to a different conversation" }
+        if (existing == null) {
+            db.execSQL("""INSERT INTO messages
+                (id,conversation_id,role,content,created_at,metadata_json) VALUES(?,?,?,?,?,?)""",
+                arrayOf(id,conversationId,role,content,timestamp,metadata))
+        } else {
+            db.execSQL("""UPDATE messages SET content=?,metadata_json=?
+                WHERE id=? AND conversation_id=?""",
+                arrayOf(content,metadata,id,conversationId))
+        }
         val sec = now()
         if (role == "user") {
             db.execSQL("""UPDATE conversations SET
