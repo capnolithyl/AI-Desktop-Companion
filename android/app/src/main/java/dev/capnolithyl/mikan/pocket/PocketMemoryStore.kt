@@ -322,6 +322,8 @@ class PocketMemoryStore(private val context: Context) :
         val db = writableDatabase
         return when (action) {
             "snapshot" -> snapshot(db)
+            "listFacts" -> JSONObject().put("facts",allFacts(db))
+            "listCanon" -> JSONObject().put("canon",allCanon(db))
             "createConversation" -> {
                 insertConversation(db,data.getString("conversationId")); JSONObject()
             }
