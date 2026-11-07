@@ -31,6 +31,12 @@ struct ChatRequest {
     messages: Vec<ChatMessage>,
     #[serde(default)]
     auto_search: bool,
+    // The same TypeScript intent policy is used by Android and desktop.
+    // Older API callers omit these and keep the original Rust behavior.
+    #[serde(default)]
+    research_route: Option<String>,
+    #[serde(default)]
+    research_query: Option<String>,
     #[serde(default)]
     searxng_endpoint: String,
     #[serde(default = "default_cache_hours")]
@@ -227,9 +233,13 @@ async fn chat_stream_impl(
     let mut sources_carried_over = false;
     let selected_context = valid_context_window(request.context_window);
     let previous_sources = research_intent::clean_prior_sources(&request.prior_sources);
-    let explicit_query = request.auto_search
-        .then(|| research_intent::explicit_research_query(&messages))
-        .flatten();
+    let explicit_query = request.auto_search.then(|| {
+        research_intent::routed_research_query(
+            &messages,
+            request.research_route.as_deref(),
+            request.research_query.as_deref(),
+        )
+    }).flatten();
     // A forecast about an already researched topic needs the cited evidence,
     // not another non-streaming tool-planning pass. Explicit searches still run.
     let reuse_prediction_evidence = explicit_query.is_none()
@@ -301,6 +311,10 @@ async fn chat_stream_impl(
             // shown in the UI. Avoid an uncited answer from tool preflight.
             sources = previous_sources.clone();
             sources_carried_over = true;
+        } else if request.research_route.as_deref() == Some("chat") {
+            // Ordinary conversation doesn't need a non-streaming Ollama tool
+            // planning call. Keep this fast and don't send private chat online.
+            // Earlier clients without a route still use the original planner.
         } else {
             let plan = agent_tools::prepare(
                 &app, &client, &url, &request.model, &request.request_id,
