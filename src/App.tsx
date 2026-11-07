@@ -4,7 +4,7 @@ import remarkGfm from "remark-gfm";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { webContext, pageContext, type PageDocument, type WebResult } from "./web-search";
 import { priorResearchSources } from "./research-context";
-import { planResearch } from "./research-routing";
+import { planResearch, stripUnsupportedCitations } from "./research-routing";
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
@@ -885,10 +885,12 @@ export default function App() {
         model: settings.model,
         stats: completion.stats
       };
-      const finalText = completion.content || accumulated || "(The model returned no visible text.)";
+      const verifiedSources = completion.sources?.length ? completion.sources : withSearch?.results;
+      const rawText = completion.content || accumulated || "(The model returned no visible text.)";
+      const finalText = verifiedSources?.length ? rawText : stripUnsupportedCitations(rawText);
       const assistant: LogMessage = {
         id: assistantId, role: "assistant", content: finalText, createdAt: Date.now(),
-        diagnostics, sources: completion.sources?.length ? completion.sources : withSearch?.results,
+        diagnostics, sources: verifiedSources,
         searchQuery: completion.searchQuery || withSearch?.query,
         sourcesCarriedOver: completion.sourcesCarriedOver === true
       };
