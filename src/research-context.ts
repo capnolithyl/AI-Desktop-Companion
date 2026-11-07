@@ -1,4 +1,5 @@
 import type { WebResult } from "./web-search";
+import { isResearchFollowup } from "./research-routing.ts";
 
 type PriorMessage = {
   role: "user" | "assistant";
@@ -13,22 +14,11 @@ type PriorMessage = {
  * its previous response. No server fetch happens when these sources are reused.
  */
 export function priorResearchSources(messages: PriorMessage[], question: string): WebResult[] {
-  const text = question.trim().toLowerCase();
-  if (!text || text.length > 280) return [];
-
-  // New independent topics should not inherit a different conversation's sources.
-  const resemblesFollowup = /^(and\b|also\b|so\b|but\b|what(?:'s| is| are| about| do| would)?\b|when\b|where\b|why\b|how\b|who\b|which\b|will\b|would\b|could\b|should\b|do you\b|does\b|is there\b|are there\b|can they\b|tell me more\b|your (?:prediction|take)\b)/i.test(text)
-    || /\b(that|those|their|they|them|it|its|schedule|milestone|prediction|timeline)\b/.test(text);
-  if (!resemblesFollowup) return [];
-
-  // Do not attach old NASA snippets to an explicit new topic or named entity.
-  if (/\b(?:about|regarding)\s+\w+/.test(text) && !/\b(?:about|regarding)\s+(?:that|it|them|those|this|their)\b/.test(text)) {
-    return [];
-  }
-
-  const recent = messages.slice(-8).reverse().find(message =>
-    message.role === "assistant" && !message.failed && Array.isArray(message.sources) && message.sources.length > 0
-  );
+  // Evidence belongs to the immediately preceding sourced answer only.
+  // This avoids dragging old research through unrelated casual replies.
+  if (!isResearchFollowup(question, messages)) return [];
+  const recent = messages[messages.length - 1];
+  if (recent?.failed) return [];
   if (!recent?.sources) return [];
 
   const urls = new Set<string>();
