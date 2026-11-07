@@ -61,9 +61,10 @@ object PocketMemoryRules {
     }
 
     fun userCandidate(text: String): Boolean {
-        val lower = " " + text.lowercase(Locale.ROOT).replace(Regex("[\n\r\t]")," ") + " "
-        return listOf(" i "," i'm "," i've "," my "," we "," we're "," our ")
-            .any { lower.contains(it) }
+        val lower = " " + text.lowercase(Locale.ROOT).replace('’','\'')
+            .replace(Regex("[\n\r\t]")," ") + " "
+        return listOf(" i "," i'm "," i've "," my "," we "," we're "," our ",
+            " call me "," i go by ").any { lower.contains(it) }
     }
 
     /**
