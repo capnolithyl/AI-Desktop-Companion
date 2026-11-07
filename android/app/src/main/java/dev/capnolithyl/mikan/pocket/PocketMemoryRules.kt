@@ -50,8 +50,8 @@ object PocketMemoryRules {
         val preference = Regex("^i\\s+(love|like|enjoy|prefer|hate|dislike)\\s+(.{1,120})$",
             RegexOption.IGNORE_CASE).matchEntire(input)
         val proposed = when {
-            name != null -> "The user's name is " + name.groupValues[1]
-            favorite != null -> "The user's favorite " + favorite.groupValues[1] +
+            name != null -> "The user is named " + name.groupValues[1]
+            favorite != null -> "The user says their favorite " + favorite.groupValues[1] +
                 " is " + favorite.groupValues[2]
             preference != null -> {
                 val verb = when (preference.groupValues[1].lowercase(Locale.ROOT)) {
