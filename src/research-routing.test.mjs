@@ -34,3 +34,13 @@ test("unrelated new topics do not blindly reuse old searches", () => {
   const result = researchRequest("What is the capital of Japan?",history);
   assert.equal(result?.query,"What is the capital of Japan?");
 });
+
+test("personal disclosures and Mikan persona questions are never sent to search automatically", () => {
+  for (const question of [
+    "I was born in 2026", "My favorite album is a 2026 release",
+    "What is your favorite color?", "What did we talk about today?",
+    "I'm at my current job", "I live in Germany"
+  ]) {
+    assert.equal(researchRequest(question), null, question);
+  }
+});
