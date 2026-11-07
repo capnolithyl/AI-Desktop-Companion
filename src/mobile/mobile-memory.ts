@@ -19,6 +19,10 @@ export const pocketMemory = {
     mobileBackend.memory("bootstrap", { legacy }),
   snapshot: (): Promise<PocketSnapshot> =>
     mobileBackend.memory("snapshot"),
+  listFacts: async (): Promise<UserFact[]> =>
+    (await mobileBackend.memory<{ facts: UserFact[] }>("listFacts")).facts,
+  listCanon: async (): Promise<CharacterFact[]> =>
+    (await mobileBackend.memory<{ canon: CharacterFact[] }>("listCanon")).canon,
   createConversation: (conversationId: string): Promise<object> =>
     mobileBackend.memory("createConversation", { conversationId }),
   saveMessage: (conversationId: string, turn: PocketTurn): Promise<object> =>
