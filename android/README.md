@@ -13,9 +13,13 @@ The desktop React entry remains unchanged in behavior. `src/main.tsx` switches e
 
 ## Install test APK
 
-Go to [Android Pocket APK GitHub Actions](https://github.com/capnolithyl/AI-Desktop-Companion/actions/workflows/android.yml), choose the newest **successful** build, download the `mikan-pocket-debug-apk` artifact, extract it and install `app-debug.apk`.
+Go to [Android Pocket APK GitHub Actions](https://github.com/capnolithyl/AI-Desktop-Companion/actions/workflows/android.yml), choose the newest **successful** build, download the `mikan-pocket-preview-apk` artifact, extract it and install `app-debug.apk`.
 
-Note: GitHub-hosted debug APKs may be signed with different ephemeral debug certificates. Updating an earlier APK may require uninstalling the previous debug build, which **deletes its local data**. Don't uninstall before saving anything you care about. A persistent signing identity is a future improvement.
+**Why the new Preview package?** GitHub Actions debug builds are signed by a new runner-local certificate each time. Android refuses to update an existing installation with a different signer, even if its version is higher. The original Pocket Mikan app also sets `android:allowBackup="false"`, so uninstalling it loses all conversations, memories, settings and its locally imported portrait.
+
+For safe phone testing, debug APKs now use a separate application ID (`dev.capnolithyl.mikan.pocket.preview`) and visible label **Pocket Mikan Preview**. You can install that **beside** the existing Pocket Mikan without uninstalling it. It starts with separate, empty local storage, so old memories and conversations **are not automatically copied** into Preview. Do not uninstall the old app merely to test the new one.
+
+**Important: Preview is currently a safe side-by-side workaround, not a permanent signing fix.** Subsequent GitHub runner debug builds can still have a different signing certificate and refuse to update the Preview install. We need to provision a persistent, privately stored Android signing key (e.g. GitHub Actions secrets plus an encrypted keystore) before painless APK updates are possible. A signing key cannot be recovered from an already signed APK. Keep signing credentials private and never commit them to a public repository.
 
 ## Runtime
 
@@ -49,7 +53,7 @@ Separate Trello backlog item records the future user-controlled **export → NAS
 
 1. From repository root: `npm install`, then `npm run build:mobile`. The Vite output lands in `android/app/src/main/assets`.
 2. Open `android/` in Android Studio (JDK 17 / SDK 35) or run `gradle :app:assembleDebug` there.
-3. GitHub Actions performs both steps, validates the shared TypeScript code, runs `PocketMemoryRulesTest` with JUnit and packages the APK.
+3. GitHub Actions performs both steps, validates the shared TypeScript code, runs `PocketMemoryRulesTest` with JUnit, verifies the `.preview` package ID and packages the APK.
 
 ## Test checklist for v0.3.0
 
