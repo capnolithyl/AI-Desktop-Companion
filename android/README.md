@@ -11,15 +11,20 @@ This is the same **Mikan project**, not a new persona implementation. The Androi
 
 The desktop React entry remains unchanged in behavior. `src/main.tsx` switches entrypoints by Vite mode; desktop builds use the existing Tauri entry, mobile builds use `--mode mobile`.
 
-## Install test APK
+## Install Pocket Mikan
 
-Go to [Android Pocket APK GitHub Actions](https://github.com/capnolithyl/AI-Desktop-Companion/actions/workflows/android.yml), choose the newest **successful** build, download the `mikan-pocket-preview-apk` artifact, extract it and install `app-debug.apk`.
+The app uses a **persistent private Android signing key** to support routine
+in-place updates. See [SIGNING.md](SIGNING.md) for the required one-time
+GitHub Actions secret configuration.
 
-**Why the new Preview package?** GitHub Actions debug builds are signed by a new runner-local certificate each time. Android refuses to update an existing installation with a different signer, even if its version is higher. The original Pocket Mikan app also sets `android:allowBackup="false"`, so uninstalling it loses all conversations, memories, settings and its locally imported portrait.
+After signing is configured, use the latest successful GitHub Actions run's
+`mikan-pocket-signed-apk` artifact. The package ID is
+`dev.capnolithyl.mikan.pocket`.
 
-For safe phone testing, debug APKs now use a separate application ID (`dev.capnolithyl.mikan.pocket.preview`) and visible label **Pocket Mikan Preview**. You can install that **beside** the existing Pocket Mikan without uninstalling it. It starts with separate, empty local storage, so old memories and conversations **are not automatically copied** into Preview. Do not uninstall the old app merely to test the new one.
-
-**Important: Preview is currently a safe side-by-side workaround, not a permanent signing fix.** Subsequent GitHub runner debug builds can still have a different signing certificate and refuse to update the Preview install. We need to provision a persistent, privately stored Android signing key (e.g. GitHub Actions secrets plus an encrypted keystore) before painless APK updates are possible. A signing key cannot be recovered from an already signed APK. Keep signing credentials private and never commit them to a public repository.
+**One-time reset:** older APKs used random debug signing keys and cannot be
+upgraded in place. Uninstall the current app only after confirming you have
+nothing to keep. Install a new APK signed with the persistent key. Subsequent
+updates can then install directly over it.
 
 ## Runtime
 
@@ -57,7 +62,7 @@ Separate Trello backlog item records the future user-controlled **export → NAS
 
 ## Test checklist for v0.3.0
 
-- Install **over** an older debug APK if the signatures match. If they don't match, **do not uninstall casually:** uninstalling wipes all app-local SQLite, conversations, memories, settings and the portrait. Current CI debug APKs may have unstable signing keys. A stable private signing key / secure backup is needed before relying on the app for important long-term memories.
+- The first stable-signed APK requires uninstalling the old randomly signed APK once. Thereafter, install updates directly over Pocket Mikan using the same GitHub Actions signing secret.
 - Confirm existing conversations and manual memories survive the in-place update and are visible on reopening.
 - Reproduce the reported problem: say "My name is Marcus" (automatic capture should save it) or say "You wanna remember that?" afterward (explicit save must acknowledge only after SQLite success). Check Memory, restart, and ask "What is my name?"
 - Save, edit, delete a user fact with `/remember`, `/forget`, and Memory; do the same with Mikan canon using `/canon-set` and `/canon`.

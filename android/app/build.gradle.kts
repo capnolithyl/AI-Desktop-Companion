@@ -1,6 +1,17 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
+}
+
+// A single, private signing identity for all GitHub Actions APKs.
+// CI creates android/signing.properties from one encrypted repository secret.
+// Neither this file nor the signing key is committed to Git.
+val mikanSigning = Properties()
+val signingFile = rootProject.file("signing.properties")
+if (signingFile.isFile) {
+    signingFile.inputStream().use { mikanSigning.load(it) }
 }
 
 android {
@@ -15,14 +26,24 @@ android {
         versionName = "0.3.1"
     }
 
-    // GitHub Actions debug APKs are signed by a new runner-local key.
-    // Give CI/dev builds their own app ID so they can be installed beside
-    // the existing Pocket Mikan without uninstalling or wiping its data.
-    // Release builds retain dev.capnolithyl.mikan.pocket.
+    signingConfigs {
+        if (mikanSigning.isNotEmpty()) {
+            create("personal") {
+                storeFile = rootProject.file(mikanSigning.getProperty("storeFile"))
+                storePassword = mikanSigning.getProperty("storePassword")
+                keyAlias = mikanSigning.getProperty("keyAlias")
+                keyPassword = mikanSigning.getProperty("keyPassword")
+            }
+        }
+    }
+
     buildTypes {
         getByName("debug") {
-            applicationIdSuffix = ".preview"
-            versionNameSuffix = "-preview"
+            // Without signing.properties local builds use the SDK's default
+            // debug key. CI never uploads that temporary-key APK.
+            if (mikanSigning.isNotEmpty()) {
+                signingConfig = signingConfigs.getByName("personal")
+            }
         }
     }
 

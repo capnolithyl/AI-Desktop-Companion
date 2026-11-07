@@ -8,6 +8,7 @@ on:
       - 'src/**'
       - 'package.json'
       - '.github/workflows/android.yml'
+      - '.github/scripts/setup-android-signing.py'
     branches: [main]
   pull_request:
     branches: [main]
@@ -16,9 +17,12 @@ on:
       - 'src/**'
       - 'package.json'
       - '.github/workflows/android.yml'
+      - '.github/scripts/setup-android-signing.py'
 
 jobs:
   build:
+    # Public fork PRs must never get access to the owner's signing secret.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -45,15 +49,30 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.13'
-      - name: Build debug APK
+      - name: Prepare persistent private signing
+        env:
+          MIKAN_ANDROID_SIGNING_BUNDLE: ${{ secrets.MIKAN_ANDROID_SIGNING_BUNDLE }}
+        run: |
+          if [ -z "$MIKAN_ANDROID_SIGNING_BUNDLE" ]; then
+            echo '::warning::Missing MIKAN_ANDROID_SIGNING_BUNDLE. Compiling and testing only, without publishing a disposable-key APK.'
+            echo 'MIKAN_SIGNING_READY=false' >> "$GITHUB_ENV"
+          else
+            python3 .github/scripts/setup-android-signing.py
+            echo 'MIKAN_SIGNING_READY=true' >> "$GITHUB_ENV"
+          fi
+      - name: Build and test Android APK
         working-directory: android
         run: gradle :app:assembleDebug :app:testDebugUnitTest --stacktrace
-      - name: Verify APK is installable beside the original
+      - name: Verify permanent package and signing certificate
+        if: env.MIKAN_SIGNING_READY == 'true'
         run: |
-          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging android/app/build/outputs/apk/debug/app-debug.apk | grep "package: name='dev.capnolithyl.mikan.pocket.preview'"
+          APK="android/app/build/outputs/apk/debug/app-debug.apk"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | grep "package: name='dev.capnolithyl.mikan.pocket'"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs "$APK" | grep -i "Signer #1 certificate SHA-256 digest: f6879570f13b54e2d2f3cc3b32246a72c48e8023ec2b76088c57629fa4e5d609"
       - uses: actions/upload-artifact@v4
+        if: env.MIKAN_SIGNING_READY == 'true'
         with:
-          name: mikan-pocket-preview-apk
+          name: mikan-pocket-signed-apk
           path: android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 14
