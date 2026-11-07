@@ -31,7 +31,7 @@ updates can then install directly over it.
 
 ## Independent web research (Pocket Mikan v0.4.3)
 
-**v0.4.3 shared research policy:** Pocket and desktop now import the exact same `src/research-routing.ts` for search-versus-chat decisions and `src/research-context.ts` for source follow-ups, with shared tests. Desktop keeps its mature Rust search-query builder, SearXNG fallback and Ollama planner; Pocket uses Tavily and Gemini Nano. Only app-specific adapters remain separate. No syncing, new subscriptions, or model changes required.
+**v0.4.3 shared research policy:** Pocket and desktop now import the exact same `src/research-routing.ts` for search-versus-chat decisions and `src/research-context.ts` for source follow-ups, with shared tests. The desktop-derived query builder is now shared TypeScript; Windows retains its Rust compatibility fallback, SearXNG retry and Ollama planner while Pocket uses Tavily and Gemini Nano. Only app-specific adapters remain separate. No syncing, new subscriptions, or model changes required.
 
 
 
