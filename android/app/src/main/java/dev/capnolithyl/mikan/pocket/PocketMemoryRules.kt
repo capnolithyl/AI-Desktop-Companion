@@ -68,37 +68,95 @@ object PocketMemoryRules {
     }
 
     /**
-     * Exact, high-confidence user declarations need no second model request.
-     * Avoid asking Nano to invent a JSON object for "My name is Marcus".
-     * Everything still passes the same evidence and sensitive-content checks
-     * before SQLite creates a sourced automatic memory.
+     * Grounded first-person assertion extraction. This covers broad grammatical
+     * patterns rather than specializing in one person's favorite color/name.
+     * Claims that do not confidently indicate durable information fall through
+     * to Gemini Nano rather than becoming automatic memories.
+     *
+     * Every result is checked for exact source evidence, sensitive content and
+     * duplicates by cleanUser and persistExtraction.
      */
-    fun obviousUserFact(message: String): Pair<String, String>? {
+    fun stableUserFacts(message: String): List<Pair<String, String>> {
         val source = PocketMemoryStore.normalize(message)
-        if (source.isBlank() || source.length > 240 || sensitive(source)) return null
-        val input = source.trimEnd(' ', '.', '!', '?')
-        val name = introducedName(input)
-        val favorite = Regex("^my favou?rite\\s+([a-z][a-z ]{1,40})\\s+is\\s+(.{1,100})$",
-            RegexOption.IGNORE_CASE).matchEntire(input)
-        val preference = Regex("^i\\s+(love|like|enjoy|prefer|hate|dislike)\\s+(.{1,120})$",
-            RegexOption.IGNORE_CASE).matchEntire(input)
-        val proposed = when {
-            name != null -> "The user is named " + name
-            favorite != null -> "The user says their favorite " + favorite.groupValues[1] +
-                " is " + favorite.groupValues[2]
-            preference != null -> {
-                val verb = when (preference.groupValues[1].lowercase(Locale.ROOT)) {
-                    "love" -> "loves"; "like" -> "likes"; "enjoy" -> "enjoys"
-                    "prefer" -> "prefers"; "hate" -> "hates"
-                    else -> "dislikes"
+        if (source.length !in 6..1500 || sensitive(source)) return emptyList()
+        val clauses = source.split(
+            Regex("(?<=[.!?;])\\s+(?=(?:my|i|we|hi|hey|hello)\\b)", RegexOption.IGNORE_CASE)
+        ).take(6)
+        return clauses.mapNotNull { clause ->
+            if (clause.trim().endsWith("?")) return@mapNotNull null
+            val evidence = clause.trim().trimEnd('.', '!', '?', ';').trim()
+            if (evidence.length !in 6..320 || sensitive(evidence)) return@mapNotNull null
+            val name = introducedName(evidence)
+            val favorite = Regex(
+                "^my favou?rite\\s+([\\p{L}][\\p{L} ]{1,42})\\s+is\\s+(.{1,180})$",
+                RegexOption.IGNORE_CASE
+            ).matchEntire(evidence)
+            val preference = Regex(
+                "^i\\s+(love|like|enjoy|prefer|hate|dislike)\\s+(.{2,180})$",
+                RegexOption.IGNORE_CASE
+            ).matchEntire(evidence)
+            val possessive = Regex(
+                "^my\\s+([\\p{L}][\\p{L}\\p{M}' -]{1,65}?)\\s+(?:is|are)\\s+(.{2,180})$",
+                RegexOption.IGNORE_CASE
+            ).matchEntire(evidence)
+            val occupation = Regex(
+                "^(?:i['’]m|i am)\\s+(?:a|an)\\s+(.{2,140})$",
+                RegexOption.IGNORE_CASE
+            ).matchEntire(evidence)
+            val ongoing = Regex(
+                "^i\\s+(work as|work at|work in|live in|come from|grew up in|was born on|was born in|speak|play|collect|study|teach|own|make)\\s+(.{2,160})$",
+                RegexOption.IGNORE_CASE
+            ).matchEntire(evidence)
+            val temporarySubject = Regex(
+                "^(?:day|mood|feeling|current mood|time|appointment|plan|problem|phone|screen|battery|meal|dinner|lunch|breakfast|weather|question|issue|temporary|today|week|morning|afternoon|night)\\b",
+                RegexOption.IGNORE_CASE
+            )
+            val temporaryRole = Regex(
+                "^(?:bit|little|lot|huge|terrible|very|currently|kind|sort|mess|bad|good|great|happy|sad|tired|sick|hungry|bored)\\b",
+                RegexOption.IGNORE_CASE
+            )
+            val fact = when {
+                name != null -> "The user is named $name"
+                favorite != null ->
+                    "The user says their ${favorite.groupValues[1]} is ${favorite.groupValues[2]}"
+                preference != null -> {
+                    val verb = when (preference.groupValues[1].lowercase(Locale.ROOT)) {
+                        "love" -> "loves"; "like" -> "likes"; "enjoy" -> "enjoys"
+                        "prefer" -> "prefers"; "hate" -> "hates"
+                        else -> "dislikes"
+                    }
+                    "The user $verb ${preference.groupValues[2]}"
                 }
-                "The user " + verb + " " + preference.groupValues[2]
+                possessive != null && !temporarySubject.containsMatchIn(possessive.groupValues[1]) ->
+                    "The user says their ${possessive.groupValues[1]} is ${possessive.groupValues[2]}"
+                occupation != null && !temporaryRole.containsMatchIn(occupation.groupValues[1]) ->
+                    "The user is a ${occupation.groupValues[1]}"
+                ongoing != null -> when (ongoing.groupValues[1].lowercase(Locale.ROOT)) {
+                    "work as" -> "The user works as ${ongoing.groupValues[2]}"
+                    "work at" -> "The user works at ${ongoing.groupValues[2]}"
+                    "work in" -> "The user works in ${ongoing.groupValues[2]}"
+                    "live in" -> "The user lives in ${ongoing.groupValues[2]}"
+                    "come from" -> "The user comes from ${ongoing.groupValues[2]}"
+                    "grew up in" -> "The user grew up in ${ongoing.groupValues[2]}"
+                    "was born on" -> "The user was born on ${ongoing.groupValues[2]}"
+                    "was born in" -> "The user was born in ${ongoing.groupValues[2]}"
+                    "speak" -> "The user speaks ${ongoing.groupValues[2]}"
+                    "play" -> "The user plays ${ongoing.groupValues[2]}"
+                    "collect" -> "The user collects ${ongoing.groupValues[2]}"
+                    "study" -> "The user studies ${ongoing.groupValues[2]}"
+                    "teach" -> "The user teaches ${ongoing.groupValues[2]}"
+                    "own" -> "The user owns ${ongoing.groupValues[2]}"
+                    else -> "The user makes ${ongoing.groupValues[2]}"
+                }
+                else -> null
             }
-            else -> return null
-        }
-        // Use the original user's words as the evidence, not a model summary.
-        return cleanUser(proposed, input, message)?.let { it to input }
+            fact?.let { cleanUser(it, evidence, message)?.let { saved -> saved to evidence } }
+        }.distinctBy { it.first.lowercase(Locale.ROOT) }.take(3)
     }
+
+    // Keep compatibility with prior one-fact callers/tests.
+    fun obviousUserFact(message: String): Pair<String, String>? =
+        stableUserFacts(message).firstOrNull()
 
     fun characterQuestion(text: String): Boolean {
         val lower = text.lowercase(Locale.ROOT)
