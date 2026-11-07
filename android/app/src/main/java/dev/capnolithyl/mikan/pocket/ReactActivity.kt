@@ -2,6 +2,10 @@ package dev.capnolithyl.mikan.pocket
 
 import android.app.Activity
 import android.content.Intent
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.util.Base64
+import java.io.ByteArrayOutputStream
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -126,6 +130,17 @@ class ReactActivity : Activity() {
         runOnUiThread { if (::web.isInitialized) web.evaluateJavascript(script, null) }
     }
 
+    private fun bundledPortrait(): String {
+        val drawable = getDrawable(R.drawable.mikan_portrait) ?: return ""
+        val bitmap = Bitmap.createBitmap(720, 680, Bitmap.Config.ARGB_8888)
+        drawable.setBounds(0, 0, bitmap.width, bitmap.height)
+        drawable.draw(Canvas(bitmap))
+        val bytes = ByteArrayOutputStream()
+        bitmap.compress(Bitmap.CompressFormat.PNG, 90, bytes)
+        bitmap.recycle()
+        return "data:image/png;base64," + Base64.encodeToString(bytes.toByteArray(), Base64.NO_WRAP)
+    }
+
     inner class Bridge {
         @JavascriptInterface
         fun postMessage(json: String) {
@@ -136,6 +151,7 @@ class ReactActivity : Activity() {
             val method = data.optString("method")
             if (!id.matches(Regex("mobile-[0-9]{1,12}"))) return
             when (method) {
+                "portrait" -> deliver(id, "result", text = bundledPortrait())
                 "status" -> scope.launch {
                     try { deliver(id, "result", status = backend.checkStatus().name) }
                     catch (e: Exception) { deliver(id, "error", error = e.message ?: "Status failed") }
