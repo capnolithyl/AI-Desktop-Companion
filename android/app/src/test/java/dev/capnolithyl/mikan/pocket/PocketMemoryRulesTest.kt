@@ -46,6 +46,31 @@ class PocketMemoryRulesTest {
         assertNull(PocketMemoryRules.obviousUserFact("My password is 12345"))
     }
 
+
+    @Test fun greetedNamesAreAutomaticMemoriesWithExactSourceEvidence() {
+        for (input in listOf(
+            "Hi I'm Marcus", "Hey, I'm Marcus", "Hello! My name is Marcus",
+            "I’m Marcus", "Hi, you can call me Marcus", "I go by Marcus"
+        )) {
+            assertTrue("Should be considered for automatic extraction: $input",
+                PocketMemoryRules.userCandidate(input))
+            val proposal = PocketMemoryRules.obviousUserFact(input)
+            assertEquals(input, "The user is named Marcus", proposal?.first)
+            assertEquals(input, input, proposal?.second)
+            assertEquals(input, "The user is named Marcus",
+                proposal?.let { (fact, evidence) -> PocketMemoryRules.cleanUser(fact, evidence, input) })
+        }
+    }
+
+    @Test fun ordinaryMoodsAreNotMistakenForNames() {
+        for (input in listOf(
+            "Hi I'm tired", "Hi I'm a developer", "I'm feeling stressed",
+            "Hello", "I am just looking around"
+        )) {
+            assertNull(input, PocketMemoryRules.obviousUserFact(input))
+        }
+    }
+
     @Test fun automaticCaptureRejectsSensitiveInformation() {
         assertNull(PocketMemoryRules.cleanUser("The user has depression",
             "I have depression", "I have depression."))
