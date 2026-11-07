@@ -67,6 +67,19 @@ export const mobileBackend = {
     const response = await send("extractMemory", args);
     return JSON.parse(response.text ?? "{}") as { userSaved: number; characterSaved: number; skipped: boolean };
   },
+  webStatus: async (): Promise<{ configured: boolean; provider: string }> =>
+    JSON.parse((await send("webKeyStatus")).text ?? "{}"),
+  saveWebKey: async (apiKey: string): Promise<{ configured: boolean; provider: string }> =>
+    JSON.parse((await send("webSaveKey", { apiKey })).text ?? "{}"),
+  clearWebKey: async (): Promise<{ configured: boolean; provider: string }> =>
+    JSON.parse((await send("webClearKey")).text ?? "{}"),
+  searchWeb: async (query: string, recent = false): Promise<{ results: import("../web-search").WebResult[] }> =>
+    JSON.parse((await send("webSearch", { query, recent })).text ?? '{"results":[]}'),
+  readWeb: async (url: string): Promise<import("../web-search").PageDocument> =>
+    JSON.parse((await send("webRead", { url })).text ?? "{}"),
+  openLink: async (url: string): Promise<void> => {
+    await send("openLink", { url });
+  },
   download: async (): Promise<NativeStatus["status"]> => (await send("download")).status ?? "UNAVAILABLE",
   generate: async (prompt: string, onDelta: (chunk: string) => void): Promise<string> =>
     (await send("generate", { prompt }, onDelta)).text ?? "",
