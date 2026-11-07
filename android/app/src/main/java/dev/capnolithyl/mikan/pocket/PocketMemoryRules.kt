@@ -33,6 +33,40 @@ object PocketMemoryRules {
             .any { lower.contains(it) }
     }
 
+    /**
+     * Exact, high-confidence user declarations need no second model request.
+     * Avoid asking Nano to invent a JSON object for "My name is Marcus".
+     * Everything still passes the same evidence and sensitive-content checks
+     * before SQLite creates a sourced automatic memory.
+     */
+    fun obviousUserFact(message: String): Pair<String, String>? {
+        val source = PocketMemoryStore.normalize(message)
+        if (source.isBlank() || source.length > 240 || sensitive(source)) return null
+        val input = source.trimEnd(' ', '.', '!', '?')
+        val name = Regex("^my name is\\s+([\\p{L}\\p{M}'-]+(?:\\s+[\\p{L}\\p{M}'-]+){0,3})$",
+            RegexOption.IGNORE_CASE).matchEntire(input)
+        val favorite = Regex("^my favou?rite\\s+([a-z][a-z ]{1,40})\\s+is\\s+(.{1,100})$",
+            RegexOption.IGNORE_CASE).matchEntire(input)
+        val preference = Regex("^i\\s+(love|like|enjoy|prefer|hate|dislike)\\s+(.{1,120})$",
+            RegexOption.IGNORE_CASE).matchEntire(input)
+        val proposed = when {
+            name != null -> "The user's name is " + name.groupValues[1]
+            favorite != null -> "The user's favorite " + favorite.groupValues[1] +
+                " is " + favorite.groupValues[2]
+            preference != null -> {
+                val verb = when (preference.groupValues[1].lowercase(Locale.ROOT)) {
+                    "love" -> "loves"; "like" -> "likes"; "enjoy" -> "enjoys"
+                    "prefer" -> "prefers"; "hate" -> "hates"
+                    else -> "dislikes"
+                }
+                "The user " + verb + " " + preference.groupValues[2]
+            }
+            else -> return null
+        }
+        // Use the original user's words as the evidence, not a model summary.
+        return cleanUser(proposed, input, message)?.let { it to input }
+    }
+
     fun characterQuestion(text: String): Boolean {
         val lower = text.lowercase(Locale.ROOT)
         val targetsMikan = listOf("your ","yours","do you ","are you ","about you","mikan")
