@@ -385,7 +385,10 @@ class PocketMemoryStore(private val context: Context) :
         }
     }
 
-    data class PairForExtraction(val user: String, val assistant: String)
+    data class PairForExtraction(
+        val user: String, val assistant: String,
+        val existingUserFacts: List<String>, val existingCanon: List<String>
+    )
     @Synchronized
     fun sourcePair(data: JSONObject): PairForExtraction? {
         val db = readableDatabase
@@ -400,7 +403,15 @@ class PocketMemoryStore(private val context: Context) :
             arrayOf(id,conversationId,role)) { it.getString(0) }.firstOrNull()
         val user = read(userId,"user") ?: return null
         val assistant = read(assistantId,"assistant") ?: return null
-        return PairForExtraction(user,assistant)
+        // As on desktop, include a small sample of existing memories in the
+        // extraction prompt so Nano avoids paraphrased duplicates.
+        val userFacts = query(db,
+            "SELECT fact FROM user_memories ORDER BY updated_at DESC LIMIT 8"
+        ) { it.getString(0).take(120) }
+        val canon = query(db,
+            "SELECT label || ': ' || value FROM character_facts WHERE persona_id='mikan' ORDER BY updated_at DESC LIMIT 8"
+        ) { it.getString(0).take(120) }
+        return PairForExtraction(user,assistant,userFacts,canon)
     }
 
     /** Caller has checked evidence and the saved message pair. Single SQLite
