@@ -28,6 +28,12 @@ export function researchRequest(question: string, previous: ResearchTurn[] = [])
   if (/^(?:i(?:['’]m| am| was| have| work| live| like| love| feel| think)\b|my\s+\w+\s+(?:is|was|are)\b|we(?:['’]re| are| have| were)\b|what(?:['’]s| is| are) your\b|who are you\b|what did we\b|what did you and i\b)/i.test(text)) return null;
 
 
+  // Privacy by default: do not send self-reports or questions involving
+  // private first-person context to the provider without an explicit request.
+  if (!explicitResearch.test(text) &&
+    (/^(?:i\b|i['’]m\b|my\b|we\b|our\b)/i.test(text) ||
+      /\b(?:my|mine|our|ours|me)\b/i.test(text))) return null;
+
   const current = timeSensitive.test(text);
   const direct = explicitResearch.test(text);
   const factual = factSeeking.test(text) && !personal.test(text);
