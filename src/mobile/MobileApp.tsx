@@ -65,6 +65,8 @@ export default function MobileApp() {
   const [canon, setCanon] = useState<CharacterFact[]>([]);
   const [memoryReady, setMemoryReady] = useState(false);
   const [memoryError, setMemoryError] = useState<string | null>(null);
+  const [memoryNotice, setMemoryNotice] = useState<string | null>(null);
+  const [memoryBusy, setMemoryBusy] = useState(false);
   const [autoMemoryBusy, setAutoMemoryBusy] = useState(false);
   const [model, setModel] = useState<NativeStatus["status"] | "CHECKING">("CHECKING");
   const [modelAction, setModelAction] = useState<"check" | "download" | null>(null);
@@ -176,33 +178,66 @@ export default function MobileApp() {
     setScreen("chat");
     void pocketMemory.createConversation(fresh.id).catch(failure => setMemoryError(String(failure)));
   }
+  async function refreshUserFacts(): Promise<UserFact[]> {
+    const current = await pocketMemory.listFacts();
+    setFacts(current);
+    return current;
+  }
+  async function refreshCharacterFacts(): Promise<CharacterFact[]> {
+    const current = await pocketMemory.listCanon();
+    setCanon(current);
+    return current;
+  }
   async function addFact(fact: string): Promise<UserFact> {
     const saved = await pocketMemory.addFact(fact);
-    setFacts(items => [saved, ...items.filter(item => item.id !== saved.id)]);
+    await refreshUserFacts();
     return saved;
   }
   async function editUserFact(id: number, fact: string): Promise<void> {
-    await pocketMemory.updateFact(id, fact);
-    setFacts(items => items.map(item => item.id === id
-      ? { ...item, fact: fact.trim(), updatedAt: Math.floor(Date.now() / 1000) } : item));
+    setMemoryBusy(true);
+    setMemoryNotice(null);
+    try {
+      await pocketMemory.updateFact(id, fact);
+      const current = await refreshUserFacts();
+      if (!current.some(item => item.id === id && item.fact === fact.trim().replace(/\\s+/g, " "))) {
+        throw new Error("SQLite did not return the updated memory");
+      }
+      setMemoryError(null);
+      setMemoryNotice("Memory updated and verified in SQLite.");
+    } finally { setMemoryBusy(false); }
   }
   async function deleteUserFact(id: number): Promise<void> {
-    await pocketMemory.deleteFact(id);
-    setFacts(items => items.filter(item => item.id !== id));
+    setMemoryBusy(true);
+    setMemoryNotice(null);
+    try {
+      await pocketMemory.deleteFact(id);
+      const current = await refreshUserFacts();
+      if (current.some(item => item.id === id)) {
+        throw new Error("SQLite still contains the deleted memory");
+      }
+      setMemoryError(null);
+      setMemoryNotice("Memory deleted and verified in SQLite.");
+    } finally { setMemoryBusy(false); }
   }
   async function addCanon(category: CharacterCategory, label: string, value: string): Promise<void> {
-    const saved = await pocketMemory.addCanon(category, label, value);
-    setCanon(items => [saved, ...items.filter(item => item.id !== saved.id)]);
+    await pocketMemory.addCanon(category, label, value);
+    await refreshCharacterFacts();
   }
   async function editCanon(id: number, category: CharacterCategory, label: string, value: string): Promise<void> {
-    await pocketMemory.updateCanon(id, category, label, value);
-    setCanon(items => items.map(item => item.id === id
-      ? { ...item, category, label: label.trim(), value: value.trim(),
-          updatedAt: Math.floor(Date.now() / 1000) } : item));
+    setMemoryBusy(true);
+    try {
+      await pocketMemory.updateCanon(id, category, label, value);
+      await refreshCharacterFacts();
+      setMemoryError(null);
+    } finally { setMemoryBusy(false); }
   }
   async function deleteCanon(id: number): Promise<void> {
-    await pocketMemory.deleteCanon(id);
-    setCanon(items => items.filter(item => item.id !== id));
+    setMemoryBusy(true);
+    try {
+      await pocketMemory.deleteCanon(id);
+      await refreshCharacterFacts();
+      setMemoryError(null);
+    } finally { setMemoryBusy(false); }
   }
   async function deleteThread(id: string): Promise<void> {
     if (!confirm("Delete this phone-local conversation?")) return;
