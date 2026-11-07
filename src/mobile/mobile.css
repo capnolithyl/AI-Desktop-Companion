@@ -126,3 +126,7 @@ button:disabled { opacity: .55; cursor: default; }
 .pocket-portrait-settings-body .pocket-hint { margin: 0 0 8px; font-size: 12px; }
 .pocket-portrait-settings-body .pocket-wide-button { margin: 7px 0; font-size: 12px; padding: 11px; }
 .pocket-portrait-reset { width: 100%; border: 1px solid #7c606b; border-radius: 10px; color: #f4d6d5; background: transparent; padding: 10px; font-size: 12px; }
+
+/* Memory mutations report actual SQLite read-back, never optimistic UI state. */
+.pocket-memory-status { padding: 9px 0; margin: 5px 0 10px; color: #bdddc8; font-size: 13px; }
+.pocket-actions button:disabled, .pocket-memory-form button:disabled { opacity: .55; cursor: not-allowed; }
