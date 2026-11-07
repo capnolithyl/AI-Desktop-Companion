@@ -29,6 +29,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.ByteArrayInputStream
@@ -43,6 +44,9 @@ import java.io.ByteArrayInputStream
 class ReactActivity : Activity() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private val backend = NanoBackend()
+    private val memoryStore by lazy { PocketMemoryStore(this) }
+    private val memoryExtractor by lazy { PocketMemoryExtractor(memoryStore,backend) }
+    private var memoryJob: Job? = null
     private lateinit var web: WebView
     private var generation: Job? = null
     private var fileChooser: ValueCallback<Array<Uri>>? = null
@@ -164,6 +168,30 @@ class ReactActivity : Activity() {
                     }
                     deliver(id, "result", text = items.toString())
                 }
+                "memory" -> scope.launch {
+                    try {
+                        val result = withContext(Dispatchers.IO) {
+                            memoryStore.handle(data.optString("action"),data)
+                        }
+                        deliver(id,"result",text=result.toString())
+                    } catch (e: Exception) {
+                        deliver(id,"error",error=e.message ?: "SQLite memory operation failed")
+                    }
+                }
+                "extractMemory" -> {
+                    if (memoryJob?.isActive == true) {
+                        deliver(id,"error",error="Memory extraction is already running")
+                    } else memoryJob = scope.launch {
+                        try {
+                            val result = memoryExtractor.process(data)
+                            deliver(id,"result",text=result.toString())
+                        } catch (_: CancellationException) {
+                            deliver(id,"error",error="Memory extraction interrupted")
+                        } catch (e: Exception) {
+                            deliver(id,"error",error=e.message ?: "Memory extraction failed")
+                        }
+                    }
+                }
                 "status" -> scope.launch {
                     try { deliver(id, "result", status = backend.checkStatus().name) }
                     catch (e: Exception) { deliver(id, "error", error = e.message ?: "Status failed") }
@@ -214,6 +242,7 @@ class ReactActivity : Activity() {
     override fun onStop() {
         super.onStop()
         generation?.cancel()
+        memoryJob?.cancel() // AICore inference is foreground-only
     }
 
     override fun onDestroy() {
@@ -221,6 +250,7 @@ class ReactActivity : Activity() {
         fileChooser = null
         scope.cancel()
         backend.close()
+        memoryStore.close()
         web.removeJavascriptInterface("MikanNative")
         web.destroy()
         super.onDestroy()
