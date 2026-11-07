@@ -172,13 +172,25 @@ button:disabled { opacity: .55; cursor: default; }
 /* Optional independent research, with source links opened outside the WebView. */
 .pocket-web-activity { display: flex; gap: 8px; align-items: center; padding: 8px 12px;
   color: #ffe2cd; background: #342935; border-radius: 10px; margin: 6px 0; font-size: 12px; }
-.pocket-web-sources { display: flex; flex-direction: column; gap: 4px; width: min(100%, 360px);
-  padding: 8px 10px; background: #29202d; border: 1px solid #594550; border-radius: 12px; }
-.pocket-web-sources span { color: var(--pocket-accent); font-weight: 700; font-size: 10px;
-  text-transform: uppercase; letter-spacing: .06em; }
-.pocket-web-sources button { padding: 4px 0; border: 0; background: transparent; color: #dbc8e7;
+.pocket-web-sources { display: block; width: min(100%, 360px);
+  background: #29202d; border: 1px solid #594550; border-radius: 12px; }
+.pocket-web-sources summary { display: flex; align-items: center; gap: 7px; cursor: pointer;
+  padding: 10px 12px; color: var(--pocket-accent); font-weight: 700; font-size: 11px;
+  text-transform: uppercase; letter-spacing: .06em; list-style: none; user-select: none; }
+.pocket-web-sources summary::-webkit-details-marker { display: none; }
+.pocket-web-sources summary::after { content: "▾"; margin-left: auto; font-size: 14px;
+  transition: transform .15s ease; }
+.pocket-web-sources[open] summary::after { transform: rotate(180deg); }
+.pocket-web-sources summary:focus-visible { outline: 2px solid var(--pocket-accent);
+  outline-offset: 2px; border-radius: 10px; }
+.pocket-source-count { display: inline-flex; align-items: center; justify-content: center;
+  min-width: 19px; height: 19px; padding: 0 5px; border-radius: 10px;
+  background: #45313f; color: #dbc8e7; font-size: 10px; }
+.pocket-web-source-list { display: flex; flex-direction: column; gap: 4px;
+  padding: 0 12px 10px; }
+.pocket-web-source-list button { padding: 5px 0; border: 0; background: transparent; color: #dbc8e7;
   text-align: left; font-size: 12px; overflow-wrap: anywhere; text-decoration: underline; }
-.pocket-web-sources button:focus-visible { outline: 2px solid var(--pocket-accent); }
+.pocket-web-source-list button:focus-visible { outline: 2px solid var(--pocket-accent); }
 .pocket-web-settings { background: #2b212d; border: 1px solid #614955; padding: 13px;
   border-radius: 12px; margin: 8px 0 12px; display: flex; flex-direction: column; gap: 8px; }
 .pocket-web-settings strong { font-size: 13px; }
