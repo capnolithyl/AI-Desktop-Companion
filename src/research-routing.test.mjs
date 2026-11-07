@@ -102,3 +102,30 @@ test("never display fabricated [1] markers without live research sources", () =>
   assert.equal(stripUnsupportedCitations("No sources [1], [2] here."), "No sources, here.");
   assert.equal(stripUnsupportedCitations("Read [this](https://example.org)"), "Read [this](https://example.org)");
 });
+
+
+test("Pixel regression: find me the latest album news searches rather than hallucinating offline", () => {
+  const exact = "Can you find me the latest info on shadows fall? Any updates on their upcoming album?";
+  assert.deepEqual(researchRequest(exact), { query: exact, recent: true });
+  assert.deepEqual(researchRequest("Can you find me info on the next NASA launch?"),
+    { query: "Can you find me info on the next NASA launch?", recent: false });
+  assert.ok(researchRequest("Could you find me the newest release announcement?")?.recent);
+  assert.ok(researchRequest("Tell me the latest news about Shadows Fall")?.recent);
+  assert.ok(researchRequest("What can you tell me about Shadows Fall?"));
+  assert.ok(researchRequest("Do you have any updates about Shadows Fall?")?.recent);
+  assert.ok(researchRequest("What is the new album release date for that band?")?.recent);
+});
+
+test("find me is a recipient phrase, but private data remains private without explicit web permission", () => {
+  for (const message of [
+    "Can you find me my home address?",
+    "Find me info about me",
+    "Tell me about your hobbies",
+    "What is my current job?",
+    "Can you look up our old conversations?",
+    "I have a new album I love today"
+  ]) {
+    assert.equal(researchRequest(message), null, message);
+  }
+  assert.ok(researchRequest("Search the web for the history of Shadows Fall"));
+});
