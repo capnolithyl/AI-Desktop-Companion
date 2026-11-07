@@ -29,6 +29,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
+import org.json.JSONArray
 import org.json.JSONObject
 import java.io.ByteArrayInputStream
 
@@ -57,7 +58,7 @@ class ReactActivity : Activity() {
             settings.javaScriptEnabled = true
             settings.domStorageEnabled = true
             settings.allowFileAccess = false
-            settings.allowContentAccess = false
+            settings.allowContentAccess = true // for user-selected portrait files only
             settings.javaScriptCanOpenWindowsAutomatically = false
             settings.setSupportMultipleWindows(false)
             if (Build.VERSION.SDK_INT >= 26) settings.safeBrowsingEnabled = true
@@ -152,6 +153,17 @@ class ReactActivity : Activity() {
             if (!id.matches(Regex("mobile-[0-9]{1,12}"))) return
             when (method) {
                 "portrait" -> deliver(id, "result", text = bundledPortrait())
+                "importLegacy" -> {
+                    val items = JSONArray()
+                    ChatStore(this@ReactActivity).load().forEach { turn ->
+                        items.put(JSONObject()
+                            .put("id", turn.id)
+                            .put("role", if (turn.role == ChatRole.USER) "user" else "assistant")
+                            .put("content", turn.content)
+                            .put("createdAt", turn.createdAt))
+                    }
+                    deliver(id, "result", text = items.toString())
+                }
                 "status" -> scope.launch {
                     try { deliver(id, "result", status = backend.checkStatus().name) }
                     catch (e: Exception) { deliver(id, "error", error = e.message ?: "Status failed") }
