@@ -72,7 +72,7 @@ jobs:
           # signing secret without ever exposing the private keystore.
           CERTS="$("$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs "$APK")"
           ACTUAL="$(printf '%s\n' "$CERTS" | sed -n 's/.*certificate SHA-256 digest: //p' | head -n1 | tr '[:upper:]' '[:lower:]' | tr -d '\r')"
-          EXPECTED="f6879570f13b54e2d2f3cc3b32246a72c48e8023ec2b76088c57629fa4e5d609"
+          EXPECTED="0e68231585a55dba6c211949e622768de271cafc14140c1d41ba50a1f8c56cc0"
           echo "Built APK signer SHA-256: $ACTUAL"
           if [ -z "$ACTUAL" ] || [ "$ACTUAL" != "$EXPECTED" ]; then
             echo "::error::APK signing certificate does not match pinned private key"
