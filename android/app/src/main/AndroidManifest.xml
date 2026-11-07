@@ -1,6 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <!-- No INTERNET permission: inference and chat stay on device. -->
+    <!-- Only Kotlin's pinned Tavily HTTPS client uses the network. The WebView
+         continues to block external resources, and Gemini Nano stays local. -->
+    <uses-permission android:name="android.permission.INTERNET" />
     <application
         android:allowBackup="false"
         android:label="Pocket Mikan"
