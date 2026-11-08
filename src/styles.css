@@ -735,3 +735,31 @@ button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px
 .vision-preview>div {min-width:0;display:flex;flex-direction:column;align-items:start;gap:5px}
 .vision-preview button {padding:5px 8px}
 .vision-error {color:#ffd0ce;font-size:11px;padding:7px 10px;border:1px solid #9b5668;border-radius:8px;margin-top:7px}
+
+
+/* Owner-selected ephemeral document/image attachment preview. */
+.attachment-preview {
+  display:flex;align-items:center;gap:10px;padding:9px 10px;margin:9px 0 3px;
+  background:#382d3b;border:1px solid #715464;border-radius:11px;
+  color:#fce2d5;min-width:0;
+}
+.attachment-preview>img {
+  width:110px;max-height:86px;object-fit:contain;
+  border-radius:7px;border:1px solid #896d7b;
+}
+.attachment-preview>svg {flex:0 0 auto;color:#ffbd91}
+.attachment-preview>div {display:flex;flex:1;min-width:0;flex-direction:column;gap:4px}
+.attachment-preview strong {font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.attachment-preview small {color:#ceb7c4;font-size:10px;line-height:1.35}
+.attachment-preview>button {
+  display:grid;place-items:center;flex:0 0 26px;width:26px;height:26px;border-radius:7px;
+  border:1px solid #7b5b69;background:#4e3a48;color:#fbe0d5;
+}
+.attachment-text-peek {font-size:10px;margin-top:3px;max-width:100%}
+.attachment-text-peek summary {cursor:pointer;color:#ffb995}
+.attachment-text-peek pre {
+  max-width:100%;max-height:110px;overflow:auto;white-space:pre-wrap;
+  overflow-wrap:anywhere;padding:8px;background:#241e29;
+  border:1px solid #59444f;border-radius:7px;
+  font-family:Consolas,monospace;font-size:10px;color:#e6cfda;
+}

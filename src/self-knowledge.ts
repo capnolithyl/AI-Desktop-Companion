@@ -4,7 +4,7 @@
  * The CI checker detects unmapped Tauri commands, missing files and stale versions.
  * Add a feature here when adding capability, and update the matching source/docs.
  */
-export const CAPABILITY_RELEASE = "0.8.2";
+export const CAPABILITY_RELEASE = "0.8.3";
 
 export type CapabilityStage = "implemented" | "experimental" | "planned";
 export type RuntimeDependency = "none" | "ollama" | "search" | "mem0" | "voice" | "vision" | "pocket";
@@ -151,6 +151,20 @@ export const CAPABILITIES: readonly Capability[] = [
     commands:[]
   },
   {
+    id:"file-reading",label:"Local document and text attachment reading",category:"Files",
+    description:"Owner-selected local text, source code, Markdown, CSV/JSON, PDF, DOCX, PPTX, ODT, XLS/XLSX/XLSB and ODS files can be previewed and their extracted text included in one chat turn. Scanned PDFs lack OCR; long files are trimmed to the model context. Files and extracted text are not automatically saved as long-term memory.",
+    stage:"experimental",runtime:"ollama",keywords:["attach","upload","file","read file","document","pdf","word","docx","excel","xlsx","spreadsheet","presentation","pptx","text","csv","json","source","code"],
+    sources:["src/chat-attachments.ts","src-tauri/src/file_attachments.rs","src/App.tsx"],docs:["attachments/README.md"],
+    commands:["extract_document"],slashCommands:["attach"]
+  },
+  {
+    id:"image-attachments",label:"Local image file attachments",category:"Files",
+    description:"Owner can select PNG/JPEG/WebP/GIF/BMP images, review a local preview, then send one resized still frame to a local Ollama model that supports vision. No automatic upload, persistent image storage, or background file access. Animated GIFs are first-frame only.",
+    stage:"experimental",runtime:"vision",keywords:["upload","attach","picture","photo","image","png","jpg","jpeg","webp","gif","bmp","see"],
+    sources:["src/chat-attachments.ts","src/App.tsx","src/screen-vision.ts"],docs:["attachments/README.md"],
+    commands:[]
+  },
+  {
     id:"screen-vision",label:"On-demand screen vision",category:"Vision",
     description:"Experimental Windows screen capture: the owner chooses a monitor, captures one still image, previews it and decides whether to send it to a vision-capable local Ollama model. Mikan does not continuously watch, save screenshots, interact with the desktop, or see anything without approval.",
     stage:"experimental",runtime:"vision",keywords:["see","look","screen","screenshot","vision","capture","visual","game","monitor","image","eyes"],
@@ -188,7 +202,9 @@ export const CAPABILITIES: readonly Capability[] = [
 export function isSelfKnowledgeQuestion(query: string): boolean {
   const q = query.trim().toLowerCase();
   return /\b(?:your (?:own )?(?:code|source|implementation|documentation|features|capabilities|abilities|tools|architecture|version)|mikan(?:'s)? (?:code|source|features|capabilities|architecture)|what can you (?:do|actually do)|how (?:do|does) (?:you|mikan) (?:work|remember|search|speak)|are you able to|do you (?:have|support|know how to)|can you (?:see|hear|listen|speak|talk|search|browse|remember|read my|control|click|use the|inspect|access))\b/i.test(q)
-    || /\b(?:implemented|available|supported|planned|not yet built)\b.*\b(?:in mikan|in your app|by you)\b/i.test(q);
+    || /\b(?:implemented|available|supported|planned|not yet built)\b.*\b(?:in mikan|in your app|by you)\b/i.test(q)
+    || /\b(?:can you|do you|are you able to)\s+(?:open|read|analy[sz]e|upload|attach)\b.{0,45}\b(?:pdf|file|document|image|photo|picture|spreadsheet)\b/i.test(q)
+    || /\bwhat (?:file|image|document) formats (?:can you|do you) support\b/i.test(q);
 }
 
 const generic = new Set(["what","when","where","have","your","you","can","the","and","are","with","about","does","this","that","from","mikan","work","code","know","how","what","its","for","which","just","help","will"]);
