@@ -5,6 +5,7 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 import { webContext, pageContext, type PageDocument, type WebResult } from "./web-search";
 import { priorResearchSources } from "./research-context";
 import { planResearch, stripUnsupportedCitations } from "./research-routing";
+import { verifyResearchAnswer } from "./evidence-verification";
 import { resolveConversationQuestion, needsContextResolution, contextGuidance } from "./conversation-engine";
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
@@ -871,10 +872,16 @@ export default function App() {
         if (event.payload.requestId !== requestId || !event.payload.content) return;
         if (firstTokenMs == null) firstTokenMs = performance.now() - started;
         accumulated += event.payload.content;
-        const currentText = accumulated;
-        setMessages(current => current.map(m =>
-          m.id === assistantId ? { ...m, content: currentText } : m
-        ));
+        // Source-bearing drafts remain private until the evidence check finishes.
+        // Streaming an unverified invented release date is misleading.
+        const researchAnswer = !!withSearch ||
+          (settings.autoSearch && researchPlan !== null && researchPlan.mode !== "chat");
+        if (!researchAnswer) {
+          const currentText = accumulated;
+          setMessages(current => current.map(m =>
+            m.id === assistantId ? { ...m, content: currentText } : m
+          ));
+        }
       });
 
       const completion = await invoke<ChatCompletion>("chat_stream", {
@@ -907,7 +914,8 @@ export default function App() {
       };
       const verifiedSources = completion.sources?.length ? completion.sources : withSearch?.results;
       const rawText = completion.content || accumulated || "(The model returned no visible text.)";
-      const finalText = verifiedSources?.length ? rawText : stripUnsupportedCitations(rawText);
+      const finalText = verifiedSources?.length
+        ? verifyResearchAnswer(rawText, verifiedSources).text : stripUnsupportedCitations(rawText);
       const assistant: LogMessage = {
         id: assistantId, role: "assistant", content: finalText, createdAt: Date.now(),
         diagnostics, sources: verifiedSources,
