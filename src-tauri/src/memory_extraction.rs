@@ -411,6 +411,31 @@ mod tests {
     }
 
     #[test]
+    fn ordinary_short_answers_are_contextual_memory_candidates() {
+        assert!(contextual_user_candidate(
+            "Hmm, what's your favorite kind of cheese? Crucial question.",
+            "Swiss for sure"
+        ));
+        assert!(contextual_user_candidate(
+            "What's your favorite kind of music?",
+            "Black metal"
+        ));
+        assert!(!contextual_user_candidate(
+            "Here's what I found on those albums.", "Vanilla"
+        ));
+        assert!(!contextual_user_candidate(
+            "What's your password?", "top secret"
+        ));
+        assert!(!contextual_user_candidate(
+            "What's your favorite genre?", "What about yours?"
+        ));
+        assert!(clean_user_candidate(
+            "The user prefers vanilla ice cream", "Vanilla",
+            "Vanilla for sure"
+        ).is_some());
+    }
+
+    #[test]
     fn extraction_requires_evidence_and_respects_privacy() {
         assert!(clean_user_candidate("The user loves black metal",
             "I love black metal", "I love black metal.").is_some());
