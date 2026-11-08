@@ -639,8 +639,9 @@ export default function MobileApp() {
         : stripUnsupportedCitations(answer);
       replaceTurn(threadId, assistant.id, displayedAnswer, sources, false);
       await pocketMemory.saveMessage(threadId, {...assistant,content:displayedAnswer,sources,failed:false});
-      // No auto-memory writes on retry or a mere research response rerun.
-      if (!verifiedMemory && !retry) captureAutomaticMemory(threadId, user.id, assistant.id);
+      // A successful retry is the first completed answer for this user turn.
+      // Native extraction deduplicates by assistant ID when replayed.
+      if (!verifiedMemory) captureAutomaticMemory(threadId, user.id, assistant.id);
     } catch (failure) {
       const detail = failure instanceof Error ? failure.message : String(failure);
       const reply = output && !sources.length
