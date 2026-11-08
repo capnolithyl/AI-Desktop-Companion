@@ -63,7 +63,7 @@ export function pageContext(query: string, page: PageDocument): string {
  * Same WebResult type and citation conventions, smaller context budget.
  */
 export function compactWebContext(query: string, results: WebResult[], now: Date = new Date(), timeZone: string = deviceTimeZone()): string {
-  const sources = results.slice(0, 4).map((item, index) =>
+  const sources = results.slice(0, 5).map((item, index) =>
     "[" + (index + 1) + "] " + item.title.slice(0, 110) +
     "\nURL: " + item.url +
     "\nPublished: " + (item.publishedDate || "unknown") +
