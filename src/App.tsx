@@ -946,6 +946,7 @@ export default function App() {
     switch (name) {
       case "help": setScreen("help"); return;
       case "vision": void openCapturePicker(); return;
+      case "attach": uploadRef.current?.click(); return;
       case "capabilities":
       case "features": setScreen("capabilities"); void checkCapabilities(); return;
       case "personality":
