@@ -399,7 +399,7 @@ export default function App() {
           .catch(()=>{next.voice="offline";}) : Promise.resolve(),
         needed.has("search") ? invoke<SearchService>("search_service",{
           action:"status",endpoint:settings.searxngEndpoint
-        }).then(s=>{next.search=/^(?:running|ready)$/.test(s.state)?"ready":"offline";})
+        }).then(s=>{next.search=s.state==="ready"?"ready":"offline";})
           .catch(()=>{next.search="offline";}) : Promise.resolve()
       ]);
       setCapabilityHealth(current=>({...current,...next}));
