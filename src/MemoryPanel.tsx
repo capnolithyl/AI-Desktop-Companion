@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ArrowLeft, Check, MessageCircle, Plus, RotateCw, Trash2, X } from "lucide-react";
+import { ArrowLeft, Check, MessageCircle, Plus, RotateCw, Star, Trash2, X } from "lucide-react";
 import type { CharacterCategory, CharacterFact, MemoryConversation, UserFact } from "./memory-client";
 import { CharacterCanonTab } from "./CharacterCanonTab";
 import type { SessionSummary } from "./memory-budget";
@@ -25,6 +25,7 @@ type Props = {
   onAddFact: (fact: string) => Promise<void>;
   onEditFact: (id: number, fact: string) => Promise<void>;
   onDeleteFact: (id: number) => Promise<void>;
+  onPinFact: (id: number, pinned: boolean) => Promise<void>;
   onRefresh: () => Promise<void>;
   onAddCharacter: (category: CharacterCategory, label: string, value: string) => Promise<void>;
   onEditCharacter: (id: number, category: CharacterCategory, label: string, value: string) => Promise<void>;
@@ -40,7 +41,7 @@ export function MemoryPanel({
   initialTab = "facts", conversations, sessionSummaries, facts, characterFacts,
   autoRememberUser, autoRememberMikan, automaticError, onAutoRememberUserChange, onAutoRememberMikanChange,
   currentId, busy, error, onClose, onNew,
-  onOpen, onDeleteChat, onAddFact, onEditFact, onDeleteFact, onRefresh,
+  onOpen, onDeleteChat, onAddFact, onEditFact, onDeleteFact, onPinFact, onRefresh,
   onAddCharacter, onEditCharacter, onDeleteCharacter
 }: Props) {
   const [tab, setTab] = useState<"chats" | "facts" | "character">(initialTab);
@@ -120,6 +121,12 @@ export function MemoryPanel({
             <div className="memory-actions">
               <small>#{fact.id} · {shortDate(fact.updatedAt)}
                 {(fact.referenceCount ?? 0) > 0 && " · Recalled " + fact.referenceCount + "×"}</small>
+              <button type="button" disabled={working}
+                title={(fact.importance ?? 50) >= 90 ? "Remove from core profile" : "Keep in core profile"}
+                onClick={() => void run(() => onPinFact(fact.id,(fact.importance ?? 50)<90))}>
+                <Star size={13} fill={(fact.importance ?? 50)>=90 ? "currentColor":"none"}/>
+                {(fact.importance ?? 50)>=90 ? "Pinned":"Pin"}
+              </button>
               <button type="button" onClick={() => { setEditId(fact.id); setEditValue(fact.fact); }}>Edit</button>
               {confirmId === `fact:${fact.id}` ? <>
                 <button type="button" className="memory-danger" disabled={working}
