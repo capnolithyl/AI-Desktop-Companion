@@ -29,6 +29,10 @@ nothing to keep. Install a new APK signed with the persistent key. Subsequent
 updates can then install directly over it.
 
 
+## Independent web research (Pocket Mikan v0.4.8)
+
+**v0.4.8:** Fact-based source verification is now shared with desktop v0.7.5. Nano's draft answer is screened against actual citation numbers, titles, years and release-type evidence; unsupported claims are omitted, or the app states it cannot verify the answer. Factual drafts no longer stream visibly before verification. Search snippets are 500 characters per selected source. Android AICore explicitly blocks background generation, so an interrupted response is stored in SQLite with a retryable state and a **Retry answer** control; a retry reuses the same user turn and any previously fetched Tavily evidence without duplicate messages or unnecessary web calls. This does not enable prohibited background Nano inference.
+
 ## Independent web research (Pocket Mikan v0.4.7)
 
 **v0.4.7:** Shared conversation context engine from desktop v0.7.4, inspired by SillyTavern's bounded dialogue and LlamaIndex's condense-plus-context. A lightweight Gemini Nano-only rewrite resolves ambiguous follow-up searches (e.g. "When did that album come out?") against the latest user-established subject; only the resolved public query is sent to Tavily. Prior sourced assistant replies stay in the small dialogue context as unverified conversation, not trusted facts. Ordinary chat skips the extra model pass. **Automatic local memory remains on in regular conversations when Settings → Auto Remember User is enabled (the default).** After Mikan asks a personal question, a short answer without "I"/"my" is eligible for Nano memory extraction. Native SQLite checks the answer's verbatim evidence; no command or special learning phrase is required. The dedicated v0.4.6 learning mode remains optional, not required.
