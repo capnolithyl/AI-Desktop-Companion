@@ -2,10 +2,12 @@ import { useState } from "react";
 import { ArrowLeft, Check, MessageCircle, Plus, RotateCw, Trash2, X } from "lucide-react";
 import type { CharacterCategory, CharacterFact, MemoryConversation, UserFact } from "./memory-client";
 import { CharacterCanonTab } from "./CharacterCanonTab";
+import type { SessionSummary } from "./memory-budget";
 
 type Props = {
   initialTab?: "chats" | "facts" | "character";
   conversations: MemoryConversation[];
+  sessionSummaries: SessionSummary[];
   facts: UserFact[];
   characterFacts: CharacterFact[];
   autoRememberUser: boolean;
@@ -35,7 +37,7 @@ function shortDate(seconds: number): string {
 
 /** Separate fact and conversation controls; no automatic memory extraction in phase one. */
 export function MemoryPanel({
-  initialTab = "facts", conversations, facts, characterFacts,
+  initialTab = "facts", conversations, sessionSummaries, facts, characterFacts,
   autoRememberUser, autoRememberMikan, automaticError, onAutoRememberUserChange, onAutoRememberMikanChange,
   currentId, busy, error, onClose, onNew,
   onOpen, onDeleteChat, onAddFact, onEditFact, onDeleteFact, onRefresh,
@@ -116,7 +118,8 @@ export function MemoryPanel({
           </> : <>
             <p>{fact.fact}</p>
             <div className="memory-actions">
-              <small>#{fact.id} · {shortDate(fact.updatedAt)}</small>
+              <small>#{fact.id} · {shortDate(fact.updatedAt)}
+                {(fact.referenceCount ?? 0) > 0 && " · Recalled " + fact.referenceCount + "×"}</small>
               <button type="button" onClick={() => { setEditId(fact.id); setEditValue(fact.fact); }}>Edit</button>
               {confirmId === `fact:${fact.id}` ? <>
                 <button type="button" className="memory-danger" disabled={working}
@@ -149,6 +152,14 @@ export function MemoryPanel({
             <span><strong>{chat.title}</strong><small>{shortDate(chat.updatedAt)}</small></span>
             {currentId === chat.id && <span className="memory-current">Current</span>}
           </button>
+          {sessionSummaries.find(s=>s.conversationId===chat.id &&
+              !s.summary.startsWith("- No durable")) && <details className="memory-session-notes">
+            <summary>Session notes</summary>
+            <p style={{whiteSpace:"pre-line"}}>
+              {sessionSummaries.find(s=>s.conversationId===chat.id)?.summary}
+            </p>
+            <small>Conversation continuity only, not verified permanent facts</small>
+          </details>}
           <div className="memory-actions">
             {confirmId === `chat:${chat.id}` ? <>
               <span>Delete conversation and all its messages?</span>
@@ -162,6 +173,6 @@ export function MemoryPanel({
         </article>)}
       </>}
     </div>
-    <footer className="drawer-footer">Your facts and Mikan's character canon are stored separately. Webpage knowledge remains independent.</footer>
+    <footer className="drawer-footer">Your facts, Mikan's character canon and session notes are stored separately. Webpage knowledge remains independent.</footer>
   </section>;
 }
