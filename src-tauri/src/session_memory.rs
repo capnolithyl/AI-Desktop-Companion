@@ -40,24 +40,33 @@ fn collect_candidate(
          WHERE conversation_id=?1 AND role='assistant' AND length(content)>0",
         params![conversation_id], |r| r.get(0)
     ).map_err(|e| e.to_string())?;
-    let Some(last_message_rowid) = latest else { return Ok(None) };
-    if last_message_rowid <= expected_previous_rowid { return Ok(None); }
+    let Some(latest_assistant_rowid) = latest else { return Ok(None) };
+    if latest_assistant_rowid <= expected_previous_rowid { return Ok(None); }
 
+    // Work from the OLDEST unsummarized turn, never the newest. When the
+    // service was offline during a long chat, process the backlog in chunks
+    // instead of silently skipping all but the latest messages.
     let mut stmt = db.prepare(
-        "SELECT content FROM messages
+        "SELECT rowid,content FROM messages
          WHERE conversation_id=?1 AND role='user' AND rowid>?2 AND rowid<?3
-         ORDER BY rowid DESC LIMIT 30"
+         ORDER BY rowid ASC LIMIT 16"
     ).map_err(|e| e.to_string())?;
-    let rows = stmt.query_map(params![conversation_id,expected_previous_rowid,last_message_rowid],
-        |r| r.get::<_,String>(0))
+    let rows = stmt.query_map(params![conversation_id,expected_previous_rowid,latest_assistant_rowid],
+        |r| Ok((r.get::<_,i64>(0)?, r.get::<_,String>(1)?)))
         .map_err(|e| e.to_string())?;
-    let mut user_messages: Vec<String> = rows.collect::<Result<_,_>>()
+    let user_rows: Vec<(i64,String)> = rows.collect::<Result<_,_>>()
         .map_err(|e| e.to_string())?;
-    user_messages.retain(|s| !s.trim().is_empty());
+    let user_messages: Vec<String> = user_rows.iter().map(|(_,s)| s.clone())
+        .filter(|s| !s.trim().is_empty()).collect();
     // Refresh after six answered turns, or when explicitly leaving a session
     // containing at least two new user turns.
     if user_messages.len() < if force {2} else {6} { return Ok(None) }
-    user_messages.reverse();
+    let final_user_rowid = user_rows.last().map(|(id,_)| *id).unwrap_or(0);
+    let last_message_rowid: i64 = db.query_row(
+        "SELECT MIN(rowid) FROM messages
+         WHERE conversation_id=?1 AND role='assistant' AND rowid>?2 AND rowid<=?3",
+        params![conversation_id,final_user_rowid,latest_assistant_rowid], |r| r.get::<_,Option<i64>>(0)
+    ).map_err(|e| e.to_string())?.unwrap_or(latest_assistant_rowid);
     Ok(Some(SessionCandidate {
         conversation_id: conversation_id.into(),
         previous_summary,
