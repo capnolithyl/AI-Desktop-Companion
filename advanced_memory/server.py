@@ -58,7 +58,7 @@ def make_mem0(root: Path) -> Any:
     local_config = {}
     file = root / "config.json"
     if file.exists():
-        local_config = json.loads(file.read_text(encoding="utf-8"))
+        local_config = json.loads(file.read_text(encoding="utf-8-sig"))
     ollama_url = os.environ.get("MIKAN_OLLAMA_URL", local_config.get("ollamaUrl", "http://127.0.0.1:11434"))
     if ollama_url.rstrip("/") not in ("http://localhost:11434", "http://127.0.0.1:11434"):
         raise ValueError("Mem0 may use only the local Ollama server")
