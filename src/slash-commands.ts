@@ -1,6 +1,7 @@
 export type SlashHelpItem = { usage: string; description: string; insert: string };
 export const SLASH_HELP: readonly SlashHelpItem[] = [
   { usage: "/help", description: "Show all available commands", insert: "/help" },
+  { usage: "/capabilities", description: "Browse Mikan's own features and live status", insert: "/capabilities" },
   { usage: "/personality", description: "Open quick personality controls", insert: "/personality" },
   { usage: "/preset <name>", description: "Switch to classic, cozy, flirty, focused, or chaos", insert: "/preset " },
   { usage: "/randomize", description: "Roll new personality settings", insert: "/randomize" },
