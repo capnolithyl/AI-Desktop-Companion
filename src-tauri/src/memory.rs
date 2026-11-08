@@ -16,6 +16,12 @@ pub(crate) fn open_db(app: &AppHandle) -> Result<Connection, String> {
 }
 
 fn initialize_database(connection: &Connection) -> Result<(), String> {
+    // Populate the index once when upgrading an existing SQLite archive.
+    // Opening the app repeatedly must never rebuild the index.
+    let had_search: bool = connection.query_row(
+        "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='message_search')",
+        [], |row| row.get(0)
+    ).map_err(|e| e.to_string())?;
     connection.execute_batch(
         "PRAGMA foreign_keys=ON;
          PRAGMA journal_mode=WAL;
@@ -80,8 +86,31 @@ fn initialize_database(connection: &Connection) -> Result<(), String> {
          CREATE TABLE IF NOT EXISTS automatic_memory_runs (
            assistant_message_id TEXT PRIMARY KEY REFERENCES messages(id) ON DELETE CASCADE,
            processed_at INTEGER NOT NULL DEFAULT (unixepoch())
-         );"
+         );
+         -- Search only user-authored messages, never generated assistant text.
+         CREATE VIRTUAL TABLE IF NOT EXISTS message_search USING fts5(
+           content, tokenize='unicode61 remove_diacritics 2'
+         );
+         CREATE TRIGGER IF NOT EXISTS messages_search_insert AFTER INSERT ON messages
+           WHEN new.role='user' BEGIN
+             INSERT INTO message_search(rowid,content) VALUES(new.rowid,new.content);
+           END;
+         CREATE TRIGGER IF NOT EXISTS messages_search_delete AFTER DELETE ON messages
+           WHEN old.role='user' BEGIN
+             DELETE FROM message_search WHERE rowid=old.rowid;
+           END;
+         CREATE TRIGGER IF NOT EXISTS messages_search_update AFTER UPDATE ON messages BEGIN
+             DELETE FROM message_search WHERE rowid=old.rowid AND old.role='user';
+             INSERT INTO message_search(rowid,content)
+               SELECT new.rowid,new.content WHERE new.role='user';
+           END;"
     ).map_err(|e| format!("Cannot initialize memory database: {e}"))?;
+    if !had_search {
+        connection.execute(
+            "INSERT INTO message_search(rowid,content)
+             SELECT rowid,content FROM messages WHERE role='user'", []
+        ).map_err(|e| format!("Cannot index existing conversations: {e}"))?;
+    }
     Ok(())
 }
 
@@ -225,6 +254,69 @@ pub fn memory_delete_conversation(app: AppHandle, id: String) -> Result<(), Stri
     open_db(&app)?.execute("DELETE FROM conversations WHERE id=?1", params![id])
         .map_err(|e| e.to_string())?;
     Ok(())
+}
+
+/// A quotation of a past user message; this is episodic context, not a verified fact.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ArchiveMemoryHit {
+    conversation_id: String,
+    title: String,
+    content: String,
+    created_at: i64,
+}
+
+// Build literal FTS5 phrases, not user-supplied MATCH grammar. Even symbols,
+// quotes and malformed queries cannot become SQLite query operators.
+fn message_search_terms(query: &str) -> String {
+    const STOP: &[&str] = &[
+        "the","and","that","this","with","about","from","what","when","where",
+        "which","would","could","should","have","been","your","mine","ours",
+        "remember","earlier","before","after","please","help","want","need",
+        "talked","discussed","conversation","last","time","said","tell","told",
+        "something","anything","there","here","some","just","again","more",
+        "can","you","are","was","were","for","our","how","did","does","she",
+        "her","his","not","why","who","all","but","now","any"
+    ];
+    let mut unique = std::collections::HashSet::new();
+    query.split(|c: char| !c.is_alphanumeric())
+        .map(|term| term.to_lowercase())
+        .filter(|term| (term.chars().count() >= 3
+                       || (term.chars().count() >= 2 && term.chars().all(|c| c.is_ascii_digit())))
+                       && !STOP.contains(&term.as_str()))
+        .filter(|term| unique.insert(term.clone()))
+        .take(8)
+        .map(|term| format!(r#""{term}""#))
+        .collect::<Vec<_>>().join(" OR ")
+}
+
+fn find_archive_messages(
+    db: &Connection, query: &str, exclude_conversation: &str
+) -> Result<Vec<ArchiveMemoryHit>, String> {
+    if query.chars().count() > 800 { return Ok(vec![]); }
+    let terms = message_search_terms(query);
+    if terms.is_empty() { return Ok(vec![]); }
+    let mut statement = db.prepare(
+        "SELECT m.conversation_id,c.title,substr(m.content,1,500),m.created_at
+         FROM message_search JOIN messages m ON m.rowid=message_search.rowid
+         JOIN conversations c ON c.id=m.conversation_id
+         WHERE message_search MATCH ?1 AND m.role='user'
+           AND m.conversation_id<>?2
+         ORDER BY bm25(message_search),m.created_at DESC LIMIT 16"
+    ).map_err(|e| e.to_string())?;
+    let rows = statement.query_map(params![terms,exclude_conversation], |row| Ok(ArchiveMemoryHit {
+        conversation_id:row.get(0)?, title:row.get(1)?,
+        content:row.get(2)?, created_at:row.get(3)?
+    })).map_err(|e| e.to_string())?;
+    rows.collect::<Result<Vec<_>,_>>().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn memory_search_archive(
+    app: AppHandle, query: String, exclude_conversation: String
+) -> Result<Vec<ArchiveMemoryHit>, String> {
+    if !valid_id(&exclude_conversation) { return Err("Invalid conversation ID".into()); }
+    find_archive_messages(&open_db(&app)?,&query,&exclude_conversation)
 }
 
 #[tauri::command]
@@ -543,5 +635,40 @@ mod tests {
         assert!(valid_character_category("favorites"));
         assert!(!valid_character_category("instructions"));
     }
+
+    #[test]
+    fn archive_fts_searches_only_user_messages_and_tracks_changes() {
+        let db=Connection::open_in_memory().unwrap();
+        initialize_database(&db).unwrap();
+        db.execute("INSERT INTO conversations(id,title,created_at,updated_at) VALUES('older','My site',1,1)",[]).unwrap();
+        db.execute("INSERT INTO messages(id,conversation_id,role,content,created_at) VALUES('u','older','user','I use WordPress for my websites',10)",[]).unwrap();
+        db.execute("INSERT INTO messages(id,conversation_id,role,content,created_at) VALUES('a','older','assistant','SuperSecretImaginedFacts',11)",[]).unwrap();
+        let found=find_archive_messages(&db,"WordPress websites","current").unwrap();
+        assert_eq!(found.len(),1);
+        assert!(found[0].content.contains("WordPress"));
+        assert!(find_archive_messages(&db,"SuperSecretImaginedFacts","current").unwrap().is_empty());
+        assert!(find_archive_messages(&db,"WordPress","older").unwrap().is_empty());
+        db.execute("UPDATE messages SET content='I now use Astro for websites' WHERE id='u'",[]).unwrap();
+        assert!(find_archive_messages(&db,"WordPress","current").unwrap().is_empty());
+        assert_eq!(find_archive_messages(&db,"Astro","current").unwrap().len(),1);
+        db.execute("DELETE FROM conversations WHERE id='older'",[]).unwrap();
+        assert!(find_archive_messages(&db,"Astro","current").unwrap().is_empty());
+    }
+
+    #[test]
+    fn archive_search_migrates_old_messages_once_without_duplicates() {
+        let db=Connection::open_in_memory().unwrap();
+        db.execute_batch("PRAGMA foreign_keys=ON;
+          CREATE TABLE conversations(id TEXT PRIMARY KEY,title TEXT,created_at INTEGER,updated_at INTEGER);
+          CREATE TABLE messages(id TEXT PRIMARY KEY,conversation_id TEXT,role TEXT,content TEXT,created_at INTEGER,metadata_json TEXT);
+          INSERT INTO conversations VALUES('prior','Past talk',1,1);
+          INSERT INTO messages VALUES('m','prior','user','I configured Vivaldi tab stacks',1,'{}');").unwrap();
+        initialize_database(&db).unwrap();
+        initialize_database(&db).unwrap();
+        assert_eq!(find_archive_messages(&db,"Vivaldi","active").unwrap().len(),1);
+        assert!(message_search_terms("WordPress \" OR injection").contains("wordpress"));
+        assert_eq!(message_search_terms("??? ???"),"");
+    }
+
 
 }

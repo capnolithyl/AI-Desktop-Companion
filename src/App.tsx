@@ -35,6 +35,7 @@ import {
 import { MemoryPanel } from "./MemoryPanel";
 import { toSpeechText, VOICE_TEST_LINE } from "./speech";
 import { memoryBudget, sessionMemoryContext, type SessionSummary } from "./memory-budget";
+import { archiveMemoryContext, shouldSearchArchive } from "./archive-memory";
 import { sessionSummaryPrompt, mergeSessionSummary, validSessionSummaryResponse } from "./session-memory";
 
 type Screen = "compact" | "log" | "settings" | "search" | "page" | "personality" | "help" | "memory";
@@ -1088,6 +1089,13 @@ export default function App() {
       const currentSession = archivedSessions.find(s => s.conversationId === conversationId) ?? null;
       const earlierSessions = archivedSessions.filter(s => s.conversationId !== conversationId);
       const sessionNotes = sessionMemoryContext(text,currentSession,earlierSessions,budget);
+      // Search historical user messages without treating generated assistant text
+      // or outdated conversations as authoritative facts. Fully local SQLite FTS5.
+      const archivedMessages = !withSearch && (researchPlan?.mode === "chat" || !researchPlan)
+        && shouldSearchArchive(text)
+        ? await memoryApi.searchArchive(text,conversationId).catch(() => [])
+        : [];
+      const archiveNotes = archiveMemoryContext(text,archivedMessages,budget);
       if (!withSearch && settings.autoSearch && researchPlan && researchPlan.mode !== "chat" &&
           needsContextResolution(text, messages)) {
         setActivity("Understanding follow-up…");
@@ -1142,7 +1150,7 @@ export default function App() {
           contextWindow: settings.contextWindow,
           priorSources,
           messages: [
-            { role: "system", content: [settings.systemPrompt.trim(), personalityGuidance(settings.personality), runtimeContext(), remembered.text, sessionNotes, characterContext(characterFacts, text), characterAnswerGuidance(text), researchPlan?.mode !== "chat" ? contextGuidance(messages, text, 1800) : ""].filter(Boolean).join("\n\n") },
+            { role: "system", content: [settings.systemPrompt.trim(), personalityGuidance(settings.personality), runtimeContext(), remembered.text, sessionNotes, archiveNotes, characterContext(characterFacts, text), characterAnswerGuidance(text), researchPlan?.mode !== "chat" ? contextGuidance(messages, text, 1800) : ""].filter(Boolean).join("\n\n") },
             ...(withSearch ? [{ role: "user", content: withSearch.page ? pageContext(withSearch.query, withSearch.page) : webContext(withSearch.query, withSearch.results) }] : []),
             ...history.filter(m => !withSearch || m.role === "user").slice(-budget.recentTurns).map(m => ({ role: m.role, content: m.content }))
           ]
