@@ -5,6 +5,7 @@ mod agent_tools;
 mod research_intent;
 mod memory;
 mod memory_extraction;
+mod advanced_memory;
 use futures_util::{future::{AbortHandle, Abortable}, StreamExt};
 use std::{collections::HashMap, sync::Mutex};
 use serde::{Deserialize, Serialize};
