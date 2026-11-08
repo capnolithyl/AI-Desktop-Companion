@@ -11,6 +11,7 @@ import { memoryContext, characterContext, type UserFact, type CharacterFact, typ
 import { mobileBackend, type NativeStatus } from "./mobile-backend";
 import { pocketMemory, type PocketThread, type PocketTurn } from "./mobile-memory";
 import { resolveExplicitMemoryIntent, type ExplicitMemoryIntent } from "./memory-intent";
+import { learningCommand, learningSessionActive, contextualLearningFact } from "./learning-memory";
 import { planResearch, stripUnsupportedCitations } from "../research-routing";
 import { priorResearchSources } from "../research-context";
 import { compactWebContext, pageContext, type WebResult } from "../web-search";
@@ -33,9 +34,18 @@ function readArray<T>(key: string): T[] {
     return Array.isArray(value) ? value as T[] : [];
   } catch { return []; }
 }
-function buildPrompt(settings: Settings, facts: UserFact[], canon: CharacterFact[], turns: Turn[], research = ""): string {
+function buildPrompt(settings: Settings, facts: UserFact[], canon: CharacterFact[], turns: Turn[], research = "", verifiedMemory: string | null = null): string {
   const query = turns[turns.length - 1]?.content ?? "";
-  const context = [settings.systemPrompt, personalityGuidance(settings.personality),
+  const isLearning = learningSessionActive(turns);
+  const learningGuidance = isLearning ? [
+    "The user explicitly invited you to get to know them by asking questions and saving their answers. Ask exactly ONE short, specific question per reply, across varied topics.",
+    "The app, not you, performs actual memory writes. Do not say a response was saved or that you'll definitely remember it unless the app explicitly verifies a write.",
+    verifiedMemory
+      ? "DATABASE WRITE VERIFIED FOR THIS USER REPLY: " + verifiedMemory + ". You may briefly acknowledge this true save, then ask the next question."
+      : "No new memory write is confirmed for this turn. Do not assert you saved anything.",
+    "Build on the user's answer without reciting earlier answers. Never pressure them to answer sensitive personal questions; they can stop the session any time."
+  ].join(" ") : "";
+  const context = [settings.systemPrompt, personalityGuidance(settings.personality), learningGuidance,
     pocketRuntimeContext(),
     "This is on-device Gemini Nano pocket mode. You cannot see the user's PC or desktop memory. You have no direct browsing abilities; when the application supplies WEB RESEARCH, use only those cited sources. Otherwise be candid about not having live data.",
     "When no WEB RESEARCH is provided for this turn, respond conversationally without citing sources or recycling earlier research. Do not invent numbered citations. Prior chat text is not verified evidence.",
@@ -475,6 +485,9 @@ export default function MobileApp() {
     const cmd = textOverride === undefined ? parseSlashCommand(text) : null;
     if (cmd) { handleCommand(cmd.name, cmd.argument); return; }
     const explicitMemory = resolveExplicitMemoryIntent(text, active.turns);
+    const learnCommand = mode ? null : learningCommand(text);
+    const learningAnswer = mode || learnCommand || explicitMemory
+      ? null : contextualLearningFact(text, active.turns);
     const localClockAnswer = mode ? null : deviceClockAnswer(text);
     if (!explicitMemory && !localClockAnswer && model !== "READY") {
       setIntro("Gemini Nano isn't ready yet. Open Settings to check or download the local model.");
@@ -496,6 +509,38 @@ export default function MobileApp() {
         return;
       }
       await pocketMemory.saveMessage(threadId, user);
+      // A learning session is explicit consent, persisted in chat history.
+      // Stop never depends on a model response or an asynchronous extraction.
+      if (learnCommand === "stop") {
+        const reply = "Got it! I'll stop collecting answers. Already saved memories remain editable under Memory.";
+        replaceTurn(threadId, assistant.id, reply);
+        await pocketMemory.saveMessage(threadId, { ...assistant, content: reply });
+        return;
+      }
+      let verifiedMemory: string | null = null;
+      let promptFacts = facts;
+      if (learningAnswer) {
+        try {
+          // Save first. Only a successful read-back allows the AI to claim it
+          // remembers the answer. This works even if auto-memory is disabled.
+          const saved = await pocketMemory.addFact(learningAnswer.fact);
+          const readBack = await pocketMemory.listFacts();
+          if (!readBack.some(f => f.id === saved.id && f.fact === learningAnswer.fact)) {
+            throw new Error("Saved fact could not be verified in SQLite.");
+          }
+          setFacts(readBack);
+          promptFacts = readBack;
+          verifiedMemory = learningAnswer.fact;
+          confirmMemorySaved("Saved answer to user memory");
+        } catch (failure) {
+          const detail = failure instanceof Error ? failure.message : String(failure);
+          const reply = "I couldn't save that answer, so I won't claim to remember it. " + detail;
+          replaceTurn(threadId, assistant.id, reply);
+          await pocketMemory.saveMessage(threadId, { ...assistant, content: reply });
+          setMemoryError(detail);
+          return;
+        }
+      }
       if (localClockAnswer) {
         // A local date/time request needs neither Tavily nor Gemini Nano.
         // Never attach stale research links or an unrelated album summary.
@@ -558,8 +603,8 @@ export default function MobileApp() {
           setWebActivity("");
         }
       }
-      const answer = await mobileBackend.generate(buildPrompt(settings, facts, canon,
-        [...active.turns, user], research), chunk => {
+      const answer = await mobileBackend.generate(buildPrompt(settings, promptFacts, canon,
+        [...active.turns, user], research, verifiedMemory), chunk => {
         output += chunk;
         replaceTurn(threadId, assistant.id, sources.length ? output : stripUnsupportedCitations(output),
           sources.length ? sources : undefined);
@@ -568,7 +613,9 @@ export default function MobileApp() {
       replaceTurn(threadId, assistant.id, displayedAnswer, sources.length ? sources : undefined);
       // Keep the saved reply identical to the UI: without sources, citation numbers are unverified.
       await pocketMemory.saveMessage(threadId, { ...assistant, content: displayedAnswer, ...(sources.length ? { sources } : {}) });
-      captureAutomaticMemory(threadId, user.id, assistant.id);
+      // Contextual answer already wrote the fact; don't ask automatic
+      // extraction to duplicate it from the same message.
+      if (!verifiedMemory) captureAutomaticMemory(threadId, user.id, assistant.id);
     } catch (failure) {
       const detail = failure instanceof Error ? failure.message : String(failure);
       const reply = output || (mode || webEnabled ? "I couldn't verify that information right now." : "(No response)");
@@ -622,7 +669,7 @@ export default function MobileApp() {
       <div className="pocket-heading">
         <strong>{screen === "chat" ? "Mikan" : title}</strong>
         <span className="pocket-subtitle">
-          POCKET COMPANION · LOCAL · v0.4.5
+          POCKET COMPANION · LOCAL · v0.4.6
           <button type="button" className={`pocket-model-indicator ${model === "READY" ? "ready" : "attention"}`}
             onClick={() => setScreen("settings")} title="View local model status in settings"
             aria-label={`Gemini Nano: ${model.toLowerCase()}. Open model settings`}>
