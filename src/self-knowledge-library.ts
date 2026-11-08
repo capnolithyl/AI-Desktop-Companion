@@ -8,7 +8,7 @@ import { isSelfKnowledgeQuestion, relevantCapabilities } from "./self-knowledge"
  */
 const included = import.meta.glob([
   "../README.md", "../SETUP.md", "../MEMORY.md", "../RESEARCH-EVAL.md",
-  "../self_knowledge/README.md", "../screen_vision/README.md",
+  "../self_knowledge/README.md", "../screen_vision/README.md", "../attachments/README.md",
   "../advanced_memory/README.md", "../tools/searxng/README.md",
   "../tools/tts/README.md", "../android/README.md",
   "../src-tauri/src/*.rs", "./*.ts", "./*.tsx",
