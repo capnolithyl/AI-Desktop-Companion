@@ -36,3 +36,18 @@ export function rankMemories<T extends RankableMemory>(
   return facts.slice().sort((a,b) =>
     score(b) - score(a) || b.updatedAt - a.updatedAt || b.id-a.id);
 }
+
+
+/** Owner-pinned facts are deliberately always-on core context, not merely
+ * another similarity hint. Reserve one or two slots; leave the rest for
+ * relevant semantic/lexical memories.
+ */
+export function prioritizeCoreMemories<T extends RankableMemory>(
+  facts: T[], query: string, semanticIds: number[], maxFacts: number
+): T[] {
+  const ranked=rankMemories(facts,query,semanticIds);
+  const pinned=ranked.filter(f=>(f.importance ?? 50)>=90)
+    .slice(0, maxFacts <= 3 ? 1 : 2);
+  const coreIds=new Set(pinned.map(f=>f.id));
+  return [...pinned,...ranked.filter(f=>!coreIds.has(f.id))];
+}
