@@ -33,9 +33,10 @@ export function sessionMemoryContext(
 ): string {
   const explicit = /\b(?:last time|previous(?:ly)?|earlier|yesterday|other chat|we talked|continue|remember when)\b/i.test(query);
   const notes: string[] = [];
-  if (current?.summary.trim()) notes.push("THIS CONVERSATION (compressed earlier turns): " + current.summary.trim());
+  if (current?.summary.trim() && !current.summary.startsWith("- No durable")) notes.push("THIS CONVERSATION (compressed earlier turns): " + current.summary.trim());
   const past = recent.find(s => s.conversationId !== current?.conversationId &&
-    s.summary.trim() && (explicit || nowSeconds - s.updatedAt > 6 * 3600));
+    s.summary.trim() && !s.summary.startsWith("- No durable") &&
+    (explicit || nowSeconds - s.updatedAt > 6 * 3600));
   if (past) notes.push("EARLIER SESSION (not necessarily relevant): " + past.summary.trim());
   if (!notes.length) return "";
   let left = budget.sessionChars;
