@@ -21,6 +21,11 @@ jobs:
       - uses: swatinem/rust-cache@v2
         with:
           workspaces: "src-tauri -> target"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Test local Mem0 adapter (mock SDK, no Ollama needed)
+        run: python -m unittest discover -s advanced_memory/tests -v
       - name: Install JavaScript dependencies
         run: npm install --no-audit --no-fund
       - name: Generate icons
