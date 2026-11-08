@@ -36,7 +36,7 @@ export function splitSpeechText(text: string, maxChars = 160): string[] {
     let boundary = -1;
     for (const regex of [/[.!?]["')\]]*\s+/g, /[,;:]\s+/g, /\s+/g]) {
       for (const match of window.matchAll(regex)) {
-        const end = match.index + match[0].length;
+        const end = (match.index ?? 0) + match[0].length;
         if (end >= Math.floor(maxChars * 0.3) && end <= maxChars) boundary = end;
       }
       if (boundary !== -1) break;
