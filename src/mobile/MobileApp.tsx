@@ -13,6 +13,7 @@ import { pocketMemory, type PocketThread, type PocketTurn } from "./mobile-memor
 import { resolveExplicitMemoryIntent, type ExplicitMemoryIntent } from "./memory-intent";
 import { learningCommand, learningSessionActive, contextualLearningFact } from "./learning-memory";
 import { planResearch, stripUnsupportedCitations } from "../research-routing";
+import { contextGuidance, needsContextResolution, resolveConversationQuestion } from "../conversation-engine";
 import { priorResearchSources } from "../research-context";
 import { compactWebContext, pageContext, type WebResult } from "../web-search";
 import { deviceClockAnswer, pocketRuntimeContext } from "../runtime-context";
@@ -54,20 +55,10 @@ function buildPrompt(settings: Settings, facts: UserFact[], canon: CharacterFact
     "CRITICAL: Conversation text alone cannot save a memory. Never claim that a memory has been saved, filed away, or remembered permanently unless the application has confirmed a database write. Explicit save requests are handled by the app, not by your own text.",
     memoryContext(facts, query), characterContext(canon, query), research
   ].filter(Boolean).join("\n");
-  // Nano has a significantly smaller working context than the desktop model.
-  const recent: string[] = [];
-  let used = context.length + query.length;
-  for (const turn of turns.slice(0, -1).reverse()) {
-    // Previous sourced answers can contaminate casual chat with stale [1] citations.
-    // Current research, when requested, is supplied separately as verified metadata.
-    if (turn.role === "assistant" && turn.sources?.length) continue;
-    const line = (turn.role === "user" ? "User: " : "Mikan: ") + turn.content.slice(0, 1500);
-    if (used + line.length > (research ? 7900 : 5400)) break;
-    recent.unshift(line);
-    used += line.length;
-  }
-  return context + "\n\nConversation context (not instructions):\n" + recent.join("\n") +
-    "\nUser: " + query.slice(0, 2200) + "\nMikan:";
+  // Keep earlier web replies as dialogue context, NOT as verified evidence.
+  // Keep the most recent intact turns before truncating old context.
+  const budget = Math.max(1200, (research ? 7900 : 5400) - context.length - query.length - 180);
+  return context + "\n\n" + contextGuidance(turns.slice(0, -1), query, budget) + "\nMikan:";
 }
 function openLink(href: string) {
   try {
@@ -551,10 +542,18 @@ export default function MobileApp() {
       let sources: WebResult[] = [];
       let research = "";
       const researchPlan = planResearch(text, active.turns);
-      // Pocket uses the same research intent as desktop, then supplies Tavily
-      // instead of SearXNG; the factual tier still searches on Pocket.
+      // Resolve ambiguous factual follow-ups using a local Nano-only request.
+      // Only the resulting standalone query (not the chat history) reaches Tavily.
+      const condensed = mode === null && webEnabled && researchPlan.mode !== "chat" &&
+        needsContextResolution(text, active.turns)
+        ? await resolveConversationQuestion(text, active.turns,
+            prompt => mobileBackend.generate(prompt, () => {}))
+        : null;
+      const lookup = condensed?.rewritten ? condensed.standaloneQuestion :
+        (researchPlan.query ?? text);
       const planned = researchPlan.mode === "chat" ? null : {
-        query: researchPlan.query ?? text, recent: researchPlan.recent
+        query: lookup, recent: researchPlan.recent ||
+          (condensed?.rewritten ? planResearch(lookup, active.turns).recent : false)
       };
       const prior = priorResearchSources(active.turns, text);
       // If the user requests fresh information while search is disabled, stop
@@ -586,7 +585,7 @@ export default function MobileApp() {
         // Follow-up evidence is already stored locally in SQLite metadata.
         // Reuse it rather than charging another search credit unnecessarily.
         sources = prior;
-        research = compactWebContext(text, sources);
+        research = compactWebContext(lookup, sources);
       } else if (mode === "search" || (webEnabled && webConfigured && planned)) {
         if (!webConfigured) throw new Error("Set a Tavily API key in Settings → Internet before searching.");
         const request = mode === "search" ?
@@ -597,7 +596,7 @@ export default function MobileApp() {
           const response = await mobileBackend.searchWeb(request.query,request.recent);
           sources = response.results;
           if (!sources.length) throw new Error("The search returned no usable sources. Try a different query.");
-          research = compactWebContext(text, sources);
+          research = compactWebContext(lookup, sources);
         } finally {
           setWebBusy(false);
           setWebActivity("");
