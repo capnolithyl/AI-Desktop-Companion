@@ -6,7 +6,7 @@ import {
 } from "./self-knowledge.ts";
 
 test("feature registry tracks implemented, experimental and planned without duplicates",()=>{
-  assert.equal(CAPABILITY_RELEASE,"0.8.2");
+  assert.equal(CAPABILITY_RELEASE,"0.8.3");
   assert.ok(CAPABILITIES.length>=15);
   assert.equal(new Set(CAPABILITIES.map(c=>c.id)).size,CAPABILITIES.length);
   assert.equal(CAPABILITIES.find(c=>c.id==="screen-vision")?.stage,"experimental");
