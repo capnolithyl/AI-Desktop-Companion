@@ -286,7 +286,7 @@ fn message_search_terms(query: &str) -> String {
                        && !STOP.contains(&term.as_str()))
         .filter(|term| unique.insert(term.clone()))
         .take(8)
-        .map(|term| format!("\\"{term}\\""))
+        .map(|term| format!(r#""{term}""#))
         .collect::<Vec<_>>().join(" OR ")
 }
 
