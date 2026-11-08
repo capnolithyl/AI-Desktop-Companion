@@ -3,6 +3,7 @@ import type { Message } from "./storage";
 import { prioritizeCoreMemories } from "./memory-ranking";
 import { memoryBudget, type MemoryBudget, type SessionSummary } from "./memory-budget";
 import type { SessionCandidate } from "./session-memory";
+import type { ArchiveMemoryHit } from "./archive-memory";
 
 export type MemoryConversation = {
   id: string;
@@ -86,6 +87,8 @@ export const memoryApi = {
     invoke<SessionSummary[]>("memory_list_session_summaries"),
   deleteSessionSummary: (conversationId: string) =>
     invoke<void>("memory_delete_session_summary", {conversationId}),
+  searchArchive: (query: string, excludeConversation: string) =>
+    invoke<ArchiveMemoryHit[]>("memory_search_archive", { query, excludeConversation }),
   addFact: (fact: string) => invoke<UserFact>("memory_add_fact", { fact }),
   updateFact: (id: number, fact: string) => invoke<void>("memory_update_fact", { id, fact }),
   deleteFact: (id: number) => invoke<void>("memory_delete_fact", { id }),
