@@ -30,7 +30,7 @@ export const pocketMemory = {
       conversationId,
       message: {
         id: turn.id, role: turn.role, content: turn.content,
-        createdAt: turn.createdAt, metadataJson: JSON.stringify({ sources: (turn.sources ?? []).slice(0, 5) })
+        createdAt: turn.createdAt, metadataJson: JSON.stringify({ sources: (turn.sources ?? []).slice(0, 5), failed: turn.failed === true })
       }
     }),
   deleteConversation: (conversationId: string): Promise<object> =>
