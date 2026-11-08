@@ -50,6 +50,21 @@ const notDocumented=registered.filter(cmd=>!commandOwners.has(cmd));
 const notImplemented=[...commandOwners.keys()].filter(cmd=>!actual.has(cmd));
 assert.deepEqual(notDocumented,[],"Unregistered features! Map every newly added Tauri command into the capability catalog.");
 assert.deepEqual(notImplemented,[],"Capability catalog advertises commands no longer registered");
+const uiScreenType = read("src/App.tsx").match(/type Screen = ([^;]+);/);
+assert(uiScreenType,"Cannot parse the desktop screen union");
+const activeScreens = [...uiScreenType[1].matchAll(/"([^"]+)"/g)].map(x=>x[1]);
+const helpActions = [...read("src/slash-commands.ts").matchAll(/usage: "\/([a-z-]+)/g)].map(x=>x[1]);
+function checkVisibleSurface(label, active, key) {
+  const described = CAPABILITIES.flatMap(f=>f[key]??[]);
+  const duplicate = described.filter((name,i)=>described.indexOf(name)!==i);
+  assert.deepEqual(duplicate,[],label+" is mapped more than once");
+  assert.deepEqual(active.filter(name=>!described.includes(name)),[],
+    "New "+label+" is not represented in Mikan's self-knowledge");
+  assert.deepEqual(described.filter(name=>!active.includes(name)),[],
+    "Stale "+label+" in capability catalog");
+}
+checkVisibleSurface("desktop screen",activeScreens,"screens");
+checkVisibleSurface("slash command",helpActions,"slashCommands");
 assert(CAPABILITIES.some(f=>f.id==="self-knowledge"&&f.stage==="implemented"),"Self-knowledge must describe itself");
 console.log("Self-knowledge current for v"+CAPABILITY_RELEASE+": "+CAPABILITIES.length+
-  " entries, "+registered.length+" Tauri commands mapped, cited files present.");
+  " entries, "+registered.length+" Tauri commands, "+activeScreens.length+" screens and "+helpActions.length+" slash commands mapped.");
