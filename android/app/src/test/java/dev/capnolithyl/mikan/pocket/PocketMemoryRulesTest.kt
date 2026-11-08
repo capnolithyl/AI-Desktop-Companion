@@ -7,6 +7,28 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class PocketMemoryRulesTest {
+    @Test fun shortNaturalRepliesCanUseThePrecedingPersonalQuestion() {
+        assertTrue(PocketMemoryRules.contextualAnswerCandidate(
+            "What's your favorite kind of cheese? That's important!", "Probably Swiss"
+        ))
+        assertTrue(PocketMemoryRules.contextualAnswerCandidate(
+            "What music do you enjoy listening to?", "Black metal for sure"
+        ))
+        assertFalse(PocketMemoryRules.contextualAnswerCandidate(
+            "Here are the album details.", "Vanilla"
+        ))
+        assertFalse(PocketMemoryRules.contextualAnswerCandidate(
+            "What's your password?", "secret access token"
+        ))
+        assertFalse(PocketMemoryRules.contextualAnswerCandidate(
+            "What kind of books do you like?", "What about you?"
+        ))
+        assertEquals("The user prefers vanilla ice cream",
+            PocketMemoryRules.cleanUser(
+                "The user prefers vanilla ice cream", "Vanilla", "Vanilla for sure"
+            ))
+    }
+
     @Test fun userFactsComeOnlyFromUsersOwnWords() {
         assertTrue(PocketMemoryRules.userCandidate("I love black metal."))
         assertFalse(PocketMemoryRules.userCandidate("What's your favorite music?"))
