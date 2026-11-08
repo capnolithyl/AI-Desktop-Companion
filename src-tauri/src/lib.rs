@@ -138,6 +138,46 @@ async fn list_models(endpoint: String) -> Result<Vec<String>, String> {
     Ok(names)
 }
 
+/// Optional local-only condensed-question pass. We call it only for ambiguous
+/// factual follow-ups; ordinary conversation and manual commands stay fast.
+#[tauri::command]
+async fn condense_local_context(
+    endpoint: String,
+    model: String,
+    prompt: String,
+    context_window: Option<u32>,
+) -> Result<String, String> {
+    if model.trim().is_empty() || model.len() > 120 || prompt.len() > 5500 {
+        return Err("Invalid context request".into());
+    }
+    let url = format!("{}/api/chat", local_origin(&endpoint)?);
+    let mut options = json!({"temperature": 0, "num_predict": 190});
+    if let Some(ctx) = valid_context_window(context_window) {
+        options["num_ctx"] = json!(ctx);
+    }
+    let payload = json!({
+        "model": model,
+        "stream": false,
+        "think": false,
+        "format": "json",
+        "options": options,
+        "messages": [{"role":"user","content":prompt}]
+    });
+    let response = client()?
+        .post(url)
+        .json(&payload)
+        .timeout(Duration::from_secs(35))
+        .send()
+        .await
+        .map_err(|e| format!("Local context resolution unavailable: {e}"))?;
+    if !response.status().is_success() {
+        return Err(format!("Local context resolution returned HTTP {}", response.status()));
+    }
+    let output: Value = response.json().await
+        .map_err(|e| format!("Invalid local context response: {e}"))?;
+    Ok(output["message"]["content"].as_str().unwrap_or("").chars().take(1200).collect())
+}
+
 fn process_line(
     app: &tauri::AppHandle,
     request_id: &str,
@@ -485,6 +525,7 @@ pub fn run() {
             web_reader::web_cache_info,
             web_reader::clear_web_cache,
             chat_stream,
+            condense_local_context,
             cancel_chat,
             memory::memory_list_conversations,
             memory::memory_create_conversation,
