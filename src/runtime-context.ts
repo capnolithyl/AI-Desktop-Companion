@@ -49,3 +49,68 @@ export function runtimeContext(now: Date = new Date()): string {
     "Never claim you searched or verified a source unless the app actually returned a search or webpage result. If automatic search is disabled, state any uncertainty without pretending you checked the web."
   ].join("\n");
 }
+
+
+/**
+ * Pocket mode takes its time zone from Android's WebView/device settings.
+ * Desktop intentionally keeps its user-configured America/Detroit clock above.
+ */
+export function deviceTimeZone(): string {
+  return Intl.DateTimeFormat().resolvedOptions().timeZone || COMPANION_TIME_ZONE;
+}
+
+export function deviceLocalCalendarDate(
+  now: Date = new Date(), timeZone: string = deviceTimeZone()
+): string {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone, year: "numeric", month: "2-digit", day: "2-digit"
+  }).formatToParts(now);
+  const part = (type: string) => parts.find(item => item.type === type)?.value ?? "";
+  return [part("year"), part("month"), part("day")].join("-");
+}
+
+function deviceLongDate(now: Date, timeZone: string): string {
+  return new Intl.DateTimeFormat("en-US", {
+    timeZone, weekday: "long", year: "numeric", month: "long", day: "numeric"
+  }).format(now);
+}
+
+/** Short enough for Nano; supplied fresh on every turn. */
+export function pocketRuntimeContext(
+  now: Date = new Date(), timeZone: string = deviceTimeZone()
+): string {
+  const local = new Intl.DateTimeFormat("en-US", {
+    timeZone, weekday: "long", year: "numeric", month: "long",
+    day: "numeric", hour: "numeric", minute: "2-digit",
+    hour12: true, timeZoneName: "short"
+  }).format(now);
+  return [
+    "LIVE DATE AND TIME FROM THIS ANDROID DEVICE (not model memory or training):",
+    "Current local date and time: " + local + ". Time zone: " + timeZone + ".",
+    "Current LOCAL calendar date (YYYY-MM-DD): " + deviceLocalCalendarDate(now, timeZone) + ".",
+    "Current UTC timestamp: " + now.toISOString() + " (NOT the local calendar date).",
+    "Use the LOCAL date for today, yesterday, upcoming, and past events. A prior article's future-tense claims may now be outdated.",
+    "Compare EVENT dates, not search result timestamps, to today's local date. An old proposed release date does not prove the release occurred.",
+    "Do not describe a past tour, announcement, or album release as upcoming. If the available sources cannot verify the outcome or a newer official date, say so."
+  ].join("\n");
+}
+
+/**
+ * Trusted local clock requests should never search the web or ask Nano to guess.
+ * Strict exact-phrase matching avoids hijacking an album's release-date query.
+ */
+export function deviceClockAnswer(
+  question: string, now: Date = new Date(), timeZone: string = deviceTimeZone()
+): string | null {
+  const text = question.toLowerCase().trim().replace(/[.?!\s]+$/g, "").replace(/\s+/g, " ");
+  const dateQuestion = /^(?:what date is it|what day is it|what day is today|what(?:'s| is) (?:today's|the|current) date|what's today|today's date|current date|what(?:'s| is) the day today)$/.test(text);
+  const timeQuestion = /^(?:what time is it|what time is it now|what(?:'s| is) the (?:current|local) time|current time|what(?:'s| is) the time now)$/.test(text);
+  if (dateQuestion) return "It's " + deviceLongDate(now, timeZone) + ".";
+  if (timeQuestion) {
+    const time = new Intl.DateTimeFormat("en-US", {
+      timeZone, hour: "numeric", minute: "2-digit", hour12: true, timeZoneName: "short"
+    }).format(now);
+    return "It's " + time + " on " + deviceLongDate(now, timeZone) + ".";
+  }
+  return null;
+}

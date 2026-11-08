@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Lightweight bundled illustration for Pocket Mikan.
+     Tap Change Portrait in the app to use the exact character-sheet PNG instead. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="360dp"
+    android:height="340dp"
+    android:viewportWidth="360"
+    android:viewportHeight="340">
+    <!-- Soft halo -->
+    <path android:fillColor="#1CFFA76A" android:pathData="M180,21 a126,126 0,1 0,0 252 a126,126 0,1 0,0 -252" />
+    <path android:fillColor="#15FFDDB8" android:pathData="M180,54 a99,99 0,1 0,0 198 a99,99 0,1 0,0 -198" />
+    <!-- Fluffy striped tail -->
+    <path android:fillColor="#D66E33" android:strokeColor="#9F481E" android:strokeWidth="4"
+        android:pathData="M263,261 C308,264 344,228 321,183 C311,165 286,166 282,181 C279,195 298,203 301,215 C308,238 279,236 258,233 Z" />
+    <path android:fillColor="#00000000" android:strokeColor="#A24E25" android:strokeWidth="10"
+        android:pathData="M295,181 C302,183 307,189 310,196 M301,222 C313,224 323,220 329,211" />
+    <!-- Silhouette of wavy hair -->
+    <path android:fillColor="#C45D2B" android:strokeColor="#A34B27" android:strokeWidth="2"
+        android:pathData="M102,118 C94,80 127,57 174,55 C239,50 272,91 264,139 C261,170 279,198 271,248 C265,274 282,278 274,299 C246,298 233,280 228,267 C206,283 158,288 133,267 C123,286 107,294 79,293 C88,268 72,245 88,219 C93,198 85,172 102,118 Z" />
+    <!-- Cat ears, orange stripes and soft inner ear -->
+    <path android:fillColor="#D97A39" android:strokeColor="#943E22" android:strokeWidth="4"
+        android:pathData="M116,101 L96,30 Q92,22 104,27 L166,74 Z" />
+    <path android:fillColor="#F7A9A4" android:pathData="M119,87 L108,46 L150,77 Z" />
+    <path android:fillColor="#AD572B" android:pathData="M103,36 L109,60 L118,66 L111,41 Z" />
+    <path android:fillColor="#D97A39" android:strokeColor="#943E22" android:strokeWidth="4"
+        android:pathData="M216,78 L265,28 Q275,19 272,35 L261,119 Z" />
+    <path android:fillColor="#F7A9A4" android:pathData="M231,78 L260,46 L251,95 Z" />
+    <path android:fillColor="#AD572B" android:pathData="M258,43 L247,62 L245,74 L265,36 Z" />
+    <!-- Neck -->
+    <path android:fillColor="#EAB18F" android:pathData="M159,204 L156,240 L137,256 L185,276 L223,253 L200,238 L198,207 Z" />
+    <!-- Oversized cream sweater -->
+    <path android:fillColor="#EFE4D6" android:strokeColor="#D6C4B7" android:strokeWidth="3"
+        android:pathData="M130,244 C115,243 97,254 80,274 C68,291 57,317 54,340 L301,340 C304,316 294,285 278,270 C266,256 239,243 218,246 C207,256 194,266 177,265 C157,263 144,254 130,244 Z" />
+    <!-- Off-shoulder fold -->
+    <path android:fillColor="#F9EEE0" android:strokeColor="#DDC8B6" android:strokeWidth="3"
+        android:pathData="M126,244 C141,253 157,268 181,270 C202,270 218,259 229,244 L246,257 C221,282 197,290 179,289 C155,288 132,276 110,255 Z" />
+    <!-- Cable knitting suggestion -->
+    <path android:fillColor="#00000000" android:strokeColor="#DACCBF" android:strokeWidth="5"
+        android:strokeLineCap="round"
+        android:pathData="M172,292 C154,305 190,313 171,326 M191,295 C207,308 170,316 193,330 M138,292 L140,337 M227,290 L225,337" />
+    <!-- Face with gentle chin -->
+    <path android:fillColor="#F6C4A4" android:strokeColor="#C98970" android:strokeWidth="2"
+        android:pathData="M124,121 C127,93 150,82 180,83 C216,85 241,106 240,146 C239,177 222,216 196,231 Q180,240 164,230 C139,213 122,176 124,145 Z" />
+    <!-- Side locks -->
+    <path android:fillColor="#DE803C" android:pathData="M134,103 C117,132 132,173 135,205 C138,224 126,245 114,254 C113,226 103,202 105,166 C102,132 110,103 134,103 Z" />
+    <path android:fillColor="#D57134" android:pathData="M222,93 C250,113 251,148 246,181 C242,213 258,235 266,246 C237,239 226,218 227,193 C227,166 236,129 222,93 Z" />
+    <!-- Soft cheek blush -->
+    <path android:fillColor="#40E8798C" android:pathData="M133,179 a19,9 0,1 0,38 0 a19,9 0,1 0,-38 0 M201,179 a19,9 0,1 0,38 0 a19,9 0,1 0,-38 0" />
+    <!-- Eyes and lashes -->
+    <path android:fillColor="#4D303A" android:pathData="M132,155 Q150,143 166,156 Q156,153 148,154 Q140,154 132,157 Z M192,156 Q211,143 229,156 Q212,152 205,154 Q198,153 192,158 Z" />
+    <path android:fillColor="#FFF6ED" android:pathData="M135,158 Q150,151 166,158 Q165,177 151,181 Q138,178 135,158 Z M193,158 Q210,151 226,158 Q224,177 211,181 Q197,177 193,158 Z" />
+    <path android:fillColor="#C77B2F" android:pathData="M143,157 a10,14 0,1 0,20 0 a10,14 0,1 0,-20 0 M201,157 a10,14 0,1 0,20 0 a10,14 0,1 0,-20 0" />
+    <path android:fillColor="#4B2C36" android:pathData="M149,157 a4,12 0,1 0,8 0 a4,12 0,1 0,-8 0 M207,157 a4,12 0,1 0,8 0 a4,12 0,1 0,-8 0" />
+    <path android:fillColor="#FFFDFC" android:pathData="M147,160 a4,4 0,1 0,8 0 a4,4 0,1 0,-8 0 M205,160 a4,4 0,1 0,8 0 a4,4 0,1 0,-8 0" />
+    <!-- Nose, smile -->
+    <path android:fillColor="#00000000" android:strokeColor="#AE7566" android:strokeWidth="2"
+        android:strokeLineCap="round" android:pathData="M181,177 L178,189 L183,192" />
+    <path android:fillColor="#00000000" android:strokeColor="#8F4A50" android:strokeWidth="2.8"
+        android:strokeLineCap="round" android:pathData="M167,203 Q183,216 198,201" />
+    <!-- Flowy layered bangs -->
+    <path android:fillColor="#E98D43" android:strokeColor="#BD612F" android:strokeWidth="1.5"
+        android:pathData="M118,127 C125,75 158,65 195,68 C227,70 249,98 250,130 C228,117 220,94 213,87 C202,118 175,129 156,128 C173,119 179,105 180,98 C158,121 136,128 118,127 Z" />
+    <path android:fillColor="#F4A656" android:pathData="M125,117 C140,88 160,76 183,76 C165,86 154,110 125,117 Z M191,79 C210,81 225,99 234,116 C209,107 206,91 191,79 Z" />
+    <!-- Black X hairpins -->
+    <path android:fillColor="#00000000" android:strokeColor="#2D252E" android:strokeWidth="5"
+        android:strokeLineCap="round"
+        android:pathData="M221,111 L239,128 M239,111 L221,128 M242,128 L255,140 M255,128 L242,140" />
+    <!-- Paw-bell choker -->
+    <path android:fillColor="#25212A" android:pathData="M156,228 Q180,240 201,226 L202,238 Q178,248 155,239 Z" />
+    <path android:fillColor="#DFA56E" android:pathData="M179,235 a7,7 0,1 0,14 0 a7,7 0,1 0,-14 0" />
+    <path android:fillColor="#6E473A" android:pathData="M184,232 a2,2 0,1 0,4 0 a2,2 0,1 0,-4 0 M181,236 a2,2 0,1 0,4 0 a2,2 0,1 0,-4 0 M187,236 a2,2 0,1 0,4 0 a2,2 0,1 0,-4 0" />
+</vector>

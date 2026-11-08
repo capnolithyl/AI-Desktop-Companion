@@ -4,17 +4,20 @@ import remarkGfm from "remark-gfm";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { webContext, pageContext, type PageDocument, type WebResult } from "./web-search";
 import { priorResearchSources } from "./research-context";
+import { planResearch, stripUnsupportedCitations } from "./research-routing";
+import { verifyResearchAnswer } from "./evidence-verification";
+import { resolveConversationQuestion, needsContextResolution, contextGuidance } from "./conversation-engine";
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { register, unregister } from "@tauri-apps/plugin-global-shortcut";
 import {
   ArrowLeft, ArrowUp, Brain, Cat, Check, Clock3, Copy, History,
-  BookOpen, ExternalLink, HardDrive, LoaderCircle, MessageCircle, RotateCw, Search, Settings2, SlidersHorizontal, Sparkles, Square, SquarePen, X
+  BookOpen, ExternalLink, HardDrive, LoaderCircle, MessageCircle, RotateCw, Search, Settings2, SlidersHorizontal, Sparkles, Square, SquarePen, Volume2, X
 } from "lucide-react";
 import {
-  DEFAULT_SETTINGS, DEFAULT_APPEARANCE, loadPortrait, loadSettings, savePortrait, saveSettings,
-  type Message, type Settings
+  DEFAULT_SETTINGS, DEFAULT_APPEARANCE, DEFAULT_VOICE, loadPortrait, loadSettings, savePortrait, saveSettings,
+  type Message, type Settings, type VoiceSettings
 } from "./storage";
 import {
   PERSONALITY_TRAITS, PERSONALITY_PRESETS,
@@ -25,14 +28,19 @@ import { parseSlashCommand, SLASH_HELP } from "./slash-commands";
 import { runtimeContext } from "./runtime-context";
 import { formatDebugLog, type Diagnostics, type OllamaStats, type ResearchAudit } from "./debug-log";
 import {
-  memoryApi, memoryContext, characterContext, characterAnswerGuidance, readMessageMetadata,
+  memoryApi, prepareMemoryContext, characterContext, characterAnswerGuidance, readMessageMetadata,
   type MemoryConversation, type UserFact, type PersistedMessage,
   type CharacterCategory, type CharacterFact
 } from "./memory-client";
 import { MemoryPanel } from "./MemoryPanel";
+import { toSpeechText, VOICE_TEST_LINE } from "./speech";
+import { memoryBudget, sessionMemoryContext, type SessionSummary } from "./memory-budget";
+import { sessionSummaryPrompt, mergeSessionSummary, validSessionSummaryResponse } from "./session-memory";
 
 type Screen = "compact" | "log" | "settings" | "search" | "page" | "personality" | "help" | "memory";
-type SettingsTab = "ai" | "internet" | "appearance";
+type SettingsTab = "ai" | "internet" | "voice" | "appearance";
+type VoiceHealth = { ready: boolean; modelLoaded: boolean; device: string | null };
+type VoiceReference = { configured: boolean; transcript: string | null; durationSeconds: number | null };
 type SearchService = { state: string; message: string };
 type CacheInfo = { pages: number; bytes: number };
 type Activity = { requestId: string; text: string };
@@ -181,7 +189,9 @@ export default function App() {
   const [messages, setMessages] = useState<LogMessage[]>([]);
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
   const [conversations, setConversations] = useState<MemoryConversation[]>([]);
+  const [sessionSummaries, setSessionSummaries] = useState<SessionSummary[]>([]);
   const [userFacts, setUserFacts] = useState<UserFact[]>([]);
+  const [advancedMemoryStatus, setAdvancedMemoryStatus] = useState<{ready: boolean; reason?: string; provider?: string} | null>(null);
   const [characterFacts, setCharacterFacts] = useState<CharacterFact[]>([]);
   const [memoryReady, setMemoryReady] = useState(false);
   const [memoryError, setMemoryError] = useState<string | null>(null);
@@ -209,9 +219,169 @@ export default function App() {
   const portraitUrl = useRef<string | null>(null);
   const activeRequestId = useRef<string | null>(null);
   const automaticMemoryQueue = useRef<Promise<void>>(Promise.resolve());
+  const sessionMemoryQueue = useRef<Promise<void>>(Promise.resolve());
   const stopRequested = useRef(false);
+  const [voiceState, setVoiceState] = useState<"idle" | "synthesizing" | "playing">("idle");
+  const [voiceError, setVoiceError] = useState<string | null>(null);
+  const [voiceHealth, setVoiceHealth] = useState<VoiceHealth | null>(null);
+  const [voiceChecking, setVoiceChecking] = useState(false);
+  const [voiceReference, setVoiceReference] = useState<VoiceReference | null>(null);
+  const [referenceFile, setReferenceFile] = useState<File | null>(null);
+  const [referenceText, setReferenceText] = useState("");
+  const [referenceBusy, setReferenceBusy] = useState(false);
+  const voiceSerial = useRef(0);
+  const voiceAudio = useRef<HTMLAudioElement | null>(null);
+  const voiceUrl = useRef<string | null>(null);
+
+  const releaseVoiceAudio = useCallback(() => {
+    if (voiceAudio.current) {
+      voiceAudio.current.onended = null;
+      voiceAudio.current.onerror = null;
+      voiceAudio.current.pause();
+      voiceAudio.current.removeAttribute("src");
+      voiceAudio.current = null;
+    }
+    if (voiceUrl.current) {
+      URL.revokeObjectURL(voiceUrl.current);
+      voiceUrl.current = null;
+    }
+  }, []);
+  const stopSpeech = useCallback(() => {
+    voiceSerial.current += 1;
+    releaseVoiceAudio();
+    setVoiceState("idle");
+  }, [releaseVoiceAudio]);
+  useEffect(() => () => {
+    voiceSerial.current += 1;
+    releaseVoiceAudio();
+  }, [releaseVoiceAudio]);
+
+  const speak = useCallback(async (source: string, voice: VoiceSettings = settings.voice) => {
+    stopSpeech();
+    const text = toSpeechText(source);
+    if (!text) {
+      setVoiceError("This reply has no speakable text.");
+      return;
+    }
+    const serial = voiceSerial.current;
+    setVoiceError(null);
+    setVoiceState("synthesizing");
+    try {
+      const encoded = await invoke<string>("voice_synthesize", {
+        endpoint: voice.endpoint, text, voicePrompt: voice.prompt
+      });
+      if (serial !== voiceSerial.current) return;
+      const bytes = Uint8Array.from(atob(encoded), character => character.charCodeAt(0));
+      const url = URL.createObjectURL(new Blob([bytes], { type: "audio/wav" }));
+      voiceUrl.current = url;
+      const player = new Audio(url);
+      voiceAudio.current = player;
+      player.playbackRate = voice.speed;
+      player.onended = () => {
+        if (serial === voiceSerial.current) {
+          releaseVoiceAudio();
+          setVoiceState("idle");
+        }
+      };
+      player.onerror = () => {
+        if (serial === voiceSerial.current) {
+          releaseVoiceAudio();
+          setVoiceState("idle");
+          setVoiceError("Windows could not play the generated WAV audio.");
+        }
+      };
+      await player.play();
+      if (serial === voiceSerial.current) setVoiceState("playing");
+    } catch (error) {
+      if (serial !== voiceSerial.current) return;
+      releaseVoiceAudio();
+      setVoiceState("idle");
+      setVoiceError(errorText(error));
+    }
+  }, [releaseVoiceAudio, settings.voice, stopSpeech]);
+
+  const checkVoice = async (endpoint: string) => {
+    setVoiceChecking(true);
+    setVoiceError(null);
+    setVoiceHealth(null);
+    setVoiceReference(null);
+    try {
+      const status = await invoke<VoiceHealth>("voice_health", { endpoint });
+      if (!status.ready) throw new Error("Voice service is not ready.");
+      const saved = await invoke<VoiceReference>("voice_reference_status", { endpoint });
+      setVoiceHealth(status);
+      setVoiceReference(saved);
+      setReferenceText(saved.transcript ?? "");
+    } catch (error) {
+      setVoiceError(errorText(error));
+    } finally {
+      setVoiceChecking(false);
+    }
+  };
+
+  const saveVoiceReference = async () => {
+    if (!referenceFile || referenceBusy) return;
+    if (referenceFile.size > 6 * 1024 * 1024 || referenceFile.size < 44) {
+      setVoiceError("Select a WAV reference under 6 MB.");
+      return;
+    }
+    if (!referenceText.trim() || referenceText.trim().length > 2000) {
+      setVoiceError("Enter the exact spoken transcript (1–2000 characters).");
+      return;
+    }
+    setReferenceBusy(true);
+    setVoiceError(null);
+    stopSpeech();
+    try {
+      const audioBase64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const data = reader.result;
+          if (typeof data !== "string" || !data.includes(",")) reject(new Error("Cannot read reference WAV."));
+          else resolve(data.slice(data.indexOf(",") + 1));
+        };
+        reader.onerror = () => reject(reader.error ?? new Error("Could not read WAV."));
+        reader.readAsDataURL(referenceFile);
+      });
+      const saved = await invoke<VoiceReference>("voice_save_reference", {
+        endpoint: draft.voice.endpoint, audioBase64, refText: referenceText
+      });
+      setVoiceReference(saved);
+      setReferenceFile(null);
+      setReferenceText(saved.transcript ?? "");
+    } catch (error) {
+      setVoiceError(errorText(error));
+    } finally {
+      setReferenceBusy(false);
+    }
+  };
+
+  const removeVoiceReference = async () => {
+    if (referenceBusy) return;
+    setReferenceBusy(true);
+    setVoiceError(null);
+    stopSpeech();
+    try {
+      const cleared = await invoke<VoiceReference>("voice_delete_reference", { endpoint: draft.voice.endpoint });
+      setVoiceReference(cleared);
+      setReferenceFile(null);
+      setReferenceText("");
+    } catch (error) {
+      setVoiceError(errorText(error));
+    } finally {
+      setReferenceBusy(false);
+    }
+  };
 
   useEffect(() => { setCopyLogState("idle"); }, [messages, screen]);
+  const refreshAdvancedMemoryStatus = () => {
+    void invoke<{ready:boolean; reason?:string; provider?:string}>("memory_semantic_status")
+      .then(setAdvancedMemoryStatus)
+      .catch(() => setAdvancedMemoryStatus({ready:false,reason:"Unavailable"}));
+  };
+  useEffect(() => {
+    if (screen === "settings" && settingsTab === "ai") refreshAdvancedMemoryStatus();
+  }, [screen, settingsTab]);
 
   const focusInput = useCallback(() => {
     requestAnimationFrame(() => inputRef.current?.focus());
@@ -324,10 +494,12 @@ export default function App() {
       try {
         // Initialize the SQLite schema on one connection before reading facts.
         const archive = await memoryApi.listConversations();
+        const summaries = await memoryApi.listSessionSummaries();
         const facts = await memoryApi.listFacts();
         const canon = await memoryApi.listCharacterFacts();
         if (disposed) return;
         setConversations(archive);
+        setSessionSummaries(summaries);
         setUserFacts(facts);
         setCharacterFacts(canon);
         const latest = archive[0];
@@ -352,6 +524,9 @@ export default function App() {
   };
   const refreshFacts = async () => {
     setUserFacts(await memoryApi.listFacts());
+  };
+  const refreshSummaries = async () => {
+    setSessionSummaries(await memoryApi.listSessionSummaries());
   };
   const refreshCharacter = async () => {
     setCharacterFacts(await memoryApi.listCharacterFacts());
@@ -396,11 +571,37 @@ export default function App() {
         setAutomaticMemoryError(`Automatic memory extraction failed: ${errorText(error)}`);
       });
   };
+  const queueSessionMemory = (conversationId: string, force = false) => {
+    const opts = {endpoint:settings.endpoint,model:settings.model,contextWindow:settings.contextWindow};
+    sessionMemoryQueue.current = sessionMemoryQueue.current.catch(() => {}).then(async () => {
+      // Model calls for persistent memories and session summaries are serialized.
+      // Neither a missing model nor a malformed summary can block chatting.
+      await automaticMemoryQueue.current.catch(() => {});
+      const candidate = await memoryApi.sessionCandidate(conversationId, force);
+      if (!candidate) return;
+      const raw = await invoke<string>("condense_local_context", {
+        ...opts, prompt:sessionSummaryPrompt(candidate), maxOutputTokens:480
+      });
+      if (!validSessionSummaryResponse(raw)) return;
+      const grounded = mergeSessionSummary(candidate,raw);
+      // Even a session without useful notes advances its watermark, avoiding
+      // a fresh LLM summary request on every subsequent turn.
+      const summary = grounded || candidate.previousSummary || "- No durable session notes";
+      if (await memoryApi.saveSessionSummary(candidate,summary)) {
+        await refreshSummaries();
+      }
+    }).catch(error => {
+      console.warn("Optional local session summary skipped:", errorText(error));
+    });
+  };
+
   const refreshMemory = async () => {
-    const [archive, facts, canon] = await Promise.all([
-      memoryApi.listConversations(), memoryApi.listFacts(), memoryApi.listCharacterFacts()
+    const [archive, facts, canon, summaries] = await Promise.all([
+      memoryApi.listConversations(), memoryApi.listFacts(),
+      memoryApi.listCharacterFacts(), memoryApi.listSessionSummaries()
     ]);
     setConversations(archive);
+    setSessionSummaries(summaries);
     setUserFacts(facts);
     setCharacterFacts(canon);
     setMemoryError(null);
@@ -408,18 +609,34 @@ export default function App() {
   const addUserFact = async (fact: string) => {
     await memoryApi.addFact(fact);
     await refreshFacts();
+    // Sync the owner-controlled mirror after a manual edit. The conversation
+    // stays usable if the optional Mem0 process is offline.
+    void invoke("memory_semantic_recall", {query:""}).catch(() => {});
     setMemoryError(null);
   };
   const editUserFact = async (id: number, fact: string) => {
     await memoryApi.updateFact(id, fact);
     await refreshFacts();
+    void invoke("memory_semantic_recall", {query:""}).catch(() => {});
+  };
+  const pinUserFact = async (id: number, pinned: boolean) => {
+    await memoryApi.pinFact(id,pinned);
+    await refreshFacts();
   };
   const deleteUserFact = async (id: number) => {
     await memoryApi.deleteFact(id);
     await refreshFacts();
+    void invoke("memory_semantic_recall", {query:""}).catch(() => {});
+  };
+  const deleteSessionNotes = async (conversationId: string) => {
+    await memoryApi.deleteSessionSummary(conversationId);
+    await refreshSummaries();
   };
   const openConversation = async (id: string) => {
     if (busy) return;
+    if (activeConversationId && activeConversationId !== id) {
+      queueSessionMemory(activeConversationId, true);
+    }
     const stored = await memoryApi.listMessages(id);
     setMessages(stored.map(restoreMessage));
     setActiveConversationId(id);
@@ -444,6 +661,7 @@ export default function App() {
 
   const clearChat = () => {
     if (busy || !memoryReady) return;
+    if (activeConversationId) queueSessionMemory(activeConversationId,true);
     setMessages([]);
     setActiveConversationId(null);
     setFeedback(null);
@@ -536,11 +754,14 @@ export default function App() {
       model: draft.model.trim(),
       systemPrompt: draft.systemPrompt.trim(),
       searxngEndpoint: draft.searxngEndpoint.trim().replace(/\/+$/, ""),
+      voice: { ...draft.voice, endpoint: draft.voice.endpoint.trim().replace(/\/+$/, "") },
       appearance: { ...draft.appearance },
       personality: { ...settings.personality }
     };
+    stopSpeech();
     setSettings(updated);
     saveSettings(updated);
+    setVoiceHealth(null);
     goCompact();
   };
 
@@ -783,6 +1004,7 @@ export default function App() {
   };
 
   const stopGeneration = async () => {
+    stopSpeech();
     const requestId = activeRequestId.current;
     if (!requestId || stopRequested.current) return;
     stopRequested.current = true;
@@ -809,10 +1031,13 @@ export default function App() {
 
     if (busy) return;
     if (!memoryReady) { setFeedback("Loading conversation memory…"); return; }
+    stopSpeech();
     setFeedback(null);
     const user: LogMessage = { id: crypto.randomUUID(), role: "user", content: text, createdAt: Date.now() };
     const assistantId = crypto.randomUUID();
     const history = [...messages, user];
+    // Shared routing policy: keep the proven desktop query construction in Rust.
+    let researchPlan = !withSearch ? planResearch(text, messages) : null;
     const priorSources = !withSearch ? priorResearchSources(messages, text) : [];
     const conversationId = activeConversationId ?? crypto.randomUUID();
     setActiveConversationId(conversationId);
@@ -847,6 +1072,41 @@ export default function App() {
 
     try {
       await persistMessage(user);
+      // Always refresh authoritative SQLite facts before answering. Optional
+      // Mem0 OSS reorders facts by meaning (e.g. "website" => WordPress skills).
+      // With no sidecar, the Rust command returns [] and normal chat continues.
+      setActivity("Recalling relevant context…");
+      const liveFacts = await memoryApi.listFacts().catch(() => userFacts);
+      const semanticMatches = await invoke<Array<{id:number; fact:string; score:number|null}>>(
+        "memory_semantic_recall", { query: text }
+      ).catch(() => []);
+      const semanticIds = semanticMatches.map(entry => entry.id);
+      if (liveFacts !== userFacts) setUserFacts(liveFacts);
+      const budget = memoryBudget(settings.contextWindow);
+      const remembered = prepareMemoryContext(liveFacts,text,semanticIds,budget);
+      const archivedSessions = await memoryApi.listSessionSummaries().catch(() => sessionSummaries);
+      const currentSession = archivedSessions.find(s => s.conversationId === conversationId) ?? null;
+      const earlierSessions = archivedSessions.filter(s => s.conversationId !== conversationId);
+      const sessionNotes = sessionMemoryContext(text,currentSession,earlierSessions,budget);
+      if (!withSearch && settings.autoSearch && researchPlan && researchPlan.mode !== "chat" &&
+          needsContextResolution(text, messages)) {
+        setActivity("Understanding follow-up…");
+        const resolved = await resolveConversationQuestion(text, messages,
+          prompt => invoke<string>("condense_local_context", {
+            endpoint: settings.endpoint, model: settings.model,
+            prompt, contextWindow: settings.contextWindow
+          }));
+        if (resolved.rewritten) {
+          const updated = planResearch(resolved.standaloneQuestion, messages);
+          researchPlan = {
+            // Context-dependent factual dates need a fresh grounded lookup.
+            // Otherwise the tool planner may answer from stale chat instead.
+            mode: "research",
+            query: resolved.standaloneQuestion,
+            recent: researchPlan.recent || updated.recent
+          };
+        }
+      }
       unlistenActivity = await listen<Activity>("mikan://activity", event => {
         if (event.payload.requestId === requestId) setActivity(event.payload.text);
       });
@@ -854,10 +1114,16 @@ export default function App() {
         if (event.payload.requestId !== requestId || !event.payload.content) return;
         if (firstTokenMs == null) firstTokenMs = performance.now() - started;
         accumulated += event.payload.content;
-        const currentText = accumulated;
-        setMessages(current => current.map(m =>
-          m.id === assistantId ? { ...m, content: currentText } : m
-        ));
+        // Source-bearing drafts remain private until the evidence check finishes.
+        // Streaming an unverified invented release date is misleading.
+        const researchAnswer = !!withSearch ||
+          (settings.autoSearch && researchPlan !== null && researchPlan.mode !== "chat");
+        if (!researchAnswer) {
+          const currentText = accumulated;
+          setMessages(current => current.map(m =>
+            m.id === assistantId ? { ...m, content: currentText } : m
+          ));
+        }
       });
 
       const completion = await invoke<ChatCompletion>("chat_stream", {
@@ -867,14 +1133,18 @@ export default function App() {
           model: settings.model,
           autoSearch: settings.autoSearch && !withSearch,
           structuredResearch: settings.structuredResearch,
+          // These hints come from shared TypeScript rules used by Pocket too.
+          // Rust still owns SearXNG query refinement, retries and web tools.
+          researchRoute: researchPlan?.mode,
+          researchQuery: researchPlan?.mode === "research" ? researchPlan.query : undefined,
           searxngEndpoint: settings.searxngEndpoint,
           cacheHours: settings.cacheHours,
           contextWindow: settings.contextWindow,
           priorSources,
           messages: [
-            { role: "system", content: [settings.systemPrompt.trim(), personalityGuidance(settings.personality), runtimeContext(), memoryContext(userFacts, text), characterContext(characterFacts, text), characterAnswerGuidance(text)].filter(Boolean).join("\n\n") },
+            { role: "system", content: [settings.systemPrompt.trim(), personalityGuidance(settings.personality), runtimeContext(), remembered.text, sessionNotes, characterContext(characterFacts, text), characterAnswerGuidance(text), researchPlan?.mode !== "chat" ? contextGuidance(messages, text, 1800) : ""].filter(Boolean).join("\n\n") },
             ...(withSearch ? [{ role: "user", content: withSearch.page ? pageContext(withSearch.query, withSearch.page) : webContext(withSearch.query, withSearch.results) }] : []),
-            ...history.filter(m => !withSearch || m.role === "user").slice(-32).map(m => ({ role: m.role, content: m.content }))
+            ...history.filter(m => !withSearch || m.role === "user").slice(-budget.recentTurns).map(m => ({ role: m.role, content: m.content }))
           ]
         }
       });
@@ -886,16 +1156,24 @@ export default function App() {
         stats: completion.stats,
         research: completion.researchAudit ?? undefined
       };
-      const finalText = completion.content || accumulated || "(The model returned no visible text.)";
+      const verifiedSources = completion.sources?.length ? completion.sources : withSearch?.results;
+      const rawText = completion.content || accumulated || "(The model returned no visible text.)";
+      const finalText = verifiedSources?.length
+        ? verifyResearchAnswer(rawText, verifiedSources).text : stripUnsupportedCitations(rawText);
       const assistant: LogMessage = {
         id: assistantId, role: "assistant", content: finalText, createdAt: Date.now(),
-        diagnostics, sources: completion.sources?.length ? completion.sources : withSearch?.results,
+        diagnostics, sources: verifiedSources,
         searchQuery: completion.searchQuery || withSearch?.query,
         sourcesCarriedOver: completion.sourcesCarriedOver === true
       };
       setMessages(current => current.map(m => m.id === assistantId ? assistant : m));
       await persistMessage(assistant);
+      if (remembered.ids.length) {
+        void memoryApi.markRecalled(remembered.ids).catch(() => {});
+      }
       queueAutomaticMemory(conversationId, user.id, assistant.id);
+      queueSessionMemory(conversationId);
+      if (settings.voice.autoSpeak) void speak(finalText);
     } catch (error) {
       const message = errorText(error);
       const stopped = message === "Generation stopped" || stopRequested.current;
@@ -983,12 +1261,20 @@ export default function App() {
               onClick={() => setScreen("personality")}><SlidersHorizontal size={17}/></button>
             <button className="dock-icon" title="Memory and conversations (/memories)" aria-label="Memory and conversations"
               onClick={() => openMemory("facts")}><Brain size={17}/></button>
+            <button type="button" className="dock-icon" disabled={!lastReply?.content || lastReply.failed}
+              title={voiceState === "idle" ? "Speak latest reply" : voiceState === "synthesizing" ? "Cancel pending speech" : "Stop speech"}
+              aria-label={voiceState === "idle" ? "Speak latest reply" : "Stop speech"}
+              onClick={() => voiceState === "idle" ? void speak(lastReply?.content ?? "") : stopSpeech()}>
+              {voiceState === "synthesizing" ? <LoaderCircle className="spin" size={17}/> :
+                voiceState === "playing" ? <Square size={15} fill="currentColor"/> : <Volume2 size={17}/>}
+            </button>
             <button className="dock-icon" title="Conversation log (/log)" aria-label="Conversation log" onClick={() => setScreen("log")}><History size={17}/></button>
             <button className="dock-icon" title="Settings (/settings)" aria-label="Settings" onClick={openSettings}><Settings2 size={17}/></button>
             <button className="dock-icon" title="Hide Mikan" aria-label="Hide Mikan" onClick={() => void invoke("hide_companion")}><X size={18}/></button>
           </div>
         </div>
         <div className="latest-reply"><MarkdownText text={replyText}/></div>
+        {voiceError && <div className="voice-error" role="alert">Voice: {voiceError}</div>}
       </div>
       <div className="input-row">
         <textarea
@@ -1073,6 +1359,8 @@ export default function App() {
         {messages.map(m => <article key={m.id} className={`log-message ${m.role}`}>
           <div className="log-message-header">
             <strong>{m.role === "user" ? "YOU" : "MIKAN"}</strong>
+            {m.role === "assistant" && !m.failed && !!m.content && <button type="button" className="voice-log-action"
+              title="Read this message aloud" onClick={() => void speak(m.content)}><Volume2 size={13}/> Speak</button>}
             <time>{new Date(m.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</time>
           </div>
           <div className={m.failed ? "message-error message-content" : "message-content"}><MarkdownText text={m.content || (busy ? "Thinking…" : "")}/></div>
@@ -1198,14 +1486,14 @@ export default function App() {
     </section>}
 
     {screen === "memory" && <MemoryPanel key={memoryInitialTab} initialTab={memoryInitialTab}
-      conversations={conversations} facts={userFacts} characterFacts={characterFacts} currentId={activeConversationId}
+      conversations={conversations} sessionSummaries={sessionSummaries} facts={userFacts} characterFacts={characterFacts} currentId={activeConversationId}
       autoRememberUser={settings.autoRememberUser} autoRememberMikan={settings.autoRememberMikan}
       onAutoRememberUserChange={enabled => applySetting({autoRememberUser: enabled})}
       onAutoRememberMikanChange={enabled => applySetting({autoRememberMikan: enabled})}
       automaticError={automaticMemoryError}
       busy={busy} error={memoryError} onClose={goCompact} onNew={clearChat}
-      onOpen={openConversation} onDeleteChat={deleteConversation}
-      onAddFact={addUserFact} onEditFact={editUserFact} onDeleteFact={deleteUserFact}
+      onOpen={openConversation} onDeleteChat={deleteConversation} onDeleteSessionSummary={deleteSessionNotes}
+      onAddFact={addUserFact} onEditFact={editUserFact} onDeleteFact={deleteUserFact} onPinFact={pinUserFact}
       onAddCharacter={addCharacter} onEditCharacter={editCharacter} onDeleteCharacter={deleteCharacter}
       onRefresh={refreshMemory}/>}
 
@@ -1245,7 +1533,7 @@ export default function App() {
     {screen === "settings" && <section className="drawer" role="dialog" aria-label="Mikan settings">
       <header className="drawer-header">
         <button className="back-button" title="Back to companion" onClick={goCompact}><ArrowLeft size={19}/></button>
-        <div className="drawer-title"><strong>Settings</strong><span>Mikan v0.7.0 · Local first</span></div>
+        <div className="drawer-title"><strong>Settings</strong><span>Mikan Desktop · Local first</span></div>
         <button className="secondary-action" onClick={() => setDraft(current => ({
           ...current,
           ...(settingsTab === "ai" ? {
@@ -1254,13 +1542,14 @@ export default function App() {
             contextWindow: DEFAULT_SETTINGS.contextWindow
           } : settingsTab === "internet" ? {
             searxngEndpoint: DEFAULT_SETTINGS.searxngEndpoint, autoSearch: false, cacheHours: 24
-          } : { appearance: { ...DEFAULT_APPEARANCE } })
+          } : settingsTab === "voice" ? { voice: { ...DEFAULT_VOICE } }
+            : { appearance: { ...DEFAULT_APPEARANCE } })
         }))}><RotateCw size={14}/> Reset tab</button>
       </header>
       <nav className="settings-tabs" aria-label="Settings categories">
-        {([["ai", "AI & Models"], ["internet", "Internet"], ["appearance", "Appearance"]] as const).map(([tab, label]) =>
+        {([["ai", "AI & Models"], ["internet", "Internet"], ["voice", "Voice"], ["appearance", "Appearance"]] as const).map(([tab, label]) =>
           <button type="button" key={tab} className={settingsTab === tab ? "settings-tab active" : "settings-tab"}
-            onClick={() => { setSettingsTab(tab); if (tab === "internet") { void refreshService(); void refreshCache(); } }}>
+            onClick={() => { setSettingsTab(tab); if (tab === "internet") { void refreshService(); void refreshCache(); } if (tab === "voice") void checkVoice(draft.voice.endpoint); }}>
             {label}
           </button>
         )}
@@ -1307,6 +1596,19 @@ export default function App() {
           </label>
           <button type="button" className="secondary-action"
             onClick={() => setScreen("personality")}><SlidersHorizontal size={15}/> Open Personality controls</button>
+          <div className="settings-section-title"><Brain size={17}/> Advanced personal memory (Mem0 OSS)</div>
+          <div className="service-panel">
+            <div><strong>Semantic recall · local</strong>
+              <span className={advancedMemoryStatus?.ready ? "service-running" : "service-muted"}>
+                {advancedMemoryStatus === null ? "Checking…" : advancedMemoryStatus.ready
+                  ? "Ready · Mem0 + Ollama" : advancedMemoryStatus.reason || "Not running"}
+              </span>
+            </div>
+            <button type="button" className="secondary-action"
+              onClick={refreshAdvancedMemoryStatus}><RotateCw size={14}/> Check status</button>
+            <small>Optional real Mem0 semantic retrieval. Uses your editable SQLite facts and local Ollama, never a cloud account. Run the bundled advanced-memory setup script once to enable it. If unavailable, ordinary SQLite recall continues unchanged.</small>
+          </div>
+
         </>}
         {settingsTab === "internet" && <>
           <div className="settings-section-title">Local search service</div>
@@ -1373,6 +1675,82 @@ export default function App() {
             }}>Clear cache</button>
           </div>
           <button type="button" className="inline-action" onClick={() => void openPage("")}><BookOpen size={14}/> Open webpage reader</button>
+        </>}
+        {settingsTab === "voice" && <>
+          <div className="settings-section-title"><Volume2 size={17}/> Local voice · Qwen3-TTS</div>
+          <div className="settings-note">First version requires running the optional Python service from tools/tts.
+            Save one voice sample to keep Mikan recognizable. Without a reference, VoiceDesign generates a different possible speaker each time.</div>
+          <label className="setting-field">Local speech server
+            <input spellCheck={false} value={draft.voice.endpoint}
+              onChange={event => { setDraft(current => ({ ...current, voice: { ...current.voice, endpoint: event.target.value } })); setVoiceHealth(null); setVoiceReference(null); }}
+              placeholder="http://127.0.0.1:8765"/>
+            <small>HTTP localhost only. Install/start instructions: tools/tts/README.md</small>
+          </label>
+          <div className="service-panel">
+            <div><strong>{voiceHealth?.ready ? "Voice server responding" : "Local voice service"}</strong>
+              <small>{voiceHealth?.ready
+                ? (voiceHealth.modelLoaded ? `Model loaded on ${voiceHealth.device || "configured device"}` : "Server online · model loads on first speech")
+                : "No connection checked yet. Starting the server is manual in this prototype."}</small></div>
+            <div className="service-buttons">
+              <button type="button" className="secondary-action" disabled={voiceChecking}
+                onClick={() => void checkVoice(draft.voice.endpoint)}>
+                {voiceChecking ? <LoaderCircle size={14} className="spin"/> : <RotateCw size={14}/>} Check connection</button>
+              <button type="button" className="secondary-action" disabled={voiceState !== "idle"}
+                onClick={() => void speak(VOICE_TEST_LINE, draft.voice)}><Volume2 size={14}/> Test voice</button>
+              {voiceState !== "idle" && <button type="button" className="secondary-action"
+                onClick={stopSpeech}><Square size={13}/> Stop</button>}
+            </div>
+            {voiceError && <small className="field-error" role="alert">{voiceError}</small>}
+          </div>
+          <div className="settings-section-title">Saved voice identity</div>
+          <div className="service-panel">
+            <div>
+              <strong>{voiceReference?.configured ? "Mikan's reference voice is saved" : "No reference voice saved"}</strong>
+              <small>{voiceReference?.configured
+                ? `Cloning enabled with Qwen3-TTS Base · ${voiceReference.durationSeconds ?? "?"} seconds of reference audio`
+                : "VoiceDesign will be used until you save a sample and matching transcript."}</small>
+            </div>
+            {voiceReference?.configured && <div className="voice-reference-transcript">
+              <strong>Stored transcript</strong><small>{voiceReference.transcript}</small>
+            </div>}
+            <label className="setting-field voice-reference-field">Reference audio · WAV
+              <input type="file" accept=".wav,audio/wav,audio/x-wav" disabled={referenceBusy}
+                onChange={event => setReferenceFile(event.target.files?.[0] ?? null)}/>
+              <small>Prefer clean 5–15 second voice samples. Mono PCM16, 2–30 seconds, under 6 MB.</small>
+            </label>
+            <label className="setting-field voice-reference-field">Exactly what she says in the recording
+              <textarea rows={4} maxLength={2000} value={referenceText} disabled={referenceBusy}
+                placeholder="Paste the exact words spoken in the clip"
+                onChange={event => setReferenceText(event.target.value)}/>
+              <small>Matching transcript and audio improve the cloning result.</small>
+            </label>
+            <div className="service-buttons">
+              <button type="button" className="secondary-action"
+                disabled={!referenceFile || !referenceText.trim() || referenceBusy || voiceChecking}
+                onClick={() => void saveVoiceReference()}>
+                {referenceBusy ? <LoaderCircle size={14} className="spin"/> : <Check size={14}/>}
+                {voiceReference?.configured ? "Replace reference" : "Save reference"}
+              </button>
+              {voiceReference?.configured && <button type="button" className="secondary-action"
+                disabled={referenceBusy} onClick={() => void removeVoiceReference()}>Remove reference</button>}
+            </div>
+            <small>The reference stays on your PC, not in an online voice service.</small>
+          </div>
+          <label className="settings-toggle">
+            <input type="checkbox" checked={draft.voice.autoSpeak}
+              onChange={event => setDraft(current => ({ ...current, voice: { ...current.voice, autoSpeak: event.target.checked } }))}/>
+            <span><strong>Speak new replies automatically</strong>
+              <small>Off by default. You can always use the speaker icon on a reply.</small></span>
+          </label>
+          <label className="setting-field">VoiceDesign description (when no reference is saved)
+            <textarea rows={6} value={draft.voice.prompt} maxLength={650}
+              onChange={event => setDraft(current => ({ ...current, voice: { ...current.voice, prompt: event.target.value } }))}/>
+            <small>Once a reference is saved, Base cloning uses that voice instead of inventing a new one.</small>
+          </label>
+          <label className="setting-field">Playback speed · {draft.voice.speed.toFixed(2)}×
+            <input type="range" min="0.8" max="1.2" step="0.05" value={draft.voice.speed}
+              onChange={event => setDraft(current => ({ ...current, voice: { ...current.voice, speed: Number(event.target.value) } }))}/>
+          </label>
         </>}
         {settingsTab === "appearance" && <>
           <div className="settings-section-title">Character</div>

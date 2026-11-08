@@ -7,6 +7,9 @@ mod source_enrichment;
 mod evidence_pack;
 mod memory;
 mod memory_extraction;
+mod advanced_memory;
+mod session_memory;
+mod voice;
 use futures_util::{future::{AbortHandle, Abortable}, StreamExt};
 use std::{collections::HashMap, sync::Mutex};
 use serde::{Deserialize, Serialize};
@@ -35,6 +38,12 @@ struct ChatRequest {
     auto_search: bool,
     #[serde(default = "default_structured_research")]
     structured_research: bool,
+    // The same TypeScript intent policy is used by Android and desktop.
+    // Older API callers omit these and keep the original Rust behavior.
+    #[serde(default)]
+    research_route: Option<String>,
+    #[serde(default)]
+    research_query: Option<String>,
     #[serde(default)]
     searxng_endpoint: String,
     #[serde(default = "default_cache_hours")]
@@ -138,6 +147,48 @@ async fn list_models(endpoint: String) -> Result<Vec<String>, String> {
     Ok(names)
 }
 
+/// Optional local-only condensed-question pass. We call it only for ambiguous
+/// factual follow-ups; ordinary conversation and manual commands stay fast.
+#[tauri::command]
+async fn condense_local_context(
+    endpoint: String,
+    model: String,
+    prompt: String,
+    context_window: Option<u32>,
+    max_output_tokens: Option<u32>,
+) -> Result<String, String> {
+    if model.trim().is_empty() || model.len() > 120 || prompt.len() > 5500 {
+        return Err("Invalid context request".into());
+    }
+    let url = format!("{}/api/chat", local_origin(&endpoint)?);
+    let output_limit = max_output_tokens.unwrap_or(190).clamp(64, 500);
+    let mut options = json!({"temperature": 0, "num_predict": output_limit});
+    if let Some(ctx) = valid_context_window(context_window) {
+        options["num_ctx"] = json!(ctx);
+    }
+    let payload = json!({
+        "model": model,
+        "stream": false,
+        "think": false,
+        "format": "json",
+        "options": options,
+        "messages": [{"role":"user","content":prompt}]
+    });
+    let response = client()?
+        .post(url)
+        .json(&payload)
+        .timeout(Duration::from_secs(if output_limit > 200 { 55 } else { 35 }))
+        .send()
+        .await
+        .map_err(|e| format!("Local context resolution unavailable: {e}"))?;
+    if !response.status().is_success() {
+        return Err(format!("Local context resolution returned HTTP {}", response.status()));
+    }
+    let output: Value = response.json().await
+        .map_err(|e| format!("Invalid local context response: {e}"))?;
+    Ok(output["message"]["content"].as_str().unwrap_or("").chars().take(3600).collect())
+}
+
 fn process_line(
     app: &tauri::AppHandle,
     request_id: &str,
@@ -235,9 +286,13 @@ async fn chat_stream_impl(
     let mut research_audit = None;
     let selected_context = valid_context_window(request.context_window);
     let previous_sources = research_intent::clean_prior_sources(&request.prior_sources);
-    let explicit_query = request.auto_search
-        .then(|| research_intent::explicit_research_query(&messages))
-        .flatten();
+    let explicit_query = request.auto_search.then(|| {
+        research_intent::routed_research_query(
+            &messages,
+            request.research_route.as_deref(),
+            request.research_query.as_deref(),
+        )
+    }).flatten();
     // A forecast about an already researched topic needs the cited evidence,
     // not another non-streaming tool-planning pass. Explicit searches still run.
     let reuse_prediction_evidence = explicit_query.is_none()
@@ -324,6 +379,10 @@ async fn chat_stream_impl(
             // shown in the UI. Avoid an uncited answer from tool preflight.
             sources = previous_sources.clone();
             sources_carried_over = true;
+        } else if request.research_route.as_deref() == Some("chat") {
+            // Ordinary conversation doesn't need a non-streaming Ollama tool
+            // planning call. Keep this fast and don't send private chat online.
+            // Earlier clients without a route still use the original planner.
         } else {
             let plan = agent_tools::prepare(
                 &app, &client, &url, &request.model, &request.request_id,
@@ -518,7 +577,13 @@ pub fn run() {
             web_reader::web_cache_info,
             web_reader::clear_web_cache,
             chat_stream,
+            condense_local_context,
             cancel_chat,
+            voice::voice_health,
+            voice::voice_synthesize,
+            voice::voice_reference_status,
+            voice::voice_save_reference,
+            voice::voice_delete_reference,
             memory::memory_list_conversations,
             memory::memory_create_conversation,
             memory::memory_list_messages,
@@ -533,10 +598,19 @@ pub fn run() {
             memory::memory_update_character_fact,
             memory::memory_delete_character_fact,
             memory_extraction::memory_process_turn,
+            memory::memory_mark_recalled,
+            memory::memory_pin_fact,
+            session_memory::memory_session_candidate,
+            session_memory::memory_save_session_summary,
+            session_memory::memory_list_session_summaries,
+            session_memory::memory_delete_session_summary,
+            advanced_memory::memory_semantic_recall,
+            advanced_memory::memory_semantic_status,
             toggle_companion,
             hide_companion
         ])
         .setup(|app| {
+            advanced_memory::start_if_installed();
             let show = MenuItem::with_id(app, "show", "Show / Hide Mikan", true, None::<&str>)?;
             let quit = MenuItem::with_id(app, "quit", "Quit Mikan", true, None::<&str>)?;
             let menu = Menu::with_items(app, &[&show, &quit])?;
@@ -546,7 +620,7 @@ pub fn run() {
                 .show_menu_on_left_click(false)
                 .on_menu_event(|app, event| match event.id().as_ref() {
                     "show" => toggle_window(app),
-                    "quit" => app.exit(0),
+                    "quit" => { advanced_memory::stop_if_started(); app.exit(0); },
                     _ => {}
                 })
                 .on_tray_icon_event(|tray, event| {

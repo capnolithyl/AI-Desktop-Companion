@@ -1,0 +1,4 @@
+# Install a PyTorch build compatible with your machine before these packages.
+# Windows AMD ROCm requires separate driver/runtime setup; see README.md.
+qwen-tts
+soundfile
