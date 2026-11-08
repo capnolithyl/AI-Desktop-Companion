@@ -40,7 +40,10 @@ export function decideDesktopTurn(
     allowAutomaticWeb:false,verifyWebEvidence:true
   };
   const isCapability = isSelfKnowledgeQuestion(question) && !explicitPublicResearchTask(question);
-  const plan = isCapability ? chat : planResearch(question,previous);
+  // Questions about Mikan's own previous words are a conversational follow-up,
+  // even when the prior topic happened to be a recent public news event.
+  const isConversationMeta = /^(?:why did you say|what did you mean|why would you say|why are you saying|can you explain what you meant)\b/i.test(question.trim());
+  const plan = isCapability || isConversationMeta ? chat : planResearch(question,previous);
   const useWeb=autoEnabled && plan.mode!=="chat";
   return {
     plan,capabilityQuestion:isCapability,
