@@ -28,11 +28,13 @@ import { parseSlashCommand, SLASH_HELP } from "./slash-commands";
 import { runtimeContext } from "./runtime-context";
 import { formatDebugLog, type Diagnostics, type OllamaStats } from "./debug-log";
 import {
-  memoryApi, memoryContext, characterContext, characterAnswerGuidance, readMessageMetadata,
+  memoryApi, prepareMemoryContext, characterContext, characterAnswerGuidance, readMessageMetadata,
   type MemoryConversation, type UserFact, type PersistedMessage,
   type CharacterCategory, type CharacterFact
 } from "./memory-client";
 import { MemoryPanel } from "./MemoryPanel";
+import { memoryBudget, sessionMemoryContext, type SessionSummary } from "./memory-budget";
+import { sessionSummaryPrompt, mergeSessionSummary, validSessionSummaryResponse } from "./session-memory";
 
 type Screen = "compact" | "log" | "settings" | "search" | "page" | "personality" | "help" | "memory";
 type SettingsTab = "ai" | "internet" | "appearance";
@@ -178,7 +180,9 @@ export default function App() {
   const [messages, setMessages] = useState<LogMessage[]>([]);
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
   const [conversations, setConversations] = useState<MemoryConversation[]>([]);
+  const [sessionSummaries, setSessionSummaries] = useState<SessionSummary[]>([]);
   const [userFacts, setUserFacts] = useState<UserFact[]>([]);
+  const [advancedMemoryStatus, setAdvancedMemoryStatus] = useState<{ready: boolean; reason?: string; provider?: string} | null>(null);
   const [characterFacts, setCharacterFacts] = useState<CharacterFact[]>([]);
   const [memoryReady, setMemoryReady] = useState(false);
   const [memoryError, setMemoryError] = useState<string | null>(null);
@@ -206,9 +210,18 @@ export default function App() {
   const portraitUrl = useRef<string | null>(null);
   const activeRequestId = useRef<string | null>(null);
   const automaticMemoryQueue = useRef<Promise<void>>(Promise.resolve());
+  const sessionMemoryQueue = useRef<Promise<void>>(Promise.resolve());
   const stopRequested = useRef(false);
 
   useEffect(() => { setCopyLogState("idle"); }, [messages, screen]);
+  const refreshAdvancedMemoryStatus = () => {
+    void invoke<{ready:boolean; reason?:string; provider?:string}>("memory_semantic_status")
+      .then(setAdvancedMemoryStatus)
+      .catch(() => setAdvancedMemoryStatus({ready:false,reason:"Unavailable"}));
+  };
+  useEffect(() => {
+    if (screen === "settings" && settingsTab === "ai") refreshAdvancedMemoryStatus();
+  }, [screen, settingsTab]);
 
   const focusInput = useCallback(() => {
     requestAnimationFrame(() => inputRef.current?.focus());
@@ -321,10 +334,12 @@ export default function App() {
       try {
         // Initialize the SQLite schema on one connection before reading facts.
         const archive = await memoryApi.listConversations();
+        const summaries = await memoryApi.listSessionSummaries();
         const facts = await memoryApi.listFacts();
         const canon = await memoryApi.listCharacterFacts();
         if (disposed) return;
         setConversations(archive);
+        setSessionSummaries(summaries);
         setUserFacts(facts);
         setCharacterFacts(canon);
         const latest = archive[0];
@@ -349,6 +364,9 @@ export default function App() {
   };
   const refreshFacts = async () => {
     setUserFacts(await memoryApi.listFacts());
+  };
+  const refreshSummaries = async () => {
+    setSessionSummaries(await memoryApi.listSessionSummaries());
   };
   const refreshCharacter = async () => {
     setCharacterFacts(await memoryApi.listCharacterFacts());
@@ -393,11 +411,37 @@ export default function App() {
         setAutomaticMemoryError(`Automatic memory extraction failed: ${errorText(error)}`);
       });
   };
+  const queueSessionMemory = (conversationId: string, force = false) => {
+    const opts = {endpoint:settings.endpoint,model:settings.model,contextWindow:settings.contextWindow};
+    sessionMemoryQueue.current = sessionMemoryQueue.current.catch(() => {}).then(async () => {
+      // Model calls for persistent memories and session summaries are serialized.
+      // Neither a missing model nor a malformed summary can block chatting.
+      await automaticMemoryQueue.current.catch(() => {});
+      const candidate = await memoryApi.sessionCandidate(conversationId, force);
+      if (!candidate) return;
+      const raw = await invoke<string>("condense_local_context", {
+        ...opts, prompt:sessionSummaryPrompt(candidate), maxOutputTokens:480
+      });
+      if (!validSessionSummaryResponse(raw)) return;
+      const grounded = mergeSessionSummary(candidate,raw);
+      // Even a session without useful notes advances its watermark, avoiding
+      // a fresh LLM summary request on every subsequent turn.
+      const summary = grounded || candidate.previousSummary || "- No durable session notes";
+      if (await memoryApi.saveSessionSummary(candidate,summary)) {
+        await refreshSummaries();
+      }
+    }).catch(error => {
+      console.warn("Optional local session summary skipped:", errorText(error));
+    });
+  };
+
   const refreshMemory = async () => {
-    const [archive, facts, canon] = await Promise.all([
-      memoryApi.listConversations(), memoryApi.listFacts(), memoryApi.listCharacterFacts()
+    const [archive, facts, canon, summaries] = await Promise.all([
+      memoryApi.listConversations(), memoryApi.listFacts(),
+      memoryApi.listCharacterFacts(), memoryApi.listSessionSummaries()
     ]);
     setConversations(archive);
+    setSessionSummaries(summaries);
     setUserFacts(facts);
     setCharacterFacts(canon);
     setMemoryError(null);
@@ -405,18 +449,34 @@ export default function App() {
   const addUserFact = async (fact: string) => {
     await memoryApi.addFact(fact);
     await refreshFacts();
+    // Sync the owner-controlled mirror after a manual edit. The conversation
+    // stays usable if the optional Mem0 process is offline.
+    void invoke("memory_semantic_recall", {query:""}).catch(() => {});
     setMemoryError(null);
   };
   const editUserFact = async (id: number, fact: string) => {
     await memoryApi.updateFact(id, fact);
     await refreshFacts();
+    void invoke("memory_semantic_recall", {query:""}).catch(() => {});
+  };
+  const pinUserFact = async (id: number, pinned: boolean) => {
+    await memoryApi.pinFact(id,pinned);
+    await refreshFacts();
   };
   const deleteUserFact = async (id: number) => {
     await memoryApi.deleteFact(id);
     await refreshFacts();
+    void invoke("memory_semantic_recall", {query:""}).catch(() => {});
+  };
+  const deleteSessionNotes = async (conversationId: string) => {
+    await memoryApi.deleteSessionSummary(conversationId);
+    await refreshSummaries();
   };
   const openConversation = async (id: string) => {
     if (busy) return;
+    if (activeConversationId && activeConversationId !== id) {
+      queueSessionMemory(activeConversationId, true);
+    }
     const stored = await memoryApi.listMessages(id);
     setMessages(stored.map(restoreMessage));
     setActiveConversationId(id);
@@ -441,6 +501,7 @@ export default function App() {
 
   const clearChat = () => {
     if (busy || !memoryReady) return;
+    if (activeConversationId) queueSessionMemory(activeConversationId,true);
     setMessages([]);
     setActiveConversationId(null);
     setFeedback(null);
@@ -846,6 +907,22 @@ export default function App() {
 
     try {
       await persistMessage(user);
+      // Always refresh authoritative SQLite facts before answering. Optional
+      // Mem0 OSS reorders facts by meaning (e.g. "website" => WordPress skills).
+      // With no sidecar, the Rust command returns [] and normal chat continues.
+      setActivity("Recalling relevant context…");
+      const liveFacts = await memoryApi.listFacts().catch(() => userFacts);
+      const semanticMatches = await invoke<Array<{id:number; fact:string; score:number|null}>>(
+        "memory_semantic_recall", { query: text }
+      ).catch(() => []);
+      const semanticIds = semanticMatches.map(entry => entry.id);
+      if (liveFacts !== userFacts) setUserFacts(liveFacts);
+      const budget = memoryBudget(settings.contextWindow);
+      const remembered = prepareMemoryContext(liveFacts,text,semanticIds,budget);
+      const archivedSessions = await memoryApi.listSessionSummaries().catch(() => sessionSummaries);
+      const currentSession = archivedSessions.find(s => s.conversationId === conversationId) ?? null;
+      const earlierSessions = archivedSessions.filter(s => s.conversationId !== conversationId);
+      const sessionNotes = sessionMemoryContext(text,currentSession,earlierSessions,budget);
       if (!withSearch && settings.autoSearch && researchPlan && researchPlan.mode !== "chat" &&
           needsContextResolution(text, messages)) {
         setActivity("Understanding follow-up…");
@@ -899,9 +976,9 @@ export default function App() {
           contextWindow: settings.contextWindow,
           priorSources,
           messages: [
-            { role: "system", content: [settings.systemPrompt.trim(), personalityGuidance(settings.personality), runtimeContext(), memoryContext(userFacts, text), characterContext(characterFacts, text), characterAnswerGuidance(text), researchPlan?.mode !== "chat" ? contextGuidance(messages, text, 1800) : ""].filter(Boolean).join("\n\n") },
+            { role: "system", content: [settings.systemPrompt.trim(), personalityGuidance(settings.personality), runtimeContext(), remembered.text, sessionNotes, characterContext(characterFacts, text), characterAnswerGuidance(text), researchPlan?.mode !== "chat" ? contextGuidance(messages, text, 1800) : ""].filter(Boolean).join("\n\n") },
             ...(withSearch ? [{ role: "user", content: withSearch.page ? pageContext(withSearch.query, withSearch.page) : webContext(withSearch.query, withSearch.results) }] : []),
-            ...history.filter(m => !withSearch || m.role === "user").slice(-18).map(m => ({ role: m.role, content: m.content }))
+            ...history.filter(m => !withSearch || m.role === "user").slice(-budget.recentTurns).map(m => ({ role: m.role, content: m.content }))
           ]
         }
       });
@@ -924,7 +1001,11 @@ export default function App() {
       };
       setMessages(current => current.map(m => m.id === assistantId ? assistant : m));
       await persistMessage(assistant);
+      if (remembered.ids.length) {
+        void memoryApi.markRecalled(remembered.ids).catch(() => {});
+      }
       queueAutomaticMemory(conversationId, user.id, assistant.id);
+      queueSessionMemory(conversationId);
     } catch (error) {
       const message = errorText(error);
       const stopped = message === "Generation stopped" || stopRequested.current;
@@ -1227,14 +1308,14 @@ export default function App() {
     </section>}
 
     {screen === "memory" && <MemoryPanel key={memoryInitialTab} initialTab={memoryInitialTab}
-      conversations={conversations} facts={userFacts} characterFacts={characterFacts} currentId={activeConversationId}
+      conversations={conversations} sessionSummaries={sessionSummaries} facts={userFacts} characterFacts={characterFacts} currentId={activeConversationId}
       autoRememberUser={settings.autoRememberUser} autoRememberMikan={settings.autoRememberMikan}
       onAutoRememberUserChange={enabled => applySetting({autoRememberUser: enabled})}
       onAutoRememberMikanChange={enabled => applySetting({autoRememberMikan: enabled})}
       automaticError={automaticMemoryError}
       busy={busy} error={memoryError} onClose={goCompact} onNew={clearChat}
-      onOpen={openConversation} onDeleteChat={deleteConversation}
-      onAddFact={addUserFact} onEditFact={editUserFact} onDeleteFact={deleteUserFact}
+      onOpen={openConversation} onDeleteChat={deleteConversation} onDeleteSessionSummary={deleteSessionNotes}
+      onAddFact={addUserFact} onEditFact={editUserFact} onDeleteFact={deleteUserFact} onPinFact={pinUserFact}
       onAddCharacter={addCharacter} onEditCharacter={editCharacter} onDeleteCharacter={deleteCharacter}
       onRefresh={refreshMemory}/>}
 
@@ -1274,7 +1355,7 @@ export default function App() {
     {screen === "settings" && <section className="drawer" role="dialog" aria-label="Mikan settings">
       <header className="drawer-header">
         <button className="back-button" title="Back to companion" onClick={goCompact}><ArrowLeft size={19}/></button>
-        <div className="drawer-title"><strong>Settings</strong><span>Mikan v0.7.0 · Local first</span></div>
+        <div className="drawer-title"><strong>Settings</strong><span>Mikan Desktop · Local first</span></div>
         <button className="secondary-action" onClick={() => setDraft(current => ({
           ...current,
           ...(settingsTab === "ai" ? {
@@ -1336,6 +1417,19 @@ export default function App() {
           </label>
           <button type="button" className="secondary-action"
             onClick={() => setScreen("personality")}><SlidersHorizontal size={15}/> Open Personality controls</button>
+          <div className="settings-section-title"><Brain size={17}/> Advanced personal memory (Mem0 OSS)</div>
+          <div className="service-panel">
+            <div><strong>Semantic recall · local</strong>
+              <span className={advancedMemoryStatus?.ready ? "service-running" : "service-muted"}>
+                {advancedMemoryStatus === null ? "Checking…" : advancedMemoryStatus.ready
+                  ? "Ready · Mem0 + Ollama" : advancedMemoryStatus.reason || "Not running"}
+              </span>
+            </div>
+            <button type="button" className="secondary-action"
+              onClick={refreshAdvancedMemoryStatus}><RotateCw size={14}/> Check status</button>
+            <small>Optional real Mem0 semantic retrieval. Uses your editable SQLite facts and local Ollama, never a cloud account. Run the bundled advanced-memory setup script once to enable it. If unavailable, ordinary SQLite recall continues unchanged.</small>
+          </div>
+
         </>}
         {settingsTab === "internet" && <>
           <div className="settings-section-title">Local search service</div>

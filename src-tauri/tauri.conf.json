@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Mikan Companion",
-  "version": "0.7.5",
+  "version": "0.7.7",
   "identifier": "dev.capnolithyl.mikan",
   "build": {
     "beforeDevCommand": "npm run dev",
@@ -34,6 +34,11 @@
     "targets": [
       "nsis"
     ],
+    "resources": {
+      "../advanced_memory/server.py": "advanced-memory/server.py",
+      "../advanced_memory/requirements.txt": "advanced-memory/requirements.txt",
+      "../scripts/setup-advanced-memory.ps1": "advanced-memory/setup-advanced-memory.ps1"
+    },
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",

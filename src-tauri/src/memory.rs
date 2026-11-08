@@ -35,11 +35,25 @@ fn initialize_database(connection: &Connection) -> Result<(), String> {
          );
          CREATE INDEX IF NOT EXISTS idx_messages_conversation
            ON messages(conversation_id, created_at, id);
+         CREATE TABLE IF NOT EXISTS session_summaries (
+           conversation_id TEXT PRIMARY KEY REFERENCES conversations(id) ON DELETE CASCADE,
+           summary TEXT NOT NULL,
+           last_message_rowid INTEGER NOT NULL,
+           updated_at INTEGER NOT NULL DEFAULT (unixepoch())
+         );
+         CREATE INDEX IF NOT EXISTS idx_session_summaries_updated
+           ON session_summaries(updated_at DESC);
          CREATE TABLE IF NOT EXISTS user_memories (
            id INTEGER PRIMARY KEY AUTOINCREMENT,
            fact TEXT NOT NULL COLLATE NOCASE UNIQUE,
            created_at INTEGER NOT NULL DEFAULT (unixepoch()),
            updated_at INTEGER NOT NULL DEFAULT (unixepoch())
+         );
+         CREATE TABLE IF NOT EXISTS user_memory_usage (
+           memory_id INTEGER PRIMARY KEY REFERENCES user_memories(id) ON DELETE CASCADE,
+           importance INTEGER NOT NULL DEFAULT 50 CHECK (importance BETWEEN 0 AND 100),
+           reference_count INTEGER NOT NULL DEFAULT 0,
+           last_accessed INTEGER
          );
          CREATE TABLE IF NOT EXISTS character_facts (
            id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -93,10 +107,12 @@ pub struct StoredMessage {
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UserMemory {
-    id: i64,
-    fact: String,
+    pub(crate) id: i64,
+    pub(crate) fact: String,
     created_at: i64,
     updated_at: i64,
+    importance: i64,
+    reference_count: i64,
 }
 
 #[derive(Deserialize)]
@@ -215,10 +231,14 @@ pub fn memory_delete_conversation(app: AppHandle, id: String) -> Result<(), Stri
 pub fn memory_list_facts(app: AppHandle) -> Result<Vec<UserMemory>, String> {
     let db = open_db(&app)?;
     let mut statement = db.prepare(
-        "SELECT id,fact,created_at,updated_at FROM user_memories ORDER BY updated_at DESC,id DESC LIMIT 500"
+        "SELECT m.id,m.fact,m.created_at,m.updated_at,
+                COALESCE(u.importance,50),COALESCE(u.reference_count,0)
+         FROM user_memories m LEFT JOIN user_memory_usage u ON m.id=u.memory_id
+         ORDER BY m.updated_at DESC,m.id DESC LIMIT 500"
     ).map_err(|e| e.to_string())?;
     let rows = statement.query_map([], |row| Ok(UserMemory {
-        id: row.get(0)?, fact: row.get(1)?, created_at: row.get(2)?, updated_at: row.get(3)?
+        id: row.get(0)?, fact: row.get(1)?, created_at: row.get(2)?, updated_at: row.get(3)?,
+        importance: row.get(4)?, reference_count: row.get(5)?
     })).map_err(|e| e.to_string())?;
     rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())
 }
@@ -233,9 +253,13 @@ pub fn memory_add_fact(app: AppHandle, fact: String) -> Result<UserMemory, Strin
         params![fact]
     ).map_err(|e| e.to_string())?;
     db.query_row(
-        "SELECT id,fact,created_at,updated_at FROM user_memories WHERE fact=?1 COLLATE NOCASE",
+        "SELECT m.id,m.fact,m.created_at,m.updated_at,
+                COALESCE(u.importance,50),COALESCE(u.reference_count,0)
+         FROM user_memories m LEFT JOIN user_memory_usage u ON m.id=u.memory_id
+         WHERE m.fact=?1 COLLATE NOCASE",
         params![fact], |row| Ok(UserMemory {
-            id: row.get(0)?, fact: row.get(1)?, created_at: row.get(2)?, updated_at: row.get(3)?
+            id: row.get(0)?, fact: row.get(1)?, created_at: row.get(2)?, updated_at: row.get(3)?,
+            importance: row.get(4)?, reference_count: row.get(5)?
         })
     ).optional().map_err(|e| e.to_string())?
         .ok_or_else(|| "Could not read saved memory".to_string())
@@ -259,6 +283,49 @@ pub fn memory_delete_fact(app: AppHandle, id: i64) -> Result<(), String> {
     Ok(())
 }
 
+
+/// Record which stored facts actually entered an answered prompt. A capped
+/// usage bonus is used for later recall; deleted records cannot be recreated.
+fn mark_recalled(db: &Connection, ids: &[i64]) -> Result<(), String> {
+    let mut unique = std::collections::HashSet::new();
+    for id in ids.iter().copied().take(20) {
+        if id <= 0 || !unique.insert(id) { continue; }
+        db.execute(
+            "INSERT INTO user_memory_usage(memory_id,reference_count,last_accessed)
+             SELECT id,1,unixepoch() FROM user_memories WHERE id=?1
+             ON CONFLICT(memory_id) DO UPDATE
+             SET reference_count=MIN(10000,user_memory_usage.reference_count+1),
+                 last_accessed=unixepoch()",
+            params![id]
+        ).map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub fn memory_mark_recalled(app: AppHandle, ids: Vec<i64>) -> Result<(), String> {
+    mark_recalled(&open_db(&app)?, &ids)
+}
+
+/// Optional owner-selected core-profile importance. This is deterministic,
+/// never inferred from untrusted web content or silently overwritten by Mem0.
+fn set_importance(db: &Connection, id: i64, pinned: bool) -> Result<(), String> {
+    if id <= 0 { return Err("Invalid memory ID".into()); }
+    let importance = if pinned {95} else {50};
+    let changed = db.execute(
+        "INSERT INTO user_memory_usage(memory_id,importance)
+         SELECT id,?2 FROM user_memories WHERE id=?1
+         ON CONFLICT(memory_id) DO UPDATE SET importance=excluded.importance",
+        params![id,importance]
+    ).map_err(|e| e.to_string())?;
+    if changed==0 { return Err("Memory no longer exists".into()); }
+    Ok(())
+}
+
+#[tauri::command]
+pub fn memory_pin_fact(app: AppHandle, id: i64, pinned: bool) -> Result<(), String> {
+    set_importance(&open_db(&app)?,id,pinned)
+}
 
 /// Canon facts are Mikan's fictional self-description, never user facts or webpage knowledge.
 #[derive(Serialize)]
@@ -378,6 +445,29 @@ pub fn memory_delete_character_fact(app: AppHandle, id: i64, persona_id: String)
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn referenced_and_pinned_facts_are_persistent_and_cascade_on_delete() {
+        let db=Connection::open_in_memory().unwrap();
+        initialize_database(&db).unwrap();
+        db.execute("INSERT INTO user_memories(fact) VALUES ('The user is a WordPress developer')", []).unwrap();
+        let id=db.last_insert_rowid();
+        mark_recalled(&db,&[id,id,99999]).unwrap(); // no duplicate or resurrection
+        set_importance(&db,id,true).unwrap();
+        let (importance,count):(i64,i64)=db.query_row(
+            "SELECT importance,reference_count FROM user_memory_usage WHERE memory_id=?1",
+            params![id],|r| Ok((r.get(0)?,r.get(1)?))
+        ).unwrap();
+        assert_eq!((importance,count),(95,1));
+        set_importance(&db,id,false).unwrap();
+        let importance:i64=db.query_row("SELECT importance FROM user_memory_usage WHERE memory_id=?1",
+            params![id],|r| r.get(0)).unwrap();
+        assert_eq!(importance,50);
+        db.execute("DELETE FROM user_memories WHERE id=?1",params![id]).unwrap();
+        let metadata_count:i64=db.query_row("SELECT COUNT(*) FROM user_memory_usage",[],|r|r.get(0)).unwrap();
+        assert_eq!(metadata_count,0);
+        assert!(set_importance(&db,id,true).is_err());
+    }
 
     #[test]
     fn memory_facts_are_normalized_and_bounded() {

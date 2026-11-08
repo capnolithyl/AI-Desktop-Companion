@@ -5,6 +5,8 @@ mod agent_tools;
 mod research_intent;
 mod memory;
 mod memory_extraction;
+mod advanced_memory;
+mod session_memory;
 use futures_util::{future::{AbortHandle, Abortable}, StreamExt};
 use std::{collections::HashMap, sync::Mutex};
 use serde::{Deserialize, Serialize};
@@ -146,12 +148,14 @@ async fn condense_local_context(
     model: String,
     prompt: String,
     context_window: Option<u32>,
+    max_output_tokens: Option<u32>,
 ) -> Result<String, String> {
     if model.trim().is_empty() || model.len() > 120 || prompt.len() > 5500 {
         return Err("Invalid context request".into());
     }
     let url = format!("{}/api/chat", local_origin(&endpoint)?);
-    let mut options = json!({"temperature": 0, "num_predict": 190});
+    let output_limit = max_output_tokens.unwrap_or(190).clamp(64, 500);
+    let mut options = json!({"temperature": 0, "num_predict": output_limit});
     if let Some(ctx) = valid_context_window(context_window) {
         options["num_ctx"] = json!(ctx);
     }
@@ -166,7 +170,7 @@ async fn condense_local_context(
     let response = client()?
         .post(url)
         .json(&payload)
-        .timeout(Duration::from_secs(35))
+        .timeout(Duration::from_secs(if output_limit > 200 { 55 } else { 35 }))
         .send()
         .await
         .map_err(|e| format!("Local context resolution unavailable: {e}"))?;
@@ -175,7 +179,7 @@ async fn condense_local_context(
     }
     let output: Value = response.json().await
         .map_err(|e| format!("Invalid local context response: {e}"))?;
-    Ok(output["message"]["content"].as_str().unwrap_or("").chars().take(1200).collect())
+    Ok(output["message"]["content"].as_str().unwrap_or("").chars().take(3600).collect())
 }
 
 fn process_line(
@@ -541,10 +545,19 @@ pub fn run() {
             memory::memory_update_character_fact,
             memory::memory_delete_character_fact,
             memory_extraction::memory_process_turn,
+            memory::memory_mark_recalled,
+            memory::memory_pin_fact,
+            session_memory::memory_session_candidate,
+            session_memory::memory_save_session_summary,
+            session_memory::memory_list_session_summaries,
+            session_memory::memory_delete_session_summary,
+            advanced_memory::memory_semantic_recall,
+            advanced_memory::memory_semantic_status,
             toggle_companion,
             hide_companion
         ])
         .setup(|app| {
+            advanced_memory::start_if_installed();
             let show = MenuItem::with_id(app, "show", "Show / Hide Mikan", true, None::<&str>)?;
             let quit = MenuItem::with_id(app, "quit", "Quit Mikan", true, None::<&str>)?;
             let menu = Menu::with_items(app, &[&show, &quit])?;
@@ -554,7 +567,7 @@ pub fn run() {
                 .show_menu_on_left_click(false)
                 .on_menu_event(|app, event| match event.id().as_ref() {
                     "show" => toggle_window(app),
-                    "quit" => app.exit(0),
+                    "quit" => { advanced_memory::stop_if_started(); app.exit(0); },
                     _ => {}
                 })
                 .on_tray_icon_event(|tray, event| {
