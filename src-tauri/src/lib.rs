@@ -587,6 +587,7 @@ pub fn run() {
             memory::memory_list_conversations,
             memory::memory_create_conversation,
             memory::memory_list_messages,
+            memory::memory_search_archive,
             memory::memory_save_message,
             memory::memory_delete_conversation,
             memory::memory_list_facts,
