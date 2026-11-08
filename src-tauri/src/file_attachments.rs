@@ -144,7 +144,26 @@ fn extract_office(bytes: Vec<u8>, ext: &str) -> Result<ExtractedDocument, String
     }
     capped(combined,ext,truncated)
 }
+fn check_spreadsheet_archive(bytes: &[u8]) -> Result<(), String> {
+    // Calamine unpacks workbook parts internally. Reject ZIP bombs before it
+    // sees the file; legacy .xls is not ZIP and uses the input byte limit.
+    let mut archive=ZipArchive::new(Cursor::new(bytes))
+        .map_err(|_|"Spreadsheet is not a readable ZIP container".to_owned())?;
+    if archive.len()>MAX_ARCHIVE_MEMBERS {
+        return Err("Too many internal spreadsheet parts".into());
+    }
+    let mut expanded: u64=0;
+    for index in 0..archive.len() {
+        let size=archive.by_index(index).map_err(|e|e.to_string())?.size();
+        expanded=expanded.checked_add(size).ok_or("Spreadsheet size overflow")?;
+        if expanded>96*1024*1024 {
+            return Err("Spreadsheet expands beyond the safe 96 MB limit".into());
+        }
+    }
+    Ok(())
+}
 fn extract_spreadsheet(bytes: Vec<u8>, ext: &str) -> Result<ExtractedDocument, String> {
+    if ext!="xls" { check_spreadsheet_archive(&bytes)?; }
     let mut workbook=open_workbook_auto_from_rs(Cursor::new(bytes))
         .map_err(|e|format!("Cannot read spreadsheet: {e}"))?;
     let names=workbook.sheet_names().to_owned();
