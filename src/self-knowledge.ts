@@ -4,10 +4,10 @@
  * The CI checker detects unmapped Tauri commands, missing files and stale versions.
  * Add a feature here when adding capability, and update the matching source/docs.
  */
-export const CAPABILITY_RELEASE = "0.8.1";
+export const CAPABILITY_RELEASE = "0.8.2";
 
 export type CapabilityStage = "implemented" | "experimental" | "planned";
-export type RuntimeDependency = "none" | "ollama" | "search" | "mem0" | "voice" | "pocket";
+export type RuntimeDependency = "none" | "ollama" | "search" | "mem0" | "voice" | "vision" | "pocket";
 export type RuntimeState = "ready" | "offline" | "unchecked";
 export type Capability = {
   id: string;
@@ -151,10 +151,12 @@ export const CAPABILITIES: readonly Capability[] = [
     commands:[]
   },
   {
-    id:"screen-vision",label:"Screen capture and visual understanding",category:"Future",
-    description:"Planned: on-demand screen capture with explicit permission and visual interpretation. This desktop build has NO screen-vision tool.",
-    stage:"planned",runtime:"none",keywords:["see","look","screen","screenshot","vision","capture","visual","game"],
-    sources:[],docs:[],commands:[]
+    id:"screen-vision",label:"On-demand screen vision",category:"Vision",
+    description:"Experimental Windows screen capture: the owner chooses a monitor, captures one still image, previews it and decides whether to send it to a vision-capable local Ollama model. Mikan does not continuously watch, save screenshots, interact with the desktop, or see anything without approval.",
+    stage:"experimental",runtime:"vision",keywords:["see","look","screen","screenshot","vision","capture","visual","game","monitor","image","eyes"],
+    sources:["src-tauri/src/screen_vision.rs","src/screen-vision.ts","src/App.tsx"],docs:["screen_vision/README.md"],
+    commands:["vision_monitors","vision_capture","vision_model_status"],
+    slashCommands:["vision"]
   },
   {
     id:"microphone",label:"Microphone speech recognition",category:"Future",
