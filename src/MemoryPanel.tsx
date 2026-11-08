@@ -22,6 +22,7 @@ type Props = {
   onNew: () => void;
   onOpen: (id: string) => Promise<void>;
   onDeleteChat: (id: string) => Promise<void>;
+  onDeleteSessionSummary: (conversationId: string) => Promise<void>;
   onAddFact: (fact: string) => Promise<void>;
   onEditFact: (id: number, fact: string) => Promise<void>;
   onDeleteFact: (id: number) => Promise<void>;
@@ -41,7 +42,7 @@ export function MemoryPanel({
   initialTab = "facts", conversations, sessionSummaries, facts, characterFacts,
   autoRememberUser, autoRememberMikan, automaticError, onAutoRememberUserChange, onAutoRememberMikanChange,
   currentId, busy, error, onClose, onNew,
-  onOpen, onDeleteChat, onAddFact, onEditFact, onDeleteFact, onPinFact, onRefresh,
+  onOpen, onDeleteChat, onDeleteSessionSummary, onAddFact, onEditFact, onDeleteFact, onPinFact, onRefresh,
   onAddCharacter, onEditCharacter, onDeleteCharacter
 }: Props) {
   const [tab, setTab] = useState<"chats" | "facts" | "character">(initialTab);
@@ -166,6 +167,10 @@ export function MemoryPanel({
               {sessionSummaries.find(s=>s.conversationId===chat.id)?.summary}
             </p>
             <small>Conversation continuity only, not verified permanent facts</small>
+            <button type="button" className="secondary-action" disabled={working || busy}
+              onClick={() => void run(()=>onDeleteSessionSummary(chat.id))}>
+              <Trash2 size={12}/> Forget session notes
+            </button>
           </details>}
           <div className="memory-actions">
             {confirmId === `chat:${chat.id}` ? <>
