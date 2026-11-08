@@ -127,14 +127,28 @@ pub fn memory_list_session_summaries(app: AppHandle) -> Result<Vec<SessionSummar
     records.collect::<Result<_,_>>().map_err(|e| e.to_string())
 }
 
-#[tauri::command]
-pub fn memory_delete_session_summary(app: AppHandle, conversation_id: String) -> Result<(), String> {
-    if !valid_id(&conversation_id) { return Err("Invalid conversation ID".into()); }
-    memory::open_db(&app)?.execute(
-        "DELETE FROM session_summaries WHERE conversation_id=?1",
+fn forget_session_notes(db: &Connection, conversation_id: &str) -> Result<(), String> {
+    if !valid_id(conversation_id) { return Err("Invalid conversation ID".into()); }
+    // Keep a text-free watermark so a queued Ollama summary that was started
+    // BEFORE the owner's deletion cannot resurrect forgotten session notes.
+    db.execute(
+        "INSERT INTO session_summaries(conversation_id,summary,last_message_rowid,updated_at)
+         SELECT id,'- No durable session notes',
+           COALESCE((SELECT MAX(rowid) FROM messages
+                     WHERE conversation_id=?1 AND role='assistant'),0),unixepoch()
+         FROM conversations WHERE id=?1
+         ON CONFLICT(conversation_id) DO UPDATE SET
+           summary='- No durable session notes',
+           last_message_rowid=MAX(session_summaries.last_message_rowid,excluded.last_message_rowid),
+           updated_at=unixepoch()",
         params![conversation_id]
     ).map_err(|e| e.to_string())?;
     Ok(())
+}
+
+#[tauri::command]
+pub fn memory_delete_session_summary(app: AppHandle, conversation_id: String) -> Result<(), String> {
+    forget_session_notes(&memory::open_db(&app)?, &conversation_id)
 }
 
 #[cfg(test)]
@@ -178,6 +192,18 @@ mod tests {
         assert!(!store_summary(&conn,ID,"- Older conflicting summary",
             candidate.last_message_rowid,0).unwrap());
     }
+    #[test]
+    fn manual_forget_prevents_stale_background_summary_resurrection() {
+        let conn=db();
+        conn.execute("INSERT INTO conversations(id,updated_at) VALUES(?1,1)",params![ID]).unwrap();
+        assert!(store_summary(&conn,ID,"- Private past topic",1,0).unwrap());
+        forget_session_notes(&conn,ID).unwrap();
+        let summary:String=conn.query_row("SELECT summary FROM session_summaries WHERE conversation_id=?1",
+            params![ID],|r|r.get(0)).unwrap();
+        assert_eq!(summary,"- No durable session notes");
+        assert!(!store_summary(&conn,ID,"- Stale private topic",1,0).unwrap());
+    }
+
     #[test]
     fn long_unsummarized_backlogs_are_processed_in_order() {
         let conn=db();
