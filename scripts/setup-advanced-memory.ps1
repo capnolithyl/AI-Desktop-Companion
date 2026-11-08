@@ -37,6 +37,7 @@ Write-Host "Downloading the free local semantic embedding model..."
 & ollama pull nomic-embed-text
 if ($LASTEXITCODE -ne 0) { throw "Ollama could not download nomic-embed-text." }
 
+@{model=$Model;ollamaUrl=$OllamaUrl} | ConvertTo-Json -Compress | Set-Content -Encoding UTF8 (Join-Path $home "config.json")
 if (-not $InstallOnly) {
   $env:MIKAN_MEMORY_LLM = $Model
   $env:MIKAN_OLLAMA_URL = $OllamaUrl
