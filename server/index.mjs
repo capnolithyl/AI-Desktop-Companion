@@ -10,7 +10,7 @@ import { createServer } from "node:http";
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import { readFileSync, mkdirSync, writeFileSync, appendFileSync, existsSync } from "node:fs";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { join, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 export const PUBLIC_PORT = 3847;
@@ -116,7 +116,7 @@ export function createBridge({ key, reportsPath = REPORTS_PATH, publicHost = "mi
         const body = await readJson(request, 4096);
         const note = typeof body.note === "string" ? body.note.trim() : "";
         if (!note || note.length > 1500) return fail(response, 400, "Enter a note up to 1500 characters");
-        mkdirSync(join(reportsPath, ".."), { recursive: true });
+        mkdirSync(dirname(reportsPath), { recursive: true });
         appendFileSync(reportsPath, JSON.stringify({
           at: new Date().toISOString(), note, conversationId: desktop.conversationId,
           messages: desktop.messages.slice(-8).map((m) => ({role:m.role, content:m.content.slice(0,1800)}))
@@ -176,7 +176,7 @@ function listen(server, port) {
   });
 }
 
-if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
+if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1])) {
   const key = keyFile();
   if (process.argv.includes("--key")) {
     console.log(key);
