@@ -52,6 +52,9 @@ def load_token(root: Path) -> str:
 
 
 def make_mem0(root: Path) -> Any:
+    # Mem0 OSS otherwise phones home to PostHog for anonymous telemetry.
+    # Read at import time: set this BEFORE importing any mem0 module.
+    os.environ["MEM0_TELEMETRY"] = "false"
     from mem0 import Memory  # optional dependency; the base desktop app needs none
     vector_dir = root / "qdrant"
     vector_dir.mkdir(parents=True, exist_ok=True)
