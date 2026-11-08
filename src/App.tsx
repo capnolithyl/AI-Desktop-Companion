@@ -1987,18 +1987,26 @@ export default function App() {
           <div className="settings-section-title">Saved voice identity</div>
           <div className="service-panel">
             <div>
-              <strong>{voiceReference?.configured ? "Mikan's reference voice is saved" : "No reference voice saved"}</strong>
+              <strong>{voiceChecking ? "Checking saved voice…"
+                : !voiceHealth?.ready || !voiceReference ? "Voice reference status unknown"
+                : voiceReference.configured ? "Mikan's reference voice is saved" : "No reference voice saved"}</strong>
               <small>{voiceReference?.configured
                 ? `Cloning enabled with Qwen3-TTS Base · ${voiceReference.durationSeconds ?? "?"} seconds of reference audio`
-                : "VoiceDesign will be used until you save a sample and matching transcript."}</small>
+                : !voiceHealth?.ready || !voiceReference
+                  ? "Start the Python voice server and click Check connection to inspect or save the reference. Selecting a file does not upload it."
+                  : "VoiceDesign will be used until you save a sample and matching transcript."}</small>
             </div>
             {voiceReference?.configured && <div className="voice-reference-transcript">
               <strong>Stored transcript</strong><small>{voiceReference.transcript}</small>
             </div>}
             <label className="setting-field voice-reference-field">Reference audio · WAV
               <input type="file" accept=".wav,audio/wav,audio/x-wav" disabled={referenceBusy}
-                onChange={event => setReferenceFile(event.target.files?.[0] ?? null)}/>
-              <small>Prefer clean 5–15 second voice samples. Mono PCM16, 2–30 seconds, under 6 MB.</small>
+                onChange={event => {
+                  setReferenceFile(event.currentTarget.files?.[0] ?? null);
+                  event.currentTarget.value = "";
+                }}/>
+              <small>{referenceFile ? `Selected locally, not yet saved: ${referenceFile.name}`
+                : "Prefer clean 5–15 second voice samples. Mono PCM16, 2–30 seconds, under 6 MB."}</small>
             </label>
             <label className="setting-field voice-reference-field">Exactly what she says in the recording
               <textarea rows={4} maxLength={2000} value={referenceText} disabled={referenceBusy}
@@ -2008,7 +2016,7 @@ export default function App() {
             </label>
             <div className="service-buttons">
               <button type="button" className="secondary-action"
-                disabled={!referenceFile || !referenceText.trim() || referenceBusy || voiceChecking}
+                disabled={!voiceHealth?.ready || !voiceReference || !referenceFile || !referenceText.trim() || referenceBusy || voiceChecking}
                 onClick={() => void saveVoiceReference()}>
                 {referenceBusy ? <LoaderCircle size={14} className="spin"/> : <Check size={14}/>}
                 {voiceReference?.configured ? "Replace reference" : "Save reference"}
@@ -2016,7 +2024,7 @@ export default function App() {
               {voiceReference?.configured && <button type="button" className="secondary-action"
                 disabled={referenceBusy} onClick={() => void removeVoiceReference()}>Remove reference</button>}
             </div>
-            <small>The reference stays on your PC, not in an online voice service.</small>
+            <small>Saving requires a running local Python server. Once saved, the WAV and transcript persist in %LOCALAPPDATA%\\Mikan\\voice.</small>
           </div>
           <label className="settings-toggle">
             <input type="checkbox" checked={draft.voice.autoSpeak}
