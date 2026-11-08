@@ -6,7 +6,7 @@ import { mobileBackend } from "./mobile-backend";
  * Android SQLite instead of the desktop Tauri/Rust commands.
  * Keep this adapter separate from the React components.
  */
-export type PocketTurn = { id: string; role: "user" | "assistant"; content: string; createdAt: number; sources?: import("../web-search").WebResult[] };
+export type PocketTurn = { id: string; role: "user" | "assistant"; content: string; createdAt: number; sources?: import("../web-search").WebResult[]; failed?: boolean };
 export type PocketThread = { id: string; title: string; createdAt: number; turns: PocketTurn[] };
 export type PocketSnapshot = {
   threads: PocketThread[];
