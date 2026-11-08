@@ -29,6 +29,10 @@ nothing to keep. Install a new APK signed with the persistent key. Subsequent
 updates can then install directly over it.
 
 
+## Independent web research (Pocket Mikan v0.4.7)
+
+**v0.4.7:** Shared conversation context engine from desktop v0.7.4, inspired by SillyTavern's bounded dialogue and LlamaIndex's condense-plus-context. A lightweight Gemini Nano-only rewrite resolves ambiguous follow-up searches (e.g. "When did that album come out?") against the latest user-established subject; only the resolved public query is sent to Tavily. Prior sourced assistant replies stay in the small dialogue context as unverified conversation, not trusted facts. Ordinary chat skips the extra model pass. **Automatic local memory remains on in regular conversations when Settings → Auto Remember User is enabled (the default).** After Mikan asks a personal question, a short answer without "I"/"my" is eligible for Nano memory extraction. Native SQLite checks the answer's verbatim evidence; no command or special learning phrase is required. The dedicated v0.4.6 learning mode remains optional, not required.
+
 ## Independent web research (Pocket Mikan v0.4.6)
 
 **v0.4.6:** Opt-in conversational learning. After the user asks Mikan to learn about them by asking questions and remembering answers, short responses are interpreted using Mikan's immediately preceding question, not just isolated first-person grammar. Supported across arbitrary topics, with normalized structured facts when safe and a grounded question/answer fallback otherwise. New memories are written and verified in local SQLite *before* any confirmation; this works even when automatic memory capture is turned off. Mikan can continue asking new questions and the user can say "Stop learning my answers" to end the session. Direct "Remember that?" after a question/answer now also resolves the context. Sensitive content and uncertain answers are not saved automatically; all saved facts remain inspectable, editable, and deletable in Memory.
