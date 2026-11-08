@@ -68,6 +68,29 @@ object PocketMemoryRules {
     }
 
     /**
+     * A short answer to Mikan's latest personal question can express a stable
+     * preference without "I" or "my". Nano decides its meaning from the Q/A.
+     * This gate merely avoids spending a model request on obvious non-answers.
+     */
+    fun contextualAnswerCandidate(previousAssistant: String, user: String): Boolean {
+        val text = PocketMemoryStore.normalize(user)
+        if (text.length !in 2..260 || text.endsWith("?") || sensitive(text) ||
+            text.startsWith("/") || text.contains("http://") || text.contains("https://")) return false
+        val negative = Regex(
+            "^(?:not sure|don't know|i don't know|no idea|idk|skip|pass|maybe|it depends|depends|rather not say|prefer not to say)[.!? ]*$",
+            RegexOption.IGNORE_CASE
+        )
+        if (negative.matches(text)) return false
+        // Use the final interrogative from the immediately preceding assistant
+        // turn, never a question in an unrelated old chat.
+        val question = previousAssistant.substringAfterLast('.', previousAssistant)
+            .substringAfterLast('!', previousAssistant).trim()
+        if (!question.contains('?') || question.length > 260 || sensitive(question)) return false
+        return Regex("\\b(?:you|your|yours)\\b", RegexOption.IGNORE_CASE)
+            .containsMatchIn(question)
+    }
+
+    /**
      * Grounded first-person assertion extraction. This covers broad grammatical
      * patterns rather than specializing in one person's favorite color/name.
      * Claims that do not confidently indicate durable information fall through
