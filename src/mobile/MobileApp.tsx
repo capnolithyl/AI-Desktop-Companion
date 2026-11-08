@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { ArrowLeft, ArrowUp, BookOpen, Cat, Check, Copy, History, Image, LoaderCircle, MessageCircle, Plus, Settings2, SlidersHorizontal, Sparkles, Square, Trash2 } from "lucide-react";
+import { ArrowLeft, ArrowUp, BookOpen, Cat, Check, Copy, History, Image, LoaderCircle, MessageCircle, Plus, RotateCcw, Settings2, SlidersHorizontal, Sparkles, Square, Trash2 } from "lucide-react";
 import defaultMikanPortrait from "./assets/mikan-portrait.webp";
 import { ChatMarkdown } from "../components/ChatMarkdown";
 import { PersonalityPresets, PersonalitySliders } from "../PersonalityControls";
@@ -13,6 +13,8 @@ import { pocketMemory, type PocketThread, type PocketTurn } from "./mobile-memor
 import { resolveExplicitMemoryIntent, type ExplicitMemoryIntent } from "./memory-intent";
 import { learningCommand, learningSessionActive, contextualLearningFact } from "./learning-memory";
 import { planResearch, stripUnsupportedCitations } from "../research-routing";
+import { verifyResearchAnswer } from "../evidence-verification";
+import { retryTarget, type RetryTarget } from "./retry-response";
 import { contextGuidance, needsContextResolution, resolveConversationQuestion } from "../conversation-engine";
 import { priorResearchSources } from "../research-context";
 import { compactWebContext, pageContext, type WebResult } from "../web-search";
@@ -126,7 +128,10 @@ export default function MobileApp() {
       facts: readArray<UserFact>(USER_KEY),
       canon: readArray<CharacterFact>(CANON_KEY)
     }).then(snapshot => {
-      const stored = snapshot.threads.length ? snapshot.threads : [newThread()];
+      const stored = (snapshot.threads.length ? snapshot.threads : [newThread()])
+        .map(thread => ({...thread, turns:thread.turns.map(turn =>
+          turn.role === "assistant" && !turn.content.trim()
+            ? {...turn, failed:true} : turn)}));
       setThreads(stored);
       setFacts(snapshot.facts);
       setCanon(snapshot.canon);
@@ -202,10 +207,11 @@ export default function MobileApp() {
       turns: [...thread.turns, turn]
     } : thread));
   }
-  function replaceTurn(threadId: string, id: string, content: string, sources?: WebResult[]) {
+  function replaceTurn(threadId: string, id: string, content: string, sources?: WebResult[], failed?: boolean) {
     setThreads(items => items.map(thread => thread.id === threadId ? {
       ...thread, turns: thread.turns.map(turn => turn.id === id ?
-        { ...turn, content, ...(sources ? { sources } : {}) } : turn)
+        { ...turn, content, ...(sources !== undefined ? { sources } : {}),
+          ...(failed !== undefined ? { failed } : {}) } : turn)
     } : thread));
   }
   function startChat() {
@@ -468,18 +474,19 @@ export default function MobileApp() {
     }
   }
 
-  async function send(textOverride?: string, mode?: "search" | "read") {
+  async function send(textOverride?: string, mode?: "search" | "read", retry?: RetryTarget) {
     const text = (textOverride ?? draft).trim();
     if (!text || busy || !memoryReady) return;
-    if (textOverride === undefined) setDraft("");
+    if (textOverride === undefined && !retry) setDraft("");
     setIntro("");
-    const cmd = textOverride === undefined ? parseSlashCommand(text) : null;
+    const cmd = textOverride === undefined && !retry ? parseSlashCommand(text) : null;
     if (cmd) { handleCommand(cmd.name, cmd.argument); return; }
-    const explicitMemory = resolveExplicitMemoryIntent(text, active.turns);
-    const learnCommand = mode ? null : learningCommand(text);
-    const learningAnswer = mode || learnCommand || explicitMemory
-      ? null : contextualLearningFact(text, active.turns);
-    const localClockAnswer = mode ? null : deviceClockAnswer(text);
+    const history = retry?.history ?? active.turns;
+    const explicitMemory = retry ? null : resolveExplicitMemoryIntent(text, history);
+    const learnCommand = mode || retry ? null : learningCommand(text);
+    const learningAnswer = mode || retry || learnCommand || explicitMemory
+      ? null : contextualLearningFact(text, history);
+    const localClockAnswer = mode || retry ? null : deviceClockAnswer(text);
     if (!explicitMemory && !localClockAnswer && model !== "READY") {
       setIntro("Gemini Nano isn't ready yet. Open Settings to check or download the local model.");
       return;
@@ -487,12 +494,18 @@ export default function MobileApp() {
     followLatest.current = true;
     setBusy(true);
     setError("");
-    const threadId = active.id;
-    const user: Turn = { id: uuid(), role: "user", content: text, createdAt: Date.now() };
-    const assistant: Turn = { id: uuid(), role: "assistant", content: "", createdAt: Date.now() };
-    writeTurn(threadId, user);
-    writeTurn(threadId, assistant);
+    const threadId = retry?.threadId ?? active.id;
+    const user: Turn = retry?.user ?? { id: uuid(), role: "user", content: text, createdAt: Date.now() };
+    const assistant: Turn = retry?.assistant ?? { id: uuid(), role: "assistant", content: "", createdAt: Date.now() };
+    if (retry) {
+      // Keep the same assistant ID and don't append a duplicate user message.
+      replaceTurn(threadId, assistant.id, "", retry.assistant.sources ?? [], false);
+    } else {
+      writeTurn(threadId, user);
+      writeTurn(threadId, assistant);
+    }
     let output = "";
+    let sources: WebResult[] = retry?.assistant.sources ?? [];
     try {
       // The message is durable before inference and can be cited as evidence.
       if (explicitMemory) {
@@ -500,6 +513,9 @@ export default function MobileApp() {
         return;
       }
       await pocketMemory.saveMessage(threadId, user);
+      // Persist the placeholder before inference so Android process death
+      // cannot lose the question or produce an un-retryable half-message.
+      await pocketMemory.saveMessage(threadId, { ...assistant, content:"", sources, failed:false });
       // A learning session is explicit consent, persisted in chat history.
       // Stop never depends on a model response or an asynchronous extraction.
       if (learnCommand === "stop") {
@@ -539,23 +555,22 @@ export default function MobileApp() {
         await pocketMemory.saveMessage(threadId, { ...assistant, content: localClockAnswer });
         return;
       }
-      let sources: WebResult[] = [];
       let research = "";
-      const researchPlan = planResearch(text, active.turns);
+      const researchPlan = planResearch(text, history);
       // Resolve ambiguous factual follow-ups using a local Nano-only request.
       // Only the resulting standalone query (not the chat history) reaches Tavily.
       const condensed = !mode && webEnabled && researchPlan.mode !== "chat" &&
-        needsContextResolution(text, active.turns)
-        ? await resolveConversationQuestion(text, active.turns,
+        needsContextResolution(text, history)
+        ? await resolveConversationQuestion(text, history,
             prompt => mobileBackend.generate(prompt, () => {}))
         : null;
       const lookup = condensed?.rewritten ? condensed.standaloneQuestion :
         (researchPlan.query ?? text);
       const planned = researchPlan.mode === "chat" ? null : {
         query: lookup, recent: researchPlan.recent ||
-          (condensed?.rewritten ? planResearch(lookup, active.turns).recent : false)
+          (condensed?.rewritten ? planResearch(lookup, history).recent : false)
       };
-      const prior = priorResearchSources(active.turns, text);
+      const prior = priorResearchSources(history, text);
       // If the user requests fresh information while search is disabled, stop
       // before Nano improvises a convincing but unsourced release date.
       if (planned?.recent && !webEnabled && mode !== "search" && mode !== "read") {
@@ -603,7 +618,7 @@ export default function MobileApp() {
         }
       }
       const answer = await mobileBackend.generate(buildPrompt(settings, promptFacts, canon,
-        [...active.turns, user], research, verifiedMemory), chunk => {
+        [...history, user], research, verifiedMemory), chunk => {
         output += chunk;
         replaceTurn(threadId, assistant.id, sources.length ? output : stripUnsupportedCitations(output),
           sources.length ? sources : undefined);
