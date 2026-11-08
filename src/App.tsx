@@ -179,6 +179,7 @@ export default function App() {
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
   const [conversations, setConversations] = useState<MemoryConversation[]>([]);
   const [userFacts, setUserFacts] = useState<UserFact[]>([]);
+  const [advancedMemoryStatus, setAdvancedMemoryStatus] = useState<{ready: boolean; reason?: string; provider?: string} | null>(null);
   const [characterFacts, setCharacterFacts] = useState<CharacterFact[]>([]);
   const [memoryReady, setMemoryReady] = useState(false);
   const [memoryError, setMemoryError] = useState<string | null>(null);
@@ -209,6 +210,14 @@ export default function App() {
   const stopRequested = useRef(false);
 
   useEffect(() => { setCopyLogState("idle"); }, [messages, screen]);
+  const refreshAdvancedMemoryStatus = () => {
+    void invoke<{ready:boolean; reason?:string; provider?:string}>("memory_semantic_status")
+      .then(setAdvancedMemoryStatus)
+      .catch(() => setAdvancedMemoryStatus({ready:false,reason:"Unavailable"}));
+  };
+  useEffect(() => {
+    if (screen === "settings" && settingsTab === "ai") refreshAdvancedMemoryStatus();
+  }, [screen, settingsTab]);
 
   const focusInput = useCallback(() => {
     requestAnimationFrame(() => inputRef.current?.focus());
@@ -1284,7 +1293,7 @@ export default function App() {
     {screen === "settings" && <section className="drawer" role="dialog" aria-label="Mikan settings">
       <header className="drawer-header">
         <button className="back-button" title="Back to companion" onClick={goCompact}><ArrowLeft size={19}/></button>
-        <div className="drawer-title"><strong>Settings</strong><span>Mikan v0.7.0 · Local first</span></div>
+        <div className="drawer-title"><strong>Settings</strong><span>Mikan Desktop · Local first</span></div>
         <button className="secondary-action" onClick={() => setDraft(current => ({
           ...current,
           ...(settingsTab === "ai" ? {
@@ -1346,6 +1355,19 @@ export default function App() {
           </label>
           <button type="button" className="secondary-action"
             onClick={() => setScreen("personality")}><SlidersHorizontal size={15}/> Open Personality controls</button>
+          <div className="settings-section-title"><Brain size={17}/> Advanced personal memory (Mem0 OSS)</div>
+          <div className="service-panel">
+            <div><strong>Semantic recall · local</strong>
+              <span className={advancedMemoryStatus?.ready ? "service-running" : "service-muted"}>
+                {advancedMemoryStatus === null ? "Checking…" : advancedMemoryStatus.ready
+                  ? "Ready · Mem0 + Ollama" : advancedMemoryStatus.reason || "Not running"}
+              </span>
+            </div>
+            <button type="button" className="secondary-action"
+              onClick={refreshAdvancedMemoryStatus}><RotateCw size={14}/> Check status</button>
+            <small>Optional real Mem0 semantic retrieval. Uses your editable SQLite facts and local Ollama, never a cloud account. Run the bundled advanced-memory setup script once to enable it. If unavailable, ordinary SQLite recall continues unchanged.</small>
+          </div>
+
         </>}
         {settingsTab === "internet" && <>
           <div className="settings-section-title">Local search service</div>
