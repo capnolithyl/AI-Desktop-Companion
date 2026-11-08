@@ -222,3 +222,21 @@ test("source-topic inheritance never trusts invented assistant claims or switche
   assert.equal(planResearch("Any info on a new album from Metallica?", history).query.includes("Cattle Decapitation"), false);
   assert.equal(planResearch("How are you feeling today?", history).mode, "chat");
 });
+
+
+test("Pocket age recall and user-memory questions never go to Tavily even after research", () => {
+  const prior = [
+    {role:"user",content:"What's the latest NASA news?"},
+    {role:"assistant",content:"Here are five sources [1].",
+      sources:[{title:"NASA",url:"https://nasa.gov",content:"Latest",engine:"Tavily"}]}
+  ];
+  for (const question of [
+    "How old am I?", "What's my age?", "Where do I work?",
+    "Do you remember my birthday?", "What did I tell you about my hobbies?"
+  ]) {
+    assert.equal(researchRequest(question,prior),null,question);
+    assert.deepEqual(planResearch(question,prior),{mode:"chat",recent:false},question);
+  }
+  assert.ok(researchRequest("How old is the universe?",prior));
+  assert.ok(researchRequest("What's the latest news on my favorite band's new album?",prior));
+});
