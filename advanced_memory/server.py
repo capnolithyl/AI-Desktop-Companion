@@ -62,7 +62,7 @@ def make_mem0(root: Path) -> Any:
     ollama_url = os.environ.get("MIKAN_OLLAMA_URL", local_config.get("ollamaUrl", "http://127.0.0.1:11434"))
     if ollama_url.rstrip("/") not in ("http://localhost:11434", "http://127.0.0.1:11434"):
         raise ValueError("Mem0 may use only the local Ollama server")
-    model = os.environ.get("MIKAN_MEMORY_LLM", "qwen3.5:9b")
+    model = os.environ.get("MIKAN_MEMORY_LLM", local_config.get("model", "qwen3.5:9b"))
     if not model or len(model) > 100 or any(ch.isspace() for ch in model):
         raise ValueError("Invalid local Mem0 model")
     config = {
