@@ -4,7 +4,7 @@
  * The CI checker detects unmapped Tauri commands, missing files and stale versions.
  * Add a feature here when adding capability, and update the matching source/docs.
  */
-export const CAPABILITY_RELEASE = "0.8.2";
+export const CAPABILITY_RELEASE = "0.8.3";
 
 export type CapabilityStage = "implemented" | "experimental" | "planned";
 export type RuntimeDependency = "none" | "ollama" | "search" | "mem0" | "voice" | "vision" | "pocket";
@@ -148,6 +148,20 @@ export const CAPABILITIES: readonly Capability[] = [
     description:"Separate Android Pocket build using on-device Gemini Nano. Its features and device availability are not the same as this desktop install.",
     stage:"experimental",runtime:"pocket",keywords:["android","pocket","phone","mobile","nano"],
     sources:["src/mobile/MobileApp.tsx","android/app/src/main/java/dev/capnolithyl/mikan/pocket/NanoBackend.kt"],docs:["android/README.md"],
+    commands:[]
+  },
+  {
+    id:"file-reading",label:"Local document and text attachment reading",category:"Files",
+    description:"Owner-selected local text, source code, Markdown, CSV/JSON, PDF, DOCX, PPTX, ODT, XLS/XLSX/XLSB and ODS files can be previewed and their extracted text included in one chat turn. Scanned PDFs lack OCR; long files are trimmed to the model context. Files and extracted text are not automatically saved as long-term memory.",
+    stage:"experimental",runtime:"ollama",keywords:["attach","upload","file","read file","document","pdf","word","docx","excel","xlsx","spreadsheet","presentation","pptx","text","csv","json","source","code"],
+    sources:["src/chat-attachments.ts","src-tauri/src/file_attachments.rs","src/App.tsx"],docs:["attachments/README.md"],
+    commands:["extract_document"],slashCommands:["attach"]
+  },
+  {
+    id:"image-attachments",label:"Local image file attachments",category:"Files",
+    description:"Owner can select PNG/JPEG/WebP/GIF/BMP images, review a local preview, then send one resized still frame to a local Ollama model that supports vision. No automatic upload, persistent image storage, or background file access. Animated GIFs are first-frame only.",
+    stage:"experimental",runtime:"vision",keywords:["upload","attach","picture","photo","image","png","jpg","jpeg","webp","gif","bmp","see"],
+    sources:["src/chat-attachments.ts","src/App.tsx","src/screen-vision.ts"],docs:["attachments/README.md"],
     commands:[]
   },
   {
