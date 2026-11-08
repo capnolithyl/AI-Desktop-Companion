@@ -427,6 +427,7 @@ export default function App() {
   const deleteUserFact = async (id: number) => {
     await memoryApi.deleteFact(id);
     await refreshFacts();
+    void invoke("memory_semantic_recall", {query:""}).catch(() => {});
   };
   const openConversation = async (id: string) => {
     if (busy) return;
