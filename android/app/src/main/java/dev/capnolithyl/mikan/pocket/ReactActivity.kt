@@ -282,7 +282,8 @@ class ReactActivity : Activity() {
                     }
                     generation = scope.launch {
                         try {
-                            val answer = backend.generate(prompt) { chunk -> deliver(id, "delta", text = chunk) }
+                            val answer = if (method == "generateResearch") backend.generateResearch(prompt) { chunk -> deliver(id, "delta", text = chunk) }
+                                         else backend.generate(prompt) { chunk -> deliver(id, "delta", text = chunk) }
                             deliver(id, "result", text = answer)
                         } catch (interrupted: CancellationException) {
                             deliver(id, "error", error = interrupted.message ?: "Generation stopped")
