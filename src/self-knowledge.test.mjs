@@ -6,10 +6,10 @@ import {
 } from "./self-knowledge.ts";
 
 test("feature registry tracks implemented, experimental and planned without duplicates",()=>{
-  assert.equal(CAPABILITY_RELEASE,"0.8.1");
+  assert.equal(CAPABILITY_RELEASE,"0.8.2");
   assert.ok(CAPABILITIES.length>=15);
   assert.equal(new Set(CAPABILITIES.map(c=>c.id)).size,CAPABILITIES.length);
-  assert.equal(CAPABILITIES.find(c=>c.id==="screen-vision")?.stage,"planned");
+  assert.equal(CAPABILITIES.find(c=>c.id==="screen-vision")?.stage,"experimental");
   assert.equal(CAPABILITIES.find(c=>c.id==="semantic-memory")?.stage,"experimental");
   assert.equal(CAPABILITIES.find(c=>c.id==="self-knowledge")?.stage,"implemented");
 });
@@ -29,14 +29,15 @@ test("offline, unchecked and unimplemented are different claims",()=>{
   assert.equal(capabilityState(voice,{voice:"offline"}),"RUNTIME CHECK: UNAVAILABLE");
   assert.equal(capabilityState(voice,{}),"RUNTIME NOT CHECKED");
   assert.equal(capabilityState(voice,{voice:"ready"}),"RUNTIME CHECK: READY");
-  assert.equal(capabilityState(capture,{voice:"ready"}),"NOT IMPLEMENTED");
+  assert.equal(capabilityState(capture,{vision:"offline"}),"RUNTIME CHECK: UNAVAILABLE");
+  assert.equal(capabilityState(capture,{vision:"ready"}),"RUNTIME CHECK: READY");
 });
 
 test("source-grounded answers include correct limitations and read-only caveat",()=>{
   const screenshot=selfKnowledgeContext("Can you see my screen?",{ollama:"ready"});
   assert.match(screenshot,/Screen capture/);
-  assert.match(screenshot,/NOT IMPLEMENTED/);
-  assert.match(screenshot,/NO screen-vision tool/);
+  assert.match(screenshot,/RUNTIME NOT CHECKED/);
+  assert.match(screenshot,/does not continuously watch/);
   const voice=selfKnowledgeContext("Can you speak?",{voice:"offline"});
   assert.match(voice,/RUNTIME CHECK: UNAVAILABLE/);
   const docs=selfKnowledgeContext("How does your own code work?",{},["READ-ONLY BUNDLED SOURCE CODE src/App.tsx"]);
