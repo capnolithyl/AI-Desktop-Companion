@@ -35,7 +35,7 @@ test("offline, unchecked and unimplemented are different claims",()=>{
 
 test("source-grounded answers include correct limitations and read-only caveat",()=>{
   const screenshot=selfKnowledgeContext("Can you see my screen?",{ollama:"ready"});
-  assert.match(screenshot,/Screen capture/);
+  assert.match(screenshot,/screen capture/i);
   assert.match(screenshot,/RUNTIME NOT CHECKED/);
   assert.match(screenshot,/does not continuously watch/);
   const voice=selfKnowledgeContext("Can you speak?",{voice:"offline"});
