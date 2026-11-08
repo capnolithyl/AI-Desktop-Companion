@@ -5,7 +5,7 @@ use base64::{engine::general_purpose::STANDARD, Engine as _};
 use calamine::{open_workbook_auto_from_rs, Reader};
 use quick_xml::{events::Event, Reader as XmlReader, XmlVersion};
 use serde::Serialize;
-use std::{io::{Cursor, Read}, str};
+use std::io::{Cursor, Read};
 use zip::ZipArchive;
 
 const MAX_FILE_BYTES: usize = 12 * 1024 * 1024;
@@ -22,7 +22,7 @@ pub struct ExtractedDocument {
 }
 
 fn extension(file_name: &str) -> Result<&str, String> {
-    if file_name.len() > 180 || file_name.contains(['/', '\\', '\0']) {
+    if file_name.len() > 180 || file_name.chars().any(|c|matches!(c,'/'|'\\'|'\0')) {
         return Err("Invalid document name".into());
     }
     file_name.rsplit('.').next().filter(|e| file_name.contains('.') && !e.is_empty())
@@ -52,7 +52,7 @@ fn xml_to_plain(xml: &str) -> Result<String, String> {
         match reader.read_event().map_err(|e| format!("Cannot parse document XML: {e}"))? {
             Event::Start(e)=>{
                 let tag=local_tag(e.name().as_ref()).to_vec();
-                if matches!(tag.as_slice(),b"p"|b"h"|b"row"|b"tr") && !out.ends_with('\n') {
+                if [b"p".as_slice(),b"h".as_slice(),b"row".as_slice(),b"tr".as_slice()].contains(&tag.as_slice()) && !out.ends_with('\n') {
                     out.push('\n');
                 }
                 if tag==b"t" {inside_text=true;}
@@ -141,7 +141,7 @@ fn extract_spreadsheet(bytes: Vec<u8>, ext: &str) -> Result<ExtractedDocument, S
         let range=workbook.worksheet_range(name).map_err(|e|format!("Cannot read sheet {name}: {e}"))?;
         if range.height()>500 {truncated=true;}
         for row in range.rows().take(500) {
-            let line=row.iter().take(50).map(|value|value.to_string().replace(['\n','\t']," "))
+            let line=row.iter().take(50).map(|value|value.to_string().replace('\n'," ").replace('\t'," "))
                 .collect::<Vec<_>>().join("\t");
             text.push_str(&line);
             text.push('\n');
