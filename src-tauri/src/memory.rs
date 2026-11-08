@@ -304,11 +304,11 @@ fn find_archive_messages(
            AND m.conversation_id<>?2
          ORDER BY bm25(message_search),m.created_at DESC LIMIT 16"
     ).map_err(|e| e.to_string())?;
-    statement.query_map(params![terms,exclude_conversation], |row| Ok(ArchiveMemoryHit {
+    let rows = statement.query_map(params![terms,exclude_conversation], |row| Ok(ArchiveMemoryHit {
         conversation_id:row.get(0)?, title:row.get(1)?,
         content:row.get(2)?, created_at:row.get(3)?
-    })).map_err(|e| e.to_string())?
-      .collect::<Result<Vec<_>,_>>().map_err(|e| e.to_string())
+    })).map_err(|e| e.to_string())?;
+    rows.collect::<Result<Vec<_>,_>>().map_err(|e| e.to_string())
 }
 
 #[tauri::command]
