@@ -7,7 +7,7 @@
 export type LearningTurn = { role: "user" | "assistant"; content: string };
 export type LearningMemory = { fact: string; question: string; answer: string };
 
-const startLearning = /^(?:(?:please\s+)?ask me (?:anything|questions?|some questions?)(?:\s+about me)?\s+and\s+(?:remember|save|store|keep|learn)(?:\s+(?:my|the|each|every|those))?\s+(?:answers?|responses?|things I tell you)|(?:i(?:'d| would)?\s+(?:like|want)\s+(?:you|mikan)\s+to\s+learn\s+(?:some\s+)?things?\s+about me)|(?:get to know me\s+and\s+(?:remember|save)\s+(?:what|my answers)))(?:\s+.*)?$/i;
+const startLearning = /^(?:(?:please\s+)?ask me (?:anything|questions?|some questions?)(?:\s+about me)?\s+and\s+(?:remember|save|store|keep|learn)(?:\s+(?:my|the|each|every|those))?\s+(?:answers?|responses?|things I tell you)|(?:i(?:'d| would)?\s+(?:like|want)\s+(?:you|mikan)\s+to\s+learn\s+(?:some\s+)?things?\s+about me)|(?:get to know me\s+and\s+(?:remember|save)\s+(?:what|my answers)))(?:[.!?]|\s+.*)?$/i;
 const stopLearning = /^(?:stop\s+(?:asking\s+me\s+questions?|learning\s+about\s+me)|stop\s+(?:asking(?:\s+me)?\s+questions?\s+and\s+)?(?:remembering|saving|learning)(?:\s+(?:my|the|those)\s+answers?)?|(?:stop|end|quit|pause)\s+(?:the\s+)?(?:learning|memory|question)\s+(?:mode|session)|(?:don't|do not)\s+(?:remember|save)\s+(?:my|the)\s+answers?\s+anymore)(?:[.!?\s]*)$/i;
 
 /** Starting is an explicit opt-in. A normal casual question is never opt-in. */
@@ -50,7 +50,7 @@ function answerValue(userMessage: string): string | null {
     otherQuestion.test(source) || emptyOrUncertain.test(source) || sensitive.test(source)) return null;
   // One self-contained response is enough evidence; irrelevant banter after it
   // should not become part of a permanent user preference.
-  let candidate = source.split(/(?<=[.!])\s+/, 1)[0].trim()
+  let candidate = source.split(/(?<=[.!])\s+/, 1)[0].replace(/[.!?]+$/, "").trim()
     .replace(/^(?:(?:oh|well|okay|ok|hmm|uh|um|i'?d say|i think)\b[,:\s]*){0,3}/i, "")
     .replace(/\s+(?:for sure|definitely|hands down|of course)$/i, "");
   candidate = clean(candidate).replace(/^[,;:\s]+/, "");
