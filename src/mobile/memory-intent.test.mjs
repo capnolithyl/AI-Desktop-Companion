@@ -97,3 +97,27 @@ test("a passing mood or vague greeting cannot be misread as a saved name", () =>
     assert.equal(result?.kind, "clarify", text);
   }
 });
+
+
+test("remember that resolves context after a short answer to a prior question", () => {
+  const history = [
+    { role:"user", content:"Ask me some questions!" },
+    { role:"assistant", content:"What's your favorite flavor of ice cream?" },
+    { role:"user", content:"Vanilla for sure. I'm classy like that" },
+    { role:"assistant", content:"Sounds tasty!" }
+  ];
+  assert.deepEqual(resolveExplicitMemoryIntent("Remember that?", history), {
+    kind:"user",
+    fact:"The user's favorite flavor of ice cream is Vanilla",
+    description:"your answer about What's your favorite flavor of ice cream",
+    sourceText:"Vanilla for sure. I'm classy like that"
+  });
+});
+
+test("remember that will not invent a fact from an unrelated assistant statement", () => {
+  const history = [
+    { role:"user", content:"Sure" },
+    { role:"assistant", content:"Great! I am a catgirl." }
+  ];
+  assert.equal(resolveExplicitMemoryIntent("Remember that?", history)?.kind, "clarify");
+});
