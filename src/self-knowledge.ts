@@ -20,6 +20,9 @@ export type Capability = {
   sources: string[];
   docs: string[];
   commands: string[];
+  /** Visible UI surfaces and documented slash actions; checked against App.tsx and slash-commands.ts. */
+  screens?: string[];
+  slashCommands?: string[];
 };
 export type RuntimeReadiness = Partial<Record<RuntimeDependency, RuntimeState>>;
 
@@ -30,42 +33,53 @@ export const CAPABILITIES: readonly Capability[] = [
     description:"Windows system-tray application with a draggable compact overlay, global Ctrl+Alt+M hotkey and hide/show controls.",
     stage:"implemented",runtime:"none",keywords:["tray","window","overlay","shortcut","hotkey","desktop","hide"],
     sources:["src-tauri/src/lib.rs","src/App.tsx"],docs:["README.md","SETUP.md"],
-    commands:["toggle_companion","hide_companion"]
+    commands:["toggle_companion","hide_companion"],
+    screens:["compact","help"],
+    slashCommands:["help","hide","chat"]
   },
   {
     id:"local-chat",label:"Local LLM chat",category:"AI",
     description:"Text chat streams replies from local Ollama, supports model switching, cancellation and conversation-aware follow-ups. Model quality and availability depend on Ollama.",
     stage:"implemented",runtime:"ollama",keywords:["chat","model","ollama","qwen","llm","coding","stream","context"],
     sources:["src/App.tsx","src-tauri/src/lib.rs","src/conversation-engine.ts"],docs:["README.md","SETUP.md"],
-    commands:["list_models","chat_stream","condense_local_context","cancel_chat"]
+    commands:["list_models","chat_stream","condense_local_context","cancel_chat"],
+    slashCommands:["model","models","ollama","prompt"]
   },
   {
     id:"web-search",label:"On-demand web search",category:"Research",
     description:"SearXNG search with an optional local Docker service monitor, auto-search, source citations and experimental evidence verification. Cannot search when the local search service is unavailable.",
     stage:"implemented",runtime:"search",keywords:["internet","web","search","latest","news","searxng","docker","browse"],
     sources:["src-tauri/src/web_search.rs","src-tauri/src/search_service.rs","src-tauri/src/research_intent.rs"],docs:["tools/searxng/README.md","RESEARCH-EVAL.md"],
-    commands:["web_search","search_service"]
+    commands:["web_search","search_service"],
+    screens:["search"],
+    slashCommands:["search-start","search-stop","search-status","search","searxng","internet"]
   },
   {
     id:"web-reader",label:"Webpage reading and cache",category:"Research",
     description:"Can read allowed public HTTPS webpages and cache extracted text locally; site restrictions and stale pages still apply.",
     stage:"implemented",runtime:"none",keywords:["read","page","website","cache","article","documentation","url"],
     sources:["src-tauri/src/web_reader.rs","src/App.tsx"],docs:["README.md","SETUP.md"],
-    commands:["read_page","web_cache_info","clear_web_cache"]
+    commands:["read_page","web_cache_info","clear_web_cache"],
+    screens:["page"],
+    slashCommands:["read"]
   },
   {
     id:"personal-facts",label:"Personal facts and automatic extraction",category:"Memory",
     description:"Owner-editable SQLite user facts, automatic evidence-grounded fact capture, deletion and pinned core memories. Facts are separate from character canon.",
     stage:"implemented",runtime:"none",keywords:["remember","fact","profile","memory","pin","forget","personal"],
     sources:["src-tauri/src/memory.rs","src-tauri/src/memory_extraction.rs","src/memory-client.ts"],docs:["MEMORY.md"],
-    commands:["memory_list_facts","memory_add_fact","memory_update_fact","memory_delete_fact","memory_mark_recalled","memory_pin_fact","memory_process_turn"]
+    commands:["memory_list_facts","memory_add_fact","memory_update_fact","memory_delete_fact","memory_mark_recalled","memory_pin_fact","memory_process_turn"],
+    screens:["memory"],
+    slashCommands:["memories","remember","forget"]
   },
   {
     id:"conversation-history",label:"Persistent chat history",category:"Memory",
     description:"SQLite conversation archive and searchable chat UI with owner-controlled conversation deletion; conversation content is not the same as durable personal facts.",
     stage:"implemented",runtime:"none",keywords:["history","chat","archive","conversation","log","messages"],
     sources:["src-tauri/src/memory.rs","src/memory-client.ts","src/MemoryPanel.tsx"],docs:["MEMORY.md"],
-    commands:["memory_list_conversations","memory_create_conversation","memory_list_messages","memory_save_message","memory_delete_conversation"]
+    commands:["memory_list_conversations","memory_create_conversation","memory_list_messages","memory_save_message","memory_delete_conversation"],
+    screens:["log"],
+    slashCommands:["chats","log","new"]
   },
   {
     id:"archive-recall",label:"Historical conversation retrieval",category:"Memory",
@@ -93,21 +107,25 @@ export const CAPABILITIES: readonly Capability[] = [
     description:"Editable character preferences and lore kept distinct from information about the user.",
     stage:"implemented",runtime:"none",keywords:["persona","canon","personality","character","favorite","fictional"],
     sources:["src-tauri/src/memory.rs","src/CharacterCanonTab.tsx"],docs:["MEMORY.md"],
-    commands:["memory_list_character_facts","memory_add_character_fact","memory_update_character_fact","memory_delete_character_fact"]
+    commands:["memory_list_character_facts","memory_add_character_fact","memory_update_character_fact","memory_delete_character_fact"],
+    slashCommands:["canon","canon-set","canon-forget"]
   },
   {
     id:"personality-settings",label:"Personalities and presets",category:"Personality",
     description:"Personality sliders, presets and a customizable prompt change Mikan's speaking style; presets do not change model capabilities.",
     stage:"implemented",runtime:"none",keywords:["personality","persona","mood","affection","flirty","preset","settings"],
     sources:["src/personality.ts","src/PersonalityControls.tsx","src/App.tsx"],docs:["README.md"],
-    commands:[]
+    commands:[],
+    screens:["settings","personality"],
+    slashCommands:["personality","preset","randomize","playfulness","flirtiness","affection","sass","energy","settings","appearance","accent","panel","opacity","font","fontsize"]
   },
   {
     id:"portrait",label:"Static companion portrait",category:"Avatar",
     description:"Bundled static portrait with optional locally uploaded image. No live 3D model, eye-tracking or lip sync yet.",
     stage:"implemented",runtime:"none",keywords:["portrait","image","appearance","avatar","catgirl","character"],
     sources:["src/App.tsx","src/storage.ts"],docs:["README.md"],
-    commands:[]
+    commands:[],
+    slashCommands:["portrait"]
   },
   {
     id:"voice",label:"Local voice synthesis and cloning",category:"Voice",
@@ -121,7 +139,9 @@ export const CAPABILITIES: readonly Capability[] = [
     description:"Versioned self-description with live service checks and read-only, on-demand search of source files and documentation bundled into this exact installed build. No automatic self-modification.",
     stage:"implemented",runtime:"none",keywords:["yourself","capabilities","features","documentation","source","code","implementation","self","help"],
     sources:["src/self-knowledge.ts","src/self-knowledge-library.ts","scripts/check-self-knowledge.mjs"],docs:["self_knowledge/README.md"],
-    commands:[]
+    commands:[],
+    screens:["capabilities"],
+    slashCommands:["capabilities"]
   },
   {
     id:"pocket",label:"Pocket Mikan on Android",category:"Platforms",
