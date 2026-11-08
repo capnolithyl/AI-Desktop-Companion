@@ -29,7 +29,11 @@ nothing to keep. Install a new APK signed with the persistent key. Subsequent
 updates can then install directly over it.
 
 
-## Independent web research (Pocket Mikan v0.4.4)
+## Independent web research (Pocket Mikan v0.4.5)
+
+**v0.4.5:** Every Gemini Nano prompt receives live local date/time and timezone from the Android device. The Tavily evidence prompt uses the phone's local calendar date, not the UTC date (which is often tomorrow after early evening in Michigan). Simple "What date is it?" and "What time is it?" requests are answered directly from the local clock, without web searches, stale citations or Nano-generated recaps. Additional instructions prioritize the new question rather than repeating old band facts. Tests cover a UTC-midnight crossover, DST, local time requests, and temporal source handling.
+
+
 
 **v0.4.4:** Web research follow-ups such as "Any info on a potential release date, a title, or singles?" now inherit user-established topics, search for the newly requested details, and must avoid inventing specifics absent from sources. The source link list in chat is collapsed by default; tap Sources to expand. Shared routing tests cover both Windows and Android.
 
