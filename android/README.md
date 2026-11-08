@@ -1,3 +1,7 @@
+## Pocket Mikan v0.4.9: Memory-first personal questions
+
+Pocket now routes self-referential questions to phone-local SQLite rather than Tavily. It waits for any in-flight automatic memory extraction to finish, then reads fresh saved facts before preparing Nano's prompt. The web research cache is not reused for personal questions, so "How old am I?" never searches public age-calculator websites. When a saved birth date exists, the app calculates age deterministically using the phone's local calendar date, including birthday boundaries and time zones; if not saved, it explains the missing fact rather than guessing. Broader questions such as "Where do I work?" and "What do you remember about me?" stay local and use saved facts with explicit instructions not to invent personal details. This is a reusable, privacy-preserving memory-first route rather than a special-purpose web search exception.
+
 # Pocket Mikan · Shared React Android client (experimental)
 
 This is the same **Mikan project**, not a new persona implementation. The Android client now builds the React frontend from the root repository and reuses:
