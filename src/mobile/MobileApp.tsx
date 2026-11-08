@@ -626,7 +626,8 @@ export default function MobileApp() {
       if (sources.length) {
         await pocketMemory.saveMessage(threadId, {...assistant,content:"",sources,failed:false});
       }
-      const answer = await mobileBackend.generate(buildPrompt(settings, promptFacts, canon,
+      const answer = await (sources.length ? mobileBackend.generateResearch : mobileBackend.generate)(
+        buildPrompt(settings, promptFacts, canon,
         [...history, user], research, verifiedMemory), chunk => {
         output += chunk;
         // Don't flash possibly fabricated factual claims before verification.
