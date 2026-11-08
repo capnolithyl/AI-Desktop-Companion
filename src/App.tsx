@@ -37,8 +37,11 @@ import { toSpeechText, VOICE_TEST_LINE } from "./speech";
 import { memoryBudget, sessionMemoryContext, type SessionSummary } from "./memory-budget";
 import { archiveMemoryContext, shouldSearchArchive } from "./archive-memory";
 import { sessionSummaryPrompt, mergeSessionSummary, validSessionSummaryResponse } from "./session-memory";
+import { CapabilitiesPanel } from "./CapabilitiesPanel";
+import { isSelfKnowledgeQuestion, relevantCapabilities, selfKnowledgeContext, type RuntimeReadiness, type RuntimeDependency } from "./self-knowledge";
+import { loadSelfReferencePassages } from "./self-knowledge-library";
 
-type Screen = "compact" | "log" | "settings" | "search" | "page" | "personality" | "help" | "memory";
+type Screen = "compact" | "log" | "settings" | "search" | "page" | "personality" | "help" | "memory" | "capabilities";
 type SettingsTab = "ai" | "internet" | "voice" | "appearance";
 type VoiceHealth = { ready: boolean; modelLoaded: boolean; device: string | null };
 type VoiceReference = { configured: boolean; transcript: string | null; durationSeconds: number | null };
@@ -193,6 +196,8 @@ export default function App() {
   const [sessionSummaries, setSessionSummaries] = useState<SessionSummary[]>([]);
   const [userFacts, setUserFacts] = useState<UserFact[]>([]);
   const [advancedMemoryStatus, setAdvancedMemoryStatus] = useState<{ready: boolean; reason?: string; provider?: string} | null>(null);
+  const [capabilityHealth, setCapabilityHealth] = useState<RuntimeReadiness>({});
+  const [capabilitiesChecking, setCapabilitiesChecking] = useState(false);
   const [characterFacts, setCharacterFacts] = useState<CharacterFact[]>([]);
   const [memoryReady, setMemoryReady] = useState(false);
   const [memoryError, setMemoryError] = useState<string | null>(null);
@@ -375,6 +380,32 @@ export default function App() {
   };
 
   useEffect(() => { setCopyLogState("idle"); }, [messages, screen]);
+  /** Runtime truth is checked when asked, not inferred from a feature's existence. */
+  const checkCapabilities = async (query = "What can you do?"): Promise<RuntimeReadiness> => {
+    const needed = new Set<RuntimeDependency>(relevantCapabilities(query,6).map(feature=>feature.runtime));
+    const next: RuntimeReadiness = {
+      ollama: connection.mode === "online" ? "ready" :
+        connection.mode === "offline" ? "offline" : "unchecked",
+      pocket:"unchecked"
+    };
+    setCapabilitiesChecking(true);
+    try {
+      await Promise.all([
+        needed.has("mem0") ? invoke<{ready:boolean}>("memory_semantic_status")
+          .then(s=>{next.mem0=s.ready?"ready":"offline";})
+          .catch(()=>{next.mem0="offline";}) : Promise.resolve(),
+        needed.has("voice") ? invoke<VoiceHealth>("voice_health",{endpoint:settings.voice.endpoint})
+          .then(s=>{next.voice=s.ready?"ready":"offline";})
+          .catch(()=>{next.voice="offline";}) : Promise.resolve(),
+        needed.has("search") ? invoke<SearchService>("search_service",{
+          action:"status",endpoint:settings.searxngEndpoint
+        }).then(s=>{next.search=/^(?:running|ready)$/.test(s.state)?"ready":"offline";})
+          .catch(()=>{next.search="offline";}) : Promise.resolve()
+      ]);
+      setCapabilityHealth(current=>({...current,...next}));
+      return next;
+    } finally {setCapabilitiesChecking(false);}
+  };
   const refreshAdvancedMemoryStatus = () => {
     void invoke<{ready:boolean; reason?:string; provider?:string}>("memory_semantic_status")
       .then(setAdvancedMemoryStatus)
@@ -832,6 +863,8 @@ export default function App() {
     }
     switch (name) {
       case "help": setScreen("help"); return;
+      case "capabilities":
+      case "features": setScreen("capabilities"); void checkCapabilities(); return;
       case "personality":
       case "presets": setScreen("personality"); return;
       case "preset": {
@@ -1038,7 +1071,7 @@ export default function App() {
     const assistantId = crypto.randomUUID();
     const history = [...messages, user];
     // Shared routing policy: keep the proven desktop query construction in Rust.
-    let researchPlan = !withSearch ? planResearch(text, messages) : null;
+    let researchPlan = !withSearch && !isSelfKnowledgeQuestion(text) ? planResearch(text, messages) : null;
     const priorSources = !withSearch ? priorResearchSources(messages, text) : [];
     const conversationId = activeConversationId ?? crypto.randomUUID();
     setActiveConversationId(conversationId);
@@ -1096,6 +1129,12 @@ export default function App() {
         ? await memoryApi.searchArchive(text,conversationId).catch(() => [])
         : [];
       const archiveNotes = archiveMemoryContext(text,archivedMessages,budget);
+      const selfContext = isSelfKnowledgeQuestion(text)
+        ? selfKnowledgeContext(
+            text,await checkCapabilities(text),
+            await loadSelfReferencePassages(text).catch(() => []),
+          ) + "\nAuto web search is "+(settings.autoSearch?"enabled":"disabled")+" in settings."
+        : "";
       if (!withSearch && settings.autoSearch && researchPlan && researchPlan.mode !== "chat" &&
           needsContextResolution(text, messages)) {
         setActivity("Understanding follow-up…");
@@ -1150,7 +1189,7 @@ export default function App() {
           contextWindow: settings.contextWindow,
           priorSources,
           messages: [
-            { role: "system", content: [settings.systemPrompt.trim(), personalityGuidance(settings.personality), runtimeContext(), remembered.text, sessionNotes, archiveNotes, characterContext(characterFacts, text), characterAnswerGuidance(text), researchPlan?.mode !== "chat" ? contextGuidance(messages, text, 1800) : ""].filter(Boolean).join("\n\n") },
+            { role: "system", content: [settings.systemPrompt.trim(), personalityGuidance(settings.personality), runtimeContext(), selfContext, remembered.text, sessionNotes, archiveNotes, characterContext(characterFacts, text), characterAnswerGuidance(text), researchPlan?.mode !== "chat" ? contextGuidance(messages, text, 1800) : ""].filter(Boolean).join("\n\n") },
             ...(withSearch ? [{ role: "user", content: withSearch.page ? pageContext(withSearch.query, withSearch.page) : webContext(withSearch.query, withSearch.results) }] : []),
             ...history.filter(m => !withSearch || m.role === "user").slice(-budget.recentTurns).map(m => ({ role: m.role, content: m.content }))
           ]
@@ -1267,6 +1306,8 @@ export default function App() {
             </button>
             <button className="dock-icon" title="Quick personality presets (/personality)" aria-label="Personality presets"
               onClick={() => setScreen("personality")}><SlidersHorizontal size={17}/></button>
+            <button className="dock-icon" title="Mikan's features (/capabilities)" aria-label="Mikan capabilities"
+              onClick={() => {setScreen("capabilities");void checkCapabilities();}}><BookOpen size={17}/></button>
             <button className="dock-icon" title="Memory and conversations (/memories)" aria-label="Memory and conversations"
               onClick={() => openMemory("facts")}><Brain size={17}/></button>
             <button type="button" className="dock-icon" disabled={!lastReply?.content || lastReply.failed}
@@ -1504,6 +1545,11 @@ export default function App() {
       onAddFact={addUserFact} onEditFact={editUserFact} onDeleteFact={deleteUserFact} onPinFact={pinUserFact}
       onAddCharacter={addCharacter} onEditCharacter={editCharacter} onDeleteCharacter={deleteCharacter}
       onRefresh={refreshMemory}/>}
+
+    {screen === "capabilities" && <CapabilitiesPanel health={capabilityHealth}
+      checking={capabilitiesChecking} onClose={goCompact}
+      onRefresh={() => void checkCapabilities()}
+      onAsk={question => {setInput(question);goCompact();focusInput();}}/>}
 
     {screen === "personality" && <section className="drawer" role="dialog" aria-label="Quick personality controls">
       <header className="drawer-header">
