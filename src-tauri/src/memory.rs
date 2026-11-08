@@ -307,6 +307,22 @@ pub fn memory_mark_recalled(app: AppHandle, ids: Vec<i64>) -> Result<(), String>
     mark_recalled(&open_db(&app)?, &ids)
 }
 
+/// Optional owner-selected core-profile importance. This is deterministic,
+/// never inferred from untrusted web content or silently overwritten by Mem0.
+#[tauri::command]
+pub fn memory_pin_fact(app: AppHandle, id: i64, pinned: bool) -> Result<(), String> {
+    if id <= 0 { return Err("Invalid memory ID".into()); }
+    let importance = if pinned {95} else {50};
+    let changed = open_db(&app)?.execute(
+        "INSERT INTO user_memory_usage(memory_id,importance)
+         SELECT id,?2 FROM user_memories WHERE id=?1
+         ON CONFLICT(memory_id) DO UPDATE SET importance=excluded.importance",
+        params![id,importance]
+    ).map_err(|e| e.to_string())?;
+    if changed==0 { return Err("Memory no longer exists".into()); }
+    Ok(())
+}
+
 /// Canon facts are Mikan's fictional self-description, never user facts or webpage knowledge.
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
