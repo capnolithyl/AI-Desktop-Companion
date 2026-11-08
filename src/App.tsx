@@ -39,7 +39,7 @@ import { memoryBudget, sessionMemoryContext, type SessionSummary } from "./memor
 import { archiveMemoryContext, shouldSearchArchive } from "./archive-memory";
 import { sessionSummaryPrompt, mergeSessionSummary, validSessionSummaryResponse } from "./session-memory";
 import { CapabilitiesPanel } from "./CapabilitiesPanel";
-import { isSelfKnowledgeQuestion, relevantCapabilities, selfKnowledgeContext, type RuntimeReadiness, type RuntimeDependency } from "./self-knowledge";
+import { relevantCapabilities, selfKnowledgeContext, type RuntimeReadiness, type RuntimeDependency } from "./self-knowledge";
 import { loadSelfReferencePassages } from "./self-knowledge-library";
 import { visionQuestion, visionContext, type ScreenMonitor, type ScreenCapture, type VisionModelStatus } from "./screen-vision";
 import { attachmentQuestion, attachmentPromptText, loadChatAttachment, type PendingAttachment, type ExtractedDocument } from "./chat-attachments";
