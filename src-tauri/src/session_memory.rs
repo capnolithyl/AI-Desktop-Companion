@@ -118,6 +118,16 @@ pub fn memory_list_session_summaries(app: AppHandle) -> Result<Vec<SessionSummar
     records.collect::<Result<_,_>>().map_err(|e| e.to_string())
 }
 
+#[tauri::command]
+pub fn memory_delete_session_summary(app: AppHandle, conversation_id: String) -> Result<(), String> {
+    if !valid_id(&conversation_id) { return Err("Invalid conversation ID".into()); }
+    memory::open_db(&app)?.execute(
+        "DELETE FROM session_summaries WHERE conversation_id=?1",
+        params![conversation_id]
+    ).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
