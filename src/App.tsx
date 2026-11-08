@@ -414,6 +414,9 @@ export default function App() {
   const addUserFact = async (fact: string) => {
     await memoryApi.addFact(fact);
     await refreshFacts();
+    // Sync the owner-controlled mirror after a manual edit. The conversation
+    // stays usable if the optional Mem0 process is offline.
+    void invoke("memory_semantic_recall", {query:""}).catch(() => {});
     setMemoryError(null);
   };
   const editUserFact = async (id: number, fact: string) => {
