@@ -542,6 +542,8 @@ pub fn run() {
             memory::memory_update_character_fact,
             memory::memory_delete_character_fact,
             memory_extraction::memory_process_turn,
+            advanced_memory::memory_semantic_recall,
+            advanced_memory::memory_semantic_status,
             toggle_companion,
             hide_companion
         ])
