@@ -4,10 +4,57 @@
 use crate::memory;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use std::{fs, path::PathBuf, time::Duration};
+use std::{fs, path::PathBuf, time::Duration, process::{Child, Command, Stdio}, sync::{Mutex, OnceLock}};
+#[cfg(target_os = "windows")]
+use std::os::windows::process::CommandExt;
+
 use tauri::AppHandle;
 
 const SERVICE: &str = "http://127.0.0.1:18764";
+
+static OWN_CHILD: OnceLock<Mutex<Option<Child>>> = OnceLock::new();
+
+fn data_path() -> Option<PathBuf> {
+    std::env::var_os("LOCALAPPDATA")
+        .map(|root| PathBuf::from(root).join("Mikan").join("advanced-memory"))
+}
+
+/// A sidecar installed by the owner may be started with Mikan. No download,
+/// cloud login or external command is attempted by the desktop app itself.
+pub fn start_if_installed() {
+    #[cfg(target_os = "windows")]
+    {
+        let Some(root) = data_path() else { return };
+        let python = root.join("venv").join("Scripts").join("python.exe");
+        let script = root.join("server.py");
+        if !python.is_file() || !script.is_file() { return }
+        if std::net::TcpStream::connect_timeout(
+            &std::net::SocketAddr::from(([127,0,0,1],18764)),
+            Duration::from_millis(120)).is_ok() { return }
+        let mut command = Command::new(python);
+        command.arg(script).current_dir(&root)
+            .stdout(Stdio::null()).stderr(Stdio::null());
+        command.creation_flags(0x08000000); // CREATE_NO_WINDOW
+        if let Ok(child) = command.spawn() {
+            let holder = OWN_CHILD.get_or_init(|| Mutex::new(None));
+            if let Ok(mut guard) = holder.lock() { *guard = Some(child) }
+        }
+    }
+}
+
+/// Stop only a service process started by this Mikan instance. Do not kill
+/// an independently launched owner-managed Mem0 service.
+pub fn stop_if_started() {
+    if let Some(holder) = OWN_CHILD.get() {
+        if let Ok(mut guard) = holder.lock() {
+            if let Some(mut child) = guard.take() {
+                let _ = child.kill();
+                let _ = child.wait();
+            }
+        }
+    }
+}
+
 
 #[derive(Clone, Deserialize, Serialize)]
 pub struct SemanticMatch {
@@ -22,8 +69,7 @@ struct RecallResponse {
 }
 
 fn token_path() -> Option<PathBuf> {
-    std::env::var_os("LOCALAPPDATA")
-        .map(|root| PathBuf::from(root).join("Mikan").join("advanced-memory").join("token"))
+    data_path().map(|root| root.join("token"))
 }
 fn token() -> Option<String> {
     let value = fs::read_to_string(token_path()?).ok()?;
@@ -40,7 +86,6 @@ pub async fn memory_semantic_recall(app: AppHandle, query: String) -> Vec<Semant
     let Some(secret) = token() else { return vec![] };
     // Curated SQLite records, not chat logs or character canon, are indexed.
     let Ok(facts) = memory::memory_list_facts(app) else { return vec![] };
-    if facts.is_empty() { return vec![] }
     let Ok(client) = reqwest::Client::builder()
         .connect_timeout(Duration::from_millis(250))
         .timeout(Duration::from_secs(12))
