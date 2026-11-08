@@ -148,12 +148,14 @@ async fn condense_local_context(
     model: String,
     prompt: String,
     context_window: Option<u32>,
+    max_output_tokens: Option<u32>,
 ) -> Result<String, String> {
     if model.trim().is_empty() || model.len() > 120 || prompt.len() > 5500 {
         return Err("Invalid context request".into());
     }
     let url = format!("{}/api/chat", local_origin(&endpoint)?);
-    let mut options = json!({"temperature": 0, "num_predict": 190});
+    let output_limit = max_output_tokens.unwrap_or(190).clamp(64, 500);
+    let mut options = json!({"temperature": 0, "num_predict": output_limit});
     if let Some(ctx) = valid_context_window(context_window) {
         options["num_ctx"] = json!(ctx);
     }
@@ -168,7 +170,7 @@ async fn condense_local_context(
     let response = client()?
         .post(url)
         .json(&payload)
-        .timeout(Duration::from_secs(35))
+        .timeout(Duration::from_secs(if output_limit > 200 { 55 } else { 35 }))
         .send()
         .await
         .map_err(|e| format!("Local context resolution unavailable: {e}"))?;
@@ -177,7 +179,7 @@ async fn condense_local_context(
     }
     let output: Value = response.json().await
         .map_err(|e| format!("Invalid local context response: {e}"))?;
-    Ok(output["message"]["content"].as_str().unwrap_or("").chars().take(1200).collect())
+    Ok(output["message"]["content"].as_str().unwrap_or("").chars().take(3600).collect())
 }
 
 fn process_line(
