@@ -35,6 +35,14 @@ fn initialize_database(connection: &Connection) -> Result<(), String> {
          );
          CREATE INDEX IF NOT EXISTS idx_messages_conversation
            ON messages(conversation_id, created_at, id);
+         CREATE TABLE IF NOT EXISTS session_summaries (
+           conversation_id TEXT PRIMARY KEY REFERENCES conversations(id) ON DELETE CASCADE,
+           summary TEXT NOT NULL,
+           last_message_rowid INTEGER NOT NULL,
+           updated_at INTEGER NOT NULL DEFAULT (unixepoch())
+         );
+         CREATE INDEX IF NOT EXISTS idx_session_summaries_updated
+           ON session_summaries(updated_at DESC);
          CREATE TABLE IF NOT EXISTS user_memories (
            id INTEGER PRIMARY KEY AUTOINCREMENT,
            fact TEXT NOT NULL COLLATE NOCASE UNIQUE,
