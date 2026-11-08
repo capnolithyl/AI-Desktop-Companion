@@ -29,7 +29,11 @@ nothing to keep. Install a new APK signed with the persistent key. Subsequent
 updates can then install directly over it.
 
 
-## Independent web research (Pocket Mikan v0.4.5)
+## Independent web research (Pocket Mikan v0.4.6)
+
+**v0.4.6:** Opt-in conversational learning. After the user asks Mikan to learn about them by asking questions and remembering answers, short responses are interpreted using Mikan's immediately preceding question, not just isolated first-person grammar. Supported across arbitrary topics, with normalized structured facts when safe and a grounded question/answer fallback otherwise. New memories are written and verified in local SQLite *before* any confirmation; this works even when automatic memory capture is turned off. Mikan can continue asking new questions and the user can say "Stop learning my answers" to end the session. Direct "Remember that?" after a question/answer now also resolves the context. Sensitive content and uncertain answers are not saved automatically; all saved facts remain inspectable, editable, and deletable in Memory.
+
+
 
 **v0.4.5:** Every Gemini Nano prompt receives live local date/time and timezone from the Android device. The Tavily evidence prompt uses the phone's local calendar date, not the UTC date (which is often tomorrow after early evening in Michigan). Simple "What date is it?" and "What time is it?" requests are answered directly from the local clock, without web searches, stale citations or Nano-generated recaps. Additional instructions prioritize the new question rather than repeating old band facts. Tests cover a UTC-midnight crossover, DST, local time requests, and temporal source handling.
 
