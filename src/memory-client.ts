@@ -73,6 +73,7 @@ export const memoryApi = {
   deleteConversation: (id: string) => invoke<void>("memory_delete_conversation", { id }),
   listFacts: () => invoke<UserFact[]>("memory_list_facts"),
   markRecalled: (ids: number[]) => invoke<void>("memory_mark_recalled", { ids }),
+  pinFact: (id: number, pinned: boolean) => invoke<void>("memory_pin_fact", {id,pinned}),
   sessionCandidate: (conversationId: string, force = false) =>
     invoke<SessionCandidate | null>("memory_session_candidate", {conversationId, force}),
   saveSessionSummary: (candidate: SessionCandidate, summary: string) =>
