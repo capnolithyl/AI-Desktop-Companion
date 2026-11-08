@@ -20,7 +20,7 @@ test("common images, documents and source files are recognized without executabl
 });
 
 test("file prompts include bounded content, caveats and lower-trust delimiters",()=>{
-  const doc={kind:"text",name:"readme.md",size:1000,format:"md",truncated:false,text:"Hello world"} as const;
+  const doc={kind:"text",name:"readme.md",size:1000,format:"md",truncated:false,text:"Hello world"};
   const rendered=attachmentPromptText(doc,4096);
   assert.match(rendered.content,/Filename: "readme.md"/);
   assert.match(rendered.content,/BEGIN ATTACHED FILE TEXT\nHello world\nEND ATTACHED FILE TEXT/);
@@ -37,7 +37,7 @@ test("file prompts include bounded content, caveats and lower-trust delimiters",
 });
 
 test("image prompts pass no invented content, file bytes, or sensitive names to model",()=>{
-  const image={kind:"image",name:"photo.png",size:5000,width:800,height:600,imageBase64:"secret"} as const;
+  const image={kind:"image",name:"photo.png",size:5000,width:800,height:600,imageBase64:"secret"};
   const prompt=attachmentPromptText(image,8192);
   assert.match(prompt.content,/owner-approved local image/i);
   assert.doesNotMatch(prompt.content,/secret/);
