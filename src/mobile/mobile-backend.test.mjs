@@ -83,3 +83,16 @@ test("native background-generation errors reject so UI can mark message retryabl
   }));
   await assert.rejects(promise,/Tap Retry/);
 });
+
+
+test("foreground resume rejects an undelivered native background cancellation", async () => {
+  const promise=mobileBackend.generateResearch("Long running chat",()=>{});
+  const request=packets.shift();
+  assert.equal(request.method,"generateResearch");
+  globalThis.window.__mikanBackgroundInterrupted();
+  await assert.rejects(promise,/Tap Retry/);
+  // A late native error is ignored after the pending request is rejected.
+  globalThis.window.__mikanReceive(JSON.stringify({
+    id:request.id,kind:"error",error:"Generation stopped"
+  }));
+});
