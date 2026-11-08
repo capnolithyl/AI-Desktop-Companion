@@ -55,7 +55,11 @@ def make_mem0(root: Path) -> Any:
     from mem0 import Memory  # optional dependency; the base desktop app needs none
     vector_dir = root / "qdrant"
     vector_dir.mkdir(parents=True, exist_ok=True)
-    ollama_url = os.environ.get("MIKAN_OLLAMA_URL", "http://127.0.0.1:11434")
+    local_config = {}
+    file = root / "config.json"
+    if file.exists():
+        local_config = json.loads(file.read_text(encoding="utf-8"))
+    ollama_url = os.environ.get("MIKAN_OLLAMA_URL", local_config.get("ollamaUrl", "http://127.0.0.1:11434"))
     if ollama_url.rstrip("/") not in ("http://localhost:11434", "http://127.0.0.1:11434"):
         raise ValueError("Mem0 may use only the local Ollama server")
     model = os.environ.get("MIKAN_MEMORY_LLM", "qwen3.5:9b")
