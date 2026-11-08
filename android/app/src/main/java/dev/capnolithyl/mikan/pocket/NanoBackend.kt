@@ -46,6 +46,11 @@ class NanoBackend {
     suspend fun generate(prompt: String, onDelta: (String) -> Unit): String =
         generateInternal(prompt, 280, 0.75f, onDelta)
 
+    // Research has a lower sampling temperature than personality chat;
+    // the deterministic source guard still checks the generated claims.
+    suspend fun generateResearch(prompt: String, onDelta: (String) -> Unit): String =
+        generateInternal(prompt, 330, 0.18f, onDelta)
+
     suspend fun generateMemory(prompt: String): String =
         generateInternal(prompt, 520, 0f) { }
 
