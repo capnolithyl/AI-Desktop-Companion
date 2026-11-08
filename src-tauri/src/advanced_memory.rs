@@ -80,7 +80,7 @@ fn token() -> Option<String> {
 
 #[tauri::command]
 pub async fn memory_semantic_recall(app: AppHandle, query: String) -> Vec<SemanticMatch> {
-    if query.trim().is_empty() || query.len() > 1000 {
+    if query.len() > 1000 {
         return vec![];
     }
     let Some(secret) = token() else { return vec![] };
