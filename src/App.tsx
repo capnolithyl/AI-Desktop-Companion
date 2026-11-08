@@ -12,7 +12,7 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { register, unregister } from "@tauri-apps/plugin-global-shortcut";
 import {
-  ArrowLeft, ArrowUp, Brain, Cat, Check, Clock3, Copy, History,
+  ArrowLeft, ArrowUp, Brain, Camera, Cat, Check, Clock3, Copy, History,
   BookOpen, ExternalLink, HardDrive, LoaderCircle, MessageCircle, RotateCw, Search, Settings2, SlidersHorizontal, Sparkles, Square, SquarePen, Volume2, X
 } from "lucide-react";
 import {
@@ -40,6 +40,7 @@ import { sessionSummaryPrompt, mergeSessionSummary, validSessionSummaryResponse 
 import { CapabilitiesPanel } from "./CapabilitiesPanel";
 import { isSelfKnowledgeQuestion, relevantCapabilities, selfKnowledgeContext, type RuntimeReadiness, type RuntimeDependency } from "./self-knowledge";
 import { loadSelfReferencePassages } from "./self-knowledge-library";
+import { visionQuestion, visionContext, type ScreenMonitor, type ScreenCapture, type VisionModelStatus } from "./screen-vision";
 
 type Screen = "compact" | "log" | "settings" | "search" | "page" | "personality" | "help" | "memory" | "capabilities";
 type SettingsTab = "ai" | "internet" | "voice" | "appearance";
@@ -227,6 +228,14 @@ export default function App() {
   const automaticMemoryQueue = useRef<Promise<void>>(Promise.resolve());
   const sessionMemoryQueue = useRef<Promise<void>>(Promise.resolve());
   const stopRequested = useRef(false);
+  // Screenshots exist only in UI state until the owner sends one turn; never saved to SQLite.
+  const [capturePickerOpen, setCapturePickerOpen] = useState(false);
+  const [screens, setScreens] = useState<ScreenMonitor[]>([]);
+  const [selectedScreen, setSelectedScreen] = useState(0);
+  const [pendingScreenshot, setPendingScreenshot] = useState<ScreenCapture | null>(null);
+  const [captureBusy, setCaptureBusy] = useState(false);
+  const [captureError, setCaptureError] = useState<string | null>(null);
+  const [visionModel, setVisionModel] = useState<VisionModelStatus | null>(null);
   const [voiceState, setVoiceState] = useState<"idle" | "synthesizing" | "playing">("idle");
   const [voiceError, setVoiceError] = useState<string | null>(null);
   const [voiceHealth, setVoiceHealth] = useState<VoiceHealth | null>(null);
@@ -397,6 +406,10 @@ export default function App() {
         needed.has("voice") ? invoke<VoiceHealth>("voice_health",{endpoint:settings.voice.endpoint})
           .then(s=>{next.voice=s.ready?"ready":"offline";})
           .catch(()=>{next.voice="offline";}) : Promise.resolve(),
+        needed.has("vision") ? invoke<VisionModelStatus>("vision_model_status",{
+          endpoint:settings.endpoint,model:settings.model
+        }).then(s=>{next.vision=s.supportsVision?"ready":"offline";})
+          .catch(()=>{next.vision="offline";}) : Promise.resolve(),
         needed.has("search") ? invoke<SearchService>("search_service",{
           action:"status",endpoint:settings.searxngEndpoint
         }).then(s=>{next.search=s.state==="ready"?"ready":"offline";})
@@ -405,6 +418,43 @@ export default function App() {
       setCapabilityHealth(current=>({...current,...next}));
       return next;
     } finally {setCapabilitiesChecking(false);}
+  };
+  const openCapturePicker = async () => {
+    if (busy || captureBusy) return;
+    setCapturePickerOpen(true);
+    setCaptureBusy(true);
+    setCaptureError(null);
+    setVisionModel(null);
+    try {
+      const [monitors, modelStatus] = await Promise.all([
+        invoke<ScreenMonitor[]>("vision_monitors"),
+        invoke<VisionModelStatus>("vision_model_status", {endpoint:settings.endpoint,model:settings.model})
+      ]);
+      setScreens(monitors);
+      setSelectedScreen(monitors.find(monitor=>monitor.primary)?.index ?? 0);
+      setVisionModel(modelStatus);
+      if (!modelStatus.supportsVision) {
+        setCaptureError(`The selected model (${settings.model}) cannot process images. Pick a vision-capable Ollama model first.`);
+      }
+    } catch (error) {
+      setCaptureError(errorText(error));
+    } finally {
+      setCaptureBusy(false);
+    }
+  };
+  const captureSelectedScreen = async () => {
+    if (busy || captureBusy || !visionModel?.supportsVision) return;
+    setCaptureBusy(true);
+    setCaptureError(null);
+    try {
+      const image = await invoke<ScreenCapture>("vision_capture",{monitorIndex:selectedScreen});
+      setPendingScreenshot(image);
+      setCapturePickerOpen(false);
+    } catch (error) {
+      setCaptureError(errorText(error));
+    } finally {
+      setCaptureBusy(false);
+    }
   };
   const refreshAdvancedMemoryStatus = () => {
     void invoke<{ready:boolean; reason?:string; provider?:string}>("memory_semantic_status")
@@ -692,6 +742,8 @@ export default function App() {
   };
 
   const clearChat = () => {
+    setPendingScreenshot(null);
+    setCapturePickerOpen(false);
     if (busy || !memoryReady) return;
     if (activeConversationId) queueSessionMemory(activeConversationId,true);
     setMessages([]);
@@ -776,6 +828,7 @@ export default function App() {
     const updated = { ...settings, model };
     setSettings(updated);
     saveSettings(updated);
+    setVisionModel(null);
     setDraft(current => ({ ...current, model }));
   };
 
@@ -1054,11 +1107,13 @@ export default function App() {
   };
 
   const send = async (withSearch?: { query: string; results: WebResult[]; page?: PageDocument }) => {
-    const text = withSearch ? withSearch.query : input.trim();
+    const screenshot = withSearch ? null : pendingScreenshot;
+    const text = withSearch ? withSearch.query : visionQuestion(input,!!screenshot);
     if (!text) return;
 
     // Slash commands stay inside the app and never reach the language model.
     if (!withSearch && text.startsWith("/")) {
+      if (screenshot) { setCaptureError("Remove the screenshot before using a slash command."); return; }
       runSlashCommand(text);
       return;
     }
@@ -1067,12 +1122,17 @@ export default function App() {
     if (!memoryReady) { setFeedback("Loading conversation memory…"); return; }
     stopSpeech();
     setFeedback(null);
-    const user: LogMessage = { id: crypto.randomUUID(), role: "user", content: text, createdAt: Date.now() };
+    const user: LogMessage = {
+      id: crypto.randomUUID(),role: "user",
+      // The annotation is archived; the actual image is not persisted in SQLite.
+      content: screenshot ? text+"\n[Screen image attached for this turn; image not stored]" : text,
+      createdAt: Date.now()
+    };
     const assistantId = crypto.randomUUID();
     const history = [...messages, user];
     // Shared routing policy: keep the proven desktop query construction in Rust.
-    let researchPlan = !withSearch && !isSelfKnowledgeQuestion(text) ? planResearch(text, messages) : null;
-    const priorSources = !withSearch ? priorResearchSources(messages, text) : [];
+    let researchPlan = !withSearch && !screenshot && !isSelfKnowledgeQuestion(text) ? planResearch(text, messages) : null;
+    const priorSources = !withSearch && !screenshot ? priorResearchSources(messages, text) : [];
     const conversationId = activeConversationId ?? crypto.randomUUID();
     setActiveConversationId(conversationId);
     const persistMessage = async (message: LogMessage) => {
@@ -1092,6 +1152,9 @@ export default function App() {
       ...(withSearch ? { sources: withSearch.results } : {})
     }]);
     setInput("");
+    setPendingScreenshot(null);
+    setCapturePickerOpen(false);
+    setCaptureError(null);
     activeRequestId.current = requestId;
     stopRequested.current = false;
     setStopping(false);
@@ -1129,6 +1192,7 @@ export default function App() {
         ? await memoryApi.searchArchive(text,conversationId).catch(() => [])
         : [];
       const archiveNotes = archiveMemoryContext(text,archivedMessages,budget);
+      const screenNotes = visionContext(text,!!screenshot);
       const selfContext = isSelfKnowledgeQuestion(text)
         ? selfKnowledgeContext(
             text,await checkCapabilities(text),
@@ -1178,7 +1242,7 @@ export default function App() {
           requestId,
           endpoint: settings.endpoint,
           model: settings.model,
-          autoSearch: settings.autoSearch && !withSearch,
+          autoSearch: settings.autoSearch && !withSearch && !screenshot,
           structuredResearch: settings.structuredResearch,
           // These hints come from shared TypeScript rules used by Pocket too.
           // Rust still owns SearXNG query refinement, retries and web tools.
@@ -1189,9 +1253,13 @@ export default function App() {
           contextWindow: settings.contextWindow,
           priorSources,
           messages: [
-            { role: "system", content: [settings.systemPrompt.trim(), personalityGuidance(settings.personality), runtimeContext(), selfContext, remembered.text, sessionNotes, archiveNotes, characterContext(characterFacts, text), characterAnswerGuidance(text), researchPlan?.mode !== "chat" ? contextGuidance(messages, text, 1800) : ""].filter(Boolean).join("\n\n") },
+            { role: "system", content: [settings.systemPrompt.trim(), personalityGuidance(settings.personality), runtimeContext(), selfContext, screenNotes, remembered.text, sessionNotes, archiveNotes, characterContext(characterFacts, text), characterAnswerGuidance(text), researchPlan?.mode !== "chat" ? contextGuidance(messages, text, 1800) : ""].filter(Boolean).join("\n\n") },
             ...(withSearch ? [{ role: "user", content: withSearch.page ? pageContext(withSearch.query, withSearch.page) : webContext(withSearch.query, withSearch.results) }] : []),
-            ...history.filter(m => !withSearch || m.role === "user").slice(-budget.recentTurns).map(m => ({ role: m.role, content: m.content }))
+            ...history.filter(m => !withSearch || m.role === "user").slice(-budget.recentTurns).map(m => ({
+              role:m.role,content:m.content,
+              // The image is attached to only this final user turn, never any saved history.
+              ...(screenshot && m.id === user.id ? {images:[screenshot.imageBase64]} : {})
+            }))
           ]
         }
       });
@@ -1218,8 +1286,11 @@ export default function App() {
       if (remembered.ids.length) {
         void memoryApi.markRecalled(remembered.ids).catch(() => {});
       }
-      queueAutomaticMemory(conversationId, user.id, assistant.id);
-      queueSessionMemory(conversationId);
+      // Don't automatically extract durable personal facts from a transient screenshot.
+      if (!screenshot) {
+        queueAutomaticMemory(conversationId, user.id, assistant.id);
+        queueSessionMemory(conversationId);
+      }
       if (settings.voice.autoSpeak) void speak(finalText);
     } catch (error) {
       const message = errorText(error);
@@ -1325,7 +1396,44 @@ export default function App() {
         <div className="latest-reply"><MarkdownText text={replyText}/></div>
         {voiceError && <div className="voice-error" role="alert">Voice: {voiceError}</div>}
       </div>
+      {capturePickerOpen && <div className="vision-panel">
+        <strong>Share a screen with Mikan</strong>
+        <small>Choose a display, then capture it. Mikan briefly hides her own window.</small>
+        {screens.length>0 && <label>Display
+          <select aria-label="Choose display to capture" value={selectedScreen}
+            onChange={event=>setSelectedScreen(Number(event.target.value))}
+            disabled={captureBusy}>
+            {screens.map(m=><option value={m.index} key={m.index}>
+              {m.label} ({m.width}×{m.height}){m.primary?" · primary":""}
+            </option>)}
+          </select>
+        </label>}
+        <div className="vision-actions">
+          <button type="button" disabled={captureBusy||!visionModel?.supportsVision}
+            onClick={()=>void captureSelectedScreen()}>
+            {captureBusy?<LoaderCircle size={14} className="spin"/>:<Camera size={14}/>}
+            Take screenshot
+          </button>
+          <button type="button" onClick={()=>setCapturePickerOpen(false)}>Cancel</button>
+        </div>
+        <small>Screen content may include private information. You review it before sending to local Ollama.</small>
+      </div>}
+      {pendingScreenshot && <div className="vision-preview">
+        <img src={`data:image/jpeg;base64,${pendingScreenshot.imageBase64}`}
+          alt="Screenshot pending your approval" />
+        <div><strong>{pendingScreenshot.label}</strong>
+          <small>{pendingScreenshot.width}×{pendingScreenshot.height} · Not sent yet</small>
+          <button type="button" onClick={()=>setPendingScreenshot(null)}>Remove screenshot</button>
+        </div>
+      </div>}
+      {captureError && <div className="vision-error" role="alert">{captureError}</div>}
       <div className="input-row">
+        <button type="button" className="vision-capture-button" aria-label="Capture a screen for Mikan"
+          title="Capture and preview a screen (one shot, not continuous)"
+          disabled={busy||captureBusy}
+          onClick={()=>capturePickerOpen?setCapturePickerOpen(false):void openCapturePicker()}>
+          {captureBusy?<LoaderCircle size={19} className="spin"/>:<Camera size={19}/>}
+        </button>
         <textarea
           ref={inputRef}
           aria-label="Message Mikan"
