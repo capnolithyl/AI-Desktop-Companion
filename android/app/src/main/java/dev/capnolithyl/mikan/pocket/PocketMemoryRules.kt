@@ -83,9 +83,9 @@ object PocketMemoryRules {
         if (negative.matches(text)) return false
         // Use the final interrogative from the immediately preceding assistant
         // turn, never a question in an unrelated old chat.
-        val question = previousAssistant.substringAfterLast('.', previousAssistant)
-            .substringAfterLast('!', previousAssistant).trim()
-        if (!question.contains('?') || question.length > 260 || sensitive(question)) return false
+        val question = Regex("""[^?!\n]{3,220}\?""")
+            .findAll(previousAssistant).lastOrNull()?.value?.trim().orEmpty()
+        if (question.isBlank() || sensitive(question)) return false
         return Regex("\\b(?:you|your|yours)\\b", RegexOption.IGNORE_CASE)
             .containsMatchIn(question)
     }
