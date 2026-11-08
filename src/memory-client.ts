@@ -84,6 +84,8 @@ export const memoryApi = {
     }),
   listSessionSummaries: () =>
     invoke<SessionSummary[]>("memory_list_session_summaries"),
+  deleteSessionSummary: (conversationId: string) =>
+    invoke<void>("memory_delete_session_summary", {conversationId}),
   addFact: (fact: string) => invoke<UserFact>("memory_add_fact", { fact }),
   updateFact: (id: number, fact: string) => invoke<void>("memory_update_fact", { id, fact }),
   deleteFact: (id: number) => invoke<void>("memory_delete_fact", { id }),
