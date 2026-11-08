@@ -846,6 +846,16 @@ export default function App() {
 
     try {
       await persistMessage(user);
+      // Always refresh authoritative SQLite facts before answering. Optional
+      // Mem0 OSS reorders facts by meaning (e.g. "website" => WordPress skills).
+      // With no sidecar, the Rust command returns [] and normal chat continues.
+      setActivity("Recalling relevant context…");
+      const liveFacts = await memoryApi.listFacts().catch(() => userFacts);
+      const semanticMatches = await invoke<Array<{id:number; fact:string; score:number|null}>>(
+        "memory_semantic_recall", { query: text }
+      ).catch(() => []);
+      const semanticIds = semanticMatches.map(entry => entry.id);
+      if (liveFacts !== userFacts) setUserFacts(liveFacts);
       if (!withSearch && settings.autoSearch && researchPlan && researchPlan.mode !== "chat" &&
           needsContextResolution(text, messages)) {
         setActivity("Understanding follow-up…");
@@ -899,7 +909,7 @@ export default function App() {
           contextWindow: settings.contextWindow,
           priorSources,
           messages: [
-            { role: "system", content: [settings.systemPrompt.trim(), personalityGuidance(settings.personality), runtimeContext(), memoryContext(userFacts, text), characterContext(characterFacts, text), characterAnswerGuidance(text), researchPlan?.mode !== "chat" ? contextGuidance(messages, text, 1800) : ""].filter(Boolean).join("\n\n") },
+            { role: "system", content: [settings.systemPrompt.trim(), personalityGuidance(settings.personality), runtimeContext(), memoryContext(liveFacts, text, semanticIds), characterContext(characterFacts, text), characterAnswerGuidance(text), researchPlan?.mode !== "chat" ? contextGuidance(messages, text, 1800) : ""].filter(Boolean).join("\n\n") },
             ...(withSearch ? [{ role: "user", content: withSearch.page ? pageContext(withSearch.query, withSearch.page) : webContext(withSearch.query, withSearch.results) }] : []),
             ...history.filter(m => !withSearch || m.role === "user").slice(-18).map(m => ({ role: m.role, content: m.content }))
           ]
