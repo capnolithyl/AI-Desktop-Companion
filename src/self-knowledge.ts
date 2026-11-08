@@ -176,6 +176,11 @@ function words(input:string): string[] {
 export function relevantCapabilities(query:string, limit=5): Capability[] {
   if (/\b(?:what can you do|list (?:all )?(?:your )?(?:features|capabilities)|your capabilities|your features|all your features)\b/i.test(query))
     return [...CAPABILITIES];
+  // "Inspect your own source" refers to the self-knowledge library even when
+  // the user does not name a particular system or implementation module.
+  if (/\b(?:your|mikan(?:'s)?)\b.{0,24}\b(?:source|code|documentation|architecture)\b/i.test(query)
+      && !/\b(?:memory|search|voice|audio|avatar|screen|android|chat|web)\b/i.test(query))
+    return CAPABILITIES.filter(c=>c.id==="self-knowledge");
   const terms=words(query);
   if (!terms.length) return CAPABILITIES.slice(0,limit);
   return CAPABILITIES.map(feature=>{
