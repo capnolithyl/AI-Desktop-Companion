@@ -12,3 +12,10 @@ src-tauri/icons/
 # Local-only SearXNG secrets and writable container cache
 tools/searxng/.env
 tools/searxng/cache/
+
+# Local Python virtual environments and caches
+.venv/
+venv/
+__pycache__/
+.pytest_cache/
+*.py[cod]

@@ -25,3 +25,27 @@ export function toSpeechText(markdown: string): string {
 }
 export const VOICE_TEST_LINE =
   "Hey there! I'm Mikan. I finally have a voice. Let's see if I can sound cute without turning into a squeaky toy.";
+
+/** Break text into short WAV synthesis jobs; avoid delaying the first spoken word. */
+export function splitSpeechText(text: string, maxChars = 160): string[] {
+  if (maxChars < 32) throw new Error("Speech chunks need at least 32 characters");
+  const chunks: string[] = [];
+  let remaining = text.trim();
+  while (remaining.length > maxChars) {
+    const window = remaining.slice(0, maxChars + 1);
+    let boundary = -1;
+    for (const regex of [/[.!?]["')\]]*\s+/g, /[,;:]\s+/g, /\s+/g]) {
+      for (const match of window.matchAll(regex)) {
+        const end = match.index + match[0].length;
+        if (end >= Math.floor(maxChars * 0.3) && end <= maxChars) boundary = end;
+      }
+      if (boundary !== -1) break;
+    }
+    const cut = boundary === -1 ? maxChars : boundary;
+    const chunk = remaining.slice(0, cut).trim();
+    if (chunk) chunks.push(chunk);
+    remaining = remaining.slice(cut).trimStart();
+  }
+  if (remaining) chunks.push(remaining);
+  return chunks;
+}
