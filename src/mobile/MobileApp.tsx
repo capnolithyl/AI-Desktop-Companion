@@ -737,6 +737,14 @@ export default function MobileApp() {
                   title={source.url}>{index + 1}. {source.title}</button>)}
             </div>
           </details>}
+          {turn.role === "assistant" && (turn.failed || (!turn.content.trim() && !busy)) &&
+            retryTarget(active.id, active.turns, turn.id) && <button
+              type="button" className="pocket-retry"
+              disabled={busy || !memoryReady || model !== "READY"}
+              onClick={() => {
+                const target = retryTarget(active.id, active.turns, turn.id);
+                if (target) void send(target.user.content, undefined, target);
+              }}><RotateCcw size={15}/> Retry answer</button>}
         </article>)}
         {intro && <p className="pocket-notice">{intro}</p>}
         {webActivity && <p className="pocket-web-activity" role="status"><LoaderCircle size={14} className="spin"/> {webActivity}</p>}
