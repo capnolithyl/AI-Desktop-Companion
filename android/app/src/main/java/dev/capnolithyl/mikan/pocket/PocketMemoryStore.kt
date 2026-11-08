@@ -142,6 +142,9 @@ class PocketMemoryStore(private val context: Context) :
                 metadata.optJSONArray("sources")?.let { sources ->
                     turn.put("sources", sources)
                 }
+                if (metadata.optBoolean("failed", false) || (turn.optString("role") == "assistant" && turn.optString("content").isEmpty())) {
+                    turn.put("failed", true)
+                }
                 turn
             }.forEach(messages::put)
             conversation.put("turns",messages)
