@@ -581,15 +581,19 @@ export default function MobileApp() {
       if (webEnabled && planned?.recent && !webConfigured && mode !== "read") {
         throw new Error("Current information needs Tavily. Add your free API key in Settings → Internet, or turn off automatic search to use Nano offline.");
       }
-      // Explicit commands always use the provider. Automatic search is optional.
-      if (mode === "read") {
+      // Retrying a failed generation reuses the already retrieved evidence.
+      // This avoids unnecessary Tavily credits and preserves the same sources.
+      if (retry?.assistant.sources?.length) {
+        sources = retry.assistant.sources;
+        research = compactWebContext(lookup, sources);
+      } else if (mode === "read") {
         if (!webConfigured) throw new Error("Set a Tavily API key in Settings → Internet before reading webpages.");
         const address = text.replace(/^Read and summarize this webpage:\s*/i, "").trim();
         setWebActivity("Reading webpage…");
         setWebBusy(true);
         try {
           const page = await mobileBackend.readWeb(address);
-          sources = [{title:page.title, url:page.url, content:page.content.slice(0, 300), engine:"Tavily"}];
+          sources = [{title:page.title, url:page.url, content:page.content.slice(0, 3300), engine:"Tavily"}];
           research = pageContext(text, { ...page, content: page.content.slice(0, 3300) });
         } finally {
           setWebBusy(false);
@@ -617,25 +621,33 @@ export default function MobileApp() {
           setWebActivity("");
         }
       }
+      // Save retrieved sources before Nano starts. An app switch can interrupt
+      // AICore; Retry then uses identical evidence without a second web query.
+      if (sources.length) {
+        await pocketMemory.saveMessage(threadId, {...assistant,content:"",sources,failed:false});
+      }
       const answer = await mobileBackend.generate(buildPrompt(settings, promptFacts, canon,
         [...history, user], research, verifiedMemory), chunk => {
         output += chunk;
-        replaceTurn(threadId, assistant.id, sources.length ? output : stripUnsupportedCitations(output),
-          sources.length ? sources : undefined);
+        // Don't flash possibly fabricated factual claims before verification.
+        if (!sources.length) {
+          replaceTurn(threadId, assistant.id, stripUnsupportedCitations(output));
+        }
       });
-      const displayedAnswer = sources.length ? answer : stripUnsupportedCitations(answer);
-      replaceTurn(threadId, assistant.id, displayedAnswer, sources.length ? sources : undefined);
-      // Keep the saved reply identical to the UI: without sources, citation numbers are unverified.
-      await pocketMemory.saveMessage(threadId, { ...assistant, content: displayedAnswer, ...(sources.length ? { sources } : {}) });
-      // Contextual answer already wrote the fact; don't ask automatic
-      // extraction to duplicate it from the same message.
-      if (!verifiedMemory) captureAutomaticMemory(threadId, user.id, assistant.id);
+      const displayedAnswer = sources.length
+        ? (mode === "read" ? answer : verifyResearchAnswer(answer, sources).text)
+        : stripUnsupportedCitations(answer);
+      replaceTurn(threadId, assistant.id, displayedAnswer, sources, false);
+      await pocketMemory.saveMessage(threadId, {...assistant,content:displayedAnswer,sources,failed:false});
+      // No auto-memory writes on retry or a mere research response rerun.
+      if (!verifiedMemory && !retry) captureAutomaticMemory(threadId, user.id, assistant.id);
     } catch (failure) {
       const detail = failure instanceof Error ? failure.message : String(failure);
-      const reply = output || (mode || webEnabled ? "I couldn't verify that information right now." : "(No response)");
-      replaceTurn(threadId, assistant.id, reply);
+      const reply = output && !sources.length
+        ? output : "Generation interrupted. Tap Retry to regenerate this answer.";
+      replaceTurn(threadId, assistant.id, reply, sources, true);
       setError(detail);
-      void pocketMemory.saveMessage(threadId, { ...assistant, content: reply })
+      await pocketMemory.saveMessage(threadId, {...assistant,content:reply,sources,failed:true})
         .catch(() => {});
     } finally {
       setBusy(false);
