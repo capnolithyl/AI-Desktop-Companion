@@ -13,8 +13,8 @@ const unsafe = /\b(?:password|passphrase|api.key|secret.key|private.key|authoriz
  * Each note needs a literal user-authored evidence substring.
  */
 export function sessionSummaryPrompt(candidate: SessionCandidate): string {
-  const messages = candidate.userMessages.slice(-24).map((m,i) =>
-    (i+1)+". "+m.slice(0, 300).replace(/\s+/g," ")).join("\n");
+  const messages = candidate.userMessages.slice(-16).map((m,i) =>
+    (i+1)+". "+m.slice(0, 230).replace(/\s+/g," ")).join("\n");
   return [
     "You are a LOCAL conversation-summary assistant for a private AI companion.",
     'Output ONLY JSON: {"notes":[{"note":"brief topic/decision/open question","evidence":"exact user quote"}]}.',
@@ -36,6 +36,9 @@ function parseObject(raw: string): Record<string, unknown> | null {
     return value && typeof value==="object" && !Array.isArray(value)
       ? value as Record<string,unknown> : null;
   } catch { return null }
+}
+export function validSessionSummaryResponse(raw: string): boolean {
+  return Array.isArray(parseObject(raw)?.notes);
 }
 /** Preserve earlier grounded notes. New notes must have exact user evidence;
  * user quotes are retained to distinguish remembered discussions from facts.
