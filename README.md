@@ -2,6 +2,8 @@
 
 A local-first, personal Windows AI desktop companion powered by Tauri 2, React, TypeScript, and Ollama. Free hobby project for one PC.
 
+**v0.8.1 (self-knowledge):** Feature inventory + live local service checks in the /capabilities panel, plus on-demand read-only search of the *installed build's* bundled docs and selected source files. Mikan can answer which features exist versus what is actually online without claiming planned tools work. Source/documentation excerpts are reference text, not executable instructions or permissions. On every PR, Windows CI checks that all registered native commands appear in the feature registry, every cited source/documentation path exists and the release versions match; adding frontend-only features still requires updating the catalog during review. See [Self-knowledge maintenance](self_knowledge/README.md).
+
 **v0.8.0 (consolidated desktop development build):** Integrates advanced local Mem0 OSS + embedded Qdrant semantic recall, owner-editable SQLite memories and pinned facts, bounded session summaries, and **SQLite FTS5 search over historical USER messages**. Past chat excerpts are retrieved only for relevant personal questions, treated as unverified historical context, and prevented from overruling corrected facts. New topic-based summary selection avoids injecting unrelated old chats. Bundles the experimental local Qwen3-TTS voice bridge and opt-in source-anchored research, alongside Pocket v0.4.9's Android fixes. This is an intentionally experimental checkpoint, not a guarantee of flawless live inference on Windows/AMD. Install the optional Mem0 and voice services separately using their READMEs. No cloud memory service is required.
 
 
