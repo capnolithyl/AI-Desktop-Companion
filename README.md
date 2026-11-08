@@ -22,6 +22,8 @@ A local-first, personal Windows AI desktop companion powered by Tauri 2, React, 
 
 **v0.6.0:** First local SQLite memory layer: persistent conversations and explicitly saved user facts, with a memory inspector and slash commands. Previous v0.5.4 features:  Conversational, explicitly labeled speculation grounded in evidence; continuity across follow-ups and improved inline citation guidance; expanded web-research triggers and recent-album queries; evidence-first search with transparent queries and source excerpts, per-turn Eastern date/time context, stronger search chronology/disambiguation, integrated Docker/SearXNG lifecycle controls, organized Settings tabs (AI, Internet, Appearance), separate personality presets, optional model-directed web tools, safe public HTTPS reader, and on-disk webpage caching.
 
+**Voice prototype branch:** Optional localhost Qwen3-TTS VoiceDesign/Base service, persistent WAV reference cloning, and Speak/Stop UI. See [tools/tts/README.md](tools/tts/README.md). The Python speech service is not bundled or auto-started; AMD RX 9070 inference still needs on-PC benchmarking.
+
 ## Getting started
 
 1. Install Ollama for Windows and download a model (such as `qwen3.5:9b`).

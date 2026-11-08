@@ -126,3 +126,30 @@ Changing the context window can improve retention, but won't guarantee factual a
 ## v0.7.0: Mikan's own memory
 
 Use `/canon` to edit Mikan's own favorites, interests, dislikes, hobbies and traits separately from **About you** and **Chats**. Use `/canon-set favorite color: orange` to save a new preference, or `/canon-forget <id>` to remove it. User facts still use `/remember`. Character canon persists locally in SQLite and is not automatically extracted from chat yet. See [MEMORY.md](MEMORY.md).
+
+## Local voice prototype (Qwen3-TTS)
+
+Voice is under **Settings → Voice**. Automatic speaking is off by default;
+the speaker icon reads the most recent reply, and individual replies in
+`/log` have a Speak action. Stop the audio or pending playback with the
+same dock button. Mikan skips stage directions, citations, Markdown and code
+when speaking; long answers are limited to their first passage for now.
+
+A separate optional Python Qwen3-TTS VoiceDesign server must be running at
+`http://127.0.0.1:8765`. The voice model is **not bundled** with Mikan and
+does **not start automatically**. Follow [tools/tts/README.md](tools/tts/README.md)
+for setup and AMD Windows caveats. Use **Check connection** and **Test voice**
+in Settings → Voice. The voice description and playback speed can be adjusted;
+the design model does not yet guarantee a fixed speaker from one response to
+the next. No paid speech API is used.
+
+### Reusing one consistent Mikan voice
+
+Under **Settings → Voice**, choose a VoiceDesign recording you like, upload
+its WAV (mono PCM16, 2–30 seconds, under 6 MB) and enter the exact transcript.
+Mikan then uses the Qwen3-TTS **Base** model with a cached voice clone prompt,
+instead of regenerating a new voice identity each turn. Save, replace and
+remove the reference from the Voice tab. The WAV and transcript persist in
+`%LOCALAPPDATA%\Mikan\voice`, even when Mikan or the voice service quits.
+Without a reference, VoiceDesign is used as a fallback. See
+[tools/tts/README.md](tools/tts/README.md).

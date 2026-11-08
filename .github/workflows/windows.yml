@@ -36,6 +36,8 @@ jobs:
         run: node --experimental-strip-types --test src/research-routing.test.mjs src/research-context.test.mjs src/runtime-context.test.mjs src/conversation-engine.test.mjs src/evidence-verification.test.mjs src/memory-ranking.test.mjs src/memory-budget.test.mjs src/session-memory.test.mjs
       - name: Test debug-log export
         run: npm run test:debug
+      - name: Test local voice reference API
+        run: python -m unittest discover -s tools/tts -p "test_*.py"
       - name: Test Rust research intent and source handling
         working-directory: src-tauri
         run: cargo test --lib

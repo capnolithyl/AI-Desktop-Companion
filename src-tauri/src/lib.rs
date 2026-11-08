@@ -7,6 +7,7 @@ mod memory;
 mod memory_extraction;
 mod advanced_memory;
 mod session_memory;
+mod voice;
 use futures_util::{future::{AbortHandle, Abortable}, StreamExt};
 use std::{collections::HashMap, sync::Mutex};
 use serde::{Deserialize, Serialize};
@@ -531,6 +532,11 @@ pub fn run() {
             chat_stream,
             condense_local_context,
             cancel_chat,
+            voice::voice_health,
+            voice::voice_synthesize,
+            voice::voice_reference_status,
+            voice::voice_save_reference,
+            voice::voice_delete_reference,
             memory::memory_list_conversations,
             memory::memory_create_conversation,
             memory::memory_list_messages,
