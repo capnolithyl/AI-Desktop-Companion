@@ -25,3 +25,19 @@ test("does not mutate caller state or allow semantic ids to invent facts",()=>{
   assert.equal(ranked.length,facts.length);
   assert.ok(ranked.every(x=>ids.includes(x.id)));
 });
+
+test("an owner-pinned core fact outranks unrelated recent chatter, but not a strong semantic match",()=>{
+  const sample = [
+    {id:1,fact:"The user is a professional programmer.",updatedAt:1,importance:95,referenceCount:6},
+    {id:2,fact:"The user likes a recent album.",updatedAt:99,importance:50,referenceCount:0}
+  ];
+  assert.equal(rankMemories(sample,"Hello!")[0].id,1);
+  assert.equal(rankMemories(sample,"Tell me about music",[2])[0].id,2);
+});
+test("reference frequency provides a bounded boost, not infinite reinforcement",()=>{
+  const base=[
+    {id:1,fact:"User prefers working locally.",updatedAt:1,importance:50,referenceCount:1000000},
+    {id:2,fact:"User likes clean architecture.",updatedAt:5,importance:95,referenceCount:0}
+  ];
+  assert.equal(rankMemories(base,"Hello!")[0].id,2);
+});
