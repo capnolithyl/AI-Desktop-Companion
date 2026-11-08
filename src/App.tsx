@@ -422,6 +422,7 @@ export default function App() {
   const editUserFact = async (id: number, fact: string) => {
     await memoryApi.updateFact(id, fact);
     await refreshFacts();
+    void invoke("memory_semantic_recall", {query:""}).catch(() => {});
   };
   const deleteUserFact = async (id: number) => {
     await memoryApi.deleteFact(id);
