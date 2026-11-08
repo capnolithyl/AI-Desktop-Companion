@@ -93,8 +93,8 @@ pub struct StoredMessage {
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UserMemory {
-    id: i64,
-    fact: String,
+    pub(crate) id: i64,
+    pub(crate) fact: String,
     created_at: i64,
     updated_at: i64,
 }
