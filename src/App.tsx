@@ -459,6 +459,10 @@ export default function App() {
     await refreshFacts();
     void invoke("memory_semantic_recall", {query:""}).catch(() => {});
   };
+  const pinUserFact = async (id: number, pinned: boolean) => {
+    await memoryApi.pinFact(id,pinned);
+    await refreshFacts();
+  };
   const deleteUserFact = async (id: number) => {
     await memoryApi.deleteFact(id);
     await refreshFacts();
@@ -1307,7 +1311,7 @@ export default function App() {
       automaticError={automaticMemoryError}
       busy={busy} error={memoryError} onClose={goCompact} onNew={clearChat}
       onOpen={openConversation} onDeleteChat={deleteConversation}
-      onAddFact={addUserFact} onEditFact={editUserFact} onDeleteFact={deleteUserFact}
+      onAddFact={addUserFact} onEditFact={editUserFact} onDeleteFact={deleteUserFact} onPinFact={pinUserFact}
       onAddCharacter={addCharacter} onEditCharacter={editCharacter} onDeleteCharacter={deleteCharacter}
       onRefresh={refreshMemory}/>}
 
