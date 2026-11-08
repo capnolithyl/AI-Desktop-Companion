@@ -72,7 +72,12 @@ export function questionAnswerMemory(
   if (!last || last.role !== "assistant") return null;
   const question = lastAskedQuestion(last.content);
   const answer = answerValue(message);
-  if (!question || !answer || sensitive.test(question)) return null;
+  // Don't turn passing moods, health symptoms or today's events into
+  // permanent personal identity, even during a user-invited learning session.
+  const transientQuestion = /\b(?:today|tonight|this (?:morning|afternoon|evening|week)|right now|currently|how (?:are you feeling|was your day)|what (?:did you eat|did you have for (?:breakfast|lunch|dinner)))\b/i;
+  const transientAnswer = /^(?:i(?:'m| am| was) (?:tired|hungry|sick|stressed|sad|happy|bored|busy)|i have (?:a headache|a cold|the flu))\b/i;
+  if (!question || !answer || sensitive.test(question) ||
+      transientQuestion.test(question) || transientAnswer.test(answer)) return null;
 
   const normalizedQuestion = question.replace(/’/g, "'");
   const lower = normalizedQuestion.toLowerCase();
