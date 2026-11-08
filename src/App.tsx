@@ -468,6 +468,10 @@ export default function App() {
     await refreshFacts();
     void invoke("memory_semantic_recall", {query:""}).catch(() => {});
   };
+  const deleteSessionNotes = async (conversationId: string) => {
+    await memoryApi.deleteSessionSummary(conversationId);
+    await refreshSummaries();
+  };
   const openConversation = async (id: string) => {
     if (busy) return;
     if (activeConversationId && activeConversationId !== id) {
@@ -1310,7 +1314,7 @@ export default function App() {
       onAutoRememberMikanChange={enabled => applySetting({autoRememberMikan: enabled})}
       automaticError={automaticMemoryError}
       busy={busy} error={memoryError} onClose={goCompact} onNew={clearChat}
-      onOpen={openConversation} onDeleteChat={deleteConversation}
+      onOpen={openConversation} onDeleteChat={deleteConversation} onDeleteSessionSummary={deleteSessionNotes}
       onAddFact={addUserFact} onEditFact={editUserFact} onDeleteFact={deleteUserFact} onPinFact={pinUserFact}
       onAddCharacter={addCharacter} onEditCharacter={editCharacter} onDeleteCharacter={deleteCharacter}
       onRefresh={refreshMemory}/>}
