@@ -12,7 +12,8 @@ export function isPersonalMemoryQuestion(question: string): boolean {
   // "Find me restaurants" refers to the recipient, not the user's memories.
   const selfReference =
     /\b(?:my|mine|myself|our|ours|ourselves)\b/i.test(text) ||
-    /\b(?:am|was|were|do|did|have|has|had|can|could|should|would|will)\s+i\b/i.test(text) ||
+    /\b(?:am|was|were|do|did|have|has|had)\s+i\b/i.test(text) ||
+    /\bi\s+(?:am|was|were|have|had|do|did|work|live|like|love|prefer)\b/i.test(text) ||
     /\b(?:about|of)\s+me\b/i.test(text) ||
     /\b(?:who|how)\s+am\s+i\b/i.test(text) ||
     /\b(?:remember|know)\s+(?:me|anything about me)\b/i.test(text);
