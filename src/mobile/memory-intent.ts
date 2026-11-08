@@ -1,4 +1,5 @@
 import type { CharacterCategory } from "../memory-client";
+import { questionAnswerMemory } from "./learning-memory.ts";
 
 /** Explicit conversational memory saves must bypass the LLM's verbal promises. */
 type PreviousTurn = { role: "user" | "assistant"; content: string };
@@ -134,6 +135,16 @@ function fromRecentContext(turns: PreviousTurn[]): UserMemory | CharacterMemory 
     if (turn.role !== "user") continue;
     const userFact = fromUserStatement(turn.content, false);
     if (userFact) return userFact;
+    // "Remember that" after a short reply can refer to the immediately
+    // preceding Mikan question. Never infer a fact from Mikan's response alone.
+    if (turns[i - 1]?.role === "assistant") {
+      const grounded = questionAnswerMemory(turn.content, turns.slice(0, i));
+      if (grounded) return {
+        kind: "user", fact: grounded.fact,
+        description: `your answer about ${grounded.question.replace(/\?$/, "")}`,
+        sourceText: turn.content
+      };
+    }
     if (/\b(your|you|mikan)\b/i.test(turn.content) &&
         /favou?rite|you\s+(?:like|love|dislike|hate)/i.test(turn.content)) {
       const answer = turns[i + 1];
