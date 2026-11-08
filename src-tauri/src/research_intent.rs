@@ -85,6 +85,30 @@ pub fn explicit_research_query(messages: &[Value]) -> Option<String> {
     Some(query)
 }
 
+/// Desktop uses the shared TS route to decide when to research. Preserve
+/// the mature Rust subject extraction, quoting, and retry query construction.
+pub fn routed_research_query(
+    messages: &[Value],
+    route: Option<&str>,
+    hint: Option<&str>,
+) -> Option<String> {
+    if matches!(route, Some("chat" | "factual")) {
+        return None;
+    }
+    // Shared TypeScript now implements the desktop-tested query builder and
+    // is authoritative for modern desktop and Android clients.
+    if route == Some("research") {
+        if let Some(candidate) = hint.map(str::trim) {
+            if candidate.len() >= 3 && !candidate.chars().any(char::is_control) {
+                return Some(candidate.chars().take(250).collect());
+            }
+        }
+    }
+    // Retain the original Rust implementation for older desktop builds and
+    // as a safe fallback for malformed or absent query hints.
+    explicit_research_query(messages)
+}
+
 pub fn is_album_research(messages: &[Value]) -> bool {
     let last = messages.iter().rev().find(|item| item["role"] == "user")
         .and_then(|item| item["content"].as_str()).unwrap_or("").to_lowercase();
@@ -110,12 +134,15 @@ pub fn is_prediction_followup(messages: &[Value]) -> bool {
 fn extract_subject(text: &str) -> Option<String> {
     let lower = text.to_lowercase();
     for prefix in [" about ", " on ", " for ", " regarding "] {
-        if let Some(index) = lower.rfind(prefix) {
-            let rest = text[index + prefix.len()..]
-                .split(['?', '!', '\n']).next().unwrap_or("")
+        // A later clause may refer only to "their upcoming album".
+        // Try earlier mentions in that case, rather than searching for
+        // the pronoun instead of the named band or project.
+        for (index, _) in lower.rmatch_indices(prefix) {
+            let Some(rest) = text.get(index + prefix.len()..) else { continue };
+            let rest = rest.split(['?', '!', '\n']).next().unwrap_or("")
                 .trim().trim_end_matches(|c: char| matches!(c, '.' | ',' | ';' | ':')).trim();
             let subject = canonical_subject(strip_type_prefix(rest));
-            if !subject.is_empty() {
+            if is_specific(&subject) {
                 return Some(subject);
             }
         }
@@ -212,7 +239,9 @@ fn is_specific(phrase: &str) -> bool {
     !matches!(p.as_str(), "them" | "it" | "him" | "her" | "that" | "this" |
         "the band" | "the group" | "the artist" | "those guys" |
         "a new album" | "a new release" | "the new album" | "an album" |
-        "their new album" | "the latest album" | "an update" | "updates" |
+        "their new album" | "their next album" | "their upcoming album" |
+        "an upcoming album" | "the upcoming album" | "the latest album" |
+        "an update" | "updates" |
         "them please" | "that band" | "a next album")
         && p.chars().count() >= 3
         && p.chars().count() < 120
@@ -388,6 +417,34 @@ mod tests {
             explicit_research_query(&context).as_deref(),
             Some("NASA Artemis missions next mission schedule")
         );
+    }
+
+    #[test]
+    fn shared_route_prevents_auto_search_during_casual_chat() {
+        let chat = messages(&["The latest album is fantastic!"]);
+        assert!(explicit_research_query(&chat).is_some());
+        assert!(routed_research_query(&chat, Some("chat"), None).is_none());
+        let query = messages(&["Can you find me the latest info on Shadows Fall?"]);
+        assert_eq!(routed_research_query(&query, Some("research"), Some("SHARED QUERY")).as_deref(), Some("SHARED QUERY"));
+    }
+
+    #[test]
+    fn shared_route_fallback_only_for_positive_research() {
+        let chat = messages(&["Hello Mikan"]);
+        assert!(routed_research_query(&chat, None, Some("Metal news")).is_none());
+        assert_eq!(routed_research_query(&chat, Some("research"), Some("Metal news")).as_deref(), Some("Metal news"));
+        assert!(routed_research_query(&chat, Some("factual"), Some("Metal news")).is_none());
+        assert!(routed_research_query(&chat, Some("research"), Some("bad\nquery")).is_none());
+    }
+
+    #[test]
+    fn prefers_named_subject_over_later_generic_album_pronouns() {
+        let turns = messages(&["Can you find me the latest info on Shadows Fall? Any updates on their upcoming album?"]);
+        assert_eq!(
+            explicit_research_query(&turns).as_deref(),
+            Some("\"Shadows Fall\" next album recording studio announcement")
+        );
+        assert_eq!(extract_subject("Any updates on their upcoming album?"), None);
     }
 
     #[test]
