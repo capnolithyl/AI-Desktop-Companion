@@ -856,7 +856,9 @@ export default function App() {
         if (resolved.rewritten) {
           const updated = planResearch(resolved.standaloneQuestion, messages);
           researchPlan = {
-            mode: researchPlan.mode,
+            // Context-dependent factual dates need a fresh grounded lookup.
+            // Otherwise the tool planner may answer from stale chat instead.
+            mode: "research",
             query: resolved.standaloneQuestion,
             recent: researchPlan.recent || updated.recent
           };
