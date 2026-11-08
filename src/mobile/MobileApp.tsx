@@ -544,7 +544,7 @@ export default function MobileApp() {
       const researchPlan = planResearch(text, active.turns);
       // Resolve ambiguous factual follow-ups using a local Nano-only request.
       // Only the resulting standalone query (not the chat history) reaches Tavily.
-      const condensed = mode === null && webEnabled && researchPlan.mode !== "chat" &&
+      const condensed = !mode && webEnabled && researchPlan.mode !== "chat" &&
         needsContextResolution(text, active.turns)
         ? await resolveConversationQuestion(text, active.turns,
             prompt => mobileBackend.generate(prompt, () => {}))
