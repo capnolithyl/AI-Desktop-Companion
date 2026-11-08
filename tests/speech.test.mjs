@@ -22,6 +22,6 @@ test("long unbroken words still respect the maximum", () => {
 });
 
 test("clean markdown before splitting", () => {
-  const cleaned = toSpeechText("Hello **friend**. [1] Here is [a link](https://example.com)!");
-  assert.deepEqual(splitSpeechText(cleaned, 35), ["Hello friend.", "Here is a link!"]);
+  const cleaned = toSpeechText("Hello **friend**. [1] Here is [a useful link today](https://example.com)!");
+  assert.deepEqual(splitSpeechText(cleaned, 35), ["Hello friend.", "Here is a useful link today!"]);
 });
