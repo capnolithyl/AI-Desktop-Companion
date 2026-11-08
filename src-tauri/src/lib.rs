@@ -546,6 +546,7 @@ pub fn run() {
             memory::memory_delete_character_fact,
             memory_extraction::memory_process_turn,
             memory::memory_mark_recalled,
+            memory::memory_pin_fact,
             session_memory::memory_session_candidate,
             session_memory::memory_save_session_summary,
             session_memory::memory_list_session_summaries,
