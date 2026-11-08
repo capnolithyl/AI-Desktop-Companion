@@ -36,8 +36,8 @@ test("an answer acquires its subject from Mikan's question, not a first-person g
 
 test("general questions across topics preserve semantics or the exact question and response", () => {
   const examples = [
-    ["Where did you grow up?", "Near Hamburg.", "The user grew up in Near Hamburg"],
-    ["What do you do for work?", "Web development!", "The user works as Web development"],
+    ["Where did you grow up?", "Near Hamburg.", "The user grew up Near Hamburg"],
+    ["What do you do for work?", "Web development!", "The user works in Web development"],
     ["What's your favorite programming language?", "TypeScript", "The user's favorite programming language is TypeScript"],
     ["What kinds of books do you enjoy?", "Cosmic horror", 'When asked "What kinds of books do you enjoy?", the user answered "Cosmic horror"'],
     ["What motivates you to create things?", "I like learning new skills.", 'When asked "What motivates you to create things?", the user answered "I like learning new skills"'],
