@@ -61,3 +61,25 @@ test("a failed SQLite write rejects rather than pretending to save", async () =>
   }));
   await assert.rejects(promise, /Memory not found/);
 });
+
+
+test("factual generation uses a dedicated native low-temperature route and streams normally", async () => {
+  const chunks=[];
+  const promise=mobileBackend.generateResearch("Source-backed question", x=>chunks.push(x));
+  const request=packets.shift();
+  assert.equal(request.method,"generateResearch");
+  assert.equal(request.prompt,"Source-backed question");
+  globalThis.window.__mikanReceive(JSON.stringify({id:request.id,kind:"delta",text:"Verified "}));
+  globalThis.window.__mikanReceive(JSON.stringify({id:request.id,kind:"result",text:"Verified answer"}));
+  assert.deepEqual(chunks,["Verified "]);
+  assert.equal(await promise,"Verified answer");
+});
+
+test("native background-generation errors reject so UI can mark message retryable", async () => {
+  const promise=mobileBackend.generateResearch("Answer while app pauses",()=>{});
+  const request=packets.shift();
+  globalThis.window.__mikanReceive(JSON.stringify({
+    id:request.id,kind:"error",error:"App moved to background. Tap Retry to regenerate."
+  }));
+  await assert.rejects(promise,/Tap Retry/);
+});
