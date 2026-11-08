@@ -59,6 +59,24 @@ struct ChatRequest {
 }
 fn default_cache_hours() -> u64 { 24 }
 fn default_structured_research() -> bool { true }
+fn web_tools_allowed(auto_search: bool, research_route: Option<&str>) -> bool {
+    // Backward-compatible with clients that omit research_route; a known
+    // local-chat route has priority even when auto_search was left enabled.
+    auto_search && research_route != Some("chat")
+}
+#[cfg(test)]
+mod local_chat_route_tests {
+    use super::*;
+    #[test]
+    fn personal_and_capability_chat_cannot_fall_through_to_web_planner() {
+        assert!(!web_tools_allowed(true, Some("chat")));
+        assert!(!web_tools_allowed(false, Some("research")));
+        assert!(web_tools_allowed(true, Some("research")));
+        assert!(web_tools_allowed(true, Some("factual")));
+        // Keep legacy callers supported until they use explicit routing.
+        assert!(web_tools_allowed(true, None));
+    }
+}
 fn valid_context_window(context: Option<u32>) -> Option<u32> {
     context.filter(|v| matches!(*v, 4096 | 8192 | 16384 | 32768))
 }
@@ -298,7 +316,7 @@ async fn chat_stream_impl(
     // leave auto_search enabled must not invoke web tools or carry unrelated
     // source excerpts into personal, persona or self-capability replies.
     let local_chat = request.research_route.as_deref() == Some("chat");
-    let may_research = request.auto_search && !local_chat;
+    let may_research = web_tools_allowed(request.auto_search, request.research_route.as_deref());
     let previous_sources = if local_chat { Vec::new() }
         else { research_intent::clean_prior_sources(&request.prior_sources) };
     let explicit_query = may_research.then(|| {
