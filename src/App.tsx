@@ -1145,10 +1145,10 @@ export default function App() {
     }
   };
 
-  const send = async (withSearch?: { query: string; results: WebResult[]; page?: PageDocument }) => {
-    const attachment = withSearch ? null : pendingAttachment;
-    const screenshot = withSearch || attachment ? null : pendingScreenshot;
-    const text = withSearch ? withSearch.query
+  const send = async (withSearch?: { query: string; results: WebResult[]; page?: PageDocument }, remoteText?: string) => {
+    const attachment = withSearch || remoteText !== undefined ? null : pendingAttachment;
+    const screenshot = withSearch || remoteText !== undefined || attachment ? null : pendingScreenshot;
+    const text = remoteText !== undefined ? remoteText : withSearch ? withSearch.query
       : attachment ? attachmentQuestion(input, attachment)
       : visionQuestion(input,!!screenshot);
     if (!text || attachmentBusy) return;
@@ -1375,7 +1375,7 @@ export default function App() {
         queueAutomaticMemory(conversationId, user.id, assistant.id);
         queueSessionMemory(conversationId);
       }
-      if (settings.voice.autoSpeak) void speak(finalText);
+      if (settings.voice.autoSpeak && remoteText === undefined) void speak(finalText);
     } catch (error) {
       const message = errorText(error);
       const stopped = message === "Generation stopped" || stopRequested.current;
@@ -1400,6 +1400,69 @@ export default function App() {
       focusInput();
     }
   };
+
+  // Optional browser relay. It does not run a second model or open the SQLite
+  // database: remote turns enter the exact same send()/memory/research path as
+  // desktop turns. If the relay isn't running, retry slowly and stay local.
+  const remoteSendRef = useRef<(text: string) => Promise<void>>(async () => {});
+  remoteSendRef.current = text => send(undefined, text);
+  const remoteBusyRef = useRef(false);
+  remoteBusyRef.current = busy || !memoryReady || attachmentBusy ||
+    !!pendingAttachment || !!pendingScreenshot || !!input.trim();
+  const remoteSnapshotRef = useRef<object>({});
+  remoteSnapshotRef.current = {
+    conversationId: activeConversationId,
+    model: settings.model,
+    busy,
+    messages: messages.map(({ id, role, content, createdAt }) => ({
+      id, role, content, createdAt
+    }))
+  };
+  useEffect(() => {
+    let disposed = false;
+    let timer: ReturnType<typeof setTimeout>;
+    let lastSnapshot = "";
+    let dispatching = false;
+    const origin = "http://127.0.0.1:3848";
+    const agentHeaders = { "X-Mikan-Agent": "desktop" };
+    const tick = async () => {
+      let retryMs = 1200;
+      try {
+        const body = JSON.stringify(remoteSnapshotRef.current);
+        if (body !== lastSnapshot) {
+          const response = await fetch(origin + "/agent/state", {
+            method: "POST",
+            headers: { ...agentHeaders, "Content-Type": "application/json" },
+            body
+          });
+          if (!response.ok) throw new Error("Relay is unavailable");
+          lastSnapshot = body;
+        }
+        const response = await fetch(origin + "/agent/next", { headers: agentHeaders });
+        if (!response.ok) throw new Error("Relay is unavailable");
+        const data = await response.json() as { job?: { id: string; text: string } | null };
+        if (data.job && !dispatching && !remoteBusyRef.current) {
+          dispatching = true;
+          const ack = await fetch(origin + "/agent/ack", {
+            method: "POST",
+            headers: { ...agentHeaders, "Content-Type": "application/json" },
+            body: JSON.stringify({ id: data.job.id })
+          });
+          if (ack.ok) {
+            void remoteSendRef.current(data.job.text).finally(() => { dispatching = false; });
+          } else {
+            dispatching = false;
+          }
+        }
+      } catch {
+        retryMs = 12000;
+        lastSnapshot = "";
+      }
+      if (!disposed) timer = setTimeout(() => void tick(), retryMs);
+    };
+    void tick();
+    return () => { disposed = true; clearTimeout(timer); };
+  }, []);
 
   const copyFullDebugLog = async () => {
     if (!messages.length) return;
