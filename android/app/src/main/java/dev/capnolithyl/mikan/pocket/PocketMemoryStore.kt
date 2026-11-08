@@ -423,7 +423,7 @@ class PocketMemoryStore(private val context: Context) :
     }
 
     data class PairForExtraction(
-        val user: String, val assistant: String,
+        val user: String, val assistant: String, val previousAssistant: String,
         val existingUserFacts: List<String>, val existingCanon: List<String>
     )
     @Synchronized
@@ -440,6 +440,15 @@ class PocketMemoryStore(private val context: Context) :
             arrayOf(id,conversationId,role)) { it.getString(0) }.firstOrNull()
         val user = read(userId,"user") ?: return null
         val assistant = read(assistantId,"assistant") ?: return null
+        // Context is read from SQLite in the same conversation. The user's
+        // previous question and Mikan's answer are not evidence for new facts;
+        // only the current user's message may support a saved memory.
+        val previousAssistant = query(db,
+            """SELECT content FROM messages WHERE conversation_id=? AND role='assistant'
+               AND rowid < (SELECT rowid FROM messages WHERE id=? AND conversation_id=?)
+               ORDER BY rowid DESC LIMIT 1""",
+            arrayOf(conversationId,userId,conversationId)) { it.getString(0) }
+            .firstOrNull().orEmpty()
         // As on desktop, include a small sample of existing memories in the
         // extraction prompt so Nano avoids paraphrased duplicates.
         val userFacts = query(db,
@@ -448,7 +457,7 @@ class PocketMemoryStore(private val context: Context) :
         val canon = query(db,
             "SELECT label || ': ' || value FROM character_facts WHERE persona_id='mikan' ORDER BY updated_at DESC LIMIT 8"
         ) { it.getString(0).take(120) }
-        return PairForExtraction(user,assistant,userFacts,canon)
+        return PairForExtraction(user,assistant,previousAssistant,userFacts,canon)
     }
 
     /** Caller has checked evidence and the saved message pair. Single SQLite
