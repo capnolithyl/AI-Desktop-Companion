@@ -62,6 +62,14 @@ test("never infer an answer without consent, a model question, or a real user re
   }
 });
 
+
+test("opted-in learning ignores transient personal states and private information", () => {
+  assert.equal(contextualLearningFact("I have a headache", history("How are you feeling today?")), null);
+  assert.equal(contextualLearningFact("I'm tired", history("What's your favorite snack?")), null);
+  assert.equal(contextualLearningFact("Christian", history("What's your religion?")), null);
+  assert.equal(contextualLearningFact("My bank account is 123", history("What's your favorite sport?")), null);
+});
+
 test("explicit remember can resolve a recent answer without an active learning session", () => {
   const turns = [
     { role:"user", content:"Tell me about your day" },
