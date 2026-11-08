@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { rankMemories } from "./memory-ranking.ts";
+import { rankMemories, prioritizeCoreMemories } from "./memory-ranking.ts";
 
 const facts = [
   {id:7,fact:"The user is an experienced WordPress developer creating client sites professionally.",updatedAt:1},
@@ -40,4 +40,19 @@ test("reference frequency provides a bounded boost, not infinite reinforcement",
     {id:2,fact:"User likes clean architecture.",updatedAt:5,importance:95,referenceCount:0}
   ];
   assert.equal(rankMemories(base,"Hello!")[0].id,2);
+});
+
+test("one pinned fact is always reserved at 4k, two at larger contexts",()=>{
+ const stored=[
+  {id:1,fact:"User is an experienced WordPress developer",updatedAt:1,importance:95},
+  {id:2,fact:"User frequently writes metal music",updatedAt:2,importance:95},
+  {id:3,fact:"User likes the latest album",updatedAt:3,importance:50},
+  {id:4,fact:"User likes recent recordings",updatedAt:4,importance:50},
+  {id:5,fact:"User likes another record",updatedAt:5,importance:50}
+ ];
+ const small=prioritizeCoreMemories(stored,"any recent albums?",[3,4,5],3).slice(0,3);
+ assert.equal([1,2].filter(id=>small.some(x=>x.id===id)).length,1);
+ const large=prioritizeCoreMemories(stored,"any recent albums?",[3,4,5],5).slice(0,5);
+ assert.ok(large.some(x=>x.id===1));
+ assert.ok(large.some(x=>x.id===2));
 });
