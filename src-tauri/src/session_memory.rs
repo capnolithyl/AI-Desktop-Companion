@@ -179,6 +179,27 @@ mod tests {
             candidate.last_message_rowid,0).unwrap());
     }
     #[test]
+    fn long_unsummarized_backlogs_are_processed_in_order() {
+        let conn=db();
+        conn.execute("INSERT INTO conversations(id,updated_at) VALUES(?1,1)",params![ID]).unwrap();
+        for i in 0..20 {
+            conn.execute("INSERT INTO messages(id,conversation_id,role,content) VALUES(?1,?2,'user',?3)",
+                params![format!("u{i}"),ID,format!("I mentioned topic {i}")]).unwrap();
+            conn.execute("INSERT INTO messages(id,conversation_id,role,content) VALUES(?1,?2,'assistant','Okay')",
+                params![format!("a{i}"),ID]).unwrap();
+        }
+        let first=collect_candidate(&conn,ID,false).unwrap().unwrap();
+        assert_eq!(first.user_messages.len(),16);
+        assert!(first.user_messages.first().unwrap().contains("topic 0"));
+        assert!(!first.user_messages.iter().any(|s| s.contains("topic 19")));
+        assert!(store_summary(&conn,ID,"- First batch",first.last_message_rowid,0).unwrap());
+        let next=collect_candidate(&conn,ID,true).unwrap().unwrap();
+        assert_eq!(next.user_messages.len(),4);
+        assert!(next.user_messages.first().unwrap().contains("topic 16"));
+        assert!(next.last_message_rowid>first.last_message_rowid);
+    }
+
+    #[test]
     fn summary_cascades_on_chat_deletion() {
         let conn=db();
         conn.execute("INSERT INTO conversations(id,updated_at) VALUES(?1,1)",params![ID]).unwrap();
