@@ -3,6 +3,8 @@ mod web_reader;
 mod search_service;
 mod agent_tools;
 mod research_intent;
+mod source_enrichment;
+mod evidence_pack;
 mod memory;
 mod memory_extraction;
 mod advanced_memory;
@@ -34,6 +36,8 @@ struct ChatRequest {
     messages: Vec<ChatMessage>,
     #[serde(default)]
     auto_search: bool,
+    #[serde(default = "default_structured_research")]
+    structured_research: bool,
     // The same TypeScript intent policy is used by Android and desktop.
     // Older API callers omit these and keep the original Rust behavior.
     #[serde(default)]
@@ -50,6 +54,7 @@ struct ChatRequest {
     prior_sources: Vec<web_search::SearchResult>,
 }
 fn default_cache_hours() -> u64 { 24 }
+fn default_structured_research() -> bool { true }
 fn valid_context_window(context: Option<u32>) -> Option<u32> {
     context.filter(|v| matches!(*v, 4096 | 8192 | 16384 | 32768))
 }
@@ -83,6 +88,7 @@ struct ChatCompletion {
     sources: Vec<web_search::SearchResult>,
     search_query: Option<String>,
     sources_carried_over: bool,
+    research_audit: Option<evidence_pack::ResearchAudit>,
 }
 
 fn local_origin(endpoint: &str) -> Result<String, String> {
@@ -276,6 +282,8 @@ async fn chat_stream_impl(
     let mut sources = Vec::new();
     let mut search_query: Option<String> = None;
     let mut sources_carried_over = false;
+    let mut newly_researched = false;
+    let mut research_audit = None;
     let selected_context = valid_context_window(request.context_window);
     let previous_sources = research_intent::clean_prior_sources(&request.prior_sources);
     let explicit_query = request.auto_search.then(|| {
@@ -336,10 +344,25 @@ async fn chat_stream_impl(
             if sources.is_empty() {
                 let content = "SearXNG couldn't find relevant sources, even after a broader search. Try a shorter topic or search manually with /search.".to_owned();
                 return Ok(ChatCompletion {
-                    content, stats: None, sources, search_query, sources_carried_over
+                    content, stats: None, sources, search_query, sources_carried_over,
+                    research_audit
                 });
             }
 
+            // Time-sensitive research benefits from fuller source passages.
+            // Search previews can omit key qualifiers, dates and distinctions
+            // between related entities or separate stages of a project.
+            if research_intent::needs_primary_source_verification(&messages) {
+                let _ = app.emit("mikan://activity", json!({
+                    "requestId": request.request_id,
+                    "text": "Checking source pages…"
+                }));
+                source_enrichment::enrich_relevant_sources(
+                    &app, &mut sources, &query, request.cache_hours
+                ).await;
+            }
+
+            newly_researched = true;
             // Previous assistant text can contain hallucinations. For web research
             // retain only the user's conversation context, not prior model claims.
             messages.retain(|m| m["role"] == "system" || m["role"] == "user");
@@ -367,6 +390,7 @@ async fn chat_stream_impl(
                 selected_context
             ).await?;
             let newly_fetched = !plan.sources.is_empty();
+            newly_researched = newly_fetched;
             if newly_fetched {
                 // Source indexes must map to the sources displayed for THIS
                 // answer. Drop carried snippets when new live tool results
@@ -399,7 +423,7 @@ async fn chat_stream_impl(
                         prompt_eval_duration_ns: data["prompt_eval_duration"].as_u64(),
                         eval_duration_ns: data["eval_duration"].as_u64(),
                     };
-                    return Ok(ChatCompletion { content, stats: Some(stats), sources, search_query, sources_carried_over });
+                    return Ok(ChatCompletion { content, stats: Some(stats), sources, search_query, sources_carried_over, research_audit });
                 }
             } else {
                 // Even a model-initiated tool call must end with a source-focused
@@ -421,6 +445,29 @@ async fn chat_stream_impl(
     if !request.auto_search && !previous_sources.is_empty() {
         sources = previous_sources;
         sources_carried_over = true;
+    }
+    if request.structured_research && newly_researched && !sources.is_empty() {
+        let _ = app.emit("mikan://activity", json!({
+            "requestId": request.request_id,
+            "text": "Checking source-anchored facts…"
+        }));
+        let latest_question = request.messages.iter().rev()
+            .find(|message| message.role == "user")
+            .map(|message| message.content.as_str()).unwrap_or("");
+        let (notes, audit) = evidence_pack::extract(
+            &client, &url, &request.model, latest_question, &sources, selected_context
+        ).await;
+        research_audit = Some(audit);
+        if let Some(notes) = notes {
+            let insert_at = usize::from(messages.first().is_some_and(|m| m["role"] == "system"));
+            messages.insert(insert_at, json!({
+                "role":"system",
+                "content": "RESEARCH CHECKPOINT\nThe application ran a separate structured evidence extraction pass before this answer.\nThe only automatic validation performed is: cited source exists, quoted text\noccurs inside that source's retrieved excerpt, subject occurs inside the quote,\nand numeric anchors in the candidate claim occur inside the quote.\nDo not call extracted candidate claims verified facts; an exact quotation can\nstill be misleading, outdated, misinterpreted, or inconsistent with another source.\nUse the quotes as an aid to reason carefully, alongside the full source excerpts.\nDo not let extraction change your personality or make your reply feel robotic.\n"
+            }));
+            let latest_user = messages.iter().rposition(|message| message["role"] == "user")
+                .unwrap_or(messages.len());
+            messages.insert(latest_user, json!({"role":"user","content":notes}));
+        }
     }
     let mut payload = json!({
         "model": request.model,
@@ -491,7 +538,7 @@ async fn chat_stream_impl(
     }
     // The final text is returned as well as streamed so that no event-ordering
     // race can lose the last characters when the frontend removes its listener.
-    Ok(ChatCompletion { content, stats, sources, search_query, sources_carried_over })
+    Ok(ChatCompletion { content, stats, sources, search_query, sources_carried_over, research_audit })
 }
 
 fn toggle_window(app: &tauri::AppHandle) {

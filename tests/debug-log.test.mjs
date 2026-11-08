@@ -16,6 +16,8 @@ test("copies all message text, source details and response timings", () => {
       }],
       diagnostics: {
         elapsedMs: 5000, firstTokenMs: 1200, model: "qwen3.5:9b",
+        research: {status: "used", accepted: 3, rejected: 2, elapsedMs: 2100,
+          note: "Quoted text matched sources; candidate claims still require semantic judgment."},
         stats: {
           outputTokens: 100, promptTokens: 2500, totalDurationNs: 4_000_000_000,
           loadDurationNs: 20_000_000, promptEvalDurationNs: 500_000_000,
@@ -50,6 +52,10 @@ test("copies all message text, source details and response timings", () => {
   assert.match(result, /Speed: 50\.0 tok\/s/);
   assert.match(result, /Prompt: 2500 tokens/);
   assert.match(result, /Model: qwen3\.5:9b/);
+  assert.match(result, /Research evidence: used/);
+  assert.match(result, /Accepted source-anchored facts: 3/);
+  assert.match(result, /Rejected candidates: 2/);
+  assert.match(result, /Extraction time: 2\.10 s/);
   assert.equal((result.match(/=== MIKAN/g) ?? []).length, 2);
 });
 
