@@ -34,7 +34,7 @@ import {
 } from "./memory-client";
 import { MemoryPanel } from "./MemoryPanel";
 import { memoryBudget, sessionMemoryContext, type SessionSummary } from "./memory-budget";
-import { sessionSummaryPrompt, mergeSessionSummary } from "./session-memory";
+import { sessionSummaryPrompt, mergeSessionSummary, validSessionSummaryResponse } from "./session-memory";
 
 type Screen = "compact" | "log" | "settings" | "search" | "page" | "personality" | "help" | "memory";
 type SettingsTab = "ai" | "internet" | "appearance";
@@ -420,8 +420,9 @@ export default function App() {
       const candidate = await memoryApi.sessionCandidate(conversationId, force);
       if (!candidate) return;
       const raw = await invoke<string>("condense_local_context", {
-        ...opts, prompt:sessionSummaryPrompt(candidate)
+        ...opts, prompt:sessionSummaryPrompt(candidate), maxOutputTokens:480
       });
+      if (!validSessionSummaryResponse(raw)) return;
       const grounded = mergeSessionSummary(candidate,raw);
       // Even a session without useful notes advances its watermark, avoiding
       // a fresh LLM summary request on every subsequent turn.
