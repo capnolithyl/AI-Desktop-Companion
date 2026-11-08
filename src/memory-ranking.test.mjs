@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { rankMemories } from "./memory-ranking.ts";
 
 const facts = [
-  {id:7,fact:"The user is an experienced WordPress developer who builds sites professionally.",updatedAt:1},
+  {id:7,fact:"The user is an experienced WordPress developer creating client sites professionally.",updatedAt:1},
   ...Array.from({length:20},(_,i)=>({
     id:i+100, fact:"The user recently enjoyed listening to an album number "+i,updatedAt:100+i
   }))
