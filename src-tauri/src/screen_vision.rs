@@ -90,7 +90,8 @@ fn encode_capture(index: usize) -> Result<ScreenCapture, String> {
     let height = scaled.height();
     let mut bytes = Vec::new();
     let mut encoder = JpegEncoder::new_with_quality(&mut bytes, 82);
-    encoder.encode_image(&scaled).map_err(|e| format!("Could not compress screenshot: {e}"))?;
+    encoder.encode_image(&DynamicImage::ImageRgb8(scaled.to_rgb8()))
+        .map_err(|e| format!("Could not compress screenshot: {e}"))?;
     if bytes.is_empty() || bytes.len() > MAX_JPEG_BYTES {
         return Err("Screenshot is too large. Try reducing display resolution.".into());
     }
