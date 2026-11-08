@@ -1502,10 +1502,15 @@ export default function App() {
           <small>{pendingAttachment.kind==="image"
             ? `${pendingAttachment.width}×${pendingAttachment.height} · Image · Not sent`
             : `Text extracted · ${pendingAttachment.text.length.toLocaleString()} characters · Not sent`}</small>
-          {pendingAttachment.kind==="text" &&
+          {pendingAttachment.kind==="text" && <>
             <small>{attachmentPromptText(pendingAttachment,settings.contextWindow).truncated
               ? "Only part of this document fits in the current context window."
-              : "Ready for local analysis."}</small>}
+              : "Ready for local analysis."}</small>
+            <details className="attachment-text-peek">
+              <summary>Preview extracted text</summary>
+              <pre>{pendingAttachment.text.slice(0,550)}</pre>
+            </details>
+          </>}
         </div>
         <button type="button" title="Remove attached file" aria-label="Remove attached file"
           onClick={()=>{setPendingAttachment(null);setAttachmentError(null);}}><X size={15}/></button>
