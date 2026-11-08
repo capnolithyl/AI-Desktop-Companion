@@ -4,7 +4,7 @@
  * The CI checker detects unmapped Tauri commands, missing files and stale versions.
  * Add a feature here when adding capability, and update the matching source/docs.
  */
-export const CAPABILITY_RELEASE = "0.8.3";
+export const CAPABILITY_RELEASE = "0.8.4";
 
 export type CapabilityStage = "implemented" | "experimental" | "planned";
 export type RuntimeDependency = "none" | "ollama" | "search" | "mem0" | "voice" | "vision" | "pocket";
@@ -49,7 +49,7 @@ export const CAPABILITIES: readonly Capability[] = [
     id:"web-search",label:"On-demand web search",category:"Research",
     description:"SearXNG search with an optional local Docker service monitor, auto-search, source citations and experimental evidence verification. Cannot search when the local search service is unavailable.",
     stage:"implemented",runtime:"search",keywords:["internet","web","search","latest","news","searxng","docker","browse"],
-    sources:["src-tauri/src/web_search.rs","src-tauri/src/search_service.rs","src-tauri/src/research_intent.rs"],docs:["tools/searxng/README.md","RESEARCH-EVAL.md"],
+    sources:["src-tauri/src/web_search.rs","src-tauri/src/search_service.rs","src-tauri/src/research_intent.rs","src/desktop-turn-routing.ts"],docs:["tools/searxng/README.md","RESEARCH-EVAL.md"],
     commands:["web_search","search_service"],
     screens:["search"],
     slashCommands:["search-start","search-stop","search-status","search","searxng","internet"]
@@ -204,7 +204,8 @@ export function isSelfKnowledgeQuestion(query: string): boolean {
   return /\b(?:your (?:own )?(?:code|source|implementation|documentation|features|capabilities|abilities|tools|architecture|version)|mikan(?:'s)? (?:code|source|features|capabilities|architecture)|what can you (?:do|actually do)|how (?:do|does) (?:you|mikan) (?:work|remember|search|speak)|are you able to|do you (?:have|support|know how to)|can you (?:see|hear|listen|speak|talk|search|browse|remember|read my|control|click|use the|inspect|access))\b/i.test(q)
     || /\b(?:implemented|available|supported|planned|not yet built)\b.*\b(?:in mikan|in your app|by you)\b/i.test(q)
     || /\b(?:can you|do you|are you able to)\s+(?:open|read|analy[sz]e|upload|attach)\b.{0,45}\b(?:pdf|file|document|image|photo|picture|spreadsheet)\b/i.test(q)
-    || /\bwhat (?:file|image|document) formats (?:can you|do you) support\b/i.test(q);
+    || /\bwhat (?:file|image|document) formats (?:can you|do you) support\b/i.test(q)
+    || /^what (?:features|abilities|capabilities|tools) (?:do|can) you (?:have|use|support)\b/i.test(q);
 }
 
 const generic = new Set(["what","when","where","have","your","you","can","the","and","are","with","about","does","this","that","from","mikan","work","code","know","how","what","its","for","which","just","help","will"]);

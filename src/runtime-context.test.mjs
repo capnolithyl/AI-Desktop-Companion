@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { runtimeContext, deviceLocalCalendarDate, pocketRuntimeContext, deviceClockAnswer } from "./runtime-context.ts";
+import { runtimeContext, chatRuntimeContext, deviceLocalCalendarDate, pocketRuntimeContext, deviceClockAnswer } from "./runtime-context.ts";
 
 const utcNextDay = new Date("2026-11-08T00:15:00.000Z");
 
@@ -13,6 +13,15 @@ test("phone local date does not flip to tomorrow when UTC crosses midnight", () 
   assert.match(prompt, /America\/Detroit/);
   assert.match(prompt, /UTC timestamp: 2026-11-08T00:15:00.000Z/);
   assert.match(runtimeContext(utcNextDay), /2026-11-07/);
+});
+
+test("personal chat has the live date but not the giant web verification rubric", () => {
+  const prompt=chatRuntimeContext(utcNextDay);
+  assert.match(prompt,/November 7, 2026/);
+  assert.match(prompt,/America\/Detroit/);
+  assert.match(prompt,/established personality/);
+  assert.doesNotMatch(prompt,/source|search_web|webpage|research checkpoint/i);
+  assert.ok(prompt.length<600);
 });
 
 test("the device answers simple clock questions locally without a search or citations", () => {
