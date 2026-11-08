@@ -13,6 +13,7 @@ declare global {
   interface Window {
     MikanNative?: NativeClient;
     __mikanReceive?: (json: string) => void;
+    __mikanBackgroundInterrupted?: () => void;
   }
 }
 
@@ -21,6 +22,7 @@ const pending = new Map<string, {
   resolve: (value: NativeResponse) => void;
   reject: (error: Error) => void;
   onDelta?: (delta: string) => void;
+  method: string;
 }>();
 
 window.__mikanReceive = (payload: string) => {
@@ -38,13 +40,24 @@ window.__mikanReceive = (payload: string) => {
   else target.resolve(response);
 };
 
+// Native AICore may cancel while the WebView is paused. If its error event
+// cannot be delivered during the pause, onResume rejects stale generate calls.
+window.__mikanBackgroundInterrupted = () => {
+  for (const [id, request] of pending) {
+    if (request.method === "generate" || request.method === "generateResearch") {
+      pending.delete(id);
+      request.reject(new Error("App moved to background. Tap Retry to regenerate."));
+    }
+  }
+};
+
 function send(method: string, args: Record<string, unknown> = {}, onDelta?: (chunk: string) => void): Promise<NativeResponse> {
   if (!window.MikanNative) {
     return Promise.reject(new Error("Pocket Mikan native backend is unavailable. Install the Android APK."));
   }
   const id = "mobile-" + (++sequence);
   return new Promise((resolve, reject) => {
-    pending.set(id, { resolve, reject, onDelta });
+    pending.set(id, { resolve, reject, onDelta, method });
     try { // Transport request ID must never be overwritten by a database record ID.
       window.MikanNative!.postMessage(JSON.stringify({ ...args, id, method })); }
     catch (error) {
