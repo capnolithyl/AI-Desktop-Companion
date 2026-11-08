@@ -45,6 +45,11 @@ button:disabled { opacity: .55; cursor: default; }
 .pocket-turn strong { color: var(--pocket-accent); font-size: 10px; letter-spacing: .06em; }
 .pocket-bubble { background: #31252f; border-radius: 17px; padding: 12px 14px; max-width: 100%; min-width: 36px; line-height: 1.5; font-size: max(13px, var(--pocket-font-size, 14px)); overflow-wrap: anywhere; }
 .pocket-turn.user .pocket-bubble { background: #654248; }
+.pocket-retry { display: inline-flex; align-items: center; gap: 7px; margin: 1px 0 5px;
+  padding: 8px 11px; background: #3d2b38; border: 1px solid #805763;
+  border-radius: 10px; color: var(--pocket-accent); font-size: 12px; font-weight: 700; }
+.pocket-retry:focus-visible { outline: 2px solid var(--pocket-accent); outline-offset: 2px; }
+
 .markdown-text p { margin: 0 0 .35em; } .markdown-text p:last-child { margin-bottom: 0; }
 .markdown-text ul, .markdown-text ol { padding-left: 22px; margin: .4em 0; }
 .markdown-text pre { overflow: auto; background: #1d1721; padding: 10px; border-radius: 8px; }
