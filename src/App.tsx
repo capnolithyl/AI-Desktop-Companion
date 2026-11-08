@@ -428,8 +428,10 @@ export default function App() {
     if (!file || busy || attachmentBusy) return;
     setAttachmentBusy(true);
     setAttachmentError(null);
-    // If the replacement fails, never accidentally send a previously selected file.
+    // If the replacement fails, never accidentally send a previously selected image/file.
     setPendingAttachment(null);
+    setPendingScreenshot(null);
+    setCapturePickerOpen(false);
     try {
       const parsed = await loadChatAttachment(
         file, (fileName, fileBase64) => invoke<ExtractedDocument>(
@@ -448,6 +450,9 @@ export default function App() {
   };
   const openCapturePicker = async () => {
     if (busy || captureBusy) return;
+    // Choosing a new capture also invalidates a previously selected file.
+    setPendingAttachment(null);
+    setAttachmentError(null);
     setCapturePickerOpen(true);
     setCaptureBusy(true);
     setCaptureError(null);
