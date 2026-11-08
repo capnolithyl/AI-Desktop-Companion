@@ -4,7 +4,7 @@
  * The CI checker detects unmapped Tauri commands, missing files and stale versions.
  * Add a feature here when adding capability, and update the matching source/docs.
  */
-export const CAPABILITY_RELEASE = "0.8.4";
+export const CAPABILITY_RELEASE = "0.8.5";
 
 export type CapabilityStage = "implemented" | "experimental" | "planned";
 export type RuntimeDependency = "none" | "ollama" | "search" | "mem0" | "voice" | "vision" | "pocket";
@@ -36,6 +36,13 @@ export const CAPABILITIES: readonly Capability[] = [
     commands:["toggle_companion","hide_companion"],
     screens:["compact","help"],
     slashCommands:["help","hide","chat"]
+  },
+  {
+    id:"remote-browser",label:"Remote browser companion (experimental)",category:"Platforms",
+    description:"Optional locally hosted, key-protected browser chat over Cloudflare Tunnel and Access. Shares the active desktop conversation, its local model, persona, SQLite memory and web tools by relaying text turns into the running desktop UI. Requires separate Node relay, Cloudflare setup and awake PC. No remote attachments, voice, or independent chats yet.",
+    stage:"experimental",runtime:"none",keywords:["server","remote","browser","cloudflare","tunnel","phone","web app","access"],
+    sources:["server/index.mjs","server/public/index.html","src/App.tsx"],docs:["server/README.md"],
+    commands:[]
   },
   {
     id:"local-chat",label:"Local LLM chat",category:"AI",

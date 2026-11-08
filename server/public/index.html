@@ -1,0 +1,227 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#201821">
+  <title>Mikan | Remote Companion</title>
+  <style>
+    :root { color-scheme: dark; font-family: "Segoe UI", system-ui, sans-serif; background:#17131b; color:#f9eaf1; }
+    * { box-sizing:border-box; }
+    body { margin:0; height:100dvh; }
+    button, input, textarea { font:inherit; }
+    button { cursor:pointer; border:0; color:inherit; }
+    button:disabled { opacity:.45; cursor:not-allowed; }
+    .shell { height:100dvh; max-width:820px; margin:auto; display:flex; flex-direction:column; background:linear-gradient(180deg,#30232e 0%,#1d1821 45%); }
+    header { display:flex; align-items:center; gap:12px; border-bottom:1px solid #65526066; padding:12px 18px; }
+    .avatar { width:45px; height:45px; display:grid; place-items:center; font-size:26px; background:#593b45; border:1px solid #ab7883; border-radius:18px; }
+    .heading { flex:1; min-width:0; } .heading strong { font-size:19px; }
+    .heading small { display:block; margin-top:2px; color:#c8b6c2; font-size:12px; }
+    .secondary { background:#4a3748; border:1px solid #795869; border-radius:10px; padding:9px; }
+    #messages { flex:1; overflow:auto; padding:18px 14px 30px; display:flex; flex-direction:column; gap:14px; }
+    .welcome { text-align:center; color:#dbc4ce; margin:auto; max-width:28rem; line-height:1.6; }
+    .bubble { width:fit-content; max-width:92%; padding:13px 15px; border-radius:17px; white-space:pre-wrap; overflow-wrap:anywhere; line-height:1.48; }
+    .bubble.user { background:#70414f; align-self:flex-end; border-bottom-right-radius:5px; }
+    .bubble.assistant { background:#322935; border:1px solid #5a4657; align-self:flex-start; border-bottom-left-radius:5px; }
+    .speaker { display:block; font-size:11px; text-transform:uppercase; letter-spacing:1px; color:#ffb88f; margin-bottom:6px; font-weight:700; }
+    .composer { border-top:1px solid #65526066; padding:12px max(12px, env(safe-area-inset-right)) calc(12px + env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left)); }
+    form.chat { display:flex; align-items:flex-end; gap:9px; }
+    textarea { resize:none; min-height:46px; max-height:135px; flex:1; border-radius:14px; border:1px solid #76556d; color:#fff3f9; background:#30232f; outline:0; padding:12px; }
+    textarea:focus, input:focus { border-color:#ffad7e; }
+    .send { background:#ffad7e; color:#271923; border-radius:12px; font-size:21px; min-width:46px; height:46px; font-weight:700; }
+    .meta { display:flex; gap:8px; justify-content:space-between; color:#b9a8b4; font-size:11px; padding:6px 3px 0; }
+    #gate { display:flex; flex:1; align-items:center; justify-content:center; padding:20px; }
+    #gate .panel { padding:25px; max-width:380px; width:100%; background:#302430; border:1px solid #684d60; border-radius:20px; }
+    .panel h1 { margin:0 0 6px; } .panel p { line-height:1.5; color:#c9bbc6; }
+    .panel input { width:100%; background:#1e1921; color:#fff; border:1px solid #76556d; border-radius:10px; padding:12px; margin-bottom:12px; }
+    .wide { width:100%; padding:12px; background:#ffad7e; border-radius:10px; color:#281824; font-weight:700; }
+    #error { color:#ffb5bd; min-height:1.5em; font-size:13px; }
+    #app { display:none; flex:1; min-height:0; }
+    #reportPanel { position:fixed; inset:0; background:#100d12cc; display:none; align-items:center; justify-content:center; padding:18px; }
+    #reportPanel .panel { background:#302430; border:1px solid #795869; border-radius:18px; padding:24px; width:min(100%,430px); }
+    #reportPanel textarea { width:100%; min-height:120px; margin:12px 0; }
+    .actions { display:flex; gap:8px; } .actions button { flex:1; }
+    [hidden] { display:none !important; }
+  </style>
+</head>
+<body>
+<div id="gate">
+  <div class="panel">
+    <h1>Mikan 🐾</h1>
+    <p>Your desktop companion, wherever you are. Cloudflare Access protects the address; the additional private key unlocks her chat relay.</p>
+    <form id="unlock">
+      <label for="key">Remote access key</label>
+      <input id="key" type="password" spellcheck="false" autocomplete="off" minlength="32" required>
+      <button class="wide" type="submit">Unlock Mikan</button>
+    </form>
+    <div id="error" role="alert"></div>
+    <small>On your PC: <code>npm run server:key</code></small>
+  </div>
+</div>
+<div id="app" class="shell">
+  <header>
+    <div class="avatar" aria-hidden="true">🐈</div>
+    <div class="heading"><strong>Mikan</strong><small id="status">Connecting…</small></div>
+    <button id="report" class="secondary" type="button" title="Report an issue">Report</button>
+    <button id="lock" class="secondary" type="button" title="Lock this browser">Lock</button>
+  </header>
+  <main id="messages" aria-live="polite">
+    <p class="welcome">This is the same Mikan running in your desktop app. Her active conversation will appear here.</p>
+  </main>
+  <div class="composer">
+    <form class="chat" id="chat">
+      <textarea id="message" rows="1" placeholder="Talk to Mikan…" maxlength="4000" aria-label="Message Mikan"></textarea>
+      <button class="send" id="send" type="submit" title="Send" disabled>↑</button>
+    </form>
+    <div class="meta"><span id="conversation">Desktop conversation</span><span>Remote chat · Text only</span></div>
+  </div>
+</div>
+<div id="reportPanel">
+  <div class="panel">
+    <h2>Report an issue</h2>
+    <p>Save a note and a short excerpt of the current conversation on your PC to review tomorrow.</p>
+    <textarea id="reportNote" maxlength="1500" placeholder="What did Mikan get wrong?"></textarea>
+    <div id="reportStatus" role="status"></div>
+    <div class="actions"><button id="cancelReport" class="secondary" type="button">Cancel</button><button id="saveReport" class="wide" type="button">Save report</button></div>
+  </div>
+</div>
+<script>
+(function () {
+  "use strict";
+  var key = sessionStorage.getItem("mikan-remote-key") || "";
+  var current = null;
+  var inFlight = false;
+  var gate = document.getElementById("gate");
+  var app = document.getElementById("app");
+  var status = document.getElementById("status");
+  var messages = document.getElementById("messages");
+  var message = document.getElementById("message");
+  var send = document.getElementById("send");
+  var error = document.getElementById("error");
+  var reportPanel = document.getElementById("reportPanel");
+  var idSignature = "";
+  function showUnlocked(yes) {
+    gate.style.display = yes ? "none" : "flex";
+    app.style.display = yes ? "flex" : "none";
+    if (!yes) { status.textContent = "Locked"; current = null; }
+  }
+  async function api(path, options) {
+    var response = await fetch(path, Object.assign({}, options || {}, {
+      cache:"no-store",
+      headers: Object.assign({ Authorization:"Bearer " + key }, (options && options.headers) || {})
+    }));
+    var payload = await response.json();
+    if (!response.ok) {
+      var reason = payload.error || ("HTTP " + response.status);
+      var err = new Error(reason);
+      err.status = response.status;
+      throw err;
+    }
+    return payload;
+  }
+  function render(data) {
+    var entries = Array.isArray(data.messages) ? data.messages : [];
+    var signature = entries.map(function (m) { return m.id + ":" + m.content.length + ":" + m.content.slice(-25); }).join("|");
+    if (signature !== idSignature) {
+      var atBottom = messages.scrollHeight - messages.scrollTop - messages.clientHeight < 160;
+      var fragment = document.createDocumentFragment();
+      entries.forEach(function (m) {
+        var bubble = document.createElement("div");
+        bubble.className = "bubble " + (m.role === "user" ? "user" : "assistant");
+        var label = document.createElement("span");
+        label.className = "speaker";
+        label.textContent = m.role === "user" ? "You" : "Mikan";
+        var content = document.createElement("span");
+        content.textContent = m.content || (data.busy && m.role === "assistant" ? "Thinking…" : "");
+        bubble.append(label, content);
+        fragment.append(bubble);
+      });
+      messages.replaceChildren(fragment);
+      if (!entries.length) {
+        var welcome = document.createElement("p");
+        welcome.className = "welcome";
+        welcome.textContent = "Your desktop conversation will appear here. Send a message to begin.";
+        messages.append(welcome);
+      }
+      if (atBottom || !idSignature) messages.scrollTop = messages.scrollHeight;
+      idSignature = signature;
+    }
+    status.textContent = !data.connected ? "Desktop offline" : (data.busy || data.queued ? "Thinking…" : "Online · " + (data.model || "local model"));
+    document.getElementById("conversation").textContent = data.conversationId ? "Shared conversation · " + data.conversationId.slice(0,8) : "New conversation";
+    current = data;
+    send.disabled = !data.connected || data.busy || data.queued || inFlight || !message.value.trim();
+  }
+  async function refresh() {
+    if (!key) return;
+    try {
+      var data = await api("/api/state");
+      render(data);
+    } catch (e) {
+      if (e.status === 401) {
+        key = ""; sessionStorage.removeItem("mikan-remote-key"); showUnlocked(false);
+        error.textContent = "The remote key was not accepted.";
+      } else {
+        status.textContent = "Connection unavailable";
+        send.disabled = true;
+      }
+    }
+  }
+  document.getElementById("unlock").addEventListener("submit", async function (ev) {
+    ev.preventDefault();
+    key = document.getElementById("key").value.trim();
+    try {
+      current = await api("/api/state");
+      sessionStorage.setItem("mikan-remote-key", key);
+      error.textContent = "";
+      showUnlocked(true);
+      render(current);
+    } catch (e) {
+      key = "";
+      error.textContent = e.message;
+    }
+  });
+  document.getElementById("lock").addEventListener("click", function () {
+    sessionStorage.removeItem("mikan-remote-key"); key = ""; showUnlocked(false);
+  });
+  message.addEventListener("input", function () {
+    send.disabled = !current || !current.connected || current.busy || current.queued || inFlight || !message.value.trim();
+  });
+  message.addEventListener("keydown", function (event) {
+    if (event.key === "Enter" && !event.shiftKey && !event.isComposing) {
+      event.preventDefault();
+      document.getElementById("chat").requestSubmit();
+    }
+  });
+  document.getElementById("chat").addEventListener("submit", async function (event) {
+    event.preventDefault();
+    var text = message.value.trim();
+    if (!text || inFlight || !current || !current.connected) return;
+    inFlight = true; send.disabled = true;
+    try {
+      await api("/api/send", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({text:text}) });
+      message.value = "";
+      await refresh();
+    } catch (e) { status.textContent = e.message; }
+    finally { inFlight = false; send.disabled = !message.value.trim(); }
+  });
+  document.getElementById("report").addEventListener("click", function () { reportPanel.style.display = "flex"; });
+  document.getElementById("cancelReport").addEventListener("click", function () { reportPanel.style.display = "none"; });
+  document.getElementById("saveReport").addEventListener("click", async function () {
+    var note = document.getElementById("reportNote").value.trim();
+    if (!note) return;
+    try {
+      await api("/api/report", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({note:note}) });
+      document.getElementById("reportStatus").textContent = "Saved on your PC.";
+      document.getElementById("reportNote").value = "";
+      setTimeout(function(){reportPanel.style.display = "none"; document.getElementById("reportStatus").textContent = "";}, 900);
+    } catch (e) { document.getElementById("reportStatus").textContent = e.message; }
+  });
+  if (key) {
+    showUnlocked(true);
+    refresh();
+  } else showUnlocked(false);
+  setInterval(refresh, 1200);
+})();
+</script>
+</body>
+</html>
