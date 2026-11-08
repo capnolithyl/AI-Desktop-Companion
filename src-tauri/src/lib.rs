@@ -11,6 +11,7 @@ mod advanced_memory;
 mod session_memory;
 mod voice;
 mod screen_vision;
+mod file_attachments;
 use futures_util::{future::{AbortHandle, Abortable}, StreamExt};
 use std::{collections::HashMap, sync::Mutex};
 use serde::{Deserialize, Serialize};
@@ -595,6 +596,7 @@ pub fn run() {
             screen_vision::vision_monitors,
             screen_vision::vision_capture,
             screen_vision::vision_model_status,
+            file_attachments::extract_document,
             memory::memory_list_conversations,
             memory::memory_create_conversation,
             memory::memory_list_messages,
