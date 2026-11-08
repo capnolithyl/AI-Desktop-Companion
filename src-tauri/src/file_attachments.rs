@@ -73,14 +73,13 @@ fn xml_to_plain(xml: &str) -> Result<String, String> {
             },
             Event::Text(e)=>{
                 // ODT uses plain XML text in paragraphs/spans; DOCX and PPTX use t nodes.
-                let content=e.xml_content(XmlVersion::Implicit1_0)
-                    .map_err(|err|format!("Invalid document text: {err}"))?;
+                let content=e.xml_content(XmlVersion::Implicit1_0);
                 if inside_text || !content.trim().is_empty() {
                     out.push_str(&content);
                 }
             },
             Event::CData(e)=>{
-                out.push_str(&e.xml_content(XmlVersion::Implicit1_0).map_err(|err|err.to_string())?);
+                out.push_str(&e.xml_content(XmlVersion::Implicit1_0));
             },
             Event::GeneralRef(e)=>{
                 // quick-xml emits predefined/numeric XML references as separate
@@ -115,7 +114,8 @@ fn extract_office(bytes: Vec<u8>, ext: &str) -> Result<ExtractedDocument, String
         "pptx"=>{
             let mut slides=Vec::new();
             for index in 0..archive.len() {
-                let path=archive.by_index(index).map_err(|e|e.to_string())?.name().to_owned();
+                let path=archive.by_index(index).map_err(|e|e.to_string())?
+                    .name().map_err(|e|e.to_string())?.into_owned();
                 if let Some(n)=path.strip_prefix("ppt/slides/slide").and_then(|p|p.strip_suffix(".xml"))
                     .and_then(|n|n.parse::<usize>().ok())
                 { slides.push((n,path)); }
