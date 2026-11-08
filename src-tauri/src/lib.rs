@@ -6,6 +6,7 @@ mod research_intent;
 mod memory;
 mod memory_extraction;
 mod advanced_memory;
+mod session_memory;
 use futures_util::{future::{AbortHandle, Abortable}, StreamExt};
 use std::{collections::HashMap, sync::Mutex};
 use serde::{Deserialize, Serialize};
@@ -542,6 +543,10 @@ pub fn run() {
             memory::memory_update_character_fact,
             memory::memory_delete_character_fact,
             memory_extraction::memory_process_turn,
+            memory::memory_mark_recalled,
+            session_memory::memory_session_candidate,
+            session_memory::memory_save_session_summary,
+            session_memory::memory_list_session_summaries,
             advanced_memory::memory_semantic_recall,
             advanced_memory::memory_semantic_status,
             toggle_companion,
