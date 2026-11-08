@@ -5,6 +5,8 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 import { webContext, pageContext, type PageDocument, type WebResult } from "./web-search";
 import { priorResearchSources } from "./research-context";
 import { planResearch, stripUnsupportedCitations } from "./research-routing";
+import { verifyResearchAnswer } from "./evidence-verification";
+import { resolveConversationQuestion, needsContextResolution, contextGuidance } from "./conversation-engine";
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
@@ -809,7 +811,7 @@ export default function App() {
     const assistantId = crypto.randomUUID();
     const history = [...messages, user];
     // Shared routing policy: keep the proven desktop query construction in Rust.
-    const researchPlan = !withSearch ? planResearch(text, messages) : null;
+    let researchPlan = !withSearch ? planResearch(text, messages) : null;
     const priorSources = !withSearch ? priorResearchSources(messages, text) : [];
     const conversationId = activeConversationId ?? crypto.randomUUID();
     setActiveConversationId(conversationId);
@@ -844,6 +846,25 @@ export default function App() {
 
     try {
       await persistMessage(user);
+      if (!withSearch && settings.autoSearch && researchPlan && researchPlan.mode !== "chat" &&
+          needsContextResolution(text, messages)) {
+        setActivity("Understanding follow-up…");
+        const resolved = await resolveConversationQuestion(text, messages,
+          prompt => invoke<string>("condense_local_context", {
+            endpoint: settings.endpoint, model: settings.model,
+            prompt, contextWindow: settings.contextWindow
+          }));
+        if (resolved.rewritten) {
+          const updated = planResearch(resolved.standaloneQuestion, messages);
+          researchPlan = {
+            // Context-dependent factual dates need a fresh grounded lookup.
+            // Otherwise the tool planner may answer from stale chat instead.
+            mode: "research",
+            query: resolved.standaloneQuestion,
+            recent: researchPlan.recent || updated.recent
+          };
+        }
+      }
       unlistenActivity = await listen<Activity>("mikan://activity", event => {
         if (event.payload.requestId === requestId) setActivity(event.payload.text);
       });
@@ -851,10 +872,16 @@ export default function App() {
         if (event.payload.requestId !== requestId || !event.payload.content) return;
         if (firstTokenMs == null) firstTokenMs = performance.now() - started;
         accumulated += event.payload.content;
-        const currentText = accumulated;
-        setMessages(current => current.map(m =>
-          m.id === assistantId ? { ...m, content: currentText } : m
-        ));
+        // Source-bearing drafts remain private until the evidence check finishes.
+        // Streaming an unverified invented release date is misleading.
+        const researchAnswer = !!withSearch ||
+          (settings.autoSearch && researchPlan !== null && researchPlan.mode !== "chat");
+        if (!researchAnswer) {
+          const currentText = accumulated;
+          setMessages(current => current.map(m =>
+            m.id === assistantId ? { ...m, content: currentText } : m
+          ));
+        }
       });
 
       const completion = await invoke<ChatCompletion>("chat_stream", {
@@ -872,9 +899,9 @@ export default function App() {
           contextWindow: settings.contextWindow,
           priorSources,
           messages: [
-            { role: "system", content: [settings.systemPrompt.trim(), personalityGuidance(settings.personality), runtimeContext(), memoryContext(userFacts, text), characterContext(characterFacts, text), characterAnswerGuidance(text)].filter(Boolean).join("\n\n") },
+            { role: "system", content: [settings.systemPrompt.trim(), personalityGuidance(settings.personality), runtimeContext(), memoryContext(userFacts, text), characterContext(characterFacts, text), characterAnswerGuidance(text), researchPlan?.mode !== "chat" ? contextGuidance(messages, text, 1800) : ""].filter(Boolean).join("\n\n") },
             ...(withSearch ? [{ role: "user", content: withSearch.page ? pageContext(withSearch.query, withSearch.page) : webContext(withSearch.query, withSearch.results) }] : []),
-            ...history.filter(m => !withSearch || m.role === "user").slice(-32).map(m => ({ role: m.role, content: m.content }))
+            ...history.filter(m => !withSearch || m.role === "user").slice(-18).map(m => ({ role: m.role, content: m.content }))
           ]
         }
       });
@@ -887,7 +914,8 @@ export default function App() {
       };
       const verifiedSources = completion.sources?.length ? completion.sources : withSearch?.results;
       const rawText = completion.content || accumulated || "(The model returned no visible text.)";
-      const finalText = verifiedSources?.length ? rawText : stripUnsupportedCitations(rawText);
+      const finalText = verifiedSources?.length
+        ? verifyResearchAnswer(rawText, verifiedSources).text : stripUnsupportedCitations(rawText);
       const assistant: LogMessage = {
         id: assistantId, role: "assistant", content: finalText, createdAt: Date.now(),
         diagnostics, sources: verifiedSources,
