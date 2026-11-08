@@ -83,5 +83,7 @@ export const mobileBackend = {
   download: async (): Promise<NativeStatus["status"]> => (await send("download")).status ?? "UNAVAILABLE",
   generate: async (prompt: string, onDelta: (chunk: string) => void): Promise<string> =>
     (await send("generate", { prompt }, onDelta)).text ?? "",
+  generateResearch: async (prompt: string, onDelta: (chunk: string) => void): Promise<string> =>
+    (await send("generateResearch", { prompt }, onDelta)).text ?? "",
   cancel: (): void => { void send("cancel").catch(() => {}); }
 };
