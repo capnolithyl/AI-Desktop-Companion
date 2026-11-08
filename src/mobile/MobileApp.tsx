@@ -19,6 +19,7 @@ import { contextGuidance, needsContextResolution, resolveConversationQuestion } 
 import { priorResearchSources } from "../research-context";
 import { compactWebContext, pageContext, type WebResult } from "../web-search";
 import { deviceClockAnswer, pocketRuntimeContext } from "../runtime-context";
+import { answerFromPersonalMemory, isPersonalMemoryQuestion, personalMemoryGuidance } from "../personal-memory";
 import "./mobile.css";
 
 type Turn = PocketTurn;
@@ -55,7 +56,7 @@ function buildPrompt(settings: Settings, facts: UserFact[], canon: CharacterFact
     "Answer the CURRENT user question directly and concisely. For a follow-up, do not introduce the subject again, repeat previous facts or praise the user's taste. Only mention earlier details if essential to answer the NEW question.",
     "Do not turn a specific factual answer into another biography, timeline or generic recommendation. If you have no verified new information, say precisely what could not be confirmed, without replaying old search results.",
     "CRITICAL: Conversation text alone cannot save a memory. Never claim that a memory has been saved, filed away, or remembered permanently unless the application has confirmed a database write. Explicit save requests are handled by the app, not by your own text.",
-    memoryContext(facts, query), characterContext(canon, query), research
+    memoryContext(facts, query), personalMemoryGuidance(query), characterContext(canon, query), research
   ].filter(Boolean).join("\n");
   // Keep earlier web replies as dialogue context, NOT as verified evidence.
   // Keep the most recent intact turns before truncating old context.
@@ -487,7 +488,8 @@ export default function MobileApp() {
     const learningAnswer = mode || retry || learnCommand || explicitMemory
       ? null : contextualLearningFact(text, history);
     const localClockAnswer = mode || retry ? null : deviceClockAnswer(text);
-    if (!explicitMemory && !localClockAnswer && model !== "READY") {
+    const personalQuestion = !mode && isPersonalMemoryQuestion(text);
+    if (!explicitMemory && !localClockAnswer && !personalQuestion && model !== "READY") {
       setIntro("Gemini Nano isn't ready yet. Open Settings to check or download the local model.");
       return;
     }
@@ -505,7 +507,7 @@ export default function MobileApp() {
       writeTurn(threadId, assistant);
     }
     let output = "";
-    let sources: WebResult[] = retry?.assistant.sources ?? [];
+    let sources: WebResult[] = personalQuestion ? [] : retry?.assistant.sources ?? [];
     try {
       // The message is durable before inference and can be cited as evidence.
       if (explicitMemory) {
@@ -548,6 +550,24 @@ export default function MobileApp() {
           return;
         }
       }
+      if (personalQuestion) {
+        // Native automatic extraction may still be running after the previous
+        // answer. Read the latest committed SQLite facts before responding.
+        await memoryQueue.current.catch(() => {});
+        promptFacts = await pocketMemory.listFacts();
+        setFacts(promptFacts);
+        const knownAnswer = answerFromPersonalMemory(text, promptFacts);
+        if (knownAnswer) {
+          replaceTurn(threadId, assistant.id, knownAnswer, [], false);
+          await pocketMemory.saveMessage(threadId, {
+            ...assistant, content:knownAnswer, sources:[], failed:false
+          });
+          return;
+        }
+        if (model !== "READY") {
+          throw new Error("I can read your saved memories, but Gemini Nano isn't ready to answer this question.");
+        }
+      }
       if (localClockAnswer) {
         // A local date/time request needs neither Tavily nor Gemini Nano.
         // Never attach stale research links or an unrelated album summary.
@@ -556,7 +576,7 @@ export default function MobileApp() {
         return;
       }
       let research = "";
-      const researchPlan = planResearch(text, history);
+      const researchPlan = personalQuestion ? { mode:"chat" as const, recent:false } : planResearch(text, history);
       // Resolve ambiguous factual follow-ups using a local Nano-only request.
       // Only the resulting standalone query (not the chat history) reaches Tavily.
       const condensed = !mode && webEnabled && researchPlan.mode !== "chat" &&
@@ -570,7 +590,7 @@ export default function MobileApp() {
         query: lookup, recent: researchPlan.recent ||
           (condensed?.rewritten ? planResearch(lookup, history).recent : false)
       };
-      const prior = priorResearchSources(history, text);
+      const prior = personalQuestion ? [] : priorResearchSources(history, text);
       // If the user requests fresh information while search is disabled, stop
       // before Nano improvises a convincing but unsourced release date.
       if (planned?.recent && !webEnabled && mode !== "search" && mode !== "read") {
@@ -583,7 +603,7 @@ export default function MobileApp() {
       }
       // Retrying a failed generation reuses the already retrieved evidence.
       // This avoids unnecessary Tavily credits and preserves the same sources.
-      if (retry?.assistant.sources?.length) {
+      if (!personalQuestion && retry?.assistant.sources?.length) {
         sources = retry.assistant.sources;
         research = compactWebContext(lookup, sources);
       } else if (mode === "read") {
