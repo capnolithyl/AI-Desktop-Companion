@@ -62,10 +62,9 @@ const genericYes = /^(?:yes|yeah|yep|absolutely|definitely|sure|of course)$/i;
 const genericNo = /^(?:no|nope|nah|not really)$/i;
 
 /** Only accept an answer if the most recent saved assistant turn asked a question. */
-export function contextualLearningFact(
+export function questionAnswerMemory(
   message: string, previous: LearningTurn[]
 ): LearningMemory | null {
-  if (!learningSessionActive(previous)) return null;
   const last = previous.at(-1);
   if (!last || last.role !== "assistant") return null;
   const question = lastAskedQuestion(last.content);
@@ -78,6 +77,7 @@ export function contextualLearningFact(
     /\bwhich\s+([^?]+?)\s+is\s+your\s+favou?rite\b/i.exec(question);
   const interest =
     /\b(?:what|which)\s+(?:kind|type|sort)\s+of\s+([^?]+?)\s+do you (?:like|love|enjoy|prefer)\b/i.exec(question);
+  const yesNoSubject = /\b(?:do|did|would)\s+you\s+(?:like|love|enjoy|prefer)\s+([^?]+)/i.exec(lower);
   let fact: string;
   if (favorite) {
     const topic = clean(favorite[1]).replace(/\b(?:for you|these days|right now)$/i, "").trim();
@@ -92,9 +92,8 @@ export function contextualLearningFact(
     fact = "The user works as " + answer;
   } else if (/\bwhat\s+(?:do you (?:like|love|enjoy) doing|are your hobbies)\b/i.test(lower)) {
     fact = "The user enjoys " + answer;
-  } else if (/\b(?:do|did|would)\s+you\s+(?:like|love|enjoy|prefer)\s+([^?]+)/i.test(lower) &&
-    (genericYes.test(answer) || genericNo.test(answer))) {
-    const subject = clean(RegExp.$1);
+  } else if (yesNoSubject && (genericYes.test(answer) || genericNo.test(answer))) {
+    const subject = clean(yesNoSubject[1]);
     fact = "The user " + (genericYes.test(answer) ? "likes " : "does not like ") + subject;
   } else {
     // A general, lossless QA memory remains useful even for topics that have
@@ -105,4 +104,11 @@ export function contextualLearningFact(
   fact = clean(fact);
   if (fact.length > 500 || sensitive.test(fact)) return null;
   return { fact, question, answer };
+}
+
+/** Opt-in guard belongs to the session layer, not the grounded QA parser. */
+export function contextualLearningFact(
+  message: string, previous: LearningTurn[]
+): LearningMemory | null {
+  return learningSessionActive(previous) ? questionAnswerMemory(message, previous) : null;
 }
