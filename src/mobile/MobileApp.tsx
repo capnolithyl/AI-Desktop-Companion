@@ -580,7 +580,7 @@ export default function MobileApp() {
           setWebBusy(false);
           setWebActivity("");
         }
-      } else if (mode !== "search" && webEnabled && prior.length && !planned?.recent &&
+      } else if (mode !== "search" && webEnabled && prior.length && !planned?.recent && !condensed?.rewritten &&
         !/\b(?:my|me|mine|our|ours|yourself)\b/i.test(text)) {
         // Follow-up evidence is already stored locally in SQLite metadata.
         // Reuse it rather than charging another search credit unnecessarily.
