@@ -550,6 +550,7 @@ pub fn run() {
             session_memory::memory_session_candidate,
             session_memory::memory_save_session_summary,
             session_memory::memory_list_session_summaries,
+            session_memory::memory_delete_session_summary,
             advanced_memory::memory_semantic_recall,
             advanced_memory::memory_semantic_status,
             toggle_companion,
