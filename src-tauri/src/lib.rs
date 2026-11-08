@@ -294,8 +294,14 @@ async fn chat_stream_impl(
     let mut newly_researched = false;
     let mut research_audit = None;
     let selected_context = valid_context_window(request.context_window);
-    let previous_sources = research_intent::clean_prior_sources(&request.prior_sources);
-    let explicit_query = request.auto_search.then(|| {
+    // The chat route is authoritative. Even old clients that accidentally
+    // leave auto_search enabled must not invoke web tools or carry unrelated
+    // source excerpts into personal, persona or self-capability replies.
+    let local_chat = request.research_route.as_deref() == Some("chat");
+    let may_research = request.auto_search && !local_chat;
+    let previous_sources = if local_chat { Vec::new() }
+        else { research_intent::clean_prior_sources(&request.prior_sources) };
+    let explicit_query = may_research.then(|| {
         research_intent::routed_research_query(
             &messages,
             request.research_route.as_deref(),
@@ -323,7 +329,7 @@ async fn chat_stream_impl(
                 research_intent::evidence_data(&previous_sources))
         }));
     }
-    if request.auto_search {
+    if may_research {
         if let Some(query) = explicit_query {
             // Explicit research intent: search the user's actual subject before the
             // model can reinterpret "Cattle Decapitation" as a slaughter procedure.
@@ -451,7 +457,7 @@ async fn chat_stream_impl(
             }
         }
     }
-    if !request.auto_search && !previous_sources.is_empty() {
+    if !may_research && !previous_sources.is_empty() {
         sources = previous_sources;
         sources_carried_over = true;
     }
