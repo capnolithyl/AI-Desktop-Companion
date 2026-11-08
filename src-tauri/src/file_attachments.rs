@@ -41,8 +41,8 @@ fn capped(text: String, kind: &str, was_truncated: bool) -> Result<ExtractedDocu
     }
     Ok(ExtractedDocument {text,truncated,kind:kind.to_owned()})
 }
-fn local_tag(name: &[u8]) -> &[u8] {
-    name.rsplit(|c|*c==b':').next().unwrap_or(name)
+fn local_tag(name: &str) -> &str {
+    name.rsplit(':').next().unwrap_or(name)
 }
 fn xml_to_plain(xml: &str) -> Result<String, String> {
     let mut reader=XmlReader::from_str(xml);
@@ -51,23 +51,23 @@ fn xml_to_plain(xml: &str) -> Result<String, String> {
     loop {
         match reader.read_event().map_err(|e| format!("Cannot parse document XML: {e}"))? {
             Event::Start(e)=>{
-                let tag=local_tag(e.name().as_ref()).to_vec();
-                if [b"p".as_slice(),b"h".as_slice(),b"row".as_slice(),b"tr".as_slice()].contains(&tag.as_slice()) && !out.ends_with('\n') {
+                let tag=local_tag(e.name().as_ref()).to_owned();
+                if matches!(tag.as_str(),"p"|"h"|"row"|"tr") && !out.ends_with('\n') {
                     out.push('\n');
                 }
-                if tag==b"t" {inside_text=true;}
-                if tag==b"tab" {out.push('\t');}
-                if tag==b"br" {out.push('\n');}
+                if tag=="t" {inside_text=true;}
+                if tag=="tab" {out.push('\t');}
+                if tag=="br" {out.push('\n');}
             },
             Event::Empty(e)=>{
-                let tag=local_tag(e.name().as_ref()).to_vec();
-                if tag==b"tab" {out.push('\t');}
-                if tag==b"br" {out.push('\n');}
+                let tag=local_tag(e.name().as_ref()).to_owned();
+                if tag=="tab" {out.push('\t');}
+                if tag=="br" {out.push('\n');}
             },
             Event::End(e)=>{
-                let tag=local_tag(e.name().as_ref()).to_vec();
-                if tag==b"t" {inside_text=false;}
-                if matches!(tag.as_slice(),b"p"|b"h"|b"row"|b"tr") && !out.ends_with('\n') {
+                let tag=local_tag(e.name().as_ref()).to_owned();
+                if tag=="t" {inside_text=false;}
+                if matches!(tag.as_str(),"p"|"h"|"row"|"tr") && !out.ends_with('\n') {
                     out.push('\n');
                 }
             },
@@ -81,6 +81,20 @@ fn xml_to_plain(xml: &str) -> Result<String, String> {
             },
             Event::CData(e)=>{
                 out.push_str(&e.xml_content(XmlVersion::Implicit1_0).map_err(|err|err.to_string())?);
+            },
+            Event::GeneralRef(e)=>{
+                // quick-xml emits predefined/numeric XML references as separate
+                // events. Resolve safely; never expand custom entities.
+                let name=e.as_ref();
+                let builtin=match name {
+                    "amp"=>Some('&'),"lt"=>Some('<'),"gt"=>Some('>'),
+                    "quot"=>Some('"'),"apos"=>Some('\''),
+                    _=>None
+                };
+                let numeric=name.strip_prefix("#x").and_then(|n|u32::from_str_radix(n,16).ok())
+                    .or_else(||name.strip_prefix('#').and_then(|n|n.parse::<u32>().ok()))
+                    .and_then(char::from_u32);
+                if let Some(c)=builtin.or(numeric) {out.push(c);}
             },
             Event::Eof=>break,
             _=>{}
