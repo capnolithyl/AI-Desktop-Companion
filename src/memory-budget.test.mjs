@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { memoryBudget, sessionMemoryContext } from "./memory-budget.ts";
 
 test("Utsuwa-style budgets scale working memory and fact counts with the configured window",()=>{
- assert.deepEqual(memoryBudget(4096),{recentTurns:6,maxFacts:3,factChars:820,sessionChars:380});
+ assert.deepEqual(memoryBudget(4096),{recentTurns:6,maxFacts:3,factChars:820,sessionChars:380,archiveChars:270});
  assert.equal(memoryBudget(8192).maxFacts,5);
  assert.equal(memoryBudget(16384).recentTurns,20);
  assert.equal(memoryBudget(32768).maxFacts,10);
@@ -33,4 +33,16 @@ test("session notes have bounded length and empty checkpoints are hidden",()=>{
  const large={...empty,summary:"- "+"a".repeat(3000)};
  const v2=sessionMemoryContext("Continue",large,[],memoryBudget(4096),100);
  assert.ok(v2.length<650);
+});
+
+test("older session notes use topic relevance instead of arbitrary age",()=>{
+ const discussions=[
+  {conversationId:"games",summary:"- User discussed Skyrim and Fire Emblem",lastMessageRowid:8,updatedAt:200},
+  {conversationId:"work",summary:"- User built a WordPress site",lastMessageRowid:9,updatedAt:100}
+ ];
+ const result=sessionMemoryContext("Can we work on my WordPress site?",null,discussions,memoryBudget(8192),300);
+ assert.match(result,/WordPress site/);
+ assert.doesNotMatch(result,/Skyrim/);
+ const casual=sessionMemoryContext("How's it going?",null,discussions,memoryBudget(8192),300);
+ assert.equal(casual,"");
 });
