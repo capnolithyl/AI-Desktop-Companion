@@ -309,11 +309,10 @@ pub fn memory_mark_recalled(app: AppHandle, ids: Vec<i64>) -> Result<(), String>
 
 /// Optional owner-selected core-profile importance. This is deterministic,
 /// never inferred from untrusted web content or silently overwritten by Mem0.
-#[tauri::command]
-pub fn memory_pin_fact(app: AppHandle, id: i64, pinned: bool) -> Result<(), String> {
+fn set_importance(db: &Connection, id: i64, pinned: bool) -> Result<(), String> {
     if id <= 0 { return Err("Invalid memory ID".into()); }
     let importance = if pinned {95} else {50};
-    let changed = open_db(&app)?.execute(
+    let changed = db.execute(
         "INSERT INTO user_memory_usage(memory_id,importance)
          SELECT id,?2 FROM user_memories WHERE id=?1
          ON CONFLICT(memory_id) DO UPDATE SET importance=excluded.importance",
@@ -321,6 +320,11 @@ pub fn memory_pin_fact(app: AppHandle, id: i64, pinned: bool) -> Result<(), Stri
     ).map_err(|e| e.to_string())?;
     if changed==0 { return Err("Memory no longer exists".into()); }
     Ok(())
+}
+
+#[tauri::command]
+pub fn memory_pin_fact(app: AppHandle, id: i64, pinned: bool) -> Result<(), String> {
+    set_importance(&open_db(&app)?,id,pinned)
 }
 
 /// Canon facts are Mikan's fictional self-description, never user facts or webpage knowledge.
@@ -441,6 +445,29 @@ pub fn memory_delete_character_fact(app: AppHandle, id: i64, persona_id: String)
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn referenced_and_pinned_facts_are_persistent_and_cascade_on_delete() {
+        let db=Connection::open_in_memory().unwrap();
+        initialize_database(&db).unwrap();
+        db.execute("INSERT INTO user_memories(fact) VALUES ('The user is a WordPress developer')", []).unwrap();
+        let id=db.last_insert_rowid();
+        mark_recalled(&db,&[id,id,99999]).unwrap(); // no duplicate or resurrection
+        set_importance(&db,id,true).unwrap();
+        let (importance,count):(i64,i64)=db.query_row(
+            "SELECT importance,reference_count FROM user_memory_usage WHERE memory_id=?1",
+            params![id],|r| Ok((r.get(0)?,r.get(1)?))
+        ).unwrap();
+        assert_eq!((importance,count),(95,1));
+        set_importance(&db,id,false).unwrap();
+        let importance:i64=db.query_row("SELECT importance FROM user_memory_usage WHERE memory_id=?1",
+            params![id],|r| r.get(0)).unwrap();
+        assert_eq!(importance,50);
+        db.execute("DELETE FROM user_memories WHERE id=?1",params![id]).unwrap();
+        let metadata_count:i64=db.query_row("SELECT COUNT(*) FROM user_memory_usage",[],|r|r.get(0)).unwrap();
+        assert_eq!(metadata_count,0);
+        assert!(set_importance(&db,id,true).is_err());
+    }
 
     #[test]
     fn memory_facts_are_normalized_and_bounded() {
