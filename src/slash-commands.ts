@@ -3,6 +3,7 @@ export const SLASH_HELP: readonly SlashHelpItem[] = [
   { usage: "/help", description: "Show all available commands", insert: "/help" },
   { usage: "/capabilities", description: "Browse Mikan's own features and live status", insert: "/capabilities" },
   { usage: "/vision", description: "Choose and capture a screen for local visual analysis", insert: "/vision" },
+  { usage: "/attach", description: "Choose a local document or image to attach", insert: "/attach" },
   { usage: "/personality", description: "Open quick personality controls", insert: "/personality" },
   { usage: "/preset <name>", description: "Switch to classic, cozy, flirty, focused, or chaos", insert: "/preset " },
   { usage: "/randomize", description: "Roll new personality settings", insert: "/randomize" },
