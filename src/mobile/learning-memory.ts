@@ -45,6 +45,9 @@ function lastAskedQuestion(reply: string): string | null {
 }
 
 function answerValue(userMessage: string): string | null {
+  // Check interrogative punctuation BEFORE cleanup removes it. Otherwise
+  // "What about you?" becomes an invented user preference.
+  if (userMessage.trim().endsWith("?") || otherQuestion.test(userMessage.trim())) return null;
   const source = clean(userMessage);
   if (source.length < 1 || source.length > 400 || /^(?:\/|remember\b)/i.test(source) ||
     otherQuestion.test(source) || emptyOrUncertain.test(source) || sensitive.test(source)) return null;
