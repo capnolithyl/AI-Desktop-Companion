@@ -51,6 +51,7 @@ class ReactActivity : Activity() {
     private var memoryJob: Job? = null
     private lateinit var web: WebView
     private var generation: Job? = null
+    private var generationInterruptedByBackground = false
     private var fileChooser: ValueCallback<Array<Uri>>? = null
     private val fileRequestCode = 4546
     private val allowedHost = "appassets.androidplatform.net"
@@ -312,8 +313,23 @@ class ReactActivity : Activity() {
         }
     }
 
+    override fun onResume() {
+        super.onResume()
+        if (generationInterruptedByBackground) {
+            generationInterruptedByBackground = false
+            // Some WebViews defer JavaScript until resume. A lifecycle callback
+            // ensures a pending generation promise does not stay stuck forever.
+            if (::web.isInitialized) web.post {
+                web.evaluateJavascript(
+                    "window.__mikanBackgroundInterrupted && window.__mikanBackgroundInterrupted();", null
+                )
+            }
+        }
+    }
+
     override fun onStop() {
         super.onStop()
+        generationInterruptedByBackground = generation?.isActive == true
         // Google AICore disallows Nano generation in the background. Deliver
         // a recoverable interruption so the UI can offer Retry on return.
         generation?.cancel(CancellationException("App moved to background. Tap Retry to regenerate."))
