@@ -272,7 +272,7 @@ class ReactActivity : Activity() {
                     try { deliver(id, "result", status = backend.download { _ -> }.name) }
                     catch (e: Exception) { deliver(id, "error", error = e.message ?: "Download failed") }
                 }
-                "generate" -> {
+                "generate", "generateResearch" -> {
                     val prompt = data.optString("prompt")
                     if (prompt.isBlank() || prompt.length > 30_000) {
                         deliver(id, "error", error = "Invalid prompt"); return
