@@ -58,14 +58,19 @@ export function needsContextResolution(question: string, history: ConversationTu
 }
 
 function lastUsefulUserQuestion(history: ConversationTurn[]): string | null {
-  for (const turn of history.slice(-16).reverse()) {
-    if (turn.role !== "user") continue;
-    const text = turn.content.trim();
-    if (text.length >= 16 && text.length <= 280 && !insignificant.test(text) &&
-      !/^(?:i meant|i'm still talking|still talking)\b/i.test(text) &&
-      !/^(?:what date|what time)\b/i.test(text)) return text;
-  }
-  return null;
+  // Prefer a user-authored topic introduction rather than the nearest vague
+  // follow-up ("any info on a new album?"). This is a SAFE fallback if the
+  // local model cannot produce usable JSON, not a replacement for the model.
+  const candidates = history.slice(-18).filter(t => t.role === "user")
+    .map(t => t.content.trim()).filter(t =>
+      t.length >= 16 && t.length <= 280 && !insignificant.test(t) &&
+      !/^(?:i meant|i'm still talking|still talking|what date|what time)\b/i.test(t));
+  return candidates.slice().reverse().find(t =>
+    /\b(?:about|regarding)\s+.{6,}\b/i.test(t) &&
+    !/\b(?:about|regarding)\s+(?:it|that|a new album|the album)\b/i.test(t)) ??
+    candidates.slice().reverse().find(t =>
+      /\b(?:the band|the artist|the musician|the project)\b/i.test(t)) ??
+    candidates[0] ?? null;
 }
 
 /** Use the last meaningful user question as a safe fallback, not the last
