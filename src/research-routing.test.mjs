@@ -238,5 +238,5 @@ test("Pocket age recall and user-memory questions never go to Tavily even after 
     assert.deepEqual(planResearch(question,prior),{mode:"chat",recent:false},question);
   }
   assert.ok(researchRequest("How old is the universe?",prior));
-  assert.ok(researchRequest("What's the latest news on my favorite band's new album?",prior));
+  assert.ok(researchRequest("What's the latest news on Maximum the Hormone's new album?",prior));
 });
