@@ -14,6 +14,7 @@ import { resolveExplicitMemoryIntent, type ExplicitMemoryIntent } from "./memory
 import { planResearch, stripUnsupportedCitations } from "../research-routing";
 import { priorResearchSources } from "../research-context";
 import { compactWebContext, pageContext, type WebResult } from "../web-search";
+import { deviceClockAnswer, pocketRuntimeContext } from "../runtime-context";
 import "./mobile.css";
 
 type Turn = PocketTurn;
@@ -35,8 +36,11 @@ function readArray<T>(key: string): T[] {
 function buildPrompt(settings: Settings, facts: UserFact[], canon: CharacterFact[], turns: Turn[], research = ""): string {
   const query = turns[turns.length - 1]?.content ?? "";
   const context = [settings.systemPrompt, personalityGuidance(settings.personality),
+    pocketRuntimeContext(),
     "This is on-device Gemini Nano pocket mode. You cannot see the user's PC or desktop memory. You have no direct browsing abilities; when the application supplies WEB RESEARCH, use only those cited sources. Otherwise be candid about not having live data.",
     "When no WEB RESEARCH is provided for this turn, respond conversationally without citing sources or recycling earlier research. Do not invent numbered citations. Prior chat text is not verified evidence.",
+    "Answer the CURRENT user question directly and concisely. For a follow-up, do not introduce the subject again, repeat previous facts or praise the user's taste. Only mention earlier details if essential to answer the NEW question.",
+    "Do not turn a specific factual answer into another biography, timeline or generic recommendation. If you have no verified new information, say precisely what could not be confirmed, without replaying old search results.",
     "CRITICAL: Conversation text alone cannot save a memory. Never claim that a memory has been saved, filed away, or remembered permanently unless the application has confirmed a database write. Explicit save requests are handled by the app, not by your own text.",
     memoryContext(facts, query), characterContext(canon, query), research
   ].filter(Boolean).join("\n");
@@ -471,7 +475,8 @@ export default function MobileApp() {
     const cmd = textOverride === undefined ? parseSlashCommand(text) : null;
     if (cmd) { handleCommand(cmd.name, cmd.argument); return; }
     const explicitMemory = resolveExplicitMemoryIntent(text, active.turns);
-    if (!explicitMemory && model !== "READY") {
+    const localClockAnswer = mode ? null : deviceClockAnswer(text);
+    if (!explicitMemory && !localClockAnswer && model !== "READY") {
       setIntro("Gemini Nano isn't ready yet. Open Settings to check or download the local model.");
       return;
     }
@@ -491,6 +496,13 @@ export default function MobileApp() {
         return;
       }
       await pocketMemory.saveMessage(threadId, user);
+      if (localClockAnswer) {
+        // A local date/time request needs neither Tavily nor Gemini Nano.
+        // Never attach stale research links or an unrelated album summary.
+        replaceTurn(threadId, assistant.id, localClockAnswer);
+        await pocketMemory.saveMessage(threadId, { ...assistant, content: localClockAnswer });
+        return;
+      }
       let sources: WebResult[] = [];
       let research = "";
       const researchPlan = planResearch(text, active.turns);
@@ -610,7 +622,7 @@ export default function MobileApp() {
       <div className="pocket-heading">
         <strong>{screen === "chat" ? "Mikan" : title}</strong>
         <span className="pocket-subtitle">
-          POCKET COMPANION · LOCAL · v0.4.4
+          POCKET COMPANION · LOCAL · v0.4.5
           <button type="button" className={`pocket-model-indicator ${model === "READY" ? "ready" : "attention"}`}
             onClick={() => setScreen("settings")} title="View local model status in settings"
             aria-label={`Gemini Nano: ${model.toLowerCase()}. Open model settings`}>
