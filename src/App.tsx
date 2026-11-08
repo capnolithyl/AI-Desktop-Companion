@@ -428,6 +428,8 @@ export default function App() {
     if (!file || busy || attachmentBusy) return;
     setAttachmentBusy(true);
     setAttachmentError(null);
+    // If the replacement fails, never accidentally send a previously selected file.
+    setPendingAttachment(null);
     try {
       const parsed = await loadChatAttachment(
         file, (fileName, fileBase64) => invoke<ExtractedDocument>(
