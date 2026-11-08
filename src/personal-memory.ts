@@ -22,7 +22,7 @@ export function isPersonalMemoryQuestion(question: string): boolean {
   // used to describe the band. They still need a privacy-aware web query.
   if (/\b(?:latest|recent|upcoming|news|release|tour|album|concert|stock|weather|price)\b/i.test(text) &&
       !/\b(?:my|our)\s+(?:latest|recent|upcoming)\s+(?:work|project|job|conversation)\b/i.test(text) &&
-      !/\b(?:what|which)\b.*\b(?:my favorite|my preferences?|my interests?)\b/i.test(text))
+      !/^(?:what(?:\'s| is)|which(?: is| are)?)\s+(?:my|our)\s+(?:favorite|preferences?|interests?)\b/i.test(text))
     return false;
   return true;
 }
