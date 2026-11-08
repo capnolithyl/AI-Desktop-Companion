@@ -4,7 +4,7 @@
  * The CI checker detects unmapped Tauri commands, missing files and stale versions.
  * Add a feature here when adding capability, and update the matching source/docs.
  */
-export const CAPABILITY_RELEASE = "0.8.3";
+export const CAPABILITY_RELEASE = "0.8.4";
 
 export type CapabilityStage = "implemented" | "experimental" | "planned";
 export type RuntimeDependency = "none" | "ollama" | "search" | "mem0" | "voice" | "vision" | "pocket";
@@ -49,7 +49,7 @@ export const CAPABILITIES: readonly Capability[] = [
     id:"web-search",label:"On-demand web search",category:"Research",
     description:"SearXNG search with an optional local Docker service monitor, auto-search, source citations and experimental evidence verification. Cannot search when the local search service is unavailable.",
     stage:"implemented",runtime:"search",keywords:["internet","web","search","latest","news","searxng","docker","browse"],
-    sources:["src-tauri/src/web_search.rs","src-tauri/src/search_service.rs","src-tauri/src/research_intent.rs"],docs:["tools/searxng/README.md","RESEARCH-EVAL.md"],
+    sources:["src-tauri/src/web_search.rs","src-tauri/src/search_service.rs","src-tauri/src/research_intent.rs","src/desktop-turn-routing.ts"],docs:["tools/searxng/README.md","RESEARCH-EVAL.md"],
     commands:["web_search","search_service"],
     screens:["search"],
     slashCommands:["search-start","search-stop","search-status","search","searxng","internet"]
