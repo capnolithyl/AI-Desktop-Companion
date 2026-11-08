@@ -10,6 +10,7 @@ mod memory_extraction;
 mod advanced_memory;
 mod session_memory;
 mod voice;
+mod screen_vision;
 use futures_util::{future::{AbortHandle, Abortable}, StreamExt};
 use std::{collections::HashMap, sync::Mutex};
 use serde::{Deserialize, Serialize};
@@ -25,6 +26,8 @@ use tauri::{
 struct ChatMessage {
     role: String,
     content: String,
+    #[serde(default)]
+    images: Vec<String>,
 }
 
 #[derive(Deserialize)]
@@ -274,10 +277,15 @@ async fn chat_stream_impl(
     if request.model.trim().is_empty() {
         return Err("Select an installed model in Settings".into());
     }
+    screen_vision::validate_request_images(&request.messages)?;
     let url = format!("{}/api/chat", local_origin(&request.endpoint)?);
     let client = client()?;
     let mut messages: Vec<Value> = request.messages.iter().map(|m| {
-        json!({"role":m.role,"content":m.content})
+        let mut value = json!({"role":m.role,"content":m.content});
+        if !m.images.is_empty() {
+            value["images"] = json!(m.images);
+        }
+        value
     }).collect();
     let mut sources = Vec::new();
     let mut search_query: Option<String> = None;
@@ -584,6 +592,9 @@ pub fn run() {
             voice::voice_reference_status,
             voice::voice_save_reference,
             voice::voice_delete_reference,
+            screen_vision::vision_monitors,
+            screen_vision::vision_capture,
+            screen_vision::vision_model_status,
             memory::memory_list_conversations,
             memory::memory_create_conversation,
             memory::memory_list_messages,

@@ -1,6 +1,6 @@
 [package]
 name = "mikan-companion"
-version = "0.8.1"
+version = "0.8.2"
 description = "Local-first AI desktop companion"
 authors = ["capnolithyl"]
 edition = "2021"
@@ -26,3 +26,5 @@ sha2 = "0.10"
 rusqlite = { version = "0.32", features = ["bundled"] }
 
 base64 = "0.22"
+xcap = "0.9.8"
+image = { version = "0.25", default-features = false, features = ["jpeg"] }

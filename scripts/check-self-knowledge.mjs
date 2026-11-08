@@ -25,7 +25,7 @@ for(const feature of CAPABILITIES){
   assert(!ids.has(feature.id),"Duplicate capability "+feature.id); ids.add(feature.id);
   assert(!titles.has(feature.label),"Duplicate capability label "+feature.label);titles.add(feature.label);
   assert(["implemented","experimental","planned"].includes(feature.stage),"Invalid implementation stage: "+feature.id);
-  assert(["none","ollama","search","mem0","voice","pocket"].includes(feature.runtime),"Invalid runtime dependency: "+feature.id);
+  assert(["none","ollama","search","mem0","voice","vision","pocket"].includes(feature.runtime),"Invalid runtime dependency: "+feature.id);
   assert(feature.description.length>25,"Describe actual limitations of "+feature.id);
   assert(feature.keywords.length>0,"Add recall keywords for "+feature.id);
   if(feature.stage==="planned") assert.equal(feature.commands.length,0,"Planned features cannot expose commands: "+feature.id);
