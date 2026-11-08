@@ -284,8 +284,8 @@ class ReactActivity : Activity() {
                         try {
                             val answer = backend.generate(prompt) { chunk -> deliver(id, "delta", text = chunk) }
                             deliver(id, "result", text = answer)
-                        } catch (_: CancellationException) {
-                            deliver(id, "error", error = "Generation stopped")
+                        } catch (interrupted: CancellationException) {
+                            deliver(id, "error", error = interrupted.message ?: "Generation stopped")
                         } catch (e: Exception) {
                             deliver(id, "error", error = e.message ?: "Gemini Nano failed")
                         }
@@ -313,7 +313,9 @@ class ReactActivity : Activity() {
 
     override fun onStop() {
         super.onStop()
-        generation?.cancel()
+        // Google AICore disallows Nano generation in the background. Deliver
+        // a recoverable interruption so the UI can offer Retry on return.
+        generation?.cancel(CancellationException("App moved to background. Tap Retry to regenerate."))
         memoryJob?.cancel() // AICore inference is foreground-only
     }
 
