@@ -1,0 +1,13 @@
+.gradle/
+build/
+app/build/
+local.properties
+.idea/
+*.iml
+
+# Never commit credentials from private GitHub Actions signing setup.
+.signing/
+signing.properties
+*.p12
+*.jks
+*.keystore

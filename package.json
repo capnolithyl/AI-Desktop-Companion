@@ -10,7 +10,8 @@
     "icons": "tauri icon assets/mikan-icon.svg",
     "desktop": "npm run icons && tauri dev",
     "package:windows": "npm run icons && tauri build",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "build:mobile": "tsc --noEmit && vite build --mode mobile --outDir android/app/src/main/assets --base ./"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.0.0",
@@ -25,6 +26,7 @@
   "devDependencies": {
     "@tailwindcss/vite": "4.1.3",
     "@tauri-apps/cli": "^2.0.0",
+    "@types/node": "^22.0.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "@vitejs/plugin-react": "^4.3.0",

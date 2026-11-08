@@ -1,3 +1,5 @@
+import { isPersonalMemoryQuestion } from "./personal-memory.ts";
+
 /** Deterministic, privacy-conscious research routing for Pocket Mikan. */
 export type ResearchTurn = {
   role: "user" | "assistant";
@@ -28,6 +30,7 @@ const privateContext = /\b(?:my|mine|our|ours)\b|\b(?:about|with|to)\s+me\b/i;
 
 export function researchRequest(question: string, previous: ResearchTurn[] = []): ResearchRequest | null {
   const text = question.trim();
+  if (isPersonalMemoryQuestion(text)) return null;
   if (text.length < 4 || text.length > 1500) return null;
   if (/^(?:\/|remember\b|forget\b)/i.test(text)) return null;
   if (/^(?:what(?:'s| is) my\b|who am i\b|do you (?:remember|think|like|love)\b|what do you (?:think|feel|remember)\b|how are you\b|tell me about (?:me|you|your\s+\w+|yourself)\b)/i.test(text)) return null;
@@ -166,6 +169,7 @@ export function buildResearchQuery(question: string, previous: ResearchTurn[] = 
  * can still use Ollama's existing optional tool planner.
  */
 export function planResearch(question: string, previous: ResearchTurn[] = []): ResearchPlan {
+  if (isPersonalMemoryQuestion(question)) return { mode: "chat", recent: false };
   const detailFollowup = isResearchFollowup(question, previous) &&
     /\b(?:release date|release window|title|singles?|track\s*list|announcement|confirmed date|launch date|tour dates)\b/i.test(question);
   const request = researchRequest(question, previous);
