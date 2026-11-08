@@ -51,6 +51,24 @@ export function runtimeContext(now: Date = new Date()): string {
 }
 
 
+/** An everyday chat should not read like a web verification rubric.
+ * Keep the live clock while leaving personality, memory and response length
+ * to Mikan's normal persona and the owner's settings.
+ */
+export function chatRuntimeContext(now: Date = new Date()): string {
+  const time = new Intl.DateTimeFormat("en-US",{
+    timeZone:COMPANION_TIME_ZONE,weekday:"long",year:"numeric",month:"long",
+    day:"numeric",hour:"numeric",minute:"2-digit",hour12:true,timeZoneName:"short"
+  }).format(now);
+  return [
+    "LIVE LOCAL CONTEXT:",
+    "Current date and time: "+time+" (America/Detroit).",
+    "This is a conversational turn, not a web-research report.",
+    "Answer the user's actual question naturally in your established personality.",
+    "Do not invent tool capabilities, personal memories or visual observations."
+  ].join("\n");
+}
+
 /**
  * Pocket mode takes its time zone from Android's WebView/device settings.
  * Desktop intentionally keeps its user-configured America/Detroit clock above.
