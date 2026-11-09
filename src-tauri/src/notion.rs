@@ -547,10 +547,11 @@ fn query_hits(conn: &Connection, query: &str) -> Result<Vec<NotionHit>, String> 
          WHERE notion_fts MATCH ?1
          ORDER BY bm25(notion_fts, 6.0, 1.0) LIMIT 5"
     ).map_err(|e| e.to_string())?;
-    stmt.query_map(params![terms], |r| Ok(NotionHit {
+    let rows = stmt.query_map(params![terms], |r| Ok(NotionHit {
         title:r.get(0)?, url:r.get(1)?, content:r.get(2)?, synced_at:r.get(3)?
-    })).map_err(|e| e.to_string())?
-      .collect::<Result<Vec<_>,_>>().map_err(|e| e.to_string())
+    })).map_err(|e| e.to_string())?;
+    let hits = rows.collect::<Result<Vec<_>,_>>().map_err(|e| e.to_string())?;
+    Ok(hits)
 }
 
 #[tauri::command]
