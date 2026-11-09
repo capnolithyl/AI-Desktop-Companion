@@ -52,3 +52,13 @@ test("no sources means no verification and does not censor casual chat", () => {
   assert.equal(result.text,"Good morning! You're funny.");
   assert.equal(result.usable,false);
 });
+
+test("grounded cited definitions survive verification without music-specific keywords",()=>{
+  const docs=[{title:"Introducing ChatGPT by OpenAI",url:"https://openai.com/index/chatgpt/",
+    content:"ChatGPT is an AI assistant created by OpenAI that responds conversationally to questions."}];
+  const answer="ChatGPT is a conversational assistant from OpenAI. [1]";
+  const result=verifyResearchAnswer(answer,docs);
+  assert.equal(result.usable,true);
+  assert.equal(result.rejected,0);
+  assert.match(result.text,/ChatGPT/);
+});

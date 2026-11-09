@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { rankMemories, prioritizeCoreMemories } from "./memory-ranking.ts";
+import { rankMemories, prioritizeCoreMemories, filterStaleActivities, strongSemanticIds } from "./memory-ranking.ts";
 
 const facts = [
   {id:7,fact:"The user is an experienced WordPress developer creating client sites professionally.",updatedAt:1},
@@ -55,4 +55,37 @@ test("one pinned fact is always reserved at 4k, two at larger contexts",()=>{
  const large=prioritizeCoreMemories(stored,"any recent albums?",[3,4,5],5).slice(0,5);
  assert.ok(large.some(x=>x.id===1));
  assert.ok(large.some(x=>x.id===2));
+});
+
+test("irrelevant personal memories no longer flood generic chat prompts",()=>{
+  const stored=[
+    {id:1,fact:"The user loves black metal",updatedAt:20,importance:50},
+    {id:2,fact:"The user is a developer",updatedAt:21,importance:50},
+    {id:3,fact:"The user is writing a book",updatedAt:22,importance:50}
+  ];
+  assert.deepEqual(prioritizeCoreMemories(stored,"Good morning!",[],5),[]);
+  assert.deepEqual(prioritizeCoreMemories(stored,"What is a good black metal band?",[],5).map(x=>x.id),[1]);
+  assert.deepEqual(prioritizeCoreMemories(stored,"Can you help me with a website?",[2],5).map(x=>x.id),[2]);
+  assert.deepEqual(prioritizeCoreMemories(stored,"How are you?",[3],5).map(x=>x.id),[3]);
+});
+
+test("old testing snapshots are retained but not treated as current facts",()=>{
+  const now=2_000_000_000;
+  const facts=[
+    {id:1,fact:"The user is testing a new feature",updatedAt:now-30*86400,importance:50},
+    {id:2,fact:"The user is working on fixing a bug",updatedAt:now-30*86400,importance:50},
+    {id:3,fact:"The user is writing a book",updatedAt:now-90*86400,importance:50},
+    {id:4,fact:"The user has enabled live vision",updatedAt:now-1*86400,importance:50}
+  ];
+  assert.deepEqual(filterStaleActivities(facts,"What's happening?",now).map(x=>x.id),[3,4]);
+  assert.deepEqual(filterStaleActivities(facts,"What was I testing last month?",now).map(x=>x.id),[1,2,3,4]);
+  assert.equal(facts.length,4,"never delete facts from the owner's archive");
+});
+
+test("weak nearest-neighbor matches never become assumed personal context",()=>{
+  const hits=[{id:1,score:0.38},{id:2,score:0.45},{id:3,score:null}];
+  assert.deepEqual(strongSemanticIds(hits,"Can we talk about something else?"),[]);
+  assert.deepEqual(strongSemanticIds([{id:8,score:0.8}],"Good morning!"),[]);
+  assert.deepEqual(strongSemanticIds([{id:7,score:0.81},{id:8,score:0.63},{id:9,score:0.14}],"Can you help build a website?"),[7]);
+  assert.deepEqual(strongSemanticIds([{id:7,score:0.73}],"What do you remember about my work?"),[7]);
 });

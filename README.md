@@ -1,5 +1,8 @@
 # Mikan Desktop Companion
 
+**v0.8.10 (memory/context and optional managed voice):** Long-lived user facts are separated from temporary testing and project updates; irrelevant memories and weak semantic matches no longer fill chat context. Response guidance reduces repeated observations without flattening Mikan's persona. Already-working Qwen3-TTS environments can be registered once for automatic local startup and recovery when Mikan is running, with no PyTorch reinstall or GPU model loading until speech is requested. See [voice setup](tools/tts/README.md) and [memory details](MEMORY.md).
+
+
 **v0.8.9 (voice responsiveness and diagnostics):** Longer replies play in short generated WAV chunks, with the next chunk prepared while the current one plays. TTS timing logs help diagnose slow starts; voice reference status now distinguishes an offline server from an unsaved voice. Optional 0.6B clone model benchmarking is available. Voice still needs its separate local Python service and manual GPU testing; chunking is not true sample streaming.
 
 A local-first, personal Windows AI desktop companion powered by Tauri 2, React, TypeScript, and Ollama. Free hobby project for one PC.

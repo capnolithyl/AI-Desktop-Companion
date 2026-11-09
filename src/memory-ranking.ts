@@ -38,6 +38,45 @@ export function rankMemories<T extends RankableMemory>(
 }
 
 
+
+/**
+ * Legacy auto-extracted snapshots can still exist in the user's SQLite facts.
+ * Retain them on disk for historical recall, but do not present a weeks-old
+ * test/bug/session toggle as the owner's CURRENT activity. Nothing is deleted.
+ */
+export function filterStaleActivities<T extends RankableMemory>(
+  facts: T[], query: string, nowSeconds = Date.now()/1000
+): T[] {
+  const historical = /\b(?:last (?:week|month|year)|previously|back then|what was i|what did i|in (?:20\d\d)|remember when|used to|old (?:tasks|projects))\b/i.test(query);
+  if (historical) return facts.slice();
+  return facts.filter(f=>{
+    if ((f.importance ?? 50)>=90) return true; // The owner chose to pin it.
+    const age = nowSeconds-f.updatedAt;
+    if (!Number.isFinite(age) || age<=7*24*60*60) return true;
+    return !/\b(?:is|was|has|had|wants to|plans to)\s+(?:(?:currently|now|recently)\s+)?(?:test|testing|debugging|troubleshooting|checking|fixing|experimenting|trying|working on fixing|enabled|disabled|updated)\b/i.test(f.fact);
+  });
+}
+
+
+export type SemanticRecallMatch = {id:number;score:number|null};
+
+/** Mem0's top K are nearest neighbors, not necessarily good neighbors.
+ * Require a meaningful cosine similarity, and avoid forcing unrelated owner
+ * facts into greetings. Unknown/unscored matches fall back to lexical recall.
+ * The threshold is intentionally conservative until live embedding benchmarks.
+ */
+export function strongSemanticIds(matches: SemanticRecallMatch[], query: string): number[] {
+  const clean=query.trim().toLowerCase().replace(/[!?.]+$/,"").trim();
+  if (/^(?:hi|hello|hey|hey there|good morning|good afternoon|good evening|good night|thanks|thank you|cool|nice|okay|ok|lol|how are you|how's it going)$/.test(clean)) return [];
+  const scored=matches.filter(m=>Number.isSafeInteger(m.id) && m.id>0 &&
+    typeof m.score==="number" && Number.isFinite(m.score) && m.score>=0 && m.score<=1);
+  if (!scored.length) return [];
+  const best=Math.max(...scored.map(m=>m.score as number));
+  const threshold=Math.max(0.62,best-0.12);
+  return [...new Set(scored.filter(m=>(m.score as number)>=threshold)
+    .sort((a,b)=>(b.score as number)-(a.score as number)).slice(0,6).map(m=>m.id))];
+}
+
 /** Owner-pinned facts are deliberately always-on core context, not merely
  * another similarity hint. Reserve one or two slots; leave the rest for
  * relevant semantic/lexical memories.
@@ -49,5 +88,18 @@ export function prioritizeCoreMemories<T extends RankableMemory>(
   const pinned=ranked.filter(f=>(f.importance ?? 50)>=90)
     .slice(0, maxFacts <= 3 ? 1 : 2);
   const coreIds=new Set(pinned.map(f=>f.id));
-  return [...pinned,...ranked.filter(f=>!coreIds.has(f.id))];
+  // No similarity and no topical overlap means no personal-memory injection.
+  // Unrelated stored facts were previously included just to fill the context
+  // budget; their presence made Mikan assume every conversation was about the
+  // owner's strongest interests. Pinned facts remain owner-controlled core.
+  const significant = new Set((query.toLowerCase().match(/[\p{L}\p{N}]{3,}/gu) ?? [])
+    .filter(word=>!generic.has(word)));
+  const semantic = new Set(semanticIds.slice(0,12));
+  const relevant = ranked.filter(f=>{
+    if(coreIds.has(f.id))return false;
+    if(semantic.has(f.id))return true;
+    const stored=f.fact.toLowerCase();
+    return [...significant].some(word=>stored.includes(word));
+  });
+  return [...pinned,...relevant];
 }
