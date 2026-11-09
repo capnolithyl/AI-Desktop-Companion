@@ -69,7 +69,8 @@ export function splitSpeechText(text: string, maxChars = SPEECH_CHUNK_CHARS, fir
  * synthesis and uses a shorter first phrase. It is NOT codec-level streaming.
  */
 export class ProgressiveSpeechFeed implements AsyncIterable<string> {
-  constructor(private readonly engine: "qwen" | "pocket" = "qwen") {}
+  private readonly engine: "qwen" | "pocket";
+  constructor(engine: "qwen" | "pocket" = "qwen") { this.engine = engine; }
   private buffer = "";
   private spoken = "";
   private rawChars = 0;
