@@ -53,7 +53,7 @@ export function filterStaleActivities<T extends RankableMemory>(
     if ((f.importance ?? 50)>=90) return true; // The owner chose to pin it.
     const age = nowSeconds-f.updatedAt;
     if (!Number.isFinite(age) || age<=7*24*60*60) return true;
-    return !/\b(?:is|was|has|had|wants to|plans to)\s+(?:(?:currently|now|recently)\s+)?(?:testing|debugging|troubleshooting|checking|fixing|experimenting|trying|working on fixing|enabled|disabled|updated)\b/i.test(f.fact);
+    return !/\b(?:is|was|has|had|wants to|plans to)\s+(?:(?:currently|now|recently)\s+)?(?:test|testing|debugging|troubleshooting|checking|fixing|experimenting|trying|working on fixing|enabled|disabled|updated)\b/i.test(f.fact);
   });
 }
 
