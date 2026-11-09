@@ -35,12 +35,16 @@ pub async fn vision_region_open(app:tauri::AppHandle,monitor_index:usize)->Resul
     if app.get_webview_window("region-picker").is_some(){
         return Err("The region selector is already open".into());
     }
-    let monitors=Monitor::all().map_err(|e|e.to_string())?;
-    let monitor=monitors.get(monitor_index).ok_or("Selected display is not available")?;
-    let width=monitor.width().map_err(|e|e.to_string())?;
-    let height=monitor.height().map_err(|e|e.to_string())?;
-    let x=monitor.x().map_err(|e|e.to_string())?;
-    let y=monitor.y().map_err(|e|e.to_string())?;
+    // Drop XCap handles before awaiting: the asynchronous Tauri command
+    // must remain Send even when native monitor enumeration uses OS handles.
+    let (width,height,x,y)={
+        let monitors=Monitor::all().map_err(|e|e.to_string())?;
+        let monitor=monitors.get(monitor_index).ok_or("Selected display is not available")?;
+        (monitor.width().map_err(|e|e.to_string())?,
+         monitor.height().map_err(|e|e.to_string())?,
+         monitor.x().map_err(|e|e.to_string())?,
+         monitor.y().map_err(|e|e.to_string())?)
+    };
 
     let capture=screen_vision::vision_capture(app.clone(),monitor_index,None).await?;
     let preview=RegionPickerPreview{
