@@ -217,11 +217,12 @@ pub fn vision_live_set(
                 // normally available soon after the owner enables the toggle.
                 let should_capture = {
                     let state = worker_app.state::<LiveVisionState>();
-                    match state.0.lock() {
+                    let allowed = match state.0.lock() {
                         Ok(value) => value.enabled && value.generation == generation &&
                             value.monitor_index == Some(index),
                         Err(_) => false,
-                    }
+                    };
+                    allowed
                 };
                 if !should_capture { return; }
                 // Don't hide or focus Mikan every 15 seconds: doing so would
