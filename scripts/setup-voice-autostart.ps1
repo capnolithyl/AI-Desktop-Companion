@@ -4,7 +4,8 @@
 param(
     [string]$ProjectRoot,
     [ValidateSet("auto", "cuda:0", "cpu")][string]$Device = "auto",
-    [ValidateSet("1.7B", "0.6B")][string]$CloneSize = "1.7B"
+    [ValidateSet("1.7B", "0.6B")][string]$CloneSize = "1.7B",
+    [switch]$DisableMiopen
 )
 
 $ErrorActionPreference = "Stop"
@@ -36,6 +37,7 @@ $config = [ordered]@{
     server = $server
     device = $Device
     cloneSize = $CloneSize
+    disableMiopen = $DisableMiopen.IsPresent
 }
 # PowerShell 5.1's Set-Content -Encoding UTF8 adds a BOM that serde_json
 # cannot read. Write BOM-free UTF-8 on both PS 5.1 and 7+.
@@ -44,5 +46,6 @@ $utf8 = [System.Text.UTF8Encoding]::new($false)
 Write-Host "Voice service registered for automatic startup in Mikan."
 Write-Host "Python: $python"
 Write-Host "Server: $server"
+Write-Host "Experimental AMD MIOpen bypass: $($DisableMiopen.IsPresent)"
 Write-Host "Restart the Mikan desktop app, then open Settings > Voice > Check connection."
 Write-Host "The speech model still loads on first use; your voice reference is preserved."

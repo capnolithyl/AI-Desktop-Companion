@@ -117,9 +117,35 @@ def delete_reference() -> dict:
         return reference_status()
 
 
+def miopen_workaround_enabled() -> bool:
+    """Read an opt-in, per-Mikan setting; never change global ROCm configuration."""
+    override = os.environ.get("MIKAN_TTS_DISABLE_MIOPEN")
+    if override is not None:
+        return override.strip().lower() in ("1", "true", "yes")
+    try:
+        config_path = reference_paths()[0].parent / "service.json"
+        config = json.loads(config_path.read_text(encoding="utf-8-sig"))
+        return config.get("disableMiopen") is True
+    except (OSError, ValueError, TypeError, AttributeError):
+        return False
+
+
+def configure_torch_backend(torch) -> None:
+    """Experimental Windows ROCm workaround for very slow MIOpen Conv1d decode."""
+    if (miopen_workaround_enabled()
+            and getattr(torch.version, "hip", None)
+            and torch.cuda.is_available()):
+        # PyTorch exposes MIOpen through torch.backends.cudnn on ROCm.
+        # Scope this to the local TTS process; do not touch the user's wheel.
+        torch.backends.cudnn.enabled = False
+        torch.backends.cudnn.benchmark = False
+        print("[tts] Experimental AMD fallback enabled: bypass MIOpen convolutions", flush=True)
+
+
 def load_model(kind: str):
     global _model, _model_kind, _device
     import torch
+    configure_torch_backend(torch)
     from qwen_tts import Qwen3TTSModel
 
     if _model is not None and _model_kind == kind:
