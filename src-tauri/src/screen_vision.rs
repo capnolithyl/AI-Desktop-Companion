@@ -330,11 +330,11 @@ pub fn vision_live_configure(
     region:Option<ScreenRegion>,
 )->Result<LiveVisionStatus,String>{
     let mut session=state.0.lock().map_err(|_|"Live Vision state is unavailable")?;
-    if session.enabled {
-        let monitors=Monitor::all().map_err(|e|e.to_string())?;
-        let monitor=monitors.get(session.monitor_index.ok_or("No monitor selected")?)
-            .ok_or("Live Vision monitor is unavailable")?;
+    if session.enabled && session.region != region {
         if let Some(rect)=region {
+            let monitors=Monitor::all().map_err(|e|e.to_string())?;
+            let monitor=monitors.get(session.monitor_index.ok_or("No monitor selected")?)
+                .ok_or("Live Vision monitor is unavailable")?;
             let w=monitor.width().map_err(|e|e.to_string())?;
             let h=monitor.height().map_err(|e|e.to_string())?;
             if !valid_region(rect,w,h) {return Err("Selected capture rectangle is invalid for this monitor".into());}
