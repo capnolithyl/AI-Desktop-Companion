@@ -12,6 +12,7 @@ mod session_memory;
 mod voice;
 mod screen_vision;
 mod file_attachments;
+mod notion;
 use futures_util::{future::{AbortHandle, Abortable}, StreamExt};
 use std::{collections::HashMap, sync::Mutex};
 use serde::{Deserialize, Serialize};
@@ -625,6 +626,14 @@ pub fn run() {
             screen_vision::vision_live_set,
             screen_vision::vision_live_latest,
             file_attachments::extract_document,
+            notion::notion_status,
+            notion::notion_connect,
+            notion::notion_disconnect,
+            notion::notion_list_pages,
+            notion::notion_select_page,
+            notion::notion_set_all,
+            notion::notion_sync,
+            notion::notion_recall,
             memory::memory_list_conversations,
             memory::memory_create_conversation,
             memory::memory_list_messages,
