@@ -144,6 +144,34 @@ exactly**. Hear the generated sample before switching Mikan.
    full HTTP WAV to arrive before playing it. The Pocket engine itself supports
    streamed WAVs, but **sample-level playback is not yet exposed in Mikan**.
 
+### Automatic Pocket authentication (v0.8.13)
+
+The official Pocket standalone Rust executable may require `HF_TOKEN_PATH`
+pointing to the login file saved by Python's `huggingface_hub.login()`, even
+when the user has already downloaded the model. In v0.8.12, that path could
+be available to a manual PowerShell server but not to an independently
+launched desktop app, causing `/health` to be unreachable.
+
+Mikan v0.8.13 detects an existing user-scoped token file from the registered
+`hfTokenPath` (if present), the inherited `HF_TOKEN_PATH`, `HF_HOME/token`,
+or `%USERPROFILE%\\.cache\\huggingface\\token` and passes
+`HF_TOKEN_PATH` *only to the Pocket child*. The token **contents are never
+copied into Mikan's configuration, logs, or GitHub**. Existing v0.8.12
+`pocket-service.json` registrations work without rerunning setup.
+
+If you already successfully started Pocket manually with:
+
+```powershell
+$env:HF_TOKEN_PATH = & ".\\tools\\tts\\.venv\\Scripts\\python.exe" -c "from huggingface_hub.constants import HF_TOKEN_PATH; print(HF_TOKEN_PATH)"
+```
+
+you can quit that manual Pocket process, quit Mikan from the tray, install
+v0.8.13, reopen Mikan and select **Check connection**. No need to regenerate
+the WAV. Future setup runs can register the absolute token file path only.
+
+For a non-default `HF_TOKEN_PATH` that isn't in the usual cache, log in
+persistently and run the setup script again once to register the path.
+
 You can switch back to **Qwen3-TTS** in the dropdown at any time. Pocket
 reference editing is deliberately disabled: switch to Qwen to update the WAV
 and rerun Pocket setup to register that voice again. The reference transcript
