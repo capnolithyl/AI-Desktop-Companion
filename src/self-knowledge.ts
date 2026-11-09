@@ -4,7 +4,7 @@
  * The CI checker detects unmapped Tauri commands, missing files and stale versions.
  * Add a feature here when adding capability, and update the matching source/docs.
  */
-export const CAPABILITY_RELEASE = "0.8.11";
+export const CAPABILITY_RELEASE = "0.8.12";
 
 export type CapabilityStage = "implemented" | "experimental" | "planned";
 export type RuntimeDependency = "none" | "ollama" | "search" | "mem0" | "voice" | "vision" | "pocket";
@@ -145,9 +145,9 @@ export const CAPABILITIES: readonly Capability[] = [
   },
   {
     id:"voice",label:"Local voice synthesis and cloning",category:"Voice",
-    description:"Experimental Qwen3-TTS service with speak/stop, auto-speak, optional progressive first-phrase playback during local chat, chunked WAV synthesis, latency diagnostics, and a locally saved reference clone. The official Base API does not offer true PCM streaming. Voice Python/ROCm environment requires one-time owner setup. After registering the existing venv with scripts/setup-voice-autostart.ps1, the desktop starts the local speech server on launch and retries after a crash; no microphone speech recognition yet.",
+    description:"Experimental selectable local voice: Qwen3-TTS GPU (existing ROCm clone and optional progressive phrases) or Kyutai Pocket TTS CPU (optional separate Windows binary, shared saved voice reference and one continuous reply per synthesis). Manual download/setup and model access consent for Pocket; neither engine replaces the other. Both support speak/stop and auto-speak. The official Base API does not offer true PCM streaming. Voice Python/ROCm environment requires one-time owner setup. After registering the existing venv with scripts/setup-voice-autostart.ps1, the desktop starts the local speech server on launch and retries after a crash; no microphone speech recognition yet.",
     stage:"experimental",runtime:"voice",keywords:["speak","voice","tts","talk","speech","audio","clone","sound","hear"],
-    sources:["src-tauri/src/voice.rs","tools/tts/server.py","src/speech.ts"],docs:["tools/tts/README.md"],
+    sources:["src-tauri/src/voice.rs","tools/tts/server.py","src/speech.ts","scripts/setup-pocket-tts.ps1"],docs:["tools/tts/README.md"],
     commands:["voice_health","voice_synthesize","voice_reference_status","voice_save_reference","voice_delete_reference"]
   },
   {
