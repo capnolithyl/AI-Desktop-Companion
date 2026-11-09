@@ -34,6 +34,8 @@ import {
   type CharacterCategory, type CharacterFact
 } from "./memory-client";
 import { MemoryPanel } from "./MemoryPanel";
+import { NotionPanel } from "./NotionPanel";
+import { isNotionTopic, notionContext, type NotionHit } from "./notion-knowledge";
 import { toSpeechText, VOICE_TEST_LINE } from "./speech";
 import { memoryBudget, sessionMemoryContext, type SessionSummary } from "./memory-budget";
 import { archiveMemoryContext, shouldSearchArchive } from "./archive-memory";
@@ -50,7 +52,7 @@ import {
 import { attachmentQuestion, attachmentPromptText, loadChatAttachment, type PendingAttachment, type ExtractedDocument } from "./chat-attachments";
 
 type Screen = "compact" | "log" | "settings" | "search" | "page" | "personality" | "help" | "memory" | "capabilities";
-type SettingsTab = "ai" | "internet" | "voice" | "appearance";
+type SettingsTab = "ai" | "internet" | "notion" | "voice" | "appearance";
 type VoiceHealth = { ready: boolean; modelLoaded: boolean; device: string | null };
 type VoiceReference = { configured: boolean; transcript: string | null; durationSeconds: number | null };
 type SearchService = { state: string; message: string };
@@ -1059,6 +1061,8 @@ export default function App() {
         void manageService("status"); return;
       case "internet":
         openSettingsTab("internet"); return;
+      case "notion":
+        openSettingsTab("notion"); return;
       case "memory":
       case "memories": openMemory("facts"); return;
       case "canon":
@@ -1241,10 +1245,19 @@ export default function App() {
     if (busy || preparingSend.current) return;
     if (!memoryReady) { setFeedback("Loading conversation memory…"); return; }
     preparingSend.current=true;
+    // Resolve user-authorized writing references locally before deciding whether
+    // to search the public web. Follow-up questions keep the story subject.
+    const useNotion = !withSearch && isNotionTopic(text,messages);
+    const topic = useNotion && !isNotionTopic(text)
+      ? [...messages].reverse().find(item => isNotionTopic(item.content))?.content.slice(0,140) ?? ""
+      : "";
+    const notionHits = useNotion
+      ? await invoke<NotionHit[]>("notion_recall",{query:text+" "+topic}).catch(() => [])
+      : [];
     const baseTurn = decideDesktopTurn(text,messages,{
       attachment:!!(screenshot||attachment),
       explicitSearch:!!withSearch,
-      automaticWebEnabled:settings.autoSearch
+      automaticWebEnabled:settings.autoSearch && !useNotion
     });
     const useLiveFrame=shouldAttachLiveFrame({
       enabled:liveVision.enabled,
@@ -1367,6 +1380,7 @@ export default function App() {
         ? await memoryApi.searchArchive(text,conversationId).catch(() => [])
         : [];
       const archiveNotes = archiveMemoryContext(text,archivedMessages,budget);
+      const notionNotes = notionContext(notionHits, settings.contextWindow);
       const screenNotes = liveFrame
         ? liveVisionContext(liveFrame)
         : attachment?.kind === "image" ? "" : visionContext(text,!!screenshot);
@@ -1438,7 +1452,7 @@ export default function App() {
           contextWindow: settings.contextWindow,
           priorSources,
           messages: [
-            { role: "system", content: [settings.systemPrompt.trim(), personalityGuidance(settings.personality), researchPlan.mode==="chat" ? chatRuntimeContext() : runtimeContext(), selfContext, screenNotes, attachmentNotes, remembered.text, sessionNotes, archiveNotes, characterContext(characterFacts, text), characterAnswerGuidance(text), turn.allowAutomaticWeb ? contextGuidance(messages, text, 1800) : ""].filter(Boolean).join("\n\n") },
+            { role: "system", content: [settings.systemPrompt.trim(), personalityGuidance(settings.personality), researchPlan.mode==="chat" ? chatRuntimeContext() : runtimeContext(), selfContext, screenNotes, attachmentNotes, remembered.text, sessionNotes, archiveNotes, notionNotes, characterContext(characterFacts, text), characterAnswerGuidance(text), turn.allowAutomaticWeb ? contextGuidance(messages, text, 1800) : ""].filter(Boolean).join("\n\n") },
             ...(withSearch ? [{ role: "user", content: withSearch.page ? pageContext(withSearch.query, withSearch.page) : webContext(withSearch.query, withSearch.results) }] : []),
             ...history.filter(m => !withSearch || m.role === "user").slice(-budget.recentTurns).map(m => ({
               role:m.role,
@@ -2022,7 +2036,7 @@ export default function App() {
       <header className="drawer-header">
         <button className="back-button" title="Back to companion" onClick={goCompact}><ArrowLeft size={19}/></button>
         <div className="drawer-title"><strong>Settings</strong><span>Mikan Desktop · Local first</span></div>
-        <button className="secondary-action" onClick={() => setDraft(current => ({
+        {settingsTab !== "notion" && <button className="secondary-action" onClick={() => setDraft(current => ({
           ...current,
           ...(settingsTab === "ai" ? {
             endpoint: DEFAULT_SETTINGS.endpoint, model: DEFAULT_SETTINGS.model,
@@ -2032,10 +2046,10 @@ export default function App() {
             searxngEndpoint: DEFAULT_SETTINGS.searxngEndpoint, autoSearch: false, cacheHours: 24
           } : settingsTab === "voice" ? { voice: { ...DEFAULT_VOICE } }
             : { appearance: { ...DEFAULT_APPEARANCE } })
-        }))}><RotateCw size={14}/> Reset tab</button>
+        }))}><RotateCw size={14}/> Reset tab</button>}
       </header>
       <nav className="settings-tabs" aria-label="Settings categories">
-        {([["ai", "AI & Models"], ["internet", "Internet"], ["voice", "Voice"], ["appearance", "Appearance"]] as const).map(([tab, label]) =>
+        {([["ai", "AI & Models"], ["internet", "Internet"], ["notion", "Notion"], ["voice", "Voice"], ["appearance", "Appearance"]] as const).map(([tab, label]) =>
           <button type="button" key={tab} className={settingsTab === tab ? "settings-tab active" : "settings-tab"}
             onClick={() => { setSettingsTab(tab); if (tab === "internet") { void refreshService(); void refreshCache(); } if (tab === "voice") void checkVoice(draft.voice.endpoint); }}>
             {label}
@@ -2178,6 +2192,7 @@ export default function App() {
           </div>
           <button type="button" className="inline-action" onClick={() => void openPage("")}><BookOpen size={14}/> Open webpage reader</button>
         </>}
+        {settingsTab === "notion" && <NotionPanel/>}
         {settingsTab === "voice" && <>
           <div className="settings-section-title"><Volume2 size={17}/> Local voice · Qwen3-TTS</div>
           <div className="settings-note">First version requires running the optional Python service from tools/tts.
@@ -2304,9 +2319,9 @@ export default function App() {
           </label>
         </>}
       </div>
-      <footer className="settings-footer">
+      {settingsTab !== "notion" && <footer className="settings-footer">
         <button className="save-button" onClick={saveConfiguration}><Check size={17}/> Save settings</button>
-      </footer>
+      </footer>}
     </section>}
   </main>;
 }
