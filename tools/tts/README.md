@@ -123,6 +123,40 @@ cd .\tools\tts
 Official documentation and exact clone methods:
 https://github.com/QwenLM/Qwen3-TTS
 
+## Experimental Windows AMD MIOpen convolution workaround
+
+If an RX 9070 on Windows ROCm generates a 7–8 second cloned utterance in
+roughly two minutes even with a warm model, the bottleneck may be MIOpen
+convolution selection rather than model loading or VRAM. PyTorch exposes the
+MIOpen backend as `torch.backends.cudnn` on HIP. Some Qwen3-TTS users report
+faster generation when this backend is disabled, but this has **not** yet been
+benchmarked on Mikan's target RX 9070; it could be slower or fail.
+
+To test **without reinstalling anything** (and without changing the native
+desktop executable), stop a manually started server, quit Mikan from its tray,
+and run from the current Mikan repository root:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\setup-voice-autostart.ps1 -CloneSize "0.6B" -DisableMiopen
+```
+
+Launch Mikan v0.8.10 or newer, test speech once, and check
+`%LOCALAPPDATA%\Mikan\voice\tts-service.log` for the
+`[tts] Experimental AMD fallback enabled` line followed by a
+`[tts] mode=clone ... generate_ms=...` timing. The configuration applies to
+both auto-started and manually launched Mikan voice servers. It changes only
+the TTS process, not system-wide PyTorch/ROCm, the voice reference, or Mem0.
+
+To revert the experiment, quit Mikan and rerun the same setup command **without**
+`-DisableMiopen`; reopen Mikan. Keep `-CloneSize "0.6B"` if you want
+to preserve the current benchmark model selection. A previously running
+server must be restarted for the flag change to take effect.
+
+Upstream context:
+- https://github.com/pytorch/pytorch/issues/150168
+- https://github.com/ROCm/TheRock/issues/3077
+- https://github.com/ROCm/rocm-libraries/issues/4071
+
 ## Debug and benchmark latency
 
 Each chunk prints a [tts] console line measuring queue, model load,
