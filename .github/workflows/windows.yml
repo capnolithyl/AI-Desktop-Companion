@@ -42,6 +42,13 @@ jobs:
         run: npm run test:debug
       - name: Test local voice reference API
         run: python -m unittest discover -s tools/tts -p "test_*.py"
+      - name: Validate Pocket setup PowerShell syntax
+        shell: pwsh
+        run: |
+          $tokens = $null
+          $parseErrors = $null
+          [void][System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path "scripts/setup-pocket-tts.ps1").Path, [ref]$tokens, [ref]$parseErrors)
+          if ($parseErrors.Count -gt 0) { $parseErrors | Out-String | Write-Error; exit 1 }
       - name: Test Rust research intent and source handling
         working-directory: src-tauri
         run: cargo test --lib
