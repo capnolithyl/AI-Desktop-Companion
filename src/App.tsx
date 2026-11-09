@@ -44,7 +44,7 @@ import { loadSelfReferencePassages } from "./self-knowledge-library";
 import { visionQuestion, visionContext, type ScreenMonitor, type ScreenCapture, type VisionModelStatus } from "./screen-vision";
 import {
   LIVE_VISION_INTERVAL_SECONDS, LIVE_VISION_OFF,
-  frameIsRecent, shouldAttachLiveFrame, liveVisionContext,
+  frameIsRecent, shouldAttachLiveFrame, liveVisionContext, allowLiveSlash,
   type LiveVisionFrame, type LiveVisionStatus
 } from "./live-vision";
 import { attachmentQuestion, attachmentPromptText, loadChatAttachment, type PendingAttachment, type ExtractedDocument } from "./chat-attachments";
@@ -1225,6 +1225,11 @@ export default function App() {
 
     // Slash commands stay inside the app and never reach the language model.
     if (!withSearch && text.startsWith("/")) {
+      // A remote-browser chat must not change local screen-capture consent.
+      if (!allowLiveSlash(text,remoteText!==undefined)) {
+        setFeedback("Live Vision can only be controlled from Mikan's desktop.");
+        return;
+      }
       if (screenshot || attachment) {
         setAttachmentError("Remove the attachment before using a slash command.");
         return;
