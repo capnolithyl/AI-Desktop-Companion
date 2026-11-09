@@ -140,6 +140,40 @@ export async function resolveConversationQuestion(
 /** The response model always sees the current request verbatim; the rewritten
  * question is for retrieval only and never substitutes the user's actual words.
  */
+/**
+ * Per-turn conversational novelty guidance, independent of the user's custom
+ * persona and of web search. A small model imitates recently repeated phrases,
+ * so remind it which incidental topics it already covered. Nothing here
+ * deletes dialogue or suppresses an explicitly requested topic.
+ */
+export function responseFocusGuidance(turns: ConversationTurn[], query: string): string {
+  const recent = turns.filter(t=>t.role==="assistant" && !t.failed).slice(-4)
+    .map(t=>t.content.toLowerCase());
+  const stop = new Set(("about after again always back because been being could every from " +
+    "have here into just know like look looks mikan marcus more much need only over " +
+    "really right should some something still than that their them there these they " +
+    "think this those through very want were what when where which while with would " +
+    "your yours yourself").split(" "));
+  const queryWords = new Set(query.toLowerCase().match(/[\\p{L}\\p{N}]{5,}/gu)??[]);
+  const count = new Map<string,number>();
+  for(const reply of recent) {
+    const words = new Set((reply.match(/[\\p{L}\\p{N}]{5,}/gu)??[])
+      .filter(w=>!stop.has(w) && !queryWords.has(w)));
+    for(const word of words)count.set(word,(count.get(word)??0)+1);
+  }
+  const stale = [...count].filter(([,hits])=>hits>=2)
+    .sort((a,b)=>b[1]-a[1] || b[0].length-a[0].length)
+    .slice(0,5).map(([word])=>word);
+  return [
+    "CONVERSATION FOCUS: Respond to the owner's latest message first. Old dialogue, saved memories and screenshots provide context only.",
+    "Acknowledge a compliment or casual remark naturally; do not turn every message into a screen report, a project discussion, a lengthy monologue, or an obligatory question.",
+    "Don't repeatedly announce the same background observations, favorite interests, jokes or physical gestures just because they appeared in earlier replies.",
+    "You may be affectionate, witty and theatrical when it suits the moment. Vary delivery: a brief direct reply can feel more alive than repeated ear/tail stage directions.",
+    "When asked if you can open a site, access a tool, or perform an action, give a direct truthful capability/result answer before any banter. Never imply an access check occurred unless it actually did.",
+    stale.length ? "Already brought up repeatedly in the last few assistant replies, so do not reintroduce unless the owner is discussing them: "+stale.join(", ")+".":""
+  ].filter(Boolean).join("\\n");
+}
+
 export function contextGuidance(
   turns: ConversationTurn[], query: string, budget = 4400
 ): string {
