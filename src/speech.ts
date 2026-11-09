@@ -23,6 +23,11 @@ export function toSpeechText(markdown: string): string {
   const boundary = Math.max(passage.lastIndexOf(". "), passage.lastIndexOf("! "), passage.lastIndexOf("? "));
   return (boundary > 350 ? passage.slice(0, boundary + 1) : passage.trimEnd()).trim();
 }
+export const POCKET_VOICE_ENDPOINT = "http://127.0.0.1:8766";
+export function voiceEndpoint(voice: {engine: string; endpoint: string}): string {
+  return voice.engine === "pocket" ? POCKET_VOICE_ENDPOINT : voice.endpoint;
+}
+
 export const FIRST_SPEECH_CHARS = 72;
 export const SPEECH_CHUNK_CHARS = 160;
 export const MAX_SPEECH_CHARS = 800;
