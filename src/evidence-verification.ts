@@ -98,7 +98,9 @@ export function verifyResearchAnswer(
     if (!valid.length || !claimSupported(part, valid)) { rejected++; continue; }
     accepted.push(part);
   }
-  const usable = checked > rejected && accepted.some(factualClaim);
+  // A sourced general definition is verified too, even when it does not
+  // contain one of the historical release-date/album keywords.
+  const usable = checked > rejected && accepted.some(part=>factualClaim(part) || citations(part).length>0);
   if (!usable) return {text:fallback,rejected,checked,usable:false};
   let text = accepted.join("\n\n");
   if (rejected) text += "\n\nI left out some details because I couldn't verify them from the available sources.";
