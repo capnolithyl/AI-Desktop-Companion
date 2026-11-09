@@ -125,8 +125,11 @@ exactly**. Hear the generated sample before switching Mikan.
    `%LOCALAPPDATA%\\Mikan\\voice\\pocket-tts`. It then attempts to
    create `%LOCALAPPDATA%\\Mikan\\voice\\pocket-mikan-sample.wav`
    by cloning the saved voice. **First run includes model download and load.**
-   If it fails due to model access, use `hf auth login` (or provide a
-   temporary `HF_TOKEN` in the same PowerShell session) and rerun. The script
+   If it fails due to model access, accept the terms and rerun with
+   `-PromptForHfToken`: the script asks for your free Hugging Face read token
+   without echoing it or saving it to disk, and removes it from the process
+   environment after the test. You can alternatively use `hf auth login`
+   or a temporary `HF_TOKEN` in the same shell. The script
    registers the app backend only after a successful sample is generated.
    It does **not** touch the Qwen Python venv, torch, drivers, Ollama or persona.
 3. Play the WAV to judge timbre, then install/start Mikan v0.8.12 and choose
