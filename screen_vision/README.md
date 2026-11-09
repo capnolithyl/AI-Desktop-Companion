@@ -22,6 +22,7 @@ Click the **eye button** in the chat dock, choose Start Live Vision from the cam
 - Only the owner-facing UI and native commands control Live Vision. The LLM cannot autonomously turn on screen recording.
 - Live frames are NOT sent to web search, Cloudflare, the remote browser relay, GitHub or other integrations. Only local Ollama desktop-chat turns can receive them.
 - Image bytes are not written to disk, SQLite, Mem0 or Qdrant, and are not included in conversation history. Questions and replies remain in normal chat history and can describe on-screen content.
+- Automatic **user-fact** extraction can still learn stable information from what you TYPE during Live Vision; it does not consume raw screenshot bytes. Automatic character-canon extraction from image-grounded replies and immediate session-summary generation are skipped to reduce screen-derived memory.
 - While ON, Live Vision captures automatically without per-frame preview. The clearly visible green status strip and eye control show this permission. **Turn Live Vision OFF for passwords, financial information and other private screens.**
 - To avoid flickering every 15 seconds, live capture **does not hide Mikan's own window**, so her dock may appear in captured frames. You can hide her to the tray.
 - Captures a single chosen monitor, not secure desktops or protected content, and cannot control the mouse, keyboard or windows.
