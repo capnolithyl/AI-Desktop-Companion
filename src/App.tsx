@@ -357,7 +357,8 @@ export default function App() {
         setVoiceState("playing");
         await playbackFinished;
         if (serial !== voiceSerial.current) return;
-        pending = await nextRequest;
+        const following = await nextRequest;
+        pending = following ? Promise.resolve(following) : null;
         if (pending) setVoiceState("synthesizing");
       }
       if (serial === voiceSerial.current) setVoiceState("idle");
