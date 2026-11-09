@@ -720,9 +720,12 @@ export default function App() {
     await memoryApi.deleteCharacterFact(id);
     await refreshCharacter();
   };
-  const queueAutomaticMemory = (conversationId: string, userMessageId: string, assistantMessageId: string) => {
+  const queueAutomaticMemory = (conversationId: string, userMessageId: string, assistantMessageId: string, userOnly = false) => {
     const captureUser = settings.autoRememberUser;
-    const captureCharacter = settings.autoRememberMikan;
+    // Live image replies may contain observations about the screen. Preserve
+    // fact extraction from the owner's actual words, never from assistant
+    // image interpretations or incidental screen content.
+    const captureCharacter = settings.autoRememberMikan && !userOnly;
     if (!captureUser && !captureCharacter) return;
     const request = {
       endpoint: settings.endpoint, model: settings.model, conversationId,
@@ -1467,10 +1470,12 @@ export default function App() {
       if (remembered.ids.length) {
         void memoryApi.markRecalled(remembered.ids).catch(() => {});
       }
-      // Don't automatically extract durable personal facts from a transient screenshot.
-      if (!screenshot && !attachment && !liveFrame) {
-        queueAutomaticMemory(conversationId, user.id, assistant.id);
-        queueSessionMemory(conversationId);
+      // Preserve user-authored personal memory during Live Vision, but never
+      // extract Mikan canon from image-grounded assistant text. Ordinary
+      // automatic session summaries are also skipped for image turns.
+      if (!screenshot && !attachment) {
+        queueAutomaticMemory(conversationId,user.id,assistant.id,!!liveFrame);
+        if (!liveFrame) queueSessionMemory(conversationId);
       }
       if (settings.voice.autoSpeak && remoteText === undefined) void speak(finalText);
     } catch (error) {
