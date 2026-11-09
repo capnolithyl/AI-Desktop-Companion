@@ -28,6 +28,7 @@ import { parseSlashCommand, SLASH_HELP } from "./slash-commands";
 import { runtimeContext, chatRuntimeContext } from "./runtime-context";
 import { decideDesktopTurn } from "./desktop-turn-routing";
 import { formatDebugLog, type Diagnostics, type OllamaStats, type ResearchAudit } from "./debug-log";
+import { strongSemanticIds } from "./memory-ranking";
 import {
   memoryApi, prepareMemoryContext, characterContext, characterAnswerGuidance, readMessageMetadata,
   type MemoryConversation, type UserFact, type PersistedMessage,
@@ -1460,7 +1461,7 @@ export default function App() {
       const semanticMatches = await invoke<Array<{id:number; fact:string; score:number|null}>>(
         "memory_semantic_recall", { query: text }
       ).catch(() => []);
-      const semanticIds = semanticMatches.map(entry => entry.id);
+      const semanticIds = strongSemanticIds(semanticMatches,text);
       if (liveFacts !== userFacts) setUserFacts(liveFacts);
       const budget = memoryBudget(settings.contextWindow);
       const remembered = prepareMemoryContext(liveFacts,text,semanticIds,budget);
