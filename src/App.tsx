@@ -1363,7 +1363,10 @@ export default function App() {
         ? selfKnowledgeContext(
             text,await checkCapabilities(text),
             await loadSelfReferencePassages(text).catch(() => []),
-          ) + "\nAuto web search is "+(settings.autoSearch?"enabled":"disabled")+" in settings."
+          ) + "\nAuto web search is "+(settings.autoSearch?"enabled":"disabled")+" in settings."+
+          "\nLive Vision session toggle: "+(liveVision.enabled?"ON":"OFF")+
+          (liveFrame?"; a fresh screen image is attached to this message."
+            : "; no live screen image is attached to this message.")
         : "";
       if (turn.allowAutomaticWeb && researchPlan.mode !== "chat" &&
           needsContextResolution(text, messages)) {
