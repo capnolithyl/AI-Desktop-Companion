@@ -57,6 +57,26 @@ export function filterStaleActivities<T extends RankableMemory>(
   });
 }
 
+
+export type SemanticRecallMatch = {id:number;score:number|null};
+
+/** Mem0's top K are nearest neighbors, not necessarily good neighbors.
+ * Require a meaningful cosine similarity, and avoid forcing unrelated owner
+ * facts into greetings. Unknown/unscored matches fall back to lexical recall.
+ * The threshold is intentionally conservative until live embedding benchmarks.
+ */
+export function strongSemanticIds(matches: SemanticRecallMatch[], query: string): number[] {
+  const clean=query.trim().toLowerCase().replace(/[!?.]+$/,"").trim();
+  if (/^(?:hi|hello|hey|hey there|good morning|good afternoon|good evening|good night|thanks|thank you|cool|nice|okay|ok|lol|how are you|how's it going)$/.test(clean)) return [];
+  const scored=matches.filter(m=>Number.isSafeInteger(m.id) && m.id>0 &&
+    typeof m.score==="number" && Number.isFinite(m.score) && m.score>=0 && m.score<=1);
+  if (!scored.length) return [];
+  const best=Math.max(...scored.map(m=>m.score as number));
+  const threshold=Math.max(0.62,best-0.12);
+  return [...new Set(scored.filter(m=>(m.score as number)>=threshold)
+    .sort((a,b)=>(b.score as number)-(a.score as number)).slice(0,6).map(m=>m.id))];
+}
+
 /** Owner-pinned facts are deliberately always-on core context, not merely
  * another similarity hint. Reserve one or two slots; leave the rest for
  * relevant semantic/lexical memories.
