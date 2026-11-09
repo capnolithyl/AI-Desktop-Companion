@@ -33,7 +33,7 @@ $config = [ordered]@{
 }
 # PowerShell 5.1's Set-Content -Encoding UTF8 adds a BOM that serde_json
 # cannot read. Write BOM-free UTF-8 on both PS 5.1 and 7+.
-$utf8 = New-Object System.Text.UTF8Encoding($false)
+$utf8 = [System.Text.UTF8Encoding]::new($false)
 [System.IO.File]::WriteAllText((Join-Path $root "service.json"), ($config | ConvertTo-Json -Compress), $utf8)
 Write-Host "Voice service registered for automatic startup in Mikan."
 Write-Host "Python: $python"
