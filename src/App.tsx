@@ -37,7 +37,7 @@ import {
 import { MemoryPanel } from "./MemoryPanel";
 import { NotionPanel } from "./NotionPanel";
 import { isNotionTopic, notionContext, type NotionHit } from "./notion-knowledge";
-import { splitSpeechText, toSpeechText, VOICE_TEST_LINE } from "./speech";
+import { splitSpeechText, toSpeechText, VOICE_TEST_LINE, ProgressiveSpeechFeed, FIRST_SPEECH_CHARS } from "./speech";
 import { memoryBudget, sessionMemoryContext, type SessionSummary } from "./memory-budget";
 import { archiveMemoryContext, shouldSearchArchive } from "./archive-memory";
 import { sessionSummaryPrompt, mergeSessionSummary, validSessionSummaryResponse } from "./session-memory";
@@ -268,6 +268,7 @@ export default function App() {
   const voiceAudio = useRef<HTMLAudioElement | null>(null);
   const voiceUrl = useRef<string | null>(null);
   const voicePlaybackDone = useRef<(() => void) | null>(null);
+  const voiceFeed = useRef<ProgressiveSpeechFeed | null>(null);
 
   const releaseVoiceAudio = useCallback(() => {
     if (voiceAudio.current) {
@@ -287,44 +288,55 @@ export default function App() {
   }, []);
   const stopSpeech = useCallback(() => {
     voiceSerial.current += 1;
+    voiceFeed.current?.abort();
+    voiceFeed.current = null;
     releaseVoiceAudio();
     setVoiceState("idle");
   }, [releaseVoiceAudio]);
   useEffect(() => () => {
     voiceSerial.current += 1;
+    voiceFeed.current?.abort();
+    voiceFeed.current = null;
     releaseVoiceAudio();
   }, [releaseVoiceAudio]);
 
-  const speak = useCallback(async (source: string, voice: VoiceSettings = settings.voice) => {
+
+  /** Play WAV clauses as they become available. The next one is requested
+   * while the current WAV plays; Qwen3-TTS does not emit streaming PCM.
+   */
+  const playSpeechChunks = useCallback(async (
+    chunks: AsyncIterable<string>, voice: VoiceSettings, feed?: ProgressiveSpeechFeed
+  ) => {
     stopSpeech();
-    const chunks = splitSpeechText(toSpeechText(source));
-    if (!chunks.length) {
-      setVoiceError("This reply has no speakable text.");
-      return;
-    }
+    if (feed) voiceFeed.current = feed;
     const serial = voiceSerial.current;
     setVoiceError(null);
     setVoiceState("synthesizing");
-    // Generate the next short WAV while the current one plays; Python serializes GPU inference.
     const requestChunk = async (chunk: string, index: number) => {
       const started = performance.now();
       try {
         const encoded = await invoke<string>("voice_synthesize", {
           endpoint: voice.endpoint, text: chunk, voicePrompt: voice.prompt
         });
-        console.info(`[Mikan voice] chunk ${index}/${chunks.length}, ${chunk.length} chars: ${seconds(performance.now() - started)}`);
+        console.info(`[Mikan voice] chunk ${index}, ${chunk.length} chars: ${seconds(performance.now() - started)}`);
         return { encoded, error: null as string | null };
       } catch (error) {
         return { encoded: null as string | null, error: errorText(error) };
       }
     };
-    let pending = requestChunk(chunks[0], 1);
+    const iterator = chunks[Symbol.asyncIterator]();
     try {
-      for (let i = 0; i < chunks.length; i++) {
+      let index = 0;
+      const first = await iterator.next();
+      let pending = first.done ? null : requestChunk(first.value, ++index);
+      while (pending) {
         const result = await pending;
         if (serial !== voiceSerial.current) return;
         if (!result.encoded) throw new Error(result.error ?? "Voice synthesis returned no audio");
-        if (i + 1 < chunks.length) pending = requestChunk(chunks[i + 1], i + 2);
+        // Prefetch the next phrase, even if Ollama is still composing it.
+        const nextRequest = iterator.next().then(next =>
+          next.done || serial !== voiceSerial.current ? null : requestChunk(next.value, ++index)
+        );
         const bytes = Uint8Array.from(atob(result.encoded), character => character.charCodeAt(0));
         const url = URL.createObjectURL(new Blob([bytes], { type: "audio/wav" }));
         voiceUrl.current = url;
@@ -345,7 +357,9 @@ export default function App() {
         setVoiceState("playing");
         await playbackFinished;
         if (serial !== voiceSerial.current) return;
-        if (i + 1 < chunks.length) setVoiceState("synthesizing");
+        const following = await nextRequest;
+        pending = following ? Promise.resolve(following) : null;
+        if (pending) setVoiceState("synthesizing");
       }
       if (serial === voiceSerial.current) setVoiceState("idle");
     } catch (error) {
@@ -353,8 +367,22 @@ export default function App() {
       releaseVoiceAudio();
       setVoiceState("idle");
       setVoiceError(errorText(error));
+    } finally {
+      if (feed && voiceFeed.current === feed) voiceFeed.current = null;
     }
-  }, [releaseVoiceAudio, settings.voice, stopSpeech]);
+  }, [releaseVoiceAudio, stopSpeech]);
+
+  const speak = useCallback(async (source: string, voice: VoiceSettings = settings.voice) => {
+    const chunks = splitSpeechText(toSpeechText(source), 160, FIRST_SPEECH_CHARS);
+    if (!chunks.length) {
+      setVoiceError("This reply has no speakable text.");
+      return;
+    }
+    async function* utterances() {
+      for (const chunk of chunks) yield chunk;
+    }
+    await playSpeechChunks(utterances(), voice);
+  }, [playSpeechChunks, settings.voice]);
 
   const checkVoice = async (endpoint: string) => {
     setVoiceChecking(true);
@@ -1450,6 +1478,7 @@ export default function App() {
     let accumulated = "";
     let unlisten: UnlistenFn | null = null;
     let unlistenActivity: UnlistenFn | null = null;
+    let progressiveFeed: ProgressiveSpeechFeed | null = null;
 
     try {
       await persistMessage(user);
@@ -1517,10 +1546,17 @@ export default function App() {
       unlistenActivity = await listen<Activity>("mikan://activity", event => {
         if (event.payload.requestId === requestId) setActivity(event.payload.text);
       });
+      if (settings.voice.autoSpeak && settings.voice.progressiveSpeak &&
+          remoteText === undefined && !withSearch && !attachment && !screenshot &&
+          !liveFrame && !turn.verifyWebEvidence && researchPlan.mode === "chat") {
+        progressiveFeed = new ProgressiveSpeechFeed();
+        void playSpeechChunks(progressiveFeed, settings.voice, progressiveFeed);
+      }
       unlisten = await listen<ChatChunk>("mikan://chat", event => {
         if (event.payload.requestId !== requestId || !event.payload.content) return;
         if (firstTokenMs == null) firstTokenMs = performance.now() - started;
         accumulated += event.payload.content;
+        progressiveFeed?.append(event.payload.content);
         // Source-bearing drafts remain private until the evidence check finishes.
         // Streaming an unverified invented release date is misleading.
         const researchAnswer = turn.verifyWebEvidence;
@@ -1588,6 +1624,19 @@ export default function App() {
         sourcesCarriedOver: completion.sourcesCarriedOver === true
       };
       setMessages(current => current.map(m => m.id === assistantId ? assistant : m));
+      // Finish speech as soon as the final answer is checked; SQLite writes,
+      // session summaries and memory extraction must not delay playback.
+      if (settings.voice.autoSpeak && remoteText === undefined) {
+        if (progressiveFeed) {
+          // Respect an explicit Stop speech click: do not restart an aborted feed.
+          if (voiceFeed.current === progressiveFeed && !progressiveFeed.finish(finalText)) {
+            stopSpeech();
+            void speak(finalText);
+          }
+        } else {
+          void speak(finalText);
+        }
+      }
       await persistMessage(assistant);
       if (remembered.ids.length) {
         void memoryApi.markRecalled(remembered.ids).catch(() => {});
@@ -1599,8 +1648,8 @@ export default function App() {
         queueAutomaticMemory(conversationId,user.id,assistant.id,!!liveFrame);
         if (!liveFrame) queueSessionMemory(conversationId);
       }
-      if (settings.voice.autoSpeak && remoteText === undefined) void speak(finalText);
     } catch (error) {
+      if (progressiveFeed && voiceFeed.current === progressiveFeed) stopSpeech();
       const message = errorText(error);
       const stopped = message === "Generation stopped" || stopRequested.current;
       const assistant: LogMessage = {
@@ -2342,8 +2391,8 @@ export default function App() {
         {settingsTab === "notion" && <NotionPanel/>}
         {settingsTab === "voice" && <>
           <div className="settings-section-title"><Volume2 size={17}/> Local voice · Qwen3-TTS</div>
-          <div className="settings-note">First version requires running the optional Python service from tools/tts.
-            Save one voice sample to keep Mikan recognizable. Without a reference, VoiceDesign generates a different possible speaker each time.</div>
+          <div className="settings-note">The optional local Qwen3-TTS service starts automatically after one-time setup.
+            A saved reference keeps Mikan's voice consistent. Progressive speech can begin before an ordinary local reply finishes.</div>
           <label className="setting-field">Local speech server
             <input spellCheck={false} value={draft.voice.endpoint}
               onChange={event => { setDraft(current => ({ ...current, voice: { ...current.voice, endpoint: event.target.value } })); setVoiceHealth(null); setVoiceReference(null); }}
@@ -2354,7 +2403,7 @@ export default function App() {
             <div><strong>{voiceHealth?.ready ? "Voice server responding" : "Local voice service"}</strong>
               <small>{voiceHealth?.ready
                 ? (voiceHealth.modelLoaded ? `Model loaded on ${voiceHealth.device || "configured device"}` : "Server online · model loads on first speech")
-                : "No connection checked yet. Starting the server is manual in this prototype."}</small></div>
+                : "No connection checked yet. Register auto-start using scripts/setup-voice-autostart.ps1."}</small></div>
             <div className="service-buttons">
               <button type="button" className="secondary-action" disabled={voiceChecking}
                 onClick={() => void checkVoice(draft.voice.endpoint)}>
@@ -2413,6 +2462,14 @@ export default function App() {
               onChange={event => setDraft(current => ({ ...current, voice: { ...current.voice, autoSpeak: event.target.checked } }))}/>
             <span><strong>Speak new replies automatically</strong>
               <small>Off by default. You can always use the speaker icon on a reply.</small></span>
+          </label>
+          <label className="settings-toggle">
+            <input type="checkbox" checked={draft.voice.progressiveSpeak} disabled={!draft.voice.autoSpeak}
+              onChange={event => setDraft(current => ({ ...current, voice: { ...current.voice, progressiveSpeak: event.target.checked } }))}/>
+            <span><strong>Start speaking as Mikan types</strong>
+              <small>Experimental: short completed phrases during ordinary local chat.
+                Source-verified research, screenshots, attachments, and remote turns still wait for the final reply.
+                May compete with Ollama for GPU memory. Not true sample-level audio streaming.</small></span>
           </label>
           <label className="setting-field">VoiceDesign description (when no reference is saved)
             <textarea rows={6} value={draft.voice.prompt} maxLength={650}

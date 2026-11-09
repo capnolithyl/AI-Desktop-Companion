@@ -23,29 +23,148 @@ export function toSpeechText(markdown: string): string {
   const boundary = Math.max(passage.lastIndexOf(". "), passage.lastIndexOf("! "), passage.lastIndexOf("? "));
   return (boundary > 350 ? passage.slice(0, boundary + 1) : passage.trimEnd()).trim();
 }
+export const FIRST_SPEECH_CHARS = 72;
+export const SPEECH_CHUNK_CHARS = 160;
+export const MAX_SPEECH_CHARS = 800;
+
 export const VOICE_TEST_LINE =
   "Hey there! I'm Mikan. I finally have a voice. Let's see if I can sound cute without turning into a squeaky toy.";
 
 /** Break text into short WAV synthesis jobs; avoid delaying the first spoken word. */
-export function splitSpeechText(text: string, maxChars = 160): string[] {
+export function splitSpeechText(text: string, maxChars = SPEECH_CHUNK_CHARS, firstChunkChars = maxChars): string[] {
+  if (firstChunkChars < 32) throw new Error("The first speech chunk needs at least 32 characters");
   if (maxChars < 32) throw new Error("Speech chunks need at least 32 characters");
   const chunks: string[] = [];
   let remaining = text.trim();
-  while (remaining.length > maxChars) {
-    const window = remaining.slice(0, maxChars + 1);
+  while (remaining.length > (chunks.length === 0 ? Math.min(maxChars, firstChunkChars) : maxChars)) {
+    const limit = chunks.length === 0 ? Math.min(maxChars, firstChunkChars) : maxChars;
+    const window = remaining.slice(0, limit + 1);
     let boundary = -1;
     for (const regex of [/[.!?]["')\]]*\s+/g, /[,;:]\s+/g, /\s+/g]) {
       for (const match of window.matchAll(regex)) {
         const end = (match.index ?? 0) + match[0].length;
-        if (end >= Math.floor(maxChars * 0.3) && end <= maxChars) boundary = end;
+        if (end >= Math.floor(limit * 0.3) && end <= limit) boundary = end;
       }
       if (boundary !== -1) break;
     }
-    const cut = boundary === -1 ? maxChars : boundary;
+    const cut = boundary === -1 ? limit : boundary;
     const chunk = remaining.slice(0, cut).trim();
     if (chunk) chunks.push(chunk);
     remaining = remaining.slice(cut).trimStart();
   }
   if (remaining) chunks.push(remaining);
   return chunks;
+}
+
+
+/** A conservative, bounded feed of complete clauses from a streaming Ollama reply.
+ * Qwen3-TTS itself still returns whole WAVs; this overlaps text generation with
+ * synthesis and uses a shorter first phrase. It is NOT codec-level streaming.
+ */
+export class ProgressiveSpeechFeed implements AsyncIterable<string> {
+  private buffer = "";
+  private spoken = "";
+  private rawChars = 0;
+  private queue: string[] = [];
+  private waiter: ((value: IteratorResult<string>) => void) | null = null;
+  private ended = false;
+  private aborted = false;
+
+  append(delta: string): void {
+    if (this.ended || !delta || this.rawChars >= MAX_SPEECH_CHARS) return;
+    const available = MAX_SPEECH_CHARS - this.rawChars;
+    const addition = delta.slice(0, available);
+    this.rawChars += addition.length;
+    this.buffer += addition;
+    // Wait for natural boundaries, avoiding short, jerky individual tokens.
+    while (true) {
+      // Don't read partially streamed code fences aloud.
+      if (this.buffer.includes("```")) break;
+      const first = !this.spoken;
+      const limit = first ? FIRST_SPEECH_CHARS : SPEECH_CHUNK_CHARS;
+      const minimum = first ? 24 : 55;
+      if (this.buffer.length < minimum) break;
+      const window = this.buffer.slice(0, limit + 1);
+      let boundary = 0;
+      for (const [pattern, floor] of [
+        [/[.!?]["')\]]*\s+/g, first ? 20 : 40],
+        [/[,;:]\s+/g, first ? 35 : 60],
+      ] as const) {
+        for (const match of window.matchAll(pattern)) {
+          const end = (match.index ?? 0) + match[0].length;
+          if (end >= floor && end <= limit) {
+            boundary = end;
+            if (first) break;
+          }
+        }
+        if (boundary) break;
+      }
+      if (!boundary && this.buffer.length >= limit) {
+        const lastSpace = window.slice(0, limit).lastIndexOf(" ");
+        boundary = lastSpace >= minimum ? lastSpace + 1 : limit;
+      }
+      if (!boundary) break;
+      const part = this.buffer.slice(0, boundary);
+      this.buffer = this.buffer.slice(boundary).trimStart();
+      this.emit(toSpeechText(part));
+    }
+  }
+
+  /** Reconcile speculative spoken clauses with the verified final reply.
+   * Return false if the final answer changed an already-dispatched prefix.
+   * The caller must stop the feed and use ordinary final-text playback then.
+   */
+  finish(finalMarkdown: string): boolean {
+    if (this.aborted) return false;
+    const finalSpeech = toSpeechText(finalMarkdown);
+    if (this.spoken && (!finalSpeech.startsWith(this.spoken) ||
+        (finalSpeech.length > this.spoken.length &&
+          !/\s/.test(finalSpeech.charAt(this.spoken.length))))) {
+      this.abort();
+      return false;
+    }
+    const remainder = finalSpeech.slice(this.spoken.length).trim();
+    for (const piece of splitSpeechText(remainder, SPEECH_CHUNK_CHARS,
+      this.spoken ? SPEECH_CHUNK_CHARS : FIRST_SPEECH_CHARS)) this.emit(piece);
+    this.ended = true;
+    this.notifyDone();
+    return true;
+  }
+
+  abort(): void {
+    this.aborted = true;
+    this.ended = true;
+    this.queue.length = 0;
+    this.notifyDone();
+  }
+
+  [Symbol.asyncIterator](): AsyncIterator<string> {
+    return { next: () => this.take() };
+  }
+
+  private emit(text: string): void {
+    if (!text || this.ended) return;
+    this.spoken = this.spoken ? this.spoken + " " + text : text;
+    if (this.waiter) {
+      const resolve = this.waiter;
+      this.waiter = null;
+      resolve({ done: false, value: text });
+    } else {
+      this.queue.push(text);
+    }
+  }
+
+  private take(): Promise<IteratorResult<string>> {
+    const next = this.queue.shift();
+    if (next !== undefined) return Promise.resolve({ done: false, value: next });
+    if (this.ended) return Promise.resolve({ done: true, value: undefined });
+    return new Promise(resolve => { this.waiter = resolve; });
+  }
+
+  private notifyDone(): void {
+    if (!this.waiter || this.queue.length) return;
+    const resolve = this.waiter;
+    this.waiter = null;
+    resolve({ done: true, value: undefined });
+  }
 }
