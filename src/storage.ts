@@ -6,6 +6,7 @@ export type Message = { id: string; role: ChatRole; content: string };
 export type Settings = { voice: VoiceSettings; endpoint: string; model: string; systemPrompt: string; appearance: Appearance; personality: Personality; searxngEndpoint: string; autoSearch: boolean; structuredResearch: boolean; autoManageSearch: boolean; cacheHours: number; contextWindow: number | null; autoRememberUser: boolean; autoRememberMikan: boolean; visionCaptureIntervalSeconds:number; visionRegion:RegionChoice|null };
 
 export type VoiceSettings = {
+  engine: "qwen" | "pocket";
   endpoint: string;
   autoSpeak: boolean;
   progressiveSpeak: boolean;
@@ -13,6 +14,7 @@ export type VoiceSettings = {
   speed: number;
 };
 export const DEFAULT_VOICE: VoiceSettings = {
+  engine: "qwen",
   endpoint: "http://127.0.0.1:8765",
   autoSpeak: false,
   progressiveSpeak: true,
@@ -22,6 +24,7 @@ export const DEFAULT_VOICE: VoiceSettings = {
 function readVoice(value: unknown): VoiceSettings {
   const data = value && typeof value === "object" ? value as Partial<VoiceSettings> : {};
   return {
+    engine: data.engine === "pocket" ? "pocket" : "qwen",
     endpoint: typeof data.endpoint === "string" ? data.endpoint : DEFAULT_VOICE.endpoint,
     autoSpeak: data.autoSpeak === true,
     progressiveSpeak: data.progressiveSpeak !== false,

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { splitSpeechText, toSpeechText, ProgressiveSpeechFeed, FIRST_SPEECH_CHARS } from "../src/speech.ts";
+import { splitSpeechText, toSpeechText, ProgressiveSpeechFeed, FIRST_SPEECH_CHARS, voiceEndpoint } from "../src/speech.ts";
 
 test("short utterances and blank text", () => {
   assert.deepEqual(splitSpeechText("Hi, Mikan!"), ["Hi, Mikan!"]);
@@ -80,4 +80,9 @@ test("live feed flushes a short final reply even without a streaming clause", as
   const iterator = feed[Symbol.asyncIterator]();
   assert.deepEqual(await iterator.next(), { done: false, value: "Hi!" });
   assert.equal((await iterator.next()).done, true);
+});
+
+test("Pocket TTS uses a fixed local port and preserves Qwen's custom endpoint", () => {
+  assert.equal(voiceEndpoint({engine:"pocket",endpoint:"http://127.0.0.1:8765"}), "http://127.0.0.1:8766");
+  assert.equal(voiceEndpoint({engine:"qwen",endpoint:"http://localhost:8877"}), "http://localhost:8877");
 });
