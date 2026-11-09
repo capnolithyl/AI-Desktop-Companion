@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   boundedConversation, needsContextResolution, condenserPrompt,
-  resolveConversationQuestion, contextGuidance
+  resolveConversationQuestion, contextGuidance, responseFocusGuidance
 } from "./conversation-engine.ts";
 
 const history = [
@@ -57,4 +57,17 @@ test("context budget prefers most recent turns and never invents a summary", () 
   assert.ok(bounded.length<=1100);
   assert.match(bounded,/Message 49/);
   assert.doesNotMatch(bounded,/Message 1 /);
+});
+
+test("style helper notices repeated side topics without suppressing user-chosen ones", () => {
+  const turns=[
+    {role:"assistant",content:"Your meeting is open and the music sounds good."},
+    {role:"assistant",content:"I can see the meeting and the music again."},
+    {role:"assistant",content:"The meeting is going well and the music is playing."}
+  ];
+  const unrelated=responseFocusGuidance(turns,"Thanks, it works!");
+  assert.match(unrelated,/meeting/);
+  assert.match(unrelated,/do not reintroduce/i);
+  const directlyAsked=responseFocusGuidance(turns,"What can you tell me about the meeting?");
+  assert.doesNotMatch(directlyAsked,/discussing them: meeting/);
 });
