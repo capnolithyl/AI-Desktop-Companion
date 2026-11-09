@@ -12,7 +12,7 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { register, unregister } from "@tauri-apps/plugin-global-shortcut";
 import {
-  ArrowLeft, ArrowUp, Brain, Camera, Cat, Check, Clock3, Copy, Eye, EyeOff, FileText, History, Paperclip,
+  ArrowLeft, ArrowUp, Brain, Camera, Cat, Check, Clock3, Copy, Crop, Eye, EyeOff, FileText, History, Paperclip,
   BookOpen, ExternalLink, HardDrive, LoaderCircle, MessageCircle, RotateCw, Search, Settings2, SlidersHorizontal, Sparkles, Square, SquarePen, Volume2, X
 } from "lucide-react";
 import {
@@ -1747,8 +1747,10 @@ export default function App() {
         <Eye size={14}/>
         <span><strong>Live Vision ON</strong>
           · {liveVision.error ? "capture error"
-            : liveVision.lastCaptureAtMs ? "sampling every 15s" : "starting capture"}
-          · displayed to local Mikan during chat
+            : liveVision.lastCaptureAtMs
+              ? `capturing every ${liveVision.captureIntervalSeconds}s` : "starting capture"}
+          {liveVision.region ? " · selected region" : " · full monitor"}
+          · analyzed when you chat
         </span>
         <button type="button" onClick={()=>void setLiveVisionEnabled(false)}
           disabled={liveVisionBusy}>Off</button>
@@ -1773,6 +1775,13 @@ export default function App() {
             {captureBusy?<LoaderCircle size={14} className="spin"/>:<Camera size={14}/>}
             Take screenshot
           </button>
+          <button type="button" disabled={captureBusy||regionSelectBusy}
+            onClick={()=>void selectCaptureRegion(selectedScreen)}>
+            {regionSelectBusy?<LoaderCircle size={14} className="spin"/>:<Crop size={14}/>}
+            Select region
+          </button>
+          {settings.visionRegion && settings.visionRegion.monitorIndex===selectedScreen &&
+            <button type="button" onClick={clearCaptureRegion}>Full screen</button>}
           <button type="button"
             disabled={liveVisionBusy||captureBusy||!visionModel?.supportsVision}
             onClick={()=>{void setLiveVisionEnabled(true,selectedScreen);setCapturePickerOpen(false);}}>
@@ -1780,7 +1789,11 @@ export default function App() {
           </button>
           <button type="button" onClick={()=>setCapturePickerOpen(false)}>Cancel</button>
         </div>
-        <small>Manual captures require preview and Send. Live Vision samples the selected display every 15 seconds without hiding Mikan; it only sends a recent frame to your local model when you chat. It stays ON in the tray until you turn it OFF or close the app.</small>
+        <small>{settings.visionRegion?.monitorIndex===selectedScreen
+          ? `Region: ${settings.visionRegion.region.width} × ${settings.visionRegion.region.height} physical pixels.`
+          : "Full monitor selected."}
+          {" "}Manual captures still require preview and Send. Live Vision captures every {settings.visionCaptureIntervalSeconds}s, but Ollama analyzes only when you chat.
+        </small>
       </div>}
       {pendingScreenshot && <div className="vision-preview">
         <img src={`data:image/jpeg;base64,${pendingScreenshot.imageBase64}`}
