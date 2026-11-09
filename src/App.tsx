@@ -37,7 +37,7 @@ import {
 import { MemoryPanel } from "./MemoryPanel";
 import { NotionPanel } from "./NotionPanel";
 import { isNotionTopic, notionContext, type NotionHit } from "./notion-knowledge";
-import { splitSpeechText, toSpeechText, VOICE_TEST_LINE, ProgressiveSpeechFeed, FIRST_SPEECH_CHARS } from "./speech";
+import { splitSpeechText, toSpeechText, VOICE_TEST_LINE, ProgressiveSpeechFeed, FIRST_SPEECH_CHARS, voiceEndpoint, POCKET_VOICE_ENDPOINT } from "./speech";
 import { memoryBudget, sessionMemoryContext, type SessionSummary } from "./memory-budget";
 import { archiveMemoryContext, shouldSearchArchive } from "./archive-memory";
 import { sessionSummaryPrompt, mergeSessionSummary, validSessionSummaryResponse } from "./session-memory";
@@ -316,7 +316,7 @@ export default function App() {
       const started = performance.now();
       try {
         const encoded = await invoke<string>("voice_synthesize", {
-          endpoint: voice.endpoint, text: chunk, voicePrompt: voice.prompt
+          endpoint: voiceEndpoint(voice), text: chunk, voicePrompt: voice.prompt
         });
         console.info(`[Mikan voice] chunk ${index}, ${chunk.length} chars: ${seconds(performance.now() - started)}`);
         return { encoded, error: null as string | null };
@@ -373,7 +373,11 @@ export default function App() {
   }, [releaseVoiceAudio, stopSpeech]);
 
   const speak = useCallback(async (source: string, voice: VoiceSettings = settings.voice) => {
-    const chunks = splitSpeechText(toSpeechText(source), 160, FIRST_SPEECH_CHARS);
+    const spoken = toSpeechText(source);
+    // Pocket can synthesize an entire reply quickly on CPU. Avoid audible
+    // gaps from splitting its output into many separate WAV requests.
+    const chunks = voice.engine === "pocket" ? (spoken ? [spoken] : [])
+      : splitSpeechText(spoken, 160, FIRST_SPEECH_CHARS);
     if (!chunks.length) {
       setVoiceError("This reply has no speakable text.");
       return;
@@ -428,7 +432,7 @@ export default function App() {
         reader.readAsDataURL(referenceFile);
       });
       const saved = await invoke<VoiceReference>("voice_save_reference", {
-        endpoint: draft.voice.endpoint, audioBase64, refText: referenceText
+        endpoint: voiceEndpoint(draft.voice), audioBase64, refText: referenceText
       });
       setVoiceReference(saved);
       setReferenceFile(null);
@@ -446,7 +450,7 @@ export default function App() {
     setVoiceError(null);
     stopSpeech();
     try {
-      const cleared = await invoke<VoiceReference>("voice_delete_reference", { endpoint: draft.voice.endpoint });
+      const cleared = await invoke<VoiceReference>("voice_delete_reference", { endpoint: voiceEndpoint(draft.voice) });
       setVoiceReference(cleared);
       setReferenceFile(null);
       setReferenceText("");
@@ -472,7 +476,7 @@ export default function App() {
         needed.has("mem0") ? invoke<{ready:boolean}>("memory_semantic_status")
           .then(s=>{next.mem0=s.ready?"ready":"offline";})
           .catch(()=>{next.mem0="offline";}) : Promise.resolve(),
-        needed.has("voice") ? invoke<VoiceHealth>("voice_health",{endpoint:settings.voice.endpoint})
+        needed.has("voice") ? invoke<VoiceHealth>("voice_health",{endpoint:voiceEndpoint(settings.voice)})
           .then(s=>{next.voice=s.ready?"ready":"offline";})
           .catch(()=>{next.voice="offline";}) : Promise.resolve(),
         needed.has("vision") ? invoke<VisionModelStatus>("vision_model_status",{
@@ -1548,7 +1552,8 @@ export default function App() {
       });
       if (settings.voice.autoSpeak && settings.voice.progressiveSpeak &&
           remoteText === undefined && !withSearch && !attachment && !screenshot &&
-          !liveFrame && !turn.verifyWebEvidence && researchPlan.mode === "chat") {
+          !liveFrame && !turn.verifyWebEvidence && researchPlan.mode === "chat"
+          && settings.voice.engine === "qwen") {
         progressiveFeed = new ProgressiveSpeechFeed();
         void playSpeechChunks(progressiveFeed, settings.voice, progressiveFeed);
       }
@@ -2210,7 +2215,7 @@ export default function App() {
       <nav className="settings-tabs" aria-label="Settings categories">
         {([["ai", "AI & Models"], ["internet", "Internet"], ["notion", "Notion"], ["voice", "Voice"], ["appearance", "Appearance"]] as const).map(([tab, label]) =>
           <button type="button" key={tab} className={settingsTab === tab ? "settings-tab active" : "settings-tab"}
-            onClick={() => { setSettingsTab(tab); if (tab === "internet") { void refreshService(); void refreshCache(); } if (tab === "voice") void checkVoice(draft.voice.endpoint); }}>
+            onClick={() => { setSettingsTab(tab); if (tab === "internet") { void refreshService(); void refreshCache(); } if (tab === "voice") void checkVoice(voiceEndpoint(draft.voice)); }}>
             {label}
           </button>
         )}
@@ -2406,7 +2411,7 @@ export default function App() {
                 : "No connection checked yet. Register auto-start using scripts/setup-voice-autostart.ps1."}</small></div>
             <div className="service-buttons">
               <button type="button" className="secondary-action" disabled={voiceChecking}
-                onClick={() => void checkVoice(draft.voice.endpoint)}>
+                onClick={() => void checkVoice(voiceEndpoint(draft.voice))}>
                 {voiceChecking ? <LoaderCircle size={14} className="spin"/> : <RotateCw size={14}/>} Check connection</button>
               <button type="button" className="secondary-action" disabled={voiceState !== "idle"}
                 onClick={() => void speak(VOICE_TEST_LINE, draft.voice)}><Volume2 size={14}/> Test voice</button>
