@@ -763,3 +763,58 @@ button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px
   border:1px solid #59444f;border-radius:7px;
   font-family:Consolas,monospace;font-size:10px;color:#e6cfda;
 }
+
+
+/* Live Vision: a persistent, unmistakable owner-controlled ON indicator. */
+.live-vision-dock {position:relative}
+.live-vision-dock.active {color:#a1f0c1;background:rgba(30,115,72,.2)}
+.live-vision-dot {
+  position:absolute;right:1px;top:1px;width:6px;height:6px;
+  background:#69e2a5;border-radius:50%;box-shadow:0 0 5px #53d992;
+}
+.live-vision-strip {
+  display:flex;align-items:center;gap:6px;margin:4px 0 6px;
+  padding:6px 9px;border:1px solid #446d59;border-radius:9px;
+  background:rgba(34,96,64,.22);color:#d3f5e1;font-size:10px;
+}
+.live-vision-strip span {flex:1;line-height:1.45}
+.live-vision-strip strong {color:#b9ffd2}
+.live-vision-strip>svg {flex:0 0 auto}
+.live-vision-strip button {
+  padding:3px 7px;border:1px solid #59916f;border-radius:7px;
+  background:#335747;color:#e5ffed;font-size:10px;
+}
+
+
+@media (max-width: 470px) {
+  .dock-actions { gap: 2px; }
+  .dock-icon { flex-basis: 25px; width: 25px; height: 25px; }
+  .reply-title { gap: 4px; }
+}
+
+
+/* Capture sampling frequency is deliberately separate from vision inference. */
+.vision-interval-setting{
+  display:flex;flex-direction:column;gap:7px;padding:9px 0;
+  color:#f3dadd;font-size:12px;
+}
+.vision-interval-setting>span:first-child,
+.vision-setting-description{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.vision-interval-setting output{
+  font-size:11px;color:#ffcfb3;font-variant-numeric:tabular-nums
+}
+.vision-interval-setting input[type="range"]{
+  width:100%;accent-color:#ffad7e;cursor:pointer
+}
+.vision-range-labels{display:flex;justify-content:space-between}
+.vision-range-labels small{font-size:10px;color:#c5b3c1}
+.vision-setting-description{
+  padding:8px 0;border-top:1px solid rgba(255,200,180,.13);
+  font-size:11px;
+}
+.vision-setting-description strong{color:#f4ded8}
+.vision-setting-description>span{color:#ffcfb3;font-size:11px}
+.vision-setting-description>small{width:100%;line-height:1.4;color:#c7b6be}
+.vision-area-buttons{display:flex;width:100%;gap:8px;flex-wrap:wrap}
+.vision-area-buttons button{display:flex;align-items:center;gap:5px}
+.vision-panel .vision-actions{flex-wrap:wrap}

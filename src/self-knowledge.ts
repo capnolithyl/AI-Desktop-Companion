@@ -4,7 +4,7 @@
  * The CI checker detects unmapped Tauri commands, missing files and stale versions.
  * Add a feature here when adding capability, and update the matching source/docs.
  */
-export const CAPABILITY_RELEASE = "0.8.4";
+export const CAPABILITY_RELEASE = "0.8.9";
 
 export type CapabilityStage = "implemented" | "experimental" | "planned";
 export type RuntimeDependency = "none" | "ollama" | "search" | "mem0" | "voice" | "vision" | "pocket";
@@ -38,6 +38,13 @@ export const CAPABILITIES: readonly Capability[] = [
     slashCommands:["help","hide","chat"]
   },
   {
+    id:"remote-browser",label:"Remote browser companion (experimental)",category:"Platforms",
+    description:"Optional locally hosted, key-protected browser chat over Cloudflare Tunnel and Access. Shares the active desktop conversation, its local model, persona, SQLite memory and web tools by relaying text turns into the running desktop UI. Requires separate Node relay, Cloudflare setup and awake PC. No remote attachments, voice, or independent chats yet.",
+    stage:"experimental",runtime:"none",keywords:["server","remote","browser","cloudflare","tunnel","phone","web app","access"],
+    sources:["server/index.mjs","server/public/index.html","src/App.tsx"],docs:["server/README.md"],
+    commands:[]
+  },
+  {
     id:"local-chat",label:"Local LLM chat",category:"AI",
     description:"Text chat streams replies from local Ollama, supports model switching, cancellation and conversation-aware follow-ups. Model quality and availability depend on Ollama.",
     stage:"implemented",runtime:"ollama",keywords:["chat","model","ollama","qwen","llm","coding","stream","context"],
@@ -62,6 +69,15 @@ export const CAPABILITIES: readonly Capability[] = [
     commands:["read_page","web_cache_info","clear_web_cache"],
     screens:["page"],
     slashCommands:["read"]
+  },
+  {
+    id:"notion-knowledge",label:"Notion personal knowledge library (experimental)",category:"Knowledge",
+    description:"Connect a private read-only Notion integration in Settings, choose shared pages or all pages available to the integration, and sync a local searchable text index. Mikan can recall chapters, notes, and creative lore by keyword for chat, separate from user memories. Sync is manual; files and images are not imported. Requires a Notion integration token and explicit page sharing. Local SQLite cache is unencrypted.",
+    stage:"experimental",runtime:"none",keywords:["notion","book","novel","manuscript","charlotte","hollow meridian","story","writing","chapters","lore","knowledge","documents","integrations"],
+    sources:["src-tauri/src/notion.rs","src/NotionPanel.tsx","src/notion-knowledge.ts","src/App.tsx"],
+    docs:["notion/README.md"],
+    commands:["notion_status","notion_connect","notion_disconnect","notion_list_pages","notion_select_page","notion_set_all","notion_sync","notion_recall"],
+    slashCommands:["notion"]
   },
   {
     id:"personal-facts",label:"Personal facts and automatic extraction",category:"Memory",
@@ -129,7 +145,7 @@ export const CAPABILITIES: readonly Capability[] = [
   },
   {
     id:"voice",label:"Local voice synthesis and cloning",category:"Voice",
-    description:"Experimental Qwen3-TTS service with speak/stop, auto-speak option and locally saved WAV reference voice clone. Voice server and model require separate setup; no microphone speech recognition yet.",
+    description:"Experimental Qwen3-TTS service with speak/stop, auto-speak, chunked WAV playback to reduce first-audio wait, latency diagnostics, and a locally saved voice reference clone. Voice server and model require separate setup; no microphone speech recognition yet.",
     stage:"experimental",runtime:"voice",keywords:["speak","voice","tts","talk","speech","audio","clone","sound","hear"],
     sources:["src-tauri/src/voice.rs","tools/tts/server.py","src/speech.ts"],docs:["tools/tts/README.md"],
     commands:["voice_health","voice_synthesize","voice_reference_status","voice_save_reference","voice_delete_reference"]
@@ -165,12 +181,12 @@ export const CAPABILITIES: readonly Capability[] = [
     commands:[]
   },
   {
-    id:"screen-vision",label:"On-demand screen vision",category:"Vision",
-    description:"Experimental Windows screen capture: the owner chooses a monitor, captures one still image, previews it and decides whether to send it to a vision-capable local Ollama model. Mikan does not continuously watch, save screenshots, interact with the desktop, or see anything without approval.",
-    stage:"experimental",runtime:"vision",keywords:["see","look","screen","screenshot","vision","capture","visual","game","monitor","image","eyes"],
-    sources:["src-tauri/src/screen_vision.rs","src/screen-vision.ts","src/App.tsx"],docs:["screen_vision/README.md"],
-    commands:["vision_monitors","vision_capture","vision_model_status"],
-    slashCommands:["vision"]
+    id:"screen-vision",label:"Screen vision and Live Vision",category:"Vision",
+    description:"Experimental Windows screen capture supports manual preview-and-send and optional Live Vision. The owner chooses the monitor, optionally draws a rectangle over a full-screen preview, and adjusts screenshot frequency from every 1 to 20 seconds (default 15). Capture crops physical monitor pixels BEFORE image resizing, improving legibility on ultrawides. The latest image stays only in RAM; local Ollama analyzes it when the owner chats, NOT every capture. OFF by default on app launch, including in the tray. No automatic web/remote-image sharing, proactive commentary or mouse control. Requires a vision-capable local model.",
+    stage:"experimental",runtime:"vision",keywords:["see","look","screen","screenshot","vision","capture","visual","game","monitor","image","eyes","live","always","watch","continuous","interval","slider","frequency","crop","region","rectangle","ultrawide"],
+    sources:["src-tauri/src/screen_vision.rs","src-tauri/src/vision_region.rs","src/live-vision.ts","src/capture-region.ts","src/RegionPicker.tsx","src/screen-vision.ts","src/App.tsx"],docs:["screen_vision/README.md"],
+    commands:["vision_monitors","vision_capture","vision_model_status","vision_live_set","vision_live_status","vision_live_latest","vision_live_configure","vision_region_open","vision_region_preview","vision_region_complete","vision_region_cancel"],
+    slashCommands:["vision","live"]
   },
   {
     id:"microphone",label:"Microphone speech recognition",category:"Future",
@@ -192,7 +208,7 @@ export const CAPABILITIES: readonly Capability[] = [
   },
   {
     id:"external-integrations",label:"External account integrations",category:"Future",
-    description:"Planned: approved connectors for GitHub, Trello, email and calendar. This build does not have those account permissions or tools.",
+    description:"Planned: approved connectors for GitHub, Trello, email and calendar. Notion is available separately as an experimental read-only knowledge library; it does not grant general app control.",
     stage:"planned",runtime:"none",keywords:["github","trello","calendar","email","mcp","integration","account"],
     sources:[],docs:[],commands:[]
   }

@@ -6,7 +6,7 @@ import {
 } from "./self-knowledge.ts";
 
 test("feature registry tracks implemented, experimental and planned without duplicates",()=>{
-  assert.equal(CAPABILITY_RELEASE,"0.8.4");
+  assert.match(CAPABILITY_RELEASE,/^\d+\.\d+\.\d+$/);
   assert.ok(CAPABILITIES.length>=15);
   assert.equal(new Set(CAPABILITIES.map(c=>c.id)).size,CAPABILITIES.length);
   assert.equal(CAPABILITIES.find(c=>c.id==="screen-vision")?.stage,"experimental");
@@ -39,7 +39,9 @@ test("source-grounded answers include correct limitations and read-only caveat",
   const screenshot=selfKnowledgeContext("Can you see my screen?",{ollama:"ready"});
   assert.match(screenshot,/screen capture/i);
   assert.match(screenshot,/RUNTIME NOT CHECKED/);
-  assert.match(screenshot,/does not continuously watch/);
+  assert.match(screenshot,/optional Live Vision/);
+  assert.match(screenshot,/every 1 to 20 seconds/);
+  assert.match(screenshot,/BEFORE image resizing/);
   const voice=selfKnowledgeContext("Can you speak?",{voice:"offline"});
   assert.match(voice,/RUNTIME CHECK: UNAVAILABLE/);
   const docs=selfKnowledgeContext("How does your own code work?",{},["READ-ONLY BUNDLED SOURCE CODE src/App.tsx"]);

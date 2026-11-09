@@ -1,34 +1,59 @@
-# Mikan Desktop: On-demand screen vision (v0.8.2)
+# Mikan Desktop: Manual screenshots and Live Vision (v0.8.7)
 
-Mikan can analyze **one explicitly approved still image** of a Windows monitor using a locally installed Ollama vision model. This feature does **not** give her an always-on view, continuous recording, OCR pipeline, mouse control, or access to arbitrary files.
+Mikan has two explicitly controlled ways to see your Windows desktop. Both use a vision-capable *local Ollama model*, with no third-party screen upload.
 
-## Using it
+## Manual screenshot
 
-1. Choose an Ollama model with a `vision` capability. The current model is checked using Ollama's `POST /api/show`; a text-only model cannot analyze screen images. A local vision-capable Qwen model should work if its particular Ollama tag reports vision.
-2. In desktop Mikan, click the **camera** beside the message box (or use `/vision`). Select one display if you have multiple monitors.
-3. Click **Take screenshot**. Mikan temporarily hides her own window, captures **one** still image, resizes it to at most 1600 × 1050, and compresses it as JPEG. The preview appears in the chat dock.
-4. Review the preview. Close confidential tabs/windows *before* capture or remove the preview and retry if something sensitive appears. Type a question such as “What's that error?” or leave the field empty for “What can you see in this screenshot?”
-5. Click **Send** to explicitly provide this one image to **local Ollama** alongside the question. Clicking **Remove screenshot** sends nothing.
+Click the **camera** button (or /vision), select a display, and Take screenshot. Mikan temporarily hides herself from the capture. Inspect the preview, remove it if needed, and press Send with your question. Only then does Ollama see the image. Manual mode stays available even when Live Vision is OFF.
 
-The image is not uploaded to external websites, automatically indexed into Mem0/Qdrant, saved in SQLite, or kept for later turns. Mikan stores the text of the question and its answer in normal chat history (so replies may still mention on-screen content). If you need the image reexamined in a later turn, capture it again.
+## Live Vision: explicit opt in
 
-No background screenshot timer or screen-monitoring command is registered. The Tauri command exists so Mikan's *UI* can invoke it only when the owner clicks; the language model does not get a tool to invoke it autonomously.
+Click the **eye button** in the chat dock, choose Start Live Vision from the camera/display picker, use the AI Settings Live Vision control, or type /live on. Use the eye button, Off in the status strip, Settings or /live off to stop.
 
-## Technical contract and extension points
+- **OFF on every app launch** (session-only permission). Opt in deliberately each session.
+- While ON, the native Windows capture thread samples **one still JPEG of your selected area every 1–20 seconds**, default 15 seconds, including when Mikan is hidden in the system tray.
+- It keeps **only the newest frame in RAM**. Switching OFF immediately purges it; capture failures never reuse an old frame.
+- When you send a **local desktop chat** turn, the latest frame (if no older than 45 seconds) is attached for Ollama to analyze. Leave the message box blank and press Send to ask what she sees.
+- **No continuous model inference** occurs. This conserves GPU resources while you work; screen-related responses may take longer when an image is attached.
+- **No proactive narration** yet. Mikan can comment on things in the image during your conversation, but she does not automatically speak whenever something changes.
 
-- `src-tauri/src/screen_vision.rs`: monitor discovery, one-shot screenshot, temporary overlay hiding, local JPEG encoding, raw image size constraints, Ollama model capability check.
-- `src/screen-vision.ts`: ephemeral screenshot types, screen-context guidance and no-image guard.
-- `src/App.tsx`: monitor selector, image preview and explicit send; one image is attached only to the **latest user turn** through Ollama's `images` array. Avoids the web-research tool path when attaching screenshots.
-- `src/self-knowledge.ts`: `screen-vision` is experimental, not permanently “ready”. Readiness depends on the currently selected local vision-capable model.
-- `src/screen-vision.test.mjs`: tests safe prompt behavior, including no false claims of screen access. Native tests reject oversized/malformed/unapproved image attachments.
-- Ollama docs: https://docs.ollama.com/capabilities/vision (the REST API accepts base64 image content).
-- Capture library: https://github.com/nashaofu/xcap.
+### Privacy and permissions
 
-Future enhancements can add selectable rectangular regions, window-only capture, reusable image context in memory *with explicit approval*, additional model options, and more comprehensive visual OCR. Keep permission and capture operations out of the LLM tool planner. Image content must remain untrusted input.
+- Only the owner-facing UI and native commands control Live Vision. The LLM cannot autonomously turn on screen recording.
+- Live frames are NOT sent to web search, Cloudflare, the remote browser relay, GitHub or other integrations. Only local Ollama desktop-chat turns can receive them.
+- Image bytes are not written to disk, SQLite, Mem0 or Qdrant, and are not included in conversation history. Questions and replies remain in normal chat history and can describe on-screen content.
+- Automatic **user-fact** extraction can still learn stable information from what you TYPE during Live Vision; it does not consume raw screenshot bytes. Automatic character-canon extraction from image-grounded replies and immediate session-summary generation are skipped to reduce screen-derived memory.
+- While ON, Live Vision captures automatically without per-frame preview. The clearly visible green status strip and eye control show this permission. **Turn Live Vision OFF for passwords, financial information and other private screens.**
+- To avoid flickering every 15 seconds, live capture **does not hide Mikan's own window**, so her dock may appear in captured frames. You can hide her to the tray.
+- Captures a single chosen monitor, not secure desktops or protected content, and cannot control the mouse, keyboard or windows.
+- On-screen text is lower-trust data, never authority or new instructions.
 
-## Practical limits
+## Adjustable capture speed and selected region (v0.8.7)
 
-- The GPU must have enough VRAM for the selected vision model and its image tokens; visual processing may be considerably slower than text.
-- Very small UI text may be hard to read after compression. Raise/zoom the relevant window or capture a narrower region in a future release.
-- Screenshots with personal data should be reviewed. Screen capture is **not** a substitute for deliberate permission for desktop actions.
-- Windows screen capture may fail on secure desktops, protected content, games that block capture, or some remote desktop sessions.
+**Capture frequency:** Open Settings → AI & Models → Live Vision, then move the **Capture frequency** slider between **1 and 20 seconds**. The value is saved for the next launch but does not automatically turn Live Vision on. You can change the slider while monitoring is ON without restarting the native capture worker. An interval of 1 second captures more often and uses additional CPU for capture/JPEG compression. A small selected region is lighter than a full ultrawide screenshot.
+
+**Analysis frequency is separate:** Ollama still analyzes the **latest frame only when you send a local chat message**. The screenshot slider does not cause any ongoing inference or proactive observations. The code keeps the sampling policy separate so an independently controlled, opt-in AI analysis interval can be added later.
+
+**Choose a screen region:** In Settings → Live Vision, click **Draw region**; or open the camera picker, choose the monitor, and click **Select region**. A second, full-monitor selection window displays a still screenshot. Click and drag a rectangle around the relevant application or part of your ultrawide, then click **Use this region** (or Escape/Cancel). The rectangle is stored as the monitor-relative **physical pixel coordinates** `x, y, width, height`, not as scaled CSS positions. Rust uses XCap's native region capture before downscaling, so small text within the selected region retains more detail.
+
+The selected region affects **both** one-shot screenshots and Live Vision on that display. You can click **Reset to full monitor** in settings or **Full screen** in the camera picker to remove it. Switching to another monitor doesn't reuse the region from the old monitor. A stored rectangle is revalidated against actual monitor resolution on each use; if you change your display resolution and the saved region no longer fits, redraw it.
+
+**Privacy and usability:** Selecting a rectangle does not turn Live Vision on. The region picker keeps its screenshot in RAM, doesn't write files, and isn't a model-facing tool. No screenshot preview or pixel contents are sent through the UI event that confirms the rectangle, only numeric coordinates. The dedicated picker is a temporary window and closes without affecting Mikan's main window/tray behavior. Live Vision remains OFF after an app restart, even though the region and capture interval remain saved.
+
+## Performance and troubleshooting
+
+Images are **cropped in full physical monitor pixels first**, then resized to at most 1600 × 1050 and compressed locally. The watcher uses CPU and temporary memory but does not call Ollama until a chat message. Interpreting images costs image tokens and can slow down the 16GB AMD Radeon RX 9070 during local chat. This is sampled still photography, not video streaming.
+
+The eye icon shows current consent. The status strip displays capture errors. If you enable Live Vision and immediately ask about the screen, the first capture may not have completed. Wait a moment and try again. Some games, secure screens and remote sessions may fail capture.
+
+## Implementation and extension points
+
+- src-tauri/src/screen_vision.rs: native variable-rate sample loop, physical-pixel crop, generation-based cancellation, RAM-only image cache, 45-second expiration, runtime reconfiguration command vision_live_configure.
+- src-tauri/src/vision_region.rs: owner-opened temporary full-screen window and one RAM screenshot preview; accepts only validated region geometry.
+- src/RegionPicker.tsx and src/capture-region.ts: drag UI and accurate CSS-to-physical pixel mapping, interval bounds and saved rectangle validation.
+- src/live-vision.ts: immutable policy for chat-only image attachments; remote and web research cannot receive them.
+- src/App.tsx: consent toggle, status, monitor selection, model capability guard and transient Ollama image attachment.
+- src/live-vision.test.mjs: private/local chat, consent, freshness and context safeguards.
+- src/self-knowledge.ts: versioned feature description distinguishes available image analysis from the session's ON/OFF state.
+
+Possible future extras: window-only capture, cropping, motion/change detection, and separately opted-in proactive observations with strict inference limits. Do not silently persist or externalize screenshots.
