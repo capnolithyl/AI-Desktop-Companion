@@ -233,6 +233,7 @@ export default function App() {
   const pageInputRef = useRef<HTMLInputElement>(null);
   const portraitUrl = useRef<string | null>(null);
   const activeRequestId = useRef<string | null>(null);
+  const preparingSend = useRef(false);
   const automaticMemoryQueue = useRef<Promise<void>>(Promise.resolve());
   const sessionMemoryQueue = useRef<Promise<void>>(Promise.resolve());
   const stopRequested = useRef(false);
@@ -1232,8 +1233,9 @@ export default function App() {
       return;
     }
 
-    if (busy) return;
+    if (busy || preparingSend.current) return;
     if (!memoryReady) { setFeedback("Loading conversation memory…"); return; }
+    preparingSend.current=true;
     const baseTurn = decideDesktopTurn(text,messages,{
       attachment:!!(screenshot||attachment),
       explicitSearch:!!withSearch,
@@ -1255,6 +1257,7 @@ export default function App() {
     if (liveFrame) setLiveVisionError(null);
     if (useLiveFrame && !liveFrame && /screen|screenshot|what can you see/i.test(text)) {
       setLiveVisionError("Live Vision is warming up or the display capture failed. Try again after the next frame.");
+      preparingSend.current=false;
       return;
     }
     if (screenshot || attachment?.kind === "image" || liveFrame) {
@@ -1265,11 +1268,13 @@ export default function App() {
         if (!status.supportsVision) {
           const message="Your selected Ollama model cannot see images. Switch to a vision-capable model.";
           if (liveFrame) setLiveVisionError(message); else setAttachmentError(message);
+          preparingSend.current=false;
           return;
         }
       } catch (error) {
         const message="Couldn't check image support: "+errorText(error);
         if (liveFrame) setLiveVisionError(message); else setAttachmentError(message);
+        preparingSend.current=false;
         return;
       }
     }
@@ -1323,6 +1328,7 @@ export default function App() {
     stopRequested.current = false;
     setStopping(false);
     setBusy(true);
+    preparingSend.current=false;
     setActivity("Thinking…");
     goCompact();
     const started = performance.now();
