@@ -1606,6 +1606,19 @@ export default function App() {
               <Search size={17}/>
               <span aria-hidden="true" className={`search-health-dot ${service?.state || "checking"}`}/>
             </button>
+            <button type="button"
+              className={`dock-icon live-vision-dock ${liveVision.enabled?"active":""}`}
+              aria-label={liveVision.enabled?"Turn Live Vision off":"Turn Live Vision on"}
+              aria-pressed={liveVision.enabled}
+              title={liveVision.enabled
+                ? "Live Vision ON: one private frame every 15 seconds. Click to stop."
+                : "Live Vision OFF: click to let Mikan see a recent screen when you chat."}
+              disabled={liveVisionBusy}
+              onClick={()=>void setLiveVisionEnabled(!liveVision.enabled)}>
+              {liveVisionBusy?<LoaderCircle size={17} className="spin"/>
+                : liveVision.enabled?<Eye size={17}/>:<EyeOff size={17}/>}
+              {liveVision.enabled&&<span className="live-vision-dot" aria-hidden="true"/>}
+            </button>
             <button className="dock-icon" title="Quick personality presets (/personality)" aria-label="Personality presets"
               onClick={() => setScreen("personality")}><SlidersHorizontal size={17}/></button>
             <button className="dock-icon" title="Mikan's features (/capabilities)" aria-label="Mikan capabilities"
@@ -1627,6 +1640,18 @@ export default function App() {
         <div className="latest-reply"><MarkdownText text={replyText}/></div>
         {voiceError && <div className="voice-error" role="alert">Voice: {voiceError}</div>}
       </div>
+      {liveVision.enabled && <div className="live-vision-strip" role="status">
+        <Eye size={14}/>
+        <span><strong>Live Vision ON</strong>
+          · {liveVision.error ? "capture error"
+            : liveVision.lastCaptureAtMs ? "sampling every 15s" : "starting capture"}
+          · displayed to local Mikan during chat
+        </span>
+        <button type="button" onClick={()=>void setLiveVisionEnabled(false)}
+          disabled={liveVisionBusy}>Off</button>
+      </div>}
+      {(liveVisionError||liveVision.error)&&
+        <div className="vision-error" role="alert">{liveVisionError||liveVision.error}</div>}
       {capturePickerOpen && <div className="vision-panel">
         <strong>Share a screen with Mikan</strong>
         <small>Choose a display, then capture it. Mikan briefly hides her own window.</small>
@@ -1645,9 +1670,14 @@ export default function App() {
             {captureBusy?<LoaderCircle size={14} className="spin"/>:<Camera size={14}/>}
             Take screenshot
           </button>
+          <button type="button"
+            disabled={liveVisionBusy||captureBusy||!visionModel?.supportsVision}
+            onClick={()=>{void setLiveVisionEnabled(true,selectedScreen);setCapturePickerOpen(false);}}>
+            <Eye size={14}/> {liveVision.enabled?"Change Live display":"Start Live Vision"}
+          </button>
           <button type="button" onClick={()=>setCapturePickerOpen(false)}>Cancel</button>
         </div>
-        <small>Screen content may include private information. You review it before sending to local Ollama.</small>
+        <small>Manual captures require preview and Send. Live Vision samples the selected display every 15 seconds without hiding Mikan; it only sends a recent frame to your local model when you chat. It stays ON in the tray until you turn it OFF or close the app.</small>
       </div>}
       {pendingScreenshot && <div className="vision-preview">
         <img src={`data:image/jpeg;base64,${pendingScreenshot.imageBase64}`}
@@ -1727,7 +1757,7 @@ export default function App() {
           </button>
         ) : (
           <button type="button" className="send-button" aria-label="Send" title="Send message"
-            disabled={!memoryReady || attachmentBusy || (!input.trim() && !pendingAttachment && !pendingScreenshot)} onClick={() => void send()}><ArrowUp size={20}/></button>
+            disabled={!memoryReady || attachmentBusy || (!input.trim() && !pendingAttachment && !pendingScreenshot && !liveVision.enabled)} onClick={() => void send()}><ArrowUp size={20}/></button>
         )}
       </div>
       <div className="dock-footer">
@@ -2025,6 +2055,20 @@ export default function App() {
           </label>
           <button type="button" className="secondary-action"
             onClick={() => setScreen("personality")}><SlidersHorizontal size={15}/> Open Personality controls</button>
+          <div className="settings-section-title"><Eye size={17}/> Live Vision</div>
+          <div className="service-panel">
+            <div><strong>Continuous screen awareness</strong>
+              <span className={liveVision.enabled?"service-running":"service-muted"}>
+                {liveVision.enabled?"ON · 15-second snapshots":"OFF"}
+              </span>
+            </div>
+            <button type="button" className="secondary-action" disabled={liveVisionBusy}
+              onClick={()=>void setLiveVisionEnabled(!liveVision.enabled)}>
+              {liveVision.enabled?<EyeOff size={14}/>:<Eye size={14}/>}
+              {liveVision.enabled?"Turn off":"Turn on"}
+            </button>
+            <small>Session-only, OFF whenever Mikan restarts. Captures your primary monitor every 15 seconds (including when hidden in the tray). Keeps only the newest JPEG in RAM; sends it to local Ollama during a desktop chat turn, never to web research or the remote browser. It may include private data or Mikan's own window. No proactive narration or continuous AI processing yet.</small>
+          </div>
           <div className="settings-section-title"><Brain size={17}/> Advanced personal memory (Mem0 OSS)</div>
           <div className="service-panel">
             <div><strong>Semantic recall · local</strong>
