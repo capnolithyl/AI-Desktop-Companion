@@ -1624,17 +1624,8 @@ export default function App() {
         sourcesCarriedOver: completion.sourcesCarriedOver === true
       };
       setMessages(current => current.map(m => m.id === assistantId ? assistant : m));
-      await persistMessage(assistant);
-      if (remembered.ids.length) {
-        void memoryApi.markRecalled(remembered.ids).catch(() => {});
-      }
-      // Preserve user-authored personal memory during Live Vision, but never
-      // extract Mikan canon from image-grounded assistant text. Ordinary
-      // automatic session summaries are also skipped for image turns.
-      if (!screenshot && !attachment) {
-        queueAutomaticMemory(conversationId,user.id,assistant.id,!!liveFrame);
-        if (!liveFrame) queueSessionMemory(conversationId);
-      }
+      // Finish speech as soon as the final answer is checked; SQLite writes,
+      // session summaries and memory extraction must not delay playback.
       if (settings.voice.autoSpeak && remoteText === undefined) {
         if (progressiveFeed) {
           // Respect an explicit Stop speech click: do not restart an aborted feed.
@@ -1645,6 +1636,17 @@ export default function App() {
         } else {
           void speak(finalText);
         }
+      }
+      await persistMessage(assistant);
+      if (remembered.ids.length) {
+        void memoryApi.markRecalled(remembered.ids).catch(() => {});
+      }
+      // Preserve user-authored personal memory during Live Vision, but never
+      // extract Mikan canon from image-grounded assistant text. Ordinary
+      // automatic session summaries are also skipped for image turns.
+      if (!screenshot && !attachment) {
+        queueAutomaticMemory(conversationId,user.id,assistant.id,!!liveFrame);
+        if (!liveFrame) queueSessionMemory(conversationId);
       }
     } catch (error) {
       if (progressiveFeed && voiceFeed.current === progressiveFeed) stopSpeech();
