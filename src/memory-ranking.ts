@@ -38,6 +38,25 @@ export function rankMemories<T extends RankableMemory>(
 }
 
 
+
+/**
+ * Legacy auto-extracted snapshots can still exist in the user's SQLite facts.
+ * Retain them on disk for historical recall, but do not present a weeks-old
+ * test/bug/session toggle as the owner's CURRENT activity. Nothing is deleted.
+ */
+export function filterStaleActivities<T extends RankableMemory>(
+  facts: T[], query: string, nowSeconds = Date.now()/1000
+): T[] {
+  const historical = /\b(?:last (?:week|month|year)|previously|back then|what was i|what did i|in (?:20\d\d)|remember when|used to|old (?:tasks|projects))\b/i.test(query);
+  if (historical) return facts.slice();
+  return facts.filter(f=>{
+    if ((f.importance ?? 50)>=90) return true; // The owner chose to pin it.
+    const age = nowSeconds-f.updatedAt;
+    if (!Number.isFinite(age) || age<=7*24*60*60) return true;
+    return !/\b(?:is|was|has|had|wants to|plans to)\s+(?:(?:currently|now|recently)\s+)?(?:testing|debugging|troubleshooting|checking|fixing|experimenting|trying|working on fixing|enabled|disabled|updated)\b/i.test(f.fact);
+  });
+}
+
 /** Owner-pinned facts are deliberately always-on core context, not merely
  * another similarity hint. Reserve one or two slots; leave the rest for
  * relevant semantic/lexical memories.
