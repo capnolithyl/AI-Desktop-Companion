@@ -28,6 +28,7 @@ export const SLASH_HELP: readonly SlashHelpItem[] = [
   { usage: "/ollama <url>", description: "Update the local Ollama endpoint", insert: "/ollama " },
   { usage: "/searxng <url>", description: "Update the local web search endpoint", insert: "/searxng " },
   { usage: "/internet", description: "Open SearXNG and cache settings", insert: "/internet" },
+  { usage: "/notion", description: "Connect, choose and sync Notion pages", insert: "/notion" },
   { usage: "/settings", description: "Open settings", insert: "/settings" },
   { usage: "/appearance", description: "Open visual settings", insert: "/appearance" },
   { usage: "/prompt", description: "Edit the system prompt in settings", insert: "/prompt" },
