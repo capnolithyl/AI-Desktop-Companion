@@ -1010,6 +1010,13 @@ export default function App() {
     switch (name) {
       case "help": setScreen("help"); return;
       case "vision": void openCapturePicker(); return;
+      case "live": {
+        const choice=argument.toLowerCase().trim();
+        if (choice==="on") void setLiveVisionEnabled(true);
+        else if (choice==="off") void setLiveVisionEnabled(false);
+        else setFeedback("Use /live on or /live off. Live Vision resets to OFF whenever Mikan restarts.");
+        return;
+      }
       case "attach": uploadRef.current?.click(); return;
       case "capabilities":
       case "features": setScreen("capabilities"); void checkCapabilities(); return;
