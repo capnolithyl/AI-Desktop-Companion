@@ -43,10 +43,11 @@ import { relevantCapabilities, selfKnowledgeContext, type RuntimeReadiness, type
 import { loadSelfReferencePassages } from "./self-knowledge-library";
 import { visionQuestion, visionContext, type ScreenMonitor, type ScreenCapture, type VisionModelStatus } from "./screen-vision";
 import {
-  LIVE_VISION_INTERVAL_SECONDS, LIVE_VISION_OFF,
+  LIVE_VISION_STATUS_INTERVAL_SECONDS, LIVE_VISION_OFF,
   frameIsRecent, shouldAttachLiveFrame, liveVisionContext, allowLiveSlash,
   type LiveVisionFrame, type LiveVisionStatus
 } from "./live-vision";
+import { CAPTURE_INTERVAL_MIN,CAPTURE_INTERVAL_MAX,ANALYSIS_POLICY,type RegionChoice } from "./capture-region";
 import { attachmentQuestion, attachmentPromptText, loadChatAttachment, type PendingAttachment, type ExtractedDocument } from "./chat-attachments";
 
 type Screen = "compact" | "log" | "settings" | "search" | "page" | "personality" | "help" | "memory" | "capabilities";
@@ -251,6 +252,7 @@ export default function App() {
   const [liveVision, setLiveVision] = useState<LiveVisionStatus>(LIVE_VISION_OFF);
   const [liveVisionBusy, setLiveVisionBusy] = useState(false);
   const [liveVisionError, setLiveVisionError] = useState<string | null>(null);
+  const [regionSelectBusy,setRegionSelectBusy]=useState(false);
   const [voiceState, setVoiceState] = useState<"idle" | "synthesizing" | "playing">("idle");
   const [voiceError, setVoiceError] = useState<string | null>(null);
   const [voiceHealth, setVoiceHealth] = useState<VoiceHealth | null>(null);
@@ -473,7 +475,9 @@ export default function App() {
         invoke<VisionModelStatus>("vision_model_status", {endpoint:settings.endpoint,model:settings.model})
       ]);
       setScreens(monitors);
-      setSelectedScreen(monitors.find(monitor=>monitor.primary)?.index ?? 0);
+      setSelectedScreen(liveVision.monitorIndex
+        ?? settings.visionRegion?.monitorIndex
+        ?? monitors.find(monitor=>monitor.primary)?.index ?? 0);
       setVisionModel(modelStatus);
       if (!modelStatus.supportsVision) {
         setCaptureError(`The selected model (${settings.model}) cannot process images. Pick a vision-capable Ollama model first.`);
@@ -489,7 +493,9 @@ export default function App() {
     setCaptureBusy(true);
     setCaptureError(null);
     try {
-      const image = await invoke<ScreenCapture>("vision_capture",{monitorIndex:selectedScreen});
+      const region=settings.visionRegion?.monitorIndex===selectedScreen
+        ? settings.visionRegion.region:null;
+      const image = await invoke<ScreenCapture>("vision_capture",{monitorIndex:selectedScreen,region});
       setPendingScreenshot(image);
       setPendingAttachment(null);
       setAttachmentError(null);
@@ -499,6 +505,23 @@ export default function App() {
     } finally {
       setCaptureBusy(false);
     }
+  };
+  const selectCaptureRegion=async(monitorIndex:number)=>{
+    if(regionSelectBusy||captureBusy)return;
+    setRegionSelectBusy(true);
+    setCaptureError(null);
+    try {
+      await invoke("vision_region_open",{monitorIndex});
+    } catch(error){
+      const message=errorText(error);
+      setCaptureError(message);
+      setLiveVisionError(message);
+    } finally {setRegionSelectBusy(false);}
+  };
+  const clearCaptureRegion=()=>{
+    const updated={...settings,visionRegion:null};
+    setSettings(updated);saveSettings(updated);
+    setDraft(current=>({...current,visionRegion:null}));
   };
   /** Session-only owner consent. A native thread captures while Mikan is in
    * the system tray; no images enter Ollama until a LOCAL user chat turn. */
@@ -515,16 +538,24 @@ export default function App() {
         if (!capability.supportsVision) {
           throw new Error("The selected Ollama model cannot see images. Switch to a vision-capable model.");
         }
-        const index = monitorIndex ?? monitors.find(m=>m.primary)?.index ?? monitors[0]?.index;
+        const index = monitorIndex
+          ?? (settings.visionRegion &&
+              monitors.some(m=>m.index===settings.visionRegion?.monitorIndex)
+                ? settings.visionRegion.monitorIndex:null)
+          ?? monitors.find(m=>m.primary)?.index ?? monitors[0]?.index;
         if(index===undefined)throw new Error("No displays found");
+        const region=settings.visionRegion?.monitorIndex===index
+          ? settings.visionRegion.region:null;
         const status = await invoke<LiveVisionStatus>("vision_live_set",{
-          enabled:true,monitorIndex:index
+          enabled:true,monitorIndex:index,
+          intervalSeconds:settings.visionCaptureIntervalSeconds,region
         });
         setLiveVision(status);
         setSelectedScreen(index);
       } else {
         const status = await invoke<LiveVisionStatus>("vision_live_set",{
-          enabled:false,monitorIndex:null
+          enabled:false,monitorIndex:null,
+          intervalSeconds:settings.visionCaptureIntervalSeconds,region:null
         });
         setLiveVision(status);
       }
@@ -548,7 +579,7 @@ export default function App() {
           setLiveVision(status);
           if(status.lastCaptureAtMs && !status.error) setLiveVisionError(null);
         }).catch(error=>setLiveVisionError(errorText(error)));
-    },LIVE_VISION_INTERVAL_SECONDS*1000);
+    },LIVE_VISION_STATUS_INTERVAL_SECONDS*1000);
     return ()=>window.clearInterval(handle);
   },[liveVision.enabled]);
   const refreshAdvancedMemoryStatus = () => {
