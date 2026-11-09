@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { Message } from "./storage";
-import { prioritizeCoreMemories } from "./memory-ranking";
+import { prioritizeCoreMemories, filterStaleActivities } from "./memory-ranking";
 import { memoryBudget, type MemoryBudget, type SessionSummary } from "./memory-budget";
 import type { SessionCandidate } from "./session-memory";
 import type { ArchiveMemoryHit } from "./archive-memory";
@@ -113,7 +113,7 @@ export function prepareMemoryContext(
   budget: MemoryBudget = memoryBudget(null)
 ): {text: string; ids: number[]} {
   if (!facts.length) return {text:"",ids:[]};
-  const ranked = prioritizeCoreMemories(facts, query, semanticIds, budget.maxFacts);
+  const ranked = prioritizeCoreMemories(filterStaleActivities(facts,query), query, semanticIds, budget.maxFacts);
   const selected: UserFact[] = [];
   let length = 0;
   for (const item of ranked) {
