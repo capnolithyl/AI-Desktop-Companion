@@ -12,7 +12,7 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { register, unregister } from "@tauri-apps/plugin-global-shortcut";
 import {
-  ArrowLeft, ArrowUp, Brain, Camera, Cat, Check, Clock3, Copy, FileText, History, Paperclip,
+  ArrowLeft, ArrowUp, Brain, Camera, Cat, Check, Clock3, Copy, Eye, EyeOff, FileText, History, Paperclip,
   BookOpen, ExternalLink, HardDrive, LoaderCircle, MessageCircle, RotateCw, Search, Settings2, SlidersHorizontal, Sparkles, Square, SquarePen, Volume2, X
 } from "lucide-react";
 import {
@@ -42,6 +42,11 @@ import { CapabilitiesPanel } from "./CapabilitiesPanel";
 import { relevantCapabilities, selfKnowledgeContext, type RuntimeReadiness, type RuntimeDependency } from "./self-knowledge";
 import { loadSelfReferencePassages } from "./self-knowledge-library";
 import { visionQuestion, visionContext, type ScreenMonitor, type ScreenCapture, type VisionModelStatus } from "./screen-vision";
+import {
+  LIVE_VISION_INTERVAL_SECONDS, LIVE_VISION_OFF,
+  frameIsRecent, shouldAttachLiveFrame, liveVisionContext,
+  type LiveVisionFrame, type LiveVisionStatus
+} from "./live-vision";
 import { attachmentQuestion, attachmentPromptText, loadChatAttachment, type PendingAttachment, type ExtractedDocument } from "./chat-attachments";
 
 type Screen = "compact" | "log" | "settings" | "search" | "page" | "personality" | "help" | "memory" | "capabilities";
@@ -242,6 +247,9 @@ export default function App() {
   const [captureBusy, setCaptureBusy] = useState(false);
   const [captureError, setCaptureError] = useState<string | null>(null);
   const [visionModel, setVisionModel] = useState<VisionModelStatus | null>(null);
+  const [liveVision, setLiveVision] = useState<LiveVisionStatus>(LIVE_VISION_OFF);
+  const [liveVisionBusy, setLiveVisionBusy] = useState(false);
+  const [liveVisionError, setLiveVisionError] = useState<string | null>(null);
   const [voiceState, setVoiceState] = useState<"idle" | "synthesizing" | "playing">("idle");
   const [voiceError, setVoiceError] = useState<string | null>(null);
   const [voiceHealth, setVoiceHealth] = useState<VoiceHealth | null>(null);
@@ -491,6 +499,54 @@ export default function App() {
       setCaptureBusy(false);
     }
   };
+  /** Session-only owner consent. A native thread captures while Mikan is in
+   * the system tray; no images enter Ollama until a LOCAL user chat turn. */
+  const setLiveVisionEnabled = async (enabled:boolean, monitorIndex?:number) => {
+    if (liveVisionBusy) return;
+    setLiveVisionBusy(true);
+    setLiveVisionError(null);
+    try {
+      if (enabled) {
+        const [capability, monitors] = await Promise.all([
+          invoke<VisionModelStatus>("vision_model_status",{endpoint:settings.endpoint,model:settings.model}),
+          invoke<ScreenMonitor[]>("vision_monitors")
+        ]);
+        if (!capability.supportsVision) {
+          throw new Error("The selected Ollama model cannot see images. Switch to a vision-capable model.");
+        }
+        const index = monitorIndex ?? monitors.find(m=>m.primary)?.index ?? monitors[0]?.index;
+        if(index===undefined)throw new Error("No displays found");
+        const status = await invoke<LiveVisionStatus>("vision_live_set",{
+          enabled:true,monitorIndex:index
+        });
+        setLiveVision(status);
+        setSelectedScreen(index);
+      } else {
+        const status = await invoke<LiveVisionStatus>("vision_live_set",{
+          enabled:false,monitorIndex:null
+        });
+        setLiveVision(status);
+      }
+    } catch(error) {
+      setLiveVisionError(errorText(error));
+      // Native state remains authoritative if model checks or capture fails.
+      void invoke<LiveVisionStatus>("vision_live_status").then(setLiveVision).catch(()=>{});
+    } finally {
+      setLiveVisionBusy(false);
+    }
+  };
+  useEffect(()=>{
+    // Turning Live Vision on is never persisted across Windows app launches.
+    void invoke<LiveVisionStatus>("vision_live_status").then(setLiveVision).catch(()=>{});
+  },[]);
+  useEffect(()=>{
+    if(!liveVision.enabled)return;
+    const handle = window.setInterval(()=>{
+      void invoke<LiveVisionStatus>("vision_live_status")
+        .then(setLiveVision).catch(error=>setLiveVisionError(errorText(error)));
+    },LIVE_VISION_INTERVAL_SECONDS*1000);
+    return ()=>window.clearInterval(handle);
+  },[liveVision.enabled]);
   const refreshAdvancedMemoryStatus = () => {
     void invoke<{ready:boolean; reason?:string; provider?:string}>("memory_semantic_status")
       .then(setAdvancedMemoryStatus)
