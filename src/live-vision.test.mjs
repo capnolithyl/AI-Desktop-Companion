@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
-  LIVE_VISION_OFF,LIVE_VISION_INTERVAL_SECONDS,frameIsRecent,
+  LIVE_VISION_OFF,LIVE_VISION_STATUS_INTERVAL_SECONDS,frameIsRecent,
   shouldAttachLiveFrame,liveVisionContext,liveVisionUnavailableContext,allowLiveSlash
 } from "./live-vision.ts";
 
