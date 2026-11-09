@@ -71,6 +71,15 @@ export const CAPABILITIES: readonly Capability[] = [
     slashCommands:["read"]
   },
   {
+    id:"notion-knowledge",label:"Notion personal knowledge library (experimental)",category:"Knowledge",
+    description:"Connect a private read-only Notion integration in Settings, choose shared pages or all pages available to the integration, and sync a local searchable text index. Mikan can recall chapters, notes, and creative lore by keyword for chat, separate from user memories. Sync is manual; files and images are not imported. Requires a Notion integration token and explicit page sharing. Local SQLite cache is unencrypted.",
+    stage:"experimental",runtime:"none",keywords:["notion","book","novel","manuscript","charlotte","hollow meridian","story","writing","chapters","lore","knowledge","documents","integrations"],
+    sources:["src-tauri/src/notion.rs","src/NotionPanel.tsx","src/notion-knowledge.ts","src/App.tsx"],
+    docs:["notion/README.md"],
+    commands:["notion_status","notion_connect","notion_disconnect","notion_list_pages","notion_select_page","notion_set_all","notion_sync","notion_recall"],
+    screens:["settings"],slashCommands:["notion"]
+  },
+  {
     id:"personal-facts",label:"Personal facts and automatic extraction",category:"Memory",
     description:"Owner-editable SQLite user facts, automatic evidence-grounded fact capture, deletion and pinned core memories. Facts are separate from character canon.",
     stage:"implemented",runtime:"none",keywords:["remember","fact","profile","memory","pin","forget","personal"],
@@ -199,7 +208,7 @@ export const CAPABILITIES: readonly Capability[] = [
   },
   {
     id:"external-integrations",label:"External account integrations",category:"Future",
-    description:"Planned: approved connectors for GitHub, Trello, email and calendar. This build does not have those account permissions or tools.",
+    description:"Planned: approved GitHub, Trello, email and calendar tools. Notion is available separately as an experimental read-only knowledge library; it does not grant general app control.",
     stage:"planned",runtime:"none",keywords:["github","trello","calendar","email","mcp","integration","account"],
     sources:[],docs:[],commands:[]
   }
