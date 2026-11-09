@@ -1,8 +1,9 @@
 import { DEFAULT_PERSONALITY, readPersonality, type Personality } from "./personality";
+import { captureInterval, restoreRegion, type RegionChoice } from "./capture-region";
 
 export type ChatRole = "user" | "assistant";
 export type Message = { id: string; role: ChatRole; content: string };
-export type Settings = { voice: VoiceSettings; endpoint: string; model: string; systemPrompt: string; appearance: Appearance; personality: Personality; searxngEndpoint: string; autoSearch: boolean; structuredResearch: boolean; autoManageSearch: boolean; cacheHours: number; contextWindow: number | null; autoRememberUser: boolean; autoRememberMikan: boolean };
+export type Settings = { voice: VoiceSettings; endpoint: string; model: string; systemPrompt: string; appearance: Appearance; personality: Personality; searxngEndpoint: string; autoSearch: boolean; structuredResearch: boolean; autoManageSearch: boolean; cacheHours: number; contextWindow: number | null; autoRememberUser: boolean; autoRememberMikan: boolean; visionCaptureIntervalSeconds:number; visionRegion:RegionChoice|null };
 
 export type VoiceSettings = {
   endpoint: string;
@@ -67,6 +68,8 @@ export const DEFAULT_SETTINGS: Settings = {
   contextWindow: null,
   autoRememberUser: true,
   autoRememberMikan: true,
+  visionCaptureIntervalSeconds:15,
+  visionRegion:null,
   appearance: { ...DEFAULT_APPEARANCE },
   personality: { ...DEFAULT_PERSONALITY },
   model: "qwen3.5:9b",
@@ -92,6 +95,8 @@ export function loadSettings(): Settings {
         ? Number(data.contextWindow) : null,
       autoRememberUser: data.autoRememberUser !== false,
       autoRememberMikan: data.autoRememberMikan !== false,
+      visionCaptureIntervalSeconds:captureInterval(data.visionCaptureIntervalSeconds),
+      visionRegion:restoreRegion(data.visionRegion),
       model: typeof data.model === "string" ? data.model : DEFAULT_SETTINGS.model,
       systemPrompt: typeof data.systemPrompt === "string" && data.systemPrompt !== PRIOR_DEFAULT_SYSTEM_PROMPT
         ? data.systemPrompt : DEFAULT_SETTINGS.systemPrompt,

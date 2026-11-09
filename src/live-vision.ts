@@ -1,11 +1,12 @@
 import type { ScreenCapture } from "./screen-vision.ts";
+import type { ScreenRegion } from "./capture-region.ts";
 
 /**
  * Live Vision is an opt-in SESSION feature: OFF on a fresh process launch.
- * A native worker owns one replaceable JPEG in RAM and captures every 15s.
+ * A native worker owns one replaceable JPEG in RAM and captures every 1–20s.
  * The selected local vision model only analyzes that frame on chat turns.
  */
-export const LIVE_VISION_INTERVAL_SECONDS = 15;
+export const LIVE_VISION_STATUS_INTERVAL_SECONDS = 2;
 export const LIVE_VISION_MAX_AGE_MS = 45_000;
 
 export type LiveVisionStatus = {
@@ -13,13 +14,16 @@ export type LiveVisionStatus = {
   monitorIndex:number|null;
   lastCaptureAtMs:number|null;
   error:string|null;
+  captureIntervalSeconds:number;
+  region:ScreenRegion|null;
 };
 export type LiveVisionFrame = {
   capture:ScreenCapture;
   capturedAtMs:number;
 };
 export const LIVE_VISION_OFF:LiveVisionStatus = {
-  enabled:false,monitorIndex:null,lastCaptureAtMs:null,error:null
+  enabled:false,monitorIndex:null,lastCaptureAtMs:null,error:null,
+  captureIntervalSeconds:15,region:null
 };
 
 export function shouldAttachLiveFrame(options:{

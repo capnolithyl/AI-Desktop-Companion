@@ -1,0 +1,35 @@
+html,body,#root {margin:0;width:100%;height:100%;overflow:hidden}
+.region-picker{position:fixed;inset:0;background:#1e1721;color:#fdf0ed;font-family:system-ui,sans-serif;overflow:hidden}
+.region-picker-surface{position:absolute;inset:0;touch-action:none;cursor:crosshair;user-select:none}
+.region-picker-surface>img{width:100%;height:100%;object-fit:fill;display:block;pointer-events:none}
+.region-picker-tint{position:absolute;inset:0;background:rgba(18,10,18,.18);pointer-events:none}
+.region-picker-rectangle{
+  position:absolute;outline:3px solid #ffba8b;box-shadow:0 0 0 1px #301e25,
+   inset 0 0 0 9999px rgba(255,209,158,.08),0 0 0 300vmax rgba(15,9,16,.35);
+  pointer-events:none;min-width:1px;min-height:1px
+}
+.region-picker-rectangle span{
+  position:absolute;left:0;top:0;transform:translateY(-110%);
+  padding:6px 9px;border-radius:5px;background:#372531;color:#ffe6cc;
+  font-size:12px;font-weight:700;white-space:nowrap
+}
+.region-picker-toolbar{
+  position:absolute;top:18px;right:18px;width:min(375px,calc(100vw - 36px));
+  box-sizing:border-box;padding:16px 18px;display:flex;flex-direction:column;gap:9px;
+  border:1px solid #8d6d6b;border-radius:13px;
+  background:rgba(36,26,40,.96);box-shadow:0 8px 34px rgba(0,0,0,.45);
+  z-index:4;user-select:text
+}
+.region-picker-toolbar strong{display:block;font-size:15px}
+.region-picker-toolbar small{display:block;font-size:12px;color:#c6b8c2}
+.region-picker-toolbar p{font-size:12px;line-height:1.5;margin:0;color:#ead3da}
+.region-picker-toolbar .region-picker-error{color:#ffb8b9}
+.region-picker-actions{display:flex;justify-content:flex-end;gap:8px}
+.region-picker-actions button{
+  border:1px solid #9b6f70;background:#583d4c;color:#fff4e9;
+  padding:9px 12px;border-radius:8px;font-size:12px;cursor:pointer
+}
+.region-picker-actions button:last-child{background:#e8a57f;color:#2a2027;font-weight:700}
+.region-picker-actions button:disabled{opacity:.45;cursor:not-allowed}
+.region-picker-loading{position:absolute;left:35%;top:45%;padding:14px;
+  background:rgba(30,20,34,.9);border-radius:12px}
