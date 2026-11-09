@@ -1,6 +1,14 @@
 # Mikan memory foundation (first layer)
 
-The core conversation/user memory layer shipped in v0.6.0 and manually maintained Mikan character canon in v0.7.0. **Automatic extraction is being developed on a separate PR and has not been merged or released yet.**
+The core conversation/user memory layer shipped in v0.6.0, Mikan character canon in v0.7.0, and optional automatic extraction plus SQLite FTS5/semantic memory now ship on desktop. This document includes historical design notes below; the v0.8.10 behavior is summarized here.
+
+## v0.8.10: relevance and durability
+
+- Auto-extraction labels each suggested user fact as **long_term**, **session**, or **project**. Only long_term claims enter the permanent personal-fact table; short-lived chat/testing and engineering updates remain in dated conversation history and session/project records. A source-grounded native guard also rejects obvious temporary activity mistakenly classified as lasting.
+- Existing personal facts are preserved without rewriting or deleting them. Legacy one-off testing/debugging/toggle snapshots older than a week are omitted from routine profile recall, but remain browsable and may be retrieved for explicitly historical questions. An owner-pinned entry is always eligible.
+- Unrelated personal facts are no longer inserted just to use unused prompt budget. Semantic matches, topical keyword overlap and owner-pinned facts still work. Recalled profile entries carry their saved date and are not evidence of the current status of projects.
+- The model is reminded that a preference is **not** external knowledge: liking black metal cannot establish a band's genre, nor does working in software imply every conversation should be about coding. Live Vision and style guidance avoid repeating already acknowledged screen contents and conversational topics. The assistant's warmth and expressive persona remain intact.
+- The full chat archive, sessions and memories are **never automatically deleted or purged by age**. Everything stays on the local PC unless the owner removes it. The seven-day rule changes what is **used as current context**, not what is stored.
 
 ## What is stored
 
@@ -24,7 +32,7 @@ Everything is stored on disk in a SQLite database called `mikan-memory.sqlite3` 
 
 The app restores the most recently updated conversation on startup. The current conversation's most recent 32 turns and a compact selection of explicitly saved facts are available when composing the next local LLM request.
 
-Saved memories are *reference facts*, not extra instructions or model training. On the automatic-extraction branch, some facts can now be added after completed replies, with source quote validation and explicit user switches. Mikan must not claim that it knows old chats or facts it has not actually retrieved. Old chat archives are browsable, but global semantic search across all chats is **future work**.
+Saved memories are *reference facts*, not extra instructions or model training. Optional automatic extraction after completed turns requires actual source-message evidence and can be disabled. SQLite FTS5 indexes the locally archived user-authored messages; the optional Mem0/Qdrant sidecar ranks saved user facts. Mikan must not claim it has retrieved a memory or checked a page it did not access.
 
 ## Next memory layers
 
@@ -52,7 +60,7 @@ CI should run `npm run build` and `cargo test --lib`, then the Tauri Windows bui
 On the automatic-extraction branch, Mikan's explicit stable preferences may be saved from her answers when enabled. Existing persona/system-prompt prose remains her core identity, and automatic extraction never overwrites established canon. SQLite remains local and unencrypted.
 
 
-## Automatic retention (feature branch, not released)
+## Automatic retention (desktop implementation)
 
 - Automatic **About you** and **About Mikan** switches appear separately in the Memory panel. Both default on when the feature ships. Each can be disabled independently; manual `/remember`, `/canon-set` and edit/delete always remain available.
 - After a **successfully completed** assistant response, the app queues an optional, separate `/api/chat` request to the **same locally installed Ollama model** with structured JSON output. It never sends memories to a remote service, never uses web search for extraction, and does not delay the visible reply.
@@ -62,7 +70,7 @@ On the automatic-extraction branch, Mikan's explicit stable preferences may be s
 - Auto-added records have a source-message reference and captured timestamp in `automatic_memory_sources`. The extractor tracks completed assistant-turn IDs in `automatic_memory_runs` so retrying the same turn is idempotent.
 - If the user deletes the source conversation, the saved memory itself remains until deliberately deleted, while its source-message reference is cleared. This preserves the no-automatic-deletion policy.
 - Extraction adds an extra local inference request per eligible completed turn. It runs separately from the visible reply but uses some GPU resources. If Ollama is unavailable or Mikan is fully quit immediately, the turn may not be processed; the chat transcript is still saved.
-- No global cross-chat search, semantic deduplication, sophisticated time-aware status resolution or autonomous rewriting of established facts yet. Those remain planned.
+- Search across old user-authored conversations uses SQLite FTS5 and optional semantic ranking of curated facts uses Mem0/Qdrant. Full temporal supersession of ongoing projects, rich provenance UI, and semantic deduplication remain future improvements.
 
 ### Practical smoke tests
 
