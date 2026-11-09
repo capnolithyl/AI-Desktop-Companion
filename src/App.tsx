@@ -2395,20 +2395,36 @@ export default function App() {
         </>}
         {settingsTab === "notion" && <NotionPanel/>}
         {settingsTab === "voice" && <>
-          <div className="settings-section-title"><Volume2 size={17}/> Local voice · Qwen3-TTS</div>
-          <div className="settings-note">The optional local Qwen3-TTS service starts automatically after one-time setup.
-            A saved reference keeps Mikan's voice consistent. Progressive speech can begin before an ordinary local reply finishes.</div>
-          <label className="setting-field">Local speech server
+          <div className="settings-section-title"><Volume2 size={17}/> Local voice · selectable engine</div>
+          <div className="settings-note">Qwen3-TTS remains available. Pocket TTS is a separate
+            experimental CPU voice engine using your existing recorded voice, with no ROCm changes.</div>
+          <label className="setting-field">Speech engine
+            <select value={draft.voice.engine} onChange={event => {
+              setDraft(current => ({...current, voice: {...current.voice, engine: event.target.value === "pocket" ? "pocket" : "qwen"}}));
+              setVoiceHealth(null); setVoiceReference(null); stopSpeech();
+            }}>
+              <option value="qwen">Qwen3-TTS · GPU cloned voice (existing)</option>
+              <option value="pocket">Pocket TTS · CPU cloned voice (experimental)</option>
+            </select>
+            <small>{draft.voice.engine === "pocket"
+              ? "Run scripts/setup-pocket-tts.ps1 once to audition and register Pocket TTS."
+              : "Your saved Qwen voice and AMD MIOpen workaround are unchanged."}</small>
+          </label>
+          {draft.voice.engine === "qwen" ? <label className="setting-field">Local speech server
             <input spellCheck={false} value={draft.voice.endpoint}
               onChange={event => { setDraft(current => ({ ...current, voice: { ...current.voice, endpoint: event.target.value } })); setVoiceHealth(null); setVoiceReference(null); }}
               placeholder="http://127.0.0.1:8765"/>
-            <small>HTTP localhost only. Install/start instructions: tools/tts/README.md</small>
-          </label>
+            <small>HTTP localhost only. Existing setup: tools/tts/README.md</small>
+          </label> : <div className="settings-note">Pocket uses {POCKET_VOICE_ENDPOINT}.
+            After setup, Mikan starts the CPU server on demand. Its first run downloads model weights
+            after you accept Kyutai's Hugging Face access terms.</div>}
           <div className="service-panel">
             <div><strong>{voiceHealth?.ready ? "Voice server responding" : "Local voice service"}</strong>
               <small>{voiceHealth?.ready
                 ? (voiceHealth.modelLoaded ? `Model loaded on ${voiceHealth.device || "configured device"}` : "Server online · model loads on first speech")
-                : "No connection checked yet. Register auto-start using scripts/setup-voice-autostart.ps1."}</small></div>
+                : draft.voice.engine === "pocket"
+                  ? "Pocket not checked yet. Run setup-pocket-tts.ps1 and click Check connection."
+                  : "No connection checked yet. Register auto-start using scripts/setup-voice-autostart.ps1."}</small></div>
             <div className="service-buttons">
               <button type="button" className="secondary-action" disabled={voiceChecking}
                 onClick={() => void checkVoice(voiceEndpoint(draft.voice))}>
@@ -2427,15 +2443,20 @@ export default function App() {
                 : !voiceHealth?.ready || !voiceReference ? "Voice reference status unknown"
                 : voiceReference.configured ? "Mikan's reference voice is saved" : "No reference voice saved"}</strong>
               <small>{voiceReference?.configured
-                ? `Cloning enabled with Qwen3-TTS Base · ${voiceReference.durationSeconds ?? "?"} seconds of reference audio`
+                ? (draft.voice.engine === "pocket"
+                  ? "Pocket TTS uses Mikan's existing WAV reference"
+                  : `Cloning enabled with Qwen3-TTS Base · ${voiceReference.durationSeconds ?? "?"} seconds of reference audio`)
                 : !voiceHealth?.ready || !voiceReference
-                  ? "Start the Python voice server and click Check connection to inspect or save the reference. Selecting a file does not upload it."
-                  : "VoiceDesign will be used until you save a sample and matching transcript."}</small>
+                  ? (draft.voice.engine === "pocket" ? "Run Pocket setup and click Check connection." :
+                      "Start the Python voice server and click Check connection to inspect or save the reference. Selecting a file does not upload it.")
+                  : (draft.voice.engine === "pocket" ? "Pocket needs a reference; switch to Qwen to save one." :
+                      "VoiceDesign will be used until you save a sample and matching transcript.")}</small>
             </div>
             {voiceReference?.configured && <div className="voice-reference-transcript">
               <strong>Stored transcript</strong><small>{voiceReference.transcript}</small>
             </div>}
-            <label className="setting-field voice-reference-field">Reference audio · WAV
+            {draft.voice.engine === "qwen" && <>
+          <label className="setting-field voice-reference-field">Reference audio · WAV
               <input type="file" accept=".wav,audio/wav,audio/x-wav" disabled={referenceBusy}
                 onChange={event => {
                   setReferenceFile(event.currentTarget.files?.[0] ?? null);
@@ -2460,7 +2481,10 @@ export default function App() {
               {voiceReference?.configured && <button type="button" className="secondary-action"
                 disabled={referenceBusy} onClick={() => void removeVoiceReference()}>Remove reference</button>}
             </div>
-            <small>Saving requires a running local Python server. Once saved, the WAV and transcript persist in %LOCALAPPDATA%\\Mikan\\voice.</small>
+            </>}
+          <small>{draft.voice.engine === "pocket"
+            ? "Pocket reads the same saved reference without modifying it. To replace it, switch to Qwen, save a new WAV, then rerun Pocket setup."
+            : "Saving requires the Qwen Python server. Your WAV and transcript persist in %LOCALAPPDATA%\\Mikan\\voice."}</small>
           </div>
           <label className="settings-toggle">
             <input type="checkbox" checked={draft.voice.autoSpeak}
@@ -2469,18 +2493,17 @@ export default function App() {
               <small>Off by default. You can always use the speaker icon on a reply.</small></span>
           </label>
           <label className="settings-toggle">
-            <input type="checkbox" checked={draft.voice.progressiveSpeak} disabled={!draft.voice.autoSpeak}
+            <input type="checkbox" checked={draft.voice.progressiveSpeak} disabled={!draft.voice.autoSpeak || draft.voice.engine === "pocket"}
               onChange={event => setDraft(current => ({ ...current, voice: { ...current.voice, progressiveSpeak: event.target.checked } }))}/>
-            <span><strong>Start speaking as Mikan types</strong>
-              <small>Experimental: short completed phrases during ordinary local chat.
-                Source-verified research, screenshots, attachments, and remote turns still wait for the final reply.
-                May compete with Ollama for GPU memory. Not true sample-level audio streaming.</small></span>
+            <span><strong>Start speaking as Mikan types (Qwen only)</strong>
+              <small>Pocket uses a single continuous CPU-generated reply to avoid phrase-by-phrase pauses.
+                Switch back to Qwen to test its progressive mode.</small></span>
           </label>
-          <label className="setting-field">VoiceDesign description (when no reference is saved)
+          {draft.voice.engine === "qwen" && <label className="setting-field">VoiceDesign description (when no reference is saved)
             <textarea rows={6} value={draft.voice.prompt} maxLength={650}
               onChange={event => setDraft(current => ({ ...current, voice: { ...current.voice, prompt: event.target.value } }))}/>
             <small>Once a reference is saved, Base cloning uses that voice instead of inventing a new one.</small>
-          </label>
+          </label>}
           <label className="setting-field">Playback speed · {draft.voice.speed.toFixed(2)}×
             <input type="range" min="0.8" max="1.2" step="0.05" value={draft.voice.speed}
               onChange={event => setDraft(current => ({ ...current, voice: { ...current.voice, speed: Number(event.target.value) } }))}/>
