@@ -600,6 +600,7 @@ fn hide_companion(window: tauri::WebviewWindow) {
 pub fn run() {
     tauri::Builder::default()
         .manage(ChatCancellation::default())
+        .manage(screen_vision::LiveVisionState::default())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
@@ -620,6 +621,9 @@ pub fn run() {
             screen_vision::vision_monitors,
             screen_vision::vision_capture,
             screen_vision::vision_model_status,
+            screen_vision::vision_live_status,
+            screen_vision::vision_live_set,
+            screen_vision::vision_live_latest,
             file_attachments::extract_document,
             memory::memory_list_conversations,
             memory::memory_create_conversation,
