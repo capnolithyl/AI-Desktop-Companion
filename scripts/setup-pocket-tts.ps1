@@ -3,7 +3,8 @@
 # Model/voice weights may require accepting terms at https://huggingface.co/kyutai/pocket-tts
 [CmdletBinding()]
 param(
-    [string]$TestText = "Hey there! I'm Mikan. Let's see if this voice sounds like me without making you wait forever."
+    [string]$TestText = "Hey there! I'm Mikan. Let's see if this voice sounds like me without making you wait forever.",
+    [switch]$PromptForHfToken
 )
 
 $ErrorActionPreference = "Stop"
@@ -52,12 +53,30 @@ $sample = Join-Path $root "pocket-mikan-sample.wav"
 Write-Host "Generating Pocket TTS sample with your existing saved Mikan voice..."
 Write-Host "If Hugging Face blocks the download, accept https://huggingface.co/kyutai/pocket-tts"
 Write-Host "and authenticate locally (hf auth login or a temporary HF_TOKEN environment variable)."
-$watch = [System.Diagnostics.Stopwatch]::StartNew()
-& $exe generate --text $TestText --voice $reference --language english --output-path $sample
-$exitCode = $LASTEXITCODE
-$watch.Stop()
+$previousToken = [Environment]::GetEnvironmentVariable("HF_TOKEN", "Process")
+if ($PromptForHfToken) {
+    Write-Host "Use a Hugging Face READ token from https://huggingface.co/settings/tokens"
+    Write-Host "The token is passed only to this test process and is not saved in a file."
+    $secureToken = Read-Host "Paste Hugging Face token" -AsSecureString
+    $tokenHandle = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secureToken)
+    try {
+        $env:HF_TOKEN = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($tokenHandle)
+    } finally {
+        [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($tokenHandle)
+    }
+}
+try {
+    $watch = [System.Diagnostics.Stopwatch]::StartNew()
+    & $exe generate --text $TestText --voice $reference --language english --output-path $sample
+    $exitCode = $LASTEXITCODE
+    $watch.Stop()
+} finally {
+    if ($PromptForHfToken) {
+        [Environment]::SetEnvironmentVariable("HF_TOKEN", $previousToken, "Process")
+    }
+}
 if ($exitCode -ne 0 -or -not (Test-Path -LiteralPath $sample -PathType Leaf)) {
-    throw "Pocket voice generation failed. No app setting was changed. Check Hugging Face access and rerun."
+    throw "Pocket voice generation failed. No app setting was changed. Accept the model terms on Hugging Face and retry with -PromptForHfToken if required."
 }
 $sampleHeader = [System.IO.File]::ReadAllBytes($sample)
 if ($sampleHeader.Length -lt 44 -or [System.Text.Encoding]::ASCII.GetString($sampleHeader,0,4) -ne "RIFF") {
