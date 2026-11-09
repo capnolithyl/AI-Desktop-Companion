@@ -6,7 +6,6 @@ param(
     [ValidateSet("auto", "cuda:0", "cpu")][string]$Device = "auto",
     [ValidateSet("1.7B", "0.6B")][string]$CloneSize = "1.7B",
     [switch]$DisableMiopen
-
 )
 
 $ErrorActionPreference = "Stop"
