@@ -1,3 +1,5 @@
+**v0.8.11 (experimental progressive local voice):** With auto-speak enabled, Mikan can begin synthesizing short phrases as local Ollama text streams, instead of waiting for the completed reply. The next WAV is prefetched during playback, Stop remains available, and researched/verified answers wait until finalized. The official Qwen3-TTS Base API still returns complete WAVs, not sample-level streams; latency depends on GPU. This update uses the same saved voice reference and AMD fallback settings. See [voice setup](tools/tts/README.md).
+
 # Mikan Desktop Companion
 
 **v0.8.10 (memory/context and optional managed voice):** Long-lived user facts are separated from temporary testing and project updates; irrelevant memories and weak semantic matches no longer fill chat context. Response guidance reduces repeated observations without flattening Mikan's persona. Already-working Qwen3-TTS environments can be registered once for automatic local startup and recovery when Mikan is running, with no PyTorch reinstall or GPU model loading until speech is requested. See [voice setup](tools/tts/README.md) and [memory details](MEMORY.md).
