@@ -2173,9 +2173,10 @@ export default function App() {
             onClick={() => setScreen("personality")}><SlidersHorizontal size={15}/> Open Personality controls</button>
           <div className="settings-section-title"><Eye size={17}/> Live Vision</div>
           <div className="service-panel">
-            <div><strong>Continuous screen awareness</strong>
+            <div><strong>Screen awareness</strong>
               <span className={liveVision.enabled?"service-running":"service-muted"}>
-                {liveVision.enabled?"ON · 15-second snapshots":"OFF"}
+                {liveVision.enabled
+                  ? `ON · every ${liveVision.captureIntervalSeconds}s`:"OFF"}
               </span>
             </div>
             <button type="button" className="secondary-action" disabled={liveVisionBusy}
@@ -2183,7 +2184,43 @@ export default function App() {
               {liveVision.enabled?<EyeOff size={14}/>:<Eye size={14}/>}
               {liveVision.enabled?"Turn off":"Turn on"}
             </button>
-            <small>Session-only, OFF whenever Mikan restarts. Captures your primary monitor every 15 seconds (including when hidden in the tray). Keeps only the newest JPEG in RAM; sends it to local Ollama during a desktop chat turn, never to web research or the remote browser. It may include private data or Mikan's own window. No proactive narration or continuous AI processing yet.</small>
+            <label className="vision-interval-setting">
+              <span><strong>Capture frequency</strong>
+                <output>{settings.visionCaptureIntervalSeconds} seconds</output></span>
+              <input type="range" min={CAPTURE_INTERVAL_MIN}
+                max={CAPTURE_INTERVAL_MAX} step={1}
+                aria-label="Seconds between Live Vision screenshots"
+                value={settings.visionCaptureIntervalSeconds}
+                onChange={event=>applySetting({
+                  visionCaptureIntervalSeconds:Number(event.target.value)
+                })}/>
+              <span className="vision-range-labels"><small>1s (fast)</small><small>20s (lighter)</small></span>
+            </label>
+            <div className="vision-setting-description">
+              <strong>AI analysis frequency</strong>
+              <span>{ANALYSIS_POLICY==="on-message"?"On message only":"Configured separately"}</span>
+              <small>Capturing a frame does not run Ollama. Image interpretation happens when you chat, regardless of the interval.</small>
+            </div>
+            <div className="vision-setting-description">
+              <strong>Capture area</strong>
+              <span>{settings.visionRegion
+                ? `Selected region · ${settings.visionRegion.region.width} × ${settings.visionRegion.region.height} px (display ${settings.visionRegion.monitorIndex+1})`
+                : "Full monitor"}</span>
+              <div className="vision-area-buttons">
+                <button className="secondary-action" type="button"
+                  disabled={regionSelectBusy}
+                  onClick={()=>void selectCaptureRegion(
+                    settings.visionRegion?.monitorIndex
+                      ?? liveVision.monitorIndex ?? selectedScreen)}>
+                  <Crop size={14}/> {settings.visionRegion?"Edit region":"Draw region"}
+                </button>
+                {settings.visionRegion&&<button className="secondary-action"
+                    type="button" onClick={clearCaptureRegion}>Reset to full monitor</button>}
+              </div>
+            </div>
+            {(captureError||liveVisionError)&&<small className="field-error">
+              {captureError||liveVisionError}</small>}
+            <small>Live Vision is OFF after every app restart. Cropping occurs before JPEG resizing, helping small text stay legible on ultrawide screens. The latest frame stays in RAM and goes only to local Ollama chat. Very short intervals add CPU capture work, not continuous GPU inference.</small>
           </div>
           <div className="settings-section-title"><Brain size={17}/> Advanced personal memory (Mem0 OSS)</div>
           <div className="service-panel">
