@@ -5,7 +5,11 @@ use base64::{engine::general_purpose::STANDARD, Engine as _};
 use image::{codecs::jpeg::JpegEncoder, imageops::FilterType, DynamicImage};
 use serde::Serialize;
 use serde_json::json;
-use std::{thread, time::Duration};
+use std::{
+    sync::Mutex,
+    thread,
+    time::{Duration, SystemTime, UNIX_EPOCH},
+};
 use tauri::Manager;
 use xcap::Monitor;
 
@@ -24,7 +28,7 @@ pub struct ScreenMonitor {
     primary: bool,
 }
 
-#[derive(Serialize)]
+#[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ScreenCapture {
     image_base64: String,
@@ -116,6 +120,160 @@ pub async fn vision_capture(app: tauri::AppHandle, monitor_index: usize) -> Resu
     result?
 }
 
+/// An explicitly opted-in, session-only screen watcher. The capture thread
+/// runs inside the Windows Tauri process, not inside the potentially suspended
+/// WebView, so it keeps sampling even when Mikan is hidden in the tray.
+/// Only the most recent JPEG exists in RAM, never SQLite, disk, or the web.
+const LIVE_INTERVAL: Duration = Duration::from_secs(15);
+const LIVE_MAX_FRAME_AGE_MS: u64 = 45_000;
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LiveVisionFrame {
+    capture: ScreenCapture,
+    captured_at_ms: u64,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LiveVisionStatus {
+    enabled: bool,
+    monitor_index: Option<usize>,
+    last_capture_at_ms: Option<u64>,
+    error: Option<String>,
+}
+
+#[derive(Default)]
+struct LiveVisionSession {
+    enabled: bool,
+    generation: u64,
+    monitor_index: Option<usize>,
+    last: Option<LiveVisionFrame>,
+    error: Option<String>,
+}
+
+#[derive(Default)]
+pub struct LiveVisionState(Mutex<LiveVisionSession>);
+
+fn now_ms() -> u64 {
+    SystemTime::now().duration_since(UNIX_EPOCH)
+        .unwrap_or_default().as_millis().min(u64::MAX as u128) as u64
+}
+
+fn frame_fresh(captured_at: u64, current: u64) -> bool {
+    current >= captured_at && current - captured_at <= LIVE_MAX_FRAME_AGE_MS
+}
+
+fn live_status(session: &LiveVisionSession) -> LiveVisionStatus {
+    LiveVisionStatus {
+        enabled: session.enabled,
+        monitor_index: session.monitor_index,
+        last_capture_at_ms: session.last.as_ref().map(|frame| frame.captured_at_ms),
+        error: session.error.clone(),
+    }
+}
+
+#[tauri::command]
+pub fn vision_live_status(state: tauri::State<'_, LiveVisionState>) -> Result<LiveVisionStatus, String> {
+    let session = state.0.lock().map_err(|_| "Live vision state is unavailable")?;
+    Ok(live_status(&session))
+}
+
+/// Start/stop only from the owner's explicit UI action. Never called as an
+/// LLM tool. Each start resets the previous worker generation and discards
+/// any old frame. OFF immediately destroys the cached JPEG.
+#[tauri::command]
+pub fn vision_live_set(
+    app: tauri::AppHandle,
+    enabled: bool,
+    monitor_index: Option<usize>,
+) -> Result<LiveVisionStatus, String> {
+    let selected = if enabled {
+        let monitors = Monitor::all().map_err(|e| format!("Cannot list displays: {e}"))?;
+        let index = monitor_index.ok_or("Select a monitor before enabling Live Vision")?;
+        if monitors.get(index).is_none() { return Err("Selected monitor is unavailable".into()); }
+        Some(index)
+    } else { None };
+
+    let generation;
+    let status;
+    {
+        let store = app.state::<LiveVisionState>();
+        let mut session = store.0.lock().map_err(|_| "Live vision state is unavailable")?;
+        session.generation = session.generation.wrapping_add(1);
+        generation = session.generation;
+        session.enabled = enabled;
+        session.monitor_index = selected;
+        session.last = None;
+        session.error = None;
+        status = live_status(&session);
+    }
+
+    if let Some(index) = selected {
+        let worker_app = app.clone();
+        let spawned = thread::Builder::new().name("mikan-live-vision".into()).spawn(move || {
+            loop {
+                // No sleep before the initial capture, so the first frame is
+                // normally available soon after the owner enables the toggle.
+                let should_capture = {
+                    let state = worker_app.state::<LiveVisionState>();
+                    let allowed = match state.0.lock() {
+                        Ok(value) => value.enabled && value.generation == generation &&
+                            value.monitor_index == Some(index),
+                        Err(_) => false,
+                    };
+                    allowed
+                };
+                if !should_capture { return; }
+                // Don't hide or focus Mikan every 15 seconds: doing so would
+                // visibly flicker and interrupt the user's other windows.
+                // Mikan's overlay may therefore appear inside a live frame.
+                let image = encode_capture(index);
+                {
+                    let state = worker_app.state::<LiveVisionState>();
+                    let Ok(mut session) = state.0.lock() else { return; };
+                    if !session.enabled || session.generation != generation ||
+                        session.monitor_index != Some(index) { return; }
+                    match image {
+                        Ok(capture) => {
+                            session.last = Some(LiveVisionFrame {
+                                capture, captured_at_ms: now_ms()
+                            });
+                            session.error = None;
+                        },
+                        Err(error) => {
+                            session.last = None; // Never reuse a stale frame on failure.
+                            session.error = Some(error);
+                        }
+                    }
+                }
+                thread::sleep(LIVE_INTERVAL);
+            }
+        });
+        if let Err(error) = spawned {
+            let state = app.state::<LiveVisionState>();
+            let mut session = state.0.lock().map_err(|_| "Live vision state is unavailable")?;
+            if session.generation == generation {
+                session.enabled = false;
+                session.monitor_index = None;
+                session.last = None;
+                session.error = Some(format!("Could not start screen watcher: {error}"));
+            }
+            return Err(format!("Could not start Live Vision: {error}"));
+        }
+    }
+    Ok(status)
+}
+
+#[tauri::command]
+pub fn vision_live_latest(state: tauri::State<'_, LiveVisionState>) -> Result<Option<LiveVisionFrame>, String> {
+    let session = state.0.lock().map_err(|_| "Live vision state is unavailable")?;
+    if !session.enabled { return Ok(None); }
+    Ok(session.last.as_ref()
+        .filter(|frame| frame_fresh(frame.captured_at_ms, now_ms()))
+        .cloned())
+}
+
 /// Defense in depth for the chat bridge. The model receives at most one
 /// freshly captured JPEG, attached only to the final user message.
 pub(crate) fn validate_request_images(messages: &[super::ChatMessage]) -> Result<(), String> {
@@ -156,6 +314,14 @@ mod tests {
             user(vec![image]), user(vec![])
         ]).is_err());
         assert!(validate_request_images(&[user(vec![])]).is_ok());
+    }
+    #[test]
+    fn live_screen_cache_expires_and_default_state_is_off() {
+        let state=LiveVisionSession::default();
+        assert!(!live_status(&state).enabled);
+        assert!(!frame_fresh(1_000, 50_000));
+        assert!(frame_fresh(1_000, 46_000));
+        assert!(!frame_fresh(200, 100));
     }
     #[test]
     fn allow_bounded_jpeg_on_last_user_message() {
