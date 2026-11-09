@@ -103,6 +103,53 @@ cd .\tools\tts
 & ".\.venv\Scripts\python.exe" server.py
 ```
 
+
+## Optional Pocket TTS CPU engine (Mikan v0.8.12)
+
+This is an independent **audition**, not a replacement for the working
+Qwen3-TTS/ROCm environment. Pocket TTS uses your i7 CPU and the same saved
+`%LOCALAPPDATA%\\Mikan\\voice\\mikan-reference.wav` voice clip; its
+text/audio architecture is different, so **it may not reproduce the Qwen clone
+exactly**. Hear the generated sample before switching Mikan.
+
+1. Open https://huggingface.co/kyutai/pocket-tts and accept the model access
+   conditions using your own Hugging Face account. Voice-cloning weights are
+   access-controlled. Keep your token private; do not commit it.
+2. From the Mikan repository root run:
+   ```powershell
+   powershell -NoProfile -ExecutionPolicy Bypass -File .\\scripts\\setup-pocket-tts.ps1
+   ```
+   This downloads Kyutai's pinned `v4.0.1` Windows x64 portable executable
+   (the included Rust binary is named `3.3.0`) and verifies GitHub's
+   published SHA256 before extraction to
+   `%LOCALAPPDATA%\\Mikan\\voice\\pocket-tts`. It then attempts to
+   create `%LOCALAPPDATA%\\Mikan\\voice\\pocket-mikan-sample.wav`
+   by cloning the saved voice. **First run includes model download and load.**
+   If it fails due to model access, use `hf auth login` (or provide a
+   temporary `HF_TOKEN` in the same PowerShell session) and rerun. The script
+   registers the app backend only after a successful sample is generated.
+   It does **not** touch the Qwen Python venv, torch, drivers, Ollama or persona.
+3. Play the WAV to judge timbre, then install/start Mikan v0.8.12 and choose
+   **Settings > Voice > Speech engine > Pocket TTS · CPU**. Save settings and
+   click **Check connection**. Mikan starts the registered Pocket server on
+   127.0.0.1:8766 on demand and saves its local diagnostics to
+   `%LOCALAPPDATA%\\Mikan\\voice\\pocket-service.log`.
+4. Test the voice on one normal chat reply and compare first speech, pauses,
+   clarity, and Ollama tokens/s with the previous Qwen results. Pocket generates
+   **one bounded response** (up to 800 spoken characters), bypassing Mikan's
+   Qwen-only progressive chunking; the current Tauri bridge waits for the
+   full HTTP WAV to arrive before playing it. The Pocket engine itself supports
+   streamed WAVs, but **sample-level playback is not yet exposed in Mikan**.
+
+You can switch back to **Qwen3-TTS** in the dropdown at any time. Pocket
+reference editing is deliberately disabled: switch to Qwen to update the WAV
+and rerun Pocket setup to register that voice again. The reference transcript
+is used by Qwen, not Pocket. The saved Qwen audio identity and AMD fallback
+remain intact. Pocket's sample and binary are local to your account.
+
+Upstream: https://github.com/kyutai-labs/pocket-tts,
+https://kyutai-labs.github.io/pocket-tts/CLI%20Commands/serve/.
+
 ## Progressive conversation speech (v0.8.11)
 
 With **Speak new replies automatically** enabled, **Start speaking as Mikan types**
