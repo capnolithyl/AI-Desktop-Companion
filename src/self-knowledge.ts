@@ -77,7 +77,7 @@ export const CAPABILITIES: readonly Capability[] = [
     sources:["src-tauri/src/notion.rs","src/NotionPanel.tsx","src/notion-knowledge.ts","src/App.tsx"],
     docs:["notion/README.md"],
     commands:["notion_status","notion_connect","notion_disconnect","notion_list_pages","notion_select_page","notion_set_all","notion_sync","notion_recall"],
-    screens:["settings"],slashCommands:["notion"]
+    slashCommands:["notion"]
   },
   {
     id:"personal-facts",label:"Personal facts and automatic extraction",category:"Memory",
