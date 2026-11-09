@@ -56,3 +56,15 @@ test("one pinned fact is always reserved at 4k, two at larger contexts",()=>{
  assert.ok(large.some(x=>x.id===1));
  assert.ok(large.some(x=>x.id===2));
 });
+
+test("irrelevant personal memories no longer flood generic chat prompts",()=>{
+  const stored=[
+    {id:1,fact:"The user loves black metal",updatedAt:20,importance:50},
+    {id:2,fact:"The user is a developer",updatedAt:21,importance:50},
+    {id:3,fact:"The user is writing a book",updatedAt:22,importance:50}
+  ];
+  assert.deepEqual(prioritizeCoreMemories(stored,"Good morning!",[],5),[]);
+  assert.deepEqual(prioritizeCoreMemories(stored,"What is a good black metal band?",[],5).map(x=>x.id),[1]);
+  assert.deepEqual(prioritizeCoreMemories(stored,"Can you help me with a website?",[2],5).map(x=>x.id),[2]);
+  assert.deepEqual(prioritizeCoreMemories(stored,"How are you?",[3],5).map(x=>x.id),[3]);
+});
