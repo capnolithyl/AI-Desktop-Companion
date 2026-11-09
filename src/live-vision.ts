@@ -56,3 +56,11 @@ export function liveVisionUnavailableContext(enabled:boolean):string {
     ? "Live Vision is switched ON, but no recent screenshot is available. You cannot describe the current screen until a new frame is captured."
     : "";
 }
+
+
+/** The browser relay can submit text, but must never turn on native
+ * monitoring through a slash command. Explicit local owner controls only.
+ */
+export function allowLiveSlash(text:string, remote:boolean):boolean {
+  return !remote || !/^\/live(?:\s|$)/i.test(text.trim());
+}
