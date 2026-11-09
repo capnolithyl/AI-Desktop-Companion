@@ -2,12 +2,18 @@
 # No downloads, no venv replacement, no registry or scheduled tasks.
 [CmdletBinding()]
 param(
-    [string]$ProjectRoot = (Split-Path -Parent $PSScriptRoot),
+    [string]$ProjectRoot,
     [ValidateSet("auto", "cuda:0", "cpu")][string]$Device = "auto",
     [ValidateSet("1.7B", "0.6B")][string]$CloneSize = "1.7B"
 )
 
 $ErrorActionPreference = "Stop"
+if (-not $ProjectRoot) {
+    # Script-scoped automatic variables are populated only after parameter
+    # binding in Windows PowerShell 5.1. Resolve the repository here instead.
+    if (-not $PSCommandPath) { throw "Cannot determine the setup script path. Pass -ProjectRoot explicitly." }
+    $ProjectRoot = Split-Path -Parent (Split-Path -Parent $PSCommandPath)
+}
 if (-not $env:LOCALAPPDATA) { throw "LOCALAPPDATA is required on Windows." }
 
 $python = Join-Path $ProjectRoot "tools\tts\.venv\Scripts\python.exe"
