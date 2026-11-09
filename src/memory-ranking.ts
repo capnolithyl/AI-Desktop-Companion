@@ -49,5 +49,18 @@ export function prioritizeCoreMemories<T extends RankableMemory>(
   const pinned=ranked.filter(f=>(f.importance ?? 50)>=90)
     .slice(0, maxFacts <= 3 ? 1 : 2);
   const coreIds=new Set(pinned.map(f=>f.id));
-  return [...pinned,...ranked.filter(f=>!coreIds.has(f.id))];
+  // No similarity and no topical overlap means no personal-memory injection.
+  // Unrelated stored facts were previously included just to fill the context
+  // budget; their presence made Mikan assume every conversation was about the
+  // owner's strongest interests. Pinned facts remain owner-controlled core.
+  const significant = new Set((query.toLowerCase().match(/[\p{L}\p{N}]{3,}/gu) ?? [])
+    .filter(word=>!generic.has(word)));
+  const semantic = new Set(semanticIds.slice(0,12));
+  const relevant = ranked.filter(f=>{
+    if(coreIds.has(f.id))return false;
+    if(semantic.has(f.id))return true;
+    const stored=f.fact.toLowerCase();
+    return [...significant].some(word=>stored.includes(word));
+  });
+  return [...pinned,...relevant];
 }
