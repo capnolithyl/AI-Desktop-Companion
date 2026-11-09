@@ -582,6 +582,49 @@ export default function App() {
     },LIVE_VISION_STATUS_INTERVAL_SECONDS*1000);
     return ()=>window.clearInterval(handle);
   },[liveVision.enabled]);
+  // Updating capture frequency never starts extra worker threads. The
+  // existing native watcher adjusts its own interval within ~100ms.
+  useEffect(()=>{
+    if(!liveVision.enabled)return;
+    const region=settings.visionRegion?.monitorIndex===liveVision.monitorIndex
+      ? settings.visionRegion.region:null;
+    const timer=window.setTimeout(()=>{
+      void invoke<LiveVisionStatus>("vision_live_configure",{
+        intervalSeconds:settings.visionCaptureIntervalSeconds,region
+      }).then(setLiveVision).catch(error=>setLiveVisionError(errorText(error)));
+    },180);
+    return ()=>window.clearTimeout(timer);
+  },[liveVision.enabled,liveVision.monitorIndex,
+     settings.visionCaptureIntervalSeconds,settings.visionRegion]);
+  useEffect(()=>{
+    let active=true;
+    let remove:(()=>void)|undefined;
+    void listen<RegionChoice>("mikan://region-selected",event=>{
+      if(!active)return;
+      const choice=event.payload;
+      // Geometry only. The screenshot stays inside native selector memory.
+      setSettings(current=>{
+        const updated={...current,visionRegion:choice};
+        saveSettings(updated);
+        return updated;
+      });
+      setDraft(current=>({...current,visionRegion:choice}));
+      setSelectedScreen(choice.monitorIndex);
+      setCapturePickerOpen(false);
+      setCaptureError(null);
+      setLiveVisionError(null);
+      if(liveVision.enabled && choice.monitorIndex!==liveVision.monitorIndex){
+        void invoke<LiveVisionStatus>("vision_live_set",{
+          enabled:true,monitorIndex:choice.monitorIndex,
+          intervalSeconds:settings.visionCaptureIntervalSeconds,
+          region:choice.region
+        }).then(setLiveVision).catch(error=>setLiveVisionError(errorText(error)));
+      }
+      // Same-monitor edits are picked up by vision_live_configure.
+    }).then(stop=>{remove=stop;if(!active)stop();})
+      .catch(error=>setCaptureError(errorText(error)));
+    return ()=>{active=false;remove?.();};
+  },[liveVision.enabled,liveVision.monitorIndex,settings.visionCaptureIntervalSeconds]);
   const refreshAdvancedMemoryStatus = () => {
     void invoke<{ready:boolean; reason?:string; provider?:string}>("memory_semantic_status")
       .then(setAdvancedMemoryStatus)
