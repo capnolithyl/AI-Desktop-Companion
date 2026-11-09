@@ -137,9 +137,6 @@ export async function resolveConversationQuestion(
   }
 }
 
-/** The response model always sees the current request verbatim; the rewritten
- * question is for retrieval only and never substitutes the user's actual words.
- */
 /**
  * Per-turn conversational novelty guidance, independent of the user's custom
  * persona and of web search. A small model imitates recently repeated phrases,
@@ -154,10 +151,10 @@ export function responseFocusGuidance(turns: ConversationTurn[], query: string):
     "really right should some something still than that their them there these they " +
     "think this those through very want were what when where which while with would " +
     "your yours yourself").split(" "));
-  const queryWords = new Set(query.toLowerCase().match(/[\\p{L}\\p{N}]{5,}/gu)??[]);
+  const queryWords = new Set(query.toLowerCase().match(/[\p{L}\p{N}]{5,}/gu)??[]);
   const count = new Map<string,number>();
   for(const reply of recent) {
-    const words = new Set((reply.match(/[\\p{L}\\p{N}]{5,}/gu)??[])
+    const words = new Set((reply.match(/[\p{L}\p{N}]{5,}/gu)??[])
       .filter(w=>!stop.has(w) && !queryWords.has(w)));
     for(const word of words)count.set(word,(count.get(word)??0)+1);
   }
@@ -171,7 +168,7 @@ export function responseFocusGuidance(turns: ConversationTurn[], query: string):
     "You may be affectionate, witty and theatrical when it suits the moment. Vary delivery: a brief direct reply can feel more alive than repeated ear/tail stage directions.",
     "When asked if you can open a site, access a tool, or perform an action, give a direct truthful capability/result answer before any banter. Never imply an access check occurred unless it actually did.",
     stale.length ? "Already brought up repeatedly in the last few assistant replies, so do not reintroduce unless the owner is discussing them: "+stale.join(", ")+".":""
-  ].filter(Boolean).join("\\n");
+  ].filter(Boolean).join("\n");
 }
 
 export function contextGuidance(
