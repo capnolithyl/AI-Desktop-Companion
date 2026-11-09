@@ -63,7 +63,7 @@ pub async fn vision_region_open(app:tauri::AppHandle,monitor_index:usize)->Resul
         .title("Mikan · Select capture region")
         .decorations(false).transparent(false)
         .always_on_top(true).skip_taskbar(true)
-        .resizable(false).inner_size(800.,600.).build();
+        .resizable(false).visible(false).inner_size(800.,600.).build();
     let picker=match built {
         Ok(w)=>w,
         Err(e)=>{
@@ -78,6 +78,7 @@ pub async fn vision_region_open(app:tauri::AppHandle,monitor_index:usize)->Resul
         let _=picker.close();
         return Err(format!("Cannot position region picker: {e}"));
     }
+    picker.show().map_err(|e|format!("Cannot show region selector: {e}"))?;
     let _=picker.set_focus();
     Ok(())
 }
