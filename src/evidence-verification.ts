@@ -84,12 +84,14 @@ export function verifyResearchAnswer(
   let rejected = 0, checked = 0;
   for (const part of segments(answer)) {
     const refs = citations(part);
-    if (!factualClaim(part)) {
-      // Model apologies or conversational flourishes are harmless, but they
-      // shouldn't become the only "verified" output.
-      if (!refs.length) accepted.push(part);
+    if (!factualClaim(part) && !refs.length) {
+      // Conversational language is not itself a researched claim.
+      accepted.push(part);
       continue;
     }
+    // A cited definition is also a claim. The previous keyword-only test
+    // silently dropped ordinary explanations ("X is an AI assistant") even
+    // when a valid numbered source was present.
     checked++;
     const valid = refs.filter(n => n >= 1 && n <= results.length)
       .map(n => results[n-1]).filter(Boolean);
