@@ -1477,6 +1477,7 @@ export default function App() {
     let accumulated = "";
     let unlisten: UnlistenFn | null = null;
     let unlistenActivity: UnlistenFn | null = null;
+    let progressiveFeed: ProgressiveSpeechFeed | null = null;
 
     try {
       await persistMessage(user);
@@ -1544,10 +1545,17 @@ export default function App() {
       unlistenActivity = await listen<Activity>("mikan://activity", event => {
         if (event.payload.requestId === requestId) setActivity(event.payload.text);
       });
+      if (settings.voice.autoSpeak && settings.voice.progressiveSpeak &&
+          remoteText === undefined && !withSearch && !attachment && !screenshot &&
+          !liveFrame && !turn.verifyWebEvidence && researchPlan.mode === "chat") {
+        progressiveFeed = new ProgressiveSpeechFeed();
+        void playSpeechChunks(progressiveFeed, settings.voice, progressiveFeed);
+      }
       unlisten = await listen<ChatChunk>("mikan://chat", event => {
         if (event.payload.requestId !== requestId || !event.payload.content) return;
         if (firstTokenMs == null) firstTokenMs = performance.now() - started;
         accumulated += event.payload.content;
+        progressiveFeed?.append(event.payload.content);
         // Source-bearing drafts remain private until the evidence check finishes.
         // Streaming an unverified invented release date is misleading.
         const researchAnswer = turn.verifyWebEvidence;
@@ -1626,8 +1634,19 @@ export default function App() {
         queueAutomaticMemory(conversationId,user.id,assistant.id,!!liveFrame);
         if (!liveFrame) queueSessionMemory(conversationId);
       }
-      if (settings.voice.autoSpeak && remoteText === undefined) void speak(finalText);
+      if (settings.voice.autoSpeak && remoteText === undefined) {
+        if (progressiveFeed) {
+          // Respect an explicit Stop speech click: do not restart an aborted feed.
+          if (voiceFeed.current === progressiveFeed && !progressiveFeed.finish(finalText)) {
+            stopSpeech();
+            void speak(finalText);
+          }
+        } else {
+          void speak(finalText);
+        }
+      }
     } catch (error) {
+      if (progressiveFeed && voiceFeed.current === progressiveFeed) stopSpeech();
       const message = errorText(error);
       const stopped = message === "Generation stopped" || stopRequested.current;
       const assistant: LogMessage = {
@@ -2369,8 +2388,8 @@ export default function App() {
         {settingsTab === "notion" && <NotionPanel/>}
         {settingsTab === "voice" && <>
           <div className="settings-section-title"><Volume2 size={17}/> Local voice · Qwen3-TTS</div>
-          <div className="settings-note">First version requires running the optional Python service from tools/tts.
-            Save one voice sample to keep Mikan recognizable. Without a reference, VoiceDesign generates a different possible speaker each time.</div>
+          <div className="settings-note">The optional local Qwen3-TTS service starts automatically after one-time setup.
+            A saved reference keeps Mikan's voice consistent. Progressive speech can begin before an ordinary local reply finishes.</div>
           <label className="setting-field">Local speech server
             <input spellCheck={false} value={draft.voice.endpoint}
               onChange={event => { setDraft(current => ({ ...current, voice: { ...current.voice, endpoint: event.target.value } })); setVoiceHealth(null); setVoiceReference(null); }}
@@ -2381,7 +2400,7 @@ export default function App() {
             <div><strong>{voiceHealth?.ready ? "Voice server responding" : "Local voice service"}</strong>
               <small>{voiceHealth?.ready
                 ? (voiceHealth.modelLoaded ? `Model loaded on ${voiceHealth.device || "configured device"}` : "Server online · model loads on first speech")
-                : "No connection checked yet. Starting the server is manual in this prototype."}</small></div>
+                : "No connection checked yet. Register auto-start using scripts/setup-voice-autostart.ps1."}</small></div>
             <div className="service-buttons">
               <button type="button" className="secondary-action" disabled={voiceChecking}
                 onClick={() => void checkVoice(draft.voice.endpoint)}>
@@ -2440,6 +2459,14 @@ export default function App() {
               onChange={event => setDraft(current => ({ ...current, voice: { ...current.voice, autoSpeak: event.target.checked } }))}/>
             <span><strong>Speak new replies automatically</strong>
               <small>Off by default. You can always use the speaker icon on a reply.</small></span>
+          </label>
+          <label className="settings-toggle">
+            <input type="checkbox" checked={draft.voice.progressiveSpeak} disabled={!draft.voice.autoSpeak}
+              onChange={event => setDraft(current => ({ ...current, voice: { ...current.voice, progressiveSpeak: event.target.checked } }))}/>
+            <span><strong>Start speaking as Mikan types</strong>
+              <small>Experimental: short completed phrases during ordinary local chat.
+                Source-verified research, screenshots, attachments, and remote turns still wait for the final reply.
+                May compete with Ollama for GPU memory. Not true sample-level audio streaming.</small></span>
           </label>
           <label className="setting-field">VoiceDesign description (when no reference is saved)
             <textarea rows={6} value={draft.voice.prompt} maxLength={650}
