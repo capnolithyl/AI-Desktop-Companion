@@ -1285,11 +1285,10 @@ export default function App() {
     // Decide once: internal capability/personal/chat questions must NEVER
     // fall through to the Rust legacy auto-search planner. Preserve actual
     // source-backed research and deliberate web-search panel requests.
-    const turn = liveFrame ? decideDesktopTurn(text,messages,{
-      attachment:true,
-      explicitSearch:false,
-      automaticWebEnabled:false
-    }) : baseTurn;
+    // A live frame can only accompany an already-local chat turn, so keep
+    // its original self-knowledge decision. Re-routing as a generic file
+    // attachment would wrongly suppress Mikan's capability registry.
+    const turn = baseTurn;
     let researchPlan = turn.plan;
     const priorSources = turn.allowAutomaticWeb
       ? priorResearchSources(messages,text) : [];
