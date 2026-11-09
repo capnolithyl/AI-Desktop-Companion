@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { rankMemories, prioritizeCoreMemories } from "./memory-ranking.ts";
+import { rankMemories, prioritizeCoreMemories, filterStaleActivities } from "./memory-ranking.ts";
 
 const facts = [
   {id:7,fact:"The user is an experienced WordPress developer creating client sites professionally.",updatedAt:1},
@@ -67,4 +67,17 @@ test("irrelevant personal memories no longer flood generic chat prompts",()=>{
   assert.deepEqual(prioritizeCoreMemories(stored,"What is a good black metal band?",[],5).map(x=>x.id),[1]);
   assert.deepEqual(prioritizeCoreMemories(stored,"Can you help me with a website?",[2],5).map(x=>x.id),[2]);
   assert.deepEqual(prioritizeCoreMemories(stored,"How are you?",[3],5).map(x=>x.id),[3]);
+});
+
+test("old testing snapshots are retained but not treated as current facts",()=>{
+  const now=2_000_000_000;
+  const facts=[
+    {id:1,fact:"The user is testing a new feature",updatedAt:now-30*86400,importance:50},
+    {id:2,fact:"The user is working on fixing a bug",updatedAt:now-30*86400,importance:50},
+    {id:3,fact:"The user is writing a book",updatedAt:now-90*86400,importance:50},
+    {id:4,fact:"The user has enabled live vision",updatedAt:now-1*86400,importance:50}
+  ];
+  assert.deepEqual(filterStaleActivities(facts,"What's happening?",now).map(x=>x.id),[3,4]);
+  assert.deepEqual(filterStaleActivities(facts,"What was I testing last month?",now).map(x=>x.id),[1,2,3,4]);
+  assert.equal(facts.length,4,"never delete facts from the owner's archive");
 });
