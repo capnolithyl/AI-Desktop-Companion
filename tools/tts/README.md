@@ -59,6 +59,50 @@ Set `MIKAN_TTS_DEVICE=cpu` or `MIKAN_TTS_DEVICE=cuda:0` to override the
 automatic selection. ROCm builds commonly use PyTorch's `cuda` interface
 for AMD GPUs. Keep Ollama's VRAM usage in mind.
 
+
+## Automatic start with Mikan (recommended)
+
+If you already got Qwen3-TTS speaking once on this Windows PC, **keep that exact
+Python environment**. Do not reinstall PyTorch or rerun the ROCm setup.
+
+1. Open PowerShell in the **Mikan repository root** (the folder containing
+   `tools/tts/.venv/Scripts/python.exe`).
+2. Run once:
+
+   ```powershell
+   powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\setup-voice-autostart.ps1
+   ```
+
+3. Quit Mikan **from the tray menu**, close any manually started
+   `python server.py` console, and reopen Mikan **v0.8.10 or newer**.
+4. Open **Settings → Voice → Check connection**. The local endpoint remains
+   `http://127.0.0.1:8765`. The first test sentence loads the model;
+   simply checking the health endpoint does not load GPU weights.
+
+The one-time script stores only absolute Python/server paths and optional
+model/device settings in `%LOCALAPPDATA%\Mikan\voice\service.json`. The
+reference recording and transcript already under the voice folder are
+**preserved**. Mikan launches the existing venv hidden when Mikan starts,
+stops only the instance she launched when quitting from the tray, and tries
+to recover if the managed server quits unexpectedly on the next voice request.
+Manually started servers are never killed or duplicated. She doesn't need
+to run at Windows login; voice comes up when you open Mikan.
+
+The launcher writes small diagnostic messages to
+`%LOCALAPPDATA%\Mikan\voice\tts-service.log` (rotated on startup above
+5 MiB). For a different voice size, register with
+`-CloneSize "0.6B"`; for a forced ROCm device, use `-Device "cuda:0"`.
+The default is auto/1.7B. **Rerun the setup script after moving your
+checkout or virtual environment.** Uninstalling Mikan does not alter your
+Python venv or saved reference.
+
+If you're still on Mikan v0.8.9, startup is manual:
+
+```powershell
+cd .\tools\tts
+& ".\.venv\Scripts\python.exe" server.py
+```
+
 ## HTTP API and limitations
 
 - The service listens only on `127.0.0.1` at port `8765` (adjust with
@@ -69,10 +113,10 @@ for AMD GPUs. Keep Ollama's VRAM usage in mind.
 - `DELETE /reference`: remove the saved reference.
 - `POST /synthesize`: JSON `text`, `voice_prompt`, `language=English`;
   returns WAV. Chooses Base or VoiceDesign automatically.
-- The service is manual-start and still generates one complete WAV per request.
+- The service can be started and recovered by Mikan after one-time registration; otherwise it remains manual-start. It still generates one complete WAV per request.
   Mikan now splits longer replies into short WAV chunks and prefetches the next
   one while playing the current one. This is not true sample-level streaming.
-  No process manager, microphone, Android support, or synchronized lip movements yet.
+  No microphone, Android support, or synchronized lip movements yet.
 - Stop in Mikan interrupts playback or discards the pending WAV, but does not
   cancel a generation already running in the Python process.
 
