@@ -476,12 +476,19 @@ pub async fn notion_sync(app: AppHandle) -> Result<NotionStatus, String> {
         };
         (all, selected)
     };
-    let roots: Vec<NotionPage> = if all {
-        list_accessible(&client, &token).await?
-    } else { selected_roots };
-    if roots.is_empty() {
+    if !all && selected_roots.is_empty() {
         return Err("Choose pages or enable 'All shared pages' before syncing".into());
     }
+    // Recheck current permissions on *every* sync. If the owner has revoked
+    // access, drop that page from the new index instead of retaining stale data.
+    let available = list_accessible(&client, &token).await?;
+    let accessible: HashSet<String> = available.iter().map(|p| p.id.clone()).collect();
+    let roots: Vec<NotionPage> = if all {
+        available
+    } else {
+        selected_roots.into_iter()
+            .filter(|page| accessible.contains(&page.id)).collect()
+    };
     let mut queue: VecDeque<NotionPage> = roots.into();
     let mut visited = HashSet::new();
     let mut cached = Vec::new();
