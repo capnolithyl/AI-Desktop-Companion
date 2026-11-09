@@ -103,6 +103,29 @@ cd .\tools\tts
 & ".\.venv\Scripts\python.exe" server.py
 ```
 
+## Progressive conversation speech (v0.8.11)
+
+With **Speak new replies automatically** enabled, **Start speaking as Mikan types**
+lets Mikan start synthesizing a short complete clause from local Ollama's text
+stream instead of waiting until the whole answer finishes. Later clauses are
+queued in order and the next WAV is generated while the previous one plays.
+Stop speech and Stop generation both cancel queued segments, though a GPU
+request already running in Python continues until it finishes.
+
+This is **not** waveform-level audio streaming. The official `Qwen3TTSModel`
+Base cloning method returns complete WAV arrays. First-audio latency depends
+on how quickly Ollama generates a speakable phrase and the local GPU generates
+that phrase. 2–5 seconds is a goal, not guaranteed on the RX 9070. The opt-in
+works for ordinary local chat; source-verified research, screenshots,
+attachments and remote-browser responses still wait for the final text.
+If stream text differs from the finalized reply, Mikan cancels speculative
+speech and plays the corrected reply instead. Generated speech still uses the
+saved reference WAV and the ROCm MIOpen workaround configured earlier.
+
+The toggle can be disabled to restore finalized-answer speech. Preloading
+and true codec-level streaming remain future investigation areas. Streaming
+may increase GPU contention while Ollama is generating.
+
 ## HTTP API and limitations
 
 - The service listens only on `127.0.0.1` at port `8765` (adjust with
