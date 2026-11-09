@@ -669,6 +669,9 @@ pub fn run() {
         ])
         .setup(|app| {
             advanced_memory::start_if_installed();
+            // Optional, previously registered local Qwen3-TTS uses the owner's
+            // existing ROCm Python environment; never installs GPU packages.
+            let _ = voice::start_if_configured();
             let show = MenuItem::with_id(app, "show", "Show / Hide Mikan", true, None::<&str>)?;
             let quit = MenuItem::with_id(app, "quit", "Quit Mikan", true, None::<&str>)?;
             let menu = Menu::with_items(app, &[&show, &quit])?;
@@ -678,7 +681,11 @@ pub fn run() {
                 .show_menu_on_left_click(false)
                 .on_menu_event(|app, event| match event.id().as_ref() {
                     "show" => toggle_window(app),
-                    "quit" => { advanced_memory::stop_if_started(); app.exit(0); },
+                    "quit" => {
+                        voice::stop_if_started();
+                        advanced_memory::stop_if_started();
+                        app.exit(0);
+                    },
                     _ => {}
                 })
                 .on_tray_icon_event(|tray, event| {
