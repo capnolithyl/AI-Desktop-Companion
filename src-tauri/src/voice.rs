@@ -90,8 +90,8 @@ pub fn start_if_configured() -> Result<bool, String> {
         let _ = writeln!(output, "Starting registered local voice service...");
         let error_output = output.try_clone().map_err(|e| e.to_string())?;
         let directory = config.server.parent().ok_or("Invalid local TTS script")?;
-        let mut command = Command::new(config.python);
-        command.arg(config.server).current_dir(directory)
+        let mut command = Command::new(&config.python);
+        command.arg(&config.server).current_dir(directory)
             .stdout(Stdio::from(output)).stderr(Stdio::from(error_output));
         if let Some(device) = config.device.filter(|v|v!="auto") {
             command.env("MIKAN_TTS_DEVICE",device);
