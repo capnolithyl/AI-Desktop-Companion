@@ -26,6 +26,10 @@ static OWN_POCKET: OnceLock<Mutex<Option<Child>>> = OnceLock::new();
 struct PocketLaunchConfig {
     executable: PathBuf,
     reference: PathBuf,
+    // Optional absolute token-file path only. Never store the token in JSON.
+    // Old v0.8.12 registration files continue working without this field.
+    #[serde(default, rename = "hfTokenPath")]
+    hf_token_path: Option<PathBuf>,
 }
 
 #[cfg(target_os = "windows")]
@@ -87,8 +91,9 @@ fn load_pocket_launcher() -> Result<Option<PocketLaunchConfig>, String> {
         || config.executable.file_name().and_then(|s| s.to_str()) != Some("pocket-tts.exe")
         || !config.reference.is_absolute() || !config.reference.is_file()
         || config.reference != root.join("mikan-reference.wav")
+        || config.hf_token_path.as_ref().is_some_and(|p| !p.is_absolute())
     {
-        return Err("Saved Pocket TTS executable or reference moved. Rerun scripts/setup-pocket-tts.ps1".into());
+        return Err("Saved Pocket TTS executable, reference, or token path is invalid. Rerun scripts/setup-pocket-tts.ps1".into());
     }
     Ok(Some(config))
 }
@@ -103,6 +108,36 @@ fn stop_owned_voice(holder: Option<&Mutex<Option<Child>>>) {
             }
         }
     }
+}
+
+/// Hugging Face's Python login writes a user-scoped token file. The standalone
+/// Rust Pocket executable can consume that same file through HF_TOKEN_PATH,
+/// but a desktop app launched from the tray/Start menu does not inherit
+/// environment variables set in the owner's temporary PowerShell session.
+/// Pass only the *path* to the Pocket child, never the token contents.
+#[cfg(target_os = "windows")]
+fn pocket_token_candidates(
+    configured: Option<PathBuf>, explicit: Option<PathBuf>,
+    hf_home: Option<PathBuf>, profile: Option<PathBuf>
+) -> Vec<PathBuf> {
+    let mut candidates = Vec::new();
+    if let Some(path) = configured { candidates.push(path); }
+    if let Some(path) = explicit { candidates.push(path); }
+    if let Some(home) = hf_home { candidates.push(home.join("token")); }
+    if let Some(profile) = profile {
+        candidates.push(profile.join(".cache").join("huggingface").join("token"));
+    }
+    candidates
+}
+
+#[cfg(target_os = "windows")]
+fn pocket_token_path(configured: Option<PathBuf>) -> Option<PathBuf> {
+    pocket_token_candidates(
+        configured,
+        std::env::var_os("HF_TOKEN_PATH").map(PathBuf::from),
+        std::env::var_os("HF_HOME").map(PathBuf::from),
+        std::env::var_os("USERPROFILE").map(PathBuf::from),
+    ).into_iter().find(|path| path.is_absolute() && path.is_file())
 }
 
 #[cfg(target_os = "windows")]
@@ -132,6 +167,9 @@ fn start_pocket_if_configured() -> Result<bool, String> {
     command.args(["serve", "--host", "127.0.0.1", "--port", "8766", "--language", "english"])
         .arg("--default-voice").arg(&config.reference).current_dir(directory)
         .stdout(Stdio::from(output)).stderr(Stdio::from(errors));
+    if let Some(path) = pocket_token_path(config.hf_token_path.clone()) {
+        command.env("HF_TOKEN_PATH", path);
+    }
     command.creation_flags(0x08000000); // CREATE_NO_WINDOW
     *owned = Some(command.spawn()
         .map_err(|e| format!("Could not start Pocket TTS CPU service: {e}"))?);
@@ -384,6 +422,22 @@ mod tests {
         assert!(service_url("https://127.0.0.1:8765", "/health").is_err());
         assert!(service_url("http://127.0.0.1:8765/other", "/health").is_err());
         assert!(service_url("http://127.0.0.1:8765/?x=1", "/health").is_err());
+    }
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn pocket_auth_candidates_prioritize_registered_path_then_python_login_cache() {
+        let config = PathBuf::from(r"C:\custom\token");
+        let explicit = PathBuf::from(r"C:\session\token");
+        let home = PathBuf::from(r"C:\hf-home");
+        let profile = PathBuf::from(r"C:\Users\Mikan");
+        assert_eq!(pocket_token_candidates(
+            Some(config.clone()), Some(explicit.clone()),
+            Some(home.clone()), Some(profile.clone())
+        ), vec![
+            config, explicit, home.join("token"),
+            profile.join(".cache").join("huggingface").join("token")
+        ]);
+        assert!(pocket_token_candidates(None,None,None,None).is_empty());
     }
     #[test]
     fn repairs_pocket_http_wav_header() {
