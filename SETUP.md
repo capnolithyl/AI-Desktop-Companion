@@ -1,6 +1,30 @@
-# Mikan Desktop Companion v0.7.0 · Windows setup
+# Mikan Desktop Companion v0.8.10 · Windows setup
 
 This is a local-first, single-PC prototype. User-specific settings and the selected character portrait remain saved locally across upgrades.
+
+## Feature setup checklist (v0.8.10)
+
+Only the desktop executable, Ollama, and an installed chat model are required
+for ordinary conversation. The optional integrations built in recent releases
+need these **one-time** steps:
+
+| Feature | Owner setup | After setup |
+| --- | --- | --- |
+| Local Ollama and Qwen3.5 | Install Ollama, pull your chosen chat/vision model | Ollama runs locally; Mikan uses it for chat |
+| SearXNG web research | Install Docker/WSL2 and [initialize SearXNG](tools/searxng/README.md) | Enable Docker login startup and Mikan's Internet auto-recovery, if wanted |
+| Advanced Mem0 memory | Python 3.11 + run `powershell -ExecutionPolicy Bypass -File .\\scripts\\setup-advanced-memory.ps1` | Mikan starts the installed Mem0 service automatically. SQLite still owns facts |
+| Qwen3-TTS speech | Keep your previously tested Python 3.12/ROCm venv, then register it once using `powershell -NoProfile -ExecutionPolicy Bypass -File .\\scripts\\setup-voice-autostart.ps1` | Mikan starts/retries the Python server; saved voice reference persists; needs desktop v0.8.10+ |
+| Notion book/reference library | [Create an internal read-only integration, share pages and sync](notion/README.md) | No extra server; cache works offline, re-sync manually for changes |
+| Live Vision | Enable explicitly using the eye button or `/live on` | Screenshots are transient, and consent resets OFF on each launch |
+| File attachments | None beyond installing a recent build | One file per turn; model vision ability needed for images |
+| Remote browser chat | Optional [Node relay + Cloudflare Access + tunnel setup](server/README.md) | Still manual-start relay; desktop and PC must stay running |
+| Microphone input | Not yet implemented | No setup available |
+
+The Notion token is saved locally using Windows DPAPI, the TTS reference is
+saved in local app data, and Mem0 needs no cloud service. The separate local
+Mem0 and TTS processes consume additional RAM; their models load on demand.
+Do not reinstall a working AMD PyTorch environment just to register startup.
+The v0.8.10 voice launcher uses the venv you already tested.
 
 ## Install
 
