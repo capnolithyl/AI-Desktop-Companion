@@ -37,7 +37,7 @@ import {
 import { MemoryPanel } from "./MemoryPanel";
 import { NotionPanel } from "./NotionPanel";
 import { isNotionTopic, notionContext, type NotionHit } from "./notion-knowledge";
-import { splitSpeechText, toSpeechText, VOICE_TEST_LINE } from "./speech";
+import { splitSpeechText, toSpeechText, VOICE_TEST_LINE, ProgressiveSpeechFeed, FIRST_SPEECH_CHARS } from "./speech";
 import { memoryBudget, sessionMemoryContext, type SessionSummary } from "./memory-budget";
 import { archiveMemoryContext, shouldSearchArchive } from "./archive-memory";
 import { sessionSummaryPrompt, mergeSessionSummary, validSessionSummaryResponse } from "./session-memory";
@@ -268,6 +268,7 @@ export default function App() {
   const voiceAudio = useRef<HTMLAudioElement | null>(null);
   const voiceUrl = useRef<string | null>(null);
   const voicePlaybackDone = useRef<(() => void) | null>(null);
+  const voiceFeed = useRef<ProgressiveSpeechFeed | null>(null);
 
   const releaseVoiceAudio = useCallback(() => {
     if (voiceAudio.current) {
@@ -287,44 +288,55 @@ export default function App() {
   }, []);
   const stopSpeech = useCallback(() => {
     voiceSerial.current += 1;
+    voiceFeed.current?.abort();
+    voiceFeed.current = null;
     releaseVoiceAudio();
     setVoiceState("idle");
   }, [releaseVoiceAudio]);
   useEffect(() => () => {
     voiceSerial.current += 1;
+    voiceFeed.current?.abort();
+    voiceFeed.current = null;
     releaseVoiceAudio();
   }, [releaseVoiceAudio]);
 
-  const speak = useCallback(async (source: string, voice: VoiceSettings = settings.voice) => {
+
+  /** Play WAV clauses as they become available. The next one is requested
+   * while the current WAV plays; Qwen3-TTS does not emit streaming PCM.
+   */
+  const playSpeechChunks = useCallback(async (
+    chunks: AsyncIterable<string>, voice: VoiceSettings, feed?: ProgressiveSpeechFeed
+  ) => {
     stopSpeech();
-    const chunks = splitSpeechText(toSpeechText(source));
-    if (!chunks.length) {
-      setVoiceError("This reply has no speakable text.");
-      return;
-    }
+    if (feed) voiceFeed.current = feed;
     const serial = voiceSerial.current;
     setVoiceError(null);
     setVoiceState("synthesizing");
-    // Generate the next short WAV while the current one plays; Python serializes GPU inference.
     const requestChunk = async (chunk: string, index: number) => {
       const started = performance.now();
       try {
         const encoded = await invoke<string>("voice_synthesize", {
           endpoint: voice.endpoint, text: chunk, voicePrompt: voice.prompt
         });
-        console.info(`[Mikan voice] chunk ${index}/${chunks.length}, ${chunk.length} chars: ${seconds(performance.now() - started)}`);
+        console.info(`[Mikan voice] chunk ${index}, ${chunk.length} chars: ${seconds(performance.now() - started)}`);
         return { encoded, error: null as string | null };
       } catch (error) {
         return { encoded: null as string | null, error: errorText(error) };
       }
     };
-    let pending = requestChunk(chunks[0], 1);
+    const iterator = chunks[Symbol.asyncIterator]();
     try {
-      for (let i = 0; i < chunks.length; i++) {
+      let index = 0;
+      const first = await iterator.next();
+      let pending = first.done ? null : requestChunk(first.value, ++index);
+      while (pending) {
         const result = await pending;
         if (serial !== voiceSerial.current) return;
         if (!result.encoded) throw new Error(result.error ?? "Voice synthesis returned no audio");
-        if (i + 1 < chunks.length) pending = requestChunk(chunks[i + 1], i + 2);
+        // Prefetch the next phrase, even if Ollama is still composing it.
+        const nextRequest = iterator.next().then(next =>
+          next.done || serial !== voiceSerial.current ? null : requestChunk(next.value, ++index)
+        );
         const bytes = Uint8Array.from(atob(result.encoded), character => character.charCodeAt(0));
         const url = URL.createObjectURL(new Blob([bytes], { type: "audio/wav" }));
         voiceUrl.current = url;
@@ -345,7 +357,8 @@ export default function App() {
         setVoiceState("playing");
         await playbackFinished;
         if (serial !== voiceSerial.current) return;
-        if (i + 1 < chunks.length) setVoiceState("synthesizing");
+        pending = await nextRequest;
+        if (pending) setVoiceState("synthesizing");
       }
       if (serial === voiceSerial.current) setVoiceState("idle");
     } catch (error) {
@@ -353,8 +366,22 @@ export default function App() {
       releaseVoiceAudio();
       setVoiceState("idle");
       setVoiceError(errorText(error));
+    } finally {
+      if (feed && voiceFeed.current === feed) voiceFeed.current = null;
     }
-  }, [releaseVoiceAudio, settings.voice, stopSpeech]);
+  }, [releaseVoiceAudio, stopSpeech]);
+
+  const speak = useCallback(async (source: string, voice: VoiceSettings = settings.voice) => {
+    const chunks = splitSpeechText(toSpeechText(source), 160, FIRST_SPEECH_CHARS);
+    if (!chunks.length) {
+      setVoiceError("This reply has no speakable text.");
+      return;
+    }
+    async function* utterances() {
+      for (const chunk of chunks) yield chunk;
+    }
+    await playSpeechChunks(utterances(), voice);
+  }, [playSpeechChunks, settings.voice]);
 
   const checkVoice = async (endpoint: string) => {
     setVoiceChecking(true);
