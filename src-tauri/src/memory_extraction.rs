@@ -153,10 +153,15 @@ fn is_temporary_episode(fact: &str, evidence: &str) -> bool {
         " recently updated ", " is currently testing ", " is now testing ",
         " is in a meeting ", " is attending a meeting ", " is experimenting with "]
         .iter().any(|part| f.contains(part));
-    let temporary_update = [" has recently ", " just updated ", " just installed ",
-        " just finished ", " is currently ", " right now ", " for now "]
+    let temporary_update = [" has recently updated ", " just updated ", " just installed ",
+        " is currently testing ", " is currently fixing ", " is currently debugging "]
         .iter().any(|part| f.contains(part));
-    dated || one_off || temporary_update
+    // A dated fact is not automatically ephemeral: a marriage, career change
+    // or long-term creative project can begin yesterday and still matter.
+    let dated_activity = dated && [" was testing ", " has been testing ", " worked on fixing ",
+        " spent the day ", " was debugging ", " was troubleshooting ", " was checking "]
+        .iter().any(|part| f.contains(part));
+    one_off || temporary_update || dated_activity
 }
 
 fn clean_user_candidate(fact: &str, evidence: &str, user: &str) -> Option<String> {
@@ -483,6 +488,7 @@ mod tests {
         assert!(!is_temporary_episode("The user is writing a book", "I'm writing a book"));
         assert!(!is_temporary_episode("The user enjoys metal and jazz", "I love metal and jazz"));
         assert!(!is_temporary_episode("The user works as a developer", "I work as a developer"));
+        assert!(!is_temporary_episode("The user got married", "I got married last weekend"));
     }
 
     #[test]
