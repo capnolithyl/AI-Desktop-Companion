@@ -7,7 +7,7 @@ Mikan can discuss your novel, character sheets, story bible, and other documents
 1. Open Mikan's **Settings → Notion** (or type **/notion**).
 2. Select **Notion integrations** to create an **internal integration** (name it Mikan).
 3. Give it **Read content** capability. Write/insert/update permissions are not needed.
-4. In Notion, open the pages you want her to read, such as **Charlotte Universe | Master Story Bible** and **Hollow Meridian: Album & Mythology Reference**. In each page's **••• → Connections**, add your Mikan integration. Sharing a parent page allows reading its accessible children; some linked databases/pages may need their own sharing.
+4. In Notion, open the pages you want her to read, such as **Charlotte Universe | Master Story Bible** and **Hollow Meridian: Album & Mythology Reference**. In each page's **••• → More → Connections → Add connections** (or **••• → Add connections**, depending on the UI), add your Mikan integration. Sharing a parent page allows reading its accessible children; some linked databases/pages may need their own sharing.
 5. Copy the integration secret from Notion into Mikan's password field and click **Connect Notion**.
 6. Toggle **All pages shared with Mikan** to index everything accessible to the integration, or leave it off and tick individual roots from the list. Then press **Sync now**.
 7. Ask Mikan, for example, "What do you think about Charlotte's development in my book?" or "How does Hollow Meridian mythology fit the story?"
