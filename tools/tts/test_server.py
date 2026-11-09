@@ -137,5 +137,41 @@ class ReferenceTests(unittest.TestCase):
             self.assertEqual(fake.prompt_calls, 2)
 
 
+
+class MiopenFallbackTests(unittest.TestCase):
+    def test_setting_default_off_and_explicit_override(self):
+        with tempfile.TemporaryDirectory() as directory:
+            with patch.dict(os.environ, {"MIKAN_TTS_DATA_DIR": directory}, clear=True):
+                self.assertFalse(server.miopen_workaround_enabled())
+                config_path = os.path.join(directory, "service.json")
+                with open(config_path, "w", encoding="utf-8") as config:
+                    json.dump({"disableMiopen": True}, config)
+                self.assertTrue(server.miopen_workaround_enabled())
+                with patch.dict(os.environ, {"MIKAN_TTS_DISABLE_MIOPEN": "0"}):
+                    self.assertFalse(server.miopen_workaround_enabled())
+                with patch.dict(os.environ, {"MIKAN_TTS_DISABLE_MIOPEN": "1"}):
+                    self.assertTrue(server.miopen_workaround_enabled())
+
+    def test_only_disables_miopen_on_hip_with_opt_in(self):
+        from types import SimpleNamespace
+        conv = SimpleNamespace(enabled=True, benchmark=True)
+        torch = SimpleNamespace(
+            version=SimpleNamespace(hip="7.2"),
+            cuda=SimpleNamespace(is_available=lambda: True),
+            backends=SimpleNamespace(cudnn=conv),
+        )
+        with patch.object(server, "miopen_workaround_enabled", return_value=False):
+            server.configure_torch_backend(torch)
+            self.assertTrue(conv.enabled)
+        with patch.object(server, "miopen_workaround_enabled", return_value=True):
+            server.configure_torch_backend(torch)
+            self.assertFalse(conv.enabled)
+            self.assertFalse(conv.benchmark)
+            conv.enabled = True
+            torch.version.hip = None
+            server.configure_torch_backend(torch)
+            self.assertTrue(conv.enabled)
+
+
 if __name__ == "__main__":
     unittest.main()
