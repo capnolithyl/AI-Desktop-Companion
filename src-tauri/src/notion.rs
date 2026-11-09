@@ -8,7 +8,6 @@ use std::{collections::{HashSet, VecDeque}, fs, path::PathBuf, time::Duration};
 use tauri::{AppHandle, Manager};
 
 const NOTION_VERSION: &str = "2025-09-03";
-const API: &str = "https://api.notion.com/v1";
 const MAX_PAGES: usize = 10_000;
 const MAX_BLOCKS: usize = 100_000;
 
@@ -462,19 +461,24 @@ pub fn notion_set_all(app: AppHandle, enabled: bool) -> Result<NotionStatus, Str
 pub async fn notion_sync(app: AppHandle) -> Result<NotionStatus, String> {
     let token = need_token(&app)?;
     let client = http()?;
-    let conn = db(&app)?;
-    let all = all_pages(&conn)?;
+    // Do not hold a SQLite connection or statement across async HTTP requests.
+    let (all, selected_roots) = {
+        let conn = db(&app)?;
+        let all = all_pages(&conn)?;
+        let selected = {
+            let mut stmt = conn.prepare("SELECT id,title,url FROM notion_roots WHERE selected=1")
+                .map_err(|e| e.to_string())?;
+            let rows = stmt.query_map([], |r| Ok(NotionPage {
+                id:r.get(0)?, title:r.get(1)?, url:r.get(2)?, selected:true,
+                last_edited:String::new(),
+            })).map_err(|e| e.to_string())?;
+            rows.collect::<Result<Vec<_>,_>>().map_err(|e| e.to_string())?
+        };
+        (all, selected)
+    };
     let roots: Vec<NotionPage> = if all {
         list_accessible(&client, &token).await?
-    } else {
-        let mut stmt = conn.prepare("SELECT id,title,url FROM notion_roots WHERE selected=1")
-            .map_err(|e| e.to_string())?;
-        stmt.query_map([], |r| Ok(NotionPage {
-            id:r.get(0)?, title:r.get(1)?, url:r.get(2)?, selected:true,
-            last_edited:String::new(),
-        })).map_err(|e| e.to_string())?
-        .collect::<Result<Vec<_>,_>>().map_err(|e| e.to_string())?
-    };
+    } else { selected_roots };
     if roots.is_empty() {
         return Err("Choose pages or enable 'All shared pages' before syncing".into());
     }
