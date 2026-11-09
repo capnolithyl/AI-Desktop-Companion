@@ -4,7 +4,7 @@ use base64::{engine::general_purpose::STANDARD, Engine as _};
 use reqwest::Url;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 #[cfg(target_os = "windows")]
 use std::{fs::{self, OpenOptions}, io::Write, net::{SocketAddr, TcpStream}, path::PathBuf, process::{Child, Command, Stdio}, sync::{Mutex, OnceLock}};
 #[cfg(target_os = "windows")]
@@ -94,6 +94,18 @@ fn load_pocket_launcher() -> Result<Option<PocketLaunchConfig>, String> {
 }
 
 #[cfg(target_os = "windows")]
+fn stop_owned_voice(holder: Option<&Mutex<Option<Child>>>) {
+    if let Some(holder) = holder {
+        if let Ok(mut owned) = holder.lock() {
+            if let Some(mut child) = owned.take() {
+                let _ = child.kill();
+                let _ = child.wait();
+            }
+        }
+    }
+}
+
+#[cfg(target_os = "windows")]
 fn start_pocket_if_configured() -> Result<bool, String> {
     let Some(config) = load_pocket_launcher()? else { return Ok(false) };
     if port_reachable(POCKET_TTS_PORT) { return Ok(false) }
@@ -178,6 +190,13 @@ async fn ensure_managed_voice(endpoint: &str) -> Result<(), String> {
     #[cfg(target_os = "windows")]
     {
         let url = service_url(endpoint,"/health")?;
+        // Release GPU VRAM when switching to the CPU voice. Likewise, stop an
+        // idle owned Pocket child when switching back. Never kill manual servers.
+        if url.port_or_known_default() == Some(POCKET_TTS_PORT) {
+            stop_owned_voice(OWN_TTS.get());
+        } else if url.port_or_known_default() == Some(DEFAULT_TTS_PORT) {
+            stop_owned_voice(OWN_POCKET.get());
+        }
         if url.port_or_known_default() == Some(POCKET_TTS_PORT) && !port_reachable(POCKET_TTS_PORT) {
             if load_pocket_launcher()?.is_none() {
                 return Err("Pocket TTS is not registered. Run scripts/setup-pocket-tts.ps1 from the repo.".into());
@@ -207,13 +226,8 @@ async fn ensure_managed_voice(endpoint: &str) -> Result<(), String> {
 /// manually started owner process on the same localhost port.
 pub fn stop_if_started() {
     #[cfg(target_os = "windows")]
-    for holder in [OWN_TTS.get(), OWN_POCKET.get()].into_iter().flatten() {
-        if let Ok(mut owned) = holder.lock() {
-            if let Some(mut child) = owned.take() {
-                let _ = child.kill();
-                let _ = child.wait();
-            }
-        }
+    for holder in [OWN_TTS.get(), OWN_POCKET.get()] {
+        stop_owned_voice(holder);
     }
 }
 
@@ -293,6 +307,7 @@ pub async fn voice_health(endpoint: String) -> Result<VoiceHealth, String> {
 #[tauri::command]
 pub async fn voice_synthesize(endpoint: String, text: String, voice_prompt: String) -> Result<String, String> {
     let pocket = is_pocket_endpoint(&endpoint)?;
+    let started = Instant::now();
     let url = service_url(&endpoint, if pocket { "/tts" } else { "/synthesize" })?;
     ensure_managed_voice(&endpoint).await?;
     let text = text.trim();
@@ -321,16 +336,33 @@ pub async fn voice_synthesize(endpoint: String, text: String, voice_prompt: Stri
         return Err("Voice server returned an oversized audio file".into());
     }
     let mut wav = Vec::new();
+    let mut first_audio_ms = None;
     while let Some(chunk) = response.chunk().await.map_err(|e| format!("Voice audio interrupted: {e}"))? {
         if wav.len() + chunk.len() > MAX_WAV_BYTES {
             return Err("Voice server returned an oversized audio file".into());
         }
         wav.extend_from_slice(&chunk);
+        if wav.len() > 44 && first_audio_ms.is_none() {
+            first_audio_ms = Some(started.elapsed().as_millis());
+        }
     }
     if wav.len() < 44 || !wav.starts_with(b"RIFF") || &wav[8..12] != b"WAVE" {
         return Err("Voice server did not return a valid WAV header".into());
     }
-    if pocket { finalize_pocket_wav(&mut wav)?; }
+    if pocket {
+        finalize_pocket_wav(&mut wav)?;
+        #[cfg(target_os = "windows")]
+        if let Some(root) = launcher_dir() {
+            if let Ok(mut log) = OpenOptions::new().create(true).append(true)
+                .open(root.join("pocket-client.log")) {
+                // Never log user text or the reference recording.
+                let _ = writeln!(log,
+                    "[tts-pocket] chars={} bytes={} first_audio_bytes_ms={} total_ms={}",
+                    text.chars().count(), wav.len(), first_audio_ms.unwrap_or(0),
+                    started.elapsed().as_millis());
+            }
+        }
+    }
     Ok(STANDARD.encode(wav))
 }
 
