@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   LIVE_VISION_OFF,LIVE_VISION_INTERVAL_SECONDS,frameIsRecent,
-  shouldAttachLiveFrame,liveVisionContext,liveVisionUnavailableContext
+  shouldAttachLiveFrame,liveVisionContext,liveVisionUnavailableContext,allowLiveSlash
 } from "./live-vision.ts";
 
 const defaultTurn={
@@ -42,4 +42,12 @@ test("model context is truthful and never quotes secret base64",()=>{
   assert.doesNotMatch(info,/PRIVATE-SCREEN-JPEG/);
   assert.match(liveVisionUnavailableContext(true),/no recent screenshot/);
   assert.equal(liveVisionUnavailableContext(false),"");
+});
+
+test("remote browser cannot toggle local native screen watcher",()=>{
+  assert.equal(allowLiveSlash("/live on",true),false);
+  assert.equal(allowLiveSlash("/live off",true),false);
+  assert.equal(allowLiveSlash(" /LIVE on",true),false);
+  assert.equal(allowLiveSlash("/live on",false),true);
+  assert.equal(allowLiveSlash("/search latest news",true),true);
 });
