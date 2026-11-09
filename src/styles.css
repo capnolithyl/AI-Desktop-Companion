@@ -784,3 +784,10 @@ button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px
   padding:3px 7px;border:1px solid #59916f;border-radius:7px;
   background:#335747;color:#e5ffed;font-size:10px;
 }
+
+
+@media (max-width: 470px) {
+  .dock-actions { gap: 2px; }
+  .dock-icon { flex-basis: 25px; width: 25px; height: 25px; }
+  .reply-title { gap: 4px; }
+}
