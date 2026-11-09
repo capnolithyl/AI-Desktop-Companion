@@ -1,6 +1,6 @@
 /** Remove formatting, citations and character stage directions from audible text. */
 export function toSpeechText(markdown: string): string {
-  const text = markdown
+  return markdown
     .replace(/```[\s\S]*?```/g, " ")
     .replace(/^`{3}[\s\S]*$/gm, " ")
     .replace(/`[^`\n]*`/g, " ")
@@ -17,11 +17,6 @@ export function toSpeechText(markdown: string): string {
     .replace(/[~#|]/g, " ")
     .replace(/\s+/g, " ")
     .trim();
-  if (text.length <= 800) return text;
-  // Keep an intelligible first passage rather than sending a multi-page reply to TTS.
-  const passage = text.slice(0, 800);
-  const boundary = Math.max(passage.lastIndexOf(". "), passage.lastIndexOf("! "), passage.lastIndexOf("? "));
-  return (boundary > 350 ? passage.slice(0, boundary + 1) : passage.trimEnd()).trim();
 }
 export const POCKET_VOICE_ENDPOINT = "http://127.0.0.1:8766";
 export function voiceEndpoint(voice: {engine: string; endpoint: string}): string {
@@ -30,7 +25,14 @@ export function voiceEndpoint(voice: {engine: string; endpoint: string}): string
 
 export const FIRST_SPEECH_CHARS = 72;
 export const SPEECH_CHUNK_CHARS = 160;
-export const MAX_SPEECH_CHARS = 800;
+// Pocket starts on a complete sentence, then uses longer passages for
+// natural prosody and overlap with the next in-flight Ollama sentence.
+export const POCKET_FIRST_SPEECH_CHARS = 180;
+export const POCKET_SPEECH_CHUNK_CHARS = 420;
+export const POCKET_FINAL_SPEECH_CHARS = 650;
+// A backstop for speculative buffering, not a limit on readback length:
+// finish() enqueues the *entire* verified final reply.
+export const MAX_SPEECH_CHARS = 8000;
 
 export const VOICE_TEST_LINE =
   "Hey there! I'm Mikan. I finally have a voice. Let's see if I can sound cute without turning into a squeaky toy.";
@@ -67,6 +69,7 @@ export function splitSpeechText(text: string, maxChars = SPEECH_CHUNK_CHARS, fir
  * synthesis and uses a shorter first phrase. It is NOT codec-level streaming.
  */
 export class ProgressiveSpeechFeed implements AsyncIterable<string> {
+  constructor(private readonly engine: "qwen" | "pocket" = "qwen") {}
   private buffer = "";
   private spoken = "";
   private rawChars = 0;
@@ -86,7 +89,9 @@ export class ProgressiveSpeechFeed implements AsyncIterable<string> {
       // Don't read partially streamed code fences aloud.
       if (this.buffer.includes("```")) break;
       const first = !this.spoken;
-      const limit = first ? FIRST_SPEECH_CHARS : SPEECH_CHUNK_CHARS;
+      const limit = this.engine === "pocket"
+        ? (first ? POCKET_FIRST_SPEECH_CHARS : POCKET_SPEECH_CHUNK_CHARS)
+        : (first ? FIRST_SPEECH_CHARS : SPEECH_CHUNK_CHARS);
       const minimum = first ? 24 : 55;
       if (this.buffer.length < minimum) break;
       const window = this.buffer.slice(0, limit + 1);
@@ -129,8 +134,10 @@ export class ProgressiveSpeechFeed implements AsyncIterable<string> {
       return false;
     }
     const remainder = finalSpeech.slice(this.spoken.length).trim();
-    for (const piece of splitSpeechText(remainder, SPEECH_CHUNK_CHARS,
-      this.spoken ? SPEECH_CHUNK_CHARS : FIRST_SPEECH_CHARS)) this.emit(piece);
+    const chunkChars = this.engine === "pocket" ? POCKET_SPEECH_CHUNK_CHARS : SPEECH_CHUNK_CHARS;
+    const firstChars = this.spoken ? chunkChars
+      : this.engine === "pocket" ? POCKET_FIRST_SPEECH_CHARS : FIRST_SPEECH_CHARS;
+    for (const piece of splitSpeechText(remainder, chunkChars, firstChars)) this.emit(piece);
     this.ended = true;
     this.notifyDone();
     return true;
