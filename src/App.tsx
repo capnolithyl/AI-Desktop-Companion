@@ -543,7 +543,10 @@ export default function App() {
     if(!liveVision.enabled)return;
     const handle = window.setInterval(()=>{
       void invoke<LiveVisionStatus>("vision_live_status")
-        .then(setLiveVision).catch(error=>setLiveVisionError(errorText(error)));
+        .then(status=>{
+          setLiveVision(status);
+          if(status.lastCaptureAtMs && !status.error) setLiveVisionError(null);
+        }).catch(error=>setLiveVisionError(errorText(error)));
     },LIVE_VISION_INTERVAL_SECONDS*1000);
     return ()=>window.clearInterval(handle);
   },[liveVision.enabled]);
@@ -1246,6 +1249,7 @@ export default function App() {
           .catch(error=>{setLiveVisionError(errorText(error));return null;})
       : null;
     const liveFrame=frameIsRecent(latest) ? latest : null;
+    if (liveFrame) setLiveVisionError(null);
     if (useLiveFrame && !liveFrame && /screen|screenshot|what can you see/i.test(text)) {
       setLiveVisionError("Live Vision is warming up or the display capture failed. Try again after the next frame.");
       return;
