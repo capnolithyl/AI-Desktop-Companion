@@ -81,16 +81,16 @@ export default function RegionPicker(){
         aria-label="Full monitor preview. Drag with the mouse to select the capture area."
         onPointerDown={start} onPointerMove={move} onPointerUp={end}
         onContextMenu={event=>event.preventDefault()}>
-      <img src={\`data:image/jpeg;base64,\${preview.capture.imageBase64}\`}
+      <img src={`data:image/jpeg;base64,${preview.capture.imageBase64}`}
         alt="" draggable={false}/>
       <div className="region-picker-tint" />
       {rectangle&&<div className="region-picker-rectangle" style={rectangle}>
-        <span>{selected?\`\${selected.width} × \${selected.height} px\`:"Drag to select"}</span>
+        <span>{selected?`${selected.width} × ${selected.height} px`:"Drag to select"}</span>
       </div>}
     </div>}
     <div className="region-picker-toolbar">
       <div><strong>Mikan · Select screen area</strong>
-        <small>{preview?\`\${preview.capture.label} · \${preview.sourceWidth} × \${preview.sourceHeight}\`
+        <small>{preview?`${preview.capture.label} · ${preview.sourceWidth} × ${preview.sourceHeight}`
           :"Preparing monitor preview…"}</small>
       </div>
       <p>Drag a rectangle around what Mikan should see. The cropped area is captured before resizing.</p>
