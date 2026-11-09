@@ -83,10 +83,28 @@ if ($sampleHeader.Length -lt 44 -or [System.Text.Encoding]::ASCII.GetString($sam
     throw "Pocket generated an invalid WAV. Nothing was registered."
 }
 
+# Record the path to a user-authorized Hugging Face login, not its token.
+# The Rust desktop launcher also checks these defaults for existing v0.8.12
+# registrations, so users do not have to regenerate their WAV.
+$tokenCandidates = @()
+if ($env:HF_TOKEN_PATH) { $tokenCandidates += $env:HF_TOKEN_PATH }
+if ($env:HF_HOME) { $tokenCandidates += (Join-Path $env:HF_HOME "token") }
+if ($env:USERPROFILE) {
+    $tokenCandidates += (Join-Path $env:USERPROFILE ".cache\\huggingface\\token")
+}
+$tokenFile = $tokenCandidates | Where-Object {
+    [System.IO.Path]::IsPathRooted($_) -and (Test-Path -LiteralPath $_ -PathType Leaf)
+} | Select-Object -First 1
+
 $config = [ordered]@{
     executable = (Resolve-Path -LiteralPath $exe).ProviderPath
     reference = (Resolve-Path -LiteralPath $reference).ProviderPath
     version = $release
+}
+if ($tokenFile) {
+    $config.hfTokenPath = (Resolve-Path -LiteralPath $tokenFile).ProviderPath
+} else {
+    Write-Warning "Pocket generated a sample but no persistent Hugging Face login was found. For automatic startup, run the Hugging Face login once; the desktop launcher will find the saved token file."
 }
 $utf8 = [System.Text.UTF8Encoding]::new($false)
 [System.IO.File]::WriteAllText((Join-Path $root "pocket-service.json"), ($config | ConvertTo-Json -Compress), $utf8)
