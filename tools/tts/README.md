@@ -104,6 +104,31 @@ cd .\tools\tts
 ```
 
 
+## Progressive Pocket conversation speech (v0.8.14)
+
+Turn on **Settings > Voice > Speak new replies automatically** and
+**Start speaking as Mikan types**. Pocket uses the first completed sentence
+(typically under 180 characters), then batches longer follow-up passages
+(typically under 420 characters) with the next passage prefetched while
+the previous WAV is playing. This works concurrently with Ollama's GPU
+token generation, because Pocket runs on CPU.
+
+The initial spoken word still must wait for Ollama to produce a complete
+sentence, plus Pocket synthesis. This is *not* waveform-level streaming:
+the Tauri bridge collects each complete WAV before playing it, and gaps
+can still happen if subsequent synthesis is slower than playback. For
+no-gap packet-level audio, we'd need a dedicated streaming PCM playback
+path (and a continuous output stream), which is a separate experiment.
+Long finalized messages are split into chunks under 900 characters,
+rather than losing all speech after an 800-character cutoff. The
+speaker button still lets you read any existing reply with the whole
+text.
+
+As before, source-verified web research, screenshots and attachments
+wait for finalized text so unverified generated claims are not spoken
+prematurely. Turn the progressive toggle off to restore completion-first
+speech if you prefer longer natural passages over responsiveness.
+
 ## Optional Pocket TTS CPU engine (Mikan v0.8.12)
 
 This is an independent **audition**, not a replacement for the working
@@ -138,10 +163,12 @@ exactly**. Hear the generated sample before switching Mikan.
    127.0.0.1:8766 on demand and saves its local diagnostics to
    `%LOCALAPPDATA%\\Mikan\\voice\\pocket-service.log`.
 4. Test the voice on one normal chat reply and compare first speech, pauses,
-   clarity, and Ollama tokens/s with the previous Qwen results. Pocket generates
-   **one bounded response** (up to 800 spoken characters), bypassing Mikan's
-   Qwen-only progressive chunking; the current Tauri bridge waits for the
-   full HTTP WAV to arrive before playing it. The Pocket engine itself supports
+   clarity, and Ollama tokens/s with the previous Qwen results. Pocket generates bounded
+   requests (up to 650 spoken characters per finalized passage) without
+   omitting the tail of long replies. With progressive speech enabled,
+   it starts with a complete early sentence, followed by longer prefetched
+   passages. The Tauri bridge still waits for each complete HTTP WAV
+   before playing it. The Pocket engine itself supports
    streamed WAVs, but **sample-level playback is not yet exposed in Mikan**.
 
 ### Automatic Pocket authentication (v0.8.13)
