@@ -320,7 +320,12 @@ pub async fn voice_synthesize(endpoint: String, text: String, voice_prompt: Stri
     }
     let request = client()?.post(url);
     let request = if pocket {
-        request.form(&[("text", text)])
+        // reqwest 0.12 without default features has no .form() API.
+        // The existing Url query-pair serializer uses identical form encoding.
+        let mut form = Url::parse("http://localhost/").map_err(|e| e.to_string())?;
+        form.query_pairs_mut().append_pair("text", text);
+        let body = form.query().unwrap_or_default().to_owned();
+        request.header(reqwest::header::CONTENT_TYPE, "application/x-www-form-urlencoded").body(body)
     } else {
         request.json(&json!({"text": text, "voice_prompt": prompt, "language": "English"}))
     };
