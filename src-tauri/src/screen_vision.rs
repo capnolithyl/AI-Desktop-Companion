@@ -3,7 +3,7 @@
  //! The frontend requires an explicit capture action and preview before sending.
 use base64::{engine::general_purpose::STANDARD, Engine as _};
 use image::{codecs::jpeg::JpegEncoder, imageops::FilterType, DynamicImage};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::{
     sync::Mutex,
@@ -17,6 +17,9 @@ const MAX_JPEG_BYTES: usize = 4 * 1024 * 1024;
 const MAX_JPEG_BASE64: usize = (MAX_JPEG_BYTES + 2) / 3 * 4;
 const MAX_WIDTH: u32 = 1600;
 const MAX_HEIGHT: u32 = 1050;
+const DEFAULT_CAPTURE_INTERVAL: u64 = 15;
+const MIN_CAPTURE_INTERVAL: u64 = 1;
+const MAX_CAPTURE_INTERVAL: u64 = 20;
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -57,6 +60,21 @@ pub fn vision_monitors() -> Result<Vec<ScreenMonitor>, String> {
     })).collect()
 }
 
+/// Physical pixel rectangle relative to the selected monitor; never desktop
+/// absolute coordinates. Cropping happens before image downscaling/JPEG encoding.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ScreenRegion {
+    pub x:u32, pub y:u32, pub width:u32, pub height:u32
+}
+
+pub(super) fn valid_region(region: ScreenRegion, monitor_width:u32, monitor_height:u32) -> bool {
+    region.width >= 48 && region.height >= 48 &&
+    region.x.checked_add(region.width).is_some_and(|x|x<=monitor_width) &&
+    region.y.checked_add(region.height).is_some_and(|y|y<=monitor_height)
+}
+fn clamp_interval(value: u64) -> u64 { value.clamp(MIN_CAPTURE_INTERVAL,MAX_CAPTURE_INTERVAL) }
+
 /// Model support comes from the installed model's actual Ollama capabilities,
 /// never guesses based on its model name.
 #[tauri::command]
@@ -78,11 +96,19 @@ pub async fn vision_model_status(endpoint: String, model: String) -> Result<Visi
     Ok(VisionModelStatus { supports_vision, model })
 }
 
-fn encode_capture(index: usize) -> Result<ScreenCapture, String> {
+pub(super) fn encode_capture(index: usize, region: Option<ScreenRegion>) -> Result<ScreenCapture, String> {
     let monitors = Monitor::all().map_err(|e| format!("Cannot list displays: {e}"))?;
     let monitor = monitors.get(index).ok_or("Selected display no longer exists")?;
     let label = monitor.friendly_name().unwrap_or_else(|_| format!("Display {}", index + 1));
-    let captured = monitor.capture_image().map_err(|e| format!("Screen capture failed: {e}"))?;
+    let mw=monitor.width().map_err(|e|e.to_string())?;
+    let mh=monitor.height().map_err(|e|e.to_string())?;
+    let captured=match region {
+        Some(rect) => {
+            if !valid_region(rect,mw,mh) {return Err("Selected region is outside the monitor or too small".into());}
+            monitor.capture_region(rect.x,rect.y,rect.width,rect.height)
+        },
+        None=>monitor.capture_image()
+    }.map_err(|e|format!("Screen capture failed: {e}"))?;
     // Scaling limits Ollama prefill memory and screenshot transfers on 16 GB VRAM.
     let image = DynamicImage::ImageRgba8(captured);
     let scaled = if image.width() > MAX_WIDTH || image.height() > MAX_HEIGHT {
@@ -103,7 +129,7 @@ fn encode_capture(index: usize) -> Result<ScreenCapture, String> {
 }
 
 #[tauri::command]
-pub async fn vision_capture(app: tauri::AppHandle, monitor_index: usize) -> Result<ScreenCapture, String> {
+pub async fn vision_capture(app: tauri::AppHandle, monitor_index: usize, region: Option<ScreenRegion>) -> Result<ScreenCapture, String> {
     // Temporarily remove Mikan's always-on-top window from the screenshot.
     // The window is restored even when capture or encoding returns an error.
     let window = app.get_webview_window("main").ok_or("Mikan's window is unavailable")?;
@@ -111,7 +137,7 @@ pub async fn vision_capture(app: tauri::AppHandle, monitor_index: usize) -> Resu
     if was_visible { window.hide().map_err(|e| format!("Could not hide overlay: {e}"))?; }
     let result = tauri::async_runtime::spawn_blocking(move || {
         thread::sleep(Duration::from_millis(280));
-        encode_capture(monitor_index)
+        encode_capture(monitor_index, region)
     }).await.map_err(|e| format!("Capture task failed: {e}"));
     if was_visible {
         let _ = window.show();
@@ -124,7 +150,6 @@ pub async fn vision_capture(app: tauri::AppHandle, monitor_index: usize) -> Resu
 /// runs inside the Windows Tauri process, not inside the potentially suspended
 /// WebView, so it keeps sampling even when Mikan is hidden in the tray.
 /// Only the most recent JPEG exists in RAM, never SQLite, disk, or the web.
-const LIVE_INTERVAL: Duration = Duration::from_secs(15);
 const LIVE_MAX_FRAME_AGE_MS: u64 = 45_000;
 
 #[derive(Clone, Serialize)]
@@ -141,17 +166,26 @@ pub struct LiveVisionStatus {
     monitor_index: Option<usize>,
     last_capture_at_ms: Option<u64>,
     error: Option<String>,
+    capture_interval_seconds: u64,
+    region: Option<ScreenRegion>,
 }
 
-#[derive(Default)]
 struct LiveVisionSession {
     enabled: bool,
     generation: u64,
     monitor_index: Option<usize>,
     last: Option<LiveVisionFrame>,
     error: Option<String>,
+    capture_interval_seconds: u64,
+    region: Option<ScreenRegion>,
 }
 
+impl Default for LiveVisionSession {
+    fn default()->Self{
+        Self{enabled:false,generation:0,monitor_index:None,last:None,error:None,
+            capture_interval_seconds:DEFAULT_CAPTURE_INTERVAL,region:None}
+    }
+}
 #[derive(Default)]
 pub struct LiveVisionState(Mutex<LiveVisionSession>);
 
@@ -170,6 +204,8 @@ fn live_status(session: &LiveVisionSession) -> LiveVisionStatus {
         monitor_index: session.monitor_index,
         last_capture_at_ms: session.last.as_ref().map(|frame| frame.captured_at_ms),
         error: session.error.clone(),
+        capture_interval_seconds:session.capture_interval_seconds,
+        region:session.region,
     }
 }
 
@@ -187,11 +223,18 @@ pub fn vision_live_set(
     app: tauri::AppHandle,
     enabled: bool,
     monitor_index: Option<usize>,
+    interval_seconds: Option<u64>,
+    region: Option<ScreenRegion>,
 ) -> Result<LiveVisionStatus, String> {
     let selected = if enabled {
         let monitors = Monitor::all().map_err(|e| format!("Cannot list displays: {e}"))?;
         let index = monitor_index.ok_or("Select a monitor before enabling Live Vision")?;
-        if monitors.get(index).is_none() { return Err("Selected monitor is unavailable".into()); }
+        let monitor=monitors.get(index).ok_or("Selected monitor is unavailable")?;
+        if let Some(rect)=region {
+            let w=monitor.width().map_err(|e|e.to_string())?;
+            let h=monitor.height().map_err(|e|e.to_string())?;
+            if !valid_region(rect,w,h) {return Err("Selected region is no longer valid for this monitor".into());}
+        }
         Some(index)
     } else { None };
 
@@ -206,6 +249,8 @@ pub fn vision_live_set(
         session.monitor_index = selected;
         session.last = None;
         session.error = None;
+        session.capture_interval_seconds=clamp_interval(interval_seconds.unwrap_or(DEFAULT_CAPTURE_INTERVAL));
+        session.region=if enabled {region} else {None};
         status = live_status(&session);
     }
 
@@ -215,25 +260,25 @@ pub fn vision_live_set(
             loop {
                 // No sleep before the initial capture, so the first frame is
                 // normally available soon after the owner enables the toggle.
-                let should_capture = {
+                let config = {
                     let state = worker_app.state::<LiveVisionState>();
-                    let allowed = match state.0.lock() {
-                        Ok(value) => value.enabled && value.generation == generation &&
-                            value.monitor_index == Some(index),
-                        Err(_) => false,
-                    };
-                    allowed
+                    let Ok(current)=state.0.lock() else{return;};
+                    if !current.enabled || current.generation!=generation ||
+                       current.monitor_index!=Some(index) {return;}
+                    (current.capture_interval_seconds,current.region)
                 };
-                if !should_capture { return; }
                 // Don't hide or focus Mikan every 15 seconds: doing so would
                 // visibly flicker and interrupt the user's other windows.
                 // Mikan's overlay may therefore appear inside a live frame.
-                let image = encode_capture(index);
+                let image = encode_capture(index,config.1);
                 {
                     let state = worker_app.state::<LiveVisionState>();
                     let Ok(mut session) = state.0.lock() else { return; };
                     if !session.enabled || session.generation != generation ||
                         session.monitor_index != Some(index) { return; }
+                    // Avoid publishing a capture based on an earlier crop if
+                    // the owner changed region during capture.
+                    if session.region!=config.1 {continue;}
                     match image {
                         Ok(capture) => {
                             session.last = Some(LiveVisionFrame {
@@ -247,7 +292,18 @@ pub fn vision_live_set(
                         }
                     }
                 }
-                thread::sleep(LIVE_INTERVAL);
+                // Check for OFF/region/interval changes at most 100ms apart.
+                // The worker never needs to wait 20 seconds just to stop.
+                let mut remaining=config.0*10;
+                while remaining>0 {
+                    thread::sleep(Duration::from_millis(100));
+                    let state=worker_app.state::<LiveVisionState>();
+                    let Ok(session)=state.0.lock() else{return;};
+                    if !session.enabled || session.generation!=generation ||
+                       session.monitor_index!=Some(index) {return;}
+                    if (session.capture_interval_seconds,session.region)!=config {break;}
+                    remaining-=1;
+                }
             }
         });
         if let Err(error) = spawned {
@@ -263,6 +319,32 @@ pub fn vision_live_set(
         }
     }
     Ok(status)
+}
+
+/// Change the sampling interval/rectangle without restarting the window
+/// worker. Any region change invalidates the last screenshot immediately.
+#[tauri::command]
+pub fn vision_live_configure(
+    state: tauri::State<'_, LiveVisionState>,
+    interval_seconds:u64,
+    region:Option<ScreenRegion>,
+)->Result<LiveVisionStatus,String>{
+    let mut session=state.0.lock().map_err(|_|"Live Vision state is unavailable")?;
+    if session.enabled && session.region != region {
+        if let Some(rect)=region {
+            let monitors=Monitor::all().map_err(|e|e.to_string())?;
+            let monitor=monitors.get(session.monitor_index.ok_or("No monitor selected")?)
+                .ok_or("Live Vision monitor is unavailable")?;
+            let w=monitor.width().map_err(|e|e.to_string())?;
+            let h=monitor.height().map_err(|e|e.to_string())?;
+            if !valid_region(rect,w,h) {return Err("Selected capture rectangle is invalid for this monitor".into());}
+        }
+    }
+    let interval=clamp_interval(interval_seconds);
+    if session.region!=region {session.last=None;}
+    session.capture_interval_seconds=interval;
+    session.region=region;
+    Ok(live_status(&session))
 }
 
 #[tauri::command]
@@ -314,6 +396,16 @@ mod tests {
             user(vec![image]), user(vec![])
         ]).is_err());
         assert!(validate_request_images(&[user(vec![])]).is_ok());
+    }
+    #[test]
+    fn region_crop_validation_and_interval_bounds() {
+        assert_eq!(clamp_interval(0),1);
+        assert_eq!(clamp_interval(2),2);
+        assert_eq!(clamp_interval(25),20);
+        assert!(valid_region(ScreenRegion{x:100,y:50,width:750,height:450},3840,1080));
+        assert!(!valid_region(ScreenRegion{x:3790,y:50,width:100,height:450},3840,1080));
+        assert!(!valid_region(ScreenRegion{x:u32::MAX,y:0,width:100,height:100},3840,1080));
+        assert!(!valid_region(ScreenRegion{x:0,y:0,width:10,height:10},3840,1080));
     }
     #[test]
     fn live_screen_cache_expires_and_default_state_is_off() {

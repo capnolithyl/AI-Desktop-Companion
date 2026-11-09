@@ -4,7 +4,7 @@
  * The CI checker detects unmapped Tauri commands, missing files and stale versions.
  * Add a feature here when adding capability, and update the matching source/docs.
  */
-export const CAPABILITY_RELEASE = "0.8.6";
+export const CAPABILITY_RELEASE = "0.8.7";
 
 export type CapabilityStage = "implemented" | "experimental" | "planned";
 export type RuntimeDependency = "none" | "ollama" | "search" | "mem0" | "voice" | "vision" | "pocket";
@@ -173,10 +173,10 @@ export const CAPABILITIES: readonly Capability[] = [
   },
   {
     id:"screen-vision",label:"Screen vision and Live Vision",category:"Vision",
-    description:"Experimental Windows screen capture supports a manual preview-and-send screenshot, plus an optional Live Vision toggle that captures the selected monitor every 15 seconds while enabled, even with Mikan in the tray. It sends only the latest fresh frame during local desktop chat, not web research or remote browser turns. No continual model inference or proactive commentary; OFF by default at each launch. Images remain in RAM only, never automatically stored in memory. Requires a vision-capable Ollama model. No mouse or keyboard control.",
-    stage:"experimental",runtime:"vision",keywords:["see","look","screen","screenshot","vision","capture","visual","game","monitor","image","eyes","live","always","watch","continuous"],
-    sources:["src-tauri/src/screen_vision.rs","src/live-vision.ts","src/screen-vision.ts","src/App.tsx"],docs:["screen_vision/README.md"],
-    commands:["vision_monitors","vision_capture","vision_model_status","vision_live_set","vision_live_status","vision_live_latest"],
+    description:"Experimental Windows screen capture supports manual preview-and-send and optional Live Vision. The owner chooses the monitor, optionally draws a rectangle over a full-screen preview, and adjusts screenshot frequency from every 1 to 20 seconds (default 15). Capture crops physical monitor pixels BEFORE image resizing, improving legibility on ultrawides. The latest image stays only in RAM; local Ollama analyzes it when the owner chats, NOT every capture. OFF by default on app launch, including in the tray. No automatic web/remote-image sharing, proactive commentary or mouse control. Requires a vision-capable local model.",
+    stage:"experimental",runtime:"vision",keywords:["see","look","screen","screenshot","vision","capture","visual","game","monitor","image","eyes","live","always","watch","continuous","interval","slider","frequency","crop","region","rectangle","ultrawide"],
+    sources:["src-tauri/src/screen_vision.rs","src-tauri/src/vision_region.rs","src/live-vision.ts","src/capture-region.ts","src/RegionPicker.tsx","src/screen-vision.ts","src/App.tsx"],docs:["screen_vision/README.md"],
+    commands:["vision_monitors","vision_capture","vision_model_status","vision_live_set","vision_live_status","vision_live_latest","vision_live_configure","vision_region_open","vision_region_preview","vision_region_complete","vision_region_cancel"],
     slashCommands:["vision","live"]
   },
   {

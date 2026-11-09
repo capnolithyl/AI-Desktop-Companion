@@ -11,6 +11,7 @@ mod advanced_memory;
 mod session_memory;
 mod voice;
 mod screen_vision;
+mod vision_region;
 mod file_attachments;
 use futures_util::{future::{AbortHandle, Abortable}, StreamExt};
 use std::{collections::HashMap, sync::Mutex};
@@ -601,6 +602,7 @@ pub fn run() {
     tauri::Builder::default()
         .manage(ChatCancellation::default())
         .manage(screen_vision::LiveVisionState::default())
+        .manage(vision_region::RegionPickerState::default())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
@@ -624,6 +626,11 @@ pub fn run() {
             screen_vision::vision_live_status,
             screen_vision::vision_live_set,
             screen_vision::vision_live_latest,
+            screen_vision::vision_live_configure,
+            vision_region::vision_region_open,
+            vision_region::vision_region_preview,
+            vision_region::vision_region_complete,
+            vision_region::vision_region_cancel,
             file_attachments::extract_document,
             memory::memory_list_conversations,
             memory::memory_create_conversation,
@@ -683,9 +690,20 @@ pub fn run() {
             Ok(())
         })
         .on_window_event(|window, event| {
-            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-                api.prevent_close();
-                let _ = window.hide();
+            if window.label()=="main" {
+                if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                    api.prevent_close();
+                    let _=window.hide();
+                }
+            } else if window.label()=="region-picker" {
+                if let tauri::WindowEvent::Destroyed = event {
+                    let state=window.app_handle().state::<vision_region::RegionPickerState>();
+                    if let Ok(mut slot)=state.0.lock(){*slot=None;}
+                    if let Some(main)=window.app_handle().get_webview_window("main") {
+                        let _=main.show();
+                        let _=main.set_focus();
+                    }
+                }
             }
         })
         .run(tauri::generate_context!())

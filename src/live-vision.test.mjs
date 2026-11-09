@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
-  LIVE_VISION_OFF,LIVE_VISION_INTERVAL_SECONDS,frameIsRecent,
+  LIVE_VISION_OFF,LIVE_VISION_STATUS_INTERVAL_SECONDS,frameIsRecent,
   shouldAttachLiveFrame,liveVisionContext,liveVisionUnavailableContext,allowLiveSlash
 } from "./live-vision.ts";
 
@@ -13,7 +13,9 @@ const defaultTurn={
 test("Live Vision is off by default and samples at a bounded interval",()=>{
   assert.equal(LIVE_VISION_OFF.enabled,false);
   assert.equal(LIVE_VISION_OFF.lastCaptureAtMs,null);
-  assert.equal(LIVE_VISION_INTERVAL_SECONDS,15);
+  assert.equal(LIVE_VISION_STATUS_INTERVAL_SECONDS,2);
+  assert.equal(LIVE_VISION_OFF.captureIntervalSeconds,15);
+  assert.equal(LIVE_VISION_OFF.region,null);
 });
 test("Live Vision is used only for consenting local chat",()=>{
   assert.equal(shouldAttachLiveFrame(defaultTurn),true);
