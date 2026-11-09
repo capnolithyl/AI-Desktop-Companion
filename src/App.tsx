@@ -37,7 +37,7 @@ import {
 import { MemoryPanel } from "./MemoryPanel";
 import { NotionPanel } from "./NotionPanel";
 import { isNotionTopic, notionContext, type NotionHit } from "./notion-knowledge";
-import { splitSpeechText, toSpeechText, VOICE_TEST_LINE, ProgressiveSpeechFeed, FIRST_SPEECH_CHARS, voiceEndpoint, POCKET_VOICE_ENDPOINT } from "./speech";
+import { splitSpeechText, toSpeechText, VOICE_TEST_LINE, ProgressiveSpeechFeed, FIRST_SPEECH_CHARS, POCKET_FINAL_SPEECH_CHARS, voiceEndpoint, POCKET_VOICE_ENDPOINT } from "./speech";
 import { memoryBudget, sessionMemoryContext, type SessionSummary } from "./memory-budget";
 import { archiveMemoryContext, shouldSearchArchive } from "./archive-memory";
 import { sessionSummaryPrompt, mergeSessionSummary, validSessionSummaryResponse } from "./session-memory";
@@ -301,8 +301,9 @@ export default function App() {
   }, [releaseVoiceAudio]);
 
 
-  /** Play WAV clauses as they become available. The next one is requested
-   * while the current WAV plays; Qwen3-TTS does not emit streaming PCM.
+  /** Speak while Ollama is still composing, prefetching the next passage
+   * over the current WAV playback. Both Qwen and Pocket use buffered WAVs
+   * here; true PCM/sample streaming is a separate optimization.
    */
   const playSpeechChunks = useCallback(async (
     chunks: AsyncIterable<string>, voice: VoiceSettings, feed?: ProgressiveSpeechFeed
@@ -374,9 +375,11 @@ export default function App() {
 
   const speak = useCallback(async (source: string, voice: VoiceSettings = settings.voice) => {
     const spoken = toSpeechText(source);
-    // Pocket can synthesize an entire reply quickly on CPU. Avoid audible
-    // gaps from splitting its output into many separate WAV requests.
-    const chunks = voice.engine === "pocket" ? (spoken ? [spoken] : [])
+    // The old single-Pocket-WAV path silently dropped text after 800 chars
+    // (and the Rust endpoint rejects jobs above 900 chars). Chunk long
+    // finalized answers into natural paragraphs instead of omitting sentences.
+    const chunks = voice.engine === "pocket"
+      ? splitSpeechText(spoken, POCKET_FINAL_SPEECH_CHARS)
       : splitSpeechText(spoken, 160, FIRST_SPEECH_CHARS);
     if (!chunks.length) {
       setVoiceError("This reply has no speakable text.");
@@ -1552,9 +1555,8 @@ export default function App() {
       });
       if (settings.voice.autoSpeak && settings.voice.progressiveSpeak &&
           remoteText === undefined && !withSearch && !attachment && !screenshot &&
-          !liveFrame && !turn.verifyWebEvidence && researchPlan.mode === "chat"
-          && settings.voice.engine === "qwen") {
-        progressiveFeed = new ProgressiveSpeechFeed();
+          !liveFrame && !turn.verifyWebEvidence && researchPlan.mode === "chat") {
+        progressiveFeed = new ProgressiveSpeechFeed(settings.voice.engine);
         void playSpeechChunks(progressiveFeed, settings.voice, progressiveFeed);
       }
       unlisten = await listen<ChatChunk>("mikan://chat", event => {
@@ -2493,11 +2495,12 @@ export default function App() {
               <small>Off by default. You can always use the speaker icon on a reply.</small></span>
           </label>
           <label className="settings-toggle">
-            <input type="checkbox" checked={draft.voice.progressiveSpeak} disabled={!draft.voice.autoSpeak || draft.voice.engine === "pocket"}
+            <input type="checkbox" checked={draft.voice.progressiveSpeak} disabled={!draft.voice.autoSpeak}
               onChange={event => setDraft(current => ({ ...current, voice: { ...current.voice, progressiveSpeak: event.target.checked } }))}/>
-            <span><strong>Start speaking as Mikan types (Qwen only)</strong>
-              <small>Pocket uses a single continuous CPU-generated reply to avoid phrase-by-phrase pauses.
-                Switch back to Qwen to test its progressive mode.</small></span>
+            <span><strong>Start speaking as Mikan types</strong>
+              <small>Pocket starts after a completed sentence, then prefetches longer passages while Ollama continues.
+                Qwen retains its shorter experimental phrases. If audio gaps recur, turn this off
+                to wait for the finished reply; WAV streaming playback is not yet implemented.</small></span>
           </label>
           {draft.voice.engine === "qwen" && <label className="setting-field">VoiceDesign description (when no reference is saved)
             <textarea rows={6} value={draft.voice.prompt} maxLength={650}

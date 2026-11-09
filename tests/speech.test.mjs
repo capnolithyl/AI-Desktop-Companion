@@ -86,3 +86,40 @@ test("Pocket TTS uses a fixed local port and preserves Qwen's custom endpoint", 
   assert.equal(voiceEndpoint({engine:"pocket",endpoint:"http://127.0.0.1:8765"}), "http://127.0.0.1:8766");
   assert.equal(voiceEndpoint({engine:"qwen",endpoint:"http://localhost:8877"}), "http://localhost:8877");
 });
+
+test("Pocket preserves the entire spoken text beyond the old 800-character cutoff", () => {
+  const longReply = ("This is a thoughtful reply with lots of information. ").repeat(34).trim();
+  const spoken = toSpeechText(longReply);
+  assert.equal(spoken, longReply);
+  assert.ok(spoken.length > 900);
+  const pieces = splitSpeechText(spoken, 650);
+  assert.ok(pieces.length > 1);
+  assert.ok(pieces.every(part => part.length > 0 && part.length <= 650));
+  assert.equal(pieces.join(" "), longReply);
+});
+
+test("Pocket starts speaking as the first complete sentence streams in", async () => {
+  const feed = new ProgressiveSpeechFeed("pocket");
+  const iterator = feed[Symbol.asyncIterator]();
+  const first = "I love how this sounds, and I want to talk to you. ";
+  feed.append(first + "The second sentence is only partially");
+  assert.deepEqual(await iterator.next(), {done:false, value:first.trim()});
+  const full = first + "The second sentence is only partially finished, but now it ends.";
+  feed.append(" finished, but now it ends.");
+  assert.equal(feed.finish(full), true);
+  const rest = [];
+  for await (const part of { [Symbol.asyncIterator]: () => iterator }) rest.push(part);
+  assert.equal([first.trim(), ...rest].join(" "), full.trim());
+});
+
+test("Pocket progressive voice sends all text beyond 800 characters when finalized", async () => {
+  const long = ("Mikan can talk while her next sentence is still being written. ").repeat(42).trim();
+  const feed = new ProgressiveSpeechFeed("pocket");
+  feed.append(long.slice(0, 1200));
+  assert.equal(feed.finish(long), true);
+  const chunks = [];
+  for await (const chunk of feed) chunks.push(chunk);
+  assert.ok(chunks.length >= 4);
+  assert.ok(chunks.every(s => s.length <= 420));
+  assert.equal(chunks.join(" "), long);
+});
