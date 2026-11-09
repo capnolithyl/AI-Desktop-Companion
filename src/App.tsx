@@ -36,7 +36,7 @@ import {
 import { MemoryPanel } from "./MemoryPanel";
 import { NotionPanel } from "./NotionPanel";
 import { isNotionTopic, notionContext, type NotionHit } from "./notion-knowledge";
-import { toSpeechText, VOICE_TEST_LINE } from "./speech";
+import { splitSpeechText, toSpeechText, VOICE_TEST_LINE } from "./speech";
 import { memoryBudget, sessionMemoryContext, type SessionSummary } from "./memory-budget";
 import { archiveMemoryContext, shouldSearchArchive } from "./archive-memory";
 import { sessionSummaryPrompt, mergeSessionSummary, validSessionSummaryResponse } from "./session-memory";
@@ -266,6 +266,7 @@ export default function App() {
   const voiceSerial = useRef(0);
   const voiceAudio = useRef<HTMLAudioElement | null>(null);
   const voiceUrl = useRef<string | null>(null);
+  const voicePlaybackDone = useRef<(() => void) | null>(null);
 
   const releaseVoiceAudio = useCallback(() => {
     if (voiceAudio.current) {
@@ -279,6 +280,9 @@ export default function App() {
       URL.revokeObjectURL(voiceUrl.current);
       voiceUrl.current = null;
     }
+    const done = voicePlaybackDone.current;
+    voicePlaybackDone.current = null;
+    done?.();
   }, []);
   const stopSpeech = useCallback(() => {
     voiceSerial.current += 1;
@@ -292,40 +296,57 @@ export default function App() {
 
   const speak = useCallback(async (source: string, voice: VoiceSettings = settings.voice) => {
     stopSpeech();
-    const text = toSpeechText(source);
-    if (!text) {
+    const chunks = splitSpeechText(toSpeechText(source));
+    if (!chunks.length) {
       setVoiceError("This reply has no speakable text.");
       return;
     }
     const serial = voiceSerial.current;
     setVoiceError(null);
     setVoiceState("synthesizing");
+    // Generate the next short WAV while the current one plays; Python serializes GPU inference.
+    const requestChunk = async (chunk: string, index: number) => {
+      const started = performance.now();
+      try {
+        const encoded = await invoke<string>("voice_synthesize", {
+          endpoint: voice.endpoint, text: chunk, voicePrompt: voice.prompt
+        });
+        console.info(`[Mikan voice] chunk ${index}/${chunks.length}, ${chunk.length} chars: ${seconds(performance.now() - started)}`);
+        return { encoded, error: null as string | null };
+      } catch (error) {
+        return { encoded: null as string | null, error: errorText(error) };
+      }
+    };
+    let pending = requestChunk(chunks[0], 1);
     try {
-      const encoded = await invoke<string>("voice_synthesize", {
-        endpoint: voice.endpoint, text, voicePrompt: voice.prompt
-      });
-      if (serial !== voiceSerial.current) return;
-      const bytes = Uint8Array.from(atob(encoded), character => character.charCodeAt(0));
-      const url = URL.createObjectURL(new Blob([bytes], { type: "audio/wav" }));
-      voiceUrl.current = url;
-      const player = new Audio(url);
-      voiceAudio.current = player;
-      player.playbackRate = voice.speed;
-      player.onended = () => {
-        if (serial === voiceSerial.current) {
-          releaseVoiceAudio();
-          setVoiceState("idle");
-        }
-      };
-      player.onerror = () => {
-        if (serial === voiceSerial.current) {
-          releaseVoiceAudio();
-          setVoiceState("idle");
-          setVoiceError("Windows could not play the generated WAV audio.");
-        }
-      };
-      await player.play();
-      if (serial === voiceSerial.current) setVoiceState("playing");
+      for (let i = 0; i < chunks.length; i++) {
+        const result = await pending;
+        if (serial !== voiceSerial.current) return;
+        if (!result.encoded) throw new Error(result.error ?? "Voice synthesis returned no audio");
+        if (i + 1 < chunks.length) pending = requestChunk(chunks[i + 1], i + 2);
+        const bytes = Uint8Array.from(atob(result.encoded), character => character.charCodeAt(0));
+        const url = URL.createObjectURL(new Blob([bytes], { type: "audio/wav" }));
+        voiceUrl.current = url;
+        const player = new Audio(url);
+        voiceAudio.current = player;
+        player.playbackRate = voice.speed;
+        const playbackFinished = new Promise<void>((resolve, reject) => {
+          voicePlaybackDone.current = resolve;
+          player.onended = releaseVoiceAudio;
+          player.onerror = () => {
+            voicePlaybackDone.current = null;
+            releaseVoiceAudio();
+            reject(new Error("Windows could not play the generated WAV audio."));
+          };
+        });
+        await player.play();
+        if (serial !== voiceSerial.current) return;
+        setVoiceState("playing");
+        await playbackFinished;
+        if (serial !== voiceSerial.current) return;
+        if (i + 1 < chunks.length) setVoiceState("synthesizing");
+      }
+      if (serial === voiceSerial.current) setVoiceState("idle");
     } catch (error) {
       if (serial !== voiceSerial.current) return;
       releaseVoiceAudio();

@@ -69,11 +69,33 @@ for AMD GPUs. Keep Ollama's VRAM usage in mind.
 - `DELETE /reference`: remove the saved reference.
 - `POST /synthesize`: JSON `text`, `voice_prompt`, `language=English`;
   returns WAV. Chooses Base or VoiceDesign automatically.
-- The Python service is manual-start, one full utterance at a time, English
-  only. No streaming, persistent model process manager, microphone input,
-  Android access, or synchronized lip movements yet.
+- The service is manual-start and still generates one complete WAV per request.
+  Mikan now splits longer replies into short WAV chunks and prefetches the next
+  one while playing the current one. This is not true sample-level streaming.
+  No process manager, microphone, Android support, or synchronized lip movements yet.
 - Stop in Mikan interrupts playback or discards the pending WAV, but does not
   cancel a generation already running in the Python process.
 
 Official documentation and exact clone methods:
 https://github.com/QwenLM/Qwen3-TTS
+
+## Debug and benchmark latency
+
+Each chunk prints a [tts] console line measuring queue, model load,
+reference preparation, generation, WAV writing and total time. The client
+also logs per-chunk request times in the WebView console. No conversation
+text is logged.
+
+Default voice cloning stays on 1.7B. To benchmark 0.6B Base, stop the
+Python server and restart it with:
+
+```powershell
+$env:MIKAN_TTS_CLONE_SIZE = "0.6B"
+& ".\.venv\Scripts\python.exe" server.py
+```
+
+The 0.6B weights download on first use; the saved voice reference is unchanged.
+Set the variable back to "1.7B" to restore the original cloning model.
+Don't install NVIDIA-only FlashAttention wheels on the RX 9070.
+
+Git now ignores Python virtual environments and generated cache files.

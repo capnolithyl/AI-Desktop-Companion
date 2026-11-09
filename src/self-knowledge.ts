@@ -4,7 +4,7 @@
  * The CI checker detects unmapped Tauri commands, missing files and stale versions.
  * Add a feature here when adding capability, and update the matching source/docs.
  */
-export const CAPABILITY_RELEASE = "0.8.8";
+export const CAPABILITY_RELEASE = "0.8.9";
 
 export type CapabilityStage = "implemented" | "experimental" | "planned";
 export type RuntimeDependency = "none" | "ollama" | "search" | "mem0" | "voice" | "vision" | "pocket";
@@ -145,7 +145,7 @@ export const CAPABILITIES: readonly Capability[] = [
   },
   {
     id:"voice",label:"Local voice synthesis and cloning",category:"Voice",
-    description:"Experimental Qwen3-TTS service with speak/stop, auto-speak option and locally saved WAV reference voice clone. Voice server and model require separate setup; no microphone speech recognition yet.",
+    description:"Experimental Qwen3-TTS service with speak/stop, auto-speak, chunked WAV playback to reduce first-audio wait, latency diagnostics, and a locally saved voice reference clone. Voice server and model require separate setup; no microphone speech recognition yet.",
     stage:"experimental",runtime:"voice",keywords:["speak","voice","tts","talk","speech","audio","clone","sound","hear"],
     sources:["src-tauri/src/voice.rs","tools/tts/server.py","src/speech.ts"],docs:["tools/tts/README.md"],
     commands:["voice_health","voice_synthesize","voice_reference_status","voice_save_reference","voice_delete_reference"]

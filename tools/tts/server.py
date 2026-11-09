@@ -12,15 +12,19 @@ import io
 import json
 import os
 import threading
+import time
 import wave
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 HOST = "127.0.0.1"
 PORT = int(os.environ.get("MIKAN_TTS_PORT", "8765"))
+CLONE_SIZE = os.environ.get("MIKAN_TTS_CLONE_SIZE", "1.7B")
+if CLONE_SIZE not in ("1.7B", "0.6B"):
+    raise ValueError("MIKAN_TTS_CLONE_SIZE must be 1.7B or 0.6B")
 MODELS = {
     "design": "Qwen/Qwen3-TTS-12Hz-1.7B-VoiceDesign",
-    "clone": "Qwen/Qwen3-TTS-12Hz-1.7B-Base",
+    "clone": f"Qwen/Qwen3-TTS-12Hz-{CLONE_SIZE}-Base",
 }
 MAX_REFERENCE_BYTES = 6 * 1024 * 1024
 MAX_REQUEST_BYTES = 8 * 1024 * 1024 + 8192
@@ -132,6 +136,7 @@ def load_model(kind: str):
     _device = ("cuda:0" if torch.cuda.is_available() else "cpu") if requested == "auto" else requested
     dtype = torch.bfloat16 if _device.startswith("cuda") else torch.float32
     print(f"Loading {MODELS[kind]} on {_device} ({dtype})", flush=True)
+    loading_started = time.perf_counter()
     _model = Qwen3TTSModel.from_pretrained(
         MODELS[kind],
         device_map=_device,
@@ -139,15 +144,20 @@ def load_model(kind: str):
         attn_implementation="sdpa",
     )
     _model_kind = kind
+    print(f"[tts] model loading: {(time.perf_counter() - loading_started)*1000:.0f} ms", flush=True)
     return _model
 
 
 def synthesize(text: str, prompt: str, language: str) -> bytes:
+    queued = time.perf_counter()
     with MODEL_LOCK:
+        started = time.perf_counter()
         import soundfile as sf
         wav_file, text_file = reference_paths()
-        if wav_file.is_file() and text_file.is_file() and text_file.read_text(encoding="utf-8").strip():
-            model = load_model("clone")
+        cloned = wav_file.is_file() and text_file.is_file() and bool(text_file.read_text(encoding="utf-8").strip())
+        model = load_model("clone" if cloned else "design")
+        loaded = time.perf_counter()
+        if cloned:
             transcript = text_file.read_text(encoding="utf-8").strip()
             key = (wav_file.stat().st_mtime_ns, transcript)
             global _clone_prompt, _clone_key
@@ -158,22 +168,33 @@ def synthesize(text: str, prompt: str, language: str) -> bytes:
                     x_vector_only_mode=False,
                 )
                 _clone_key = key
+            prompted = time.perf_counter()
             wavs, sample_rate = model.generate_voice_clone(
                 text=text,
                 language=language,
                 voice_clone_prompt=_clone_prompt,
             )
         else:
-            model = load_model("design")
+            prompted = time.perf_counter()
             wavs, sample_rate = model.generate_voice_design(
                 text=text,
                 language=language,
                 instruct=prompt,
             )
+        generated = time.perf_counter()
         output = io.BytesIO()
         sf.write(output, wavs[0], sample_rate, format="WAV", subtype="PCM_16")
+        finished = time.perf_counter()
+        print(
+            f"[tts] mode={'clone' if cloned else 'design'} chars={len(text)} "
+            f"audio_s={len(wavs[0])/sample_rate:.1f} "
+            f"queue_ms={(started-queued)*1000:.0f} load_ms={(loaded-started)*1000:.0f} "
+            f"reference_ms={(prompted-loaded)*1000:.0f} "
+            f"generate_ms={(generated-prompted)*1000:.0f} "
+            f"wav_ms={(finished-generated)*1000:.0f} total_ms={(finished-queued)*1000:.0f}",
+            flush=True,
+        )
         return output.getvalue()
-
 
 class Handler(BaseHTTPRequestHandler):
     def reply(self, status: int, body: bytes, content_type: str) -> None:
