@@ -11,7 +11,7 @@ const TOPIC = /\b(notion|charlotte|hollow\s+meridian|my\s+(?:book|novel|story|st
 export function isNotionTopic(text: string, recent: ReadonlyArray<{role: string; content: string}> = []): boolean {
   if (TOPIC.test(text)) return true;
   // Short follow-ups inherit the subject, not unrelated old conversation.
-  if (text.length > 240 || !/\b(she|he|they|it|her|him|them|chapter|scene|plot|ending|story|why|what|how|then|after|next)\b/i.test(text)) {
+  if (text.length > 240 || !/\b(she|he|they|it|her|him|them|chapter|scene|plot|ending|story|then|after|next)\b|\bwhat\s+(?:happened|happens|about|did|should|comes)\b/i.test(text)) {
     return false;
   }
   return recent.slice(-5).some(turn => TOPIC.test(turn.content.slice(0, 900)));
