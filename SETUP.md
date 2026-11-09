@@ -12,8 +12,8 @@ need these **one-time** steps:
 | --- | --- | --- |
 | Local Ollama and Qwen3.5 | Install Ollama, pull your chosen chat/vision model | Ollama runs locally; Mikan uses it for chat |
 | SearXNG web research | Install Docker/WSL2 and [initialize SearXNG](tools/searxng/README.md) | Enable Docker login startup and Mikan's Internet auto-recovery, if wanted |
-| Advanced Mem0 memory | Python 3.11 + run `powershell -ExecutionPolicy Bypass -File .\\scripts\\setup-advanced-memory.ps1` | Mikan starts the installed Mem0 service automatically. SQLite still owns facts |
-| Qwen3-TTS speech | Keep your previously tested Python 3.12/ROCm venv, then register it once using `powershell -NoProfile -ExecutionPolicy Bypass -File .\\scripts\\setup-voice-autostart.ps1` | Mikan starts/retries the Python server; saved voice reference persists; needs desktop v0.8.10+ |
+| Advanced Mem0 memory | Python 3.11 + run `powershell -ExecutionPolicy Bypass -File .\scripts\setup-advanced-memory.ps1` | Mikan starts the installed Mem0 service automatically. SQLite still owns facts |
+| Qwen3-TTS speech | Keep your previously tested Python 3.12/ROCm venv, then register it once using `powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\setup-voice-autostart.ps1` | Mikan starts/retries the Python server; saved voice reference persists; needs desktop v0.8.10+ |
 | Notion book/reference library | [Create an internal read-only integration, share pages and sync](notion/README.md) | No extra server; cache works offline, re-sync manually for changes |
 | Live Vision | Enable explicitly using the eye button or `/live on` | Screenshots are transient, and consent resets OFF on each launch |
 | File attachments | None beyond installing a recent build | One file per turn; model vision ability needed for images |
