@@ -17,7 +17,7 @@ export type HybridRecallResult = {
 };
 
 const MAX_CANDIDATES = 60;
-const MAX_PROMPT_CHARS = 13600;
+const MAX_PROMPT_CHARS = 12500;
 const smallTalk = /^(?:hi|hey|hello|good (?:morning|afternoon|evening|night)|thanks|thank you|cool|nice|okay|ok|lol|haha|how are you|how's it going)[.!?\s]*$/i;
 
 function pinnedIds<T extends RankableMemory>(facts: T[], query: string, maxFacts: number): number[] {
