@@ -645,6 +645,8 @@ pub fn run() {
             notion::notion_set_all,
             notion::notion_sync,
             notion::notion_recall,
+            notion::notion_cached_pages,
+            notion::notion_read_document,
             memory::memory_list_conversations,
             memory::memory_create_conversation,
             memory::memory_list_messages,
