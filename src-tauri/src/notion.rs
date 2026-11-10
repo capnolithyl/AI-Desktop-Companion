@@ -30,6 +30,8 @@ pub struct NotionPage {
     selected: bool,
     last_edited: String,
     is_database: bool,
+    #[serde(skip_serializing)]
+    properties: Value,
 }
 
 #[derive(Serialize)]
@@ -47,6 +49,7 @@ struct CachedPage {
     url: String,
     chunks: Vec<String>,
     last_edited: String,
+    scene_links: Vec<String>,
 }
 
 /// Metadata-only list for context routing. Never sends private page bodies
@@ -68,6 +71,16 @@ pub struct NotionDocument {
     title: String,
     url: String,
     synced_at: i64,
+    chunks: Vec<String>,
+    related_pages: Vec<NotionRelatedPage>,
+    missing_related_pages: usize,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NotionRelatedPage {
+    title: String,
+    url: String,
     chunks: Vec<String>,
 }
 
@@ -92,6 +105,13 @@ fn db(app: &AppHandle) -> Result<Connection, String> {
          );
          CREATE VIRTUAL TABLE IF NOT EXISTS notion_fts USING fts5(
              title, content, tokenize='unicode61 remove_diacritics 2'
+         );
+         CREATE TABLE IF NOT EXISTS notion_page_relations(
+             page_id TEXT NOT NULL,
+             property TEXT NOT NULL,
+             target_id TEXT NOT NULL,
+             position INTEGER NOT NULL,
+             PRIMARY KEY(page_id,property,target_id)
          );"
     ).map_err(|e| e.to_string())?;
     Ok(conn)
@@ -226,6 +246,40 @@ fn page_title(page: &Value) -> String {
     })).filter(|text| !text.is_empty()).unwrap_or_else(|| "Untitled Notion page".to_owned())
 }
 
+fn indexed_properties(properties: &Value) -> (Vec<String>, Vec<String>) {
+    let mut text=Vec::new();
+    let mut scene_links=Vec::new();
+    let Some(props)=properties.as_object() else { return (text,scene_links); };
+    for (name,property) in props {
+        let kind=property["type"].as_str().unwrap_or("");
+        if kind=="title" { continue; }
+        if kind=="relation" && name=="Scenes" {
+            if let Some(items)=property["relation"].as_array() {
+                for relation in items {
+                    if let Some(id)=relation["id"].as_str().filter(|id| is_id(id)) {
+                        if !scene_links.iter().any(|item| item==id) { scene_links.push(id.to_owned()); }
+                    }
+                }
+            }
+            continue;
+        }
+        let value=match kind {
+            "rich_text" => rich_text(&property["rich_text"]),
+            "number" => property["number"].as_number().map(ToString::to_string).unwrap_or_default(),
+            "status" => property["status"]["name"].as_str().unwrap_or("").to_owned(),
+            "select" => property["select"]["name"].as_str().unwrap_or("").to_owned(),
+            "date" => property["date"]["start"].as_str().unwrap_or("").to_owned(),
+            "checkbox" => property["checkbox"].as_bool().map(|flag| flag.to_string()).unwrap_or_default(),
+            "url" => property["url"].as_str().unwrap_or("").to_owned(),
+            _ => String::new()
+        };
+        if !value.trim().is_empty() && value.len()<=12000 {
+            text.push(format!("Notion property {name}: {value}"));
+        }
+    }
+    (text,scene_links)
+}
+
 fn is_id(id: &str) -> bool {
     let compact = id.replace('-', "");
     compact.len() == 32 && compact.bytes().all(|byte| byte.is_ascii_hexdigit())
@@ -243,6 +297,7 @@ fn page_from_json(page: &Value) -> Option<NotionPage> {
         selected: false,
         last_edited: page["last_edited_time"].as_str().unwrap_or("").to_owned(),
         is_database: false,
+        properties:page["properties"].clone(),
     })
 }
 
@@ -258,6 +313,7 @@ fn database_from_json(value: &Value) -> Option<NotionPage> {
         selected:false,
         last_edited:value["last_edited_time"].as_str().unwrap_or("").to_owned(),
         is_database:true,
+        properties:Value::Null,
     })
 }
 
@@ -385,6 +441,7 @@ async fn fetch_page_text(client: &reqwest::Client, token: &str, page: &NotionPag
                             selected: false,
                             last_edited: block["last_edited_time"].as_str().unwrap_or("").to_owned(),
                             is_database:false,
+                            properties:Value::Null,
                         });
                     }
                     continue;
@@ -517,6 +574,7 @@ pub async fn notion_sync(app: AppHandle) -> Result<NotionStatus, String> {
             let rows = stmt.query_map([], |r| Ok(NotionPage {
                 id:r.get(0)?, title:r.get(1)?, url:r.get(2)?, selected:true,
                 last_edited:String::new(),is_database:false,
+                properties:Value::Null,
             })).map_err(|e| e.to_string())?;
             rows.collect::<Result<Vec<_>,_>>().map_err(|e| e.to_string())?
         };
