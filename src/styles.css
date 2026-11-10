@@ -818,3 +818,35 @@ button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px
 .vision-area-buttons{display:flex;width:100%;gap:8px;flex-wrap:wrap}
 .vision-area-buttons button{display:flex;align-items:center;gap:5px}
 .vision-panel .vision-actions{flex-wrap:wrap}
+
+
+/* Curated bulk memory import, category/tag review and filtered browsing. */
+.memory-import { border:1px solid #765565; background:#40313e; border-radius:10px; padding:11px; margin:0 0 15px; }
+.memory-import summary { display:flex;align-items:center;gap:8px;cursor:pointer;color:var(--accent,#ffad7e);font-weight:600;font-size:12px; }
+.memory-import p { font-size:11px;color:#e0c6d1;line-height:1.5; }
+.memory-import-controls,.memory-import-row-controls,.memory-organize { display:flex;flex-direction:column;gap:8px;margin:11px 0; }
+.memory-import-controls label,.memory-import-row-controls label,.memory-import-bulk,.memory-organize label { display:flex;flex-direction:column;gap:4px;font-size:11px;color:#e1c4d3; }
+.memory-import input[type="text"],.memory-import textarea,.memory-import select,.memory-organize select,.memory-organize input,.memory-filter select,.memory-filter input {
+  border:1px solid #856575;border-radius:7px;background:#2d2530;color:#fff0e8;padding:7px;min-width:0;width:100%;font:inherit;
+}
+.memory-import input[type="file"] { max-width:100%;font-size:11px; }
+.memory-import textarea { resize:vertical;min-height:90px; }
+.memory-import-summary { display:flex;flex-wrap:wrap;justify-content:space-between;gap:5px;color:#fbd4be;font-size:11px;margin:10px 0; }
+.memory-import-preview { max-height:350px;overflow-y:auto;overscroll-behavior:contain;border:1px solid #765565;border-radius:8px;margin:10px 0; }
+.memory-import-row {padding:10px;border-bottom:1px solid #644c5c;font-size:11px;}
+.memory-import-row:last-child {border-bottom:0;}
+.memory-import-row.duplicate {opacity:.65;}
+.memory-import-fact {display:flex;align-items:flex-start;gap:8px;line-height:1.5;overflow-wrap:anywhere;}
+.memory-import-fact input {margin-top:3px;flex:none;}
+.memory-import-row-controls {flex-direction:row;flex-wrap:wrap;align-items:end;margin:6px 0 0 22px;}
+.memory-import-row-controls label {flex:1 1 115px;}
+.memory-import-row-controls .memory-import-pin {flex:0 0 auto;flex-direction:row;align-items:center;padding:6px 0;}
+.memory-import-confirm {margin:6px 0 0 auto;display:flex;align-items:center;justify-content:center;}
+.memory-import-success {display:flex;gap:7px;align-items:center;color:#bdf3d1!important;}
+.memory-filter {display:flex;flex-wrap:wrap;gap:7px;align-items:center;margin:10px 0;}
+.memory-filter input {flex:1 1 140px;}
+.memory-filter select {flex:1 1 150px;}
+.memory-filter small {color:#cdb8c5;font-size:10px;}
+.memory-labels {display:flex;flex-wrap:wrap;gap:5px;margin:-5px 0 10px;}
+.memory-labels span {border:1px solid #806476;border-radius:12px;padding:2px 7px;color:#ffdbc6;font-size:10px;}
+.memory-organize {padding:9px;border-radius:8px;background:#322732;}
