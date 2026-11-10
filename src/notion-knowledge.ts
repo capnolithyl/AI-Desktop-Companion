@@ -98,8 +98,12 @@ export function asksToReadFullNotionPage(text:string):boolean {
 
 function namedCandidates(text:string):string[] {
   const tokens=[...text.matchAll(/\b[A-Z][a-zA-Z]{3,}\b/g)].map(x=>x[0]);
-  return [...new Set(tokens.filter(t=>!NAME_STOP.has(t.toLowerCase()) ||
-    (t==="Will" && (/\b(?:about|is|of|to)\s+Will\b/i.test(text) || /\bWill['’]s\b/.test(text))))].slice(0,5);
+  const names=tokens.filter(t=>{
+    if(!NAME_STOP.has(t.toLowerCase()))return true;
+    return t==="Will" &&
+      (/\b(?:about|is|of|to)\s+Will\b/i.test(text) || /\bWill['’]s\b/.test(text));
+  });
+  return [...new Set(names)].slice(0,5);
 }
 
 /** When Notion is only a soft possibility, require the named subjects in the
