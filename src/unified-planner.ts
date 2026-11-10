@@ -14,7 +14,7 @@ export type UnifiedPlan = {
   web: WebToolDecision;
 };
 
-const privateWords = /\b(?:my|mine|our|ours|myself|owner|user|his|her|their|mikan|private|personal|notion)\b/i;
+const privateWords = /\b(?:i|me|my|mine|our|ours|myself|owner|user|his|her|their|mikan|private|personal|notion)\b/i;
 const emailOrPhone = /[\w.+-]+@[\w.-]+\.[a-z]{2,}|(?:\+?\d[\d().\s-]{7,}\d)/i;
 const privateUrl = /https?:\/\//i;
 const defaultWeb: WebToolDecision = {search:false,reason:"No external lookup selected",method:"not-needed"};
@@ -54,6 +54,7 @@ export function parseWebToolDecision(
     const reason=typeof web.reason==="string" ? web.reason.trim().slice(0,130) : "";
     if(web.search!==true)return {search:false,reason:reason||"Local answer sufficient",method:"not-needed"};
     if(typeof web.query!=="string")return {...defaultWeb,method:"fallback",reason:"No usable public query"};
+    if(/[\r\n<>]/.test(web.query))return {...defaultWeb,method:"fallback",reason:"Unsafe public search query"};
     const query=web.query.trim().replace(/\s+/g," ");
     if(query.length<5 || query.length>180 || privateWords.test(query) ||
        emailOrPhone.test(query) || privateUrl.test(query) || /[\r\n<>]/.test(query) ||
