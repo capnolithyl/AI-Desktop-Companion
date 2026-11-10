@@ -23,6 +23,11 @@ export type MemoryRecallAudit = {
   semanticReason?: string;
   semanticCandidates: number;
   strongSemanticMatches: number;
+  selectionMethod?: "ai-reranked" | "fallback" | "small-talk" | "empty";
+  selectionCandidates?: number;
+  selectionTimeMs?: number;
+  selectionNote?: string;
+  semanticScores?: {id:number;score:number|null}[];
   maxFacts: number;
   facts: {
     id: number;
@@ -105,13 +110,25 @@ function performanceLines(diagnostics: Diagnostics): string[] {
       "  Semantic service: " + diagnostics.memory.semanticService +
         (diagnostics.memory.semanticReason ? " (" + diagnostics.memory.semanticReason + ")" : ""),
       "  Semantic candidates returned: " + diagnostics.memory.semanticCandidates,
-      "  Strong semantic matches: " + diagnostics.memory.strongSemanticMatches,
+      "  Strong semantic matches (legacy cutoff): " + diagnostics.memory.strongSemanticMatches,
+      ...(diagnostics.memory.semanticScores?.length ? [
+        "  Nearest-neighbor scores (not an absolute relevance test): " +
+          diagnostics.memory.semanticScores.map(hit =>
+            "#" + hit.id + "=" + (hit.score == null ? "n/a" : hit.score.toFixed(3))).join(", ")
+      ] : []),
+      ...(diagnostics.memory.selectionMethod ? [
+        "  Selection method: " + diagnostics.memory.selectionMethod,
+        "  AI candidates considered: " + (diagnostics.memory.selectionCandidates ?? "n/a"),
+        "  Selection time: " + duration(diagnostics.memory.selectionTimeMs),
+        ...(diagnostics.memory.selectionNote ? ["  Selection note: " + diagnostics.memory.selectionNote] : [])
+      ] : []),
       "  Selected facts: " + diagnostics.memory.facts.length + " / " + diagnostics.memory.maxFacts + " maximum",
       ...(diagnostics.memory.facts.length
         ? diagnostics.memory.facts.flatMap((fact, index) => [
           "  [" + (index + 1) + "] ID " + fact.id + " | " + fact.category +
             " | " + (fact.pinned ? "pinned" : "not pinned") +
-            " | " + (fact.semantic ? "semantic match" : fact.pinned ? "pinned core" : "keyword/category/tag match") +
+            " | " + (fact.semantic ? "semantic match" : fact.pinned ? "pinned core" :
+              diagnostics.memory.selectionMethod === "ai-reranked" ? "AI-selected" : "keyword/category/tag match") +
             (fact.tags.length ? " | tags: " + fact.tags.join(", ") : ""),
           "    " + fact.fact
         ])
