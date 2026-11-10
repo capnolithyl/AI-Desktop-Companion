@@ -1541,7 +1541,7 @@ export default function App() {
         prompt => invoke<string>("condense_local_context", {
           endpoint: settings.endpoint, model: settings.model, prompt,
           contextWindow: settings.contextWindow, maxOutputTokens: 180,
-          timeoutMs: 9000
+          timeoutMs: 20000
         })
       );
       const remembered = prepareMemoryContext(liveFacts,text,semanticIds,budget,selection.ids);
