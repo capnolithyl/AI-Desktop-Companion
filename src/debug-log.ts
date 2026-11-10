@@ -39,6 +39,20 @@ export type MemoryRecallAudit = {
   }[];
 };
 
+export type ToolPlanningAudit = {
+  method: string;
+  reason: string;
+  query?: string;
+  topic?: string;
+  publicWebAllowed: boolean;
+};
+
+export type PreparationTaskAudit = {
+  name: string;
+  elapsedMs: number;
+  status: "complete" | "ready" | "unavailable";
+};
+
 export type Diagnostics = {
   elapsedMs: number;
   firstTokenMs: number | null;
@@ -46,6 +60,8 @@ export type Diagnostics = {
   stats: OllamaStats | null;
   research?: ResearchAudit;
   memory?: MemoryRecallAudit;
+  toolPlan?: ToolPlanningAudit;
+  parallelTasks?: PreparationTaskAudit[];
 };
 
 export type DebugLogMessage = {
@@ -105,8 +121,21 @@ function performanceLines(diagnostics: Diagnostics): string[] {
       "  Extraction time: " + duration(diagnostics.research.elapsedMs),
       "  Evidence note: " + diagnostics.research.note
     ] : []),
+    ...(diagnostics.toolPlan ? [
+      "Tool planning:",
+      "  Route: " + diagnostics.toolPlan.method,
+      "  Reason: " + diagnostics.toolPlan.reason,
+      "  Public web allowed: " + (diagnostics.toolPlan.publicWebAllowed ? "yes" : "no"),
+      ...(diagnostics.toolPlan.query ? ["  Public search query: " + diagnostics.toolPlan.query] : []),
+      ...(diagnostics.toolPlan.topic ? ["  Preferred source topic: " + diagnostics.toolPlan.topic] : [])
+    ] : []),
+    ...(diagnostics.parallelTasks?.length ? [
+      "Parallel preparation:",
+      ...diagnostics.parallelTasks.map(task =>
+        "  " + task.name + ": " + task.status + " (" + duration(task.elapsedMs) + ")")
+    ] : []),
     ...(memory ? [
-      "Memory recall (facts actually included in the prompt):",
+      "Memory recall (facts actually included in the prompt):"
       "  SQLite facts available: " + memory.storedFacts,
       "  Semantic service: " + memory.semanticService +
         (memory.semanticReason ? " (" + memory.semanticReason + ")" : ""),
