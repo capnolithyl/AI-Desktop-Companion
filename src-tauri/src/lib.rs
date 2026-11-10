@@ -1,4 +1,5 @@
 mod web_search;
+mod source_priority;
 mod web_reader;
 mod search_service;
 mod agent_tools;
@@ -58,6 +59,10 @@ struct ChatRequest {
     context_window: Option<u32>,
     #[serde(default)]
     prior_sources: Vec<web_search::SearchResult>,
+    #[serde(default)]
+    source_preferences: Vec<source_priority::SourcePreference>,
+    #[serde(default)]
+    source_topic: Option<String>,
 }
 fn default_cache_hours() -> u64 { 24 }
 fn default_structured_research() -> bool { true }
@@ -361,11 +366,11 @@ async fn chat_stream_impl(
                 "requestId": request.request_id,
                 "text": format!("Searching: {query}")
             }));
-            sources = if research_intent::is_album_research(&messages) {
-                web_search::web_search_recent(request.searxng_endpoint.clone(), query.clone()).await?
-            } else {
-                web_search::web_search(request.searxng_endpoint.clone(), query.clone()).await?
-            };
+            sources = source_priority::search(
+                request.searxng_endpoint.clone(),query.clone(),
+                research_intent::is_album_research(&messages),
+                &request.source_preferences,request.source_topic.as_deref()
+            ).await?;
             search_query = Some(query.clone());
             if sources.is_empty() {
                 if let Some(fallback) = research_intent::fallback_research_query(&messages, &query) {
@@ -373,7 +378,10 @@ async fn chat_stream_impl(
                         "requestId": request.request_id,
                         "text": format!("Trying a broader search: {fallback}")
                     }));
-                    sources = web_search::web_search(request.searxng_endpoint.clone(), fallback.clone()).await?;
+                    sources = source_priority::search(
+                        request.searxng_endpoint.clone(),fallback.clone(),false,
+                        &request.source_preferences,request.source_topic.as_deref()
+                    ).await?;
                     // Log both actual search requests rather than pretending
                     // the narrower query found the final source results.
                     search_query = Some(format!("{query} → {fallback}"));
@@ -425,7 +433,7 @@ async fn chat_stream_impl(
             let plan = agent_tools::prepare(
                 &app, &client, &url, &request.model, &request.request_id,
                 &mut messages, &request.searxng_endpoint, request.cache_hours,
-                selected_context
+                selected_context,&request.source_preferences,request.source_topic.as_deref()
             ).await?;
             let newly_fetched = !plan.sources.is_empty();
             newly_researched = newly_fetched;

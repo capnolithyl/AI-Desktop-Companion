@@ -33,7 +33,7 @@ jobs:
       - name: Typecheck and build UI
         run: npm run build
       - name: Test shared desktop and Pocket research policy
-        run: node --experimental-strip-types --test src/research-routing.test.mjs src/research-context.test.mjs src/runtime-context.test.mjs src/conversation-engine.test.mjs src/evidence-verification.test.mjs src/memory-ranking.test.mjs src/memory-retrieval.test.mjs src/memory-import.test.mjs src/memory-budget.test.mjs src/session-memory.test.mjs src/archive-memory.test.mjs src/self-knowledge.test.mjs src/screen-vision.test.mjs src/live-vision.test.mjs src/capture-region.test.mjs src/chat-attachments.test.mjs src/desktop-turn-routing.test.mjs src/notion-knowledge.test.mjs src/notion-reading.test.mjs
+        run: node --experimental-strip-types --test src/research-routing.test.mjs src/research-context.test.mjs src/runtime-context.test.mjs src/conversation-engine.test.mjs src/evidence-verification.test.mjs src/memory-ranking.test.mjs src/memory-retrieval.test.mjs src/unified-planner.test.mjs src/preferred-sources.test.mjs src/memory-import.test.mjs src/memory-budget.test.mjs src/session-memory.test.mjs src/archive-memory.test.mjs src/self-knowledge.test.mjs src/screen-vision.test.mjs src/live-vision.test.mjs src/capture-region.test.mjs src/chat-attachments.test.mjs src/desktop-turn-routing.test.mjs src/notion-knowledge.test.mjs src/notion-reading.test.mjs
       - name: Verify self-knowledge matches release and native commands
         run: node --experimental-strip-types scripts/check-self-knowledge.mjs
       - name: Test local remote browser relay and authentication
@@ -54,9 +54,14 @@ jobs:
         run: cargo test --lib
       - name: Build NSIS installer
         run: npm run tauri -- build
+      - name: Verify installer version and clean silent install
+        shell: pwsh
+        run: scripts/check-windows-installer.ps1
       - uses: actions/upload-artifact@v4
         with:
           name: mikan-windows-installer
-          path: src-tauri/target/release/bundle/nsis/*-setup.exe
+          path: |
+            src-tauri/target/release/bundle/nsis/*-setup.exe
+            src-tauri/target/release/bundle/nsis/BUILD-INFO.txt
           if-no-files-found: error
           retention-days: 14
