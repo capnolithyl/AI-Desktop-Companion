@@ -37,7 +37,7 @@ import {
 import { MemoryPanel } from "./MemoryPanel";
 import type {ImportMemory,MemoryCategory} from "./memory-import";
 import { NotionPanel } from "./NotionPanel";
-import { isNotionTopic, notionContext, planNotionRetrieval, asksToReadFullNotionPage,
+import { isNotionTopic, notionContext, planNotionRetrieval, asksToReadFullNotionPage, hasNamedNotionMatch,
   type NotionHit, type NotionCachedPage } from "./notion-knowledge";
 import { readNotionChapter, type NotionDocument, type NotionChapterSession } from "./notion-reading";
 import { splitSpeechText, toSpeechText, VOICE_TEST_LINE, ProgressiveSpeechFeed, FIRST_SPEECH_CHARS, POCKET_FINAL_SPEECH_CHARS, voiceEndpoint, POCKET_VOICE_ENDPOINT, canSaveVoiceReference } from "./speech";
@@ -1425,7 +1425,7 @@ export default function App() {
       : [];
     const useNotion = !withSearch && (
       isNotionTopic(text,messages) || notionPlan.selectedPage !== null ||
-      (initialTurn.plan.mode === "chat" && notionHits.length > 0)
+      (initialTurn.plan.mode === "chat" && hasNamedNotionMatch(text,notionHits))
     );
     const baseTurn = decideDesktopTurn(text,messages,{
       attachment:!!(screenshot||attachment),
@@ -1624,7 +1624,7 @@ export default function App() {
       // excerpts still take precedence for details and quotations.
       const notionNotes = [
         readChapterContext || carryChapter,
-        notionContext(notionHits,settings.contextWindow != null && settings.contextWindow<=8192
+        notionContext(useNotion ? notionHits : [],settings.contextWindow != null && settings.contextWindow<=8192
           ? settings.contextWindow : 8192),
         missingChapter,missingLibrary
       ].filter(Boolean).join("\n\n");
