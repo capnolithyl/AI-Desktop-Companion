@@ -1,9 +1,10 @@
 import { DEFAULT_PERSONALITY, readPersonality, type Personality } from "./personality";
 import { captureInterval, restoreRegion, type RegionChoice } from "./capture-region";
+import { DEFAULT_SOURCE_PREFERENCES, readSourcePreferences, type SourcePreference } from "./preferred-sources";
 
 export type ChatRole = "user" | "assistant";
 export type Message = { id: string; role: ChatRole; content: string };
-export type Settings = { voice: VoiceSettings; endpoint: string; model: string; systemPrompt: string; appearance: Appearance; personality: Personality; searxngEndpoint: string; autoSearch: boolean; structuredResearch: boolean; autoManageSearch: boolean; cacheHours: number; contextWindow: number | null; autoRememberUser: boolean; autoRememberMikan: boolean; visionCaptureIntervalSeconds:number; visionRegion:RegionChoice|null };
+export type Settings = { voice: VoiceSettings; endpoint: string; model: string; systemPrompt: string; appearance: Appearance; personality: Personality; searxngEndpoint: string; autoSearch: boolean; structuredResearch: boolean; autoManageSearch: boolean; sourcePreferences: SourcePreference[]; cacheHours: number; contextWindow: number | null; autoRememberUser: boolean; autoRememberMikan: boolean; visionCaptureIntervalSeconds:number; visionRegion:RegionChoice|null };
 
 export type VoiceSettings = {
   engine: "qwen" | "pocket";
@@ -68,6 +69,7 @@ export const DEFAULT_SETTINGS: Settings = {
   voice: { ...DEFAULT_VOICE },
   searxngEndpoint: "http://127.0.0.1:8888",
   autoSearch: false,
+  sourcePreferences: readSourcePreferences(DEFAULT_SOURCE_PREFERENCES),
   structuredResearch: true,
   autoManageSearch: false,
   cacheHours: 24,
@@ -95,6 +97,7 @@ export function loadSettings(): Settings {
       voice: readVoice(data.voice),
       searxngEndpoint: typeof data.searxngEndpoint === "string" ? data.searxngEndpoint : DEFAULT_SETTINGS.searxngEndpoint,
       autoSearch: data.autoSearch === true,
+      sourcePreferences: readSourcePreferences(data.sourcePreferences),
       structuredResearch: data.structuredResearch !== false,
       autoManageSearch: typeof data.autoManageSearch === "boolean" ? data.autoManageSearch : data.autoSearch === true,
       cacheHours: typeof data.cacheHours === "number" && Number.isFinite(data.cacheHours) ? Math.max(1, Math.min(720, data.cacheHours)) : DEFAULT_SETTINGS.cacheHours,
