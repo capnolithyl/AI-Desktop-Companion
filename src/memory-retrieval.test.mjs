@@ -4,6 +4,7 @@ import {
   buildMemoryRerankPrompt, parseMemoryRerankIds, selectHybridMemoryIds
 } from "./memory-retrieval.ts";
 import { prioritizeCoreMemories } from "./memory-ranking.ts";
+import { shouldIncludeCharacterCanon } from "./character-canon-routing.ts";
 
 const facts=[
   {id:41,fact:"The user's full name is Marcus Borger.",updatedAt:1,importance:95,category:"profile",tags:["name"]},
@@ -60,4 +61,13 @@ test("large collections shortlist candidates, do not send thousands of facts to 
   }));
   const prompt=buildMemoryRerankPrompt("Tell me about my activities",many.slice(0,60),10);
   assert.ok(prompt.length<14500);
+});
+
+test("Mikan's tastes are available for questions about her but not generic user recommendations",()=>{
+  assert.equal(shouldIncludeCharacterCanon("Recommend me something to listen to"),false);
+  assert.equal(shouldIncludeCharacterCanon("Do you think I should try a new hobby?"),false);
+  assert.equal(shouldIncludeCharacterCanon("Mikan, what should I listen to?"),false);
+  assert.equal(shouldIncludeCharacterCanon("What's your favorite music genre?"),true);
+  assert.equal(shouldIncludeCharacterCanon("Do you like synthwave?"),true);
+  assert.equal(shouldIncludeCharacterCanon("Mikan, what is your personality like?"),true);
 });
