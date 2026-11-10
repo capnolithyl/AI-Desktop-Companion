@@ -1806,6 +1806,7 @@ export default function App() {
           // These hints come from shared TypeScript rules used by Pocket too.
           // Rust still owns SearXNG query refinement, retries and web tools.
           researchRoute: researchPlan.mode,
+          researchRecent: researchPlan.recent,
           researchQuery: researchPlan.mode === "research" ? researchPlan.query : undefined,
           searxngEndpoint: settings.searxngEndpoint,
           cacheHours: settings.cacheHours,
