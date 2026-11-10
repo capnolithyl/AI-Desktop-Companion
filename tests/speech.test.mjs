@@ -125,7 +125,7 @@ test("Pocket progressive voice sends all text beyond 800 characters when finaliz
 });
 
 
-test("stage directions are never spoken even when the action marker arrives across streamed tokens", async () => {
+test("asterisk emphasis survives streamed markers without dropped words", async () => {
   const feed = new ProgressiveSpeechFeed("pocket");
   const iterator = feed[Symbol.asyncIterator]();
   const opening = "*My ears twitch happily. I lean closer";
@@ -134,10 +134,10 @@ test("stage directions are never spoken even when the action marker arrives acro
   assert.equal(feed.finish(opening + " and smile.* Hey! How was your morning? I'm glad you're here. "), true);
   const actual = [];
   for await (const chunk of { [Symbol.asyncIterator]: () => iterator }) actual.push(chunk);
-  assert.equal(actual.join(" "), "Hey! How was your morning? I'm glad you're here.");
+  assert.equal(actual.join(" "), "My ears twitch happily. I lean closer and smile. Hey! How was your morning? I'm glad you're here.");
 });
 
-test("partial action markup after ordinary speech cannot leak or force a replay", async () => {
+test("streamed Markdown emphasis retains all speech without a replay", async () => {
   const feed = new ProgressiveSpeechFeed("qwen");
   const first = "Hello there! It's good to see you. ";
   feed.append(first + "*My tail swishes. I");
@@ -148,15 +148,31 @@ test("partial action markup after ordinary speech cannot leak or force a replay"
   assert.equal(feed.finish(full), true);
   const rest=[];
   for await (const chunk of { [Symbol.asyncIterator]: () => iterator }) rest.push(chunk);
-  assert.equal(["Hello there! It's good to see you.",...rest].join(" "), "Hello there! It's good to see you. How is your morning going?");
+  assert.equal(["Hello there! It's good to see you.",...rest].join(" "), "Hello there! It's good to see you. My tail swishes. I wave. How is your morning going?");
 });
 
-test("unfinished action at end of final reply is dropped from voice", () => {
-  assert.equal(toSpeechText("Hi! *My ears flick and my tail swishes"), "Hi!");
-  assert.equal(toSpeechText("*I tilt my head and smile.* Morning!"), "Morning!");
+test("unfinished Markdown emphasis keeps the spoken words", () => {
+  assert.equal(toSpeechText("Hi! *My ears flick and my tail swishes"), "Hi! My ears flick and my tail swishes");
+  assert.equal(toSpeechText("*I tilt my head and smile.* Morning!"), "I tilt my head and smile. Morning!");
 });
 
 
 test("Markdown bullet items remain audible when action filters are enabled", () => {
   assert.equal(toSpeechText("* First item\n* Second item"), "First item Second item");
+});
+
+
+test("voice speaks italic emphasis and meow rather than deleting those words", () => {
+  assert.equal(toSpeechText("It *really* works! *meow*"), "It really works! meow");
+  assert.equal(toSpeechText("I _absolutely_ love it."), "I absolutely love it.");
+});
+
+test("progressive voice preserves emphasized words across several partial deltas", async () => {
+  const feed = new ProgressiveSpeechFeed("pocket");
+  const text = "It is *really* working! *meow* I am so happy to hear your voice now.";
+  for (const part of ["It is *rea", "lly* working! *me", "ow* I am so happy to hear your voice now."]) feed.append(part);
+  assert.equal(feed.finish(text), true);
+  const chunks=[];
+  for await (const chunk of feed) chunks.push(chunk);
+  assert.equal(chunks.join(" "), "It is really working! meow I am so happy to hear your voice now.");
 });
