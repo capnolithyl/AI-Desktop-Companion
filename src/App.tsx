@@ -1629,7 +1629,8 @@ export default function App() {
         method: plannedPublicSearch ? "ai-web" : turn.allowAutomaticWeb ? "deterministic-web"
           : plannerWeb.method,
         reason:plannedPublicSearch ? plannerWeb.reason :
-          turn.allowAutomaticWeb ? "Explicit or factual research routing" : plannerWeb.reason,
+          turn.allowAutomaticWeb ? "Explicit or factual research routing" :
+            settings.autoSearch && !canPlanPublicWeb ? "Local context or sensitive turn stays private" : plannerWeb.reason,
         query:plannedPublicSearch ? plannerWeb.query : researchPlan.mode==="research" ? researchPlan.query : undefined,
         topic:preferredTopic,
         publicWebAllowed:effectiveWeb
