@@ -377,7 +377,9 @@ export default function App() {
   }, [releaseVoiceAudio, stopSpeech]);
 
   const speak = useCallback(async (source: string, voice: VoiceSettings = settings.voice) => {
-    const spoken = toSpeechText(source);
+    // Read-aloud buttons on older stored chats must not pronounce unfiltered
+    // action descriptions, even if they predate the streaming narration guard.
+    const spoken = toSpeechText(stripNarratedActions(source));
     // The old single-Pocket-WAV path silently dropped text after 800 chars
     // (and the Rust endpoint rejects jobs above 900 chars). Chunk long
     // finalized answers into natural paragraphs instead of omitting sentences.
