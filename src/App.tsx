@@ -1593,7 +1593,7 @@ export default function App() {
         factsPromise,semanticPromise,semanticStatusPromise
       ]);
       parallelTimings.push({
-        name:"memory/Notion I/O overlap",elapsedMs:performance.now()-parallelStarted,status:"complete"
+        name:"preparation critical path",elapsedMs:performance.now()-parallelStarted,status:"complete"
       });
       const semanticIds = strongSemanticIds(semanticMatches,text);
       if (liveFacts !== userFacts) setUserFacts(liveFacts);
@@ -1736,10 +1736,9 @@ export default function App() {
           };
         }
       }
-      const voiceStatus = await Promise.race([
-        voiceWarmup, Promise.resolve(null)
-      ]);
-      if(voiceStatus)parallelTimings.push(voiceStatus);
+      void voiceWarmup.then(status => {
+        if(status)parallelTimings.push(status);
+      });
       unlistenActivity = await listen<Activity>("mikan://activity", event => {
         if (event.payload.requestId === requestId) setActivity(event.payload.text);
       });
@@ -2576,6 +2575,37 @@ export default function App() {
               <small>On new automatic web research, Qwen first extracts candidate facts with source quotations. Mikan then writes the answer normally. Adds one local model pass and may slow responses. Disable to compare with the original pipeline.</small>
             </span>
           </label>
+          <details className="service-panel">
+            <summary><strong>Preferred sources by topic</strong> (optional)</summary>
+            <small>These sites receive a ranking boost; other websites remain searchable. Domain names only, separated by commas. You can edit the topics or add your own.</small>
+            {draft.sourcePreferences.map((entry,index)=><div className="setting-field" key={index}>
+              <label>Topic
+                <input value={entry.topic} onChange={e=>setDraft(current=>({
+                  ...current,sourcePreferences:current.sourcePreferences.map((p,i)=>
+                    i===index?{...p,topic:e.target.value}:p)
+                }))}/>
+              </label>
+              <label>Keywords for recognizing this topic
+                <input value={entry.cues.join(", ")} onChange={e=>setDraft(current=>({
+                  ...current,sourcePreferences:current.sourcePreferences.map((p,i)=>
+                    i===index?{...p,cues:e.target.value.split(",").map(v=>v.trim())}:p)
+                }))}/>
+              </label>
+              <label>Preferred domains
+                <input value={entry.domains.join(", ")} onChange={e=>setDraft(current=>({
+                  ...current,sourcePreferences:current.sourcePreferences.map((p,i)=>
+                    i===index?{...p,domains:e.target.value.split(",").map(v=>v.trim())}:p)
+                }))}/>
+              </label>
+              <button type="button" className="inline-action" onClick={()=>setDraft(current=>({
+                ...current,sourcePreferences:current.sourcePreferences.filter((_,i)=>i!==index)
+              }))}>Remove topic</button>
+            </div>)}
+            <button type="button" className="secondary-action" disabled={draft.sourcePreferences.length>=20}
+              onClick={()=>setDraft(current=>({...current,sourcePreferences:[
+                ...current.sourcePreferences,{topic:"new topic",cues:[],domains:[]}
+              ]}))}>Add source topic</button>
+          </details>
           <div className="settings-section-title"><HardDrive size={17}/> Webpage cache</div>
           <label className="setting-field">Refresh cached pages after
             <select value={draft.cacheHours} onChange={e => setDraft(current => ({ ...current, cacheHours: Number(e.target.value) }))}>
