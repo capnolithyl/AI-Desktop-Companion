@@ -22,10 +22,11 @@ export type NotionRetrievalPlan = {
 };
 
 // Generic writing intent, not a fixed set of book and character names.
-const WRITING = /\b(notion|my\s+(?:book|novel|story|stories|manuscript|writing|draft|characters?|chapters?|notes|lore)|(?:the|this|that)\s+(?:chapter|manuscript|draft|story\s+bible)|story\s+bible|character\s+(?:arc|sheet|backstory|development)|worldbuilding|my\s+fiction|hollow\s+meridian|charlotte)\b/i;
+const WRITING = /\b(notion|my\s+(?:book|novel|story|stories|manuscript|writing|draft|characters?|chapters?|notes|lore)|(?:the|this|that)\s+(?:chapter|manuscript|draft|story\s+bible)|story\s+bible|character\s+(?:arc|sheet|backstory|development)|worldbuilding|my\s+fiction|hollow\s+meridian|charlotte|(?:first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth|\d+(?:st|nd|rd|th)?)\s+chapter\b|chapter\s+(?:of|from|in)\s+(?:(?:my|the)\s+)?(?:book|novel|manuscript))\b/i;
 const FOLLOWUP = /\b(she|he|they|it|her|him|them|their|chapter|scene|plot|ending|story|book|novel|then|after|next|backstory|development|relationship|character|that|those|this)\b|\bwhat\s+(?:happened|happens|about|did|should|comes)\b/i;
 const NAME_STOP = new Set(("what where which when who whose why how can could would should will please tell "+
   "give show help about explain compare analyze analyse read review summarize summarise "+
+  "recommend suggest suggesting find finding search searching interested interesting surprise recent latest "+
   "i ive im my me we ours the a an in on to with from hey hello okay alright "+
   "and not but then there this that those these lets").split(" "));
 const TITLE_STOP = new Set(("the of a an and or in for on to my your our page pages "+
@@ -61,6 +62,24 @@ export function isNotionTopic(
   return isFollowup(text) && !!lastBookTopic(recent);
 }
 
+/** Handle both "Chapter One" and "the first chapter of my book".
+ * Ordinals are normalized before title matching, without inventing a chapter. */
+export function chapterNumber(query:string):string|null {
+  const q=normal(query);
+  const equivalents:Record<string,string>={
+    one:"1",first:"1",two:"2",second:"2",three:"3",third:"3",
+    four:"4",fourth:"4",five:"5",fifth:"5",six:"6",sixth:"6",
+    seven:"7",seventh:"7",eight:"8",eighth:"8",nine:"9",ninth:"9",
+    ten:"10",tenth:"10"
+  };
+  const n="(?:\\d+(?:st|nd|rd|th)?|one|two|three|four|five|six|seven|eight|nine|ten|first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth)";
+  const match=new RegExp("\\bchapter(?:\\s+(?:number|no))?\\s+("+n+")\\b|\\b("+n+")\\s+chapter\\b","i").exec(q);
+  if(!match)return null;
+  const raw=match[1]||match[2];
+  const numeric=/^\\d+/.exec(raw);
+  return numeric ? String(Number(numeric[0])) : (equivalents[raw]??null);
+}
+
 function pageScore(query:string, page:NotionCachedPage):number {
   const q=normal(query),title=normal(page.title);
   if(!q||!title)return 0;
@@ -73,12 +92,11 @@ function pageScore(query:string, page:NotionCachedPage):number {
   if(compactId.length===32 && normal(query).replace(/ /g,"").includes(compactId))return 250;
   // A chapter title needs both the label and number. Bare "chapter" is
   // too broad and must not select an unrelated page.
-  const chapter=(text:string)=>text.match(/\bchapter\s+(\d+|one|two|three|four|five|six|seven|eight|nine|ten)\b/);
-  const numbers:Record<string,string>={one:"1",two:"2",three:"3",four:"4",five:"5",six:"6",seven:"7",eight:"8",nine:"9",ten:"10"};
-  const wanted=chapter(q),candidate=chapter(title);
-  const normalizedNumber=(raw:string)=>
-    /^\d+$/.test(raw) ? String(Number(raw)) : (numbers[raw]||raw);
-  if(wanted&&candidate&&normalizedNumber(wanted[1])===normalizedNumber(candidate[1]))return 130;
+  const wanted=chapterNumber(query),candidate=chapterNumber(page.title);
+  // An explicit chapter number must never fall back to a similarly titled
+  // different chapter, or to an unrelated story-bible overview.
+  if(wanted && candidate !== wanted)return 0;
+  if(wanted && candidate===wanted)return 130;
   if(title.length>=6 && (q===title||q.includes(" "+title+" ")||q.endsWith(" "+title)))return 100+title.length/100;
   const terms=words(title).filter(w=>w.length>=4&&!TITLE_STOP.has(w));
   if(!terms.length)return 0;
@@ -97,12 +115,21 @@ export function selectNotionPage(query:string,pages:readonly NotionCachedPage[])
 }
 
 export function asksToReadFullNotionPage(text:string):boolean {
-  return /\b(?:read|review|analy[sz]e|summari[sz]e|recap|go through|look through|take a look at|critique)\b/i.test(text)
-    && /\b(?:full|whole|entire|all of|complete|chapter|draft|document|notion page|manuscript|book|story)\b/i.test(text);
+  const document=/\b(?:full|whole|entire|all of|complete|chapter|draft|document|notion page|manuscript|book|story)\b/i.test(text);
+  const direct=/\b(?:read|review|analy[sz]e|summari[sz]e|recap|go through|look through|take a look at|critique)\b/i.test(text);
+  // A request for feedback on a particular chapter requires reading it, even
+  // if the owner doesn't literally say "please read the chapter".
+  const critique=/\b(?:what do you think|what did you think|your thoughts|opinion|impressions?|feedback|critique|how is|how's)\b/i.test(text)
+    && chapterNumber(text)!==null;
+  return document && (direct || critique);
 }
 
 function namedCandidates(text:string):string[] {
-  const tokens=[...text.matchAll(/\b[A-Z][a-zA-Z]{3,}\b/g)].map(x=>x[0]);
+  const tokens=[...text.matchAll(/\b[A-Z][a-zA-Z]{3,}\b/g)]
+    // Sentence-initial "Recommend", "Suggest", etc. are not characters
+    // from the owner's private Notion library.
+    .filter(m=>m.index!==0 || !/\s/.test(text.trim()))
+    .map(x=>x[0]);
   const names=tokens.filter(t=>{
     if(!NAME_STOP.has(t.toLowerCase()))return true;
     return t==="Will" &&
