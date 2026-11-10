@@ -28,6 +28,19 @@ const followUpQuestion = /^(?:(?:and|also|but|so)\s+)?(?:what(?:'s|\s)|when\b|wh
 // "me" is the recipient in "find me" and "tell me", not private context.
 const privateContext = /\b(?:my|mine|our|ours)\b|\b(?:about|with|to)\s+me\b/i;
 
+/** Explicit public website/entity identification should not depend on a small
+ * model deciding to call a tool. Only public factual prompts qualify, not
+ * personal updates, ordinary chat, pasted code or document attachments.
+ * Automatic web lookup still requires the owner's web-search toggle.
+ */
+function publicWebsiteLookup(text: string): boolean {
+  const asksAboutEntity = /^(?:what(?:'s| is| are| does)|tell me (?:about|more about)|do you know (?:what|anything|about)|have you heard of|who (?:runs|owns|operates))\b/i.test(text);
+  const bareDomain = /^(?:https?:\/\/)?(?:www\.)?[a-z0-9-]+(?:\.[a-z0-9-]+)+\/?$/i.test(text.trim());
+  const namedDomain = /\b(?:[a-z0-9-]+\.)+(?:com|org|net|gov|edu|io|dev|ai|app|info|us|de|co|uk)\b/i.test(text);
+  const compoundBrand = /\b[A-Z][a-z]+[A-Z][A-Za-z0-9]*\b/.test(text);
+  return bareDomain || (asksAboutEntity && (namedDomain || compoundBrand));
+}
+
 export function researchRequest(question: string, previous: ResearchTurn[] = []): ResearchRequest | null {
   const text = question.trim();
   if (isPersonalMemoryQuestion(text)) return null;
@@ -38,6 +51,7 @@ export function researchRequest(question: string, previous: ResearchTurn[] = [])
   if (/^(?:i(?:['’]m| am| was| have| work| live| like| love| feel| think)\b|my\s+\w+\s+(?:is|was|are)\b|we(?:['’]re| are| have| were)\b|what(?:['’]s| is| are) your\b|who are you\b|what did we\b|what did you and i\b)/i.test(text)) return null;
 
   const direct = explicitResearch.test(text);
+  const siteLookup = publicWebsiteLookup(text);
   // Do not silently send private facts to Tavily, even after "find me".
   const publicWebPermission = /\b(?:on the web|on the internet|search the web|search online|look online|check online|google)\b/i.test(text);
   if ((/^(?:i\b|i['’]m\b|my\b|we\b|our\b)/i.test(text) || privateContext.test(text)) &&
@@ -54,7 +68,7 @@ export function researchRequest(question: string, previous: ResearchTurn[] = [])
   const continuation = followUpQuestion.test(text) && !independentTopic && previousResearch !== undefined &&
     !/\b(my|me|mine|your|yours|myself)\b/i.test(text);
 
-  if (!direct && !current && !factual && !continuation) return null;
+  if (!direct && !current && !factual && !continuation && !siteLookup) return null;
   const recent = timeSensitive.test(text) && (direct || informationQuestion.test(text) || continuation)
     || /\bupdates?\b/i.test(text) && (direct || informationQuestion.test(text) || continuation);
   const query = continuation && text.length < 120
@@ -182,7 +196,8 @@ export function planResearch(question: string, previous: ResearchTurn[] = []): R
   if (!request) return { mode: "chat", recent: false };
   const text = question.trim();
   const desktopFactResearch = /^(?:tell me (?:more )?about|what (?:can you tell me|do you know) about|what is new with|any (?:info|news) (?:on|about)|information (?:on|about))\b/i.test(text);
-  if (explicitResearch.test(text) || request.recent || desktopFactResearch) {
+  const siteLookup = publicWebsiteLookup(text);
+  if (explicitResearch.test(text) || request.recent || desktopFactResearch || siteLookup) {
     return { mode: "research", query: buildResearchQuery(question, previous), recent: request.recent };
   }
   return { mode: "factual", query: request.query, recent: request.recent };
