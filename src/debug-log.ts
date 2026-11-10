@@ -84,6 +84,7 @@ function timestamp(time: number): string {
 
 function performanceLines(diagnostics: Diagnostics): string[] {
   const s = diagnostics.stats;
+  const memory = diagnostics.memory;
   const speed = s?.outputTokens != null && s.evalDurationNs != null && s.evalDurationNs > 0
     ? (s.outputTokens / (s.evalDurationNs / 1e9)).toFixed(1) + " tok/s" : "n/a";
   return [
@@ -104,31 +105,31 @@ function performanceLines(diagnostics: Diagnostics): string[] {
       "  Extraction time: " + duration(diagnostics.research.elapsedMs),
       "  Evidence note: " + diagnostics.research.note
     ] : []),
-    ...(diagnostics.memory ? [
+    ...(memory ? [
       "Memory recall (facts actually included in the prompt):",
-      "  SQLite facts available: " + diagnostics.memory.storedFacts,
-      "  Semantic service: " + diagnostics.memory.semanticService +
-        (diagnostics.memory.semanticReason ? " (" + diagnostics.memory.semanticReason + ")" : ""),
-      "  Semantic candidates returned: " + diagnostics.memory.semanticCandidates,
-      "  Strong semantic matches (legacy cutoff): " + diagnostics.memory.strongSemanticMatches,
-      ...(diagnostics.memory.semanticScores?.length ? [
+      "  SQLite facts available: " + memory.storedFacts,
+      "  Semantic service: " + memory.semanticService +
+        (memory.semanticReason ? " (" + memory.semanticReason + ")" : ""),
+      "  Semantic candidates returned: " + memory.semanticCandidates,
+      "  Strong semantic matches (legacy cutoff): " + memory.strongSemanticMatches,
+      ...(memory.semanticScores?.length ? [
         "  Nearest-neighbor scores (not an absolute relevance test): " +
-          diagnostics.memory.semanticScores.map(hit =>
+          memory.semanticScores.map(hit =>
             "#" + hit.id + "=" + (hit.score == null ? "n/a" : hit.score.toFixed(3))).join(", ")
       ] : []),
-      ...(diagnostics.memory.selectionMethod ? [
-        "  Selection method: " + diagnostics.memory.selectionMethod,
-        "  AI candidates considered: " + (diagnostics.memory.selectionCandidates ?? "n/a"),
-        "  Selection time: " + duration(diagnostics.memory.selectionTimeMs),
-        ...(diagnostics.memory.selectionNote ? ["  Selection note: " + diagnostics.memory.selectionNote] : [])
+      ...(memory.selectionMethod ? [
+        "  Selection method: " + memory.selectionMethod,
+        "  AI candidates considered: " + (memory.selectionCandidates ?? "n/a"),
+        "  Selection time: " + duration(memory.selectionTimeMs),
+        ...(memory.selectionNote ? ["  Selection note: " + memory.selectionNote] : [])
       ] : []),
-      "  Selected facts: " + diagnostics.memory.facts.length + " / " + diagnostics.memory.maxFacts + " maximum",
-      ...(diagnostics.memory.facts.length
-        ? diagnostics.memory.facts.flatMap((fact, index) => [
+      "  Selected facts: " + memory.facts.length + " / " + memory.maxFacts + " maximum",
+      ...(memory.facts.length
+        ? memory.facts.flatMap((fact, index) => [
           "  [" + (index + 1) + "] ID " + fact.id + " | " + fact.category +
             " | " + (fact.pinned ? "pinned" : "not pinned") +
             " | " + (fact.semantic ? "semantic match" : fact.pinned ? "pinned core" :
-              diagnostics.memory.selectionMethod === "ai-reranked" ? "AI-selected" : "keyword/category/tag match") +
+              memory.selectionMethod === "ai-reranked" ? "AI-selected" : "keyword/category/tag match") +
             (fact.tags.length ? " | tags: " + fact.tags.join(", ") : ""),
           "    " + fact.fact
         ])
