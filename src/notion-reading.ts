@@ -6,6 +6,8 @@ export type NotionDocument = {
   url: string;
   syncedAt: number;
   chunks: string[];
+  relatedPages?: Array<{title:string;url:string;chunks:string[]}>;
+  missingRelatedPages?: number;
 };
 export type NotionChapterSession = {
   conversationId: string;
@@ -65,7 +67,14 @@ export async function readNotionChapter(
   progress:(current:number,total:number)=>void=()=>{},
   interrupted:()=>boolean=()=>false
 ):Promise<string> {
-  const text=joinNotionChunks(document.chunks);
+  if((document.missingRelatedPages??0)>0) {
+    throw new Error("Linked scenes are missing from the synced Notion library ("+
+      document.missingRelatedPages+"). Share and sync the Scenes database before asking for a complete chapter review.");
+  }
+  const scenes=(document.relatedPages??[]).map(scene=>
+    "\n\n# Linked scene: "+scene.title+"\nSource: "+scene.url+"\n"+
+    joinNotionChunks(scene.chunks)).join("");
+  const text=joinNotionChunks(document.chunks)+scenes;
   if(!text.trim())throw new Error("This cached Notion page contains no readable text");
   const header="NOTION DOCUMENT: "+document.title+"\nSource: "+document.url+
     "\nSynced: "+new Date(document.syncedAt*1000).toISOString()+"\n";
