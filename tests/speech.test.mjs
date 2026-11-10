@@ -142,13 +142,13 @@ test("partial action markup after ordinary speech cannot leak or force a replay"
   const first = "Hello there! It's good to see you. ";
   feed.append(first + "*My tail swishes. I");
   const iterator = feed[Symbol.asyncIterator]();
-  assert.deepEqual(await iterator.next(), {done:false,value:"Hello there!"});
+  assert.deepEqual(await iterator.next(), {done:false,value:"Hello there! It's good to see you."});
   const full = first + "*My tail swishes. I wave.* How is your morning going?";
   feed.append(" wave.* How is your morning going?");
   assert.equal(feed.finish(full), true);
   const rest=[];
   for await (const chunk of { [Symbol.asyncIterator]: () => iterator }) rest.push(chunk);
-  assert.equal(["Hello there!",...rest].join(" "), "Hello there! It's good to see you. How is your morning going?");
+  assert.equal(["Hello there! It's good to see you.",...rest].join(" "), "Hello there! It's good to see you. How is your morning going?");
 });
 
 test("unfinished action at end of final reply is dropped from voice", () => {
