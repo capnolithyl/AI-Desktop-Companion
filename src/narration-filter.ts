@@ -50,7 +50,7 @@ export class NarrationFilter {
 
   finish(): string {
     if (this.enabled) this.drain(true);
-    return this.rendered.replace(/[ \\t]{2,}/g, " ").trim();
+    return this.rendered.replace(/[ \t]{2,}/g, " ").trim();
   }
 
   private drain(final: boolean): string {
