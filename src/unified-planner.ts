@@ -56,7 +56,8 @@ export function parseWebToolDecision(
     if(typeof web.query!=="string")return {...defaultWeb,method:"fallback",reason:"No usable public query"};
     const query=web.query.trim().replace(/\s+/g," ");
     if(query.length<5 || query.length>180 || privateWords.test(query) ||
-       emailOrPhone.test(query) || privateUrl.test(query) || /[\r\n<>]/.test(query))
+       emailOrPhone.test(query) || privateUrl.test(query) || /[\r\n<>]/.test(query) ||
+       /\b[A-Z][a-z]{2,}\s+(?:birthday|birthdate)\b/.test(query))
       return {...defaultWeb,method:"fallback",reason:"Unsafe or invalid public search query"};
     // Names that appear solely in owner profile/family facts are not automatically
     // passed to a public engine even if the local model knows them.
