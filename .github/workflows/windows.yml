@@ -33,7 +33,7 @@ jobs:
       - name: Typecheck and build UI
         run: npm run build
       - name: Test shared desktop and Pocket research policy
-        run: node --experimental-strip-types --test src/research-routing.test.mjs src/research-context.test.mjs src/runtime-context.test.mjs src/conversation-engine.test.mjs src/evidence-verification.test.mjs src/memory-ranking.test.mjs src/memory-import.test.mjs src/memory-budget.test.mjs src/session-memory.test.mjs src/archive-memory.test.mjs src/self-knowledge.test.mjs src/screen-vision.test.mjs src/live-vision.test.mjs src/capture-region.test.mjs src/chat-attachments.test.mjs src/desktop-turn-routing.test.mjs src/notion-knowledge.test.mjs
+        run: node --experimental-strip-types --test src/research-routing.test.mjs src/research-context.test.mjs src/runtime-context.test.mjs src/conversation-engine.test.mjs src/evidence-verification.test.mjs src/memory-ranking.test.mjs src/memory-retrieval.test.mjs src/memory-import.test.mjs src/memory-budget.test.mjs src/session-memory.test.mjs src/archive-memory.test.mjs src/self-knowledge.test.mjs src/screen-vision.test.mjs src/live-vision.test.mjs src/capture-region.test.mjs src/chat-attachments.test.mjs src/desktop-turn-routing.test.mjs src/notion-knowledge.test.mjs
       - name: Verify self-knowledge matches release and native commands
         run: node --experimental-strip-types scripts/check-self-knowledge.mjs
       - name: Test local remote browser relay and authentication
