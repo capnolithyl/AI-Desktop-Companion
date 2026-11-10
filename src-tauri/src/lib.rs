@@ -180,8 +180,9 @@ async fn condense_local_context(
     prompt: String,
     context_window: Option<u32>,
     max_output_tokens: Option<u32>,
+    timeout_ms: Option<u64>,
 ) -> Result<String, String> {
-    if model.trim().is_empty() || model.len() > 120 || prompt.len() > 5500 {
+    if model.trim().is_empty() || model.len() > 120 || prompt.len() > 14500 {
         return Err("Invalid context request".into());
     }
     let url = format!("{}/api/chat", local_origin(&endpoint)?);
@@ -201,7 +202,9 @@ async fn condense_local_context(
     let response = client()?
         .post(url)
         .json(&payload)
-        .timeout(Duration::from_secs(if output_limit > 200 { 55 } else { 35 }))
+        .timeout(Duration::from_millis(timeout_ms.unwrap_or(
+            if output_limit > 200 { 55_000 } else { 35_000 }
+        ).clamp(3_000, 55_000)))
         .send()
         .await
         .map_err(|e| format!("Local context resolution unavailable: {e}"))?;
