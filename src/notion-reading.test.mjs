@@ -47,6 +47,24 @@ test("long chapter traverses every section and retains opening and ending",async
   assert.match(context,/ORIGINAL ENDING/);
 });
 
+test("chapter text includes related scenes in order",async()=>{
+  const d=doc("Chapter outline. ");
+  d.relatedPages=[
+    {title:"3.1 · Arrival",url:"https://www.notion.so/scene1",chunks:chunk("Saturday: The family arrives. ")},
+    {title:"3.2 · Exploring",url:"https://www.notion.so/scene2",chunks:chunk("Sunday: They explore the woods. ")}
+  ];
+  const result=await readNotionChapter(d,async()=>{throw Error("Unexpected summarizer");});
+  assert.ok(result.indexOf("3.1 · Arrival")<result.indexOf("3.2 · Exploring"));
+  assert.match(result,/The family arrives/);
+  assert.match(result,/They explore the woods/);
+});
+test("missing linked scenes block a falsely complete chapter reading",async()=>{
+  const d=doc("Chapter summary.");
+  d.missingRelatedPages=2;
+  await assert.rejects(()=>readNotionChapter(d,async()=>""),
+    /Linked scenes are missing/);
+});
+
 test("bad summaries and interrupted reading never pretend the document was read",async()=>{
   await assert.rejects(()=>readNotionChapter(doc("sample ".repeat(3000)),async()=> "not JSON"),
     /could not produce reliable section notes/);
