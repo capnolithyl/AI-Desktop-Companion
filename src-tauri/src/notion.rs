@@ -29,6 +29,7 @@ pub struct NotionPage {
     url: String,
     selected: bool,
     last_edited: String,
+    is_database: bool,
 }
 
 #[derive(Serialize)]
@@ -241,6 +242,22 @@ fn page_from_json(page: &Value) -> Option<NotionPage> {
             .unwrap_or("").to_owned(),
         selected: false,
         last_edited: page["last_edited_time"].as_str().unwrap_or("").to_owned(),
+        is_database: false,
+    })
+}
+
+fn database_from_json(value: &Value) -> Option<NotionPage> {
+    if value["object"].as_str()? != "database" { return None; }
+    let id=value["id"].as_str()?;
+    if !is_id(id) { return None; }
+    Some(NotionPage {
+        id:id.to_owned(),
+        title:rich_text(&value["title"]).trim().to_owned(),
+        url:value["url"].as_str().filter(|url| url.starts_with("https://www.notion.so/"))
+            .unwrap_or("").to_owned(),
+        selected:false,
+        last_edited:value["last_edited_time"].as_str().unwrap_or("").to_owned(),
+        is_database:true,
     })
 }
 
@@ -253,7 +270,9 @@ async fn list_accessible(client: &reqwest::Client, token: &str) -> Result<Vec<No
         let response = request(client, token, reqwest::Method::POST,
             "/v1/search", Some(body)).await?;
         for value in response["results"].as_array().ok_or("Malformed Notion search result")? {
-            if let Some(page) = page_from_json(value) { pages.push(page); }
+            if let Some(page) = page_from_json(value).or_else(|| database_from_json(value)) {
+                pages.push(page);
+            }
         }
         if pages.len() > MAX_PAGES { return Err("Too many Notion pages in workspace; use a smaller scope".into()); }
         if !response["has_more"].as_bool().unwrap_or(false) { break; }
@@ -339,6 +358,10 @@ enum Todo { BlockId(String, usize), Block(Value, usize) }
 async fn fetch_page_text(client: &reqwest::Client, token: &str, page: &NotionPage,
     discovered: &mut VecDeque<NotionPage>) -> Result<Vec<String>, String>
 {
+    if page.is_database {
+        discovered.extend(database_rows(client,token,&page.id).await?);
+        return Ok(Vec::new());
+    }
     let mut blocks = Vec::new();
     let mut todo = vec![Todo::BlockId(page.id.clone(), 0)];
     let mut processed = 0usize;
@@ -361,6 +384,7 @@ async fn fetch_page_text(client: &reqwest::Client, token: &str, page: &NotionPag
                             url: format!("https://www.notion.so/{}", id.replace('-', "")),
                             selected: false,
                             last_edited: block["last_edited_time"].as_str().unwrap_or("").to_owned(),
+                            is_database:false,
                         });
                     }
                     continue;
@@ -492,7 +516,7 @@ pub async fn notion_sync(app: AppHandle) -> Result<NotionStatus, String> {
                 .map_err(|e| e.to_string())?;
             let rows = stmt.query_map([], |r| Ok(NotionPage {
                 id:r.get(0)?, title:r.get(1)?, url:r.get(2)?, selected:true,
-                last_edited:String::new(),
+                last_edited:String::new(),is_database:false,
             })).map_err(|e| e.to_string())?;
             rows.collect::<Result<Vec<_>,_>>().map_err(|e| e.to_string())?
         };
@@ -504,12 +528,12 @@ pub async fn notion_sync(app: AppHandle) -> Result<NotionStatus, String> {
     // Recheck current permissions on *every* sync. If the owner has revoked
     // access, drop that page from the new index instead of retaining stale data.
     let available = list_accessible(&client, &token).await?;
-    let accessible: HashSet<String> = available.iter().map(|p| p.id.clone()).collect();
     let roots: Vec<NotionPage> = if all {
         available
     } else {
-        selected_roots.into_iter()
-            .filter(|page| accessible.contains(&page.id)).collect()
+        let selected_ids:HashSet<String>=selected_roots.into_iter().map(|page|page.id).collect();
+        // Use fresh metadata so database roots are not mistaken for pages.
+        available.into_iter().filter(|page| selected_ids.contains(&page.id)).collect()
     };
     let mut queue: VecDeque<NotionPage> = roots.into();
     let mut visited = HashSet::new();
@@ -644,6 +668,19 @@ mod tests {
         assert_eq!(fts_terms("Hey Mikan, tell me about Charlotte's origin"),
             "\"charlotte\" OR \"origin\"");
         assert_eq!(fts_terms("what about the book?"), "");
+    }
+    #[test]
+    fn recognizes_database_roots_without_treating_them_as_page_blocks() {
+        let database=json!({
+            "object":"database","id":"4046859f-be62-8108-aeed-fbbd5b61c7d5",
+            "title":[{"plain_text":"Charlotte Chapters"}],
+            "url":"https://www.notion.so/123",
+            "last_edited_time":"2026-11-10T12:00:00Z"
+        });
+        let root=database_from_json(&database).unwrap();
+        assert!(root.is_database);
+        assert_eq!(root.title,"Charlotte Chapters");
+        assert!(page_from_json(&database).is_none());
     }
     #[test]
     fn chunker_handles_utf8_and_overlap() {
