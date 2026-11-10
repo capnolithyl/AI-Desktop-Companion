@@ -57,3 +57,9 @@ The eye icon shows current consent. The status strip displays capture errors. If
 - src/self-knowledge.ts: versioned feature description distinguishes available image analysis from the session's ON/OFF state.
 
 Possible future extras: window-only capture, cropping, motion/change detection, and separately opted-in proactive observations with strict inference limits. Do not silently persist or externalize screenshots.
+
+### Drawn region picker (v0.8.17)
+
+Click **Select region** in Mikan's screenshot preview. Drag across the separate full-monitor selection window and release. A valid rectangle (at least 48×48 *physical* monitor pixels) enters a locked **review** state. The confirmation toolbar moves to the bottom center, above the preview. Use **Use this region** (or **Enter**) to save the crop, **Redraw** (**R**) to unlock and try again, or **Cancel** (**Esc**) to leave without changing it. A normal left-click after release no longer starts a new rectangle. Dragging in either direction works, including scaled ultrawide monitors.
+
+The selector preview is temporary and never added to the chat archive. Only its coordinates are saved. Both manual snapshots and Live Vision use this native region on the chosen monitor; clearing the region restores full-monitor capture.
