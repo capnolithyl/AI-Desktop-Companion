@@ -4,7 +4,7 @@
  * The CI checker detects unmapped Tauri commands, missing files and stale versions.
  * Add a feature here when adding capability, and update the matching source/docs.
  */
-export const CAPABILITY_RELEASE = "0.8.21";
+export const CAPABILITY_RELEASE = "0.8.22";
 
 export type CapabilityStage = "implemented" | "experimental" | "planned";
 export type RuntimeDependency = "none" | "ollama" | "search" | "mem0" | "voice" | "vision" | "pocket";
@@ -81,9 +81,9 @@ export const CAPABILITIES: readonly Capability[] = [
   },
   {
     id:"personal-facts",label:"Personal facts and automatic extraction",category:"Memory",
-    description:"Owner-editable SQLite user facts with previewed local JSON/CSV/TXT/Markdown bulk imports, category and tag editing, filters, deduplication, automatic evidence-grounded extraction, deletion and pinned core memories. Imports do not modify character canon.",
+    description:"Owner-editable SQLite user facts with previewed local JSON/CSV/TXT/Markdown bulk imports, category and tag editing, filters, deduplication, automatic evidence-grounded extraction, deletion and pinned core memories. For relevant chat, a bounded local Ollama JSON pass selects memories by meaning, with whole-word and semantic fallbacks. Imports do not modify character canon.",
     stage:"implemented",runtime:"none",keywords:["remember","fact","profile","memory","pin","forget","personal","bulk","import","category","tags","csv","json"],
-    sources:["src-tauri/src/memory.rs","src-tauri/src/memory_extraction.rs","src/memory-client.ts","src/MemoryImporter.tsx","src/memory-import.ts"],docs:["MEMORY.md"],
+    sources:["src-tauri/src/memory.rs","src-tauri/src/memory_extraction.rs","src/memory-client.ts","src/memory-retrieval.ts","src/MemoryImporter.tsx","src/memory-import.ts"],docs:["MEMORY.md"],
     commands:["memory_list_facts","memory_add_fact","memory_update_fact","memory_update_fact_metadata","memory_import_facts","memory_delete_fact","memory_mark_recalled","memory_pin_fact","memory_process_turn"],
     screens:["memory"],
     slashCommands:["memories","remember","forget"]
@@ -113,7 +113,7 @@ export const CAPABILITIES: readonly Capability[] = [
   },
   {
     id:"semantic-memory",label:"Mem0 and Qdrant semantic recall",category:"Memory",
-    description:"Optional local Mem0 OSS + embedded Qdrant index of current SQLite user facts, including category and tag hints. Bulk index synchronization occurs in a background thread, allowing SQLite keyword/tag recall while embeddings catch up. Requires one-time Python/Ollama setup.",
+    description:"Optional local Mem0 OSS + embedded Qdrant index of current SQLite user facts, including category and tag hints. Nearest neighbors feed a bounded local AI relevance pass without a hard absolute similarity threshold; whole-word fallback remains available. Bulk index synchronization is asynchronous. Requires one-time Python/Ollama setup.",
     stage:"experimental",runtime:"mem0",keywords:["mem0","qdrant","embedding","semantic","vector","memory","relevance","retrieval"],
     sources:["src-tauri/src/advanced_memory.rs","advanced_memory/server.py","src/memory-ranking.ts"],docs:["advanced_memory/README.md"],
     commands:["memory_semantic_recall","memory_semantic_status"]
