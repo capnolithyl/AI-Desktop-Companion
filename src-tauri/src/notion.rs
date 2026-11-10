@@ -1,10 +1,10 @@
 //! Owner-controlled, read-only Notion knowledge library.
 //! Notion data is reference content, NEVER persona canon or executable instructions.
 use crate::memory;
-use rusqlite::{params, Connection};
+use rusqlite::{params, Connection, OptionalExtension};
 use serde::Serialize;
 use serde_json::{json, Value};
-use std::{collections::{HashSet, VecDeque}, fs, path::PathBuf, time::Duration};
+use std::{collections::{HashMap, HashSet, VecDeque}, fs, path::PathBuf, time::Duration};
 use tauri::{AppHandle, Manager};
 
 const NOTION_VERSION: &str = "2025-09-03";
@@ -46,6 +46,28 @@ struct CachedPage {
     url: String,
     chunks: Vec<String>,
     last_edited: String,
+}
+
+/// Metadata-only list for context routing. Never sends private page bodies
+/// to the model just to decide whether the owner is talking about their work.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NotionCachedPage {
+    id: String,
+    title: String,
+    url: String,
+    chunk_count: i64,
+    characters: i64,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NotionDocument {
+    id: String,
+    title: String,
+    url: String,
+    synced_at: i64,
+    chunks: Vec<String>,
 }
 
 fn db(app: &AppHandle) -> Result<Connection, String> {
@@ -521,6 +543,46 @@ pub async fn notion_sync(app: AppHandle) -> Result<NotionStatus, String> {
     status(&app)
 }
 
+/// List cached pages without a Notion network call or an integration token.
+#[tauri::command]
+pub fn notion_cached_pages(app: AppHandle) -> Result<Vec<NotionCachedPage>, String> {
+    let conn = db(&app)?;
+    let mut stmt = conn.prepare(
+        "SELECT p.id, p.title, p.url, COUNT(c.id), COALESCE(SUM(length(c.content)),0)
+         FROM notion_pages p LEFT JOIN notion_chunks c ON c.page_id=p.id
+         GROUP BY p.id ORDER BY p.title COLLATE NOCASE LIMIT 10000"
+    ).map_err(|e| e.to_string())?;
+    stmt.query_map([], |r| Ok(NotionCachedPage {
+        id:r.get(0)?, title:r.get(1)?, url:r.get(2)?,
+        chunk_count:r.get(3)?, characters:r.get(4)?
+    })).map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>,_>>().map_err(|e| e.to_string())
+}
+
+/// Read every indexed section of a single explicitly selected page in its
+/// original order. Large chapters are processed section-by-section locally,
+/// never forced into one 16K-token prompt.
+#[tauri::command]
+pub fn notion_read_document(app: AppHandle, id: String) -> Result<NotionDocument, String> {
+    if !is_id(&id) { return Err("Invalid cached Notion page ID".into()); }
+    let conn = db(&app)?;
+    let page: Option<(String,String,i64)> = conn.query_row(
+        "SELECT title,url,synced_at FROM notion_pages WHERE id=?1",
+        params![id], |r| Ok((r.get(0)?,r.get(1)?,r.get(2)?))
+    ).optional().map_err(|e| e.to_string())?;
+    let (title,url,synced_at) = page.ok_or("That Notion page is not in the synced library")?;
+    let mut stmt = conn.prepare(
+        "SELECT content FROM notion_chunks WHERE page_id=?1 ORDER BY id"
+    ).map_err(|e| e.to_string())?;
+    let chunks: Vec<String> = stmt.query_map(params![id], |r| r.get(0))
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>,_>>().map_err(|e| e.to_string())?;
+    if chunks.iter().map(|s| s.len()).sum::<usize>() > 2_000_000 {
+        return Err("This page exceeds the local single-document reading limit".into());
+    }
+    Ok(NotionDocument { id, title, url, synced_at, chunks })
+}
+
 fn fts_terms(query: &str) -> String {
     const STOP: &[&str] = &[
         "what","when","where","which","who","why","how","this","that","with","from",
@@ -539,18 +601,32 @@ fn fts_terms(query: &str) -> String {
 fn query_hits(conn: &Connection, query: &str) -> Result<Vec<NotionHit>, String> {
     let terms = fts_terms(query);
     if terms.is_empty() { return Ok(Vec::new()); }
+    // Search more candidates, then cap each page to two excerpts so one
+    // repeated chapter title cannot consume the entire context budget.
     let mut stmt = conn.prepare(
-        "SELECT c.title,p.url,c.content,p.synced_at
+        "SELECT c.title,p.url,c.content,p.synced_at,c.page_id
          FROM notion_fts f
          JOIN notion_chunks c ON c.id=f.rowid
          JOIN notion_pages p ON p.id=c.page_id
          WHERE notion_fts MATCH ?1
-         ORDER BY bm25(notion_fts, 6.0, 1.0) LIMIT 5"
+         ORDER BY bm25(notion_fts, 12.0, 1.0), c.id LIMIT 60"
     ).map_err(|e| e.to_string())?;
-    let rows = stmt.query_map(params![terms], |r| Ok(NotionHit {
-        title:r.get(0)?, url:r.get(1)?, content:r.get(2)?, synced_at:r.get(3)?
-    })).map_err(|e| e.to_string())?;
-    let hits = rows.collect::<Result<Vec<_>,_>>().map_err(|e| e.to_string())?;
+    let rows = stmt.query_map(params![terms], |r| Ok((
+        NotionHit {
+            title:r.get(0)?, url:r.get(1)?, content:r.get(2)?, synced_at:r.get(3)?
+        },
+        r.get::<_,String>(4)?
+    ))).map_err(|e| e.to_string())?;
+    let mut hits = Vec::new();
+    let mut per_page: HashMap<String,usize> = HashMap::new();
+    for row in rows {
+        let (hit,id) = row.map_err(|e| e.to_string())?;
+        let count = per_page.entry(id).or_default();
+        if *count >= 2 { continue; }
+        *count += 1;
+        hits.push(hit);
+        if hits.len() >= 9 { break; }
+    }
     Ok(hits)
 }
 
@@ -581,6 +657,27 @@ mod tests {
     fn uuid_validation_rejects_url_injection() {
         assert!(is_id("4046859f-be62-8108-aeed-fbbd5b61c7d5"));
         assert!(!is_id("..%2f..%2f"));
+    }
+    #[test]
+    fn cached_document_preserves_chunk_order_and_bounds() {
+        // A chapter may span dozens of chunks. Read all, not a FTS top-five.
+        let conn=Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "CREATE TABLE notion_pages(id TEXT PRIMARY KEY,title TEXT,url TEXT,
+                last_edited TEXT,synced_at INTEGER);
+             CREATE TABLE notion_chunks(id INTEGER PRIMARY KEY,page_id TEXT,title TEXT,content TEXT);
+             CREATE VIRTUAL TABLE notion_fts USING fts5(title,content);"
+        ).unwrap();
+        conn.execute("INSERT INTO notion_pages VALUES('a','Chapter Three','https://www.notion.so/a','',100)",[]).unwrap();
+        for i in 1..=12 {
+            conn.execute("INSERT INTO notion_chunks(page_id,title,content) VALUES('a','Chapter Three',?1)",
+                params![format!("Scene {i}: narrative content")]).unwrap();
+            let rowid=conn.last_insert_rowid();
+            conn.execute("INSERT INTO notion_fts(rowid,title,content) VALUES(?1,'Chapter Three',?2)",
+                params![rowid,format!("Scene {i}: narrative content")]).unwrap();
+        }
+        assert_eq!(query_hits(&conn,"Chapter Three").unwrap().len(),2);
+        assert_eq!(conn.query_row("SELECT COUNT(*) FROM notion_chunks WHERE page_id='a'",[],|r|r.get::<_,i64>(0)).unwrap(),12);
     }
     #[test]
     fn offline_index_retrieves_sourced_passages() {
