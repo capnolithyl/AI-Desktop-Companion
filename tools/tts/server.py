@@ -52,7 +52,7 @@ def reference_name_path() -> Path:
 
 def valid_reference_name(name: str) -> bool:
     return (1 <= len(name) <= 255 and name.lower().endswith(".wav")
-            and not any(char in name for char in ("/", "\\\\"))
+            and "/" not in name and chr(92) not in name
             and not any(ord(char) < 32 or ord(char) == 127 for char in name)
             and name not in (".", ".."))
 
