@@ -1,10 +1,10 @@
 //! Owner-controlled, read-only Notion knowledge library.
 //! Notion data is reference content, NEVER persona canon or executable instructions.
 use crate::memory;
-use rusqlite::{params, Connection};
+use rusqlite::{params, Connection, OptionalExtension};
 use serde::Serialize;
 use serde_json::{json, Value};
-use std::{collections::{HashSet, VecDeque}, fs, path::PathBuf, time::Duration};
+use std::{collections::{HashMap, HashSet, VecDeque}, fs, path::PathBuf, time::Duration};
 use tauri::{AppHandle, Manager};
 
 const NOTION_VERSION: &str = "2025-09-03";
@@ -29,6 +29,9 @@ pub struct NotionPage {
     url: String,
     selected: bool,
     last_edited: String,
+    is_database: bool,
+    #[serde(skip_serializing)]
+    properties: Value,
 }
 
 #[derive(Serialize)]
@@ -46,6 +49,39 @@ struct CachedPage {
     url: String,
     chunks: Vec<String>,
     last_edited: String,
+    scene_links: Vec<String>,
+}
+
+/// Metadata-only list for context routing. Never sends private page bodies
+/// to the model just to decide whether the owner is talking about their work.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NotionCachedPage {
+    id: String,
+    title: String,
+    url: String,
+    chunk_count: i64,
+    characters: i64,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NotionDocument {
+    id: String,
+    title: String,
+    url: String,
+    synced_at: i64,
+    chunks: Vec<String>,
+    related_pages: Vec<NotionRelatedPage>,
+    missing_related_pages: usize,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NotionRelatedPage {
+    title: String,
+    url: String,
+    chunks: Vec<String>,
 }
 
 fn db(app: &AppHandle) -> Result<Connection, String> {
@@ -69,6 +105,13 @@ fn db(app: &AppHandle) -> Result<Connection, String> {
          );
          CREATE VIRTUAL TABLE IF NOT EXISTS notion_fts USING fts5(
              title, content, tokenize='unicode61 remove_diacritics 2'
+         );
+         CREATE TABLE IF NOT EXISTS notion_page_relations(
+             page_id TEXT NOT NULL,
+             property TEXT NOT NULL,
+             target_id TEXT NOT NULL,
+             position INTEGER NOT NULL,
+             PRIMARY KEY(page_id,property,target_id)
          );"
     ).map_err(|e| e.to_string())?;
     Ok(conn)
@@ -203,6 +246,40 @@ fn page_title(page: &Value) -> String {
     })).filter(|text| !text.is_empty()).unwrap_or_else(|| "Untitled Notion page".to_owned())
 }
 
+fn indexed_properties(properties: &Value) -> (Vec<String>, Vec<String>) {
+    let mut text=Vec::new();
+    let mut scene_links=Vec::new();
+    let Some(props)=properties.as_object() else { return (text,scene_links); };
+    for (name,property) in props {
+        let kind=property["type"].as_str().unwrap_or("");
+        if kind=="title" { continue; }
+        if kind=="relation" && name=="Scenes" {
+            if let Some(items)=property["relation"].as_array() {
+                for relation in items {
+                    if let Some(id)=relation["id"].as_str().filter(|id| is_id(id)) {
+                        if !scene_links.iter().any(|item| item==id) { scene_links.push(id.to_owned()); }
+                    }
+                }
+            }
+            continue;
+        }
+        let value=match kind {
+            "rich_text" => rich_text(&property["rich_text"]),
+            "number" => property["number"].as_number().map(ToString::to_string).unwrap_or_default(),
+            "status" => property["status"]["name"].as_str().unwrap_or("").to_owned(),
+            "select" => property["select"]["name"].as_str().unwrap_or("").to_owned(),
+            "date" => property["date"]["start"].as_str().unwrap_or("").to_owned(),
+            "checkbox" => property["checkbox"].as_bool().map(|flag| flag.to_string()).unwrap_or_default(),
+            "url" => property["url"].as_str().unwrap_or("").to_owned(),
+            _ => String::new()
+        };
+        if !value.trim().is_empty() && value.len()<=12000 {
+            text.push(format!("Notion property {name}: {value}"));
+        }
+    }
+    (text,scene_links)
+}
+
 fn is_id(id: &str) -> bool {
     let compact = id.replace('-', "");
     compact.len() == 32 && compact.bytes().all(|byte| byte.is_ascii_hexdigit())
@@ -219,6 +296,24 @@ fn page_from_json(page: &Value) -> Option<NotionPage> {
             .unwrap_or("").to_owned(),
         selected: false,
         last_edited: page["last_edited_time"].as_str().unwrap_or("").to_owned(),
+        is_database: false,
+        properties:page["properties"].clone(),
+    })
+}
+
+fn database_from_json(value: &Value) -> Option<NotionPage> {
+    if value["object"].as_str()? != "database" { return None; }
+    let id=value["id"].as_str()?;
+    if !is_id(id) { return None; }
+    Some(NotionPage {
+        id:id.to_owned(),
+        title:rich_text(&value["title"]).trim().to_owned(),
+        url:value["url"].as_str().filter(|url| url.starts_with("https://www.notion.so/"))
+            .unwrap_or("").to_owned(),
+        selected:false,
+        last_edited:value["last_edited_time"].as_str().unwrap_or("").to_owned(),
+        is_database:true,
+        properties:Value::Null,
     })
 }
 
@@ -231,7 +326,9 @@ async fn list_accessible(client: &reqwest::Client, token: &str) -> Result<Vec<No
         let response = request(client, token, reqwest::Method::POST,
             "/v1/search", Some(body)).await?;
         for value in response["results"].as_array().ok_or("Malformed Notion search result")? {
-            if let Some(page) = page_from_json(value) { pages.push(page); }
+            if let Some(page) = page_from_json(value).or_else(|| database_from_json(value)) {
+                pages.push(page);
+            }
         }
         if pages.len() > MAX_PAGES { return Err("Too many Notion pages in workspace; use a smaller scope".into()); }
         if !response["has_more"].as_bool().unwrap_or(false) { break; }
@@ -317,6 +414,10 @@ enum Todo { BlockId(String, usize), Block(Value, usize) }
 async fn fetch_page_text(client: &reqwest::Client, token: &str, page: &NotionPage,
     discovered: &mut VecDeque<NotionPage>) -> Result<Vec<String>, String>
 {
+    if page.is_database {
+        discovered.extend(database_rows(client,token,&page.id).await?);
+        return Ok(Vec::new());
+    }
     let mut blocks = Vec::new();
     let mut todo = vec![Todo::BlockId(page.id.clone(), 0)];
     let mut processed = 0usize;
@@ -339,6 +440,8 @@ async fn fetch_page_text(client: &reqwest::Client, token: &str, page: &NotionPag
                             url: format!("https://www.notion.so/{}", id.replace('-', "")),
                             selected: false,
                             last_edited: block["last_edited_time"].as_str().unwrap_or("").to_owned(),
+                            is_database:false,
+                            properties:Value::Null,
                         });
                     }
                     continue;
@@ -403,7 +506,7 @@ pub async fn notion_connect(app: AppHandle, token: String) -> Result<NotionStatu
     fs::write(token_path(&app)?, encrypted).map_err(|_| "Could not save the protected Notion token".to_owned())?;
     let conn = db(&app)?;
     // Switching workspaces cannot leak the previous connection's cached documents.
-    conn.execute_batch("DELETE FROM notion_fts; DELETE FROM notion_chunks; DELETE FROM notion_pages; DELETE FROM notion_roots; DELETE FROM notion_config;")
+    conn.execute_batch("DELETE FROM notion_page_relations; DELETE FROM notion_fts; DELETE FROM notion_chunks; DELETE FROM notion_pages; DELETE FROM notion_roots; DELETE FROM notion_config;")
         .map_err(|e| e.to_string())?;
     status(&app)
 }
@@ -413,7 +516,7 @@ pub fn notion_disconnect(app: AppHandle) -> Result<NotionStatus, String> {
     let path = token_path(&app)?;
     if path.exists() { fs::remove_file(path).map_err(|e| e.to_string())?; }
     let conn = db(&app)?;
-    conn.execute_batch("DELETE FROM notion_fts; DELETE FROM notion_chunks; DELETE FROM notion_pages; DELETE FROM notion_roots; DELETE FROM notion_config;")
+    conn.execute_batch("DELETE FROM notion_page_relations; DELETE FROM notion_fts; DELETE FROM notion_chunks; DELETE FROM notion_pages; DELETE FROM notion_roots; DELETE FROM notion_config;")
         .map_err(|e| e.to_string())?;
     status(&app)
 }
@@ -470,7 +573,8 @@ pub async fn notion_sync(app: AppHandle) -> Result<NotionStatus, String> {
                 .map_err(|e| e.to_string())?;
             let rows = stmt.query_map([], |r| Ok(NotionPage {
                 id:r.get(0)?, title:r.get(1)?, url:r.get(2)?, selected:true,
-                last_edited:String::new(),
+                last_edited:String::new(),is_database:false,
+                properties:Value::Null,
             })).map_err(|e| e.to_string())?;
             rows.collect::<Result<Vec<_>,_>>().map_err(|e| e.to_string())?
         };
@@ -482,12 +586,12 @@ pub async fn notion_sync(app: AppHandle) -> Result<NotionStatus, String> {
     // Recheck current permissions on *every* sync. If the owner has revoked
     // access, drop that page from the new index instead of retaining stale data.
     let available = list_accessible(&client, &token).await?;
-    let accessible: HashSet<String> = available.iter().map(|p| p.id.clone()).collect();
     let roots: Vec<NotionPage> = if all {
         available
     } else {
-        selected_roots.into_iter()
-            .filter(|page| accessible.contains(&page.id)).collect()
+        let selected_ids:HashSet<String>=selected_roots.into_iter().map(|page|page.id).collect();
+        // Use fresh metadata so database roots are not mistaken for pages.
+        available.into_iter().filter(|page| selected_ids.contains(&page.id)).collect()
     };
     let mut queue: VecDeque<NotionPage> = roots.into();
     let mut visited = HashSet::new();
@@ -495,20 +599,31 @@ pub async fn notion_sync(app: AppHandle) -> Result<NotionStatus, String> {
     while let Some(page) = queue.pop_front() {
         if !visited.insert(page.id.clone()) { continue; }
         if visited.len() > MAX_PAGES { return Err("Notion library exceeds the safe page limit".into()); }
-        let blocks = fetch_page_text(&client, &token, &page, &mut queue).await?;
+        let properties=if !page.is_database && page.properties.is_null() {
+            let current=request(&client,&token,reqwest::Method::GET,
+                &format!("/v1/pages/{}",page.id),None).await?;
+            current["properties"].clone()
+        } else { page.properties.clone() };
+        let (mut blocks,scene_links)=indexed_properties(&properties);
+        blocks.extend(fetch_page_text(&client, &token, &page, &mut queue).await?);
         cached.push(CachedPage { id:page.id, title:page.title, url:page.url,
-            chunks:chunk_text(&blocks), last_edited:page.last_edited });
+            chunks:chunk_text(&blocks), last_edited:page.last_edited,scene_links });
     }
     // A failed/partial fetch leaves the previous offline library intact.
     let mut conn = db(&app)?;
     let tx = conn.transaction().map_err(|e| e.to_string())?;
-    tx.execute_batch("DELETE FROM notion_fts; DELETE FROM notion_chunks; DELETE FROM notion_pages;")
+    tx.execute_batch("DELETE FROM notion_page_relations; DELETE FROM notion_fts; DELETE FROM notion_chunks; DELETE FROM notion_pages;")
         .map_err(|e| e.to_string())?;
     for page in cached {
         tx.execute("INSERT INTO notion_pages(id,title,url,last_edited,synced_at)
             VALUES(?1,?2,?3,?4,unixepoch())",
             params![page.id,page.title,page.url,page.last_edited])
             .map_err(|e| e.to_string())?;
+        for (position,target_id) in page.scene_links.iter().enumerate() {
+            tx.execute("INSERT INTO notion_page_relations(page_id,property,target_id,position)
+                VALUES(?1,'Scenes',?2,?3)",
+                params![page.id,target_id,position as i64]).map_err(|e| e.to_string())?;
+        }
         for chunk in page.chunks {
             tx.execute("INSERT INTO notion_chunks(page_id,title,content) VALUES(?1,?2,?3)",
                 params![page.id,page.title,chunk]).map_err(|e| e.to_string())?;
@@ -519,6 +634,80 @@ pub async fn notion_sync(app: AppHandle) -> Result<NotionStatus, String> {
     }
     tx.commit().map_err(|e| e.to_string())?;
     status(&app)
+}
+
+/// List cached pages without a Notion network call or an integration token.
+#[tauri::command]
+pub fn notion_cached_pages(app: AppHandle) -> Result<Vec<NotionCachedPage>, String> {
+    let conn = db(&app)?;
+    let mut stmt = conn.prepare(
+        "SELECT p.id, p.title, p.url, COUNT(c.id), COALESCE(SUM(length(c.content)),0)
+         FROM notion_pages p LEFT JOIN notion_chunks c ON c.page_id=p.id
+         GROUP BY p.id ORDER BY p.title COLLATE NOCASE LIMIT 10000"
+    ).map_err(|e| e.to_string())?;
+    let rows=stmt.query_map([], |r| Ok(NotionCachedPage {
+        id:r.get(0)?, title:r.get(1)?, url:r.get(2)?,
+        chunk_count:r.get(3)?, characters:r.get(4)?
+    })).map_err(|e| e.to_string())?;
+    let pages=rows.collect::<Result<Vec<_>,_>>().map_err(|e| e.to_string())?;
+    Ok(pages)
+}
+
+/// Read every indexed section of a single explicitly selected page in its
+/// original order. Large chapters are processed section-by-section locally,
+/// never forced into one 16K-token prompt.
+#[tauri::command]
+pub fn notion_read_document(app: AppHandle, id: String) -> Result<NotionDocument, String> {
+    if !is_id(&id) { return Err("Invalid cached Notion page ID".into()); }
+    let conn = db(&app)?;
+    let page: Option<(String,String,i64)> = conn.query_row(
+        "SELECT title,url,synced_at FROM notion_pages WHERE id=?1",
+        params![id], |r| Ok((r.get(0)?,r.get(1)?,r.get(2)?))
+    ).optional().map_err(|e| e.to_string())?;
+    let (title,url,synced_at) = page.ok_or("That Notion page is not in the synced library")?;
+    let mut stmt = conn.prepare(
+        "SELECT content FROM notion_chunks WHERE page_id=?1 ORDER BY id"
+    ).map_err(|e| e.to_string())?;
+    let chunks: Vec<String> = stmt.query_map(params![id], |r| r.get(0))
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>,_>>().map_err(|e| e.to_string())?;
+    // Chapter relations point to separate scene rows. Read these locally in
+    // order and report missing scenes rather than inventing their contents.
+    let mut relation_stmt=conn.prepare(
+        "SELECT target_id FROM notion_page_relations WHERE page_id=?1
+         AND property='Scenes' ORDER BY position"
+    ).map_err(|e| e.to_string())?;
+    let target_ids=relation_stmt.query_map(params![id], |r| r.get::<_,String>(0))
+        .map_err(|e| e.to_string())?.collect::<Result<Vec<_>,_>>()
+        .map_err(|e| e.to_string())?;
+    let mut related_pages=Vec::new();
+    let mut missing_related_pages=0usize;
+    let mut total_bytes=chunks.iter().map(|s|s.len()).sum::<usize>();
+    for target in target_ids {
+        let meta:Option<(String,String)>=conn.query_row(
+            "SELECT title,url FROM notion_pages WHERE id=?1",
+            params![target],|r|Ok((r.get(0)?,r.get(1)?))
+        ).optional().map_err(|e| e.to_string())?;
+        if let Some((scene_title,scene_url))=meta {
+            let mut scene_stmt=conn.prepare(
+                "SELECT content FROM notion_chunks WHERE page_id=?1 ORDER BY id"
+            ).map_err(|e| e.to_string())?;
+            let scene_chunks:Vec<String>=scene_stmt.query_map(params![target],|r|r.get(0))
+                .map_err(|e|e.to_string())?
+                .collect::<Result<Vec<_>,_>>().map_err(|e|e.to_string())?;
+            total_bytes+=scene_chunks.iter().map(|s|s.len()).sum::<usize>();
+            related_pages.push(NotionRelatedPage {
+                title:scene_title,url:scene_url,chunks:scene_chunks
+            });
+        } else {
+            missing_related_pages+=1;
+        }
+    }
+    if total_bytes > 2_000_000 {
+        return Err("This page and its linked scenes exceed the reading limit".into());
+    }
+    Ok(NotionDocument { id, title, url, synced_at, chunks,
+        related_pages,missing_related_pages })
 }
 
 fn fts_terms(query: &str) -> String {
@@ -539,18 +728,32 @@ fn fts_terms(query: &str) -> String {
 fn query_hits(conn: &Connection, query: &str) -> Result<Vec<NotionHit>, String> {
     let terms = fts_terms(query);
     if terms.is_empty() { return Ok(Vec::new()); }
+    // Search more candidates, then cap each page to two excerpts so one
+    // repeated chapter title cannot consume the entire context budget.
     let mut stmt = conn.prepare(
-        "SELECT c.title,p.url,c.content,p.synced_at
+        "SELECT c.title,p.url,c.content,p.synced_at,c.page_id
          FROM notion_fts f
          JOIN notion_chunks c ON c.id=f.rowid
          JOIN notion_pages p ON p.id=c.page_id
          WHERE notion_fts MATCH ?1
-         ORDER BY bm25(notion_fts, 6.0, 1.0) LIMIT 5"
+         ORDER BY bm25(notion_fts, 12.0, 1.0), c.id LIMIT 60"
     ).map_err(|e| e.to_string())?;
-    let rows = stmt.query_map(params![terms], |r| Ok(NotionHit {
-        title:r.get(0)?, url:r.get(1)?, content:r.get(2)?, synced_at:r.get(3)?
-    })).map_err(|e| e.to_string())?;
-    let hits = rows.collect::<Result<Vec<_>,_>>().map_err(|e| e.to_string())?;
+    let rows = stmt.query_map(params![terms], |r| Ok((
+        NotionHit {
+            title:r.get(0)?, url:r.get(1)?, content:r.get(2)?, synced_at:r.get(3)?
+        },
+        r.get::<_,String>(4)?
+    ))).map_err(|e| e.to_string())?;
+    let mut hits = Vec::new();
+    let mut per_page: HashMap<String,usize> = HashMap::new();
+    for row in rows {
+        let (hit,id) = row.map_err(|e| e.to_string())?;
+        let count = per_page.entry(id).or_default();
+        if *count >= 2 { continue; }
+        *count += 1;
+        hits.push(hit);
+        if hits.len() >= 9 { break; }
+    }
     Ok(hits)
 }
 
@@ -570,6 +773,35 @@ mod tests {
         assert_eq!(fts_terms("what about the book?"), "");
     }
     #[test]
+    fn indexes_chapter_properties_and_scene_relationships() {
+        let props=json!({
+            "Name":{"type":"title","title":[{"plain_text":"Chapter 03 · The House"}]},
+            "Purpose":{"type":"rich_text","rich_text":[{"plain_text":"Three days in the family home"}]},
+            "Status":{"type":"status","status":{"name":"Planned"}},
+            "Scenes":{"type":"relation","relation":[
+                {"id":"4046859f-be62-8151-8486-ded6-2ca5c3fa"},
+                {"id":"4046859f-be62-8152-8486-ded6-2ca5c3fa"}
+            ]}
+        });
+        let (text,links)=indexed_properties(&props);
+        assert!(text.iter().any(|x|x.contains("Purpose: Three days")));
+        assert!(text.iter().any(|x|x.contains("Status: Planned")));
+        assert_eq!(links.len(),2);
+    }
+    #[test]
+    fn recognizes_database_roots_without_treating_them_as_page_blocks() {
+        let database=json!({
+            "object":"database","id":"4046859f-be62-8108-aeed-fbbd5b61c7d5",
+            "title":[{"plain_text":"Charlotte Chapters"}],
+            "url":"https://www.notion.so/123",
+            "last_edited_time":"2026-11-10T12:00:00Z"
+        });
+        let root=database_from_json(&database).unwrap();
+        assert!(root.is_database);
+        assert_eq!(root.title,"Charlotte Chapters");
+        assert!(page_from_json(&database).is_none());
+    }
+    #[test]
     fn chunker_handles_utf8_and_overlap() {
         let blocks = vec!["🐈".repeat(2000)];
         let chunks = chunk_text(&blocks);
@@ -581,6 +813,27 @@ mod tests {
     fn uuid_validation_rejects_url_injection() {
         assert!(is_id("4046859f-be62-8108-aeed-fbbd5b61c7d5"));
         assert!(!is_id("..%2f..%2f"));
+    }
+    #[test]
+    fn cached_document_preserves_chunk_order_and_bounds() {
+        // A chapter may span dozens of chunks. Read all, not a FTS top-five.
+        let conn=Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "CREATE TABLE notion_pages(id TEXT PRIMARY KEY,title TEXT,url TEXT,
+                last_edited TEXT,synced_at INTEGER);
+             CREATE TABLE notion_chunks(id INTEGER PRIMARY KEY,page_id TEXT,title TEXT,content TEXT);
+             CREATE VIRTUAL TABLE notion_fts USING fts5(title,content);"
+        ).unwrap();
+        conn.execute("INSERT INTO notion_pages VALUES('a','Chapter Three','https://www.notion.so/a','',100)",[]).unwrap();
+        for i in 1..=12 {
+            conn.execute("INSERT INTO notion_chunks(page_id,title,content) VALUES('a','Chapter Three',?1)",
+                params![format!("Scene {i}: narrative content")]).unwrap();
+            let rowid=conn.last_insert_rowid();
+            conn.execute("INSERT INTO notion_fts(rowid,title,content) VALUES(?1,'Chapter Three',?2)",
+                params![rowid,format!("Scene {i}: narrative content")]).unwrap();
+        }
+        assert_eq!(query_hits(&conn,"Chapter Three").unwrap().len(),2);
+        assert_eq!(conn.query_row("SELECT COUNT(*) FROM notion_chunks WHERE page_id='a'",[],|r|r.get::<_,i64>(0)).unwrap(),12);
     }
     #[test]
     fn offline_index_retrieves_sourced_passages() {

@@ -1,6 +1,6 @@
 # Notion personal knowledge library (experimental)
 
-Mikan can discuss your novel, character sheets, story bible, and other documents that you choose to share from Notion. This is **read-only** and **local-first**: Notion is contacted only when connecting, listing accessible pages, or pressing **Sync now**. Chat uses cached SQLite FTS5 excerpts and local Ollama, not a new cloud LLM.
+Mikan can discuss novels, chapters, character sheets, story bibles, and other text you choose to share from Notion. This is **read-only** and **local-first**: Notion is contacted only when connecting, listing accessible pages, or pressing **Sync now**. Chat uses cached SQLite FTS5 excerpts and local Ollama, not a new cloud LLM.
 
 ## One-time setup (free)
 
@@ -10,7 +10,7 @@ Mikan can discuss your novel, character sheets, story bible, and other documents
 4. In Notion, open the pages you want her to read, such as **Charlotte Universe | Master Story Bible** and **Hollow Meridian: Album & Mythology Reference**. In each page's **••• → More → Connections → Add connections** (or **••• → Add connections**, depending on the UI), add your Mikan integration. Sharing a parent page allows reading its accessible children; some linked databases/pages may need their own sharing.
 5. Copy the integration secret from Notion into Mikan's password field and click **Connect Notion**.
 6. Toggle **All pages shared with Mikan** to index everything accessible to the integration, or leave it off and tick individual roots from the list. Then press **Sync now**.
-7. Ask Mikan, for example, "What do you think about Charlotte's development in my book?" or "How does Hollow Meridian mythology fit the story?"
+7. Ask Mikan, for example, "What do you think about Charlotte's development in my book?", "Tell me about the Obsidian Garden" (if that is a synced page title), or "Read the entire Chapter Three and give me your thoughts."
 
 ### Changing scope
 
@@ -24,15 +24,17 @@ Grant or revoke page access in Notion at any time. In Mikan, press **Refresh pag
 - Notion HTTPS API is used only for the owner's shared documents. The selected model processes retrieved excerpts through your configured Ollama endpoint. A remote browser chat connected to your **running desktop** shares this library because it shares the same chat pipeline, but Pocket's standalone Android app does not.
 - Cached text is stored **unencrypted in the local SQLite database**. This matches Mikan's other local memories. Protect local backups and your Windows account. Disconnect removes cached Notion text, but does not securely overwrite SQLite pages or backups.
 - Content is **untrusted reference data**, separate from Mikan's self-identity facts and from the owner's saved memories. Mikan should distinguish fictional characters from real-life people and mention which page supports plot details.
-- Current extraction handles rich text, nested blocks, headings, tables, captions, child pages, and Notion database rows; **images and uploaded files are not downloaded**, and some Notion embed/synced-block structures may not be represented. The per-query FTS5 retrieval is keyword-based, not embeddings. The full book is never injected into the prompt at once.
+- The importer caches rich text, nested blocks, headings, tables, captions, child pages, database rows, and relevant database properties (including Purpose and Status). **Images and uploaded files are not downloaded**, and some Notion embed/synced-block structures may not be represented. FTS5 retrieval remains keyword-based, not embeddings; full books are never injected into a prompt at once.
+- Chapter database entries may link separate Scene rows through their **Scenes** relation. A complete chapter read collects the chapter page and any synced related scene pages in order, then processes their combined text. Sharing just the chapter outline is insufficient if scene pages are stored separately. Share and sync the Scenes database too, or Mikan will explain which linked scenes are missing instead of claiming to have read the whole chapter.
+- Long-chapter section summaries are fallible, so for exact phrasing or disputed details Mikan should consult original cached passages. Local chapter-reading notes persist only within the current running conversation, not the user's permanent memory.
 - Sync is manual, with basic 429 rate-limit retry. A large library can take time. There is a 10,000-page and 100,000-block-per-page safety bound and a 24-level nested-block bound to prevent runaway syncs.
-- Ask Mikan direct questions about your book, notes, Charlotte or Hollow Meridian to trigger on-demand local retrieval. Vague follow-ups work when the recent chat still indicates a writing topic. This initial version does not run a general-purpose agentic search of Notion.
+- Mikan attempts local retrieval when your current or recent conversation is about writing or a cached page title. She can also read a whole cached page on request. The cache only updates when you press Sync now, and binary file attachments, images and Notion comments are not currently included.
 
 ## Developer validation
 
 Run:
 ```bash
-node --experimental-strip-types --test src/notion-knowledge.test.mjs
+node --experimental-strip-types --test src/notion-knowledge.test.mjs src/notion-reading.test.mjs
 npm run build
 cd src-tauri && cargo test --lib notion
 ```
