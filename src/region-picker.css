@@ -33,3 +33,24 @@ html,body,#root {margin:0;width:100%;height:100%;overflow:hidden}
 .region-picker-actions button:disabled{opacity:.45;cursor:not-allowed}
 .region-picker-loading{position:absolute;left:35%;top:45%;padding:14px;
   background:rgba(30,20,34,.9);border-radius:12px}
+
+/* Review is a distinct state: pointer events no longer reach the canvas,
+   and the confirmation panel stays above the screenshot/tint on every display. */
+.region-picker-surface--locked{pointer-events:none;cursor:default}
+.region-picker-toolbar{
+  max-height:calc(100vh - 36px);overflow-y:auto;pointer-events:auto;z-index:30;
+}
+.region-picker-toolbar--review{
+  position:fixed;top:auto;right:auto;bottom:24px;left:50%;
+  width:min(470px,calc(100vw - 28px));
+  transform:translateX(-50%);
+  border:2px solid #ffba8b;
+  box-shadow:0 12px 60px rgba(0,0,0,.75);
+  z-index:100;
+}
+.region-picker-actions{flex-wrap:wrap}
+.region-picker-actions button{touch-action:manipulation}
+.region-picker-actions button:focus-visible{outline:3px solid #fff1c0;outline-offset:3px}
+@media (max-height:460px){
+  .region-picker-toolbar--review{bottom:8px}
+}
