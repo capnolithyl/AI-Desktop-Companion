@@ -20,7 +20,7 @@ from typing import Any
 HOST = "127.0.0.1"
 PORT = 18764
 NAMESPACE = "mikan-curated-user-facts-v1"
-MAX_BODY = 300_000
+MAX_BODY = 2_000_000
 
 
 def data_root() -> Path:
@@ -117,70 +117,116 @@ def sqlite_id(entry: dict) -> int | None:
 
 
 class CuratedIndex:
-    """Never return a memory not present in the caller's current SQLite facts."""
+    """SQLite owns all facts; bulk embedding updates run off the chat path."""
     def __init__(self, memory: Any):
         self.memory = memory
         self.checksum: str | None = None
         self.mutex = threading.Lock()
+        self.pending: tuple[str, dict[int, str]] | None = None
+        self.syncing = False
 
-    def recall(self, question: str, supplied: list[dict]) -> list[dict]:
-        if not isinstance(question, str) or len(question) > 1000:
-            raise ValueError("Invalid query")
-        if not isinstance(supplied, list) or len(supplied) > 500:
+    @staticmethod
+    def prepare(supplied: list[dict]) -> tuple[dict[int, str], dict[int, str]]:
+        if not isinstance(supplied, list) or len(supplied) > 2000:
             raise ValueError("Invalid SQLite fact list")
         facts: dict[int, str] = {}
+        indexed: dict[int, str] = {}
+        categories = {"profile", "family", "work", "projects", "interests",
+                      "preferences", "routines", "other"}
         for item in supplied:
             if not isinstance(item, dict):
                 raise ValueError("Malformed SQLite fact")
             ident, fact = item.get("id"), item.get("fact")
             if type(ident) is not int or ident < 1 or not isinstance(fact, str) or not 1 <= len(fact) <= 500:
                 raise ValueError("Invalid SQLite fact")
+            category = item.get("category", "other")
+            tags = item.get("tags", [])
+            if category not in categories or not isinstance(tags, list) or len(tags) > 8 or any(
+                not isinstance(tag, str) or not 1 <= len(tag) <= 32 for tag in tags
+            ):
+                raise ValueError("Invalid SQLite memory metadata")
             facts[ident] = fact
-        checksum = hashlib.sha256(json.dumps(
-            sorted(facts.items()), ensure_ascii=False
-        ).encode("utf-8")).hexdigest()
+            labels = (["Category: " + category] if category != "other" else []) + (
+                ["Tags: " + ", ".join(tags)] if tags else [])
+            indexed[ident] = fact + ("\n" + "\n".join(labels) if labels else "")
+        return facts, indexed
 
-        with self.mutex:
-            if checksum != self.checksum:
-                existing = extract_rows(self.memory.get_all(
-                    filters={"user_id": NAMESPACE}, top_k=1200))
-                by_id = {key: item for item in existing
-                         if (key := sqlite_id(item)) is not None}
-                # Add and update using actual Mem0 OSS calls, not a homebrew
-                # embedding implementation. "infer=False" prevents a second
-                # model from paraphrasing a curated user-approved fact.
-                for ident, fact in facts.items():
-                    prior = by_id.get(ident)
-                    if prior is None:
-                        self.memory.add(fact, user_id=NAMESPACE, infer=False,
-                                        metadata={"sqlite_id": str(ident)})
-                    elif prior.get("memory") != fact:
-                        self.memory.update(prior["id"], text=fact)
-                for ident, prior in by_id.items():
-                    if ident not in facts:
-                        self.memory.delete(prior["id"])
+    def _sync(self, records: dict[int, str]) -> None:
+        existing = extract_rows(self.memory.get_all(
+            filters={"user_id": NAMESPACE}, top_k=2500))
+        by_id = {key: item for item in existing
+                 if (key := sqlite_id(item)) is not None}
+        # infer=False makes local SQLite text authoritative. Category and tags
+        # are search hints in the indexed payload, not extra invented facts.
+        for ident, text in records.items():
+            prior = by_id.get(ident)
+            if prior is None:
+                self.memory.add(text, user_id=NAMESPACE, infer=False,
+                                metadata={"sqlite_id": str(ident)})
+            elif prior.get("memory") != text:
+                self.memory.update(prior["id"], text=text)
+        for ident, prior in by_id.items():
+            if ident not in records:
+                self.memory.delete(prior["id"])
+
+    def _sync_loop(self) -> None:
+        while True:
+            with self.mutex:
+                work = self.pending
+                self.pending = None
+                if work is None:
+                    self.syncing = False
+                    return
+            checksum, records = work
+            try:
+                self._sync(records)
+            except Exception:
+                # An unavailable embedder must not block chatting. A future
+                # recall retries syncing; do not log private facts.
+                with self.mutex:
+                    self.syncing = False
+                    self.pending = None
+                return
+            with self.mutex:
                 self.checksum = checksum
 
-            if not question.strip() or not facts:
+    def recall(self, question: str, supplied: list[dict]) -> list[dict]:
+        if not isinstance(question, str) or len(question) > 1000:
+            raise ValueError("Invalid query")
+        facts, indexed = self.prepare(supplied)
+        checksum = hashlib.sha256(json.dumps(
+            sorted(indexed.items()), ensure_ascii=False
+        ).encode("utf-8")).hexdigest()
+        with self.mutex:
+            if checksum != self.checksum:
+                # Keep only the newest SQLite snapshot while the worker runs.
+                if self.pending is None or self.pending[0] != checksum:
+                    self.pending = (checksum, indexed)
+                if not self.syncing:
+                    self.syncing = True
+                    threading.Thread(target=self._sync_loop, daemon=True).start()
+            # Skip vector search until its snapshot matches SQLite. The UI
+            # still has local category/tag/lexical fallback with zero delay.
+            if self.syncing or not question.strip() or not facts:
                 return []
             rows = extract_rows(self.memory.search(
                 question, filters={"user_id": NAMESPACE}, top_k=10))
-            result = []
-            seen = set()
-            for entry in rows:
-                ident = sqlite_id(entry)
-                if ident not in facts or ident in seen:
-                    continue
-                seen.add(ident)
-                score = entry.get("score")
-                result.append({
-                    "id": ident,
-                    "fact": facts[ident],  # SQLite is the single source of truth.
-                    "score": float(score) if isinstance(score, (int, float)) else None
-                })
-                if len(result) >= 8:
-                    break
-            return result
+        result = []
+        seen = set()
+        for entry in rows:
+            ident = sqlite_id(entry)
+            if ident not in facts or ident in seen:
+                continue
+            seen.add(ident)
+            score = entry.get("score")
+            result.append({
+                "id": ident,
+                "fact": facts[ident],
+                "score": float(score) if isinstance(score, (int, float)) else None
+            })
+            if len(result) >= 8:
+                break
+        return result
 
 
 class Handler(BaseHTTPRequestHandler):

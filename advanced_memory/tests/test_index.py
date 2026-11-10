@@ -1,6 +1,7 @@
 """Fast contract tests: no Ollama, Qdrant, or Mem0 installation required."""
 import sys
 import unittest
+import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -51,19 +52,28 @@ class IndexTests(unittest.TestCase):
             {"id": 9, "fact": "The user plays guitar and writes metal music."}
         ]
 
+    def recall(self, question, facts):
+        self.index.recall(question, facts)
+        for _ in range(200):
+            with self.index.mutex:
+                if not self.index.syncing:
+                    break
+            time.sleep(0.005)
+        return self.index.recall(question, facts)
+
     def test_semantic_recall_uses_real_mem0_index_and_returns_authoritative_sqlite_fact(self):
-        matched = self.index.recall("Help me build a website", self.user)
+        matched = self.recall("Help me build a website", self.user)
         self.assertEqual(matched[0]["id"], 7)
         self.assertIn("WordPress developer", matched[0]["fact"])
         self.assertEqual(self.mem0.calls.count("add"), 2)
-        self.index.recall("Help me build a website", self.user)
+        self.recall("Help me build a website", self.user)
         self.assertEqual(self.mem0.calls.count("add"), 2)
         self.assertEqual(self.mem0.calls.count("list"), 1)
 
     def test_edits_are_updated_and_deleted_facts_are_purged_without_touching_archive(self):
-        self.index.recall("hobby", self.user)
+        self.recall("hobby", self.user)
         next_version = [{"id": 7, "fact": "The user is learning Rust."}]
-        self.index.recall("build a website", next_version)
+        self.recall("build a website", next_version)
         self.assertIn("update", self.mem0.calls)
         self.assertIn("delete", self.mem0.calls)
         self.assertEqual(len(self.mem0.data), 1)
@@ -71,7 +81,7 @@ class IndexTests(unittest.TestCase):
                          "The user is learning Rust.")
 
     def test_index_results_cannot_invent_unstored_memories(self):
-        self.index.recall("build a website", self.user)
+        self.recall("build a website", self.user)
         self.mem0.data["fake"] = {
             "id": "fake", "memory": "The user is a neurosurgeon.",
             "metadata": {"sqlite_id": "123"}
@@ -80,21 +90,21 @@ class IndexTests(unittest.TestCase):
         # vector response rather than simply deleting before retrieval.
         self.mem0.search = lambda *args, **kwargs: {"results": [
             self.mem0.data["fake"], *list(self.mem0.data.values())]}
-        result = self.index.recall("build a website", self.user)
+        result = self.recall("build a website", self.user)
         self.assertNotIn(123, [row["id"] for row in result])
 
     def test_empty_facts_delete_stale_index_and_return_no_results(self):
-        self.index.recall("website", self.user)
-        self.assertEqual(self.index.recall("website", []), [])
+        self.recall("website", self.user)
+        self.assertEqual(self.recall("website", []), [])
         self.assertEqual(len(self.mem0.data), 0)
 
     def test_unrelated_or_malformed_input_is_rejected(self):
         for bad in ([{"id": True, "fact": "abc"}], [{"id": -1, "fact": "abc"}],
                     [{"id": 2, "fact": ""}], "not a list"):
             with self.assertRaises(ValueError):
-                self.index.recall("question", bad)
+                self.recall("question", bad)
         with self.assertRaises(ValueError):
-            self.index.recall("q" * 1001, self.user)
+            self.recall("q" * 1001, self.user)
 
     def test_mem0_results_contract_and_metadata_fields(self):
         self.assertEqual(extract_rows({"results":[{"id":"a"},None,3]}),[{"id":"a"}])
