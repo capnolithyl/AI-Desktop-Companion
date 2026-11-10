@@ -64,6 +64,9 @@ export function isNotionTopic(
 function pageScore(query:string, page:NotionCachedPage):number {
   const q=normal(query),title=normal(page.title);
   if(!q||!title)return 0;
+  // Never silently substitute an abandoned outline for a current chapter.
+  if(/\b(?:superseded|former)\b/.test(title) &&
+    !/\b(?:superseded|former|old version|previous plan)\b/.test(q)) return 0;
   // Owner can paste an exact Notion URL/UUID to disambiguate same-name pages.
   if(query.includes(page.url) && page.url.length>18)return 300;
   const compactId=page.id.replace(/-/g,"").toLowerCase();
@@ -73,7 +76,9 @@ function pageScore(query:string, page:NotionCachedPage):number {
   const chapter=(text:string)=>text.match(/\bchapter\s+(\d+|one|two|three|four|five|six|seven|eight|nine|ten)\b/);
   const numbers:Record<string,string>={one:"1",two:"2",three:"3",four:"4",five:"5",six:"6",seven:"7",eight:"8",nine:"9",ten:"10"};
   const wanted=chapter(q),candidate=chapter(title);
-  if(wanted&&candidate&&(numbers[wanted[1]]||wanted[1])===(numbers[candidate[1]]||candidate[1]))return 130;
+  const normalizedNumber=(raw:string)=>
+    /^\d+$/.test(raw) ? String(Number(raw)) : (numbers[raw]||raw);
+  if(wanted&&candidate&&normalizedNumber(wanted[1])===normalizedNumber(candidate[1]))return 130;
   if(title.length>=6 && (q===title||q.includes(" "+title+" ")||q.endsWith(" "+title)))return 100+title.length/100;
   const terms=words(title).filter(w=>w.length>=4&&!TITLE_STOP.has(w));
   if(!terms.length)return 0;
