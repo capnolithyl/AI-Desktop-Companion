@@ -76,7 +76,7 @@ export function chapterNumber(query:string):string|null {
   const match=new RegExp("\\bchapter(?:\\s+(?:number|no))?\\s+("+n+")\\b|\\b("+n+")\\s+chapter\\b","i").exec(q);
   if(!match)return null;
   const raw=match[1]||match[2];
-  const numeric=/^\\d+/.exec(raw);
+  const numeric=/^\d+/.exec(raw);
   return numeric ? String(Number(numeric[0])) : (equivalents[raw]??null);
 }
 
