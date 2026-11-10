@@ -46,15 +46,31 @@ def reference_paths() -> tuple[Path, Path]:
     return folder / "mikan-reference.wav", folder / "mikan-reference.txt"
 
 
+def reference_name_path() -> Path:
+    return reference_paths()[0].with_name("mikan-reference-name.txt")
+
+
+def valid_reference_name(name: str) -> bool:
+    return (1 <= len(name) <= 255 and name.lower().endswith(".wav")
+            and not any(char in name for char in ("/", "\\\\"))
+            and not any(ord(char) < 32 or ord(char) == 127 for char in name)
+            and name not in (".", ".."))
+
+
 def reference_status() -> dict:
     wav, text_file = reference_paths()
     if not (wav.is_file() and text_file.is_file()):
-        return {"configured": False, "transcript": None, "duration_seconds": None}
+        return {"configured": False, "transcript": None, "duration_seconds": None, "file_name": None}
     transcript = text_file.read_text(encoding="utf-8")
+    try:
+        saved_name = reference_name_path().read_text(encoding="utf-8")
+    except OSError:
+        saved_name = ""
     return {
         "configured": bool(transcript.strip()),
         "transcript": transcript,
         "duration_seconds": round(wav_duration(wav.read_bytes()), 1),
+        "file_name": saved_name if valid_reference_name(saved_name) else "mikan-reference.wav",
     }
 
 
@@ -90,21 +106,28 @@ def clear_prompt_cache() -> None:
     _clone_key = None
 
 
-def save_reference(audio: bytes, transcript: str) -> dict:
+def save_reference(audio: bytes, transcript: str, file_name: str = "mikan-reference.wav") -> dict:
     validate_reference(audio, transcript)
+    if not valid_reference_name(file_name):
+        raise ValueError("Invalid WAV reference filename.")
     with MODEL_LOCK:
         wav, text_file = reference_paths()
         wav.parent.mkdir(parents=True, exist_ok=True)
+        name_file = reference_name_path()
         temp_wav, temp_text = wav.with_suffix(".wav.tmp"), text_file.with_suffix(".txt.tmp")
+        temp_name = name_file.with_suffix(".txt.tmp")
         try:
             temp_wav.write_bytes(audio)
             temp_text.write_text(transcript.strip(), encoding="utf-8")
+            temp_name.write_text(file_name, encoding="utf-8")
             os.replace(temp_wav, wav)
             os.replace(temp_text, text_file)
+            os.replace(temp_name, name_file)
             clear_prompt_cache()
         finally:
             temp_wav.unlink(missing_ok=True)
             temp_text.unlink(missing_ok=True)
+            temp_name.unlink(missing_ok=True)
         return reference_status()
 
 
@@ -113,6 +136,7 @@ def delete_reference() -> dict:
         wav, text_file = reference_paths()
         wav.unlink(missing_ok=True)
         text_file.unlink(missing_ok=True)
+        reference_name_path().unlink(missing_ok=True)
         clear_prompt_cache()
         return reference_status()
 
@@ -283,7 +307,7 @@ class Handler(BaseHTTPRequestHandler):
                     audio = base64.b64decode(encoded, validate=True)
                 except (binascii.Error, ValueError):
                     return self.json_reply(400, {"error": "Invalid base64 audio"})
-                return self.json_reply(200, save_reference(audio, transcript))
+                return self.json_reply(200, save_reference(audio, transcript, payload.get("file_name", "mikan-reference.wav")))
 
             text = payload.get("text", "")
             prompt = payload.get("voice_prompt", "")
