@@ -448,7 +448,7 @@ mod tests {
         assert!(reference_upload_name("../sample.wav").is_err());
         assert!(reference_upload_name("folder\\sample.wav").is_err());
         assert!(reference_upload_name("voice.mp3").is_err());
-        assert!(reference_upload_name("voice.wav\\n").is_err());
+        assert!(reference_upload_name("voice.wav\n").is_err());
     }
     #[test]
     fn accepts_pocket_wav_without_a_transcript_and_rejects_invalid_audio() {
@@ -549,7 +549,8 @@ pub async fn voice_reference_status(endpoint: String) -> Result<VoiceReference, 
 /// Persist only the original user-selected filename, never its full path.
 fn reference_upload_name(raw: &str) -> Result<String, String> {
     let filename = raw.trim();
-    if filename.is_empty() || filename.chars().count() > 255
+    if raw.chars().any(char::is_control)
+        || filename.is_empty() || filename.chars().count() > 255
         || filename.chars().any(|c| c.is_control() || matches!(c, '/' | '\\'))
         || filename == "." || filename == ".." || !filename.to_ascii_lowercase().ends_with(".wav") {
         return Err("Select a WAV recording with a valid filename".into());
