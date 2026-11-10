@@ -1,4 +1,16 @@
-/** Remove formatting, citations and character stage directions from audible text. */
+/** Wait for closing Markdown emphasis before dispatching streaming speech. */
+function hasUnclosedEmphasis(markdown: string): boolean {
+  let open = false;
+  for (let i = 0; i < markdown.length; i++) {
+    if (markdown[i] !== "*" || (i > 0 && markdown[i - 1] === "\\")) continue;
+    if (markdown[i + 1] === "*") { i++; continue; } // **bold**, not a roleplay action
+    if (/\s/.test(markdown[i + 1] ?? "")) continue; // Markdown * list item, not an action
+    open = !open;
+  }
+  return open;
+}
+
+/** Strip Markdown markup but keep spoken emphasis (*really*, *meow*, etc.). */
 export function toSpeechText(markdown: string): string {
   return markdown
     .replace(/```[\s\S]*?```/g, " ")
@@ -8,8 +20,9 @@ export function toSpeechText(markdown: string): string {
     .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
     .replace(/https?:\/\/\S+/g, " ")
     .replace(/\*\*([^*\n]+)\*\*/g, "$1")
-    .replace(/\*([^*\n]+)\*/g, " ")
-    .replace(/_([^_\n]+)_/g, " ")
+    .replace(/\*([^*\n]+)\*/g, "$1")
+    .replace(/(^|\s)\*(?![\s*])([^*\n]+)$/gm, "$1$2") // strip dangling emphasis marker, retain speech
+    .replace(/_([^_\n]+)_/g, "$1")
     .replace(/\[(?:\d{1,3}|Stopped|Interrupted:[^\]]+)\]/gi, " ")
     .replace(/<[^>]*>/g, " ")
     .replace(/^\s{0,3}#{1,6}\s+/gm, "")
@@ -103,7 +116,7 @@ export class ProgressiveSpeechFeed implements AsyncIterable<string> {
       ] as const) {
         for (const match of window.matchAll(pattern)) {
           const end = (match.index ?? 0) + match[0].length;
-          if (end >= floor && end <= limit) {
+          if (end >= floor && end <= limit && !hasUnclosedEmphasis(this.buffer.slice(0, end))) {
             boundary = end;
             if (first) break;
           }
@@ -111,8 +124,16 @@ export class ProgressiveSpeechFeed implements AsyncIterable<string> {
         if (boundary) break;
       }
       if (!boundary && this.buffer.length >= limit) {
-        const lastSpace = window.slice(0, limit).lastIndexOf(" ");
-        boundary = lastSpace >= minimum ? lastSpace + 1 : limit;
+        // Never split within unfinished *emphasis*: a later token can
+        // supply the closing marker, and mismatched cleanup would replay text.
+        const head = window.slice(0, limit);
+        for (let space = head.lastIndexOf(" "); space >= minimum; space = head.lastIndexOf(" ", space - 1)) {
+          if (!hasUnclosedEmphasis(head.slice(0, space + 1))) {
+            boundary = space + 1;
+            break;
+          }
+        }
+        if (!boundary && !hasUnclosedEmphasis(head)) boundary = limit;
       }
       if (!boundary) break;
       const part = this.buffer.slice(0, boundary);

@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { splitSpeechText, toSpeechText, ProgressiveSpeechFeed, FIRST_SPEECH_CHARS, voiceEndpoint } from "../src/speech.ts";
+import { NarrationFilter, stripNarratedActions, isNarratedAction, roleplayActive } from "../src/narration-filter.ts";
 
 test("short utterances and blank text", () => {
   assert.deepEqual(splitSpeechText("Hi, Mikan!"), ["Hi, Mikan!"]);
@@ -122,4 +123,120 @@ test("Pocket progressive voice sends all text beyond 800 characters when finaliz
   assert.ok(chunks.length >= 4);
   assert.ok(chunks.every(s => s.length <= 420));
   assert.equal(chunks.join(" "), long);
+});
+
+
+test("asterisk emphasis survives streamed markers without dropped words", async () => {
+  const feed = new ProgressiveSpeechFeed("pocket");
+  const iterator = feed[Symbol.asyncIterator]();
+  const opening = "*My ears twitch happily. I lean closer";
+  feed.append(opening);
+  feed.append(" and smile.* Hey! How was your morning? I'm glad you're here. ");
+  assert.equal(feed.finish(opening + " and smile.* Hey! How was your morning? I'm glad you're here. "), true);
+  const actual = [];
+  for await (const chunk of { [Symbol.asyncIterator]: () => iterator }) actual.push(chunk);
+  assert.equal(actual.join(" "), "My ears twitch happily. I lean closer and smile. Hey! How was your morning? I'm glad you're here.");
+});
+
+test("streamed Markdown emphasis retains all speech without a replay", async () => {
+  const feed = new ProgressiveSpeechFeed("qwen");
+  const first = "Hello there! It's good to see you. ";
+  feed.append(first + "*My tail swishes. I");
+  const iterator = feed[Symbol.asyncIterator]();
+  assert.deepEqual(await iterator.next(), {done:false,value:"Hello there! It's good to see you."});
+  const full = first + "*My tail swishes. I wave.* How is your morning going?";
+  feed.append(" wave.* How is your morning going?");
+  assert.equal(feed.finish(full), true);
+  const rest=[];
+  for await (const chunk of { [Symbol.asyncIterator]: () => iterator }) rest.push(chunk);
+  assert.equal(["Hello there! It's good to see you.",...rest].join(" "), "Hello there! It's good to see you. My tail swishes. I wave. How is your morning going?");
+});
+
+test("unfinished Markdown emphasis keeps the spoken words", () => {
+  assert.equal(toSpeechText("Hi! *My ears flick and my tail swishes"), "Hi! My ears flick and my tail swishes");
+  assert.equal(toSpeechText("*I tilt my head and smile.* Morning!"), "I tilt my head and smile. Morning!");
+});
+
+
+test("Markdown bullet items remain audible when action filters are enabled", () => {
+  assert.equal(toSpeechText("* First item\n* Second item"), "First item Second item");
+});
+
+
+test("voice speaks italic emphasis and meow rather than deleting those words", () => {
+  assert.equal(toSpeechText("It *really* works! *meow*"), "It really works! meow");
+  assert.equal(toSpeechText("I _absolutely_ love it."), "I absolutely love it.");
+});
+
+test("progressive voice preserves emphasized words across several partial deltas", async () => {
+  const feed = new ProgressiveSpeechFeed("pocket");
+  const text = "It is *really* working! *meow* I am so happy to hear your voice now.";
+  for (const part of ["It is *rea", "lly* working! *me", "ow* I am so happy to hear your voice now."]) feed.append(part);
+  assert.equal(feed.finish(text), true);
+  const chunks=[];
+  for await (const chunk of feed) chunks.push(chunk);
+  assert.equal(chunks.join(" "), "It is really working! meow I am so happy to hear your voice now.");
+});
+
+
+test("narrated actions are omitted from normal replies without flattening dialogue", () => {
+  for (const input of [
+    "*My orange ears perk up immediately, and my tail gives a happy little wag against your desk as I stretch.* Good morning!",
+    "*My ears twitch as I listen, tail curling around your wrist in a supportive loop.* Good morning!",
+    "*nuzzles cheek affectionately against your arm* Good morning!",
+    "*giggles, eyes sparkling with amusement* Good morning!",
+    "*I lean forward slightly, resting my chin on my hand, eyes focused on you.* Good morning!",
+    "*My amber eyes light up with curiosity.* Good morning!",
+    "*I scratch my ear and tilt my head.* Good morning!",
+  ]) assert.equal(stripNarratedActions(input), "Good morning!", input);
+});
+
+test("vocalizations and literal asterisk emphasis survive", () => {
+  const value="I *really* love that! *meow* That's **very** sweet. _Absolutely_.";
+  assert.equal(stripNarratedActions(value),value);
+  assert.equal(toSpeechText(stripNarratedActions(value)),"I really love that! meow That's very sweet. Absolutely.");
+  assert.equal(stripNarratedActions("*I absolutely love that!*"), "*I absolutely love that!*");
+  assert.equal(stripNarratedActions("*purr*"), "*purr*");
+  assert.equal(stripNarratedActions("**My tail swishes**"), "**My tail swishes**");
+});
+
+test("roleplay is explicitly enabled, not inferred from italic emphasis", () => {
+  assert.equal(roleplayActive("Good morning!"),false);
+  assert.equal(roleplayActive("*meow*"),false);
+  assert.equal(roleplayActive("*really* fantastic"),false);
+  assert.equal(roleplayActive("Let's roleplay a fantasy scene"),true);
+  assert.equal(roleplayActive("*I lean closer and smile.*"),true);
+  assert.equal(roleplayActive("Hello",[{role:"user",content:"Let's roleplay a fantasy scene"}]),true);
+  assert.equal(roleplayActive("Stop roleplay",[{role:"user",content:"Let's roleplay a fantasy scene"}]),false);
+  const filter=new NarrationFilter(false);
+  assert.equal(filter.append("*I lean closer.* Hi!"),"*I lean closer.* Hi!");
+  assert.equal(filter.finish(),"*I lean closer.* Hi!");
+});
+
+test("streamed stage descriptions do not appear in chat or auto speech", async () => {
+  const pieces=["*My ears", " twitch and my", " tail swishes.*", " Hey! ", "I *really* am ", "here. *me", "ow*"];
+  const unfiltered=pieces.join("");
+  const cleaned=stripNarratedActions(unfiltered);
+  assert.equal(cleaned,"Hey! I *really* am here. *meow*");
+  const filter=new NarrationFilter();
+  const spoken=new ProgressiveSpeechFeed("pocket");
+  const visible=[];
+  for (const part of pieces) {
+    const delta=filter.append(part);
+    visible.push(delta);
+    spoken.append(delta);
+  }
+  assert.equal(visible.join("").trim(),cleaned);
+  assert.equal(filter.finish(),cleaned);
+  assert.equal(spoken.finish(cleaned),true);
+  const chunks=[];
+  for await (const chunk of spoken) chunks.push(chunk);
+  assert.equal(chunks.join(" "),"Hey! I really am here. meow");
+});
+
+test("stage filter does not break Markdown lists or basic programming text", () => {
+  const sample="* First option\n* Second option\n\nUse 2 * 3 or **bold** for emphasis.";
+  assert.equal(stripNarratedActions(sample),sample);
+  assert.equal(isNarratedAction("meow"),false);
+  assert.equal(isNarratedAction("really"),false);
 });

@@ -71,3 +71,11 @@ test("style helper notices repeated side topics without suppressing user-chosen 
   const directlyAsked=responseFocusGuidance(turns,"What can you tell me about the meeting?");
   assert.doesNotMatch(directlyAsked,/discussing them: meeting/);
 });
+
+
+test("normal conversation instructions discourage stage direction narration without disabling explicit roleplay", () => {
+  const guidance = responseFocusGuidance([], "Good morning!");
+  assert.match(guidance, /do not narrate physical \*actions\*/i);
+  assert.match(guidance, /\*meow\*.*\*really\*/i);
+  assert.match(guidance, /unless the owner explicitly requests roleplay/i);
+});
