@@ -1,5 +1,12 @@
 # Mikan memory foundation (first layer)
 
+## v0.8.22: hybrid local relevance selection
+
+Saved SQLite facts remain authoritative. For meaningful user turns, Mikan sends a bounded, local-only list of stored user facts to the configured Ollama model and asks for relevant numeric IDs as JSON. Collections up to 60 eligible facts can be judged together. Larger collections use a shortlist drawn from Mem0/Qdrant nearest neighbors (without requiring the previous fixed similarity cutoff), full-word lexical and metadata relevance, pinned facts and recency. The model cannot author new facts through this route; IDs are checked against the shortlist. Pinned memories retain core slots, and selected IDs are subjected to the existing context-size budget before being sent to the answer model. Local errors, invalid JSON and an approximately 20-second timeout (to accommodate cold model loading) fall back to full-word lexical/tag matching and strong semantic matches. Trivial greetings skip the AI relevance pass entirely. This adds a separate, bounded local inference request for relevant turns and can increase first-token latency.
+
+The owner-initiated debug export now shows which method was used, candidate counts, selection latency and the raw nearest-neighbor scores, alongside the exact facts actually included in the response prompt. Character-canon preferences are only injected when the owner actually asks about Mikan herself, not when requesting personal music or game recommendations. Conversation style instructions also avoid repetitive name-addressing and unnecessary narrated physical gestures. The saved memory store is never changed merely by retrieval.
+
+
 ## v0.8.18: bulk personal memories, categories and tags
 
 In **Memory → About you → Bulk import memories**, paste one fact per line or open a TXT, Markdown, CSV or JSON file (1 MB maximum, 1000 facts per batch, 2000 total stored facts). A preview lets you skip rows, review suggested categories and tags, set category per row or across the batch, and optionally pin facts. The original file remains on your PC; no online parsing or model calls are made. Invalid input rejects the entire batch; duplicates are skipped and never overwrite existing text, metadata or pins.

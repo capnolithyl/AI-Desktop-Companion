@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { shouldIncludeCharacterCanon } from "./character-canon-routing";
 import type { ImportMemory, MemoryCategory } from "./memory-import";
 import type { Message } from "./storage";
 import { prioritizeCoreMemories, filterStaleActivities } from "./memory-ranking";
@@ -116,10 +117,19 @@ export const memoryApi = {
  */
 export function prepareMemoryContext(
   facts: UserFact[], query: string, semanticIds: number[] = [],
-  budget: MemoryBudget = memoryBudget(null)
+  budget: MemoryBudget = memoryBudget(null),
+  selectedIds?: number[]
 ): {text: string; ids: number[]} {
   if (!facts.length) return {text:"",ids:[]};
-  const ranked = prioritizeCoreMemories(filterStaleActivities(facts,query), query, semanticIds, budget.maxFacts);
+  const eligible = filterStaleActivities(facts,query);
+  // When the local LLM has judged relevance, preserve that exact ID order.
+  // Never re-add lexically matched records that the relevance pass rejected.
+  const lookup = new Map(eligible.map(f => [f.id,f]));
+  const ranked = selectedIds === undefined
+    ? prioritizeCoreMemories(eligible, query, semanticIds, budget.maxFacts)
+    : [...new Set(selectedIds)].flatMap(id => {
+        const match = lookup.get(id); return match ? [match] : [];
+      });
   const selected: UserFact[] = [];
   let length = 0;
   for (const item of ranked) {
@@ -175,6 +185,9 @@ export function readMessageMetadata(value: string): Record<string, unknown> {
  */
 export function characterContext(facts: CharacterFact[], query: string): string {
   if (!facts.length) return "";
+  // Character canon is for questions ABOUT Mikan. Supplying her music tastes
+  // during a USER music/game recommendation makes a small model copy them.
+  if (!shouldIncludeCharacterCanon(query)) return "";
   const words = (query.toLowerCase().match(/[\p{L}\p{N}]{3,}/gu) || [])
     .filter(word => !["what","when","where","which","does","your","hers","mine","that","this","with","about","tell","mikan","favorite"].includes(word));
   const scored = facts.map(fact => ({
