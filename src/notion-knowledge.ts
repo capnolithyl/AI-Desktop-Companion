@@ -124,6 +124,26 @@ export function hasNamedNotionMatch(text:string,hits:readonly NotionHit[]):boole
   });
 }
 
+/** General book chat needs an overview, but not a falsely "complete" chapter. */
+function overviewForConversation(
+  text:string,pages:readonly NotionCachedPage[]
+):NotionCachedPage|null {
+  const question=normal(text);
+  if(!/\b(?:my book|my novel|my story|my fiction|my manuscript|my writing|my characters|my lore|story bible|worldbuilding)\b/.test(question))return null;
+  const characters=/\bcharacters\b/.test(question);
+  const scored=pages.map(page=>{
+    const title=normal(page.title);
+    let score=0;
+    if(/\bstory bible\b/.test(title))score=100;
+    else if(/\b(?:universe canon|worldbuilding|story overview)\b/.test(title))score=85;
+    else if(characters && /\bcharacters\b/.test(title))score=75;
+    else if(/\b(?:books|manuscript|lore|chapters)\b/.test(title))score=40;
+    if(/\b(?:superseded|former|chapter \d+)\b/.test(title))score=0;
+    return {page,score};
+  }).filter(item=>item.score>0).sort((a,b)=>b.score-a.score);
+  return scored[0]?.page??null;
+}
+
 /** Pages are local metadata; no model call is required for routing. Any query
  * can mention a page title or character without a magic "Notion" keyword.
  */
@@ -143,7 +163,8 @@ export function planNotionRetrieval(
   // admitted into chat by hasNamedNotionMatch, not any incidental FTS hit.
   const possibleName=!!named.length && pages.length>0;
   const relevant=bookIntent || !!page || possibleName;
-  const query=(text+" "+(priorTopic||page?.title||"")).trim().slice(0,600);
+  const overview=bookIntent && !page ? overviewForConversation(text+" "+priorTopic,pages) : null;
+  const query=(text+" "+priorTopic+" "+(page?.title||overview?.title||"")).trim().slice(0,600);
   return {relevant,query,selectedPage:page,fullRead:asksToReadFullNotionPage(text) && !!page};
 }
 
