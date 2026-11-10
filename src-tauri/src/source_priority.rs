@@ -70,9 +70,11 @@ pub async fn search(
 )->Result<Vec<SearchResult>,String>{
     let rule=match_topic(preferences,selected_topic,&query);
     let first=rule.and_then(|r|r.domains.iter().find(|d|valid_domain(d))).cloned();
-    let broad=async {
-        if recent {web_search::web_search_recent(endpoint.clone(),query.clone()).await}
-        else {web_search::web_search(endpoint.clone(),query.clone()).await}
+    let broad_endpoint=endpoint.clone();
+    let broad_query=query.clone();
+    let broad=async move {
+        if recent {web_search::web_search_recent(broad_endpoint,broad_query).await}
+        else {web_search::web_search(broad_endpoint,broad_query).await}
     };
     if let Some(domain)=first {
         let targeted=format!("{} site:{}",query,domain);
