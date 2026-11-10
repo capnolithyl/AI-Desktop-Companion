@@ -106,6 +106,20 @@ function pageScore(query:string, page:NotionCachedPage):number {
   return terms.length>=2 && matched.length>=2 ? 20+matched.length : 0;
 }
 
+/**
+ * Do not route generic discovery queries through private Notion pages simply
+ * because one cached title shares topical words with a public recommendation.
+ * Genuine chapter/book questions or explicit references to page titles remain
+ * locally retrievable without hardcoded book/character names.
+ */
+function explicitPageReference(query:string, page:NotionCachedPage):boolean {
+  if(/\b(?:notion|my (?:notes|pages|documents|drafts)|in (?:that|the) (?:page|document))\b/i.test(query))
+    return true;
+  // An exact, case-sensitive proper title is an intentional resource reference.
+  const title=page.title.trim();
+  return title.length>=5 && query.includes(title);
+}
+
 export function selectNotionPage(query:string,pages:readonly NotionCachedPage[]):NotionCachedPage|null {
   const ranked=pages.map(page=>({page,score:pageScore(query,page)}))
     .filter(entry=>entry.score>0)
@@ -182,7 +196,8 @@ export function planNotionRetrieval(
 ):NotionRetrievalPlan {
   const bookIntent=isNotionTopic(text,recent);
   const priorTopic=bookIntent&&!WRITING.test(text)?lastBookTopic(recent):"";
-  const page=selectNotionPage(text,pages)
+  const directPage=selectNotionPage(text,pages);
+  const page=(directPage && (bookIntent || explicitPageReference(text,directPage)) ? directPage : null)
     || (bookIntent&&priorTopic?selectNotionPage(priorTopic,pages):null)
     || (bookIntent&&isFollowup(text)?activePage:null);
   const named=namedCandidates(text);
@@ -193,6 +208,23 @@ export function planNotionRetrieval(
   const overview=bookIntent && !page ? overviewForConversation(text+" "+priorTopic,pages) : null;
   const query=(text+" "+priorTopic+" "+(page?.title||overview?.title||"")).trim().slice(0,600);
   return {relevant,query,selectedPage:page,fullRead:asksToReadFullNotionPage(text) && !!page};
+}
+
+/** Return a deterministic response instead of giving the model a chance
+ * to invent a chapter review when no complete chapter was actually retrieved.
+ */
+export function unavailableChapterResponse(
+  query:string,
+  matchedPage:NotionCachedPage|null,
+  readContext:string,
+  cachedCount:number
+):string|null {
+  if(chapterNumber(query)===null || !asksToReadFullNotionPage(query))return null;
+  if(matchedPage && readContext.length>0 && !readContext.startsWith("NOTION FULL READING FAILED:"))
+    return null;
+  if(!cachedCount)return "I can't read that chapter yet because my Notion library is empty. Sync the book in Settings → Notion first, and I'll give you feedback based on the actual text instead of guessing.";
+  if(matchedPage)return "I found the chapter in Notion, but couldn't finish reading it. I'd rather not pretend I've read scenes I haven't. Please check the Notion sync or try the chapter again.";
+  return "I couldn't identify the chapter in my synced Notion pages. Could you tell me its exact page title, or sync the first chapter? I don't want to invent details about your manuscript.";
 }
 
 /** Ambiguous named entities are only soft context. Leave the final decision
