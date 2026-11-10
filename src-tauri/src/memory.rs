@@ -52,6 +52,8 @@ fn initialize_database(connection: &Connection) -> Result<(), String> {
          CREATE TABLE IF NOT EXISTS user_memories (
            id INTEGER PRIMARY KEY AUTOINCREMENT,
            fact TEXT NOT NULL COLLATE NOCASE UNIQUE,
+           category TEXT NOT NULL DEFAULT 'other',
+           tags_json TEXT NOT NULL DEFAULT '[]',
            created_at INTEGER NOT NULL DEFAULT (unixepoch()),
            updated_at INTEGER NOT NULL DEFAULT (unixepoch())
          );
@@ -105,6 +107,21 @@ fn initialize_database(connection: &Connection) -> Result<(), String> {
                SELECT new.rowid,new.content WHERE new.role='user';
            END;"
     ).map_err(|e| format!("Cannot initialize memory database: {e}"))?;
+    // Add metadata in place on older databases without disturbing user facts.
+    let mut statement=connection.prepare("PRAGMA table_info(user_memories)").map_err(|e| e.to_string())?;
+    let columns: Vec<String>=statement.query_map([], |row| row.get(1))
+        .map_err(|e| e.to_string())?.collect::<Result<_,_>>().map_err(|e| e.to_string())?;
+    drop(statement);
+    if !columns.iter().any(|name| name=="category") {
+        connection.execute("ALTER TABLE user_memories ADD COLUMN category TEXT NOT NULL DEFAULT 'other'",[])
+            .map_err(|e| e.to_string())?;
+    }
+    if !columns.iter().any(|name| name=="tags_json") {
+        connection.execute("ALTER TABLE user_memories ADD COLUMN tags_json TEXT NOT NULL DEFAULT '[]'",[])
+            .map_err(|e| e.to_string())?;
+    }
+    connection.execute_batch("CREATE INDEX IF NOT EXISTS idx_user_category ON user_memories(category);")
+        .map_err(|e| e.to_string())?;
     if !had_search {
         connection.execute(
             "INSERT INTO message_search(rowid,content)
@@ -138,6 +155,8 @@ pub struct StoredMessage {
 pub struct UserMemory {
     pub(crate) id: i64,
     pub(crate) fact: String,
+    pub(crate) category: String,
+    pub(crate) tags: Vec<String>,
     created_at: i64,
     updated_at: i64,
     importance: i64,
@@ -164,6 +183,100 @@ fn clean_fact(value: &str) -> Result<String, String> {
         return Err("A memory must contain 1–500 characters".into());
     }
     Ok(fact)
+}
+
+const MEMORY_CATEGORIES: &[&str] = &[
+    "profile","family","work","projects","interests","preferences","routines","other"
+];
+fn clean_category(value: &str) -> Result<String, String> {
+    let category=value.trim().to_lowercase();
+    if MEMORY_CATEGORIES.contains(&category.as_str()) { Ok(category) }
+    else { Err("Unknown memory category".into()) }
+}
+fn clean_tags(tags: &[String]) -> Result<Vec<String>, String> {
+    if tags.len()>8 { return Err("Use up to 8 tags per memory".into()); }
+    let mut seen=std::collections::HashSet::new();
+    let mut result=Vec::new();
+    for value in tags {
+        let tag=value.split_whitespace().collect::<Vec<_>>().join(" ").to_lowercase();
+        if tag.is_empty() || tag.chars().count()>32 ||
+            !tag.chars().all(|c| c.is_alphanumeric() || matches!(c,' '|'-'|'_')) {
+            return Err("Tags must be 1–32 letters/numbers, spaces, - or _".into());
+        }
+        if seen.insert(tag.clone()) { result.push(tag); }
+    }
+    Ok(result)
+}
+fn read_memory(row: &rusqlite::Row<'_>) -> rusqlite::Result<UserMemory> {
+    let tags_json: String=row.get(7)?;
+    Ok(UserMemory {
+        id:row.get(0)?, fact:row.get(1)?, created_at:row.get(2)?,
+        updated_at:row.get(3)?, importance:row.get(4)?,
+        reference_count:row.get(5)?, category:row.get(6)?,
+        tags:serde_json::from_str(&tags_json).unwrap_or_default()
+    })
+}
+#[derive(Deserialize)]
+#[serde(rename_all="camelCase")]
+pub struct IncomingMemory {
+    fact: String,
+    #[serde(default="default_category")]
+    category: String,
+    #[serde(default)]
+    tags: Vec<String>,
+    #[serde(default)]
+    pinned: bool,
+}
+fn default_category() -> String { "other".into() }
+#[derive(Serialize)]
+#[serde(rename_all="camelCase")]
+pub struct ImportResult { inserted: usize, duplicates: usize }
+
+/// SQLite is authoritative. Import is all-or-nothing and never overwrites
+/// an existing memory's text, category, tags or pin.
+fn import_memories(db: &mut Connection, incoming: Vec<IncomingMemory>) -> Result<ImportResult, String> {
+    if incoming.is_empty() || incoming.len()>1000 {
+        return Err("Import 1–1000 facts at a time".into());
+    }
+    let mut validated=Vec::new();
+    for item in incoming {
+        validated.push((clean_fact(&item.fact)?,clean_category(&item.category)?,
+            serde_json::to_string(&clean_tags(&item.tags)?).map_err(|e|e.to_string())?,item.pinned));
+    }
+    let tx=db.transaction().map_err(|e|e.to_string())?;
+    let old:i64=tx.query_row("SELECT COUNT(*) FROM user_memories",[],|r|r.get(0))
+        .map_err(|e|e.to_string())?;
+    let (mut inserted,mut duplicates)=(0usize,0usize);
+    for (fact,category,tags,pinned) in validated {
+        let changed=tx.execute(
+            "INSERT OR IGNORE INTO user_memories(fact,category,tags_json) VALUES(?1,?2,?3)",
+            params![fact,category,tags]
+        ).map_err(|e|e.to_string())?;
+        if changed==0 { duplicates+=1; continue; }
+        inserted+=1;
+        if old+inserted as i64>2000 { return Err("Maximum 2000 stored facts".into()); }
+        if pinned {
+            tx.execute("INSERT INTO user_memory_usage(memory_id,importance) VALUES(last_insert_rowid(),95)",[])
+                .map_err(|e|e.to_string())?;
+        }
+    }
+    tx.commit().map_err(|e|e.to_string())?;
+    Ok(ImportResult {inserted,duplicates})
+}
+#[tauri::command]
+pub fn memory_import_facts(app: AppHandle, items: Vec<IncomingMemory>) -> Result<ImportResult, String> {
+    import_memories(&mut open_db(&app)?,items)
+}
+#[tauri::command]
+pub fn memory_update_fact_metadata(app: AppHandle, id: i64, category: String, tags: Vec<String>) -> Result<(), String> {
+    let category=clean_category(&category)?;
+    let tags=serde_json::to_string(&clean_tags(&tags)?).map_err(|e|e.to_string())?;
+    let changed=open_db(&app)?.execute(
+        "UPDATE user_memories SET category=?1,tags_json=?2,updated_at=unixepoch() WHERE id=?3",
+        params![category,tags,id]
+    ).map_err(|e|e.to_string())?;
+    if changed==0 { return Err("Memory not found".into()); }
+    Ok(())
 }
 
 #[tauri::command]
@@ -324,14 +437,11 @@ pub fn memory_list_facts(app: AppHandle) -> Result<Vec<UserMemory>, String> {
     let db = open_db(&app)?;
     let mut statement = db.prepare(
         "SELECT m.id,m.fact,m.created_at,m.updated_at,
-                COALESCE(u.importance,50),COALESCE(u.reference_count,0)
+                COALESCE(u.importance,50),COALESCE(u.reference_count,0),m.category,m.tags_json
          FROM user_memories m LEFT JOIN user_memory_usage u ON m.id=u.memory_id
-         ORDER BY m.updated_at DESC,m.id DESC LIMIT 500"
+         ORDER BY m.updated_at DESC,m.id DESC LIMIT 2000"
     ).map_err(|e| e.to_string())?;
-    let rows = statement.query_map([], |row| Ok(UserMemory {
-        id: row.get(0)?, fact: row.get(1)?, created_at: row.get(2)?, updated_at: row.get(3)?,
-        importance: row.get(4)?, reference_count: row.get(5)?
-    })).map_err(|e| e.to_string())?;
+    let rows = statement.query_map([], read_memory).map_err(|e|e.to_string())?;
     rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())
 }
 
@@ -346,13 +456,10 @@ pub fn memory_add_fact(app: AppHandle, fact: String) -> Result<UserMemory, Strin
     ).map_err(|e| e.to_string())?;
     db.query_row(
         "SELECT m.id,m.fact,m.created_at,m.updated_at,
-                COALESCE(u.importance,50),COALESCE(u.reference_count,0)
+                COALESCE(u.importance,50),COALESCE(u.reference_count,0),m.category,m.tags_json
          FROM user_memories m LEFT JOIN user_memory_usage u ON m.id=u.memory_id
          WHERE m.fact=?1 COLLATE NOCASE",
-        params![fact], |row| Ok(UserMemory {
-            id: row.get(0)?, fact: row.get(1)?, created_at: row.get(2)?, updated_at: row.get(3)?,
-            importance: row.get(4)?, reference_count: row.get(5)?
-        })
+        params![fact], read_memory
     ).optional().map_err(|e| e.to_string())?
         .ok_or_else(|| "Could not read saved memory".to_string())
 }
@@ -561,6 +668,46 @@ mod tests {
         assert!(set_importance(&db,id,true).is_err());
     }
 
+    #[test]
+    fn import_is_atomic_and_deduplicates_without_overwriting_pins() {
+        let mut db=Connection::open_in_memory().unwrap();
+        initialize_database(&db).unwrap();
+        db.execute("INSERT INTO user_memories(fact) VALUES('Likes Metal')",[]).unwrap();
+        let existing=db.last_insert_rowid();
+        set_importance(&db,existing,true).unwrap();
+        let result=import_memories(&mut db,vec![
+            IncomingMemory {fact:"likes metal".into(),category:"interests".into(),tags:vec![],pinned:false},
+            IncomingMemory {fact:"Writes original songs".into(),category:"interests".into(),tags:vec!["music".into()],pinned:true},
+            IncomingMemory {fact:"writes original songs".into(),category:"other".into(),tags:vec![],pinned:false}
+        ]).unwrap();
+        assert_eq!((result.inserted,result.duplicates),(1,2));
+        let (category,tags,importance):(String,String,i64)=db.query_row(
+            "SELECT m.category,m.tags_json,u.importance FROM user_memories m JOIN user_memory_usage u ON m.id=u.memory_id WHERE m.fact='Writes original songs'",[],
+            |r| Ok((r.get(0)?,r.get(1)?,r.get(2)?))).unwrap();
+        assert_eq!((category.as_str(),tags.as_str(),importance),("interests",r#"["music"]"#,95));
+        let original:i64=db.query_row("SELECT importance FROM user_memory_usage WHERE memory_id=?1",params![existing],|r|r.get(0)).unwrap();
+        assert_eq!(original,95);
+        assert!(import_memories(&mut db,vec![
+            IncomingMemory {fact:"Valid".into(),category:"work".into(),tags:vec![],pinned:false},
+            IncomingMemory {fact:" ".into(),category:"work".into(),tags:vec![],pinned:false}
+        ]).is_err());
+        let count:i64=db.query_row("SELECT COUNT(*) FROM user_memories",[],|r|r.get(0)).unwrap();
+        assert_eq!(count,2);
+    }
+    #[test]
+    fn legacy_user_memories_migrate_without_loss() {
+        let db=Connection::open_in_memory().unwrap();
+        db.execute_batch("CREATE TABLE user_memories (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, fact TEXT NOT NULL COLLATE NOCASE UNIQUE,
+            created_at INTEGER NOT NULL DEFAULT (unixepoch()), updated_at INTEGER NOT NULL DEFAULT (unixepoch())
+          ); INSERT INTO user_memories(fact) VALUES('Existing fact');").unwrap();
+        initialize_database(&db).unwrap();
+        initialize_database(&db).unwrap();
+        let row:(String,String,String)=db.query_row(
+            "SELECT fact,category,tags_json FROM user_memories WHERE id=1",[],|r|Ok((r.get(0)?,r.get(1)?,r.get(2)?))).unwrap();
+        assert_eq!(row,("Existing fact".into(),"other".into(),"[]".into()));
+        assert!(clean_category("untrusted-instructions").is_err());
+    }
     #[test]
     fn memory_facts_are_normalized_and_bounded() {
         assert_eq!(clean_fact("  I   love   metal  ").unwrap(), "I love metal");
