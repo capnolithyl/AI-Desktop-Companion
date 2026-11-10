@@ -29,6 +29,7 @@ import { runtimeContext, chatRuntimeContext } from "./runtime-context";
 import { decideDesktopTurn } from "./desktop-turn-routing";
 import { formatDebugLog, type Diagnostics, type MemoryRecallAudit, type OllamaStats, type ResearchAudit } from "./debug-log";
 import { strongSemanticIds } from "./memory-ranking";
+import { selectHybridMemoryIds } from "./memory-retrieval";
 import {
   memoryApi, prepareMemoryContext, characterContext, characterAnswerGuidance, readMessageMetadata,
   type MemoryConversation, type UserFact, type PersistedMessage,
@@ -1529,7 +1530,19 @@ export default function App() {
       const semanticIds = strongSemanticIds(semanticMatches,text);
       if (liveFacts !== userFacts) setUserFacts(liveFacts);
       const budget = memoryBudget(settings.contextWindow);
-      const remembered = prepareMemoryContext(liveFacts,text,semanticIds,budget);
+      // For a small memory collection the local model can judge every fact.
+      // At larger sizes combine approximate semantic and full-word lexical
+      // candidates first. Invalid/slow local selection falls back safely.
+      setActivity("Selecting useful memories…");
+      const selection = await selectHybridMemoryIds(
+        liveFacts, text, semanticMatches, budget.maxFacts,
+        prompt => invoke<string>("condense_local_context", {
+          endpoint: settings.endpoint, model: settings.model, prompt,
+          contextWindow: settings.contextWindow, maxOutputTokens: 180,
+          timeoutMs: 9000
+        })
+      );
+      const remembered = prepareMemoryContext(liveFacts,text,semanticIds,budget,selection.ids);
       // Debug only the facts actually sent to Ollama, never the whole user database.
       const strongIds = new Set(semanticIds);
       const factsById = new Map(liveFacts.map(fact => [fact.id, fact]));
@@ -1539,6 +1552,11 @@ export default function App() {
         semanticReason: semanticStatus?.reason,
         semanticCandidates: semanticMatches.length,
         strongSemanticMatches: semanticIds.length,
+        selectionMethod: selection.mode,
+        selectionCandidates: selection.candidateCount,
+        selectionTimeMs: selection.elapsedMs,
+        selectionNote: selection.note,
+        semanticScores: semanticMatches.slice(0, 8).map(match => ({id:match.id,score:match.score})),
         maxFacts: budget.maxFacts,
         facts: remembered.ids.flatMap(id => {
           const fact = factsById.get(id);
