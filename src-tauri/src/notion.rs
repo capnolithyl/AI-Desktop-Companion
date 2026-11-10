@@ -506,7 +506,7 @@ pub async fn notion_connect(app: AppHandle, token: String) -> Result<NotionStatu
     fs::write(token_path(&app)?, encrypted).map_err(|_| "Could not save the protected Notion token".to_owned())?;
     let conn = db(&app)?;
     // Switching workspaces cannot leak the previous connection's cached documents.
-    conn.execute_batch("DELETE FROM notion_fts; DELETE FROM notion_chunks; DELETE FROM notion_pages; DELETE FROM notion_roots; DELETE FROM notion_config;")
+    conn.execute_batch("DELETE FROM notion_page_relations; DELETE FROM notion_fts; DELETE FROM notion_chunks; DELETE FROM notion_pages; DELETE FROM notion_roots; DELETE FROM notion_config;")
         .map_err(|e| e.to_string())?;
     status(&app)
 }
@@ -516,7 +516,7 @@ pub fn notion_disconnect(app: AppHandle) -> Result<NotionStatus, String> {
     let path = token_path(&app)?;
     if path.exists() { fs::remove_file(path).map_err(|e| e.to_string())?; }
     let conn = db(&app)?;
-    conn.execute_batch("DELETE FROM notion_fts; DELETE FROM notion_chunks; DELETE FROM notion_pages; DELETE FROM notion_roots; DELETE FROM notion_config;")
+    conn.execute_batch("DELETE FROM notion_page_relations; DELETE FROM notion_fts; DELETE FROM notion_chunks; DELETE FROM notion_pages; DELETE FROM notion_roots; DELETE FROM notion_config;")
         .map_err(|e| e.to_string())?;
     status(&app)
 }
@@ -599,20 +599,31 @@ pub async fn notion_sync(app: AppHandle) -> Result<NotionStatus, String> {
     while let Some(page) = queue.pop_front() {
         if !visited.insert(page.id.clone()) { continue; }
         if visited.len() > MAX_PAGES { return Err("Notion library exceeds the safe page limit".into()); }
-        let blocks = fetch_page_text(&client, &token, &page, &mut queue).await?;
+        let properties=if !page.is_database && page.properties.is_null() {
+            let current=request(&client,&token,reqwest::Method::GET,
+                &format!("/v1/pages/{}",page.id),None).await?;
+            current["properties"].clone()
+        } else { page.properties.clone() };
+        let (mut blocks,scene_links)=indexed_properties(&properties);
+        blocks.extend(fetch_page_text(&client, &token, &page, &mut queue).await?);
         cached.push(CachedPage { id:page.id, title:page.title, url:page.url,
-            chunks:chunk_text(&blocks), last_edited:page.last_edited });
+            chunks:chunk_text(&blocks), last_edited:page.last_edited,scene_links });
     }
     // A failed/partial fetch leaves the previous offline library intact.
     let mut conn = db(&app)?;
     let tx = conn.transaction().map_err(|e| e.to_string())?;
-    tx.execute_batch("DELETE FROM notion_fts; DELETE FROM notion_chunks; DELETE FROM notion_pages;")
+    tx.execute_batch("DELETE FROM notion_page_relations; DELETE FROM notion_fts; DELETE FROM notion_chunks; DELETE FROM notion_pages;")
         .map_err(|e| e.to_string())?;
     for page in cached {
         tx.execute("INSERT INTO notion_pages(id,title,url,last_edited,synced_at)
             VALUES(?1,?2,?3,?4,unixepoch())",
             params![page.id,page.title,page.url,page.last_edited])
             .map_err(|e| e.to_string())?;
+        for (position,target_id) in page.scene_links.iter().enumerate() {
+            tx.execute("INSERT INTO notion_page_relations(page_id,property,target_id,position)
+                VALUES(?1,'Scenes',?2,?3)",
+                params![page.id,target_id,position as i64]).map_err(|e| e.to_string())?;
+        }
         for chunk in page.chunks {
             tx.execute("INSERT INTO notion_chunks(page_id,title,content) VALUES(?1,?2,?3)",
                 params![page.id,page.title,chunk]).map_err(|e| e.to_string())?;
@@ -727,6 +738,22 @@ mod tests {
         assert_eq!(fts_terms("Hey Mikan, tell me about Charlotte's origin"),
             "\"charlotte\" OR \"origin\"");
         assert_eq!(fts_terms("what about the book?"), "");
+    }
+    #[test]
+    fn indexes_chapter_properties_and_scene_relationships() {
+        let props=json!({
+            "Name":{"type":"title","title":[{"plain_text":"Chapter 03 · The House"}]},
+            "Purpose":{"type":"rich_text","rich_text":[{"plain_text":"Three days in the family home"}]},
+            "Status":{"type":"status","status":{"name":"Planned"}},
+            "Scenes":{"type":"relation","relation":[
+                {"id":"4046859f-be62-8151-8486-ded6-2ca5c3fa"},
+                {"id":"4046859f-be62-8152-8486-ded6-2ca5c3fa"}
+            ]}
+        });
+        let (text,links)=indexed_properties(&props);
+        assert!(text.iter().any(|x|x.contains("Purpose: Three days")));
+        assert!(text.iter().any(|x|x.contains("Status: Planned")));
+        assert_eq!(links.len(),2);
     }
     #[test]
     fn recognizes_database_roots_without_treating_them_as_page_blocks() {
