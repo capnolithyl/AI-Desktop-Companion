@@ -37,7 +37,7 @@ import {
 import { MemoryPanel } from "./MemoryPanel";
 import { NotionPanel } from "./NotionPanel";
 import { isNotionTopic, notionContext, type NotionHit } from "./notion-knowledge";
-import { splitSpeechText, toSpeechText, VOICE_TEST_LINE, ProgressiveSpeechFeed, FIRST_SPEECH_CHARS, POCKET_FINAL_SPEECH_CHARS, voiceEndpoint, POCKET_VOICE_ENDPOINT } from "./speech";
+import { splitSpeechText, toSpeechText, VOICE_TEST_LINE, ProgressiveSpeechFeed, FIRST_SPEECH_CHARS, POCKET_FINAL_SPEECH_CHARS, voiceEndpoint, POCKET_VOICE_ENDPOINT, canSaveVoiceReference } from "./speech";
 import { NarrationFilter, roleplayActive, stripNarratedActions } from "./narration-filter";
 import { memoryBudget, sessionMemoryContext, type SessionSummary } from "./memory-budget";
 import { archiveMemoryContext, shouldSearchArchive } from "./archive-memory";
@@ -2495,8 +2495,8 @@ export default function App() {
             </label>
             <div className="service-buttons">
               <button type="button" className="secondary-action"
-                disabled={(draft.voice.engine === "qwen" && (!voiceHealth?.ready || !voiceReference || !referenceText.trim()))
-                  || !referenceFile || referenceBusy || voiceChecking}
+                disabled={!canSaveVoiceReference(draft.voice.engine, !!referenceFile, !!voiceHealth?.ready,
+                  !!voiceReference, referenceText) || referenceBusy || voiceChecking}
                 onClick={() => void saveVoiceReference()}>
                 {referenceBusy ? <LoaderCircle size={14} className="spin"/> : <Check size={14}/>}
                 {voiceReference?.configured ? "Replace reference" : "Save reference"}
