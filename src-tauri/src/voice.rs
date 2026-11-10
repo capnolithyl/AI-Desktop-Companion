@@ -444,11 +444,21 @@ mod tests {
     }
     #[test]
     fn accepts_pocket_wav_without_a_transcript_and_rejects_invalid_audio() {
-        let mut wav = vec![0u8; 44];
+        let mut wav = vec![0u8; 44 + 64];
         wav[..4].copy_from_slice(b"RIFF");
         wav[8..12].copy_from_slice(b"WAVE");
+        wav[12..16].copy_from_slice(b"fmt ");
+        wav[16..20].copy_from_slice(&16u32.to_le_bytes());
+        wav[20..22].copy_from_slice(&1u16.to_le_bytes());
+        wav[22..24].copy_from_slice(&1u16.to_le_bytes());
+        wav[24..28].copy_from_slice(&24_000u32.to_le_bytes());
+        wav[36..40].copy_from_slice(b"data");
+        wav[40..44].copy_from_slice(&64u32.to_le_bytes());
         assert!(reference_audio_valid(&wav));
         assert!(!reference_audio_valid(&wav[..20]));
+        wav[40..44].copy_from_slice(&999u32.to_le_bytes());
+        assert!(!reference_audio_valid(&wav)); // Truncated data chunk
+        wav[40..44].copy_from_slice(&64u32.to_le_bytes());
         wav[8..12].copy_from_slice(b"FAKE");
         assert!(!reference_audio_valid(&wav));
     }
@@ -538,9 +548,34 @@ fn pocket_running_outside_mikan() -> bool {
 }
 
 fn reference_audio_valid(bytes: &[u8]) -> bool {
-    (44..=MAX_REFERENCE_BYTES).contains(&bytes.len())
-        && bytes.starts_with(b"RIFF")
-        && bytes.get(8..12) == Some(b"WAVE")
+    if !(44..=MAX_REFERENCE_BYTES).contains(&bytes.len())
+        || !bytes.starts_with(b"RIFF") || bytes.get(8..12) != Some(&b"WAVE"[..]) {
+        return false;
+    }
+    // Validate the WAV chunk layout before replacing the user's working voice.
+    // Pocket can decode ordinary PCM/float WAVs; a RIFF header alone is not audio.
+    let mut offset = 12;
+    let (mut format_found, mut audio_found) = (false, false);
+    while offset + 8 <= bytes.len() {
+        let id = &bytes[offset..offset + 4];
+        let size = u32::from_le_bytes(bytes[offset + 4..offset + 8].try_into().unwrap()) as usize;
+        let start = offset + 8;
+        let Some(end) = start.checked_add(size) else { return false };
+        if end > bytes.len() { return false; }
+        if id == b"fmt " {
+            if size < 16 { return false; }
+            let coding = u16::from_le_bytes(bytes[start..start + 2].try_into().unwrap());
+            let channels = u16::from_le_bytes(bytes[start + 2..start + 4].try_into().unwrap());
+            let sample_rate = u32::from_le_bytes(bytes[start + 4..start + 8].try_into().unwrap());
+            if !matches!(coding, 1 | 3 | 0xfffe) || !matches!(channels, 1 | 2)
+                || sample_rate == 0 { return false; }
+            format_found = true;
+        } else if id == b"data" && size >= 32 {
+            audio_found = true;
+        }
+        offset = end + (size & 1);
+    }
+    format_found && audio_found
 }
 
 /// Save a validated WAV without requiring a Qwen Python server. Only the
