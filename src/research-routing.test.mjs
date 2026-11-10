@@ -240,3 +240,20 @@ test("Pocket age recall and user-memory questions never go to Tavily even after 
   assert.ok(researchRequest("How old is the universe?",prior));
   assert.ok(researchRequest("What's the latest news on Maximum the Hormone's new album?",prior));
 });
+
+
+test("public websites and distinctive unfamiliar entities trigger a grounded search instead of model speculation", () => {
+  for (const input of [
+    "What is discovermass.com?",
+    "Tell me about DiscoverMass",
+    "Have you heard of DiscoverMass?",
+    "discovermass.com",
+    "https://discovermass.com"
+  ]) {
+    assert.equal(planResearch(input).mode, "research", input);
+  }
+  assert.equal(planResearch("What is the capital of Germany?").mode, "factual");
+  for (const privateText of ["I'm working on DiscoverMass", "My website is discovermass.com", "What is my DiscoverMass project?"]) {
+    assert.equal(planResearch(privateText).mode, "chat", privateText);
+  }
+});
