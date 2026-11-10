@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   CAPTURE_INTERVAL_MIN,CAPTURE_INTERVAL_MAX,CAPTURE_INTERVAL_DEFAULT,
-  ANALYSIS_POLICY,captureInterval,dragToRegion,validScreenRegion,restoreRegion
+  ANALYSIS_POLICY,captureInterval,dragToRegion,validScreenRegion,restoreRegion,canStartRegionSelection,finalizeRegionSelection
 } from "./capture-region.ts";
 
 test("capture can sample every 1–20 seconds independent of model inference",()=>{
@@ -54,4 +54,40 @@ test("stored monitor/region is validated, never a saved screenshot or capture pe
   assert.equal(restoreRegion({monitorIndex:1,region:{x:4,y:4,width:10,height:10}}),null);
   assert.equal(restoreRegion({monitorIndex:1,region:{x:10,y:10,width:999999,height:100}}),null);
   assert.equal(restoreRegion({monitorIndex:0,region:{x:0,y:0,width:Infinity,height:Infinity}}),null);
+});
+
+test("finished drag locks region until explicit redraw, including high DPI ultrawides",()=>{
+  let locked=false;
+  assert.equal(canStartRegionSelection(locked),true);
+  const result=finalizeRegionSelection(
+    {x:450,y:270},{x:50,y:45},
+    {width:640,height:360},{width:3840,height:2160}
+  );
+  assert.deepEqual(result,{locked:true,region:{x:300,y:270,width:2400,height:1350}});
+  locked=result.locked;
+  // A click elsewhere must not reset a selected region.
+  assert.equal(canStartRegionSelection(locked),false);
+  const selected=result.region;
+  assert.deepEqual(selected,{x:300,y:270,width:2400,height:1350});
+  // Only Redraw explicitly unlocks the selection.
+  locked=false;
+  assert.equal(canStartRegionSelection(locked),true);
+});
+
+test("invalid/tiny drag cannot enter review mode or enable confirmation",()=>{
+  const selection=finalizeRegionSelection(
+    {x:140,y:100},{x:143,y:103},
+    {width:800,height:600},{width:1600,height:1200}
+  );
+  assert.deepEqual(selection,{locked:false,region:null});
+  assert.equal(canStartRegionSelection(selection.locked),true);
+});
+
+test("a full display drag reaches every physical pixel and is confirmable",()=>{
+  const result=finalizeRegionSelection(
+    {x:0,y:0},{x:1200,y:338},
+    {width:1200,height:338},{width:5120,height:1440}
+  );
+  assert.deepEqual(result,{locked:true,region:{x:0,y:0,width:5120,height:1440}});
+  assert.equal(canStartRegionSelection(result.locked),false);
 });
