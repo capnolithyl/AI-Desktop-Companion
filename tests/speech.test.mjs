@@ -155,3 +155,8 @@ test("unfinished action at end of final reply is dropped from voice", () => {
   assert.equal(toSpeechText("Hi! *My ears flick and my tail swishes"), "Hi!");
   assert.equal(toSpeechText("*I tilt my head and smile.* Morning!"), "Morning!");
 });
+
+
+test("Markdown bullet items remain audible when action filters are enabled", () => {
+  assert.equal(toSpeechText("* First item\n* Second item"), "First item Second item");
+});
