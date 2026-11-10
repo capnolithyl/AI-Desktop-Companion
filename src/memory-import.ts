@@ -18,7 +18,7 @@ export function suggestedCategory(text:string):MemoryCategory {
   const value=text.toLowerCase();
   if (/\b(?:born|grew up|birth(?:day|place)?|originally from|nationality|citizen|lives? in)\b/.test(value)) return "profile";
   if (/\b(?:wife|husband|spouse|married|daughter|son|children|child|kids|mother|father|parents|siblings|grandparents)\b/.test(value)) return "family";
-  if (/\b(?:prefer|dislike|favorite|favourite|doesn't like|does not like|enjoy|loves?|hates?)\b/.test(value)) return "preferences";
+  if (/\b(?:prefer|dislike|favorite|favourite|doesn't like|does not like|enjoys?|likes?|loves?|hates?)\b/.test(value)) return "preferences";
   if (/\b(?:work(?:s|ing)? (?:as|at|for|in)|career|job|employee|employer|profession|freelanc|developer|wordpress|salary)\b/.test(value)) return "work";
   if (/\b(?:project|building an? (?:app|site|tool)|maintains? an? (?:app|site)|developing an? app|book (?:project|draft)|novel|repository)\b/.test(value)) return "projects";
   if (/\b(?:usually|every day|daily|weekly|routine|habit|typically)\b/.test(value)) return "routines";

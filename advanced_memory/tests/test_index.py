@@ -106,6 +106,15 @@ class IndexTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.recall("q" * 1001, self.user)
 
+    def test_categories_and_tags_are_indexed_but_returned_facts_are_unmodified(self):
+        source=[{"id": 3, "fact": "The user has creative hobbies", "category":"interests",
+                 "tags":["guitar","music"]}]
+        self.recall("hobby", source)
+        stored=next(iter(self.mem0.data.values()))["memory"]
+        self.assertIn("Category: interests", stored)
+        self.assertIn("Tags: guitar, music", stored)
+        self.assertEqual(self.recall("hobby", source)[0]["fact"],source[0]["fact"])
+
     def test_mem0_results_contract_and_metadata_fields(self):
         self.assertEqual(extract_rows({"results":[{"id":"a"},None,3]}),[{"id":"a"}])
         self.assertIsNone(sqlite_id({"metadata":{"sqlite_id":"invalid"}}))
