@@ -16,6 +16,7 @@ type Page = {
   url: string;
   selected: boolean;
   lastEdited: string;
+  isDatabase?: boolean;
 };
 
 function describeError(value: unknown): string {
@@ -156,7 +157,7 @@ export function NotionPanel() {
             <input type="checkbox" checked={status.allPages || page.selected}
               disabled={busy || status.allPages}
               onChange={event=>void select(page,event.target.checked)}/>
-            <span><strong>{page.title}</strong>
+            <span><strong>{page.title}{page.isDatabase ? " (database)" : ""}</strong>
               <small>{page.lastEdited ? "Edited " + new Date(page.lastEdited).toLocaleDateString() : "Accessible page"}</small>
             </span>
           </label>)}
