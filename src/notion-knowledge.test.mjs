@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { isNotionTopic, notionContext, planNotionRetrieval, selectNotionPage, asksToReadFullNotionPage, hasNamedNotionMatch, chapterNumber } from "./notion-knowledge.ts";
+import { isNotionTopic, notionContext, planNotionRetrieval, selectNotionPage, asksToReadFullNotionPage, hasNamedNotionMatch, chapterNumber, unavailableChapterResponse } from "./notion-knowledge.ts";
 
 const pages=[
   {id:"1",title:"Charlotte Universe | Master Story Bible",url:"https://www.notion.so/1",chunkCount:5,characters:8000},
@@ -116,4 +116,20 @@ test("natural first-chapter requests resolve their ordinal and require reading e
   assert.equal(planNotionRetrieval("What do you think of the first chapter of book so far?",
     [],documents.filter(x=>x.id!=="one")).selectedPage,null);
   assert.equal(selectNotionPage(q,[documents[0],{...documents[0],id:"duplicate"}]),null);
+});
+
+test("chapter reviews without a full cached read cannot pretend to know the plot",()=>{
+  const q="What do you think of the first chapter of book so far?";
+  assert.match(unavailableChapterResponse(q,null,"",3),/couldn't identify the chapter/);
+  assert.match(unavailableChapterResponse(q,pages[1],"",3),/couldn't finish reading/);
+  assert.match(unavailableChapterResponse(q,null,"",0),/Notion library is empty/);
+  assert.equal(unavailableChapterResponse(q,pages[1],"COMPLETE TEXT OF THE CACHED PAGE: Once upon a time...",3),null);
+  assert.equal(unavailableChapterResponse("What do you think of a book?",null,"",3),null);
+});
+test("generic topical page titles don't suppress public album discovery",()=>{
+  const generic=[{id:"topic",title:"Metal albums",url:"https://www.notion.so/topic",
+    chunkCount:5,characters:4000}];
+  assert.equal(planNotionRetrieval("Recommend me three metal albums I might enjoy.",[],generic).selectedPage,null);
+  assert.equal(planNotionRetrieval("Recommend me three metal albums I might enjoy.",[],generic).relevant,false);
+  assert.equal(planNotionRetrieval("Show me my notes on Metal albums",[],generic).selectedPage?.id,"topic");
 });
