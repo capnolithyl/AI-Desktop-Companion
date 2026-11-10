@@ -7,6 +7,7 @@ import {
   filterStaleActivities, prioritizeCoreMemories, rankMemories, strongSemanticIds,
   type RankableMemory, type SemanticRecallMatch
 } from "./memory-ranking.ts";
+import { dialogueEligibleMemories } from "./identity-memory.ts";
 
 export type HybridRecallResult = {
   ids: number[];
@@ -100,7 +101,7 @@ export async function selectHybridMemoryIds<T extends RankableMemory>(
   localSelect: (prompt: string) => Promise<string>
 ): Promise<HybridRecallResult> {
   const started = Date.now();
-  const facts = filterStaleActivities(allFacts, query);
+  const facts = dialogueEligibleMemories(filterStaleActivities(allFacts, query),query);
   if (!facts.length) return {ids:[],mode:"empty",candidateCount:0,elapsedMs:0};
   const core = pinnedIds(facts, query, maxFacts);
   if (smallTalk.test(query.trim())) {
