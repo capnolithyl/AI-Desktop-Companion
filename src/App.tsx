@@ -40,7 +40,7 @@ import {
 import { MemoryPanel } from "./MemoryPanel";
 import type {ImportMemory,MemoryCategory} from "./memory-import";
 import { NotionPanel } from "./NotionPanel";
-import { isNotionTopic, notionContext, planNotionRetrieval, asksToReadFullNotionPage, hasNamedNotionMatch,
+import { isNotionTopic, notionContext, planNotionRetrieval, asksToReadFullNotionPage, hasNamedNotionMatch, unavailableChapterResponse,
   type NotionHit, type NotionCachedPage } from "./notion-knowledge";
 import { readNotionChapter, type NotionDocument, type NotionChapterSession } from "./notion-reading";
 import { splitSpeechText, toSpeechText, VOICE_TEST_LINE, ProgressiveSpeechFeed, FIRST_SPEECH_CHARS, POCKET_FINAL_SPEECH_CHARS, voiceEndpoint, POCKET_VOICE_ENDPOINT, canSaveVoiceReference } from "./speech";
@@ -1603,8 +1603,9 @@ export default function App() {
       // At larger sizes combine approximate semantic and full-word lexical
       // candidates first. Invalid/slow local selection falls back safely.
       setActivity("Planning memory and tools…");
+      const personalTurn=isPersonalMemoryQuestion(text);
       const canPlanPublicWeb = settings.autoSearch && !useNotion && !turn.capabilityQuestion &&
-        !isPersonalMemoryQuestion(text) &&
+        !personalTurn &&
         !withSearch && !attachment && !screenshot && !liveFrame && !allowRoleplay;
       const unified = await planMemoriesAndTools(
         liveFacts,text,semanticMatches,budget.maxFacts,
@@ -1633,7 +1634,13 @@ export default function App() {
           : plannerWeb.method,
         reason:plannedPublicSearch ? plannerWeb.reason :
           turn.allowAutomaticWeb ? "Explicit or factual research routing" :
-            settings.autoSearch && !canPlanPublicWeb ? "Local context or sensitive turn stays private" : plannerWeb.reason,
+            !settings.autoSearch ? "Automatic web tools disabled in Settings" :
+            useNotion ? "Owner-shared Notion document routing; public web blocked" :
+            personalTurn ? "Personal memory question; public web blocked" :
+            turn.capabilityQuestion ? "Mikan capability question; public web blocked" :
+            allowRoleplay ? "Roleplay conversation; public web blocked" :
+            attachment || screenshot || liveFrame ? "Attached private material; public web blocked" :
+            withSearch ? "Search panel supplied results already" : plannerWeb.reason,
         query:plannedPublicSearch ? plannerWeb.query : researchPlan.mode==="research" ? researchPlan.query : undefined,
         topic:preferredTopic,
         publicWebAllowed:effectiveWeb
@@ -1689,6 +1696,23 @@ export default function App() {
         : "";
       // The chapter synopsis is a working-memory aid; current original
       // excerpts still take precedence for details and quotations.
+      const unavailableChapter=useNotion ? unavailableChapterResponse(
+        text,notionPlan.selectedPage,readChapterContext,cachedNotionPages.length
+      ) : null;
+      if(unavailableChapter) {
+        // No model generation at all when a requested chapter is absent or its
+        // complete read failed. Otherwise the 9B model invents a plausible plot.
+        const assistant:LogMessage={
+          id:assistantId,role:"assistant",content:unavailableChapter,createdAt:Date.now(),
+          diagnostics:{elapsedMs:performance.now()-started,firstTokenMs:null,
+            model:settings.model,stats:null,memory:memoryAudit,toolPlan:toolAudit,
+            parallelTasks:parallelTimings}
+        };
+        setMessages(current=>current.map(m=>m.id===assistantId?assistant:m));
+        if(settings.voice.autoSpeak && remoteText===undefined)void speak(unavailableChapter);
+        await persistMessage(assistant);
+        return;
+      }
       const notionNotes = [
         useNotion && cachedNotionPages.length
           ? "NOTION CACHE STATUS: "+cachedNotionPages.length+
