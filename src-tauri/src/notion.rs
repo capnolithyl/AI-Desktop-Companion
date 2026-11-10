@@ -671,10 +671,43 @@ pub fn notion_read_document(app: AppHandle, id: String) -> Result<NotionDocument
     let chunks: Vec<String> = stmt.query_map(params![id], |r| r.get(0))
         .map_err(|e| e.to_string())?
         .collect::<Result<Vec<_>,_>>().map_err(|e| e.to_string())?;
-    if chunks.iter().map(|s| s.len()).sum::<usize>() > 2_000_000 {
-        return Err("This page exceeds the local single-document reading limit".into());
+    // Chapter relations point to separate scene rows. Read these locally in
+    // order and report missing scenes rather than inventing their contents.
+    let mut relation_stmt=conn.prepare(
+        "SELECT target_id FROM notion_page_relations WHERE page_id=?1
+         AND property='Scenes' ORDER BY position"
+    ).map_err(|e| e.to_string())?;
+    let target_ids=relation_stmt.query_map(params![id], |r| r.get::<_,String>(0))
+        .map_err(|e| e.to_string())?.collect::<Result<Vec<_>,_>>()
+        .map_err(|e| e.to_string())?;
+    let mut related_pages=Vec::new();
+    let mut missing_related_pages=0usize;
+    let mut total_bytes=chunks.iter().map(|s|s.len()).sum::<usize>();
+    for target in target_ids {
+        let meta:Option<(String,String)>=conn.query_row(
+            "SELECT title,url FROM notion_pages WHERE id=?1",
+            params![target],|r|Ok((r.get(0)?,r.get(1)?))
+        ).optional().map_err(|e| e.to_string())?;
+        if let Some((scene_title,scene_url))=meta {
+            let mut scene_stmt=conn.prepare(
+                "SELECT content FROM notion_chunks WHERE page_id=?1 ORDER BY id"
+            ).map_err(|e| e.to_string())?;
+            let scene_chunks:Vec<String>=scene_stmt.query_map(params![target],|r|r.get(0))
+                .map_err(|e|e.to_string())?
+                .collect::<Result<Vec<_>,_>>().map_err(|e|e.to_string())?;
+            total_bytes+=scene_chunks.iter().map(|s|s.len()).sum::<usize>();
+            related_pages.push(NotionRelatedPage {
+                title:scene_title,url:scene_url,chunks:scene_chunks
+            });
+        } else {
+            missing_related_pages+=1;
+        }
     }
-    Ok(NotionDocument { id, title, url, synced_at, chunks })
+    if total_bytes > 2_000_000 {
+        return Err("This page and its linked scenes exceed the reading limit".into());
+    }
+    Ok(NotionDocument { id, title, url, synced_at, chunks,
+        related_pages,missing_related_pages })
 }
 
 fn fts_terms(query: &str) -> String {
