@@ -25,3 +25,12 @@ References:
 - https://docs.ollama.com/capabilities/structured-outputs
 - https://developers.llamaindex.ai/python/framework-api-reference/query_engine/citation/
 - https://docs.ragas.io/en/latest/concepts/metrics/available_metrics/faithfulness/
+
+
+## v0.8.23: autonomous public lookup and soft preferred sources
+
+The desktop's local Ollama memory selector now emits a combined memory/tool decision on eligible turns. It can suggest public web search for release verification, recommendations or unfamiliar entities even if the owner did not explicitly say "search". Existing deterministic public research routing remains authoritative. The settings toggle is opt-in and prevents all automatic online requests when off. Personal memory queries, Notion-focused chat, roleplay, screen images and uploaded files cannot be automatically sent to SearXNG. Queries are rejected if they contain obvious private identifiers, URLs or first-person pronouns; this is a best-effort privacy barrier, not a guarantee that arbitrary semantic secrets cannot be inferred.
+
+Preferred sources are owner-editable topic/cue/domain records. A broad SearXNG lookup and one soft-priority domain search can run concurrently; nonpreferred sources remain eligible. Preferred-site membership is not proof a claim is correct: prefer actual primary evidence, date and source agreement. Debug logs distinguish AI web decisions from deterministic routing and expose public search queries.
+
+Regression checks: generic music/game recommendations, ordinary chat and private memory prompts, local SearXNG down, source-topic inference, spoofed domain names, and missing/invalid local planner responses. Profile real GPU latency before raising concurrency: Ollama inference is intentionally serialized instead of forcing two simultaneous Qwen 9B GPU requests.
