@@ -90,3 +90,5 @@ On the automatic-extraction branch, Mikan's explicit stable preferences may be s
 5. Turn automatic capture off for one or both categories, then repeat. No new automatic memories should appear; manual controls still work.
 6. Stop Ollama during extraction. Existing chat, saved memory and manual controls remain functional; the Memory panel should show a nonfatal extraction warning.
 7. Confirm saving a duplicate and replaying an already-processed message do not produce duplicate entries. A full app restart must preserve earlier memories.
+
+JSON/CSV imports also accept common category aliases such as personal → profile, relationships → family, career → work and hobbies → interests; the preview shows normalized labels.

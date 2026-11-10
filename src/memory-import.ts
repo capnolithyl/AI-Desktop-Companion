@@ -12,6 +12,12 @@ export const MEMORY_CATEGORIES = [
 export type MemoryCategory = typeof MEMORY_CATEGORIES[number]["id"];
 export type ImportMemory = {fact:string;category:MemoryCategory;tags:string[];pinned:boolean};
 const allowed = new Set<string>(MEMORY_CATEGORIES.map(category=>category.id));
+const aliases:Record<string,MemoryCategory>={
+  personal:"profile",biography:"profile",relationships:"family",
+  career:"work",hobbies:"interests",hobby:"interests",habits:"routines",
+  "family & relationships":"family","work & career":"work",
+  "interests & hobbies":"interests","habits & routines":"routines"
+};
 export const memoryKey = (fact:string):string => fact.trim().replace(/\s+/g," ").toLocaleLowerCase();
 
 export function suggestedCategory(text:string):MemoryCategory {
@@ -52,9 +58,10 @@ function normalizeRow(raw:unknown,index:number):ImportMemory {
   if(typeof value!=="string")throw Error("Row "+index+" needs a fact/text field");
   const fact=value.trim().replace(/\s+/g," ");
   if(!fact || [...fact].length>500)throw Error("Row "+index+" must contain 1–500 characters");
-  const category=typeof item.category==="string" && item.category.trim() ?
+  const rawCategory=typeof item.category==="string" && item.category.trim() ?
     item.category.trim().toLowerCase() : suggestedCategory(fact);
-  if(!allowed.has(category))throw Error("Row "+index+" has an unknown category: "+category);
+  const category=aliases[rawCategory]??rawCategory;
+  if(!allowed.has(category))throw Error("Row "+index+" has an unknown category: "+rawCategory);
   const provided=item.tags;
   let tags:string[];
   if(provided===undefined || provided===null || provided==="") tags=suggestedTags(fact);

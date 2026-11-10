@@ -33,3 +33,12 @@ test("Bad imports fail rather than silently dropping entries",()=>{
   assert.throws(()=>parseTags(Array.from({length:9},(_,i)=>"tag"+i)));
   assert.equal(memoryKey(" A   Memory "),memoryKey("a memory"));
 });
+
+test("common exported category names map to supported categories",()=>{
+  const entries=parseMemoryImport(JSON.stringify({memories:[
+    {fact:"Grew up in Germany",category:"personal"},
+    {fact:"Takes an interest in anime",category:"hobbies"},
+    {fact:"Speaks to relatives regularly",category:"relationships"}
+  ]}),"json");
+  assert.deepEqual(entries.map(x=>x.category),["profile","interests","family"]);
+});
