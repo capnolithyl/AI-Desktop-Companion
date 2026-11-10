@@ -111,7 +111,8 @@ export function planNotionRetrieval(
     || (bookIntent&&priorTopic?selectNotionPage(priorTopic,pages):null)
     || (bookIntent&&isFollowup(text)?activePage:null);
   const named=namedCandidates(text);
-  const possibleName=!!named.length && pages.length>0;
+  const possibleName=!!named.length && pages.length>0 &&
+    /\b(?:who is|tell me about|what do you think of|what happened to|backstory|origin|relationship|character|story|lore|my book)\b/i.test(text);
   const relevant=bookIntent || !!page || possibleName;
   const query=(text+" "+(priorTopic||page?.title||"")).trim().slice(0,600);
   return {relevant,query,selectedPage:page,fullRead:asksToReadFullNotionPage(text) && !!page};
