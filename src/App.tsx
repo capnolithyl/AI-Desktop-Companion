@@ -57,7 +57,7 @@ import { attachmentQuestion, attachmentPromptText, loadChatAttachment, type Pend
 type Screen = "compact" | "log" | "settings" | "search" | "page" | "personality" | "help" | "memory" | "capabilities";
 type SettingsTab = "ai" | "internet" | "notion" | "voice" | "appearance";
 type VoiceHealth = { ready: boolean; modelLoaded: boolean; device: string | null };
-type VoiceReference = { configured: boolean; transcript: string | null; durationSeconds: number | null };
+type VoiceReference = { configured: boolean; transcript: string | null; durationSeconds: number | null; fileName: string | null };
 type SearchService = { state: string; message: string };
 type CacheInfo = { pages: number; bytes: number };
 type Activity = { requestId: string; text: string };
@@ -438,7 +438,7 @@ export default function App() {
         reader.readAsDataURL(referenceFile);
       });
       const saved = await invoke<VoiceReference>("voice_save_reference", {
-        endpoint: voiceEndpoint(draft.voice), audioBase64, refText: referenceText
+        endpoint: voiceEndpoint(draft.voice), audioBase64, refText: referenceText, fileName: referenceFile.name
       });
       setVoiceReference(saved);
       setReferenceFile(null);
@@ -2470,6 +2470,10 @@ export default function App() {
                   : (draft.voice.engine === "pocket" ? "Select a WAV below to create a Pocket voice without launching Qwen." :
                       "VoiceDesign will be used until you save a sample and matching transcript.")}</small>
             </div>
+            {voiceReference?.configured && <small className="voice-saved-filename">
+              Source audio: <strong>{voiceReference.fileName || "mikan-reference.wav"}</strong>
+              <span> (stored as mikan-reference.wav)</span>
+            </small>}
             {voiceReference?.transcript && <div className="voice-reference-transcript">
               <strong>Stored transcript</strong><small>{voiceReference.transcript}</small>
             </div>}
