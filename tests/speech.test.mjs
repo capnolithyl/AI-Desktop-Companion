@@ -274,3 +274,10 @@ test("stage-direction filtering preserves legitimate emphasis and deliberate rol
   const f=new NarrationFilter(false);
   assert.equal(f.append("*sits beside you* Hello!"),"*sits beside you* Hello!");
 });
+
+test("old tail-thump and smile stage directions are not read aloud",()=>{
+  assert.equal(stripNarratedActions("*my tail gives a happy little thump against your leg* Hey!"),"Hey!");
+  assert.equal(stripNarratedActions("*smiles sweetly* How can I help?"),"How can I help?");
+  assert.equal(toSpeechText(stripNarratedActions("*winks at you* Hello!")),"Hello!");
+  assert.equal(stripNarratedActions("That is *really wonderful*."),"That is *really wonderful*.");
+});
