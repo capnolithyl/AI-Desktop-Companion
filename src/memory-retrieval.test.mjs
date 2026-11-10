@@ -56,7 +56,7 @@ test("invalid AI JSON falls back to safe exact matching, and small-talk skips re
 test("large collections shortlist candidates, do not send thousands of facts to the model",()=>{
   const many=Array.from({length:2000},(_,i)=>({
     id:i+100,fact:"The user has a distinct persistent activity number "+i,
-    updatedAt:i,category:"other",tags:[] as string[]
+    updatedAt:i,category:"other",tags:[]
   }));
   const prompt=buildMemoryRerankPrompt("Tell me about my activities",many.slice(0,60),10);
   assert.ok(prompt.length<14500);
