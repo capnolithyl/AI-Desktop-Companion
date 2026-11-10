@@ -82,3 +82,12 @@ test("invalid/tiny drag cannot enter review mode or enable confirmation",()=>{
   assert.deepEqual(selection,{locked:false,region:null});
   assert.equal(canStartRegionSelection(selection.locked),true);
 });
+
+test("a full display drag reaches every physical pixel and is confirmable",()=>{
+  const result=finalizeRegionSelection(
+    {x:0,y:0},{x:1200,y:338},
+    {width:1200,height:338},{width:5120,height:1440}
+  );
+  assert.deepEqual(result,{locked:true,region:{x:0,y:0,width:5120,height:1440}});
+  assert.equal(canStartRegionSelection(result.locked),false);
+});
