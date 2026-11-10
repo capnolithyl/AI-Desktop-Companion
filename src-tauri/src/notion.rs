@@ -576,11 +576,12 @@ pub fn notion_cached_pages(app: AppHandle) -> Result<Vec<NotionCachedPage>, Stri
          FROM notion_pages p LEFT JOIN notion_chunks c ON c.page_id=p.id
          GROUP BY p.id ORDER BY p.title COLLATE NOCASE LIMIT 10000"
     ).map_err(|e| e.to_string())?;
-    stmt.query_map([], |r| Ok(NotionCachedPage {
+    let rows=stmt.query_map([], |r| Ok(NotionCachedPage {
         id:r.get(0)?, title:r.get(1)?, url:r.get(2)?,
         chunk_count:r.get(3)?, characters:r.get(4)?
-    })).map_err(|e| e.to_string())?
-        .collect::<Result<Vec<_>,_>>().map_err(|e| e.to_string())
+    })).map_err(|e| e.to_string())?;
+    let pages=rows.collect::<Result<Vec<_>,_>>().map_err(|e| e.to_string())?;
+    Ok(pages)
 }
 
 /// Read every indexed section of a single explicitly selected page in its
