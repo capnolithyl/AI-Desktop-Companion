@@ -1,5 +1,7 @@
 # Mikan Desktop Companion
 
+**v0.8.15 (natural Mikan dialogue and voice safety, draft):** Stop encouraging repetitive asterisk stage directions in ordinary chat without flattening Mikan's playful personality; migrate only the known shipped gesture-heavy default prompt and keep owner-custom prompts. Progressive speech waits for complete `*action*` spans so incomplete streamed gestures do not leak into TTS and trigger a restart. Explicit owner-requested roleplay remains available. Needs desktop CI and owner voice testing before release.
+
 **v0.8.14 (progressive Pocket conversations):** Pocket TTS can now begin speaking the first completed sentence while Ollama is still writing the rest. Subsequent longer passages are queued and prefetched during playback to keep voice natural. Progressive playback is optional in Settings > Voice and retained separately from automatic speech. The old silent 800-character speech truncation is removed; long finalized messages are broken into bounded synthesis requests rather than losing their endings. This overlaps LLM text production and TTS but remains WAV-per-passage playback, **not** true sample-by-sample PCM streaming. The existing Qwen and Pocket engines, cloned reference, and AMD compatibility are unchanged. [Voice setup](tools/tts/README.md).
 
 
