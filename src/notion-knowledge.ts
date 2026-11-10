@@ -58,7 +58,7 @@ function lastBookTopic(recent: ReadonlyArray<{role:string; content:string}>): st
 export function isNotionTopic(
   text: string, recent: ReadonlyArray<{role:string; content:string}> = []
 ): boolean {
-  if(WRITING.test(text))return true;
+  if(WRITING.test(text) || chapterNumber(text)!==null)return true;
   return isFollowup(text) && !!lastBookTopic(recent);
 }
 
