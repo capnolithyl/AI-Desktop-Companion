@@ -1818,7 +1818,7 @@ export default function App() {
       };
       // The source-verification filter applies to actual researched answers,
       // NEVER to local conversational or capability answers.
-      const verifiedSources = turn.verifyWebEvidence
+      const verifiedSources = (turn.verifyWebEvidence || plannedPublicSearch)
         ? (completion.sources?.length ? completion.sources : withSearch?.results)
         : undefined;
       const rawText = completion.content || accumulated || "(The model returned no visible text.)";
