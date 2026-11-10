@@ -10,8 +10,8 @@
  * in finalized replies, and to old assistant turns sent back to the model.
  */
 const anatomy = /\b(?:ears?|tails?|paws?|whiskers?|eyes?|eyelids?|cheeks?|chin|head|hands?|arms?|fingers?|shoulders?|hair|body|face|smile|gaze|nose|lips?|feet|wrist)\b/i;
-const movement = /\b(?:perk(?:s|ed|ing)?|twitch(?:es|ed|ing)?|flick(?:s|ed|ing)?|curl(?:s|ed|ing)?|wag(?:s|ged|ging)?|sway(?:s|ed|ing)?|swish(?:es|ed|ing)?|nuzzl\w*|lean\w*|tilt\w*|stretch\w*|squeez\w*|wiggl\w*|fold\w*|press\w*|reach\w*|rest\w*|turn\w*|brush\w*|rub\w*|flatten\w*|droop\w*|perk\w*|sparkle\w*|soften\w*|glow\w*|light(?:s|ing)?\s+up|blink\w*|grin\w*|smirk\w*|blush\w*|smil\w*|giggl\w*|chuckl\w*|purr\w*|nod\w*|wav\w*|gesture\w*|shift\w*|pout\w*)\b/i;
-const firstPersonAction = /\b(?:I|she|he)\s+(?:\w+ly\s+)?(?:lean\w*|tilt\w*|stretch\w*|wave\w*|nod\w*|smile\w*|grin\w*|smirk\w*|nuzzle\w*|shift\w*|wiggle\w*|reach\w*|giggle\w*|chuckle\w*|purr\w*|blush\w*|step\w*|move\w*|turn\w*|rest\w*)\b/i;
+const movement = /\b(?:perk(?:s|ed|ing)?|twitch(?:es|ed|ing)?|flick(?:s|ed|ing)?|curl(?:s|ed|ing)?|wag(?:s|ged|ging)?|sway(?:s|ed|ing)?|swish(?:es|ed|ing)?|nuzzl\w*|lean\w*|tilt\w*|stretch\w*|squeez\w*|wiggl\w*|fold\w*|press\w*|reach\w*|rest\w*|turn\w*|brush\w*|rub\w*|flatten\w*|droop\w*|perk\w*|sparkle\w*|soften\w*|glow\w*|light(?:s|ing)?\s+up|blink\w*|grin\w*|smirk\w*|blush\w*|smil\w*|giggl\w*|chuckl\w*|purr\w*|nod\w*|wav\w*|gesture\w*|shift\w*|pout\w*|scratch\w*|lift\w*|tap\w*)\b/i;
+const firstPersonAction = /\b(?:I|she|he)\s+(?:\w+ly\s+)?(?:lean\w*|tilt\w*|stretch\w*|wave\w*|nod\w*|smile\w*|grin\w*|smirk\w*|nuzzle\w*|shift\w*|wiggle\w*|reach\w*|scratch\w*|lift\w*|tap\w*|giggle\w*|chuckle\w*|purr\w*|blush\w*|step\w*|move\w*|turn\w*|rest\w*)\b/i;
 const startingAction = /^(?:nuzzl\w*|giggl\w*|chuckl\w*|blush\w*|smirk\w*|grin\w*|nod\w*|wav\w*|lean\w*|tilt\w*|wiggl\w*|purr\w*)\b/i;
 
 export function isNarratedAction(content: string): boolean {
@@ -30,7 +30,7 @@ export function roleplayActive(question: string, history: {role:string;content:s
   for (const text of lines) {
     if (/\b(?:stop|end|quit|leave|exit|pause|no more)\b.{0,30}\b(?:roleplay|role-play|rp|in.character)\b/i.test(text)) active = false;
     else if (/\b(?:let(?:'|’)?s|can we|could we|please|start|begin|continue|resume|do|play|stay in)\b.{0,65}\b(?:roleplay|role-play|rp|in.character)\b/i.test(text) ||
-       /^\s*\*[^*\n]{2,150}\*/.test(text)) active = true;
+       isNarratedAction(/^\s*\*([^*\n]{2,150})\*/.exec(text)?.[1] ?? "")) active = true;
   }
   return active;
 }
@@ -63,7 +63,16 @@ export class NarrationFilter {
       // Double asterisks, escaped stars, multiplication and Markdown lists
       // are not a physical-action delimiter.
       if (star === text.length - 1 && !final) { index = star; break; }
-      if (text[star + 1] === "*" || (star > 0 && text[star - 1] === "\\") ||
+      if (text.startsWith("**", star)) {
+        // **bold** is emphasis, never a stage-direction wrapper.
+        const endBold = text.indexOf("**", star + 2);
+        if (endBold < 0 && !final && text.length - star < 800) { index = star; break; }
+        if (endBold < 0) { next += text.slice(star); index = text.length; break; }
+        next += text.slice(star, endBold + 2);
+        index = endBold + 2;
+        continue;
+      }
+      if ((star > 0 && text[star - 1] === "\\") ||
           /\s/.test(text[star + 1] ?? "")) {
         next += text[star];
         index = star + 1;
