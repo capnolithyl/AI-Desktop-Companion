@@ -4,6 +4,7 @@ function hasOpenAsteriskAction(markdown: string): boolean {
   for (let i = 0; i < markdown.length; i++) {
     if (markdown[i] !== "*" || (i > 0 && markdown[i - 1] === "\\")) continue;
     if (markdown[i + 1] === "*") { i++; continue; } // **bold**, not a roleplay action
+    if (/\s/.test(markdown[i + 1] ?? "")) continue; // Markdown * list item, not an action
     open = !open;
   }
   return open;
@@ -20,7 +21,7 @@ export function toSpeechText(markdown: string): string {
     .replace(/https?:\/\/\S+/g, " ")
     .replace(/\*\*([^*\n]+)\*\*/g, "$1")
     .replace(/\*([^*\n]+)\*/g, " ")
-    .replace(/(^|\s)\*(?!\*)([^*\n]+)$/gm, "$1") // unfinished *gesture at end
+    .replace(/(^|\s)\*(?![\s*])([^*\n]+)$/gm, "$1") // unfinished *gesture, not Markdown * bullets
     .replace(/_([^_\n]+)_/g, " ")
     .replace(/\[(?:\d{1,3}|Stopped|Interrupted:[^\]]+)\]/gi, " ")
     .replace(/<[^>]*>/g, " ")
