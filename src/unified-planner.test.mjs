@@ -4,7 +4,7 @@ import {extendPlanningPrompt,parseWebToolDecision,planMemoriesAndTools} from "./
 import {DEFAULT_SOURCE_PREFERENCES} from "./preferred-sources.ts";
 
 const facts=[
-  {id:41,importance:95,fact:"The user's full name is Marcus Borger.",category:"profile",updatedAt:1,tags:["name"]},
+  {id:41,importance:95,fact:"The user's full name is Alex Example.",category:"profile",updatedAt:1,tags:["name"]},
   {id:25,fact:"The user is a professional WordPress developer.",category:"work",updatedAt:2,tags:["wordpress"]},
   {id:34,fact:"The user likes black metal music.",category:"preferences",updatedAt:3,tags:["metal","music"]}
 ];
@@ -25,13 +25,13 @@ test("model can select developer background and independently plan music search"
         topic:"music",reason:"Check actual music releases"}});
     },{automaticWebEnabled:true,sourcePreferences:prefs});
   assert.equal(calls,1);
-  assert.deepEqual(result.memory.ids,[41,34]);
+  assert.deepEqual(result.memory.ids,[34]);
   assert.equal(result.web.search,true);
   assert.equal(result.web.topic,"music");
   assert.equal(result.web.method,"ai-planned");
 });
 test("no personal data, arbitrary URLs or unrecognized search topics leave local process",()=>{
- const cases=["my favorite bands","Marcus Borger music","Brielle birthday","me best game",
+ const cases=["my favorite bands","Alex Example music","Brielle birthday","me best game",
   "https://private.local/foo","my.name@example.com search","\nhello music"];
  for(const query of cases){
    const choice=parseWebToolDecision(JSON.stringify({web:{search:true,query,topic:"music"}}),true,prefs,facts);
