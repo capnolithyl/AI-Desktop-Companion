@@ -10,9 +10,9 @@
  * in finalized replies, and to old assistant turns sent back to the model.
  */
 const anatomy = /\b(?:ears?|tails?|paws?|whiskers?|eyes?|eyelids?|cheeks?|chin|head|hands?|arms?|fingers?|shoulders?|hair|body|face|smile|gaze|nose|lips?|feet|wrist)\b/i;
-const movement = /\b(?:perk(?:s|ed|ing)?|twitch(?:es|ed|ing)?|flick(?:s|ed|ing)?|curl(?:s|ed|ing)?|wag(?:s|ged|ging)?|sway(?:s|ed|ing)?|swish(?:es|ed|ing)?|nuzzl\w*|lean\w*|tilt\w*|stretch\w*|squeez\w*|wiggl\w*|fold\w*|press\w*|reach\w*|rest\w*|turn\w*|brush\w*|rub\w*|flatten\w*|droop\w*|perk\w*|sparkle\w*|soften\w*|glow\w*|light(?:s|ing)?\s+up|blink\w*|grin\w*|smirk\w*|blush\w*|smil\w*|giggl\w*|chuckl\w*|purr\w*|nod\w*|wav\w*|gesture\w*|shift\w*|pout\w*|scratch\w*|lift\w*|tap\w*)\b/i;
-const firstPersonAction = /\b(?:I|she|he)\s+(?:\w+ly\s+)?(?:lean\w*|tilt\w*|stretch\w*|wave\w*|nod\w*|smile\w*|grin\w*|smirk\w*|nuzzle\w*|shift\w*|wiggle\w*|reach\w*|scratch\w*|lift\w*|tap\w*|giggle\w*|chuckle\w*|purr\w*|blush\w*|step\w*|move\w*|turn\w*|rest\w*)\b/i;
-const startingAction = /^(?:nuzzl\w*|giggl\w*|chuckl\w*|blush\w*|smirk\w*|grin\w*|nod\w*|wav\w*|lean\w*|tilt\w*|wiggl\w*|purr\w*)\b/i;
+const movement = /\b(?:perk(?:s|ed|ing)?|twitch(?:es|ed|ing)?|flick(?:s|ed|ing)?|curl(?:s|ed|ing)?|wag(?:s|ged|ging)?|sway(?:s|ed|ing)?|swish(?:es|ed|ing)?|nuzzl\w*|lean\w*|tilt\w*|stretch\w*|squeez\w*|wiggl\w*|fold\w*|press\w*|reach\w*|rest\w*|turn\w*|brush\w*|rub\w*|flatten\w*|droop\w*|perk\w*|sparkle\w*|soften\w*|glow\w*|light(?:s|ing)?\s+up|blink\w*|grin\w*|smirk\w*|blush\w*|smil\w*|giggl\w*|chuckl\w*|purr\w*|nod\w*|wav\w*|gesture\w*|shift\w*|pout\w*|scratch\w*|lift\w*|tap\w*|sit(?:s|ting)?|sat|pok\w*|cuddl\w*|climb\w*|crouch\w*|kneel\w*|stand(?:s|ing)?|stood|sigh\w*|fidget\w*|twirl\w*|lick\w*|hug\w*)\b/i;
+const firstPersonAction = /\b(?:I|she|he)\s+(?:\w+ly\s+)?(?:lean\w*|tilt\w*|stretch\w*|wave\w*|nod\w*|smile\w*|grin\w*|smirk\w*|nuzzle\w*|shift\w*|wiggle\w*|reach\w*|scratch\w*|lift\w*|tap\w*|sit(?:s|ting)?|sat|pok\w*|cuddl\w*|climb\w*|stand(?:s|ing)?|stood|sigh\w*|hug\w*|giggle\w*|chuckle\w*|purr\w*|blush\w*|step\w*|move\w*|turn\w*|rest\w*)\b/i;
+const startingAction = /^(?:nuzzl\w*|giggl\w*|chuckl\w*|blush\w*|smirk\w*|grin\w*|nod\w*|wav\w*|lean\w*|tilt\w*|wiggl\w*|purr\w*|sit(?:s|ting)?|sat|pok\w*|cuddl\w*|climb\w*|sigh\w*|hug\w*)\b/i;
 
 export function isNarratedAction(content: string): boolean {
   const text = content.trim();
@@ -50,7 +50,7 @@ export class NarrationFilter {
 
   finish(): string {
     if (this.enabled) this.drain(true);
-    return this.rendered.trim();
+    return this.rendered.replace(/[ \\t]{2,}/g, " ").trim();
   }
 
   private drain(final: boolean): string {
