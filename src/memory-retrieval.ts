@@ -6,7 +6,7 @@
 import {
   filterStaleActivities, prioritizeCoreMemories, rankMemories, strongSemanticIds,
   type RankableMemory, type SemanticRecallMatch
-} from "./memory-ranking";
+} from "./memory-ranking.ts";
 
 export type HybridRecallResult = {
   ids: number[];
