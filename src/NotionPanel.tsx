@@ -102,7 +102,7 @@ export function NotionPanel() {
     <div className="settings-note">
       Mikan reads only pages shared with her Notion integration. Your book and character notes
       are searchable reference knowledge, separate from conversation memory.
-      Sync is manual for now; the last successful copy remains available offline.
+      Sync is manual for now; the last successful copy remains available offline. Ask Mikan to read a named chapter to scan its complete cached text, or discuss your writing naturally for relevant excerpts.
     </div>
     {!status?.connected ? <>
       <div className="service-panel">
@@ -162,7 +162,7 @@ export function NotionPanel() {
           </label>)}
           {!visible.length && <small>No accessible pages match. In Notion, share the page with the Mikan integration, then refresh.</small>}
         </div>
-        <small>Only extracted text, headings, table cells and captions are indexed. Embedded attachments and images are not downloaded.</small>
+        <small>Full text of shared pages is cached in sections, including headings, table cells and captions. You can discuss a named page or have Mikan read the complete chapter. Images and embedded attachments are not imported.</small>
       </div>
       <button type="button" className="secondary-action" disabled={busy}
         onClick={()=>void disconnect()}>Disconnect and delete local Notion cache</button>
