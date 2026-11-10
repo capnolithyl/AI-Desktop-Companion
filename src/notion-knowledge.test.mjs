@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { isNotionTopic, notionContext, planNotionRetrieval, selectNotionPage, asksToReadFullNotionPage } from "./notion-knowledge.ts";
+import { isNotionTopic, notionContext, planNotionRetrieval, selectNotionPage, asksToReadFullNotionPage, hasNamedNotionMatch } from "./notion-knowledge.ts";
 
 const pages=[
   {id:"1",title:"Charlotte Universe | Master Story Bible",url:"https://www.notion.so/1",chunkCount:5,characters:8000},
@@ -28,8 +28,12 @@ test("follow-ups keep a recent book topic but not an unrelated conversation",()=
 test("recognizes cached titles, chapter numbers and named projects without hardcoded names",()=>{
   assert.equal(selectNotionPage("What is Hollow Meridian about?",pages)?.id,"3");
   assert.equal(selectNotionPage("Please read Chapter Three",pages)?.id,"2");
+  assert.equal(selectNotionPage("Please read Chapter 3",pages)?.id,"2");
   assert.equal(selectNotionPage("Discuss the Charlotte Universe",pages)?.id,"1");
   assert.equal(selectNotionPage("What is your favorite food?",pages),null);
+  assert.equal(hasNamedNotionMatch("What about Will?",[
+    {title:"Chapter Three",url:"",content:"Will refused to leave Charlotte.",syncedAt:1}
+  ]),true);
   const project=[{id:"4",title:"The Obsidian Garden",url:"",chunkCount:1,characters:700}];
   assert.equal(planNotionRetrieval("What happens in The Obsidian Garden?",[],project).selectedPage?.id,"4");
 });
@@ -43,11 +47,15 @@ test("never guess which identically titled chapter was requested",()=>{
 test("full reading is intentional and does not fire for every excerpt question",()=>{
   assert.equal(asksToReadFullNotionPage("Read all of Chapter Three"),true);
   assert.equal(asksToReadFullNotionPage("Summarize the entire manuscript"),true);
+  assert.equal(asksToReadFullNotionPage("Can you read my book?"),true);
   assert.equal(asksToReadFullNotionPage("What happens next in chapter three?"),false);
   const full=planNotionRetrieval("Please read all of Chapter Three",[],pages);
   assert.equal(full.fullRead,true);
   assert.equal(full.selectedPage?.id,"2");
-  assert.equal(planNotionRetrieval("What is the NASA launch schedule?",[],pages).relevant,false);
+  assert.equal(planNotionRetrieval("What is the NASA launch schedule?",[],pages).selectedPage,null);
+  assert.equal(hasNamedNotionMatch("What is the NASA launch schedule?",[
+    {title:"Chapter Three",url:"",content:"The hero saw Artemis",syncedAt:1}
+  ]),false);
 });
 
 test("bounded excerpts include citations, source caution and multiple results",()=>{
