@@ -443,6 +443,14 @@ mod tests {
         assert!(pocket_token_candidates(None,None,None,None).is_empty());
     }
     #[test]
+    fn validates_uploaded_reference_filename() {
+        assert_eq!(reference_upload_name("sample voice.wav").unwrap(), "sample voice.wav");
+        assert!(reference_upload_name("../sample.wav").is_err());
+        assert!(reference_upload_name("folder\\sample.wav").is_err());
+        assert!(reference_upload_name("voice.mp3").is_err());
+        assert!(reference_upload_name("voice.wav\\n").is_err());
+    }
+    #[test]
     fn accepts_pocket_wav_without_a_transcript_and_rejects_invalid_audio() {
         let mut wav = vec![0u8; 44 + 64];
         wav[..4].copy_from_slice(b"RIFF");
@@ -482,6 +490,7 @@ pub struct VoiceReference {
     configured: bool,
     transcript: Option<String>,
     duration_seconds: Option<f32>,
+    file_name: Option<String>,
 }
 
 async fn reference_response(response: reqwest::Response) -> Result<VoiceReference, String> {
@@ -498,6 +507,7 @@ async fn reference_response(response: reqwest::Response) -> Result<VoiceReferenc
             configured: reference.configured,
             transcript: reference.transcript,
             duration_seconds: reference.duration_seconds,
+            file_name: reference.file_name,
         })
         .map_err(|_| "Invalid voice reference response".into())
 }
@@ -507,6 +517,7 @@ struct VoiceReferenceWire {
     configured: bool,
     transcript: Option<String>,
     duration_seconds: Option<f32>,
+    file_name: Option<String>,
 }
 
 #[tauri::command]
@@ -519,19 +530,38 @@ pub async fn voice_reference_status(endpoint: String) -> Result<VoiceReference, 
             let wav=root.join("mikan-reference.wav");
             let txt=root.join("mikan-reference.txt");
             let transcript=fs::read_to_string(&txt).ok();
+            let file_name = if wav.is_file() { Some(saved_reference_file_name(&root)) } else { None };
             return Ok(VoiceReference {
                 // Pocket only needs audio. An accompanying transcript is optional.
-                configured: wav.is_file(), transcript, duration_seconds: None
+                configured: wav.is_file(), transcript, duration_seconds: None, file_name
             });
         }
         #[cfg(not(target_os = "windows"))]
-        return Ok(VoiceReference { configured: false, transcript: None, duration_seconds: None });
+        return Ok(VoiceReference { configured: false, transcript: None, duration_seconds: None, file_name: None });
     }
     let url = service_url(&endpoint, "/reference")?;
     ensure_managed_voice(&endpoint).await?;
     let response = client()?.get(url).timeout(Duration::from_secs(10)).send().await
         .map_err(|e| format!("Cannot read voice reference: {e}"))?;
     reference_response(response).await
+}
+
+/// Persist only the original user-selected filename, never its full path.
+fn reference_upload_name(raw: &str) -> Result<String, String> {
+    let filename = raw.trim();
+    if filename.is_empty() || filename.chars().count() > 255
+        || filename.chars().any(|c| c.is_control() || matches!(c, '/' | '\\'))
+        || filename == "." || filename == ".." || !filename.to_ascii_lowercase().ends_with(".wav") {
+        return Err("Select a WAV recording with a valid filename".into());
+    }
+    Ok(filename.to_string())
+}
+
+#[cfg(target_os = "windows")]
+fn saved_reference_file_name(root: &std::path::Path) -> String {
+    fs::read_to_string(root.join("mikan-reference-name.txt"))
+        .ok().and_then(|name| reference_upload_name(&name).ok())
+        .unwrap_or_else(|| "mikan-reference.wav".into())
 }
 
 /// The CPU server resolves --default-voice when it starts. A managed instance
@@ -581,7 +611,7 @@ fn reference_audio_valid(bytes: &[u8]) -> bool {
 /// Save a validated WAV without requiring a Qwen Python server. Only the
 /// app-owned Pocket process is restarted; never terminate a manual server.
 #[cfg(target_os = "windows")]
-fn save_pocket_reference(bytes: &[u8], transcript: &str) -> Result<VoiceReference, String> {
+fn save_pocket_reference(bytes: &[u8], transcript: &str, file_name: &str) -> Result<VoiceReference, String> {
     let root = launcher_dir().ok_or("Voice data folder unavailable")?;
     if load_pocket_launcher()?.is_none() {
         return Err("Pocket TTS is not registered. Run scripts/setup-pocket-tts.ps1 once.".into());
@@ -595,19 +625,30 @@ fn save_pocket_reference(bytes: &[u8], transcript: &str) -> Result<VoiceReferenc
     fs::write(&pending, bytes).map_err(|e| format!("Cannot stage Pocket reference WAV: {e}"))?;
     let transcript_path = root.join("mikan-reference.txt");
     let pending_text = root.join("mikan-reference.pending.txt");
+    let name_path = root.join("mikan-reference-name.txt");
+    let pending_name = root.join("mikan-reference.pending.name.txt");
+    if let Err(error) = fs::write(&pending_name, file_name) {
+        let _ = fs::remove_file(&pending);
+        return Err(format!("Cannot stage reference filename: {error}"));
+    }
     if !transcript.is_empty() {
         if let Err(error) = fs::write(&pending_text, transcript) {
             let _ = fs::remove_file(&pending);
+            let _ = fs::remove_file(&pending_name);
             return Err(format!("Cannot stage Pocket reference transcript: {error}"));
         }
     }
 
     stop_owned_voice(OWN_POCKET.get());
-    if let Err(error) = fs::rename(&pending, root.join("mikan-reference.wav")) {
+    // Windows rename fails when the destination exists. Copy the staged, fully
+    // validated WAV onto the existing canonical path while Pocket is stopped.
+    if let Err(error) = fs::copy(&pending, root.join("mikan-reference.wav")) {
         let _ = fs::remove_file(&pending);
         let _ = fs::remove_file(&pending_text);
+        let _ = fs::remove_file(&pending_name);
         return Err(format!("Cannot replace Pocket reference WAV: {error}"));
     }
+    let _ = fs::remove_file(&pending);
     if transcript.is_empty() {
         // An old transcript must never be paired with a different speaker.
         if transcript_path.is_file() {
@@ -618,16 +659,23 @@ fn save_pocket_reference(bytes: &[u8], transcript: &str) -> Result<VoiceReferenc
         fs::rename(&pending_text, &transcript_path)
             .map_err(|e| format!("Voice WAV saved, but could not update transcript: {e}"))?;
     }
+    // Keep the displayed source filename in sync with the recording that
+    // was actually written, not the name of an unsaved file-picker selection.
+    fs::copy(&pending_name, &name_path)
+        .map_err(|e| format!("Voice WAV saved, but could not save filename: {e}"))?;
+    let _ = fs::remove_file(&pending_name);
     Ok(VoiceReference {
         configured: true,
         transcript: (!transcript.is_empty()).then(|| transcript.to_owned()),
         duration_seconds: None,
+        file_name: Some(file_name.to_owned()),
     })
 }
 
 #[tauri::command]
-pub async fn voice_save_reference(endpoint: String, audio_base64: String, ref_text: String) -> Result<VoiceReference, String> {
+pub async fn voice_save_reference(endpoint: String, audio_base64: String, ref_text: String, file_name: String) -> Result<VoiceReference, String> {
     let pocket = is_pocket_endpoint(&endpoint)?;
+    let file_name = reference_upload_name(&file_name)?;
     let transcript = ref_text.trim();
     // Qwen needs matching words to clone. Pocket clones from audio alone.
     if transcript.chars().count() > 2000 || (!pocket && transcript.is_empty()) {
@@ -643,7 +691,7 @@ pub async fn voice_save_reference(endpoint: String, audio_base64: String, ref_te
     }
     if pocket {
         #[cfg(target_os = "windows")]
-        return save_pocket_reference(&bytes, transcript);
+        return save_pocket_reference(&bytes, transcript, &file_name);
         #[cfg(not(target_os = "windows"))]
         return Err("Pocket reference settings currently require Windows".into());
     }
@@ -651,7 +699,7 @@ pub async fn voice_save_reference(endpoint: String, audio_base64: String, ref_te
     let url = service_url(&endpoint, "/reference")?;
     ensure_managed_voice(&endpoint).await?;
     let response = client()?.post(url)
-        .json(&json!({"audio_base64": audio_base64, "ref_text": transcript}))
+        .json(&json!({"audio_base64": audio_base64, "ref_text": transcript, "file_name": file_name}))
         .timeout(Duration::from_secs(35))
         .send().await.map_err(|e| format!("Cannot save voice reference: {e}"))?;
     reference_response(response).await
