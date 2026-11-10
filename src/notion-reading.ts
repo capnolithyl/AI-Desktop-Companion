@@ -37,7 +37,7 @@ function parseNotes(response:string):string {
     const start=response.indexOf("{"),end=response.lastIndexOf("}");
     const data=JSON.parse(response.slice(start,end+1)) as {notes?:unknown};
     if(typeof data.notes==="string" && data.notes.trim().length>=12) {
-      return data.notes.trim().slice(0,1700);
+      return data.notes.trim().slice(0,1200);
     }
   } catch { /* Never quietly treat malformed model text as document facts. */ }
   throw new Error("The local model could not produce reliable section notes");
