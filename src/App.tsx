@@ -31,6 +31,7 @@ import { formatDebugLog, type Diagnostics, type MemoryRecallAudit, type OllamaSt
 import { strongSemanticIds } from "./memory-ranking";
 import { planMemoriesAndTools, type WebToolDecision } from "./unified-planner";
 import { matchingSourceTopic } from "./preferred-sources";
+import { isPersonalMemoryQuestion } from "./personal-memory";
 import {
   memoryApi, prepareMemoryContext, characterContext, characterAnswerGuidance, readMessageMetadata,
   type MemoryConversation, type UserFact, type PersistedMessage,
@@ -1603,6 +1604,7 @@ export default function App() {
       // candidates first. Invalid/slow local selection falls back safely.
       setActivity("Planning memory and tools…");
       const canPlanPublicWeb = settings.autoSearch && !useNotion && !turn.capabilityQuestion &&
+        !isPersonalMemoryQuestion(text) &&
         !withSearch && !attachment && !screenshot && !liveFrame && !allowRoleplay;
       const unified = await planMemoriesAndTools(
         liveFacts,text,semanticMatches,budget.maxFacts,
@@ -1614,6 +1616,7 @@ export default function App() {
           sourcePreferences:settings.sourcePreferences
         }
       );
+      if(stopRequested.current)throw new Error("Generation stopped");
       const selection = unified.memory;
       const plannerWeb:WebToolDecision = unified.web;
       const plannedPublicSearch = canPlanPublicWeb && plannerWeb.search && !!plannerWeb.query &&
