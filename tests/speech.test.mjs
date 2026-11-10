@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { splitSpeechText, toSpeechText, ProgressiveSpeechFeed, FIRST_SPEECH_CHARS, voiceEndpoint } from "../src/speech.ts";
+import { NarrationFilter, stripNarratedActions, isNarratedAction, roleplayActive } from "../src/narration-filter.ts";
 
 test("short utterances and blank text", () => {
   assert.deepEqual(splitSpeechText("Hi, Mikan!"), ["Hi, Mikan!"]);
@@ -175,4 +176,67 @@ test("progressive voice preserves emphasized words across several partial deltas
   const chunks=[];
   for await (const chunk of feed) chunks.push(chunk);
   assert.equal(chunks.join(" "), "It is really working! meow I am so happy to hear your voice now.");
+});
+
+
+test("narrated actions are omitted from normal replies without flattening dialogue", () => {
+  for (const input of [
+    "*My orange ears perk up immediately, and my tail gives a happy little wag against your desk as I stretch.* Good morning!",
+    "*My ears twitch as I listen, tail curling around your wrist in a supportive loop.* Good morning!",
+    "*nuzzles cheek affectionately against your arm* Good morning!",
+    "*giggles, eyes sparkling with amusement* Good morning!",
+    "*I lean forward slightly, resting my chin on my hand, eyes focused on you.* Good morning!",
+    "*My amber eyes light up with curiosity.* Good morning!",
+    "*I scratch my ear and tilt my head.* Good morning!",
+  ]) assert.equal(stripNarratedActions(input), "Good morning!", input);
+});
+
+test("vocalizations and literal asterisk emphasis survive", () => {
+  const value="I *really* love that! *meow* That's **very** sweet. _Absolutely_.";
+  assert.equal(stripNarratedActions(value),value);
+  assert.equal(toSpeechText(stripNarratedActions(value)),"I really love that! meow That's very sweet. Absolutely.");
+  assert.equal(stripNarratedActions("*I absolutely love that!*"), "*I absolutely love that!*");
+  assert.equal(stripNarratedActions("*purr*"), "*purr*");
+  assert.equal(stripNarratedActions("**My tail swishes**"), "**My tail swishes**");
+});
+
+test("roleplay is explicitly enabled, not inferred from italic emphasis", () => {
+  assert.equal(roleplayActive("Good morning!"),false);
+  assert.equal(roleplayActive("*meow*"),false);
+  assert.equal(roleplayActive("*really* fantastic"),false);
+  assert.equal(roleplayActive("Let's roleplay a fantasy scene"),true);
+  assert.equal(roleplayActive("*I lean closer and smile.*"),true);
+  assert.equal(roleplayActive("Hello",[{role:"user",content:"Let's roleplay a fantasy scene"}]),true);
+  assert.equal(roleplayActive("Stop roleplay",[{role:"user",content:"Let's roleplay a fantasy scene"}]),false);
+  const filter=new NarrationFilter(false);
+  assert.equal(filter.append("*I lean closer.* Hi!"),"*I lean closer.* Hi!");
+  assert.equal(filter.finish(),"*I lean closer.* Hi!");
+});
+
+test("streamed stage descriptions do not appear in chat or auto speech", async () => {
+  const pieces=["*My ears", " twitch and my", " tail swishes.*", " Hey! ", "I *really* am ", "here. *me", "ow*"];
+  const unfiltered=pieces.join("");
+  const cleaned=stripNarratedActions(unfiltered);
+  assert.equal(cleaned,"Hey! I *really* am here. *meow*");
+  const filter=new NarrationFilter();
+  const spoken=new ProgressiveSpeechFeed("pocket");
+  const visible=[];
+  for (const part of pieces) {
+    const delta=filter.append(part);
+    visible.push(delta);
+    spoken.append(delta);
+  }
+  assert.equal(visible.join("").trim(),cleaned);
+  assert.equal(filter.finish(),cleaned);
+  assert.equal(spoken.finish(cleaned),true);
+  const chunks=[];
+  for await (const chunk of spoken) chunks.push(chunk);
+  assert.equal(chunks.join(" "),"Hey! I really am here. meow");
+});
+
+test("stage filter does not break Markdown lists or basic programming text", () => {
+  const sample="* First option\n* Second option\n\nUse 2 * 3 or **bold** for emphasis.";
+  assert.equal(stripNarratedActions(sample),sample);
+  assert.equal(isNarratedAction("meow"),false);
+  assert.equal(isNarratedAction("really"),false);
 });
