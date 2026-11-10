@@ -31,6 +31,13 @@ export function toSpeechText(markdown: string): string {
     .replace(/\s+/g, " ")
     .trim();
 }
+/** Pocket accepts audio-only reference swaps; Qwen requires an online server and transcript. */
+export function canSaveVoiceReference(
+  engine: "pocket" | "qwen", hasFile: boolean, serverReady: boolean, referenceChecked: boolean, transcript: string
+): boolean {
+  return hasFile && (engine === "pocket" || (serverReady && referenceChecked && !!transcript.trim()));
+}
+
 export const POCKET_VOICE_ENDPOINT = "http://127.0.0.1:8766";
 export function voiceEndpoint(voice: {engine: string; endpoint: string}): string {
   return voice.engine === "pocket" ? POCKET_VOICE_ENDPOINT : voice.endpoint;
