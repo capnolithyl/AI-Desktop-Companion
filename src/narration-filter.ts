@@ -30,7 +30,7 @@ export function isNarratedAction(content: string): boolean {
   if (!text || !/\s/.test(text) || text.length > 600) return false;
   return firstPersonAction.test(text)
     || startingAction.test(text)
-    || physicalSubject.test(text)
+    || (physicalSubject.test(text) && text.split(/\s+/).length >= 3)
     || performedAction.test(text)
     || physicalGerund.test(text)
     || (anatomy.test(text) && movement.test(text));
