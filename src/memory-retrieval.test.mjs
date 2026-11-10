@@ -67,6 +67,8 @@ test("Mikan's tastes are available for questions about her but not generic user 
   assert.equal(shouldIncludeCharacterCanon("Recommend me something to listen to"),false);
   assert.equal(shouldIncludeCharacterCanon("Do you think I should try a new hobby?"),false);
   assert.equal(shouldIncludeCharacterCanon("Mikan, what should I listen to?"),false);
+  assert.equal(shouldIncludeCharacterCanon("Mikan, what do you think of my favorite metal bands?"),false);
+  assert.equal(shouldIncludeCharacterCanon("What is Mikan's favorite music?"),true);
   assert.equal(shouldIncludeCharacterCanon("What's your favorite music genre?"),true);
   assert.equal(shouldIncludeCharacterCanon("Do you like synthwave?"),true);
   assert.equal(shouldIncludeCharacterCanon("Mikan, what is your personality like?"),true);
