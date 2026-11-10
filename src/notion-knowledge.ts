@@ -23,7 +23,7 @@ export type NotionRetrievalPlan = {
 
 // Generic writing intent, not a fixed set of book and character names.
 const WRITING = /\b(notion|my\s+(?:book|novel|story|stories|manuscript|writing|draft|characters?|chapters?|notes|lore)|(?:the|this|that)\s+(?:chapter|manuscript|draft|story\s+bible)|story\s+bible|character\s+(?:arc|sheet|backstory|development)|worldbuilding|my\s+fiction|hollow\s+meridian|charlotte)\b/i;
-const FOLLOWUP = /\b(she|he|they|it|her|him|them|their|chapter|scene|plot|ending|story|then|after|next|backstory|development|relationship|character|that|those|this)\b|\bwhat\s+(?:happened|happens|about|did|should|comes)\b/i;
+const FOLLOWUP = /\b(she|he|they|it|her|him|them|their|chapter|scene|plot|ending|story|book|novel|then|after|next|backstory|development|relationship|character|that|those|this)\b|\bwhat\s+(?:happened|happens|about|did|should|comes)\b/i;
 const NAME_STOP = new Set(("what where which when who whose why how can could would should will please tell "+
   "give show help about explain compare analyze analyse read review summarize summarise "+
   "i ive im my me we ours the a an in on to with from hey hello okay alright "+
@@ -93,7 +93,7 @@ export function selectNotionPage(query:string,pages:readonly NotionCachedPage[])
 
 export function asksToReadFullNotionPage(text:string):boolean {
   return /\b(?:read|review|analy[sz]e|summari[sz]e|recap|go through|look through|take a look at|critique)\b/i.test(text)
-    && /\b(?:full|whole|entire|all of|complete|chapter|draft|document|notion page|manuscript)\b/i.test(text);
+    && /\b(?:full|whole|entire|all of|complete|chapter|draft|document|notion page|manuscript|book|story)\b/i.test(text);
 }
 
 function namedCandidates(text:string):string[] {
