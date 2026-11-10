@@ -64,11 +64,16 @@ export function isNotionTopic(
 function pageScore(query:string, page:NotionCachedPage):number {
   const q=normal(query),title=normal(page.title);
   if(!q||!title)return 0;
+  // Owner can paste an exact Notion URL/UUID to disambiguate same-name pages.
+  if(query.includes(page.url) && page.url.length>18)return 300;
+  const compactId=page.id.replace(/-/g,"").toLowerCase();
+  if(compactId.length===32 && normal(query).replace(/ /g,"").includes(compactId))return 250;
   // A chapter title needs both the label and number. Bare "chapter" is
   // too broad and must not select an unrelated page.
   const chapter=(text:string)=>text.match(/\bchapter\s+(\d+|one|two|three|four|five|six|seven|eight|nine|ten)\b/);
+  const numbers:Record<string,string>={one:"1",two:"2",three:"3",four:"4",five:"5",six:"6",seven:"7",eight:"8",nine:"9",ten:"10"};
   const wanted=chapter(q),candidate=chapter(title);
-  if(wanted&&candidate&&wanted[1]===candidate[1])return 130;
+  if(wanted&&candidate&&(numbers[wanted[1]]||wanted[1])===(numbers[candidate[1]]||candidate[1]))return 130;
   if(title.length>=6 && (q===title||q.includes(" "+title+" ")||q.endsWith(" "+title)))return 100+title.length/100;
   const terms=words(title).filter(w=>w.length>=4&&!TITLE_STOP.has(w));
   if(!terms.length)return 0;
@@ -93,7 +98,21 @@ export function asksToReadFullNotionPage(text:string):boolean {
 
 function namedCandidates(text:string):string[] {
   const tokens=[...text.matchAll(/\b[A-Z][a-zA-Z]{3,}\b/g)].map(x=>x[0]);
-  return [...new Set(tokens.filter(t=>!NAME_STOP.has(t.toLowerCase())))].slice(0,5);
+  return [...new Set(tokens.filter(t=>!NAME_STOP.has(t.toLowerCase()) ||
+    (t==="Will" && (/\b(?:about|is|of|to)\s+Will\b/i.test(text) || /\bWill['’]s\b/.test(text))))].slice(0,5);
+}
+
+/** When Notion is only a soft possibility, require the named subjects in the
+ * user request to appear literally in a retrieved passage. Avoid hijacking
+ * unrelated internet or personal chat based on generic word matches.
+ */
+export function hasNamedNotionMatch(text:string,hits:readonly NotionHit[]):boolean {
+  const names=namedCandidates(text);
+  if(!names.length)return false;
+  return hits.some(hit=>{
+    const wordsInHit=new Set(words(hit.title+" "+hit.content));
+    return names.every(name=>wordsInHit.has(normal(name)));
+  });
 }
 
 /** Pages are local metadata; no model call is required for routing. Any query
@@ -111,8 +130,9 @@ export function planNotionRetrieval(
     || (bookIntent&&priorTopic?selectNotionPage(priorTopic,pages):null)
     || (bookIntent&&isFollowup(text)?activePage:null);
   const named=namedCandidates(text);
-  const possibleName=!!named.length && pages.length>0 &&
-    /\b(?:who is|tell me about|what do you think of|what happened to|backstory|origin|relationship|character|story|lore|my book)\b/i.test(text);
+  // A local FTS probe is inexpensive. Only a literal entity match is
+  // admitted into chat by hasNamedNotionMatch, not any incidental FTS hit.
+  const possibleName=!!named.length && pages.length>0;
   const relevant=bookIntent || !!page || possibleName;
   const query=(text+" "+(priorTopic||page?.title||"")).trim().slice(0,600);
   return {relevant,query,selectedPage:page,fullRead:asksToReadFullNotionPage(text) && !!page};
