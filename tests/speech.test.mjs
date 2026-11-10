@@ -123,3 +123,35 @@ test("Pocket progressive voice sends all text beyond 800 characters when finaliz
   assert.ok(chunks.every(s => s.length <= 420));
   assert.equal(chunks.join(" "), long);
 });
+
+
+test("stage directions are never spoken even when the action marker arrives across streamed tokens", async () => {
+  const feed = new ProgressiveSpeechFeed("pocket");
+  const iterator = feed[Symbol.asyncIterator]();
+  const opening = "*My ears twitch happily. I lean closer";
+  feed.append(opening);
+  feed.append(" and smile.* Hey! How was your morning? I'm glad you're here. ");
+  assert.equal(feed.finish(opening + " and smile.* Hey! How was your morning? I'm glad you're here. "), true);
+  const actual = [];
+  for await (const chunk of { [Symbol.asyncIterator]: () => iterator }) actual.push(chunk);
+  assert.equal(actual.join(" "), "Hey! How was your morning? I'm glad you're here.");
+});
+
+test("partial action markup after ordinary speech cannot leak or force a replay", async () => {
+  const feed = new ProgressiveSpeechFeed("qwen");
+  const first = "Hello there! It's good to see you. ";
+  feed.append(first + "*My tail swishes. I");
+  const iterator = feed[Symbol.asyncIterator]();
+  assert.deepEqual(await iterator.next(), {done:false,value:"Hello there!"});
+  const full = first + "*My tail swishes. I wave.* How is your morning going?";
+  feed.append(" wave.* How is your morning going?");
+  assert.equal(feed.finish(full), true);
+  const rest=[];
+  for await (const chunk of { [Symbol.asyncIterator]: () => iterator }) rest.push(chunk);
+  assert.equal(["Hello there!",...rest].join(" "), "Hello there! It's good to see you. How is your morning going?");
+});
+
+test("unfinished action at end of final reply is dropped from voice", () => {
+  assert.equal(toSpeechText("Hi! *My ears flick and my tail swishes"), "Hi!");
+  assert.equal(toSpeechText("*I tilt my head and smile.* Morning!"), "Morning!");
+});
