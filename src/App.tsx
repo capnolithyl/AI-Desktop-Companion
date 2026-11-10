@@ -27,7 +27,7 @@ import { PersonalityPresets, PersonalitySliders } from "./PersonalityControls";
 import { parseSlashCommand, SLASH_HELP } from "./slash-commands";
 import { runtimeContext, chatRuntimeContext } from "./runtime-context";
 import { decideDesktopTurn } from "./desktop-turn-routing";
-import { formatDebugLog, type Diagnostics, type OllamaStats, type ResearchAudit } from "./debug-log";
+import { formatDebugLog, type Diagnostics, type MemoryRecallAudit, type OllamaStats, type ResearchAudit } from "./debug-log";
 import { strongSemanticIds } from "./memory-ranking";
 import {
   memoryApi, prepareMemoryContext, characterContext, characterAnswerGuidance, readMessageMetadata,
@@ -1510,6 +1510,7 @@ export default function App() {
     let unlisten: UnlistenFn | null = null;
     let unlistenActivity: UnlistenFn | null = null;
     let progressiveFeed: ProgressiveSpeechFeed | null = null;
+    let memoryAudit: MemoryRecallAudit | undefined;
 
     try {
       await persistMessage(user);
@@ -1518,13 +1519,35 @@ export default function App() {
       // With no sidecar, the Rust command returns [] and normal chat continues.
       setActivity("Recalling relevant context…");
       const liveFacts = await memoryApi.listFacts().catch(() => userFacts);
-      const semanticMatches = await invoke<Array<{id:number; fact:string; score:number|null}>>(
-        "memory_semantic_recall", { query: text }
-      ).catch(() => []);
+      const [semanticMatches, semanticStatus] = await Promise.all([
+        invoke<Array<{id:number; fact:string; score:number|null}>>(
+          "memory_semantic_recall", { query: text }
+        ).catch(() => []),
+        invoke<{ready:boolean; reason?:string}>("memory_semantic_status")
+          .catch(() => null)
+      ]);
       const semanticIds = strongSemanticIds(semanticMatches,text);
       if (liveFacts !== userFacts) setUserFacts(liveFacts);
       const budget = memoryBudget(settings.contextWindow);
       const remembered = prepareMemoryContext(liveFacts,text,semanticIds,budget);
+      // Debug only the facts actually sent to Ollama, never the whole user database.
+      const strongIds = new Set(semanticIds);
+      const factsById = new Map(liveFacts.map(fact => [fact.id, fact]));
+      memoryAudit = {
+        storedFacts: liveFacts.length,
+        semanticService: semanticStatus === null ? "unknown" : semanticStatus.ready ? "ready" : "offline",
+        semanticReason: semanticStatus?.reason,
+        semanticCandidates: semanticMatches.length,
+        strongSemanticMatches: semanticIds.length,
+        maxFacts: budget.maxFacts,
+        facts: remembered.ids.flatMap(id => {
+          const fact = factsById.get(id);
+          return fact ? [{
+            id: fact.id, fact: fact.fact, category: fact.category, tags: fact.tags,
+            pinned: (fact.importance ?? 50) >= 90, semantic: strongIds.has(id)
+          }] : [];
+        })
+      };
       const archivedSessions = await memoryApi.listSessionSummaries().catch(() => sessionSummaries);
       const currentSession = archivedSessions.find(s => s.conversationId === conversationId) ?? null;
       const earlierSessions = archivedSessions.filter(s => s.conversationId !== conversationId);
@@ -1642,7 +1665,8 @@ export default function App() {
         firstTokenMs,
         model: settings.model,
         stats: completion.stats,
-        research: completion.researchAudit ?? undefined
+        research: completion.researchAudit ?? undefined,
+        memory: memoryAudit
       };
       // The source-verification filter applies to actual researched answers,
       // NEVER to local conversational or capability answers.
@@ -1696,7 +1720,7 @@ export default function App() {
           ? (accumulated ? `${allowRoleplay ? accumulated : stripNarratedActions(accumulated)}\n\n[Stopped]` : "[Generation stopped]")
           : (accumulated ? `${allowRoleplay ? accumulated : stripNarratedActions(accumulated)}\n\n[Interrupted: ${message}]` : `Error: ${message}`),
         failed: !stopped,
-        diagnostics: { elapsedMs: performance.now() - started, firstTokenMs, model: settings.model, stats: null },
+        diagnostics: { elapsedMs: performance.now() - started, firstTokenMs, model: settings.model, stats: null, memory: memoryAudit },
         sources: withSearch?.results, searchQuery: withSearch?.query
       };
       setMessages(current => current.map(m => m.id === assistantId ? assistant : m));

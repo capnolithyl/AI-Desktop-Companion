@@ -76,3 +76,35 @@ test("handles empty logs and missing metrics without inventing data", () => {
   });
   assert.match(pending, /\(Empty \/ still generating\)/);
 });
+
+test("exports exact selected user facts, category, tags, pins and semantic availability", () => {
+  const result = formatDebugLog([{
+    id:"answer",role:"assistant",createdAt:Date.UTC(2026,10,10),content:"Freelance WordPress work.",
+    diagnostics:{elapsedMs:900,firstTokenMs:200,model:"qwen3.5:9b",stats:null,
+      memory:{storedFacts:27,semanticService:"offline",semanticReason:"Not installed",
+        semanticCandidates:0,strongSemanticMatches:0,maxFacts:10,facts:[
+          {id:42,fact:"The user is a professional WordPress developer.",category:"work",
+            tags:["wordpress","career"],pinned:false,semantic:false},
+          {id:43,fact:"The user's name is Marcus.",category:"profile",
+            tags:["name"],pinned:true,semantic:false}
+        ]}}
+  }],{conversationId:"memory-debug",model:"qwen3.5:9b",contextWindow:16384});
+  assert.ok(result.includes("SQLite facts available: 27"));
+  assert.ok(result.includes("Semantic service: offline (Not installed)"));
+  assert.ok(result.includes("Semantic candidates returned: 0"));
+  assert.ok(result.includes("Selected facts: 2 / 10 maximum"));
+  assert.ok(result.includes("ID 42 | work | not pinned | keyword/category/tag match | tags: wordpress, career"));
+  assert.ok(result.includes("The user is a professional WordPress developer."));
+  assert.ok(result.includes("ID 43 | profile | pinned | pinned core"));
+  assert.ok(result.includes("selected personal-memory facts"));
+});
+test("distinguishes empty recall from successful recall", () => {
+  const result=formatDebugLog([{
+    id:"answer",role:"assistant",createdAt:0,content:"A comet contains ice.",
+    diagnostics:{elapsedMs:100,firstTokenMs:25,model:"qwen3.5:9b",stats:null,
+      memory:{storedFacts:35,semanticService:"ready",semanticCandidates:4,
+        strongSemanticMatches:0,maxFacts:10,facts:[]}}
+  }],{conversationId:null,model:"qwen3.5:9b",contextWindow:16384});
+  assert.ok(result.includes("Selected facts: 0 / 10 maximum"));
+  assert.ok(result.includes("No user facts were included in this model prompt."));
+});
