@@ -204,6 +204,11 @@ persistently and run the setup script again once to register the path.
 After the **one-time** Pocket setup above, no terminal and no Qwen GPU model
 are needed to change the recording.
 
+The **Saved voice identity** panel also shows the source WAV filename of the
+currently saved recording. The actual stored audio stays at
+`mikan-reference.wav`, while the original filename is retained as local
+metadata. Older references display the stored filename until replaced.
+
 1. In **Settings → Voice**, select **Pocket TTS · CPU** and click **Check
    connection** if needed.
 2. Choose another WAV recording in **Saved voice identity** (prefer a clean

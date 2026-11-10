@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { ArrowLeft, Check, MessageCircle, Plus, RotateCw, Star, Trash2, X } from "lucide-react";
 import type { CharacterCategory, CharacterFact, MemoryConversation, UserFact } from "./memory-client";
+import {MemoryImporter} from "./MemoryImporter";
+import {MEMORY_CATEGORIES,parseTags,type ImportMemory,type MemoryCategory} from "./memory-import";
 import { CharacterCanonTab } from "./CharacterCanonTab";
 import type { SessionSummary } from "./memory-budget";
 
@@ -27,6 +29,8 @@ type Props = {
   onEditFact: (id: number, fact: string) => Promise<void>;
   onDeleteFact: (id: number) => Promise<void>;
   onPinFact: (id: number, pinned: boolean) => Promise<void>;
+  onUpdateFactMetadata: (id: number, category: MemoryCategory, tags: string[]) => Promise<void>;
+  onImportFacts: (items: ImportMemory[]) => Promise<{inserted:number;duplicates:number}>;
   onRefresh: () => Promise<void>;
   onAddCharacter: (category: CharacterCategory, label: string, value: string) => Promise<void>;
   onEditCharacter: (id: number, category: CharacterCategory, label: string, value: string) => Promise<void>;
@@ -42,13 +46,20 @@ export function MemoryPanel({
   initialTab = "facts", conversations, sessionSummaries, facts, characterFacts,
   autoRememberUser, autoRememberMikan, automaticError, onAutoRememberUserChange, onAutoRememberMikanChange,
   currentId, busy, error, onClose, onNew,
-  onOpen, onDeleteChat, onDeleteSessionSummary, onAddFact, onEditFact, onDeleteFact, onPinFact, onRefresh,
+  onOpen, onDeleteChat, onDeleteSessionSummary, onAddFact, onEditFact, onDeleteFact, onPinFact,
+  onUpdateFactMetadata, onImportFacts, onRefresh,
   onAddCharacter, onEditCharacter, onDeleteCharacter
 }: Props) {
   const [tab, setTab] = useState<"chats" | "facts" | "character">(initialTab);
   const [newFact, setNewFact] = useState("");
   const [editId, setEditId] = useState<number | null>(null);
   const [editValue, setEditValue] = useState("");
+  const [filterCategory,setFilterCategory]=useState<MemoryCategory|"all">("all");
+  const [filterText,setFilterText]=useState("");
+  const [visibleLimit,setVisibleLimit]=useState(100);
+  const [organizeId,setOrganizeId]=useState<number|null>(null);
+  const [organizeCategory,setOrganizeCategory]=useState<MemoryCategory>("other");
+  const [organizeTags,setOrganizeTags]=useState("");
   const [confirmId, setConfirmId] = useState<string | null>(null);
   const [working, setWorking] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -61,6 +72,9 @@ export function MemoryPanel({
     catch (e) { setActionError(e instanceof Error ? e.message : String(e)); }
     finally { setWorking(false); }
   };
+
+  const filteredFacts=facts.filter(f=>(filterCategory==="all"||f.category===filterCategory) &&
+    (!filterText.trim() || [f.fact,f.category??"other",...(f.tags??[])].join(" ").toLowerCase().includes(filterText.trim().toLowerCase())));
 
   return <section className="drawer" role="dialog" aria-label="Mikan memory">
     <header className="drawer-header">
@@ -93,6 +107,7 @@ export function MemoryPanel({
             <small>Checks explicit, lasting details after a reply. Sensitive information is skipped by default.</small>
           </span>
         </label>
+        <MemoryImporter facts={facts} onImport={onImportFacts}/>
         <form className="memory-add" onSubmit={e => {
           e.preventDefault();
           if (!newFact.trim()) return;
@@ -106,7 +121,18 @@ export function MemoryPanel({
           </button>
         </form>
         {!facts.length && <p className="memory-empty">Nothing saved yet. Use this form or /remember followed by a fact.</p>}
-        {facts.map(fact => <article className="memory-item" key={fact.id}>
+        {!!facts.length && <div className="memory-filter">
+          <input value={filterText} placeholder="Search facts or tags…" aria-label="Filter memories"
+            onChange={e=>{setFilterText(e.target.value);setVisibleLimit(100);}}/>
+          <select value={filterCategory} aria-label="Filter by memory category"
+            onChange={e=>{setFilterCategory(e.target.value as MemoryCategory|"all");setVisibleLimit(100);}}>
+            <option value="all">All categories ({facts.length})</option>
+            {MEMORY_CATEGORIES.map(cat=><option value={cat.id} key={cat.id}>{cat.label}</option>)}
+          </select>
+          <small>{filteredFacts.length} matching memories</small>
+        </div>}
+        {facts.length>0 && !filteredFacts.length && <p className="memory-empty">No memories match those filters.</p>}
+        {filteredFacts.slice(0,visibleLimit).map(fact => <article className="memory-item" key={fact.id}>
           {editId === fact.id ? <>
             <textarea value={editValue} maxLength={500} rows={3} aria-label="Edit memory"
               onChange={e => setEditValue(e.target.value)}/>
@@ -119,6 +145,22 @@ export function MemoryPanel({
             </div>
           </> : <>
             <p>{fact.fact}</p>
+            <div className="memory-labels">
+              <span>{MEMORY_CATEGORIES.find(cat=>cat.id===fact.category)?.label??"Other"}</span>
+              {(fact.tags??[]).map(tag=><span key={tag}>#{tag}</span>)}
+            </div>
+            {organizeId===fact.id && <div className="memory-organize">
+              <label>Category <select value={organizeCategory} onChange={e=>setOrganizeCategory(e.target.value as MemoryCategory)}>
+                {MEMORY_CATEGORIES.map(cat=><option key={cat.id} value={cat.id}>{cat.label}</option>)}
+              </select></label>
+              <label>Tags <input aria-label="Memory tags" value={organizeTags} onChange={e=>setOrganizeTags(e.target.value)} placeholder="Separate tags with commas"/></label>
+              <div className="memory-actions">
+                <button type="button" disabled={working} onClick={()=>void run(async()=>{
+                  await onUpdateFactMetadata(fact.id,organizeCategory,parseTags(organizeTags));setOrganizeId(null);
+                })}><Check size={13}/> Save labels</button>
+                <button type="button" onClick={()=>setOrganizeId(null)}>Cancel</button>
+              </div>
+            </div>}
             <div className="memory-actions">
               <small>#{fact.id} · {shortDate(fact.updatedAt)}
                 {(fact.referenceCount ?? 0) > 0 && " · Recalled " + fact.referenceCount + "×"}</small>
@@ -128,6 +170,9 @@ export function MemoryPanel({
                 <Star size={13} fill={(fact.importance ?? 50)>=90 ? "currentColor":"none"}/>
                 {(fact.importance ?? 50)>=90 ? "Pinned":"Pin"}
               </button>
+              <button type="button" onClick={()=>{
+                setOrganizeId(fact.id);setOrganizeCategory(fact.category??"other");setOrganizeTags((fact.tags??[]).join(", "));
+              }}>Organize</button>
               <button type="button" onClick={() => { setEditId(fact.id); setEditValue(fact.fact); }}>Edit</button>
               {confirmId === `fact:${fact.id}` ? <>
                 <button type="button" className="memory-danger" disabled={working}
@@ -137,6 +182,9 @@ export function MemoryPanel({
             </div>
           </>}
         </article>)}
+        {filteredFacts.length>visibleLimit && <button type="button" className="secondary-action" onClick={()=>setVisibleLimit(n=>n+100)}>
+          Show 100 more ({filteredFacts.length-visibleLimit} remaining)
+        </button>}
       </> : tab === "character" ? <>
         <label className="memory-auto-toggle">
           <input type="checkbox" checked={autoRememberMikan}

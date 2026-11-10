@@ -35,6 +35,7 @@ import {
   type CharacterCategory, type CharacterFact
 } from "./memory-client";
 import { MemoryPanel } from "./MemoryPanel";
+import type {ImportMemory,MemoryCategory} from "./memory-import";
 import { NotionPanel } from "./NotionPanel";
 import { isNotionTopic, notionContext, type NotionHit } from "./notion-knowledge";
 import { splitSpeechText, toSpeechText, VOICE_TEST_LINE, ProgressiveSpeechFeed, FIRST_SPEECH_CHARS, POCKET_FINAL_SPEECH_CHARS, voiceEndpoint, POCKET_VOICE_ENDPOINT, canSaveVoiceReference } from "./speech";
@@ -934,6 +935,18 @@ export default function App() {
     // stays usable if the optional Mem0 process is offline.
     void invoke("memory_semantic_recall", {query:""}).catch(() => {});
     setMemoryError(null);
+  };
+  const importUserFacts = async (items: ImportMemory[]) => {
+    const result=await memoryApi.importFacts(items);
+    await refreshFacts();
+    // Optional local Mem0 synchronization starts separately from the import UI.
+    void invoke("memory_semantic_recall",{query:""}).catch(()=>{});
+    return result;
+  };
+  const updateUserFactMetadata = async (id:number,category:MemoryCategory,tags:string[]) => {
+    await memoryApi.updateFactMetadata(id,category,tags);
+    await refreshFacts();
+    void invoke("memory_semantic_recall",{query:""}).catch(()=>{});
   };
   const editUserFact = async (id: number, fact: string) => {
     await memoryApi.updateFact(id, fact);
@@ -2173,6 +2186,7 @@ export default function App() {
       busy={busy} error={memoryError} onClose={goCompact} onNew={clearChat}
       onOpen={openConversation} onDeleteChat={deleteConversation} onDeleteSessionSummary={deleteSessionNotes}
       onAddFact={addUserFact} onEditFact={editUserFact} onDeleteFact={deleteUserFact} onPinFact={pinUserFact}
+      onImportFacts={importUserFacts} onUpdateFactMetadata={updateUserFactMetadata}
       onAddCharacter={addCharacter} onEditCharacter={editCharacter} onDeleteCharacter={deleteCharacter}
       onRefresh={refreshMemory}/>}
 

@@ -89,3 +89,14 @@ test("weak nearest-neighbor matches never become assumed personal context",()=>{
   assert.deepEqual(strongSemanticIds([{id:7,score:0.81},{id:8,score:0.63},{id:9,score:0.14}],"Can you help build a website?"),[7]);
   assert.deepEqual(strongSemanticIds([{id:7,score:0.73}],"What do you remember about my work?"),[7]);
 });
+
+
+test("owner categories and tags make otherwise vague facts relevant without Mem0",()=>{
+  const sample=[
+    {id:1,fact:"The user keeps a regular practice schedule",updatedAt:10,category:"interests",tags:["guitar","music"]},
+    {id:2,fact:"The user has a hobby",updatedAt:30,category:"other",tags:[]}
+  ];
+  assert.deepEqual(prioritizeCoreMemories(sample,"Can we discuss guitar?",[],5).map(x=>x.id),[1]);
+  assert.deepEqual(prioritizeCoreMemories(sample,"What about my interests?",[],5).map(x=>x.id),[1]);
+  assert.deepEqual(prioritizeCoreMemories(sample,"Good morning!",[],5),[]);
+});

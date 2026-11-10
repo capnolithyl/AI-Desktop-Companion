@@ -4,6 +4,8 @@
 export type RankableMemory = {
   id: number;
   fact: string;
+  category?: string;
+  tags?: string[];
   updatedAt: number;
   importance?: number; // 0..100, owner-local metadata
   referenceCount?: number; // persisted, capped to prevent runaway feedback loops
@@ -22,6 +24,10 @@ export function rankMemories<T extends RankableMemory>(
   const score = (f: T): number => {
     const text = f.fact.toLowerCase();
     const lexical = terms.reduce((sum, word) => sum + (text.includes(word) ? 1 : 0), 0);
+    const topic = terms.reduce((sum, word) => sum +
+      ((f.tags ?? []).some(tag=>tag.toLowerCase().includes(word)) ? 1 : 0), 0);
+    const category = terms.some(word=>f.category?.toLowerCase()===word) ? 1 : 0;
+    const topical = Math.min(0.23,topic*0.115+category*0.075);
     const matched = positions.get(f.id);
     // Strong semantic match outranks incidental keyword overlap. When Mem0
     // isn't available, lexical relevance remains stronger than raw importance.
@@ -31,7 +37,7 @@ export function rankMemories<T extends RankableMemory>(
     const recurring = Math.min(0.08, Math.log1p(Math.max(0, f.referenceCount ?? 0)) * 0.018);
     const semantic = matched !== undefined ? 0.7 * relevance :
       lexical > 0 ? 0.5 * relevance : 0;
-    return semantic + 0.25 * salience + recurring + (lexical ? Math.min(lexical * 0.055, 0.15) : 0);
+    return semantic + topical + 0.25 * salience + recurring + (lexical ? Math.min(lexical * 0.055, 0.15) : 0);
   };
   return facts.slice().sort((a,b) =>
     score(b) - score(a) || b.updatedAt - a.updatedAt || b.id-a.id);
@@ -99,7 +105,8 @@ export function prioritizeCoreMemories<T extends RankableMemory>(
     if(coreIds.has(f.id))return false;
     if(semantic.has(f.id))return true;
     const stored=f.fact.toLowerCase();
-    return [...significant].some(word=>stored.includes(word));
+    return [...significant].some(word=>stored.includes(word) ||
+      f.category?.toLowerCase()===word || (f.tags??[]).some(tag=>tag.toLowerCase().includes(word)));
   });
   return [...pinned,...relevant];
 }

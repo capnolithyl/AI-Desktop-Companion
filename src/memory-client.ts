@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import type { ImportMemory, MemoryCategory } from "./memory-import";
 import type { Message } from "./storage";
 import { prioritizeCoreMemories, filterStaleActivities } from "./memory-ranking";
 import { memoryBudget, type MemoryBudget, type SessionSummary } from "./memory-budget";
@@ -14,6 +15,8 @@ export type MemoryConversation = {
 export type UserFact = {
   id: number;
   fact: string;
+  category: MemoryCategory;
+  tags: string[];
   createdAt: number;
   updatedAt: number;
   importance?: number;
@@ -73,6 +76,9 @@ export const memoryApi = {
     }),
   deleteConversation: (id: string) => invoke<void>("memory_delete_conversation", { id }),
   listFacts: () => invoke<UserFact[]>("memory_list_facts"),
+  importFacts: (items: ImportMemory[]) => invoke<{inserted:number;duplicates:number}>("memory_import_facts", {items}),
+  updateFactMetadata: (id: number, category: MemoryCategory, tags: string[]) =>
+    invoke<void>("memory_update_fact_metadata",{id,category,tags}),
   markRecalled: (ids: number[]) => invoke<void>("memory_mark_recalled", { ids }),
   pinFact: (id: number, pinned: boolean) => invoke<void>("memory_pin_fact", {id,pinned}),
   sessionCandidate: (conversationId: string, force = false) =>
@@ -120,7 +126,9 @@ export function prepareMemoryContext(
     // Every saved claim is a dated assertion, not a guarantee of current status.
     const savedOn = Number.isFinite(item.createdAt) && item.createdAt > 0
       ? new Date(item.createdAt * 1000).toISOString().slice(0, 10) : "unknown date";
-    const line = "[saved " + savedOn + "] " + item.fact;
+    const metadata=(item.category && item.category!=="other" ? " | category: "+item.category : "") +
+      ((item.tags??[]).length ? " | tags: "+item.tags.join(", ") : "");
+    const line = "[saved " + savedOn + metadata + "] " + item.fact;
     if (length + line.length > budget.factChars) continue;
     selected.push(item);
     length += line.length;
@@ -132,6 +140,8 @@ export function prepareMemoryContext(
     ...selected.map(item => "- [saved " +
       (Number.isFinite(item.createdAt) && item.createdAt > 0
         ? new Date(item.createdAt * 1000).toISOString().slice(0,10) : "unknown date")
+      + (item.category && item.category !== "other" ? " | category: "+item.category : "")
+      + ((item.tags ?? []).length ? " | tags: "+item.tags.join(", ") : "")
       + "] " + item.fact),
     "Use a memory only when it naturally helps answer the current message; never recite unrelated interests.",
     "These are the user's past statements, not verified facts about third-party people, music, products or events. A preference for one genre does NOT classify another band; a profession does NOT mean every conversation is about work.",
