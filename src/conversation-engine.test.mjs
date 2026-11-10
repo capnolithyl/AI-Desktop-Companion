@@ -84,3 +84,18 @@ test("normal conversation instructions discourage stage direction narration with
   assert.match(guidance, /\*meow\*.*\*really\*/i);
   assert.match(guidance, /unless the owner explicitly requests roleplay/i);
 });
+
+test("ordinary replies prefer short direct answers without endless self-correction", () => {
+  const guidance = responseFocusGuidance([], "What next?");
+  assert.match(guidance, /1-3 short sentences/);
+  assert.match(guidance, /WHEN CORRECTED/);
+  assert.match(guidance, /Never argue from an earlier guess/i);
+  assert.match(guidance, /request a tighter crop/i);
+  assert.match(guidance, /Elaborate when the owner asks for details/);
+});
+
+test("beginner tutoring gets a simple next step", () => {
+  const guidance = responseFocusGuidance([], "I am a beginner. What should I do?");
+  assert.match(guidance, /one concrete next step/);
+  assert.match(guidance, /ordinary language/);
+});

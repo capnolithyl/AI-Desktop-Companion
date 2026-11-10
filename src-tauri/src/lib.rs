@@ -514,10 +514,14 @@ async fn chat_stream_impl(
     if let Some(num_ctx) = selected_context {
         options["num_ctx"] = json!(num_ctx);
     }
-    // Keep normal conversational creativity intact; use lower temperature
-    // for source-grounded replies (including evidence carried between turns).
+    // Preserve natural chat, but lower randomness when a visual/spatial
+    // observation must be grounded in an image rather than guessed from text.
     if !sources.is_empty() {
         options["temperature"] = json!(0.2);
+    } else if messages.iter().any(|m| m.get("images")
+        .and_then(|images| images.as_array())
+        .is_some_and(|images| !images.is_empty())) {
+        options["temperature"] = json!(0.3);
     }
     if options.as_object().is_some_and(|items| !items.is_empty()) {
         payload["options"] = options;

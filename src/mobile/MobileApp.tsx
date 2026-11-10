@@ -15,7 +15,7 @@ import { learningCommand, learningSessionActive, contextualLearningFact } from "
 import { planResearch, stripUnsupportedCitations } from "../research-routing";
 import { verifyResearchAnswer } from "../evidence-verification";
 import { retryTarget, type RetryTarget } from "./retry-response";
-import { contextGuidance, needsContextResolution, resolveConversationQuestion } from "../conversation-engine";
+import { contextGuidance, needsContextResolution, resolveConversationQuestion, responseFocusGuidance } from "../conversation-engine";
 import { priorResearchSources } from "../research-context";
 import { compactWebContext, pageContext, type WebResult } from "../web-search";
 import { deviceClockAnswer, pocketRuntimeContext } from "../runtime-context";
@@ -56,7 +56,8 @@ function buildPrompt(settings: Settings, facts: UserFact[], canon: CharacterFact
     "Answer the CURRENT user question directly and concisely. For a follow-up, do not introduce the subject again, repeat previous facts or praise the user's taste. Only mention earlier details if essential to answer the NEW question.",
     "Do not turn a specific factual answer into another biography, timeline or generic recommendation. If you have no verified new information, say precisely what could not be confirmed, without replaying old search results.",
     "CRITICAL: Conversation text alone cannot save a memory. Never claim that a memory has been saved, filed away, or remembered permanently unless the application has confirmed a database write. Explicit save requests are handled by the app, not by your own text.",
-    memoryContext(facts, query), personalMemoryGuidance(query), characterContext(canon, query), research
+    memoryContext(facts, query), personalMemoryGuidance(query), characterContext(canon, query), research,
+    responseFocusGuidance(turns.slice(0,-1),query)
   ].filter(Boolean).join("\n");
   // Keep earlier web replies as dialogue context, NOT as verified evidence.
   // Keep the most recent intact turns before truncating old context.

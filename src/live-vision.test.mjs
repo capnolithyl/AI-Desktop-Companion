@@ -41,6 +41,8 @@ test("model context is truthful and never quotes secret base64",()=>{
   assert.match(info,/intermittent still frame/);
   assert.match(info,/NOT live video/);
   assert.match(info,/UNTRUSTED DATA/);
+  assert.match(info,/locate the orientation/);
+  assert.match(info,/instead of repeating competing guesses/);
   assert.doesNotMatch(info,/PRIVATE-SCREEN-JPEG/);
   assert.match(liveVisionUnavailableContext(true),/no recent screenshot/);
   assert.equal(liveVisionUnavailableContext(false),"");
