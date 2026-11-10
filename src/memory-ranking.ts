@@ -38,7 +38,7 @@ export function rankMemories<T extends RankableMemory>(
     const tagged = new Set((f.tags ?? []).flatMap(tag => memoryTerms(tag)));
     const lexical = terms.reduce((sum, word) => sum + (text.has(word) ? 1 : 0), 0);
     const topic = terms.reduce((sum, word) => sum + (tagged.has(word) ? 1 : 0), 0);
-    const category = terms.some(word=>f.category?.toLowerCase()===word) ? 1 : 0;
+    const category = terms.some(word => memoryTerms(f.category ?? "").includes(word)) ? 1 : 0;
     const topical = Math.min(0.23,topic*0.115+category*0.075);
     const matched = positions.get(f.id);
     // Strong semantic match outranks incidental keyword overlap. When Mem0
@@ -118,7 +118,7 @@ export function prioritizeCoreMemories<T extends RankableMemory>(
     const stored = new Set(memoryTerms(f.fact));
     const labels = new Set((f.tags ?? []).flatMap(tag => memoryTerms(tag)));
     return [...significant].some(word => stored.has(word) || labels.has(word) ||
-      f.category?.toLowerCase()===word);
+      memoryTerms(f.category ?? "").includes(word));
   });
   return [...pinned,...relevant];
 }
