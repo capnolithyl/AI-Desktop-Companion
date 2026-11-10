@@ -71,3 +71,8 @@ test("style helper notices repeated side topics without suppressing user-chosen 
   const directlyAsked=responseFocusGuidance(turns,"What can you tell me about the meeting?");
   assert.doesNotMatch(directlyAsked,/discussing them: meeting/);
 });
+
+
+test("unfamiliar site guidance discourages inventing a business from its name", () => {
+  assert.match(responseFocusGuidance([], "What is DiscoverMass?"), /never infer its purpose from its spelling/i);
+});
