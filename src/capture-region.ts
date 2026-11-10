@@ -55,3 +55,18 @@ export function dragToRegion(
   const result={x:x1,y:y1,width:x2-x1,height:y2-y1};
   return validScreenRegion(result,source.width,source.height)?result:null;
 }
+
+/** A completed drag enters review mode; normal left-clicks must not replace it.
+ * Explicit Redraw returns the picker to drawing mode.
+ */
+export function canStartRegionSelection(locked:boolean):boolean {
+  return !locked;
+}
+export function finalizeRegionSelection(
+  start:{x:number;y:number},end:{x:number;y:number},
+  viewport:{width:number;height:number},
+  source:{width:number;height:number}
+):{locked:boolean;region:ScreenRegion|null} {
+  const region=dragToRegion(start,end,viewport,source);
+  return {locked:region!==null,region};
+}

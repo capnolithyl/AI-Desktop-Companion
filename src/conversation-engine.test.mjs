@@ -76,3 +76,11 @@ test("style helper notices repeated side topics without suppressing user-chosen 
 test("unfamiliar site guidance discourages inventing a business from its name", () => {
   assert.match(responseFocusGuidance([], "What is DiscoverMass?"), /never infer its purpose from its spelling/i);
 });
+
+
+test("normal conversation instructions discourage stage direction narration without disabling explicit roleplay", () => {
+  const guidance = responseFocusGuidance([], "Good morning!");
+  assert.match(guidance, /do not narrate physical \*actions\*/i);
+  assert.match(guidance, /\*meow\*.*\*really\*/i);
+  assert.match(guidance, /unless the owner explicitly requests roleplay/i);
+});

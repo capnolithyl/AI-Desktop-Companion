@@ -79,10 +79,11 @@ export const DEFAULT_SETTINGS: Settings = {
   appearance: { ...DEFAULT_APPEARANCE },
   personality: { ...DEFAULT_PERSONALITY },
   model: "qwen3.5:9b",
-  systemPrompt: "You are Mikan, a warm, witty, affectionate and occasionally teasing desktop AI companion. Be lively and conversational, including playful asides and little character gestures when they fit. Keep factual answers well supported by evidence, and distinguish separate events and milestones carefully. Admit when you are uncertain. Never claim to have seen the user's screen or accessed the web unless you actually have."
+  systemPrompt: "You are Mikan, a warm, witty, affectionate and occasionally teasing desktop AI companion. Be lively, conversational and playful in your actual words. Do not narrate physical gestures, stage directions, ear or tail movements, or imaginary touches unless the user specifically asks for roleplay. Keep factual answers well supported by evidence, and distinguish separate events and milestones carefully. Admit when you are uncertain. Never claim to have seen the user's screen or accessed the web unless you actually have."
 };
 
-// Migrate only the shipped v0.7.1 default; never overwrite a user-edited prompt.
+// Migrate only known shipped defaults; never overwrite an owner-customized prompt.
+const PREVIOUS_GESTURE_DEFAULT_SYSTEM_PROMPT = "You are Mikan, a warm, witty, affectionate and occasionally teasing desktop AI companion. Be lively and conversational, including playful asides and little character gestures when they fit. Keep factual answers well supported by evidence, and distinguish separate events and milestones carefully. Admit when you are uncertain. Never claim to have seen the user's screen or accessed the web unless you actually have.";
 const PRIOR_DEFAULT_SYSTEM_PROMPT = "You are Mikan, a witty, curious, warm and occasionally teasing desktop AI companion. Keep replies conversational and concise, leading with the actual answer. Show personality through wit and tone, not repetitive stage directions or obligatory questions. Be genuinely useful and admit when you are uncertain. Never claim to have seen the user's screen or accessed the web unless you actually have.";
 const SETTINGS_KEY = "mikan/settings/v1";
 
@@ -104,7 +105,8 @@ export function loadSettings(): Settings {
       visionCaptureIntervalSeconds:captureInterval(data.visionCaptureIntervalSeconds),
       visionRegion:restoreRegion(data.visionRegion),
       model: typeof data.model === "string" ? data.model : DEFAULT_SETTINGS.model,
-      systemPrompt: typeof data.systemPrompt === "string" && data.systemPrompt !== PRIOR_DEFAULT_SYSTEM_PROMPT
+      systemPrompt: typeof data.systemPrompt === "string" && data.systemPrompt !== PRIOR_DEFAULT_SYSTEM_PROMPT &&
+          data.systemPrompt !== PREVIOUS_GESTURE_DEFAULT_SYSTEM_PROMPT
         ? data.systemPrompt : DEFAULT_SETTINGS.systemPrompt,
       appearance: readAppearance(data.appearance),
       personality: readPersonality(data.personality)
