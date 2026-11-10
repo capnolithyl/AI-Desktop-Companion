@@ -249,3 +249,35 @@ test("stage filter does not break Markdown lists or basic programming text", () 
   assert.equal(isNarratedAction("meow"),false);
   assert.equal(isNarratedAction("really"),false);
 });
+
+test("Mikan's desk-poking stage directions never appear in ordinary chat or Pocket audio",async()=>{
+  const input="Well, well! *sits on your desk and pokes your shoulder with a paw* Since you like strategy games, let's talk.";
+  const expected="Well, well! Since you like strategy games, let's talk.";
+  assert.equal(stripNarratedActions(input), expected);
+  assert.equal(isNarratedAction("sits on your desk and pokes your shoulder with a paw"), true);
+  const textStream = new NarrationFilter();
+  const feed = new ProgressiveSpeechFeed("pocket");
+  for(const delta of ["Well, well! *sit","s on your desk and po","kes your shoulder with a paw* Since you like strategy games, let's talk."]){
+    feed.append(textStream.append(delta));
+  }
+  const cleaned=textStream.finish();
+  assert.equal(cleaned,expected);
+  assert.equal(feed.finish(cleaned),true);
+  const spoken=[];
+  for await(const chunk of feed)spoken.push(chunk);
+  assert.equal(spoken.join(" "),expected);
+});
+test("stage-direction filtering preserves legitimate emphasis and deliberate roleplay",()=>{
+  assert.equal(stripNarratedActions("That's *really* good. *meow*"),"That's *really* good. *meow*");
+  assert.equal(stripNarratedActions("*sits beside you* Hello!"),"Hello!");
+  assert.equal(roleplayActive("Let's roleplay a cozy catgirl scene"),true);
+  const f=new NarrationFilter(false);
+  assert.equal(f.append("*sits beside you* Hello!"),"*sits beside you* Hello!");
+});
+
+test("old tail-thump and smile stage directions are not read aloud",()=>{
+  assert.equal(stripNarratedActions("*my tail gives a happy little thump against your leg* Hey!"),"Hey!");
+  assert.equal(stripNarratedActions("*smiles sweetly* How can I help?"),"How can I help?");
+  assert.equal(toSpeechText(stripNarratedActions("*winks at you* Hello!")),"Hello!");
+  assert.equal(stripNarratedActions("That is *really wonderful*."),"That is *really wonderful*.");
+});
