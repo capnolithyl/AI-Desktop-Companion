@@ -16,7 +16,8 @@ const generic = new Set([
   "help","hey","can","you","me","my","the","for","and","how",
   "any","was","were","are","been","being","did","does","do","is","its",
   "just","got","get","say","said","let","lets","thinking","think",
-  "something","things","kind","kinds","again","still","then","also"
+  "something","things","kind","kinds","again","still","then","also",
+  "called"
 ]);
 
 /** Match whole normalized words, not substrings like any in Germany. */
