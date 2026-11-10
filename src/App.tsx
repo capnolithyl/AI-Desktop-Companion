@@ -37,7 +37,9 @@ import {
 import { MemoryPanel } from "./MemoryPanel";
 import type {ImportMemory,MemoryCategory} from "./memory-import";
 import { NotionPanel } from "./NotionPanel";
-import { isNotionTopic, notionContext, type NotionHit } from "./notion-knowledge";
+import { isNotionTopic, notionContext, planNotionRetrieval, asksToReadFullNotionPage,
+  type NotionHit, type NotionCachedPage } from "./notion-knowledge";
+import { readNotionChapter, type NotionDocument, type NotionChapterSession } from "./notion-reading";
 import { splitSpeechText, toSpeechText, VOICE_TEST_LINE, ProgressiveSpeechFeed, FIRST_SPEECH_CHARS, POCKET_FINAL_SPEECH_CHARS, voiceEndpoint, POCKET_VOICE_ENDPOINT, canSaveVoiceReference } from "./speech";
 import { NarrationFilter, roleplayActive, stripNarratedActions } from "./narration-filter";
 import { memoryBudget, sessionMemoryContext, type SessionSummary } from "./memory-budget";
@@ -240,6 +242,8 @@ export default function App() {
   const portraitUrl = useRef<string | null>(null);
   const activeRequestId = useRef<string | null>(null);
   const preparingSend = useRef(false);
+  // Full-chapter reading notes belong to this conversation, never global memory.
+  const notionChapterRef = useRef<NotionChapterSession | null>(null);
   const automaticMemoryQueue = useRef<Promise<void>>(Promise.resolve());
   const sessionMemoryQueue = useRef<Promise<void>>(Promise.resolve());
   const stopRequested = useRef(false);
@@ -973,6 +977,7 @@ export default function App() {
     }
     const stored = await memoryApi.listMessages(id);
     setMessages(stored.map(restoreMessage));
+    notionChapterRef.current = null;
     setActiveConversationId(id);
     setFeedback(null);
     goCompact();
@@ -981,6 +986,7 @@ export default function App() {
     if (busy) throw new Error("Stop the current reply before deleting a conversation");
     await memoryApi.deleteConversation(id);
     if (id === activeConversationId) {
+      notionChapterRef.current = null;
       setActiveConversationId(null);
       setMessages([]);
       setFeedback(null);
@@ -1000,6 +1006,7 @@ export default function App() {
     setCapturePickerOpen(false);
     if (busy || !memoryReady) return;
     if (activeConversationId) queueSessionMemory(activeConversationId,true);
+    notionChapterRef.current = null;
     setMessages([]);
     setActiveConversationId(null);
     setFeedback(null);
@@ -1397,15 +1404,29 @@ export default function App() {
     if (busy || preparingSend.current) return;
     if (!memoryReady) { setFeedback("Loading conversation memory…"); return; }
     preparingSend.current=true;
-    // Local fiction and Notion questions consult the user-shared, offline library.
-    // Retrieve once per turn and reuse it in the same desktop/remote chat path.
-    const useNotion = !withSearch && isNotionTopic(text,messages);
-    const topic = useNotion && !isNotionTopic(text)
-      ? [...messages].reverse().find(item => isNotionTopic(item.content))?.content.slice(0,140) ?? ""
-      : "";
-    const notionHits = useNotion
-      ? await invoke<NotionHit[]>("notion_recall",{query:text+" "+topic}).catch(() => [])
+    // Lightweight local metadata and FTS retrieval. A chapter or named page
+    // can be recognized without the owner saying "Notion". Explicit public
+    // research remains independent from the personal fiction library.
+    const initialTurn = decideDesktopTurn(text,messages,{
+      attachment:!!(screenshot||attachment),
+      explicitSearch:!!withSearch,
+      automaticWebEnabled:settings.autoSearch
+    });
+    const cachedNotionPages = !withSearch
+      ? await invoke<NotionCachedPage[]>("notion_cached_pages").catch(() => [])
       : [];
+    const activeNotion = notionChapterRef.current?.conversationId === activeConversationId
+      ? notionChapterRef.current : null;
+    const notionPlan = planNotionRetrieval(
+      text,messages,cachedNotionPages,activeNotion?.page ?? null
+    );
+    const notionHits = !withSearch && notionPlan.relevant
+      ? await invoke<NotionHit[]>("notion_recall",{query:notionPlan.query}).catch(() => [])
+      : [];
+    const useNotion = !withSearch && (
+      isNotionTopic(text,messages) || notionPlan.selectedPage !== null ||
+      (initialTurn.plan.mode === "chat" && notionHits.length > 0)
+    );
     const baseTurn = decideDesktopTurn(text,messages,{
       attachment:!!(screenshot||attachment),
       explicitSearch:!!withSearch,
@@ -1514,6 +1535,32 @@ export default function App() {
 
     try {
       await persistMessage(user);
+      let readChapterContext = "";
+      if (useNotion && notionPlan.fullRead && notionPlan.selectedPage) {
+        setActivity("Opening full Notion chapter…");
+        try {
+          const document = await invoke<NotionDocument>("notion_read_document",{
+            id:notionPlan.selectedPage.id
+          });
+          readChapterContext = await readNotionChapter(
+            document,
+            prompt => invoke<string>("condense_local_context", {
+              endpoint:settings.endpoint,model:settings.model,prompt,
+              contextWindow:settings.contextWindow,maxOutputTokens:500
+            }),
+            (part,total)=>setActivity(`Reading Notion chapter: section ${part} of ${total}…`),
+            ()=>stopRequested.current
+          );
+          notionChapterRef.current = {
+            conversationId,page:notionPlan.selectedPage,context:readChapterContext
+          };
+        } catch (error) {
+          if (stopRequested.current) throw new Error("Generation stopped");
+          readChapterContext = "NOTION FULL READING FAILED: "+errorText(error)+
+            ". Do not claim to have read the complete chapter. "+
+            "You may discuss retrieved excerpts, but explain the limitation.";
+        }
+      }
       // Always refresh authoritative SQLite facts before answering. Optional
       // Mem0 OSS reorders facts by meaning (e.g. "website" => WordPress skills).
       // With no sidecar, the Rust command returns [] and normal chat continues.
@@ -1559,7 +1606,28 @@ export default function App() {
         ? await memoryApi.searchArchive(text,conversationId).catch(() => [])
         : [];
       const archiveNotes = archiveMemoryContext(text,archivedMessages,budget);
-      const notionNotes = notionContext(notionHits,settings.contextWindow);
+      const carryChapter = activeNotion &&
+        (!notionPlan.selectedPage || notionPlan.selectedPage.id === activeNotion.page.id)
+        && isNotionTopic(text,messages) ? activeNotion.context : "";
+      const missingChapter = useNotion && asksToReadFullNotionPage(text) &&
+        !notionPlan.selectedPage
+        ? "NOTION PAGE SELECTION: No unique cached page matched the chapter request. "+
+          "Ask the owner for its exact title instead of claiming to have read it. "+
+          "Indexed page titles: "+
+          cachedNotionPages.filter(p=>/chapter|story|book|manuscript/i.test(p.title))
+            .slice(0,12).map(p=>p.title).join("; ")
+        : "";
+      const missingLibrary = useNotion && !cachedNotionPages.length
+        ? "NOTION LIBRARY EMPTY: No pages are cached. Explain that the owner must share pages with the integration and sync them in Settings > Notion. Do not invent a book excerpt."
+        : "";
+      // The chapter synopsis is a working-memory aid; current original
+      // excerpts still take precedence for details and quotations.
+      const notionNotes = [
+        readChapterContext || carryChapter,
+        notionContext(notionHits,settings.contextWindow != null && settings.contextWindow<=8192
+          ? settings.contextWindow : 8192),
+        missingChapter,missingLibrary
+      ].filter(Boolean).join("\n\n");
       const screenNotes = screenshot ? visionContext(text,true)
         : liveFrame ? liveVisionContext(liveFrame)
         : attachment?.kind === "image" ? ""
