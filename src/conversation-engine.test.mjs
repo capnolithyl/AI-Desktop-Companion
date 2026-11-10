@@ -75,6 +75,7 @@ test("style helper notices repeated side topics without suppressing user-chosen 
 
 test("normal conversation instructions discourage stage direction narration without disabling explicit roleplay", () => {
   const guidance = responseFocusGuidance([], "Good morning!");
-  assert.match(guidance, /without asterisks, action narration/i);
-  assert.match(guidance, /unless the user expressly requests roleplay/i);
+  assert.match(guidance, /do not narrate physical \*actions\*/i);
+  assert.match(guidance, /\*meow\*.*\*really\*/i);
+  assert.match(guidance, /unless the owner explicitly requests roleplay/i);
 });
