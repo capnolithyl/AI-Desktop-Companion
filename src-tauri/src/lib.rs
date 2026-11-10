@@ -52,6 +52,8 @@ struct ChatRequest {
     #[serde(default)]
     research_query: Option<String>,
     #[serde(default)]
+    research_recent: bool,
+    #[serde(default)]
     searxng_endpoint: String,
     #[serde(default = "default_cache_hours")]
     cache_hours: u64,
@@ -368,7 +370,7 @@ async fn chat_stream_impl(
             }));
             sources = source_priority::search(
                 request.searxng_endpoint.clone(),query.clone(),
-                research_intent::is_album_research(&messages),
+                request.research_recent || research_intent::is_album_research(&messages),
                 &request.source_preferences,request.source_topic.as_deref()
             ).await?;
             search_query = Some(query.clone());

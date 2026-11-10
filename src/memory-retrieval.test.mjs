@@ -7,7 +7,7 @@ import { prioritizeCoreMemories } from "./memory-ranking.ts";
 import { shouldIncludeCharacterCanon } from "./character-canon-routing.ts";
 
 const facts=[
-  {id:41,fact:"The user's full name is Marcus Borger.",updatedAt:1,importance:95,category:"profile",tags:["name"]},
+  {id:41,fact:"The user's full name is Alex Example.",updatedAt:1,importance:95,category:"profile",tags:["name"]},
   {id:12,fact:"The user is an experienced WordPress developer.",updatedAt:2,category:"work",tags:["wordpress","career"]},
   {id:13,fact:"The user develops custom themes using React and PHP for clients.",updatedAt:3,category:"work",tags:["development","client work"]},
   {id:14,fact:"The user already operates a metal music review website called Runagaldr.",updatedAt:4,category:"projects",tags:["metal","reviews"]},
@@ -28,15 +28,15 @@ test("local AI reranker connects freelancing with WordPress skills absent keywor
     async input => {prompt=input;return JSON.stringify({ids:[12,13]})}
   );
   assert.equal(result.mode,"ai-reranked");
-  assert.deepEqual(result.ids,[41,12,13]);
+  assert.deepEqual(result.ids,[12,13]);
   assert.ok(prompt.includes("experienced WordPress developer"));
   assert.ok(prompt.includes("freelance business"));
-  assert.equal(result.candidateCount,facts.length);
+  assert.equal(result.candidateCount,facts.length-1);
 });
 test("music recommendations retrieve user music preferences rather than unrelated Mikan tastes",async()=>{
   const picked=await selectHybridMemoryIds(facts,"Recommend me something to listen to.",[],10,
     async()=>'{ "ids": [15] }');
-  assert.deepEqual(picked.ids,[41,15]);
+  assert.deepEqual(picked.ids,[15]);
 });
 test("untrusted AI result cannot inject unknown IDs or duplicate records",()=>{
   const allowed=new Set([12,13]);
@@ -48,11 +48,11 @@ test("untrusted AI result cannot inject unknown IDs or duplicate records",()=>{
 test("invalid AI JSON falls back to safe exact matching, and small-talk skips rerank",async()=>{
   const failing=await selectHybridMemoryIds(facts,"Any ideas?",[],10,async()=>'{broken');
   assert.equal(failing.mode,"fallback");
-  assert.deepEqual(failing.ids,[41]);
+  assert.deepEqual(failing.ids,[]);
   const greeting=await selectHybridMemoryIds(facts,"Good morning!",[],10,
     async()=>{throw Error("Must not rerank greetings")});
   assert.equal(greeting.mode,"small-talk");
-  assert.deepEqual(greeting.ids,[41]);
+  assert.deepEqual(greeting.ids,[]);
 });
 test("large collections shortlist candidates, do not send thousands of facts to the model",()=>{
   const many=Array.from({length:2000},(_,i)=>({
@@ -72,4 +72,22 @@ test("Mikan's tastes are available for questions about her but not generic user 
   assert.equal(shouldIncludeCharacterCanon("What's your favorite music genre?"),true);
   assert.equal(shouldIncludeCharacterCanon("Do you like synthwave?"),true);
   assert.equal(shouldIncludeCharacterCanon("Mikan, what is your personality like?"),true);
+});
+
+test("a pinned identity remains saved but is not injected into normal chat",async()=>{
+  const hello=await selectHybridMemoryIds(facts,"hey",[],10,
+    async()=>{throw Error("greeting should skip rerank")});
+  assert.deepEqual(hello.ids,[]);
+  const technical=await selectHybridMemoryIds(facts,"Explain why the sky is blue",[],10,
+    async prompt=>{
+      assert.doesNotMatch(prompt,/full name is/);
+      return JSON.stringify({ids:[41]});
+    });
+  assert.deepEqual(technical.ids,[]);
+  const who=await selectHybridMemoryIds(facts,"What is my full name?",[],10,
+    async prompt=>{
+      assert.match(prompt,/full name is/);
+      return '{"ids":[41]}';
+    });
+  assert.deepEqual(who.ids,[41]);
 });

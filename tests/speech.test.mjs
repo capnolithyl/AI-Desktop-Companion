@@ -281,3 +281,25 @@ test("old tail-thump and smile stage directions are not read aloud",()=>{
   assert.equal(toSpeechText(stripNarratedActions("*winks at you* Hello!")),"Hello!");
   assert.equal(stripNarratedActions("That is *really wonderful*."),"That is *really wonderful*.");
 });
+
+test("physical stage descriptions with unfamiliar verbs are removed in streaming and TTS",async()=>{
+  const examples=[
+    "*My tail wraps gently around your arm*",
+    "*Her fluffy ears pirouette into orbit*",
+    "*A tiny orange paw transforms into a tap-dancing machine*",
+    "*My striped tail invents an entirely new yoga pose*",
+    "*She gracefully glides beside you*",
+    "*Performing a ridiculous cartwheel around your chair*"
+  ];
+  for(const action of examples){
+    assert.equal(stripNarratedActions("Hello! "+action+" I'm here."),"Hello! I'm here.",action);
+    const filter=new NarrationFilter();
+    let chunks="";
+    for(const token of ["Hello! "+action.slice(0,5),action.slice(5,18),action.slice(18)+" I'm here."])
+      chunks+=filter.append(token);
+    assert.equal(filter.finish(),"Hello! I'm here.",action);
+  }
+  assert.equal(stripNarratedActions("I *really* like *black metal*."),"I *really* like *black metal*.");
+  assert.equal(stripNarratedActions("The song *My Tail* is funny."),"The song *My Tail* is funny.");
+  assert.equal(stripNarratedActions("The *red sky* looked beautiful."),"The *red sky* looked beautiful.");
+});

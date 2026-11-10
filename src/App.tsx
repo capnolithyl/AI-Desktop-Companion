@@ -40,7 +40,7 @@ import {
 import { MemoryPanel } from "./MemoryPanel";
 import type {ImportMemory,MemoryCategory} from "./memory-import";
 import { NotionPanel } from "./NotionPanel";
-import { isNotionTopic, notionContext, planNotionRetrieval, asksToReadFullNotionPage, hasNamedNotionMatch,
+import { isNotionTopic, notionContext, planNotionRetrieval, asksToReadFullNotionPage, hasNamedNotionMatch, unavailableChapterResponse,
   type NotionHit, type NotionCachedPage } from "./notion-knowledge";
 import { readNotionChapter, type NotionDocument, type NotionChapterSession } from "./notion-reading";
 import { splitSpeechText, toSpeechText, VOICE_TEST_LINE, ProgressiveSpeechFeed, FIRST_SPEECH_CHARS, POCKET_FINAL_SPEECH_CHARS, voiceEndpoint, POCKET_VOICE_ENDPOINT, canSaveVoiceReference } from "./speech";
@@ -1549,6 +1549,7 @@ export default function App() {
     let progressiveFeed: ProgressiveSpeechFeed | null = null;
     let memoryAudit: MemoryRecallAudit | undefined;
     let toolAudit: Diagnostics["toolPlan"] | undefined;
+    let notionAudit: Diagnostics["notion"] | undefined;
     // Pocket runs on CPU. Wake its service while the local GPU plans, without
     // waiting for voice readiness before starting text generation.
     const voiceReadyStarted = performance.now();
@@ -1603,8 +1604,9 @@ export default function App() {
       // At larger sizes combine approximate semantic and full-word lexical
       // candidates first. Invalid/slow local selection falls back safely.
       setActivity("Planning memory and tools…");
+      const personalTurn=isPersonalMemoryQuestion(text);
       const canPlanPublicWeb = settings.autoSearch && !useNotion && !turn.capabilityQuestion &&
-        !isPersonalMemoryQuestion(text) &&
+        !personalTurn &&
         !withSearch && !attachment && !screenshot && !liveFrame && !allowRoleplay;
       const unified = await planMemoriesAndTools(
         liveFacts,text,semanticMatches,budget.maxFacts,
@@ -1626,14 +1628,22 @@ export default function App() {
         setActivity("Preparing evidence-backed answer…");
       }
       const effectiveWeb = turn.allowAutomaticWeb || plannedPublicSearch;
-      const preferredTopic = plannedPublicSearch ? plannerWeb.topic
-        : matchingSourceTopic(researchPlan.query ?? text,settings.sourcePreferences);
+      const preferredTopic = effectiveWeb
+        ? (plannedPublicSearch ? plannerWeb.topic
+          : matchingSourceTopic(researchPlan.query ?? text,settings.sourcePreferences))
+        : undefined;
       toolAudit = {
         method: plannedPublicSearch ? "ai-web" : turn.allowAutomaticWeb ? "deterministic-web"
           : plannerWeb.method,
         reason:plannedPublicSearch ? plannerWeb.reason :
           turn.allowAutomaticWeb ? "Explicit or factual research routing" :
-            settings.autoSearch && !canPlanPublicWeb ? "Local context or sensitive turn stays private" : plannerWeb.reason,
+            !settings.autoSearch ? "Automatic web tools disabled in Settings" :
+            useNotion ? "Owner-shared Notion document routing; public web blocked" :
+            personalTurn ? "Personal memory question; public web blocked" :
+            turn.capabilityQuestion ? "Mikan capability question; public web blocked" :
+            allowRoleplay ? "Roleplay conversation; public web blocked" :
+            attachment || screenshot || liveFrame ? "Attached private material; public web blocked" :
+            withSearch ? "Search panel supplied results already" : plannerWeb.reason,
         query:plannedPublicSearch ? plannerWeb.query : researchPlan.mode==="research" ? researchPlan.query : undefined,
         topic:preferredTopic,
         publicWebAllowed:effectiveWeb
@@ -1689,6 +1699,30 @@ export default function App() {
         : "";
       // The chapter synopsis is a working-memory aid; current original
       // excerpts still take precedence for details and quotations.
+      notionAudit=useNotion ? {
+        selectedPage:notionPlan.selectedPage?.title,
+        cachedPages:cachedNotionPages.length,
+        excerptCount:notionHits.length,
+        fullReadAttempted:notionPlan.fullRead,
+        readSucceeded:!!readChapterContext && !readChapterContext.startsWith("NOTION FULL READING FAILED:")
+      } : undefined;
+      const unavailableChapter=useNotion ? unavailableChapterResponse(
+        text,notionPlan.selectedPage,readChapterContext,cachedNotionPages.length
+      ) : null;
+      if(unavailableChapter) {
+        // No model generation at all when a requested chapter is absent or its
+        // complete read failed. Otherwise the 9B model invents a plausible plot.
+        const assistant:LogMessage={
+          id:assistantId,role:"assistant",content:unavailableChapter,createdAt:Date.now(),
+          diagnostics:{elapsedMs:performance.now()-started,firstTokenMs:null,
+            model:settings.model,stats:null,memory:memoryAudit,toolPlan:toolAudit,
+            notion:notionAudit,parallelTasks:parallelTimings}
+        };
+        setMessages(current=>current.map(m=>m.id===assistantId?assistant:m));
+        if(settings.voice.autoSpeak && remoteText===undefined)void speak(unavailableChapter);
+        await persistMessage(assistant);
+        return;
+      }
       const notionNotes = [
         useNotion && cachedNotionPages.length
           ? "NOTION CACHE STATUS: "+cachedNotionPages.length+
@@ -1782,6 +1816,7 @@ export default function App() {
           // These hints come from shared TypeScript rules used by Pocket too.
           // Rust still owns SearXNG query refinement, retries and web tools.
           researchRoute: researchPlan.mode,
+          researchRecent: researchPlan.recent,
           researchQuery: researchPlan.mode === "research" ? researchPlan.query : undefined,
           searxngEndpoint: settings.searxngEndpoint,
           cacheHours: settings.cacheHours,
@@ -1806,6 +1841,14 @@ export default function App() {
         }
       });
       const duration = performance.now() - started;
+      if(toolAudit){
+        const fresh=completion.sourcesCarriedOver !== true ? (completion.sources?.length ?? 0) : 0;
+        toolAudit={...toolAudit,freshSources:fresh,
+          searchOutcome:completion.sourcesCarriedOver?"reused earlier evidence"
+            : fresh>0?"fresh evidence returned"
+            : completion.searchQuery?"search attempted; no sources"
+            : "no web evidence returned"};
+      }
       const diagnostics: Diagnostics = {
         elapsedMs: duration,
         firstTokenMs,
@@ -1814,6 +1857,7 @@ export default function App() {
         research: completion.researchAudit ?? undefined,
         memory: memoryAudit,
         toolPlan:toolAudit,
+        notion:notionAudit,
         parallelTasks:parallelTimings
       };
       // The source-verification filter applies to actual researched answers,
@@ -1868,7 +1912,7 @@ export default function App() {
           ? (accumulated ? `${allowRoleplay ? accumulated : stripNarratedActions(accumulated)}\n\n[Stopped]` : "[Generation stopped]")
           : (accumulated ? `${allowRoleplay ? accumulated : stripNarratedActions(accumulated)}\n\n[Interrupted: ${message}]` : `Error: ${message}`),
         failed: !stopped,
-        diagnostics: { elapsedMs: performance.now() - started, firstTokenMs, model: settings.model, stats: null, memory: memoryAudit, toolPlan:toolAudit, parallelTasks:parallelTimings },
+        diagnostics: { elapsedMs: performance.now() - started, firstTokenMs, model: settings.model, stats: null, memory: memoryAudit, toolPlan:toolAudit, notion:notionAudit, parallelTasks:parallelTimings },
         sources: withSearch?.results, searchQuery: withSearch?.query
       };
       setMessages(current => current.map(m => m.id === assistantId ? assistant : m));

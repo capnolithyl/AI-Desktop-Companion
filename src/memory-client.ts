@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { shouldIncludeCharacterCanon } from "./character-canon-routing";
+import { dialogueEligibleMemories } from "./identity-memory";
 import type { ImportMemory, MemoryCategory } from "./memory-import";
 import type { Message } from "./storage";
 import { prioritizeCoreMemories, filterStaleActivities } from "./memory-ranking";
@@ -121,7 +122,7 @@ export function prepareMemoryContext(
   selectedIds?: number[]
 ): {text: string; ids: number[]} {
   if (!facts.length) return {text:"",ids:[]};
-  const eligible = filterStaleActivities(facts,query);
+  const eligible = dialogueEligibleMemories(filterStaleActivities(facts,query),query);
   // When the local LLM has judged relevance, preserve that exact ID order.
   // Never re-add lexically matched records that the relevance pass rejected.
   const lookup = new Map(eligible.map(f => [f.id,f]));

@@ -45,6 +45,15 @@ export type ToolPlanningAudit = {
   query?: string;
   topic?: string;
   publicWebAllowed: boolean;
+  searchOutcome?: string;
+  freshSources?: number;
+};
+export type NotionRetrievalAudit = {
+  selectedPage?: string;
+  cachedPages: number;
+  excerptCount: number;
+  fullReadAttempted: boolean;
+  readSucceeded: boolean;
 };
 
 export type PreparationTaskAudit = {
@@ -61,6 +70,7 @@ export type Diagnostics = {
   research?: ResearchAudit;
   memory?: MemoryRecallAudit;
   toolPlan?: ToolPlanningAudit;
+  notion?: NotionRetrievalAudit;
   parallelTasks?: PreparationTaskAudit[];
 };
 
@@ -126,8 +136,20 @@ function performanceLines(diagnostics: Diagnostics): string[] {
       "  Route: " + diagnostics.toolPlan.method,
       "  Reason: " + diagnostics.toolPlan.reason,
       "  Public web allowed: " + (diagnostics.toolPlan.publicWebAllowed ? "yes" : "no"),
+      ...(diagnostics.toolPlan.searchOutcome ? [
+        "  Web outcome: " + diagnostics.toolPlan.searchOutcome,
+        "  Fresh sources returned: " + (diagnostics.toolPlan.freshSources ?? 0)
+      ] : []),
       ...(diagnostics.toolPlan.query ? ["  Public search query: " + diagnostics.toolPlan.query] : []),
       ...(diagnostics.toolPlan.topic ? ["  Preferred source topic: " + diagnostics.toolPlan.topic] : [])
+    ] : []),
+    ...(diagnostics.notion ? [
+      "Notion retrieval:",
+      "  Cached pages: " + diagnostics.notion.cachedPages,
+      "  Matching excerpts: " + diagnostics.notion.excerptCount,
+      "  Selected page: " + (diagnostics.notion.selectedPage ?? "none"),
+      "  Complete chapter read requested: " + (diagnostics.notion.fullReadAttempted ? "yes" : "no"),
+      "  Complete chapter read succeeded: " + (diagnostics.notion.readSucceeded ? "yes" : "no")
     ] : []),
     ...(diagnostics.parallelTasks?.length ? [
       "Parallel preparation:",
