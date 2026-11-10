@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { shouldIncludeCharacterCanon } from "./character-canon-routing";
 import type { ImportMemory, MemoryCategory } from "./memory-import";
 import type { Message } from "./storage";
 import { prioritizeCoreMemories, filterStaleActivities } from "./memory-ranking";
@@ -186,8 +187,7 @@ export function characterContext(facts: CharacterFact[], query: string): string 
   if (!facts.length) return "";
   // Character canon is for questions ABOUT Mikan. Supplying her music tastes
   // during a USER music/game recommendation makes a small model copy them.
-  const aboutMikan = /\b(?:your|yours|mikan|about you|are you|do you|you like|you love|you prefer)\b/i.test(query);
-  if (!aboutMikan) return "";
+  if (!shouldIncludeCharacterCanon(query)) return "";
   const words = (query.toLowerCase().match(/[\p{L}\p{N}]{3,}/gu) || [])
     .filter(word => !["what","when","where","which","does","your","hers","mine","that","this","with","about","tell","mikan","favorite"].includes(word));
   const scored = facts.map(fact => ({
