@@ -1,3 +1,14 @@
+/** An unfinished italic/action marker must not be spoken mid-stream. */
+function hasOpenAsteriskAction(markdown: string): boolean {
+  let open = false;
+  for (let i = 0; i < markdown.length; i++) {
+    if (markdown[i] !== "*" || (i > 0 && markdown[i - 1] === "\\")) continue;
+    if (markdown[i + 1] === "*") { i++; continue; } // **bold**, not a roleplay action
+    open = !open;
+  }
+  return open;
+}
+
 /** Remove formatting, citations and character stage directions from audible text. */
 export function toSpeechText(markdown: string): string {
   return markdown
@@ -9,6 +20,7 @@ export function toSpeechText(markdown: string): string {
     .replace(/https?:\/\/\S+/g, " ")
     .replace(/\*\*([^*\n]+)\*\*/g, "$1")
     .replace(/\*([^*\n]+)\*/g, " ")
+    .replace(/(^|\s)\*(?!\*)([^*\n]+)$/gm, "$1") // unfinished *gesture at end
     .replace(/_([^_\n]+)_/g, " ")
     .replace(/\[(?:\d{1,3}|Stopped|Interrupted:[^\]]+)\]/gi, " ")
     .replace(/<[^>]*>/g, " ")
@@ -103,7 +115,7 @@ export class ProgressiveSpeechFeed implements AsyncIterable<string> {
       ] as const) {
         for (const match of window.matchAll(pattern)) {
           const end = (match.index ?? 0) + match[0].length;
-          if (end >= floor && end <= limit) {
+          if (end >= floor && end <= limit && !hasOpenAsteriskAction(this.buffer.slice(0, end))) {
             boundary = end;
             if (first) break;
           }
@@ -111,8 +123,17 @@ export class ProgressiveSpeechFeed implements AsyncIterable<string> {
         if (boundary) break;
       }
       if (!boundary && this.buffer.length >= limit) {
-        const lastSpace = window.slice(0, limit).lastIndexOf(" ");
-        boundary = lastSpace >= minimum ? lastSpace + 1 : limit;
+        // Never split within an unfinished *stage direction*: the closing
+        // marker may arrive in a later Ollama token. Otherwise we'd speak
+        // 'My ears...' and finish() would replay the entire answer.
+        const head = window.slice(0, limit);
+        for (let space = head.lastIndexOf(" "); space >= minimum; space = head.lastIndexOf(" ", space - 1)) {
+          if (!hasOpenAsteriskAction(head.slice(0, space + 1))) {
+            boundary = space + 1;
+            break;
+          }
+        }
+        if (!boundary && !hasOpenAsteriskAction(head)) boundary = limit;
       }
       if (!boundary) break;
       const part = this.buffer.slice(0, boundary);
