@@ -72,11 +72,11 @@ export const CAPABILITIES: readonly Capability[] = [
   },
   {
     id:"notion-knowledge",label:"Notion personal knowledge library (experimental)",category:"Knowledge",
-    description:"Connect a private read-only Notion integration in Settings, choose shared pages or all pages available to the integration, and sync a local searchable text index. Mikan can recall chapters, notes, and creative lore by keyword for chat, separate from user memories. Sync is manual; files and images are not imported. Requires a Notion integration token and explicit page sharing. Local SQLite cache is unencrypted.",
+    description:"Connect a private read-only Notion integration in Settings, choose shared pages or all pages available to the integration, and sync a local searchable text index. Mikan can recall chapters, notes, and creative lore by context or page title, and can read a complete chapter in sequential local model passes, separate from user memories. Sync is manual; files and images are not imported. Requires a Notion integration token and explicit page sharing. Local SQLite cache is unencrypted.",
     stage:"experimental",runtime:"none",keywords:["notion","book","novel","manuscript","charlotte","hollow meridian","story","writing","chapters","lore","knowledge","documents","integrations"],
     sources:["src-tauri/src/notion.rs","src/NotionPanel.tsx","src/notion-knowledge.ts","src/App.tsx"],
     docs:["notion/README.md"],
-    commands:["notion_status","notion_connect","notion_disconnect","notion_list_pages","notion_select_page","notion_set_all","notion_sync","notion_recall"],
+    commands:["notion_status","notion_connect","notion_disconnect","notion_list_pages","notion_select_page","notion_set_all","notion_sync","notion_recall","notion_cached_pages","notion_read_document"],
     slashCommands:["notion"]
   },
   {
