@@ -29,6 +29,12 @@ test("recognizes cached titles, chapter numbers and named projects without hardc
   assert.equal(selectNotionPage("What is Hollow Meridian about?",pages)?.id,"3");
   assert.equal(selectNotionPage("Please read Chapter Three",pages)?.id,"2");
   assert.equal(selectNotionPage("Please read Chapter 3",pages)?.id,"2");
+  const realPages=[
+    {id:"real",title:"Chapter 03 · The House",url:"https://www.notion.so/real",chunkCount:12,characters:20000},
+    {id:"old",title:"Superseded plan · Former Chapter 03 · Old Draft",url:"https://www.notion.so/old",chunkCount:2,characters:2000}
+  ];
+  assert.equal(selectNotionPage("Read Chapter 3",realPages)?.id,"real");
+  assert.equal(selectNotionPage("Read Chapter 03",realPages)?.id,"real");
   assert.equal(selectNotionPage("Discuss the Charlotte Universe",pages)?.id,"1");
   assert.equal(selectNotionPage("What is your favorite food?",pages),null);
   assert.equal(hasNamedNotionMatch("What about Will?",[
