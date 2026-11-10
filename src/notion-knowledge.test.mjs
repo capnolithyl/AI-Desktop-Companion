@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { isNotionTopic, notionContext, planNotionRetrieval, selectNotionPage, asksToReadFullNotionPage, hasNamedNotionMatch } from "./notion-knowledge.ts";
+import { isNotionTopic, notionContext, planNotionRetrieval, selectNotionPage, asksToReadFullNotionPage, hasNamedNotionMatch, chapterNumber } from "./notion-knowledge.ts";
 
 const pages=[
   {id:"1",title:"Charlotte Universe | Master Story Bible",url:"https://www.notion.so/1",chunkCount:5,characters:8000},
@@ -88,4 +88,32 @@ test("bounded excerpts include citations, source caution and multiple results",(
   assert.match(small,/NOT proof you read the entire document/);
   assert.ok(small.length<4000);
   assert.ok(notionContext(hits,16384).length>small.length);
+});
+
+test("ordinary album recommendations never hijack the owner's private knowledge base",()=>{
+  const query="Recommend me three metal albums I might enjoy.";
+  assert.equal(isNotionTopic(query),false);
+  assert.equal(planNotionRetrieval(query,[],pages).selectedPage,null);
+  assert.equal(hasNamedNotionMatch(query,[
+    {title:"Recent music notes",url:"",content:"Recommend albums you might enjoy.",syncedAt:1}
+  ]),false);
+  assert.equal(planNotionRetrieval(query,[],pages).relevant,false);
+});
+test("natural first-chapter requests resolve their ordinal and require reading evidence",()=>{
+  const documents=[
+    {id:"one",title:"Chapter One · Arrival",url:"https://www.notion.so/one",chunkCount:12,characters:16000},
+    {id:"two",title:"Chapter Two",url:"https://www.notion.so/two",chunkCount:10,characters:12000},
+    {id:"bible",title:"Master Story Bible",url:"https://www.notion.so/bible",chunkCount:5,characters:7000}
+  ];
+  const q="What do you think of the first chapter of book so far?";
+  assert.equal(isNotionTopic(q),true);
+  assert.equal(chapterNumber(q),"1");
+  assert.equal(chapterNumber("Chapter 02"),"2");
+  const plan=planNotionRetrieval(q,[],documents);
+  assert.equal(plan.selectedPage?.id,"one");
+  assert.equal(plan.fullRead,true);
+  assert.equal(asksToReadFullNotionPage(q),true);
+  assert.equal(planNotionRetrieval("What do you think of the first chapter of book so far?",
+    [],documents.filter(x=>x.id!=="one")).selectedPage,null);
+  assert.equal(selectNotionPage(q,[documents[0],{...documents[0],id:"duplicate"}]),null);
 });
