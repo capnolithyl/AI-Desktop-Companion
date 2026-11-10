@@ -38,3 +38,7 @@ No remote fact processing; Mem0 anonymous telemetry explicitly disabled. Initial
 On an RX 9070 with 16 GB VRAM, the embedding model can compete with the chat LLM; benchmark latency and Ollama unload behavior. The initial vector index rebuild after a bulk import can take considerably longer, but synchronization now happens in a daemon worker and does not block chat. During indexing or when Mem0 is offline, Mikan still ranks SQLite facts locally using content, categories, tags and pins. Mem0 indexes the extra labels as search hints while returning only the unchanged, authoritative SQLite fact to the model.
 
 This is a meaningful direct Mem0 integration, not a guarantee of near-perfect memory. Date-aware changes of current project, explicit supersession, full conversation summaries, and archived FTS5 remain separate work. The service deliberately uses existing SQLite facts instead of creating a second memory truth source. Before enabling Mem0 inference to write memories, compare its actual accuracy and editing behavior with our native extractor.
+
+### Upgrading an already installed sidecar
+
+On Windows, Mikan v0.8.18 copies the bundled updated server.py into an existing LocalAppData/Mikan/advanced-memory setup at startup, preserving the first previous copy as server.py.previous. It never reinstalls packages or changes the owner's config/token. If a separately started service is already listening on port 18764, the running process keeps its loaded code until that service is restarted by the owner. SQLite-only category/tag retrieval works regardless.
