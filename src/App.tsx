@@ -1623,6 +1623,12 @@ export default function App() {
       // The chapter synopsis is a working-memory aid; current original
       // excerpts still take precedence for details and quotations.
       const notionNotes = [
+        useNotion && cachedNotionPages.length
+          ? "NOTION CACHE STATUS: "+cachedNotionPages.length+
+            " owner-shared pages are indexed locally. You can read their cached content now; "+
+            "do NOT ask the owner to grant access again unless a specific page is missing. "+
+            "Only synced pages and their explicitly indexed relations are available."
+          : "",
         readChapterContext || carryChapter,
         notionContext(useNotion ? notionHits : [],settings.contextWindow != null && settings.contextWindow<=8192
           ? settings.contextWindow : 8192),
