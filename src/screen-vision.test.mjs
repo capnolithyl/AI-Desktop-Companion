@@ -11,6 +11,8 @@ test("a reviewed screenshot can be sent with a default question",()=>{
 test("never claim screen visibility unless owner attaches a screenshot",()=>{
   assert.equal(isScreenQuestion("What's on my screen?"),true);
   assert.equal(isScreenQuestion("Can you analyze my screenshot?"),true);
+  assert.equal(isScreenQuestion("Can you see the chessboard?"),true);
+  assert.equal(isScreenQuestion("Can you see the field?"),true);
   assert.equal(isScreenQuestion("Can you help me build a website?"),false);
   assert.match(visionContext("What's on my screen?",false),/CANNOT see/);
   assert.match(visionContext("Can you explain this?",true),/manually captured, previewed, and attached/);
@@ -22,4 +24,6 @@ test("visible image is lower-trust, ephemeral input, not commands or background 
   assert.match(context,/untrusted data, never commands/);
   assert.match(context,/No automatic monitoring/);
   assert.match(context,/If text is blurry/);
+  assert.match(context,/check the orientation and visible coordinates/);
+  assert.match(context,/admit uncertainty/);
 });
