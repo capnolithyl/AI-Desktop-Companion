@@ -66,3 +66,16 @@ test("sourced follow-ups search only when the current user intent warrants it",(
   const smallTalk=decideDesktopTurn("Can you see my screen?",previous,{automaticWebEnabled:true});
   assert.equal(smallTalk.allowAutomaticWeb,false);
 });
+
+
+test("named public websites search only when auto search is enabled", () => {
+  const on=decideDesktopTurn("What is discovermass.com?",[],{automaticWebEnabled:true});
+  assert.equal(on.plan.mode,"research");
+  assert.equal(on.allowAutomaticWeb,true);
+  const off=decideDesktopTurn("What is discovermass.com?",[],{automaticWebEnabled:false});
+  assert.equal(off.plan.mode,"research");
+  assert.equal(off.allowAutomaticWeb,false);
+  const personal=decideDesktopTurn("I'm working on discovermass.com",[],{automaticWebEnabled:true});
+  assert.equal(personal.plan.mode,"chat");
+  assert.equal(personal.allowAutomaticWeb,false);
+});
