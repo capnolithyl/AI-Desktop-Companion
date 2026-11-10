@@ -1,5 +1,5 @@
 use serde_json::{json, Value};
-use crate::{web_search, web_reader};
+use crate::{web_search, web_reader, source_priority};
 use std::time::Duration;
 use tauri::{AppHandle, Emitter};
 
@@ -18,6 +18,8 @@ pub async fn prepare(
     search_endpoint: &str,
     cache_hours: u64,
     context_window: Option<u32>,
+    source_preferences: &[source_priority::SourcePreference],
+    source_topic: Option<&str>,
 ) -> Result<PreparedTools, String> {
     let mut sources = Vec::new();
     let tools = json!([
@@ -60,7 +62,9 @@ pub async fn prepare(
                 "search_web" => {
                     let query = arguments["query"].as_str().unwrap_or("").trim().to_string();
                     let _ = app.emit("mikan://activity", json!({"requestId":request_id,"text":"Searching the web…"}));
-                    match web_search::web_search(search_endpoint.to_owned(), query).await {
+                    match source_priority::search(
+                        search_endpoint.to_owned(),query,false,source_preferences,source_topic
+                    ).await {
                         Ok(found) => {
                             for item in &found {
                                 if sources.len() < 8 && !sources.iter().any(|s: &web_search::SearchResult| s.url == item.url) {
