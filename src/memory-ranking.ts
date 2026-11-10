@@ -21,7 +21,7 @@ const generic = new Set([
 
 /** Match whole normalized words, not substrings like any in Germany. */
 export function memoryTerms(value: string): string[] {
-  return (value.toLowerCase().match(/[\\p{L}\\p{N}]+/gu) ?? [])
+  return (value.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? [])
     .map(word => word.length > 4 && word.endsWith("s") && !word.endsWith("ss")
       ? word.slice(0,-1) : word);
 }
