@@ -38,7 +38,8 @@ export function roleplayActive(question: string, history: {role:string;content:s
 export class NarrationFilter {
   private pending = "";
   private rendered = "";
-  constructor(private readonly enabled = true) {}
+  private readonly enabled: boolean;
+  constructor(enabled = true) { this.enabled = enabled; }
 
   append(delta: string): string {
     if (!delta) return "";
