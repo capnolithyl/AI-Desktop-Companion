@@ -135,7 +135,7 @@ function performanceLines(diagnostics: Diagnostics): string[] {
         "  " + task.name + ": " + task.status + " (" + duration(task.elapsedMs) + ")")
     ] : []),
     ...(memory ? [
-      "Memory recall (facts actually included in the prompt):"
+      "Memory recall (facts actually included in the prompt):",
       "  SQLite facts available: " + memory.storedFacts,
       "  Semantic service: " + memory.semanticService +
         (memory.semanticReason ? " (" + memory.semanticReason + ")" : ""),
