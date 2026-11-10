@@ -38,7 +38,7 @@ import { MemoryPanel } from "./MemoryPanel";
 import type {ImportMemory,MemoryCategory} from "./memory-import";
 import { NotionPanel } from "./NotionPanel";
 import { isNotionTopic, notionContext, type NotionHit } from "./notion-knowledge";
-import { splitSpeechText, toSpeechText, VOICE_TEST_LINE, ProgressiveSpeechFeed, FIRST_SPEECH_CHARS, POCKET_FINAL_SPEECH_CHARS, voiceEndpoint, POCKET_VOICE_ENDPOINT } from "./speech";
+import { splitSpeechText, toSpeechText, VOICE_TEST_LINE, ProgressiveSpeechFeed, FIRST_SPEECH_CHARS, POCKET_FINAL_SPEECH_CHARS, voiceEndpoint, POCKET_VOICE_ENDPOINT, canSaveVoiceReference } from "./speech";
 import { NarrationFilter, roleplayActive, stripNarratedActions } from "./narration-filter";
 import { memoryBudget, sessionMemoryContext, type SessionSummary } from "./memory-budget";
 import { archiveMemoryContext, shouldSearchArchive } from "./archive-memory";
@@ -58,7 +58,7 @@ import { attachmentQuestion, attachmentPromptText, loadChatAttachment, type Pend
 type Screen = "compact" | "log" | "settings" | "search" | "page" | "personality" | "help" | "memory" | "capabilities";
 type SettingsTab = "ai" | "internet" | "notion" | "voice" | "appearance";
 type VoiceHealth = { ready: boolean; modelLoaded: boolean; device: string | null };
-type VoiceReference = { configured: boolean; transcript: string | null; durationSeconds: number | null };
+type VoiceReference = { configured: boolean; transcript: string | null; durationSeconds: number | null; fileName: string | null };
 type SearchService = { state: string; message: string };
 type CacheInfo = { pages: number; bytes: number };
 type Activity = { requestId: string; text: string };
@@ -418,8 +418,10 @@ export default function App() {
       setVoiceError("Select a WAV reference under 6 MB.");
       return;
     }
-    if (!referenceText.trim() || referenceText.trim().length > 2000) {
-      setVoiceError("Enter the exact spoken transcript (1–2000 characters).");
+    if (referenceText.trim().length > 2000 || (draft.voice.engine === "qwen" && !referenceText.trim())) {
+      setVoiceError(draft.voice.engine === "pocket"
+        ? "Transcript must be under 2000 characters."
+        : "Enter the exact spoken transcript (1–2000 characters).");
       return;
     }
     setReferenceBusy(true);
@@ -437,11 +439,16 @@ export default function App() {
         reader.readAsDataURL(referenceFile);
       });
       const saved = await invoke<VoiceReference>("voice_save_reference", {
-        endpoint: voiceEndpoint(draft.voice), audioBase64, refText: referenceText
+        endpoint: voiceEndpoint(draft.voice), audioBase64, refText: referenceText, fileName: referenceFile.name
       });
       setVoiceReference(saved);
       setReferenceFile(null);
       setReferenceText(saved.transcript ?? "");
+      // Pocket loads its default speaker at startup. Saving stops only
+      // Mikan's managed server; reconnect so Test voice uses the new WAV.
+      if (draft.voice.engine === "pocket") {
+        await checkVoice(voiceEndpoint(draft.voice));
+      }
     } catch (error) {
       setVoiceError(errorText(error));
     } finally {
@@ -2426,7 +2433,7 @@ export default function App() {
           <label className="setting-field">Speech engine
             <select value={draft.voice.engine} onChange={event => {
               setDraft(current => ({...current, voice: {...current.voice, engine: event.target.value === "pocket" ? "pocket" : "qwen"}}));
-              setVoiceHealth(null); setVoiceReference(null); stopSpeech();
+              setVoiceHealth(null); setVoiceReference(null); setReferenceFile(null); setReferenceText(""); stopSpeech();
             }}>
               <option value="qwen">Qwen3-TTS · GPU cloned voice (existing)</option>
               <option value="pocket">Pocket TTS · CPU cloned voice (experimental)</option>
@@ -2454,7 +2461,7 @@ export default function App() {
               <button type="button" className="secondary-action" disabled={voiceChecking}
                 onClick={() => void checkVoice(voiceEndpoint(draft.voice))}>
                 {voiceChecking ? <LoaderCircle size={14} className="spin"/> : <RotateCw size={14}/>} Check connection</button>
-              <button type="button" className="secondary-action" disabled={voiceState !== "idle"}
+              <button type="button" className="secondary-action" disabled={voiceState !== "idle" || referenceBusy || voiceChecking}
                 onClick={() => void speak(VOICE_TEST_LINE, draft.voice)}><Volume2 size={14}/> Test voice</button>
               {voiceState !== "idle" && <button type="button" className="secondary-action"
                 onClick={stopSpeech}><Square size={13}/> Stop</button>}
@@ -2469,46 +2476,54 @@ export default function App() {
                 : voiceReference.configured ? "Mikan's reference voice is saved" : "No reference voice saved"}</strong>
               <small>{voiceReference?.configured
                 ? (draft.voice.engine === "pocket"
-                  ? "Pocket TTS uses Mikan's existing WAV reference"
+                  ? "Pocket TTS clones directly from the saved WAV"
                   : `Cloning enabled with Qwen3-TTS Base · ${voiceReference.durationSeconds ?? "?"} seconds of reference audio`)
                 : !voiceHealth?.ready || !voiceReference
                   ? (draft.voice.engine === "pocket" ? "Run Pocket setup and click Check connection." :
                       "Start the Python voice server and click Check connection to inspect or save the reference. Selecting a file does not upload it.")
-                  : (draft.voice.engine === "pocket" ? "Pocket needs a reference; switch to Qwen to save one." :
+                  : (draft.voice.engine === "pocket" ? "Select a WAV below to create a Pocket voice without launching Qwen." :
                       "VoiceDesign will be used until you save a sample and matching transcript.")}</small>
             </div>
-            {voiceReference?.configured && <div className="voice-reference-transcript">
+            {voiceReference?.configured && <small className="voice-saved-filename">
+              Source audio: <strong>{voiceReference.fileName || "mikan-reference.wav"}</strong>
+              <span> (stored as mikan-reference.wav)</span>
+            </small>}
+            {voiceReference?.transcript && <div className="voice-reference-transcript">
               <strong>Stored transcript</strong><small>{voiceReference.transcript}</small>
             </div>}
-            {draft.voice.engine === "qwen" && <>
           <label className="setting-field voice-reference-field">Reference audio · WAV
               <input type="file" accept=".wav,audio/wav,audio/x-wav" disabled={referenceBusy}
                 onChange={event => {
                   setReferenceFile(event.currentTarget.files?.[0] ?? null);
+                  // Never reuse an old speaker's words for a newly selected clip.
+                  if (event.currentTarget.files?.[0]) setReferenceText("");
                   event.currentTarget.value = "";
                 }}/>
               <small>{referenceFile ? `Selected locally, not yet saved: ${referenceFile.name}`
                 : "Prefer clean 5–15 second voice samples. Mono PCM16, 2–30 seconds, under 6 MB."}</small>
             </label>
-            <label className="setting-field voice-reference-field">Exactly what she says in the recording
+            <label className="setting-field voice-reference-field">
+              {draft.voice.engine === "pocket" ? "Recording transcript (optional for Pocket)" : "Exactly what she says in the recording"}
               <textarea rows={4} maxLength={2000} value={referenceText} disabled={referenceBusy}
-                placeholder="Paste the exact words spoken in the clip"
+                placeholder={draft.voice.engine === "pocket" ? "Optional. Required only if you also use Qwen cloning." : "Paste the exact words spoken in the clip"}
                 onChange={event => setReferenceText(event.target.value)}/>
-              <small>Matching transcript and audio improve the cloning result.</small>
+              <small>{draft.voice.engine === "pocket"
+                ? "Pocket clones from audio alone. Leave blank if unknown; this clears any older Qwen transcript to prevent mismatches."
+                : "Matching transcript and audio improve the cloning result."}</small>
             </label>
             <div className="service-buttons">
               <button type="button" className="secondary-action"
-                disabled={!voiceHealth?.ready || !voiceReference || !referenceFile || !referenceText.trim() || referenceBusy || voiceChecking}
+                disabled={!canSaveVoiceReference(draft.voice.engine, !!referenceFile, !!voiceHealth?.ready,
+                  !!voiceReference, referenceText) || referenceBusy || voiceChecking}
                 onClick={() => void saveVoiceReference()}>
                 {referenceBusy ? <LoaderCircle size={14} className="spin"/> : <Check size={14}/>}
                 {voiceReference?.configured ? "Replace reference" : "Save reference"}
               </button>
-              {voiceReference?.configured && <button type="button" className="secondary-action"
+              {draft.voice.engine === "qwen" && voiceReference?.configured && <button type="button" className="secondary-action"
                 disabled={referenceBusy} onClick={() => void removeVoiceReference()}>Remove reference</button>}
             </div>
-            </>}
           <small>{draft.voice.engine === "pocket"
-            ? "Pocket reads the same saved reference without modifying it. To replace it, switch to Qwen, save a new WAV, then rerun Pocket setup."
+            ? "Save or replace a WAV here. Mikan reloads its managed Pocket CPU server automatically and the Test voice button will use your new recording. No Qwen server or setup script needed after Pocket's initial installation."
             : "Saving requires the Qwen Python server. Your WAV and transcript persist in %LOCALAPPDATA%\\Mikan\\voice."}</small>
           </div>
           <label className="settings-toggle">

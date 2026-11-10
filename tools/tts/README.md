@@ -199,11 +199,39 @@ the WAV. Future setup runs can register the absolute token file path only.
 For a non-default `HF_TOKEN_PATH` that isn't in the usual cache, log in
 persistently and run the setup script again once to register the path.
 
-You can switch back to **Qwen3-TTS** in the dropdown at any time. Pocket
-reference editing is deliberately disabled: switch to Qwen to update the WAV
-and rerun Pocket setup to register that voice again. The reference transcript
-is used by Qwen, not Pocket. The saved Qwen audio identity and AMD fallback
-remain intact. Pocket's sample and binary are local to your account.
+### Change Pocket's cloned voice from Mikan settings
+
+After the **one-time** Pocket setup above, no terminal and no Qwen GPU model
+are needed to change the recording.
+
+The **Saved voice identity** panel also shows the source WAV filename of the
+currently saved recording. The actual stored audio stays at
+`mikan-reference.wav`, while the original filename is retained as local
+metadata. Older references display the stored filename until replaced.
+
+1. In **Settings → Voice**, select **Pocket TTS · CPU** and click **Check
+   connection** if needed.
+2. Choose another WAV recording in **Saved voice identity** (prefer a clean
+   5–15 second clip, under 6 MB). Its transcript is optional for Pocket.
+3. Click **Replace reference**, then **Test voice** to audition it. Repeat with
+   as many recordings as you like.
+
+Mikan writes the WAV to `%LOCALAPPDATA%\Mikan\voice\mikan-reference.wav`,
+stops **only the Pocket server started by Mikan**, and reconnects to start
+it with the new speaker. The first reply may take longer as the CPU model
+reinitializes. If you manually started a Pocket server on port 8766, stop
+that process first; Mikan won't terminate it or falsely claim a voice
+change took effect.
+
+Pocket clones using the WAV alone. If you leave the optional transcript
+blank, Mikan removes the previous transcript rather than pairing it with
+unrelated audio. Qwen3-TTS still requires an exact matching transcript
+when its cloning mode is used. Both engines share the same reference WAV;
+switching engines back to Qwen is still possible, provided the required
+transcript is saved.
+
+The saved Qwen/ROCm setup, Pocket executable and Hugging Face credentials are
+untouched. Pocket's sample and binary remain local to your account.
 
 Upstream: https://github.com/kyutai-labs/pocket-tts,
 https://kyutai-labs.github.io/pocket-tts/CLI%20Commands/serve/.

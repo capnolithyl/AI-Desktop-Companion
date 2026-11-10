@@ -1,5 +1,7 @@
 # Mikan Desktop Companion
 
+**v0.8.19 (voice reference filenames and Pocket voice swaps):** In **Settings → Voice**, select a reference WAV with Pocket TTS or Qwen3-TTS and see the saved source recording filename after upload and restart. Pocket clones from the WAV without needing Qwen or a transcript; swapping restarts only Mikan's managed Pocket server. Existing references without filename metadata show the actual local filename `mikan-reference.wav`. [Voice setup](tools/tts/README.md).
+
 **v0.8.18 (bulk user memory):** Memory → About you → Bulk import accepts pasted facts or .txt/.md/.csv/.json files. Review suggested categories and tags, exclude rows, pin core facts and confirm before writing. Import is transactional; duplicates are skipped without replacing existing facts. Edit labels later in Memory and filter by category/tag. Local retrieval now ranks matching categories/tags, and optional Mem0 indexes those hints asynchronously so large imports do not freeze chat. User facts, Mikan canon and cached knowledge remain separate. Neither imported facts nor tags are instructions.
 
 

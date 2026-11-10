@@ -62,18 +62,37 @@ class ReferenceTests(unittest.TestCase):
         self.assertFalse(self.request("GET", "/reference")[1]["configured"])
         audio = base64.b64encode(make_wav()).decode("ascii")
         status, saved = self.request("POST", "/reference", {
-            "audio_base64": audio, "ref_text": "Hi! I'm Mikan."
+            "audio_base64": audio, "ref_text": "Hi! I'm Mikan.",
+            "file_name": "mikan-audition-01.wav"
         })
         self.assertEqual(status, 200)
         self.assertTrue(saved["configured"])
         self.assertEqual(saved["duration_seconds"], 3)
         self.assertEqual(saved["transcript"], "Hi! I'm Mikan.")
+        self.assertEqual(saved["file_name"], "mikan-audition-01.wav")
+        self.assertEqual(self.request("GET", "/reference")[1]["file_name"], "mikan-audition-01.wav")
         self.assertTrue(self.request("GET", "/health")[1]["reference_ready"])
         self.assertEqual(self.request("GET", "/reference")[1]["transcript"], "Hi! I'm Mikan.")
         self.assertTrue(server.reference_paths()[0].exists())
         status, result = self.request("DELETE", "/reference")
         self.assertEqual((status, result["configured"]), (200, False))
         self.assertFalse(server.reference_paths()[0].exists())
+        self.assertFalse(server.reference_name_path().exists())
+
+    def test_legacy_reference_filename_fallback(self):
+        server.save_reference(make_wav(), "legacy transcript")
+        server.reference_name_path().unlink()
+        self.assertEqual(server.reference_status()["file_name"], "mikan-reference.wav")
+
+    def test_invalid_source_filename_rejected(self):
+        for bad in ["../something.wav", "folder\\sound.wav", "voice.mp3", "voice.wav\\n"]:
+            status, _ = self.request("POST", "/reference", {
+                "audio_base64": base64.b64encode(make_wav()).decode("ascii"),
+                "ref_text": "Hello",
+                "file_name": bad,
+            })
+            self.assertEqual(status, 400)
+            self.assertFalse(server.reference_paths()[0].exists())
 
     def test_bad_audio_rejected(self):
         for audio, transcript in [

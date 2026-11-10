@@ -89,7 +89,7 @@ fn load_pocket_launcher() -> Result<Option<PocketLaunchConfig>, String> {
         .map_err(|_| "Invalid Pocket settings; rerun scripts/setup-pocket-tts.ps1".to_string())?;
     if !config.executable.is_absolute() || !config.executable.is_file()
         || config.executable.file_name().and_then(|s| s.to_str()) != Some("pocket-tts.exe")
-        || !config.reference.is_absolute() || !config.reference.is_file()
+        || !config.reference.is_absolute()
         || config.reference != root.join("mikan-reference.wav")
         || config.hf_token_path.as_ref().is_some_and(|p| !p.is_absolute())
     {
@@ -143,6 +143,9 @@ fn pocket_token_path(configured: Option<PathBuf>) -> Option<PathBuf> {
 #[cfg(target_os = "windows")]
 fn start_pocket_if_configured() -> Result<bool, String> {
     let Some(config) = load_pocket_launcher()? else { return Ok(false) };
+    if !config.reference.is_file() {
+        return Err("No Pocket reference WAV saved. Select a voice in Settings > Voice first.".into());
+    }
     if port_reachable(POCKET_TTS_PORT) { return Ok(false) }
     let holder = OWN_POCKET.get_or_init(||Mutex::new(None));
     let mut owned = holder.lock().map_err(|_| "Pocket startup lock unavailable".to_string())?;
@@ -440,6 +443,34 @@ mod tests {
         assert!(pocket_token_candidates(None,None,None,None).is_empty());
     }
     #[test]
+    fn validates_uploaded_reference_filename() {
+        assert_eq!(reference_upload_name("sample voice.wav").unwrap(), "sample voice.wav");
+        assert!(reference_upload_name("../sample.wav").is_err());
+        assert!(reference_upload_name("folder\\sample.wav").is_err());
+        assert!(reference_upload_name("voice.mp3").is_err());
+        assert!(reference_upload_name("voice.wav\n").is_err());
+    }
+    #[test]
+    fn accepts_pocket_wav_without_a_transcript_and_rejects_invalid_audio() {
+        let mut wav = vec![0u8; 44 + 64];
+        wav[..4].copy_from_slice(b"RIFF");
+        wav[8..12].copy_from_slice(b"WAVE");
+        wav[12..16].copy_from_slice(b"fmt ");
+        wav[16..20].copy_from_slice(&16u32.to_le_bytes());
+        wav[20..22].copy_from_slice(&1u16.to_le_bytes());
+        wav[22..24].copy_from_slice(&1u16.to_le_bytes());
+        wav[24..28].copy_from_slice(&24_000u32.to_le_bytes());
+        wav[36..40].copy_from_slice(b"data");
+        wav[40..44].copy_from_slice(&64u32.to_le_bytes());
+        assert!(reference_audio_valid(&wav));
+        assert!(!reference_audio_valid(&wav[..20]));
+        wav[40..44].copy_from_slice(&999u32.to_le_bytes());
+        assert!(!reference_audio_valid(&wav)); // Truncated data chunk
+        wav[40..44].copy_from_slice(&64u32.to_le_bytes());
+        wav[8..12].copy_from_slice(b"FAKE");
+        assert!(!reference_audio_valid(&wav));
+    }
+    #[test]
     fn repairs_pocket_http_wav_header() {
         let mut wav=vec![0u8; 44+480];
         wav[..4].copy_from_slice(b"RIFF");
@@ -459,6 +490,7 @@ pub struct VoiceReference {
     configured: bool,
     transcript: Option<String>,
     duration_seconds: Option<f32>,
+    file_name: Option<String>,
 }
 
 async fn reference_response(response: reqwest::Response) -> Result<VoiceReference, String> {
@@ -475,6 +507,7 @@ async fn reference_response(response: reqwest::Response) -> Result<VoiceReferenc
             configured: reference.configured,
             transcript: reference.transcript,
             duration_seconds: reference.duration_seconds,
+            file_name: reference.file_name,
         })
         .map_err(|_| "Invalid voice reference response".into())
 }
@@ -484,6 +517,7 @@ struct VoiceReferenceWire {
     configured: bool,
     transcript: Option<String>,
     duration_seconds: Option<f32>,
+    file_name: Option<String>,
 }
 
 #[tauri::command]
@@ -496,13 +530,14 @@ pub async fn voice_reference_status(endpoint: String) -> Result<VoiceReference, 
             let wav=root.join("mikan-reference.wav");
             let txt=root.join("mikan-reference.txt");
             let transcript=fs::read_to_string(&txt).ok();
+            let file_name = if wav.is_file() { Some(saved_reference_file_name(&root)) } else { None };
             return Ok(VoiceReference {
-                configured: wav.is_file() && transcript.as_ref().is_some_and(|t| !t.trim().is_empty()),
-                transcript, duration_seconds: None
+                // Pocket only needs audio. An accompanying transcript is optional.
+                configured: wav.is_file(), transcript, duration_seconds: None, file_name
             });
         }
         #[cfg(not(target_os = "windows"))]
-        return Ok(VoiceReference { configured: false, transcript: None, duration_seconds: None });
+        return Ok(VoiceReference { configured: false, transcript: None, duration_seconds: None, file_name: None });
     }
     let url = service_url(&endpoint, "/reference")?;
     ensure_managed_voice(&endpoint).await?;
@@ -511,25 +546,161 @@ pub async fn voice_reference_status(endpoint: String) -> Result<VoiceReference, 
     reference_response(response).await
 }
 
-#[tauri::command]
-pub async fn voice_save_reference(endpoint: String, audio_base64: String, ref_text: String) -> Result<VoiceReference, String> {
-    if is_pocket_endpoint(&endpoint)? {
-        return Err("Switch to Qwen3-TTS to update the shared reference, then rerun Pocket setup.".into());
+/// Persist only the original user-selected filename, never its full path.
+fn reference_upload_name(raw: &str) -> Result<String, String> {
+    let filename = raw.trim();
+    if raw.chars().any(char::is_control)
+        || filename.is_empty() || filename.chars().count() > 255
+        || filename.chars().any(|c| c.is_control() || matches!(c, '/' | '\\'))
+        || filename == "." || filename == ".." || !filename.to_ascii_lowercase().ends_with(".wav") {
+        return Err("Select a WAV recording with a valid filename".into());
     }
-    let url = service_url(&endpoint, "/reference")?;
-    ensure_managed_voice(&endpoint).await?;
-    if !(1..=2000).contains(&ref_text.trim().chars().count()) {
-        return Err("Enter the exact spoken transcript (1–2000 characters)".into());
+    Ok(filename.to_string())
+}
+
+#[cfg(target_os = "windows")]
+fn saved_reference_file_name(root: &std::path::Path) -> String {
+    fs::read_to_string(root.join("mikan-reference-name.txt"))
+        .ok().and_then(|name| reference_upload_name(&name).ok())
+        .unwrap_or_else(|| "mikan-reference.wav".into())
+}
+
+/// The CPU server resolves --default-voice when it starts. A managed instance
+/// must be stopped when replacing its WAV, otherwise it keeps the old speaker.
+#[cfg(target_os = "windows")]
+fn pocket_running_outside_mikan() -> bool {
+    if !port_reachable(POCKET_TTS_PORT) { return false; }
+    let managed = OWN_POCKET.get()
+        .and_then(|holder| holder.lock().ok())
+        .map(|mut holder| holder.as_mut()
+            .is_some_and(|child| matches!(child.try_wait(), Ok(None))))
+        .unwrap_or(false);
+    !managed
+}
+
+fn reference_audio_valid(bytes: &[u8]) -> bool {
+    if !(44..=MAX_REFERENCE_BYTES).contains(&bytes.len())
+        || !bytes.starts_with(b"RIFF") || bytes.get(8..12) != Some(&b"WAVE"[..]) {
+        return false;
+    }
+    // Validate the WAV chunk layout before replacing the user's working voice.
+    // Pocket can decode ordinary PCM/float WAVs; a RIFF header alone is not audio.
+    let mut offset = 12;
+    let (mut format_found, mut audio_found) = (false, false);
+    while offset + 8 <= bytes.len() {
+        let id = &bytes[offset..offset + 4];
+        let size = u32::from_le_bytes(bytes[offset + 4..offset + 8].try_into().unwrap()) as usize;
+        let start = offset + 8;
+        let Some(end) = start.checked_add(size) else { return false };
+        if end > bytes.len() { return false; }
+        if id == b"fmt " {
+            if size < 16 { return false; }
+            let coding = u16::from_le_bytes(bytes[start..start + 2].try_into().unwrap());
+            let channels = u16::from_le_bytes(bytes[start + 2..start + 4].try_into().unwrap());
+            let sample_rate = u32::from_le_bytes(bytes[start + 4..start + 8].try_into().unwrap());
+            if !matches!(coding, 1 | 3 | 0xfffe) || !matches!(channels, 1 | 2)
+                || sample_rate == 0 { return false; }
+            format_found = true;
+        } else if id == b"data" && size >= 32 {
+            audio_found = true;
+        }
+        offset = end + (size & 1);
+    }
+    format_found && audio_found
+}
+
+/// Save a validated WAV without requiring a Qwen Python server. Only the
+/// app-owned Pocket process is restarted; never terminate a manual server.
+#[cfg(target_os = "windows")]
+fn save_pocket_reference(bytes: &[u8], transcript: &str, file_name: &str) -> Result<VoiceReference, String> {
+    let root = launcher_dir().ok_or("Voice data folder unavailable")?;
+    if load_pocket_launcher()?.is_none() {
+        return Err("Pocket TTS is not registered. Run scripts/setup-pocket-tts.ps1 once.".into());
+    }
+    if pocket_running_outside_mikan() {
+        return Err("Pocket TTS is running outside Mikan. Stop the manual Pocket server on port 8766, then save the voice again.".into());
+    }
+
+    // Stage the complete recording before stopping the running engine.
+    let pending = root.join("mikan-reference.pending.wav");
+    fs::write(&pending, bytes).map_err(|e| format!("Cannot stage Pocket reference WAV: {e}"))?;
+    let transcript_path = root.join("mikan-reference.txt");
+    let pending_text = root.join("mikan-reference.pending.txt");
+    let name_path = root.join("mikan-reference-name.txt");
+    let pending_name = root.join("mikan-reference.pending.name.txt");
+    if let Err(error) = fs::write(&pending_name, file_name) {
+        let _ = fs::remove_file(&pending);
+        return Err(format!("Cannot stage reference filename: {error}"));
+    }
+    if !transcript.is_empty() {
+        if let Err(error) = fs::write(&pending_text, transcript) {
+            let _ = fs::remove_file(&pending);
+            let _ = fs::remove_file(&pending_name);
+            return Err(format!("Cannot stage Pocket reference transcript: {error}"));
+        }
+    }
+
+    stop_owned_voice(OWN_POCKET.get());
+    // Windows rename fails when the destination exists. Copy the staged, fully
+    // validated WAV onto the existing canonical path while Pocket is stopped.
+    if let Err(error) = fs::copy(&pending, root.join("mikan-reference.wav")) {
+        let _ = fs::remove_file(&pending);
+        let _ = fs::remove_file(&pending_text);
+        let _ = fs::remove_file(&pending_name);
+        return Err(format!("Cannot replace Pocket reference WAV: {error}"));
+    }
+    let _ = fs::remove_file(&pending);
+    if transcript.is_empty() {
+        // An old transcript must never be paired with a different speaker.
+        if transcript_path.is_file() {
+            fs::remove_file(&transcript_path)
+                .map_err(|e| format!("Voice WAV saved, but could not clear old transcript: {e}"))?;
+        }
+    } else {
+        fs::rename(&pending_text, &transcript_path)
+            .map_err(|e| format!("Voice WAV saved, but could not update transcript: {e}"))?;
+    }
+    // Keep the displayed source filename in sync with the recording that
+    // was actually written, not the name of an unsaved file-picker selection.
+    fs::copy(&pending_name, &name_path)
+        .map_err(|e| format!("Voice WAV saved, but could not save filename: {e}"))?;
+    let _ = fs::remove_file(&pending_name);
+    Ok(VoiceReference {
+        configured: true,
+        transcript: (!transcript.is_empty()).then(|| transcript.to_owned()),
+        duration_seconds: None,
+        file_name: Some(file_name.to_owned()),
+    })
+}
+
+#[tauri::command]
+pub async fn voice_save_reference(endpoint: String, audio_base64: String, ref_text: String, file_name: String) -> Result<VoiceReference, String> {
+    let pocket = is_pocket_endpoint(&endpoint)?;
+    let file_name = reference_upload_name(&file_name)?;
+    let transcript = ref_text.trim();
+    // Qwen needs matching words to clone. Pocket clones from audio alone.
+    if transcript.chars().count() > 2000 || (!pocket && transcript.is_empty()) {
+        return Err(if pocket { "Transcript may contain at most 2000 characters" }
+            else { "Enter the exact spoken transcript (1–2000 characters)" }.into());
     }
     if audio_base64.len() > MAX_REFERENCE_BYTES * 4 / 3 + 8 {
         return Err("Reference WAV must be under 6 MB".into());
     }
     let bytes = STANDARD.decode(&audio_base64).map_err(|_| "Invalid reference audio encoding".to_string())?;
-    if bytes.len() < 44 || bytes.len() > MAX_REFERENCE_BYTES || !bytes.starts_with(b"RIFF") || &bytes[8..12] != b"WAVE" {
+    if !reference_audio_valid(&bytes) {
         return Err("Choose a WAV recording under 6 MB".into());
     }
+    if pocket {
+        #[cfg(target_os = "windows")]
+        return save_pocket_reference(&bytes, transcript, &file_name);
+        #[cfg(not(target_os = "windows"))]
+        return Err("Pocket reference settings currently require Windows".into());
+    }
+
+    let url = service_url(&endpoint, "/reference")?;
+    ensure_managed_voice(&endpoint).await?;
     let response = client()?.post(url)
-        .json(&json!({"audio_base64": audio_base64, "ref_text": ref_text.trim()}))
+        .json(&json!({"audio_base64": audio_base64, "ref_text": transcript, "file_name": file_name}))
         .timeout(Duration::from_secs(35))
         .send().await.map_err(|e| format!("Cannot save voice reference: {e}"))?;
     reference_response(response).await
