@@ -2447,7 +2447,7 @@ export default function App() {
               <button type="button" className="secondary-action" disabled={voiceChecking}
                 onClick={() => void checkVoice(voiceEndpoint(draft.voice))}>
                 {voiceChecking ? <LoaderCircle size={14} className="spin"/> : <RotateCw size={14}/>} Check connection</button>
-              <button type="button" className="secondary-action" disabled={voiceState !== "idle"}
+              <button type="button" className="secondary-action" disabled={voiceState !== "idle" || referenceBusy || voiceChecking}
                 onClick={() => void speak(VOICE_TEST_LINE, draft.voice)}><Volume2 size={14}/> Test voice</button>
               {voiceState !== "idle" && <button type="button" className="secondary-action"
                 onClick={stopSpeech}><Square size={13}/> Stop</button>}
