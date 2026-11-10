@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { splitSpeechText, toSpeechText, ProgressiveSpeechFeed, FIRST_SPEECH_CHARS, voiceEndpoint } from "../src/speech.ts";
+import { splitSpeechText, toSpeechText, ProgressiveSpeechFeed, FIRST_SPEECH_CHARS, voiceEndpoint, canSaveVoiceReference } from "../src/speech.ts";
 import { NarrationFilter, stripNarratedActions, isNarratedAction, roleplayActive } from "../src/narration-filter.ts";
 
 test("short utterances and blank text", () => {
@@ -86,6 +86,15 @@ test("live feed flushes a short final reply even without a streaming clause", as
 test("Pocket TTS uses a fixed local port and preserves Qwen's custom endpoint", () => {
   assert.equal(voiceEndpoint({engine:"pocket",endpoint:"http://127.0.0.1:8765"}), "http://127.0.0.1:8766");
   assert.equal(voiceEndpoint({engine:"qwen",endpoint:"http://localhost:8877"}), "http://localhost:8877");
+});
+
+test("Pocket reference swaps accept audio without Qwen or transcript; Qwen still requires both", () => {
+  assert.equal(canSaveVoiceReference("pocket", true, false, false, ""), true);
+  assert.equal(canSaveVoiceReference("pocket", false, true, true, "words"), false);
+  assert.equal(canSaveVoiceReference("qwen", true, false, true, "words"), false);
+  assert.equal(canSaveVoiceReference("qwen", true, true, false, "words"), false);
+  assert.equal(canSaveVoiceReference("qwen", true, true, true, ""), false);
+  assert.equal(canSaveVoiceReference("qwen", true, true, true, "matching words"), true);
 });
 
 test("Pocket preserves the entire spoken text beyond the old 800-character cutoff", () => {
