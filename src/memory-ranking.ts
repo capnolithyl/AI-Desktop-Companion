@@ -13,19 +13,31 @@ export type RankableMemory = {
 const generic = new Set([
   "what","when","where","which","that","this","have","with","about",
   "remember","could","would","please","some","there","need","want",
-  "help","hey","can","you","me","my","the","for","and","how"
+  "help","hey","can","you","me","my","the","for","and","how",
+  "any","was","were","are","been","being","did","does","do","is","its",
+  "just","got","get","say","said","let","lets","thinking","think",
+  "something","things","kind","kinds","again","still","then","also"
 ]);
+
+/** Match whole normalized words, not substrings like any in Germany. */
+export function memoryTerms(value: string): string[] {
+  return (value.toLowerCase().match(/[\\p{L}\\p{N}]+/gu) ?? [])
+    .map(word => word.length > 4 && word.endsWith("s") && !word.endsWith("ss")
+      ? word.slice(0,-1) : word);
+}
+function meaningfulTerms(value: string): string[] {
+  return [...new Set(memoryTerms(value).filter(word => word.length >= 3 && !generic.has(word)))];
+}
 export function rankMemories<T extends RankableMemory>(
   facts: T[], query: string, semanticIds: number[] = []
 ): T[] {
-  const terms = (query.toLowerCase().match(/[\p{L}\p{N}]{3,}/gu) ?? [])
-    .filter(word => !generic.has(word));
+  const terms = meaningfulTerms(query);
   const positions = new Map(semanticIds.slice(0, 12).map((id,i) => [id,i]));
   const score = (f: T): number => {
-    const text = f.fact.toLowerCase();
-    const lexical = terms.reduce((sum, word) => sum + (text.includes(word) ? 1 : 0), 0);
-    const topic = terms.reduce((sum, word) => sum +
-      ((f.tags ?? []).some(tag=>tag.toLowerCase().includes(word)) ? 1 : 0), 0);
+    const text = new Set(memoryTerms(f.fact));
+    const tagged = new Set((f.tags ?? []).flatMap(tag => memoryTerms(tag)));
+    const lexical = terms.reduce((sum, word) => sum + (text.has(word) ? 1 : 0), 0);
+    const topic = terms.reduce((sum, word) => sum + (tagged.has(word) ? 1 : 0), 0);
     const category = terms.some(word=>f.category?.toLowerCase()===word) ? 1 : 0;
     const topical = Math.min(0.23,topic*0.115+category*0.075);
     const matched = positions.get(f.id);
@@ -98,15 +110,15 @@ export function prioritizeCoreMemories<T extends RankableMemory>(
   // Unrelated stored facts were previously included just to fill the context
   // budget; their presence made Mikan assume every conversation was about the
   // owner's strongest interests. Pinned facts remain owner-controlled core.
-  const significant = new Set((query.toLowerCase().match(/[\p{L}\p{N}]{3,}/gu) ?? [])
-    .filter(word=>!generic.has(word)));
+  const significant = new Set(meaningfulTerms(query));
   const semantic = new Set(semanticIds.slice(0,12));
   const relevant = ranked.filter(f=>{
     if(coreIds.has(f.id))return false;
     if(semantic.has(f.id))return true;
-    const stored=f.fact.toLowerCase();
-    return [...significant].some(word=>stored.includes(word) ||
-      f.category?.toLowerCase()===word || (f.tags??[]).some(tag=>tag.toLowerCase().includes(word)));
+    const stored = new Set(memoryTerms(f.fact));
+    const labels = new Set((f.tags ?? []).flatMap(tag => memoryTerms(tag)));
+    return [...significant].some(word => stored.has(word) || labels.has(word) ||
+      f.category?.toLowerCase()===word);
   });
   return [...pinned,...relevant];
 }
