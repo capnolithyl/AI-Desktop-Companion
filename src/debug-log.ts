@@ -17,12 +17,30 @@ export type ResearchAudit = {
   note: string;
 };
 
+export type MemoryRecallAudit = {
+  storedFacts: number;
+  semanticService: "ready" | "offline" | "unknown";
+  semanticReason?: string;
+  semanticCandidates: number;
+  strongSemanticMatches: number;
+  maxFacts: number;
+  facts: {
+    id: number;
+    fact: string;
+    category: string;
+    tags: string[];
+    pinned: boolean;
+    semantic: boolean;
+  }[];
+};
+
 export type Diagnostics = {
   elapsedMs: number;
   firstTokenMs: number | null;
   model: string;
   stats: OllamaStats | null;
   research?: ResearchAudit;
+  memory?: MemoryRecallAudit;
 };
 
 export type DebugLogMessage = {
@@ -80,6 +98,24 @@ function performanceLines(diagnostics: Diagnostics): string[] {
       "  Rejected candidates: " + diagnostics.research.rejected,
       "  Extraction time: " + duration(diagnostics.research.elapsedMs),
       "  Evidence note: " + diagnostics.research.note
+    ] : []),
+    ...(diagnostics.memory ? [
+      "Memory recall (facts actually included in the prompt):",
+      "  SQLite facts available: " + diagnostics.memory.storedFacts,
+      "  Semantic service: " + diagnostics.memory.semanticService +
+        (diagnostics.memory.semanticReason ? " (" + diagnostics.memory.semanticReason + ")" : ""),
+      "  Semantic candidates returned: " + diagnostics.memory.semanticCandidates,
+      "  Strong semantic matches: " + diagnostics.memory.strongSemanticMatches,
+      "  Selected facts: " + diagnostics.memory.facts.length + " / " + diagnostics.memory.maxFacts + " maximum",
+      ...(diagnostics.memory.facts.length
+        ? diagnostics.memory.facts.flatMap((fact, index) => [
+          "  [" + (index + 1) + "] ID " + fact.id + " | " + fact.category +
+            " | " + (fact.pinned ? "pinned" : "not pinned") +
+            " | " + (fact.semantic ? "semantic match" : fact.pinned ? "pinned core" : "keyword/category/tag match") +
+            (fact.tags.length ? " | tags: " + fact.tags.join(", ") : ""),
+          "    " + fact.fact
+        ])
+        : ["  No user facts were included in this model prompt."])
     ] : [])
   ];
 }
@@ -97,7 +133,7 @@ export function formatDebugLog(messages: readonly DebugLogMessage[], options: De
     "Current selected model: " + options.model,
     "Context window: " + (options.contextWindow == null ? "Ollama default" : options.contextWindow + " tokens"),
     "Message count: " + messages.length,
-    "Note: Contains conversation text and source excerpts. Review before sharing.",
+    "Note: Contains conversation text, source excerpts and selected personal-memory facts. Review before sharing.",
     ""
   ];
 
