@@ -8,7 +8,7 @@ use std::{fs, path::PathBuf, time::Duration, process::{Child, Command, Stdio}, s
 #[cfg(target_os = "windows")]
 use std::os::windows::process::CommandExt;
 
-use tauri::AppHandle;
+use tauri::{AppHandle, Manager, path::BaseDirectory};
 
 const SERVICE: &str = "http://127.0.0.1:18764";
 
@@ -19,15 +19,38 @@ fn data_path() -> Option<PathBuf> {
         .map(|root| PathBuf::from(root).join("Mikan").join("advanced-memory"))
 }
 
+/// Bring an existing, owner-installed service script up to this release
+/// without reinstalling Python/ROCm/Mem0. Preserve its previous source once.
+#[cfg(target_os = "windows")]
+fn update_installed_script(app: &AppHandle, root: &PathBuf) {
+    let bundled = app.path().resolve("advanced-memory/server.py", BaseDirectory::Resource)
+        .ok().filter(|path| path.is_file())
+        .or_else(|| {
+            let dev = PathBuf::from("advanced_memory/server.py");
+            dev.is_file().then_some(dev)
+        });
+    let Some(source) = bundled else { return };
+    let destination = root.join("server.py");
+    let Ok(current) = fs::read(&destination) else { return };
+    let Ok(new_source) = fs::read(&source) else { return };
+    if current == new_source { return }
+    let previous = root.join("server.py.previous");
+    if !previous.exists() {
+        if fs::copy(&destination, &previous).is_err() { return }
+    }
+    let _ = fs::copy(&source, &destination);
+}
+
 /// A sidecar installed by the owner may be started with Mikan. No download,
 /// cloud login or external command is attempted by the desktop app itself.
-pub fn start_if_installed() {
+pub fn start_if_installed(app: &AppHandle) {
     #[cfg(target_os = "windows")]
     {
         let Some(root) = data_path() else { return };
         let python = root.join("venv").join("Scripts").join("python.exe");
         let script = root.join("server.py");
         if !python.is_file() || !script.is_file() { return }
+        update_installed_script(app, &root);
         if std::net::TcpStream::connect_timeout(
             &std::net::SocketAddr::from(([127,0,0,1],18764)),
             Duration::from_millis(120)).is_ok() { return }

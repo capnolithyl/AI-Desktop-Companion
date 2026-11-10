@@ -648,6 +648,8 @@ pub fn run() {
             memory::memory_save_message,
             memory::memory_delete_conversation,
             memory::memory_list_facts,
+            memory::memory_import_facts,
+            memory::memory_update_fact_metadata,
             memory::memory_add_fact,
             memory::memory_update_fact,
             memory::memory_delete_fact,
@@ -668,7 +670,7 @@ pub fn run() {
             hide_companion
         ])
         .setup(|app| {
-            advanced_memory::start_if_installed();
+            advanced_memory::start_if_installed(app.handle());
             // Optional, previously registered local Qwen3-TTS uses the owner's
             // existing ROCm Python environment; never installs GPU packages.
             let _ = voice::start_if_configured();

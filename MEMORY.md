@@ -1,5 +1,14 @@
 # Mikan memory foundation (first layer)
 
+## v0.8.18: bulk personal memories, categories and tags
+
+In **Memory → About you → Bulk import memories**, paste one fact per line or open a TXT, Markdown, CSV or JSON file (1 MB maximum, 1000 facts per batch, 2000 total stored facts). A preview lets you skip rows, review suggested categories and tags, set category per row or across the batch, and optionally pin facts. The original file remains on your PC; no online parsing or model calls are made. Invalid input rejects the entire batch; duplicates are skipped and never overwrite existing text, metadata or pins.
+
+Accepted JSON: an array of strings, an array of objects with fact/category/tags/pinned, or an object containing a memories/facts array. CSV needs a fact (or text/memory/content) column and may have category, tags (comma/semicolon-separated) and pinned columns. Markdown headings matching known categories group subsequent bullet or numbered lines; other lines are automatically given rule-based suggested labels. The preview is authoritative, not the suggestion rules.
+
+Categories: profile, family, work, projects, interests, preferences, routines, other. Each user fact can have up to 8 owner-editable tags (32 characters each). Existing facts receive other/[] through a non-destructive SQLite migration. Facts can be filtered by category, text or tags and edited under **Organize**. Retrieval uses category/tag overlap alongside semantic similarity and importance, without blindly loading all memories into the prompt. Optional Mem0 indexes SQLite facts with labels in the background; when indexing is incomplete, SQLite lexical/tag retrieval still functions. Mikan's self-canon, history and imported reference knowledge are unaffected.
+
+
 The core conversation/user memory layer shipped in v0.6.0, Mikan character canon in v0.7.0, and optional automatic extraction plus SQLite FTS5/semantic memory now ship on desktop. This document includes historical design notes below; the v0.8.10 behavior is summarized here.
 
 ## v0.8.10: relevance and durability
@@ -81,3 +90,5 @@ On the automatic-extraction branch, Mikan's explicit stable preferences may be s
 5. Turn automatic capture off for one or both categories, then repeat. No new automatic memories should appear; manual controls still work.
 6. Stop Ollama during extraction. Existing chat, saved memory and manual controls remain functional; the Memory panel should show a nonfatal extraction warning.
 7. Confirm saving a duplicate and replaying an already-processed message do not produce duplicate entries. A full app restart must preserve earlier memories.
+
+JSON/CSV imports also accept common category aliases such as personal → profile, relationships → family, career → work and hobbies → interests; the preview shows normalized labels.
