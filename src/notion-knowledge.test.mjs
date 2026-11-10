@@ -44,6 +44,18 @@ test("recognizes cached titles, chapter numbers and named projects without hardc
   assert.equal(planNotionRetrieval("What happens in The Obsidian Garden?",[],project).selectedPage?.id,"4");
 });
 
+test("general book discussion retrieves the story bible instead of a random chapter",()=>{
+  const plan=planNotionRetrieval("Let's talk about my book",[],pages);
+  assert.equal(plan.relevant,true);
+  assert.match(plan.query,/Charlotte Universe/);
+  assert.equal(plan.selectedPage,null);
+  assert.equal(plan.fullRead,false);
+  const followup=planNotionRetrieval("What should I change in the story?",[
+    {role:"user",content:"Let's talk about my book"}
+  ],pages);
+  assert.match(followup.query,/Charlotte Universe/);
+});
+
 test("never guess which identically titled chapter was requested",()=>{
   assert.equal(selectNotionPage("Read Chapter Three",[
     ...pages,{id:"4",title:"Chapter Three",url:"",chunkCount:11,characters:18000}
