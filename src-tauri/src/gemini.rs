@@ -196,12 +196,23 @@ async fn generate(
         payload["tools"] = tools();
         payload["toolConfig"] = json!({"functionCallingConfig":{"mode":"AUTO"}});
     }
-    let response = client.post(url)
-        .header("x-goog-api-key",key)
-        .json(&payload)
-        .timeout(Duration::from_secs(timeout_seconds))
-        .send().await
-        .map_err(|e| format!("Gemini connection failed: {e}"))?;
+    // A 503 is Google's temporary capacity problem, not the user's quota.
+    // Give it one short retry before Auto routes this turn to Ollama.
+    let mut attempt = 0;
+    let response = loop {
+        let response = client.post(&url)
+            .header("x-goog-api-key",key)
+            .json(&payload)
+            .timeout(Duration::from_secs(timeout_seconds))
+            .send().await
+            .map_err(|e| format!("Gemini connection failed: {e}"))?;
+        if response.status().as_u16() == 503 && attempt == 0 {
+            attempt += 1;
+            tokio::time::sleep(Duration::from_secs(2)).await;
+            continue;
+        }
+        break response;
+    };
     let status = response.status();
     if !status.is_success() {
         let retry_after = response.headers().get("retry-after")
