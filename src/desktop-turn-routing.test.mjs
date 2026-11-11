@@ -10,6 +10,16 @@ test("screen vision capability query stays private local chat, never generic web
   assert.equal(result.verifyWebEvidence,false);
 });
 
+test("asking Mikan which LLM she uses never triggers a web research route",()=>{
+  for (const question of ["what llm are you using right now?", "Which model are you running?", "What AI model is Mikan using?"]){
+    const result=decideDesktopTurn(question,[],{automaticWebEnabled:true});
+    assert.equal(result.plan.mode,"chat",question);
+    assert.equal(result.capabilityQuestion,true,question);
+    assert.equal(result.allowAutomaticWeb,false,question);
+    assert.equal(result.verifyWebEvidence,false,question);
+  }
+});
+
 test("ordinary conversations, personal memories and roleplay are not source-checked",()=>{
   const previous=[{role:"user",content:"What's the latest Artemis news?"}];
   for(const question of [
