@@ -60,7 +60,7 @@ export function isPlainPhysicalNarration(sentence:string):boolean {
   const ownerBody=/^(?:my|mikan['’]s|her|his)\s+(?:(?:fluffy|striped|orange|tiny|soft|little|left|right)\s+){0,3}(?:tail|paws?|ears?|head|face|hands?|arms?|hair|whiskers?|cheeks?|nose|lips?|feet|legs?|body)\b/i;
   const physicalAct=/\b(?:wrap\w*|curl\w*|wag\w*|swish\w*|twitch\w*|perk\w*|flick\w*|nuzzl\w*|rub\w*|press\w*|rest\w*|lean\w*|nestl\w*|snuggl\w*|embrac\w*|hug\w*|against|around|beside|onto|into|your\s+(?:arm|shoulder|hand|face|leg|head))\b/i;
   if(ownerBody.test(text) && physicalAct.test(text))return true;
-  const narrator=/^(?:i|mikan|she)\s+(?:(?:am|was|gently|quietly|softly|slowly|playfully)\s+){0,3}(?:lean\w*|nestl\w*|snuggl\w*|nuzzl\w*|curl\w*|wrap\w*|press\w*|hug\w*|sit\w*|sitting|rest\w*|cuddl\w*)\b/i;
+  const narrator=/^(?:i(?:['’]m)?|mikan|she)\s+(?:(?:am|was|gently|quietly|softly|slowly|playfully)\s+){0,3}(?:lean\w*|nestl\w*|snuggl\w*|nuzzl\w*|curl\w*|wrap\w*|press\w*|hug\w*|sit\w*|sitting|rest\w*|cuddl\w*)\b/i;
   return narrator.test(text) && /\b(?:you|your|beside|against|around|toward|next to)\b/i.test(text);
 }
 
