@@ -5,7 +5,7 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 import { webContext, pageContext, type PageDocument, type WebResult } from "./web-search";
 import { priorResearchSources } from "./research-context";
 import { planResearch, stripUnsupportedCitations } from "./research-routing";
-import { verifyResearchAnswer } from "./evidence-verification";
+import { verifyResearchAnswer, groundedResearchFallback } from "./evidence-verification";
 import { resolveConversationQuestion, needsContextResolution, contextGuidance, responseFocusGuidance } from "./conversation-engine";
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
@@ -1881,8 +1881,17 @@ export default function App() {
         ? (completion.sources?.length ? completion.sources : withSearch?.results)
         : undefined;
       const rawText = completion.content || accumulated || "(The model returned no visible text.)";
-      const verifiedText = verifiedSources?.length
-        ? verifyResearchAnswer(rawText, verifiedSources).text : stripUnsupportedCitations(rawText);
+      const answerReview = verifiedSources?.length
+        ? verifyResearchAnswer(rawText, verifiedSources) : null;
+      if(answerReview){
+        diagnostics.answerVerification={
+          checked:answerReview.checked,rejected:answerReview.rejected,
+          recoveredHeadline:!answerReview.usable
+        };
+      }
+      const verifiedText=answerReview
+        ? answerReview.usable ? answerReview.text : groundedResearchFallback(text,verifiedSources ?? [])
+        : stripUnsupportedCitations(rawText);
       // The final stored text, rendered answer and streamed speech must agree.
       // Keep explicit roleplay unfiltered and do not mutate older saved chats.
       const finalText = allowRoleplay ? verifiedText : stripNarratedActions(verifiedText);
