@@ -45,6 +45,8 @@ struct ChatRequest {
     provider: Option<String>,
     #[serde(default)]
     gemini_model: Option<String>,
+    #[serde(default)]
+    cloud_allow_web: bool,
     messages: Vec<ChatMessage>,
     #[serde(default)]
     auto_search: bool,
