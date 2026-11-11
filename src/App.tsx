@@ -2378,6 +2378,8 @@ export default function App() {
             </div>)}
           </div>}
           {m.role === "assistant" && <ReplyMetrics diagnostics={m.diagnostics}/>}
+          {m.role === "assistant" && m.diagnostics?.fallbackReason &&
+            <div className="research-warning" role="status">Gemini fallback: {m.diagnostics.fallbackReason}</div>}
         </article>)}
       </div>
       <footer className="drawer-footer"><Clock3 size={14}/> Token counts and timings come from Ollama; wall time includes app overhead.</footer>
