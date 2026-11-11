@@ -1664,6 +1664,11 @@ export default function App() {
         researchPlan = {mode:"research",query:plannerWeb.query,recent:false};
         setActivity("Preparing evidence-backed answer…");
       }
+      const cloudMaySearch = settings.provider !== "local" && settings.autoSearch &&
+        !useNotion && !turn.capabilityQuestion && !personalTurn && !withSearch &&
+        !attachment && !screenshot && !liveFrame && !allowRoleplay;
+      // Gemini independently decides when read-only web tools are useful.
+      // Local Qwen still respects the existing deterministic/planned routes.
       const effectiveWeb = turn.allowAutomaticWeb || plannedPublicSearch;
       const preferredTopic = effectiveWeb
         ? (plannedPublicSearch ? plannerWeb.topic
@@ -1683,7 +1688,7 @@ export default function App() {
             withSearch ? "Search panel supplied results already" : plannerWeb.reason,
         query:plannedPublicSearch ? plannerWeb.query : researchPlan.mode==="research" ? researchPlan.query : undefined,
         topic:preferredTopic,
-        publicWebAllowed:effectiveWeb
+        publicWebAllowed:effectiveWeb || cloudMaySearch
       };
       const remembered = prepareMemoryContext(liveFacts,text,semanticIds,budget,selection.ids);
       // Debug only the facts actually sent to Ollama, never the whole user database.
@@ -1837,7 +1842,7 @@ export default function App() {
         progressiveFeed?.append(visibleDelta);
         // Source-bearing drafts remain private until the evidence check finishes.
         // Streaming an unverified invented release date is misleading.
-        const researchAnswer = turn.verifyWebEvidence || plannedPublicSearch;
+        const researchAnswer = turn.verifyWebEvidence || plannedPublicSearch || cloudMaySearch;
         if (!researchAnswer) {
           const currentText = visibleAccumulated;
           setMessages(current => current.map(m =>
@@ -1853,6 +1858,7 @@ export default function App() {
           model: settings.model,
           provider: settings.provider,
           geminiModel: settings.geminiModel,
+          cloudAllowWeb: cloudMaySearch,
           autoSearch: effectiveWeb,
           structuredResearch: settings.structuredResearch && effectiveWeb,
           sourcePreferences:settings.sourcePreferences,
@@ -1906,7 +1912,9 @@ export default function App() {
       };
       // The source-verification filter applies to actual researched answers,
       // NEVER to local conversational or capability answers.
-      const verifiedSources = (turn.verifyWebEvidence || plannedPublicSearch)
+      const cloudResearched = cloudMaySearch && completion.modelUsed?.startsWith("Gemini ") &&
+        !!completion.sources?.length;
+      const verifiedSources = (turn.verifyWebEvidence || plannedPublicSearch || cloudResearched)
         ? (completion.sources?.length ? completion.sources : withSearch?.results)
         : undefined;
       const rawText = completion.content || accumulated || "(The model returned no visible text.)";
