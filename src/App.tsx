@@ -1562,12 +1562,18 @@ export default function App() {
     try {
       await persistMessage(user);
       let readChapterContext = "";
+      let linkedScenesRead = 0;
+      let linkedSceneCharacters = 0;
+      let notionReadFailure: string | undefined;
       if (useNotion && notionPlan.fullRead && notionPlan.selectedPage) {
         setActivity("Opening full Notion chapter…");
         try {
           const document = await invoke<NotionDocument>("notion_read_document",{
             id:notionPlan.selectedPage.id
           });
+          linkedScenesRead = document.relatedPages?.length ?? 0;
+          linkedSceneCharacters = (document.relatedPages ?? [])
+            .reduce((n,scene)=>n+scene.chunks.reduce((total,chunk)=>total+chunk.length,0),0);
           readChapterContext = await readNotionChapter(
             document,
             prompt => invoke<string>("condense_local_context", {
@@ -1582,7 +1588,8 @@ export default function App() {
           };
         } catch (error) {
           if (stopRequested.current) throw new Error("Generation stopped");
-          readChapterContext = "NOTION FULL READING FAILED: "+errorText(error)+
+          notionReadFailure=errorText(error);
+          readChapterContext = "NOTION FULL READING FAILED: "+notionReadFailure+
             ". Do not claim to have read the complete chapter. "+
             "You may discuss retrieved excerpts, but explain the limitation.";
         }
@@ -1704,7 +1711,10 @@ export default function App() {
         cachedPages:cachedNotionPages.length,
         excerptCount:notionHits.length,
         fullReadAttempted:notionPlan.fullRead,
-        readSucceeded:!!readChapterContext && !readChapterContext.startsWith("NOTION FULL READING FAILED:")
+        readSucceeded:!!readChapterContext && !readChapterContext.startsWith("NOTION FULL READING FAILED:"),
+        linkedScenesRead,
+        linkedSceneCharacters,
+        readFailure:notionReadFailure
       } : undefined;
       const unavailableChapter=useNotion ? unavailableChapterResponse(
         text,notionPlan.selectedPage,readChapterContext,cachedNotionPages.length
