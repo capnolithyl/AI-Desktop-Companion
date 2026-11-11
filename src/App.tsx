@@ -69,7 +69,7 @@ type CacheInfo = { pages: number; bytes: number };
 type Activity = { requestId: string; text: string };
 type Connection = { mode: "loading" | "online" | "offline"; text: string };
 type ChatChunk = { requestId: string; content: string };
-type ChatCompletion = { content: string; modelUsed?: string; stats: OllamaStats | null; sources: WebResult[]; searchQuery?: string | null; sourcesCarriedOver?: boolean; researchAudit?: ResearchAudit | null };
+type ChatCompletion = { content: string; modelUsed?: string; fallbackReason?: string | null; stats: OllamaStats | null; sources: WebResult[]; searchQuery?: string | null; sourcesCarriedOver?: boolean; researchAudit?: ResearchAudit | null };
 type LogMessage = Message & { createdAt: number; diagnostics?: Diagnostics; failed?: boolean; sources?: WebResult[]; searchQuery?: string; sourcesCarriedOver?: boolean };
 const HOTKEY = "Control+Alt+M";
 const BUNDLED_PORTRAIT = "/mikan.png";
@@ -233,6 +233,8 @@ export default function App() {
   const [geminiKeyReady,setGeminiKeyReady] = useState(false);
   const [geminiKeyBusy,setGeminiKeyBusy] = useState(false);
   const [geminiKeyError,setGeminiKeyError] = useState<string | null>(null);
+  const [geminiTestBusy,setGeminiTestBusy] = useState(false);
+  const [geminiTestResult,setGeminiTestResult] = useState<string | null>(null);
   useEffect(() => {
     void invoke<boolean>("gemini_key_status").then(setGeminiKeyReady)
       .catch(error => setGeminiKeyError(errorText(error)));
@@ -242,16 +244,28 @@ export default function App() {
     setGeminiKeyBusy(true); setGeminiKeyError(null);
     try {
       await invoke("gemini_save_key",{apiKey:geminiKeyInput.trim()});
-      setGeminiKeyReady(true); setGeminiKeyInput("");
+      setGeminiKeyReady(true); setGeminiKeyInput(""); setGeminiTestResult(null);
     } catch (error) { setGeminiKeyError(errorText(error)); }
     finally { setGeminiKeyBusy(false); }
+  };
+  const testGeminiConnection = async () => {
+    if (geminiTestBusy || !geminiKeyReady) return;
+    setGeminiTestBusy(true); setGeminiTestResult(null);
+    try {
+      const result=await invoke<string>("gemini_test_connection",{model:draft.geminiModel.trim()});
+      setGeminiTestResult(result);
+    } catch (error) {
+      setGeminiTestResult("Connection failed: "+errorText(error));
+    } finally {
+      setGeminiTestBusy(false);
+    }
   };
   const removeGeminiKey = async () => {
     if (geminiKeyBusy) return;
     setGeminiKeyBusy(true); setGeminiKeyError(null);
     try {
       await invoke("gemini_remove_key");
-      setGeminiKeyReady(false); setGeminiKeyInput("");
+      setGeminiKeyReady(false); setGeminiKeyInput(""); setGeminiTestResult(null);
     } catch (error) { setGeminiKeyError(errorText(error)); }
     finally { setGeminiKeyBusy(false); }
   };
@@ -1911,6 +1925,7 @@ export default function App() {
         elapsedMs: duration,
         firstTokenMs,
         model: completion.modelUsed || settings.model,
+        fallbackReason: completion.fallbackReason,
         stats: completion.stats,
         research: completion.researchAudit ?? undefined,
         memory: memoryAudit,
@@ -2363,6 +2378,8 @@ export default function App() {
             </div>)}
           </div>}
           {m.role === "assistant" && <ReplyMetrics diagnostics={m.diagnostics}/>}
+          {m.role === "assistant" && m.diagnostics?.fallbackReason &&
+            <div className="research-warning" role="status">Gemini fallback: {m.diagnostics.fallbackReason}</div>}
         </article>)}
       </div>
       <footer className="drawer-footer"><Clock3 size={14}/> Token counts and timings come from Ollama; wall time includes app overhead.</footer>
@@ -2569,10 +2586,15 @@ export default function App() {
           <div className="service-buttons">
             <button type="button" className="secondary-action" disabled={geminiKeyBusy||!geminiKeyInput.trim()}
               onClick={()=>void saveGeminiKey()}><Check size={14}/> Save API key</button>
-            {geminiKeyReady && <button type="button" className="secondary-action" disabled={geminiKeyBusy}
-              onClick={()=>void removeGeminiKey()}>Remove key</button>}
+            {geminiKeyReady && <>
+              <button type="button" className="secondary-action" disabled={geminiKeyBusy||geminiTestBusy}
+                onClick={()=>void testGeminiConnection()}><RotateCw size={14}/> {geminiTestBusy?"Testing Gemini…":"Test Gemini connection"}</button>
+              <button type="button" className="secondary-action" disabled={geminiKeyBusy||geminiTestBusy}
+                onClick={()=>void removeGeminiKey()}>Remove key</button>
+            </>}
           </div>
           {geminiKeyError && <small className="field-error" role="alert">{geminiKeyError}</small>}
+          {geminiTestResult && <small className={geminiTestResult.startsWith("Connection failed:")?"field-error":"settings-note"} role="status">{geminiTestResult}</small>}
           <div className="settings-section-title">Local fallback · Ollama</div>
           <label className="setting-field">Ollama endpoint
             <input spellCheck={false} value={draft.endpoint}
