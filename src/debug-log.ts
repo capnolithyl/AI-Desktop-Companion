@@ -69,6 +69,7 @@ export type Diagnostics = {
   elapsedMs: number;
   firstTokenMs: number | null;
   model: string;
+  fallbackReason?: string | null;
   stats: OllamaStats | null;
   research?: ResearchAudit;
   answerVerification?: {checked:number;rejected:number;recoveredHeadline:boolean};
@@ -128,6 +129,7 @@ function performanceLines(diagnostics: Diagnostics): string[] {
     "  Load time: " + fromNanoseconds(s?.loadDurationNs),
     "  Prompt eval: " + fromNanoseconds(s?.promptEvalDurationNs),
     "  Model: " + diagnostics.model,
+    ...(diagnostics.fallbackReason ? ["  Gemini fallback: " + diagnostics.fallbackReason] : []),
     ...(diagnostics.research ? [
       "  Research evidence: " + diagnostics.research.status,
       "  Accepted source-anchored facts: " + diagnostics.research.accepted,
