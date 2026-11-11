@@ -599,7 +599,13 @@ pub async fn notion_sync(app: AppHandle) -> Result<NotionStatus, String> {
     while let Some(page) = queue.pop_front() {
         if !visited.insert(page.id.clone()) { continue; }
         if visited.len() > MAX_PAGES { return Err("Notion library exceeds the safe page limit".into()); }
-        let properties=if !page.is_database && page.properties.is_null() {
+        // Notion search/database listings can expose incomplete relation
+        // values. Refresh chapter page properties before caching the ordered
+        // Scenes relations; otherwise a chapter can look successfully synced
+        // while its manuscript scene rows are silently absent.
+        let chapter_with_scenes=page.title.to_ascii_lowercase().starts_with("chapter ")
+            && page.title.chars().any(|c|c.is_ascii_digit());
+        let properties=if !page.is_database && (page.properties.is_null() || chapter_with_scenes) {
             let current=request(&client,&token,reqwest::Method::GET,
                 &format!("/v1/pages/{}",page.id),None).await?;
             current["properties"].clone()
