@@ -79,6 +79,10 @@ export const memoryApi = {
   deleteConversation: (id: string) => invoke<void>("memory_delete_conversation", { id }),
   listFacts: () => invoke<UserFact[]>("memory_list_facts"),
   importFacts: (items: ImportMemory[]) => invoke<{inserted:number;duplicates:number}>("memory_import_facts", {items}),
+  exportFacts: () => invoke<{path:string;count:number}>("memory_export_facts"),
+  replaceFacts: (items: ImportMemory[], expectedCount: number) =>
+    invoke<{inserted:number;oldCount:number;backupPath:string}>("memory_replace_facts",
+      {items,expectedCount,confirmation:"REPLACE"}),
   updateFactMetadata: (id: number, category: MemoryCategory, tags: string[]) =>
     invoke<void>("memory_update_fact_metadata",{id,category,tags}),
   markRecalled: (ids: number[]) => invoke<void>("memory_mark_recalled", { ids }),
