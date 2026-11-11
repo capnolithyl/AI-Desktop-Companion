@@ -27,6 +27,7 @@ import { PersonalityPresets, PersonalitySliders } from "./PersonalityControls";
 import { parseSlashCommand, SLASH_HELP } from "./slash-commands";
 import { runtimeContext, chatRuntimeContext } from "./runtime-context";
 import { decideDesktopTurn } from "./desktop-turn-routing";
+import { isModelStatusQuestion, modelStatusAnswer } from "./model-status";
 import { formatDebugLog, type Diagnostics, type MemoryRecallAudit, type OllamaStats, type ResearchAudit } from "./debug-log";
 import { strongSemanticIds } from "./memory-ranking";
 import { planMemoriesAndTools, type WebToolDecision } from "./unified-planner";
@@ -1460,6 +1461,37 @@ export default function App() {
 
     if (busy || preparingSend.current) return;
     if (!memoryReady) { setFeedback("Loading conversation memory…"); return; }
+    // The app knows its configured providers and which model actually answered.
+    // Asking about Mikan's own LLM must not invoke cloud inference, memory reranking,
+    // SearXNG or source-verification. Still archive this normal chat exchange.
+    if (!withSearch && !attachment && !screenshot && isModelStatusQuestion(text)) {
+      preparingSend.current = true;
+      const conversationId=activeConversationId ?? crypto.randomUUID();
+      const user:LogMessage={
+        id:crypto.randomUUID(),role:"user",content:text,createdAt:Date.now()
+      };
+      const assistant:LogMessage={
+        id:crypto.randomUUID(),role:"assistant",
+        content:modelStatusAnswer(settings,messages),createdAt:Date.now()
+      };
+      setActiveConversationId(conversationId);
+      setMessages(current=>[...current,user,assistant]);
+      setInput("");setFeedback(null);
+      goCompact();
+      try {
+        await memoryApi.createConversation(conversationId);
+        await memoryApi.saveMessage(conversationId,user,archiveMetadata(user));
+        await memoryApi.saveMessage(conversationId,assistant,archiveMetadata(assistant));
+        await refreshArchive();
+        setMemoryError(null);
+      } catch (error) {
+        setMemoryError("Chat is not being saved: "+errorText(error));
+      } finally {
+        preparingSend.current=false;
+        focusInput();
+      }
+      return;
+    }
     preparingSend.current=true;
     // Lightweight local metadata and FTS retrieval. A chapter or named page
     // can be recognized without the owner saying "Notion". Explicit public
