@@ -91,7 +91,7 @@ function csvRows(input:string):string[][] {
   return rows;
 }
 export function parseMemoryImport(input:string,format:"json"|"csv"|"text"):ImportMemory[] {
-  if(input.length>1_000_000)throw Error("Import text/file must be under 1 MB");
+  if(input.length>3_000_000)throw Error("Import text/file must be under 3 MB");
   let raw:unknown[]=[];
   if(format==="json"){
     let parsed:unknown;
@@ -127,6 +127,6 @@ export function parseMemoryImport(input:string,format:"json"|"csv"|"text"):Impor
         category:section??undefined}];
     });
   }
-  if(!raw.length || raw.length>1000)throw Error("Import 1–1000 individual memories");
+  if(!raw.length || raw.length>2000)throw Error("Import 1–2000 individual memories");
   return raw.map((item,index)=>normalizeRow(item,index+1));
 }

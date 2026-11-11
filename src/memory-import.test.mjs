@@ -42,3 +42,19 @@ test("common exported category names map to supported categories",()=>{
   ]}),"json");
   assert.deepEqual(entries.map(x=>x.category),["profile","interests","family"]);
 });
+
+test("JSON export can be re-imported after consolidation without losing categories and pins",()=>{
+  const backup=JSON.stringify({schema:"mikan-user-memories",version:1,memories:[
+    {id:5,fact:"Marcus loves Fear Factory",category:"interests",tags:["music","metal"],pinned:true,
+      createdAt:100,updatedAt:200,referenceCount:18,importance:95}
+  ]});
+  const imported=parseMemoryImport(backup,"json");
+  assert.equal(imported.length,1);
+  assert.deepEqual(imported[0],{fact:"Marcus loves Fear Factory",
+    category:"interests",tags:["music","metal"],pinned:true});
+});
+test("replace-scale import supports up to the SQLite 2000-memory limit",()=>{
+  const sample=Array.from({length:2000},(_,i)=>({fact:"Unique fact "+i,category:"other",pinned:false,tags:[]}));
+  assert.equal(parseMemoryImport(JSON.stringify({memories:sample}),"json").length,2000);
+  assert.throws(()=>parseMemoryImport(JSON.stringify({memories:[...sample,{fact:"Too many"}]}),"json"));
+});

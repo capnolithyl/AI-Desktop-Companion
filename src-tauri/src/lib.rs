@@ -707,6 +707,8 @@ pub fn run() {
             memory::memory_delete_conversation,
             memory::memory_list_facts,
             memory::memory_import_facts,
+            memory::memory_export_facts,
+            memory::memory_replace_facts,
             memory::memory_update_fact_metadata,
             memory::memory_add_fact,
             memory::memory_update_fact,

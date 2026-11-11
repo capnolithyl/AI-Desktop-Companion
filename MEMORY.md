@@ -7,9 +7,17 @@ Saved SQLite facts remain authoritative. For meaningful user turns, Mikan sends 
 The owner-initiated debug export now shows which method was used, candidate counts, selection latency and the raw nearest-neighbor scores, alongside the exact facts actually included in the response prompt. Character-canon preferences are only injected when the owner actually asks about Mikan herself, not when requesting personal music or game recommendations. Conversation style instructions also avoid repetitive name-addressing and unnecessary narrated physical gestures. The saved memory store is never changed merely by retrieval.
 
 
+## Personal fact JSON export and safe rebuild
+
+In **Memory → About you → Bulk import memories**, choose **Export all personal memories (JSON)** to write an import-compatible JSON file to your Downloads folder. The export includes every stored user fact, category, tags, pinned state and inspection metadata (IDs, timestamps, importance and recall counts). It does not export chats, Mikan's character canon, or Notion documents.
+
+To consolidate duplicates offline, edit the exported JSON and load it back into the same importer. Change **Import action** to **Replace all personal memories with this file**, preview the resulting facts (including tags, category and pins), exclude any rows you do not want, and type **REPLACE** before submitting. In replace mode, duplicate checks apply within the replacement, not against the old set. Differently worded memories are never automatically merged.
+
+The app first creates a timestamped JSON backup of the existing user facts under its local `memory-backups` application-data folder, then uses a single SQLite transaction to replace only user facts. Invalid, duplicate, oversized or stale-input replacements fail without deleting the original database facts. A successful rebuild creates new SQLite IDs and dates and resets recall counts; original values are preserved in the backup. The optional Mem0/Qdrant index resynchronizes from SQLite after the change. Personal chat history, session notes, character canon, and Notion references remain untouched.
+
 ## v0.8.18: bulk personal memories, categories and tags
 
-In **Memory → About you → Bulk import memories**, paste one fact per line or open a TXT, Markdown, CSV or JSON file (1 MB maximum, 1000 facts per batch, 2000 total stored facts). A preview lets you skip rows, review suggested categories and tags, set category per row or across the batch, and optionally pin facts. The original file remains on your PC; no online parsing or model calls are made. Invalid input rejects the entire batch; duplicates are skipped and never overwrite existing text, metadata or pins.
+In **Memory → About you → Bulk import memories**, paste one fact per line or open a TXT, Markdown, CSV or JSON file (3 MB maximum, 2000 facts per batch, 2000 total stored facts). A preview lets you skip rows, review suggested categories and tags, set category per row or across the batch, and optionally pin facts. The original file remains on your PC; no online parsing or model calls are made. Invalid input rejects the entire batch; duplicates are skipped and never overwrite existing text, metadata or pins.
 
 Accepted JSON: an array of strings, an array of objects with fact/category/tags/pinned, or an object containing a memories/facts array. CSV needs a fact (or text/memory/content) column and may have category, tags (comma/semicolon-separated) and pinned columns. Markdown headings matching known categories group subsequent bullet or numbered lines; other lines are automatically given rule-based suggested labels. The preview is authoritative, not the suggestion rules.
 
