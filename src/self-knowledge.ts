@@ -81,10 +81,10 @@ export const CAPABILITIES: readonly Capability[] = [
   },
   {
     id:"personal-facts",label:"Personal facts and automatic extraction",category:"Memory",
-    description:"Owner-editable SQLite user facts with previewed local JSON/CSV/TXT/Markdown bulk imports, category and tag editing, filters, deduplication, automatic evidence-grounded extraction, deletion and pinned core memories. For relevant chat, a bounded local Ollama JSON pass selects memories by meaning, with whole-word and semantic fallbacks. Imports do not modify character canon.",
+    description:"Owner-editable SQLite user facts with previewed local JSON/CSV/TXT/Markdown bulk imports, category and tag editing, filters, exact-text deduplication, automatic evidence-grounded extraction, deletion and pinned core memories. Export all user facts to JSON in Downloads, or atomically replace the user-fact set after a typed confirmation and automatic JSON backup; replacements leave chat history, character canon, and Notion untouched. Similar but differently worded facts are not automatically merged. For relevant chat, a bounded local Ollama JSON pass selects memories by meaning, with whole-word and semantic fallbacks.",
     stage:"implemented",runtime:"none",keywords:["remember","fact","profile","memory","pin","forget","personal","bulk","import","category","tags","csv","json"],
     sources:["src-tauri/src/memory.rs","src-tauri/src/memory_extraction.rs","src/memory-client.ts","src/memory-retrieval.ts","src/MemoryImporter.tsx","src/memory-import.ts"],docs:["MEMORY.md"],
-    commands:["memory_list_facts","memory_add_fact","memory_update_fact","memory_update_fact_metadata","memory_import_facts","memory_delete_fact","memory_mark_recalled","memory_pin_fact","memory_process_turn"],
+    commands:["memory_list_facts","memory_add_fact","memory_update_fact","memory_update_fact_metadata","memory_import_facts","memory_export_facts","memory_replace_facts","memory_delete_fact","memory_mark_recalled","memory_pin_fact","memory_process_turn"],
     screens:["memory"],
     slashCommands:["memories","remember","forget"]
   },
