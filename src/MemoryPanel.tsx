@@ -31,6 +31,9 @@ type Props = {
   onPinFact: (id: number, pinned: boolean) => Promise<void>;
   onUpdateFactMetadata: (id: number, category: MemoryCategory, tags: string[]) => Promise<void>;
   onImportFacts: (items: ImportMemory[]) => Promise<{inserted:number;duplicates:number}>;
+  onExportFacts: () => Promise<{path:string;count:number}>;
+  onReplaceFacts: (items: ImportMemory[], expectedCount: number) =>
+    Promise<{inserted:number;oldCount:number;backupPath:string}>;
   onRefresh: () => Promise<void>;
   onAddCharacter: (category: CharacterCategory, label: string, value: string) => Promise<void>;
   onEditCharacter: (id: number, category: CharacterCategory, label: string, value: string) => Promise<void>;
@@ -47,7 +50,7 @@ export function MemoryPanel({
   autoRememberUser, autoRememberMikan, automaticError, onAutoRememberUserChange, onAutoRememberMikanChange,
   currentId, busy, error, onClose, onNew,
   onOpen, onDeleteChat, onDeleteSessionSummary, onAddFact, onEditFact, onDeleteFact, onPinFact,
-  onUpdateFactMetadata, onImportFacts, onRefresh,
+  onUpdateFactMetadata, onImportFacts, onExportFacts, onReplaceFacts, onRefresh,
   onAddCharacter, onEditCharacter, onDeleteCharacter
 }: Props) {
   const [tab, setTab] = useState<"chats" | "facts" | "character">(initialTab);
@@ -107,7 +110,7 @@ export function MemoryPanel({
             <small>Checks explicit, lasting details after a reply. Sensitive information is skipped by default.</small>
           </span>
         </label>
-        <MemoryImporter facts={facts} onImport={onImportFacts}/>
+        <MemoryImporter facts={facts} onImport={onImportFacts} onExport={onExportFacts} onReplace={onReplaceFacts}/>
         <form className="memory-add" onSubmit={e => {
           e.preventDefault();
           if (!newFact.trim()) return;
