@@ -48,9 +48,57 @@ export function roleplayActive(question: string, history: {role:string;content:s
   return active;
 }
 
+/**
+ * Speech without asterisks can still be roleplay stage narration:
+ * "My tail is wrapped around your arm." Process complete sentences before
+ * emitting them so neither streaming chat nor progressive TTS gets the
+ * unwanted narration. Actual dialogue/emphasis and opt-in RP remain intact.
+ */
+export function isPlainPhysicalNarration(sentence:string):boolean {
+  const text=sentence.trim();
+  if(text.length<9 || text.length>650)return false;
+  const ownerBody=/^(?:my|mikan['’]s|her|his)\s+(?:(?:fluffy|striped|orange|tiny|soft|little|left|right)\s+){0,3}(?:tail|paws?|ears?|head|face|hands?|arms?|hair|whiskers?|cheeks?|nose|lips?|feet|legs?|body)\b/i;
+  const physicalAct=/\b(?:wrap\w*|curl\w*|wag\w*|swish\w*|twitch\w*|perk\w*|flick\w*|nuzzl\w*|rub\w*|press\w*|rest\w*|lean\w*|nestl\w*|snuggl\w*|embrac\w*|hug\w*|against|around|beside|onto|into|your\s+(?:arm|shoulder|hand|face|leg|head))\b/i;
+  if(ownerBody.test(text) && physicalAct.test(text))return true;
+  const narrator=/^(?:i|mikan|she)\s+(?:(?:am|was|gently|quietly|softly|slowly|playfully)\s+){0,3}(?:lean\w*|nestl\w*|snuggl\w*|nuzzl\w*|curl\w*|wrap\w*|press\w*|hug\w*|sit\w*|sitting|rest\w*|cuddl\w*)\b/i;
+  return narrator.test(text) && /\b(?:you|your|beside|against|around|toward|next to)\b/i.test(text);
+}
+
+class PlainNarrationFilter {
+  private pending="";
+  private rendered="";
+  append(fragment:string):string {
+    this.pending+=fragment;
+    let accepted="";
+    // Wait for sentence boundaries to avoid speaking an action clause before
+    // we can recognize it. Preserve ordinary sentence boundaries and spacing.
+    while(this.pending.length){
+      const boundary=/[.!?](?=\s|$)|\n/g.exec(this.pending);
+      if(!boundary)break;
+      const end=boundary.index+1;
+      const sentence=this.pending.slice(0,end);
+      this.pending=this.pending.slice(end);
+      if(!isPlainPhysicalNarration(sentence))accepted+=sentence;
+    }
+    // A long unsentenced block should not indefinitely block streaming.
+    if(this.pending.length>1200 && !/^\s*(?:my|mikan|her|his|i|she)\b/i.test(this.pending)){
+      accepted+=this.pending;
+      this.pending="";
+    }
+    this.rendered+=accepted;
+    return accepted;
+  }
+  finish():string {
+    if(this.pending && !isPlainPhysicalNarration(this.pending))this.rendered+=this.pending;
+    this.pending="";
+    return this.rendered.replace(/[ \t]{2,}/g," ").trim();
+  }
+}
+
 export class NarrationFilter {
   private pending = "";
   private rendered = "";
+  private readonly prose = new PlainNarrationFilter();
   private readonly enabled: boolean;
   constructor(enabled = true) { this.enabled = enabled; }
 
@@ -58,11 +106,14 @@ export class NarrationFilter {
     if (!delta) return "";
     if (!this.enabled) { this.rendered += delta; return delta; }
     this.pending += delta;
-    return this.drain(false);
+    return this.prose.append(this.drain(false));
   }
 
   finish(): string {
-    if (this.enabled) this.drain(true);
+    if (this.enabled) {
+      this.prose.append(this.drain(true));
+      return this.prose.finish();
+    }
     return this.rendered.replace(/[ \t]{2,}/g, " ").trim();
   }
 
