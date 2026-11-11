@@ -530,7 +530,7 @@ async fn chat_stream_impl(
     // Preserve natural chat, but lower randomness when a visual/spatial
     // observation must be grounded in an image rather than guessed from text.
     if !sources.is_empty() {
-        options["temperature"] = json!(0.2);
+        options["temperature"] = json!(0.35);
     } else if messages.iter().any(|m| m.get("images")
         .and_then(|images| images.as_array())
         .is_some_and(|images| !images.is_empty())) {

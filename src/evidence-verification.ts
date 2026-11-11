@@ -103,6 +103,38 @@ export function verifyResearchAnswer(
   const usable = checked > rejected && accepted.some(part=>factualClaim(part) || citations(part).length>0);
   if (!usable) return {text:fallback,rejected,checked,usable:false};
   let text = accepted.join("\n\n");
-  if (rejected) text += "\n\nI left out some details because I couldn't verify them from the available sources.";
+  // Removing unsafe claims is enough: avoid appending a robotic disclaimer
+  // that derails an otherwise warm, accurate companion response.
   return {text,rejected,checked,usable:true};
+}
+
+
+/** A final-answer citation verifier can be stricter than the source data.
+ * When it rejects all generated claims, still give the owner a USEFUL,
+ * directly attributed source rather than claiming "nothing was found".
+ * This recovers SOURCE HEADLINES ONLY, never unverifiable model prose.
+ * It is a fallback, not evidence that the whole article was read.
+ */
+export function groundedResearchFallback(
+  question: string, sources: readonly EvidenceSource[]
+): string {
+  const requested=significant(question);
+  const headlines=sources.map((source,i)=>{
+    const title=source.title.replace(/[\r\n\t*<>\\[\\]`]/g," ").replace(/\s+/g," ").trim().slice(0,165);
+    const titleWords=new Set(significant(title));
+    const textWords=new Set(significant(source.content.slice(0,650)));
+    const titleHits=requested.filter(w=>titleWords.has(w)).length;
+    const contentHits=requested.filter(w=>textWords.has(w)).length;
+    return {index:i+1,title,score:titleHits*5+Math.min(contentHits,3),
+      titleHits,valid:/^https?:\/\//.test(source.url) && title.length>=10};
+  }).filter(item=>item.valid && item.titleHits>0)
+    .sort((a,b)=>b.score-a.score||a.index-b.index);
+  const best=headlines[0];
+  if(!best)return "I searched, but I couldn't establish the specific claim from the retrieved excerpts. I don't want to invent details.";
+  const enthusiastic=/\b(?:really good|love|awesome|excited|fantastic|finally|amazing|hyped|stoked|brilliant|so good)\b/i.test(question);
+  const intro=enthusiastic?"Nice, you're clearly excited about this!":"I did find reporting about it:";
+  const end=enthusiastic
+    ?"I haven't heard it myself, but I'm curious what you liked most."
+    :"That headline is directly supported by the source; I don't want to guess about details beyond it.";
+  return intro+" **"+best.title+"** ["+best.index+"]. "+end;
 }

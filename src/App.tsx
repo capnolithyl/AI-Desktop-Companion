@@ -5,7 +5,7 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 import { webContext, pageContext, type PageDocument, type WebResult } from "./web-search";
 import { priorResearchSources } from "./research-context";
 import { planResearch, stripUnsupportedCitations } from "./research-routing";
-import { verifyResearchAnswer } from "./evidence-verification";
+import { verifyResearchAnswer, groundedResearchFallback } from "./evidence-verification";
 import { resolveConversationQuestion, needsContextResolution, contextGuidance, responseFocusGuidance } from "./conversation-engine";
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
@@ -43,7 +43,7 @@ import { NotionPanel } from "./NotionPanel";
 import { isNotionTopic, notionContext, planNotionRetrieval, asksToReadFullNotionPage, hasNamedNotionMatch, unavailableChapterResponse,
   type NotionHit, type NotionCachedPage } from "./notion-knowledge";
 import { readNotionChapter, type NotionDocument, type NotionChapterSession } from "./notion-reading";
-import { splitSpeechText, toSpeechText, VOICE_TEST_LINE, ProgressiveSpeechFeed, FIRST_SPEECH_CHARS, POCKET_FINAL_SPEECH_CHARS, voiceEndpoint, POCKET_VOICE_ENDPOINT, canSaveVoiceReference } from "./speech";
+import { splitSpeechText, toSpeechText, VOICE_TEST_LINE, ProgressiveSpeechFeed, FIRST_SPEECH_CHARS, POCKET_FINAL_SPEECH_CHARS, voiceEndpoint, POCKET_VOICE_ENDPOINT, canSaveVoiceReference, voicePlaybackGain } from "./speech";
 import { NarrationFilter, roleplayActive, stripNarratedActions } from "./narration-filter";
 import { memoryBudget, sessionMemoryContext, type SessionSummary } from "./memory-budget";
 import { archiveMemoryContext, shouldSearchArchive } from "./archive-memory";
@@ -275,6 +275,7 @@ export default function App() {
   const [referenceBusy, setReferenceBusy] = useState(false);
   const voiceSerial = useRef(0);
   const voiceAudio = useRef<HTMLAudioElement | null>(null);
+  const voiceVolumeRef = useRef(settings.voice.volume);
   const voiceUrl = useRef<string | null>(null);
   const voicePlaybackDone = useRef<(() => void) | null>(null);
   const voiceFeed = useRef<ProgressiveSpeechFeed | null>(null);
@@ -318,6 +319,7 @@ export default function App() {
     chunks: AsyncIterable<string>, voice: VoiceSettings, feed?: ProgressiveSpeechFeed
   ) => {
     stopSpeech();
+    voiceVolumeRef.current = voice.volume;
     if (feed) voiceFeed.current = feed;
     const serial = voiceSerial.current;
     setVoiceError(null);
@@ -353,6 +355,7 @@ export default function App() {
         const player = new Audio(url);
         voiceAudio.current = player;
         player.playbackRate = voice.speed;
+        player.volume = voicePlaybackGain(voiceVolumeRef.current);
         const playbackFinished = new Promise<void>((resolve, reject) => {
           voicePlaybackDone.current = resolve;
           player.onended = releaseVoiceAudio;
@@ -1886,8 +1889,17 @@ export default function App() {
         ? (completion.sources?.length ? completion.sources : withSearch?.results)
         : undefined;
       const rawText = completion.content || accumulated || "(The model returned no visible text.)";
-      const verifiedText = verifiedSources?.length
-        ? verifyResearchAnswer(rawText, verifiedSources).text : stripUnsupportedCitations(rawText);
+      const answerReview = verifiedSources?.length
+        ? verifyResearchAnswer(rawText, verifiedSources) : null;
+      if(answerReview){
+        diagnostics.answerVerification={
+          checked:answerReview.checked,rejected:answerReview.rejected,
+          recoveredHeadline:!answerReview.usable
+        };
+      }
+      const verifiedText=answerReview
+        ? answerReview.usable ? answerReview.text : groundedResearchFallback(text,verifiedSources ?? [])
+        : stripUnsupportedCitations(rawText);
       // The final stored text, rendered answer and streamed speech must agree.
       // Keep explicit roleplay unfiltered and do not mutate older saved chats.
       const finalText = allowRoleplay ? verifiedText : stripNarratedActions(verifiedText);
@@ -2814,6 +2826,20 @@ export default function App() {
               onChange={event => setDraft(current => ({ ...current, voice: { ...current.voice, prompt: event.target.value } }))}/>
             <small>Once a reference is saved, Base cloning uses that voice instead of inventing a new one.</small>
           </label>}
+          <label className="setting-field">Voice volume · {draft.voice.volume}%
+            <input type="range" min="0" max="100" step="5" value={draft.voice.volume}
+              aria-label="Mikan speech volume"
+              onChange={event => {
+                const volume=Number(event.target.value);
+                setDraft(current => ({...current,voice:{...current.voice,volume}}));
+                // Applies immediately to any currently playing WAV. Subsequent
+                // synthesized segments also use this level without restart.
+                voiceVolumeRef.current=volume;
+                if(voiceAudio.current)voiceAudio.current.volume=voicePlaybackGain(volume);
+              }}/>
+            <small>Changes the volume of Mikan's voice only, not Windows or music.
+              Starts at 55% on older installs. The Test voice button uses this setting.</small>
+          </label>
           <label className="setting-field">Playback speed · {draft.voice.speed.toFixed(2)}×
             <input type="range" min="0.8" max="1.2" step="0.05" value={draft.voice.speed}
               onChange={event => setDraft(current => ({ ...current, voice: { ...current.voice, speed: Number(event.target.value) } }))}/>
