@@ -3,6 +3,7 @@ mod source_priority;
 mod web_reader;
 mod search_service;
 mod agent_tools;
+mod gemini;
 mod research_intent;
 mod source_enrichment;
 mod evidence_pack;
@@ -40,6 +41,12 @@ struct ChatRequest {
     request_id: String,
     endpoint: String,
     model: String,
+    #[serde(default)]
+    provider: Option<String>,
+    #[serde(default)]
+    gemini_model: Option<String>,
+    #[serde(default)]
+    cloud_allow_web: bool,
     messages: Vec<ChatMessage>,
     #[serde(default)]
     auto_search: bool,
@@ -120,6 +127,7 @@ struct ChatCompletion {
     search_query: Option<String>,
     sources_carried_over: bool,
     research_audit: Option<evidence_pack::ResearchAudit>,
+    model_used: String,
 }
 
 fn local_origin(endpoint: &str) -> Result<String, String> {
@@ -305,10 +313,38 @@ async fn chat_stream_impl(
     app: tauri::AppHandle,
     request: ChatRequest,
 ) -> Result<ChatCompletion, String> {
+    // Validate image sizes and encoding before sending owner-approved screenshots to any provider.
+    screen_vision::validate_request_images(&request.messages)?;
+    let provider = request.provider.as_deref().unwrap_or("local");
+    if matches!(provider, "auto" | "gemini") {
+        // A rejected/limited cloud request has no destructive side effects.
+        // The only enabled functions are public SearXNG search and page reads.
+        if provider == "auto" && gemini::cooled_down() {
+            let _ = app.emit("mikan://activity", json!({
+                "requestId":request.request_id,"text":"Gemini rate-limited; using local Qwen…"
+            }));
+        } else {
+            match gemini::key() {
+                Ok(Some(key)) => match gemini::chat(&app,&request,&key).await {
+                    Ok(completion) => return Ok(completion),
+                    Err(reason) if provider == "gemini" => return Err(reason),
+                    Err(reason) => {
+                        let _ = app.emit("mikan://activity", json!({
+                            "requestId":request.request_id,
+                            "text":format!("Gemini unavailable ({reason}); switching to local Qwen…")
+                        }));
+                    }
+                },
+                Ok(None) if provider == "gemini" =>
+                    return Err("Add your Gemini API key under Settings → AI & Models".into()),
+                Err(reason) if provider == "gemini" => return Err(reason),
+                _ => {} // Auto mode without a key is intentionally local-only.
+            }
+        }
+    }
     if request.model.trim().is_empty() {
         return Err("Select an installed model in Settings".into());
     }
-    screen_vision::validate_request_images(&request.messages)?;
     let url = format!("{}/api/chat", local_origin(&request.endpoint)?);
     let client = client()?;
     let mut messages: Vec<Value> = request.messages.iter().map(|m| {
@@ -393,7 +429,7 @@ async fn chat_stream_impl(
                 let content = "SearXNG couldn't find relevant sources, even after a broader search. Try a shorter topic or search manually with /search.".to_owned();
                 return Ok(ChatCompletion {
                     content, stats: None, sources, search_query, sources_carried_over,
-                    research_audit
+                    research_audit, model_used: request.model.clone()
                 });
             }
 
@@ -471,7 +507,7 @@ async fn chat_stream_impl(
                         prompt_eval_duration_ns: data["prompt_eval_duration"].as_u64(),
                         eval_duration_ns: data["eval_duration"].as_u64(),
                     };
-                    return Ok(ChatCompletion { content, stats: Some(stats), sources, search_query, sources_carried_over, research_audit });
+                    return Ok(ChatCompletion { content, stats: Some(stats), sources, search_query, sources_carried_over, research_audit, model_used: request.model.clone() });
                 }
             } else {
                 // Even a model-initiated tool call must end with a source-focused
@@ -590,7 +626,7 @@ async fn chat_stream_impl(
     }
     // The final text is returned as well as streamed so that no event-ordering
     // race can lose the last characters when the frontend removes its listener.
-    Ok(ChatCompletion { content, stats, sources, search_query, sources_carried_over, research_audit })
+    Ok(ChatCompletion { content, stats, sources, search_query, sources_carried_over, research_audit, model_used: request.model.clone() })
 }
 
 fn toggle_window(app: &tauri::AppHandle) {
@@ -625,6 +661,9 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
             list_models,
+            gemini::gemini_key_status,
+            gemini::gemini_save_key,
+            gemini::gemini_remove_key,
             web_search::web_search,
             search_service::search_service,
             web_reader::read_page,
