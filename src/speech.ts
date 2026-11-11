@@ -38,6 +38,18 @@ export function canSaveVoiceReference(
   return hasFile && (engine === "pocket" || (serverReady && referenceChecked && !!transcript.trim()));
 }
 
+/** Voice loudness default for both local TTS engines, independent of Windows volume. */
+export const DEFAULT_VOICE_VOLUME = 55;
+export function readVoiceVolume(value: unknown): number {
+  return typeof value === "number" && Number.isFinite(value)
+    ? Math.max(0,Math.min(100,Math.round(value))) : DEFAULT_VOICE_VOLUME;
+}
+
+/** HTMLAudioElement.volume expects [0,1]. Keep WAV amplitude unchanged. */
+export function voicePlaybackGain(percent: number): number {
+  return Number.isFinite(percent) ? Math.min(1,Math.max(0,percent/100)) : 0.55;
+}
+
 export const POCKET_VOICE_ENDPOINT = "http://127.0.0.1:8766";
 export function voiceEndpoint(voice: {engine: string; endpoint: string}): string {
   return voice.engine === "pocket" ? POCKET_VOICE_ENDPOINT : voice.endpoint;
