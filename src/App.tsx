@@ -952,6 +952,14 @@ export default function App() {
     void invoke("memory_semantic_recall",{query:""}).catch(()=>{});
     return result;
   };
+  const exportUserFacts = () => memoryApi.exportFacts();
+  const replaceUserFacts = async (items:ImportMemory[],expectedCount:number) => {
+    const result=await memoryApi.replaceFacts(items,expectedCount);
+    await refreshFacts();
+    // SQLite is authoritative. The optional Qdrant mirror resyncs asynchronously.
+    void invoke("memory_semantic_recall",{query:""}).catch(()=>{});
+    return result;
+  };
   const updateUserFactMetadata = async (id:number,category:MemoryCategory,tags:string[]) => {
     await memoryApi.updateFactMetadata(id,category,tags);
     await refreshFacts();
@@ -2416,7 +2424,7 @@ export default function App() {
       busy={busy} error={memoryError} onClose={goCompact} onNew={clearChat}
       onOpen={openConversation} onDeleteChat={deleteConversation} onDeleteSessionSummary={deleteSessionNotes}
       onAddFact={addUserFact} onEditFact={editUserFact} onDeleteFact={deleteUserFact} onPinFact={pinUserFact}
-      onImportFacts={importUserFacts} onUpdateFactMetadata={updateUserFactMetadata}
+      onImportFacts={importUserFacts} onExportFacts={exportUserFacts} onReplaceFacts={replaceUserFacts} onUpdateFactMetadata={updateUserFactMetadata}
       onAddCharacter={addCharacter} onEditCharacter={editCharacter} onDeleteCharacter={deleteCharacter}
       onRefresh={refreshMemory}/>}
 
