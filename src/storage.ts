@@ -1,6 +1,7 @@
 import { DEFAULT_PERSONALITY, readPersonality, type Personality } from "./personality";
 import { captureInterval, restoreRegion, type RegionChoice } from "./capture-region";
 import { DEFAULT_SOURCE_PREFERENCES, readSourcePreferences, type SourcePreference } from "./preferred-sources";
+import { DEFAULT_VOICE_VOLUME, readVoiceVolume } from "./speech";
 
 export type ChatRole = "user" | "assistant";
 export type Message = { id: string; role: ChatRole; content: string };
@@ -23,12 +24,8 @@ export const DEFAULT_VOICE: VoiceSettings = {
   progressiveSpeak: true,
   prompt: "A warm, expressive young adult anime-inspired woman's voice. Medium to slightly high pitch, gentle natural American English, softly playful and lightly teasing. Clear and relaxed, not shrill, squeaky, childlike or constantly overexcited.",
   speed: 1,
-  volume: 55
+  volume: DEFAULT_VOICE_VOLUME
 };
-export function readVoiceVolume(value: unknown): number {
-  return typeof value === "number" && Number.isFinite(value)
-    ? Math.max(0,Math.min(100,Math.round(value))) : DEFAULT_VOICE.volume;
-}
 function readVoice(value: unknown): VoiceSettings {
   const data = value && typeof value === "object" ? value as Partial<VoiceSettings> : {};
   return {
