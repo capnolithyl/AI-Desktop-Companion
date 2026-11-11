@@ -69,7 +69,7 @@ type CacheInfo = { pages: number; bytes: number };
 type Activity = { requestId: string; text: string };
 type Connection = { mode: "loading" | "online" | "offline"; text: string };
 type ChatChunk = { requestId: string; content: string };
-type ChatCompletion = { content: string; stats: OllamaStats | null; sources: WebResult[]; searchQuery?: string | null; sourcesCarriedOver?: boolean; researchAudit?: ResearchAudit | null };
+type ChatCompletion = { content: string; modelUsed?: string; stats: OllamaStats | null; sources: WebResult[]; searchQuery?: string | null; sourcesCarriedOver?: boolean; researchAudit?: ResearchAudit | null };
 type LogMessage = Message & { createdAt: number; diagnostics?: Diagnostics; failed?: boolean; sources?: WebResult[]; searchQuery?: string; sourcesCarriedOver?: boolean };
 const HOTKEY = "Control+Alt+M";
 const BUNDLED_PORTRAIT = "/mikan.png";
@@ -228,6 +228,33 @@ export default function App() {
   const [portrait, setPortrait] = useState<string | null>(BUNDLED_PORTRAIT);
   const [imageError, setImageError] = useState<string | null>(null);
   const [availableModels, setAvailableModels] = useState<string[]>([]);
+  // Secret remains exclusively in Windows Credential Manager, never Settings/localStorage.
+  const [geminiKeyInput,setGeminiKeyInput] = useState("");
+  const [geminiKeyReady,setGeminiKeyReady] = useState(false);
+  const [geminiKeyBusy,setGeminiKeyBusy] = useState(false);
+  const [geminiKeyError,setGeminiKeyError] = useState<string | null>(null);
+  useEffect(() => {
+    void invoke<boolean>("gemini_key_status").then(setGeminiKeyReady)
+      .catch(error => setGeminiKeyError(errorText(error)));
+  }, []);
+  const saveGeminiKey = async () => {
+    if (!geminiKeyInput.trim() || geminiKeyBusy) return;
+    setGeminiKeyBusy(true); setGeminiKeyError(null);
+    try {
+      await invoke("gemini_save_key",{apiKey:geminiKeyInput.trim()});
+      setGeminiKeyReady(true); setGeminiKeyInput("");
+    } catch (error) { setGeminiKeyError(errorText(error)); }
+    finally { setGeminiKeyBusy(false); }
+  };
+  const removeGeminiKey = async () => {
+    if (geminiKeyBusy) return;
+    setGeminiKeyBusy(true); setGeminiKeyError(null);
+    try {
+      await invoke("gemini_remove_key");
+      setGeminiKeyReady(false); setGeminiKeyInput("");
+    } catch (error) { setGeminiKeyError(errorText(error)); }
+    finally { setGeminiKeyBusy(false); }
+  };
   const [connection, setConnection] = useState<Connection>({ mode: "loading", text: "Checking Ollama…" });
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<WebResult[]>([]);
@@ -1824,6 +1851,8 @@ export default function App() {
           requestId,
           endpoint: settings.endpoint,
           model: settings.model,
+          provider: settings.provider,
+          geminiModel: settings.geminiModel,
           autoSearch: effectiveWeb,
           structuredResearch: settings.structuredResearch && effectiveWeb,
           sourcePreferences:settings.sourcePreferences,
@@ -1867,7 +1896,7 @@ export default function App() {
       const diagnostics: Diagnostics = {
         elapsedMs: duration,
         firstTokenMs,
-        model: settings.model,
+        model: completion.modelUsed || settings.model,
         stats: completion.stats,
         research: completion.researchAudit ?? undefined,
         memory: memoryAudit,
@@ -2478,6 +2507,7 @@ export default function App() {
           ...current,
           ...(settingsTab === "ai" ? {
             endpoint: DEFAULT_SETTINGS.endpoint, model: DEFAULT_SETTINGS.model,
+            provider: DEFAULT_SETTINGS.provider, geminiModel: DEFAULT_SETTINGS.geminiModel,
             systemPrompt: DEFAULT_SETTINGS.systemPrompt,
             contextWindow: DEFAULT_SETTINGS.contextWindow
           } : settingsTab === "internet" ? {
@@ -2496,7 +2526,38 @@ export default function App() {
       </nav>
       <div className="settings-body">
         {settingsTab === "ai" && <>
-          <div className="settings-section-title">Local AI</div>
+          <div className="settings-section-title">Inference provider</div>
+          <label className="setting-field">Primary model
+            <select aria-label="AI inference provider" value={draft.provider}
+              onChange={event => setDraft(current => ({
+                ...current,provider:event.target.value as Settings["provider"]
+              }))}>
+              <option value="local">Local Ollama only</option>
+              <option value="auto">Auto · Gemini with Ollama fallback</option>
+              <option value="gemini">Gemini only · show cloud errors</option>
+            </select>
+            <small>Auto uses Gemini when a key and quota are available, switching to local on API failure or rate limits. Memory, SearXNG and Pocket TTS stay unchanged.</small>
+          </label>
+          <label className="setting-field">Gemini model ID
+            <input spellCheck={false} value={draft.geminiModel}
+              onChange={event => setDraft(current=>({...current,geminiModel:event.target.value}))}/>
+            <small>Default: gemini-3.8-flash. Uses Google's free tier when your API project is on the free plan.</small>
+          </label>
+          <label className="setting-field">Google AI Studio API key
+            <input type="password" spellCheck={false} autoComplete="off"
+              value={geminiKeyInput} placeholder={geminiKeyReady?"Saved securely · enter a new key to replace":"Paste API key (not yet configured)"}
+              onChange={event=>setGeminiKeyInput(event.target.value)}/>
+            <small>{geminiKeyReady?"Key saved in Windows Credential Manager.":"No key saved; Auto uses local Qwen until configured."}
+              {" "}The key never goes into chat history, debug exports, or browser storage.</small>
+          </label>
+          <div className="service-buttons">
+            <button type="button" className="secondary-action" disabled={geminiKeyBusy||!geminiKeyInput.trim()}
+              onClick={()=>void saveGeminiKey()}><Check size={14}/> Save API key</button>
+            {geminiKeyReady && <button type="button" className="secondary-action" disabled={geminiKeyBusy}
+              onClick={()=>void removeGeminiKey()}>Remove key</button>}
+          </div>
+          {geminiKeyError && <small className="field-error" role="alert">{geminiKeyError}</small>}
+          <div className="settings-section-title">Local fallback · Ollama</div>
           <label className="setting-field">Ollama endpoint
             <input spellCheck={false} value={draft.endpoint}
               onChange={event => setDraft({ ...draft, endpoint: event.target.value })}/>
