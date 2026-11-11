@@ -311,6 +311,8 @@ async fn chat_stream_impl(
     app: tauri::AppHandle,
     request: ChatRequest,
 ) -> Result<ChatCompletion, String> {
+    // Validate image sizes and encoding before sending owner-approved screenshots to any provider.
+    screen_vision::validate_request_images(&request.messages)?;
     let provider = request.provider.as_deref().unwrap_or("local");
     if matches!(provider, "auto" | "gemini") {
         // A rejected/limited cloud request has no destructive side effects.
@@ -341,7 +343,6 @@ async fn chat_stream_impl(
     if request.model.trim().is_empty() {
         return Err("Select an installed model in Settings".into());
     }
-    screen_vision::validate_request_images(&request.messages)?;
     let url = format!("{}/api/chat", local_origin(&request.endpoint)?);
     let client = client()?;
     let mut messages: Vec<Value> = request.messages.iter().map(|m| {
