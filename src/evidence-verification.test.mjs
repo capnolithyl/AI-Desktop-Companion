@@ -36,7 +36,7 @@ test("remove unsupported cited statements while preserving other supported facts
   assert.equal(result.usable,true);
   assert.match(result.text,/Yoshū Fukushū/);
   assert.doesNotMatch(result.text,/Vol. 10/);
-  assert.match(result.text,/left out some details/);
+  assert.doesNotMatch(result.text,/left out some details|couldn't verify/);
 });
 test("rejects hallucinations with fake, nonexistent, or missing citations", () => {
   for(const response of [
