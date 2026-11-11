@@ -6,6 +6,7 @@ test("asks about Mikan's active model never need a public web lookup",()=>{
   for (const q of [
     "what llm are you using right now?", "which model are you running?",
     "Hey Mikan. What LLM are you using right now?",
+    "Hey Mikan. Can you tell me which LLM you\'re using right now?",
     "what model are you currently using?", "What AI model is Mikan using?",
     "what model powers you?"
   ]) assert.equal(isModelStatusQuestion(q),true,q);
