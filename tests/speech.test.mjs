@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { splitSpeechText, toSpeechText, ProgressiveSpeechFeed, FIRST_SPEECH_CHARS, voiceEndpoint, canSaveVoiceReference } from "../src/speech.ts";
+import { splitSpeechText, toSpeechText, ProgressiveSpeechFeed, FIRST_SPEECH_CHARS, voiceEndpoint, canSaveVoiceReference, voicePlaybackGain } from "../src/speech.ts";
+import { readVoiceVolume, DEFAULT_VOICE } from "../src/storage.ts";
 import { NarrationFilter, stripNarratedActions, isNarratedAction, roleplayActive } from "../src/narration-filter.ts";
 
 test("short utterances and blank text", () => {
@@ -324,4 +325,19 @@ test("Mikan cannot evade stage filtering by removing asterisks",async()=>{
  const spoken=[];
  for await(const chunk of feed)spoken.push(chunk);
  assert.equal(spoken.join(" "),expected);
+});
+
+test("Mikan's TTS volume defaults quieter and safely clamps every engine",()=>{
+  assert.equal(DEFAULT_VOICE.volume,55);
+  assert.equal(readVoiceVolume(undefined),55);
+  assert.equal(readVoiceVolume("loud"),55);
+  assert.equal(readVoiceVolume(-20),0);
+  assert.equal(readVoiceVolume(250),100);
+  assert.equal(readVoiceVolume(42.4),42);
+  assert.equal(voicePlaybackGain(0),0);
+  assert.equal(voicePlaybackGain(55),0.55);
+  assert.equal(voicePlaybackGain(100),1);
+  assert.equal(voicePlaybackGain(-100),0);
+  assert.equal(voicePlaybackGain(999),1);
+  assert.equal(voicePlaybackGain(NaN),0.55);
 });
