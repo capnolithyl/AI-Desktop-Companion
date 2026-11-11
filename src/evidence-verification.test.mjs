@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { verifyResearchAnswer } from "./evidence-verification.ts";
+import { verifyResearchAnswer, groundedResearchFallback } from "./evidence-verification.ts";
 
 const sources = [
   {title:"Maximum the Hormone discography",url:"https://example.org/discography",
@@ -61,4 +61,34 @@ test("grounded cited definitions survive verification without music-specific key
   assert.equal(result.usable,true);
   assert.equal(result.rejected,0);
   assert.match(result.text,/ChatGPT/);
+});
+
+test("the owner gets a useful sourced music reply even when the model's answer fails verification",()=>{
+  const docs=[
+   {title:"Unrelated album news",url:"https://example.com/news/other",content:"Some other album exists."},
+   {title:"Fear Factory - Roboticist - Encyclopaedia Metallum",
+     url:"https://www.metal-archives.com/albums/Fear_Factory/Roboticist/1489860",
+     content:"Detonizer appears on the upcoming Roboticist track list."},
+   {title:'FEAR FACTORY announce new album with explosive song "Detonizer"',
+     url:"https://www.revolvermag.com/music/fear-factory-announce-new-album-with-explosive-song-detonizer/",
+     content:"Their second single follows Roboticist."}
+  ];
+  const candidate='Fear Factory released a new nonexistent song "Robot Jamboree" in 2026. [3]';
+  const reviewed=verifyResearchAnswer(candidate,docs);
+  assert.equal(reviewed.usable,false);
+  const repaired=groundedResearchFallback(
+    'they just released their second single of that album. "detonizer". really good song',
+    docs
+  );
+  assert.match(repaired,/Detonizer/);
+  assert.match(repaired,/\[3\]/);
+  assert.match(repaired,/curious what you liked/);
+  assert.doesNotMatch(repaired,/Robot Jamboree|couldn't verify those details/);
+});
+test("fallback never invents claims when retrieved headlines do not match the question",()=>{
+  const answer=groundedResearchFallback("Unknown album from a private notebook",
+    [{title:"Unrelated economics report",url:"https://example.org/report",
+      content:"A study of interest rates."}]);
+  assert.match(answer,/couldn't establish/);
+  assert.doesNotMatch(answer,/\[1\]/);
 });
