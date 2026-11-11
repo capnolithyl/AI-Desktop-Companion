@@ -1,0 +1,77 @@
+Project: Mikan v02 bust-up puppet
+
+Goal:
+Create a clean, front-facing, bust-up 2D puppet version of Mikan for Iki/Codex. This version should prioritize fidelity to Mikan’s established design over experimentation. The result should look like the same character across all parts, not multiple interpretations.
+
+Character identity:
+Mikan is a mature orange-tabby catgirl desktop companion. She should read as a warm, playful, slightly teasing young adult anime woman. Her design should feel cute, cozy, and polished, not overly exaggerated or childish.
+
+Primary appearance:
+- Long, voluminous, wavy orange hair
+- Amber / golden eyes
+- Soft freckles across the cheeks and nose
+- Two black X-shaped hairpins on the viewer-left side of her bangs
+- One small ahoge curl on top of her head
+- Two large orange cat ears with soft cream inner fur
+- One fluffy orange-striped tabby tail
+- Soft, friendly, gentle smile
+
+Outfit:
+- Oversized cream / beige off-shoulder cable-knit sweater
+- Black lace bra visible subtly at the neckline
+- Black choker with gold paw-shaped bell charm
+- For v02 bust-up scope, only the upper body is needed; shorts may be excluded unless needed for a preview
+
+Style target:
+- Polished anime illustration
+- Clean linework
+- Soft shading
+- Stable facial design
+- Suitable for a 2D VTuber / desktop companion puppet
+- Should stay visually close to the existing Mikan portrait
+
+Reference priorities:
+1. ref-01-portrait.png = primary identity reference
+   Use for face, expression vibe, eye shape/color, hair style, personality, and overall “this is Mikan”.
+2. ref-02-tpose.png = body / outfit construction reference
+   Use for sweater, choker, proportions, and clean clothing structure.
+3. ref-03-frontview.png = neutral assembly target
+   Use for straight-on front-facing placement, neutral composition, and final assembled layout.
+
+Important constraints:
+- Exactly 2 cat ears only
+- Exactly 1 tail only
+- No duplicate ears hidden inside hair
+- No extra hair masses that change the hairstyle dramatically
+- Do not make the hair shorter, puffier, or more salon-styled than the references
+- The face should not be wider, flatter, or more expressionless than the portrait
+- The irises must fit naturally inside the eyes; do not make the irises larger than the visible eye shape
+- Keep the expression gentle and alive, not blank, dead-eyed, or unsettling
+- Keep Mikan looking like the same character in all parts
+
+Pose / composition:
+- Front-facing
+- Neutral bust-up / upper torso puppet
+- Relaxed posture
+- Centered
+- Straight-on angle
+- No extreme tilt
+- No dramatic perspective
+- No hands in frame
+- No complex background
+
+Required neutral parts only for v02 initial pass:
+- face_base
+- ear_left
+- ear_right
+- hair_back
+- hair_front
+- body_upper
+- eye_left_open
+- eye_right_open
+- iris_left
+- iris_right
+- mouth_neutral
+
+What success looks like:
+The assembled neutral preview should look like the same Mikan from the portrait, but in a clean, front-facing puppet-ready bust-up view. If any single part drifts from that identity, regenerate only that part rather than redesigning the entire character.

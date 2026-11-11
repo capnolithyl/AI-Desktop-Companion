@@ -1,0 +1,123 @@
+[
+    {
+        "value":  [
+                      "hair_back",
+                      "hair_back",
+                      180,
+                      120,
+                      740,
+                      1120
+                  ],
+        "Count":  6
+    },
+    {
+        "value":  [
+                      "ear_left",
+                      "ear_right",
+                      270,
+                      60,
+                      190,
+                      240
+                  ],
+        "Count":  6
+    },
+    {
+        "value":  [
+                      "ear_right",
+                      "ear_left",
+                      640,
+                      60,
+                      190,
+                      240
+                  ],
+        "Count":  6
+    },
+    {
+        "value":  [
+                      "body_upper",
+                      "body",
+                      140,
+                      590,
+                      820,
+                      820
+                  ],
+        "Count":  6
+    },
+    {
+        "value":  [
+                      "face_base",
+                      "face",
+                      350,
+                      180,
+                      400,
+                      450
+                  ],
+        "Count":  6
+    },
+    {
+        "value":  [
+                      "eye_left_open",
+                      "eye_R",
+                      400,
+                      400,
+                      120,
+                      64
+                  ],
+        "Count":  6
+    },
+    {
+        "value":  [
+                      "eye_right_open",
+                      "eye_L",
+                      580,
+                      400,
+                      120,
+                      64
+                  ],
+        "Count":  6
+    },
+    {
+        "value":  [
+                      "iris_left",
+                      "iris_R",
+                      440,
+                      410,
+                      58,
+                      58
+                  ],
+        "Count":  6
+    },
+    {
+        "value":  [
+                      "iris_right",
+                      "iris_L",
+                      608,
+                      405,
+                      58,
+                      58
+                  ],
+        "Count":  6
+    },
+    {
+        "value":  [
+                      "mouth_neutral",
+                      "mouth",
+                      512,
+                      539,
+                      76,
+                      20
+                  ],
+        "Count":  6
+    },
+    {
+        "value":  [
+                      "hair_front",
+                      "hair_front",
+                      220,
+                      20,
+                      660,
+                      700
+                  ],
+        "Count":  6
+    }
+]

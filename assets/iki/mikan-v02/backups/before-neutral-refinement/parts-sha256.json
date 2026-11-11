@@ -1,0 +1,57 @@
+[
+    {
+        "Algorithm":  "SHA256",
+        "Hash":  "2C0163B78C2F929912A9BF9E72B5AF32777DD90590FC0B324BBA204C3ACF4C94",
+        "Path":  "H:\\_FunProjects\\AI-Desktop-Companion\\assets\\iki\\mikan-v02\\parts\\body_upper.png"
+    },
+    {
+        "Algorithm":  "SHA256",
+        "Hash":  "C74C45C1A1988E1E56B680F34E3A6DD1DC3B0A1875406D4E4F28837473D18CB3",
+        "Path":  "H:\\_FunProjects\\AI-Desktop-Companion\\assets\\iki\\mikan-v02\\parts\\ear_left.png"
+    },
+    {
+        "Algorithm":  "SHA256",
+        "Hash":  "393BF470AAE83804207716D43CDA40A94E83C9FCF70E3DF7B745C6871C3C0D8B",
+        "Path":  "H:\\_FunProjects\\AI-Desktop-Companion\\assets\\iki\\mikan-v02\\parts\\ear_right.png"
+    },
+    {
+        "Algorithm":  "SHA256",
+        "Hash":  "92AFEE6F2DF6C3997066537BF3D206D0F09A654DA1EF670ED2CAB1251CA1A4A8",
+        "Path":  "H:\\_FunProjects\\AI-Desktop-Companion\\assets\\iki\\mikan-v02\\parts\\eye_left_open.png"
+    },
+    {
+        "Algorithm":  "SHA256",
+        "Hash":  "55E857FB34B23F2397FE7E5D2532831C35C54405142BECB49B9F1B2B1F90E3B4",
+        "Path":  "H:\\_FunProjects\\AI-Desktop-Companion\\assets\\iki\\mikan-v02\\parts\\eye_right_open.png"
+    },
+    {
+        "Algorithm":  "SHA256",
+        "Hash":  "AE9FF80C9B8A81C84E013E8DEE4949A66AE1FFDED13D3D2BAE2738DA7C3B1CE2",
+        "Path":  "H:\\_FunProjects\\AI-Desktop-Companion\\assets\\iki\\mikan-v02\\parts\\face_base.png"
+    },
+    {
+        "Algorithm":  "SHA256",
+        "Hash":  "A74FA1925D09C84B73597FD42EFEE3EF2BECA33365BB5D60F678297D8C546AAE",
+        "Path":  "H:\\_FunProjects\\AI-Desktop-Companion\\assets\\iki\\mikan-v02\\parts\\hair_back.png"
+    },
+    {
+        "Algorithm":  "SHA256",
+        "Hash":  "58E5F2F531D6762A2B0EC21BAF765999985F2C1A0579C2D11395B4890ED5ACB7",
+        "Path":  "H:\\_FunProjects\\AI-Desktop-Companion\\assets\\iki\\mikan-v02\\parts\\hair_front.png"
+    },
+    {
+        "Algorithm":  "SHA256",
+        "Hash":  "94A24A5EF14294AF51A76D8A2B8F8DDF364C3E4DD6B9BED5780696868385C091",
+        "Path":  "H:\\_FunProjects\\AI-Desktop-Companion\\assets\\iki\\mikan-v02\\parts\\iris_left.png"
+    },
+    {
+        "Algorithm":  "SHA256",
+        "Hash":  "ACB972C79101A66200ABE2055B34982CC81F981D7DF60A8C13537BEBDF6D7642",
+        "Path":  "H:\\_FunProjects\\AI-Desktop-Companion\\assets\\iki\\mikan-v02\\parts\\iris_right.png"
+    },
+    {
+        "Algorithm":  "SHA256",
+        "Hash":  "1391996A2B94B7BFB0E6C9979966DA9C711541CD092A5C0C8CCF8654DD78EB88",
+        "Path":  "H:\\_FunProjects\\AI-Desktop-Companion\\assets\\iki\\mikan-v02\\parts\\mouth_neutral.png"
+    }
+]
