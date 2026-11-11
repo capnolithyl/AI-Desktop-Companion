@@ -2113,6 +2113,8 @@ export default function App() {
       await copyTextToClipboard(formatDebugLog(messages, {
         conversationId: activeConversationId,
         model: settings.model,
+        provider: settings.provider,
+        geminiModel: settings.geminiModel,
         contextWindow: settings.contextWindow
       }));
       setCopyLogState("copied");
