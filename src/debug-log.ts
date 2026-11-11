@@ -71,6 +71,7 @@ export type Diagnostics = {
   model: string;
   stats: OllamaStats | null;
   research?: ResearchAudit;
+  answerVerification?: {checked:number;rejected:number;recoveredHeadline:boolean};
   memory?: MemoryRecallAudit;
   toolPlan?: ToolPlanningAudit;
   notion?: NotionRetrievalAudit;
@@ -133,6 +134,12 @@ function performanceLines(diagnostics: Diagnostics): string[] {
       "  Rejected candidates: " + diagnostics.research.rejected,
       "  Extraction time: " + duration(diagnostics.research.elapsedMs),
       "  Evidence note: " + diagnostics.research.note
+    ] : []),
+    ...(diagnostics.answerVerification ? [
+      "Final answer evidence check:",
+      "  Model claims checked: " + diagnostics.answerVerification.checked,
+      "  Model claims rejected: " + diagnostics.answerVerification.rejected,
+      "  Source-headline fallback: " + (diagnostics.answerVerification.recoveredHeadline ? "yes" : "no")
     ] : []),
     ...(diagnostics.toolPlan ? [
       "Tool planning:",
