@@ -103,7 +103,8 @@ export function verifyResearchAnswer(
   const usable = checked > rejected && accepted.some(part=>factualClaim(part) || citations(part).length>0);
   if (!usable) return {text:fallback,rejected,checked,usable:false};
   let text = accepted.join("\n\n");
-  if (rejected) text += "\n\nI left out some details because I couldn't verify them from the available sources.";
+  // Removing unsafe claims is enough: avoid appending a robotic disclaimer
+  // that derails an otherwise warm, accurate companion response.
   return {text,rejected,checked,usable:true};
 }
 
