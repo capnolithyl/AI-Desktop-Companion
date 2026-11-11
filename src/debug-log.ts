@@ -54,6 +54,9 @@ export type NotionRetrievalAudit = {
   excerptCount: number;
   fullReadAttempted: boolean;
   readSucceeded: boolean;
+  linkedScenesRead?: number;
+  linkedSceneCharacters?: number;
+  readFailure?: string;
 };
 
 export type PreparationTaskAudit = {
@@ -149,7 +152,10 @@ function performanceLines(diagnostics: Diagnostics): string[] {
       "  Matching excerpts: " + diagnostics.notion.excerptCount,
       "  Selected page: " + (diagnostics.notion.selectedPage ?? "none"),
       "  Complete chapter read requested: " + (diagnostics.notion.fullReadAttempted ? "yes" : "no"),
-      "  Complete chapter read succeeded: " + (diagnostics.notion.readSucceeded ? "yes" : "no")
+      "  Complete chapter read succeeded: " + (diagnostics.notion.readSucceeded ? "yes" : "no"),
+      "  Linked scene pages read: " + (diagnostics.notion.linkedScenesRead ?? 0),
+      "  Linked scene characters cached: " + (diagnostics.notion.linkedSceneCharacters ?? 0),
+      ...(diagnostics.notion.readFailure ? ["  Reading failure: " + diagnostics.notion.readFailure] : [])
     ] : []),
     ...(diagnostics.parallelTasks?.length ? [
       "Parallel preparation:",

@@ -71,3 +71,17 @@ test("bad summaries and interrupted reading never pretend the document was read"
   await assert.rejects(()=>readNotionChapter(doc("sample ".repeat(3000)),async()=> "{}",
     ()=>{},()=>true),/Generation stopped/);
 });
+
+
+test("chapter editorial notes alone are not mistaken for the linked manuscript",async()=>{
+  const d=doc("## Chapter responsibility\nEstablish a loving family.\n## Writing and continuity\nFour approved scenes, word counts and editing notes.");
+  await assert.rejects(()=>readNotionChapter(d,async()=>""),/Only chapter planning notes were cached/);
+  d.relatedPages=[{title:"1.1 · Last Boxes",url:"https://www.notion.so/scene",
+    chunks:chunk("## Approved manuscript prose\nWilliam and Lisa pack the last boxes and talk about their future.")}];
+  const content=await readNotionChapter(d,async()=>{throw Error("Not necessary")});
+  assert.match(content,/linked scenes included/);
+  assert.match(content,/William and Lisa pack the last boxes/);
+  assert.match(content,/You HAVE just read the cached original text/);
+  d.relatedPages[0].chunks=[];
+  await assert.rejects(()=>readNotionChapter(d,async()=>""),/linked scene has no cached manuscript text/);
+});
