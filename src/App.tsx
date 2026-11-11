@@ -1741,7 +1741,9 @@ export default function App() {
             "Only synced pages and their explicitly indexed relations are available."
           : "",
         readChapterContext || carryChapter,
-        notionContext(useNotion ? notionHits : [],settings.contextWindow != null && settings.contextWindow<=8192
+        // Full chapter notes supersede FTS excerpts. The excerpts' generic
+        // "not a complete reading" disclaimer made Qwen deny the full read.
+        notionContext(useNotion && !notionPlan.fullRead ? notionHits : [],settings.contextWindow != null && settings.contextWindow<=8192
           ? settings.contextWindow : 8192),
         missingChapter,missingLibrary
       ].filter(Boolean).join("\n\n");
