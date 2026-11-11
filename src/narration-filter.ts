@@ -80,8 +80,12 @@ class PlainNarrationFilter {
       this.pending=this.pending.slice(end);
       if(!isPlainPhysicalNarration(sentence))accepted+=sentence;
     }
-    // A long unsentenced block should not indefinitely block streaming.
-    if(this.pending.length>1200 && !/^\s*(?:my|mikan|her|his|i|she)\b/i.test(this.pending)){
+    // Keep normal token streaming fast. Only sentences beginning with the
+    // companion's own physical subject need complete-sentence inspection.
+    // Short incomplete prefixes are held briefly so "M" + "y tail..." is
+    // never released before the full subject arrives.
+    const mightNarrate=/^\s*(?:my|mikan(?:['’]s)?|her|his|i(?:['’]m)?|she)\b/i.test(this.pending);
+    if(this.pending.length>=12 && !mightNarrate) {
       accepted+=this.pending;
       this.pending="";
     }
