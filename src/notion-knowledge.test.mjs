@@ -133,3 +133,17 @@ test("generic topical page titles don't suppress public album discovery",()=>{
   assert.equal(planNotionRetrieval("Recommend me three metal albums I might enjoy.",[],generic).relevant,false);
   assert.equal(planNotionRetrieval("Show me my notes on Metal albums",[],generic).selectedPage?.id,"topic");
 });
+
+
+test("a normal exhausting day does not look like a Notion character named Today",()=>{
+  const query="I'm exhausted. Today has been a long day.";
+  const hits=[{title:"Today and Tomorrow",url:"https://www.notion.so/notes",
+    content:"Today the family packed boxes.",syncedAt:1794000000}];
+  assert.equal(isNotionTopic(query),false);
+  assert.equal(hasNamedNotionMatch(query,hits),false);
+  assert.equal(planNotionRetrieval(query,[],pages).relevant,false);
+  // Real names within a sentence remain eligible for local knowledge.
+  assert.equal(hasNamedNotionMatch("What about Will?",[
+    {title:"Will's Arc",url:"",content:"Will remembers the family",syncedAt:1794000000}
+  ]),true);
+});
