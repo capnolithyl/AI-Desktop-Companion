@@ -68,3 +68,31 @@ test("greetings skip expensive planning, corrupted replies use private fallback"
  assert.equal(bad.memory.mode,"fallback");
  assert.equal(bad.web.search,false);
 });
+
+
+test("a recommendation can discard generic recipient pronouns without leaking personal facts",()=>{
+ const result=parseWebToolDecision(JSON.stringify({web:{search:true,query:"recommend me 2026 new metal albums for me",topic:"music"}}),true,prefs,facts);
+ assert.equal(result.search,true);
+ assert.equal(result.query,"recommend 2026 new metal albums");
+ assert.equal(parseWebToolDecision(JSON.stringify({web:{search:true,query:"new albums for my son",topic:"music"}}),true,prefs,facts).search,false);
+});
+test("an unsafe planner query gets exactly one locally validated retry",async()=>{
+ let calls=0;
+ const result=await planMemoriesAndTools(facts,"Recommend me three metal albums I might enjoy.",[],10,
+   async prompt=>{
+      calls++;
+      if(calls===1)return JSON.stringify({ids:[34],web:{
+        search:true,query:"2026 metal albums for my personal taste",topic:"music"
+      }});
+      assert.match(prompt,/safe, general PUBLIC WEB SEARCH query/);
+      assert.doesNotMatch(prompt,/Alex Example/);
+      return JSON.stringify({web:{
+        search:true,query:"2026 metal album reviews",topic:"music",reason:"verify real releases"
+      }});
+   },{automaticWebEnabled:true,sourcePreferences:prefs});
+ assert.equal(calls,2);
+ assert.deepEqual(result.memory.ids,[34]);
+ assert.equal(result.web.search,true);
+ assert.equal(result.web.query,"2026 metal album reviews");
+ assert.match(result.web.reason,/rewritten locally/);
+});
