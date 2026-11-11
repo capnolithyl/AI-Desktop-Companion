@@ -169,7 +169,7 @@ async fn generate(
     let mut payload = json!({
         "contents":contents,
         "systemInstruction":{"parts":[{"text":system}]},
-        "generationConfig":{"temperature":0.45,"maxOutputTokens":2048}
+        "generationConfig":{"maxOutputTokens":8192}
     });
     if allow_tools {
         payload["tools"] = tools();
