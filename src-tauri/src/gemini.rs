@@ -3,7 +3,7 @@
 use crate::{research_intent, source_priority, web_reader, web_search, ChatChunk, ChatCompletion,
     ChatMessage, ChatRequest, ChatStats};
 use serde_json::{json, Value};
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{atomic::{AtomicU64, Ordering}, Mutex};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tauri::{AppHandle, Emitter};
 
@@ -11,6 +11,7 @@ const SERVICE: &str = "dev.capnolithyl.mikan.gemini";
 const ACCOUNT: &str = "default";
 const DEFAULT_MODEL: &str = "gemini-3.8-flash";
 static NEXT_TRY_EPOCH: AtomicU64 = AtomicU64::new(0);
+static LAST_ERROR: Mutex<Option<String>> = Mutex::new(None);
 
 fn entry() -> Result<keyring::Entry, String> {
     keyring::Entry::new(SERVICE, ACCOUNT).map_err(|e| format!("Windows credential store: {e}"))
@@ -34,6 +35,7 @@ pub(crate) fn gemini_save_key(api_key: String) -> Result<(), String> {
     }
     entry()?.set_password(clean).map_err(|e| format!("Could not save Gemini credential: {e}"))?;
     NEXT_TRY_EPOCH.store(0, Ordering::Relaxed);
+    if let Ok(mut last) = LAST_ERROR.lock() { *last = None; }
     Ok(())
 }
 #[tauri::command]
@@ -47,8 +49,27 @@ pub(crate) fn key() -> Result<Option<String>, String> { api_key() }
 fn epoch() -> u64 {
     SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_secs()
 }
-pub(crate) fn cooled_down() -> bool { epoch() < NEXT_TRY_EPOCH.load(Ordering::Relaxed) }
-fn cool_down(seconds: u64) { NEXT_TRY_EPOCH.store(epoch().saturating_add(seconds), Ordering::Relaxed); }
+pub(crate) fn cooldown_reason() -> Option<String> {
+    if epoch() >= NEXT_TRY_EPOCH.load(Ordering::Relaxed) { return None; }
+    LAST_ERROR.lock().ok().and_then(|last| last.clone())
+}
+fn cool_down(seconds: u64, reason: &str) {
+    NEXT_TRY_EPOCH.store(epoch().saturating_add(seconds), Ordering::Relaxed);
+    if let Ok(mut last) = LAST_ERROR.lock() { *last = Some(reason.to_owned()); }
+}
+fn api_error(status: u16, reason: &str, key: &str) -> String {
+    let sanitized = reason.replace(key, "[redacted]");
+    let hint = match status {
+        400 => "Bad request or unsupported API option",
+        401 => "Invalid or expired API key",
+        403 => "Permission denied; check Google AI Studio project access, free-tier eligibility and account verification",
+        404 => "Model unavailable to this project; check model ID and API access",
+        429 => "Rate or daily quota exceeded",
+        500..=599 => "Google service error or timeout",
+        _ => "API error"
+    };
+    format!("Gemini HTTP {status} ({hint}): {}", sanitized.chars().take(240).collect::<String>())
+}
 
 fn gemini_model(name: Option<&str>) -> Result<&str, String> {
     let model = name.filter(|s| !s.trim().is_empty()).unwrap_or(DEFAULT_MODEL);
@@ -163,13 +184,13 @@ async fn execute_tool(
 
 async fn generate(
     client: &reqwest::Client, key: &str, model: &str, system: &str,
-    contents: &[Value], allow_tools: bool
+    contents: &[Value], allow_tools: bool, max_output_tokens: u32, timeout_seconds: u64
 ) -> Result<Value, String> {
     let url = format!("https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent");
     let mut payload = json!({
         "contents":contents,
         "systemInstruction":{"parts":[{"text":system}]},
-        "generationConfig":{"maxOutputTokens":8192}
+        "generationConfig":{"maxOutputTokens":max_output_tokens}
     });
     if allow_tools {
         payload["tools"] = tools();
@@ -178,23 +199,29 @@ async fn generate(
     let response = client.post(url)
         .header("x-goog-api-key",key)
         .json(&payload)
-        .timeout(Duration::from_secs(150))
+        .timeout(Duration::from_secs(timeout_seconds))
         .send().await
         .map_err(|e| format!("Gemini connection failed: {e}"))?;
     let status = response.status();
     if !status.is_success() {
-        if status.as_u16() == 429 {
-            // Prevent every chat turn hammering Google's free quota. User can
-            // choose Gemini-only to see the actual failure immediately.
-            let retry_after = response.headers().get("retry-after")
-                .and_then(|v|v.to_str().ok()).and_then(|s|s.parse::<u64>().ok());
-            cool_down(retry_after.unwrap_or(120).clamp(30,3600));
-        } else if status.as_u16() == 503 || status.is_server_error() {
-            cool_down(60);
-        }
+        let retry_after = response.headers().get("retry-after")
+            .and_then(|v|v.to_str().ok()).and_then(|s|s.parse::<u64>().ok());
         let body: Value = response.json().await.unwrap_or(Value::Null);
         let reason = body["error"]["message"].as_str().unwrap_or("Request failed");
-        return Err(format!("Gemini HTTP {}: {}",status.as_u16(),reason.chars().take(240).collect::<String>()));
+        let explanation = api_error(status.as_u16(), reason, key);
+        match status.as_u16() {
+            429 => {
+                // Daily quota and transient RPM throttling need different backoff.
+                let daily = reason.to_ascii_lowercase().contains("daily")
+                    || reason.to_ascii_lowercase().contains("per day");
+                let seconds = retry_after.unwrap_or(if daily { 43_200 } else { 120 });
+                cool_down(seconds.clamp(30, 43_200), &explanation);
+            },
+            401 | 403 => cool_down(600, &explanation),
+            500..=599 => cool_down(90, &explanation),
+            _ => {}
+        }
+        return Err(explanation);
     }
     response.json().await.map_err(|e|format!("Invalid Gemini response: {e}"))
 }
@@ -205,6 +232,7 @@ pub(crate) async fn chat(
     let model = gemini_model(request.gemini_model.as_deref())?;
     let allow_tools = tool_permissions(request);
     let (mut system, mut contents) = to_gemini(&request.messages);
+    system.push_str(&format!("\n\nCURRENT INFERENCE ENGINE: You are responding through the Google Gemini API with model {model}. This is runtime configuration provided by Mikan, not a guess. For direct questions about your model, answer with this exact model and provider. Never claim to be a local Ollama model."));
     let mut sources = Vec::new();
     let mut search_query = None;
     let mut sources_carried_over = false;
@@ -245,7 +273,7 @@ pub(crate) async fn chat(
     // Each iteration is a genuine Gemini function-calling turn. Read-only
     // web functions are the *only* side effects and are safe to retry locally.
     for turn in 0..4 {
-        result = generate(&client,key,model,&system,&contents,allow_tools).await?;
+        result = generate(&client,key,model,&system,&contents,allow_tools,8192,150).await?;
         let model_content = result["candidates"][0]["content"].clone();
         let parts = model_content["parts"].as_array().ok_or_else(||
             format!("Gemini returned no response parts: {}",
@@ -270,7 +298,7 @@ pub(crate) async fn chat(
                     prompt_eval_duration_ns:None,eval_duration_ns:None
                 }),
                 sources,search_query,sources_carried_over,
-                research_audit:None,model_used:format!("Gemini {model}")
+                research_audit:None,model_used:format!("Gemini {model}"),fallback_reason:None
             });
         }
         if !allow_tools || turn == 3 {
@@ -294,6 +322,27 @@ pub(crate) async fn chat(
     Err("Gemini exceeded its tool-call budget".into())
 }
 
+/// Makes one harmless API request with the saved key, without an Ollama fallback.
+/// Errors remain visible in Settings even when Auto is configured.
+#[tauri::command]
+pub(crate) async fn gemini_test_connection(model: String) -> Result<String, String> {
+    let model = gemini_model(Some(&model))?;
+    let key = api_key()?.ok_or("No Gemini API key saved. Save one under AI & Models first.")?;
+    let client = reqwest::Client::builder()
+        .connect_timeout(Duration::from_secs(8)).build().map_err(|e| e.to_string())?;
+    let contents = vec![json!({"role":"user","parts":[{"text":"Reply with the single word OK."}]})];
+    let result = generate(
+        &client, &key, model, "This is a connection check, not a chat message.",
+        &contents, false, 256, 45
+    ).await?;
+    if result["candidates"].as_array().is_none() {
+        return Err("Gemini returned no candidates. Check API access in Google AI Studio.".into());
+    }
+    NEXT_TRY_EPOCH.store(0, Ordering::Relaxed);
+    if let Ok(mut last) = LAST_ERROR.lock() { *last = None; }
+    Ok(format!("Gemini connection successful: {model}. The saved key can generate a response."))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -306,6 +355,13 @@ mod tests {
         assert_eq!(system,"You are Mikan");
         assert_eq!(contents[0]["parts"][1]["inlineData"]["mimeType"],"image/jpeg");
         assert_eq!(contents[0]["parts"][1]["inlineData"]["data"],"abc");
+    }
+    #[test]
+    fn errors_explain_permission_and_timeout_failures_without_exposing_credentials() {
+        assert!(api_error(403, "project denied", "top-secret").contains("Permission denied"));
+        assert!(api_error(504, "gateway timeout", "top-secret").contains("timeout"));
+        assert!(!api_error(403, "invalid top-secret", "top-secret").contains("top-secret"));
+        assert!(api_error(429, "quota exhausted", "top-secret").contains("quota"));
     }
     #[test]
     fn model_identifiers_are_restricted() {
