@@ -140,9 +140,12 @@ export function asksToReadFullNotionPage(text:string):boolean {
 
 function namedCandidates(text:string):string[] {
   const tokens=[...text.matchAll(/\b[A-Z][a-zA-Z]{3,}\b/g)]
-    // Sentence-initial "Recommend", "Suggest", etc. are not characters
-    // from the owner's private Notion library.
-    .filter(m=>m.index!==0 || !/\s/.test(text.trim()))
+    // A word at the beginning of ANY sentence is not necessarily a person's
+    // name. "I'm exhausted. Today..." must not turn into a Notion query.
+    .filter(m=>{
+      const before=text.slice(0,m.index);
+      return !!before.trim() && !/[.!?]\s*$/.test(before);
+    })
     .map(x=>x[0]);
   const names=tokens.filter(t=>{
     if(!NAME_STOP.has(t.toLowerCase()))return true;
