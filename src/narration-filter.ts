@@ -85,7 +85,10 @@ class PlainNarrationFilter {
     // Short incomplete prefixes are held briefly so "M" + "y tail..." is
     // never released before the full subject arrives.
     const mightNarrate=/^\s*(?:my|mikan(?:['’]s)?|her|his|i(?:['’]m)?|she)\b/i.test(this.pending);
-    if(this.pending.length>=12 && !mightNarrate) {
+    if(!mightNarrate && (this.pending.length>=12 ||
+       /^\s*\*[^*\n]{1,40}\*\s*$/.test(this.pending))) {
+      // A completed one-word vocalization like *meow* is already safe even
+      // if it is shorter than the normal 12-character lookahead.
       accepted+=this.pending;
       this.pending="";
     }
