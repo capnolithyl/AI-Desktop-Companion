@@ -6,8 +6,10 @@ export function isModelStatusQuestion(question: string): boolean {
   const text = question.trim()
     .replace(/^(?:hey|hi|hello)[,!. ]+(?:mikan[,!. ]+)?/i,"")
     .replace(/^mikan[,!. ]+/i,"")
+    .replace(/^(?:can|could)\s+you\s+(?:please\s+)?(?:tell\s+me|say)\s+/i,"")
     .trim();
   return /^(?:what|which)\s+(?:llm|(?:ai\s+|language\s+|inference\s+)?model)\s+(?:are\s+you|is\s+mikan)\s+(?:(?:currently|right\s+now)\s+)?(?:using|running)(?:\s+(?:right\s+now|currently|now|at\s+the\s+moment))?\s*[?.!]*$/i.test(text)
+    || /^(?:what|which)\s+(?:llm|(?:ai\s+|language\s+|inference\s+)?model)\s+(?:you['’]re|you\s+are|mikan\s+is)\s+(?:(?:currently|right\s+now)\s+)?(?:using|running)(?:\s+(?:right\s+now|currently|now))?\s*[?.!]*$/i.test(text)
     || /^what\s+(?:llm|(?:ai\s+|language\s+)?model)\s+(?:powers|runs)\s+(?:you|mikan)\s*[?.!]*$/i.test(text);
 }
 
