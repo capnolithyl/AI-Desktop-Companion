@@ -303,3 +303,25 @@ test("physical stage descriptions with unfamiliar verbs are removed in streaming
   assert.equal(stripNarratedActions("The song *My Tail* is funny."),"The song *My Tail* is funny.");
   assert.equal(stripNarratedActions("The *red sky* looked beautiful."),"The *red sky* looked beautiful.");
 });
+
+
+test("Mikan cannot evade stage filtering by removing asterisks",async()=>{
+ const message="Come here, let's get cozy for a moment. My tail is wrapped around your arm and my head is heavy against your shoulder to help you relax. You deserve some rest.";
+ const expected="Come here, let's get cozy for a moment. You deserve some rest.";
+ assert.equal(stripNarratedActions(message),expected);
+ assert.equal(stripNarratedActions("My fluffy ears twitch with excitement. Hey, sweetheart!"),"Hey, sweetheart!");
+ assert.equal(stripNarratedActions("Mikan's tail curls around your wrist. I can help you with your code."),"I can help you with your code.");
+ assert.equal(stripNarratedActions("I'm leaning against you. Have a good night."),"Have a good night.");
+ assert.equal(stripNarratedActions("I *really* like *black metal*. My thoughts on the album haven't changed."),
+  "I *really* like *black metal*. My thoughts on the album haven't changed.");
+ const f=new NarrationFilter();
+ const feed=new ProgressiveSpeechFeed("pocket");
+ for(const piece of [message.slice(0,35),message.slice(35,65),message.slice(65,112),message.slice(112)])
+   feed.append(f.append(piece));
+ const cleaned=f.finish();
+ assert.equal(cleaned,expected);
+ assert.equal(feed.finish(cleaned),true);
+ const spoken=[];
+ for await(const chunk of feed)spoken.push(chunk);
+ assert.equal(spoken.join(" "),expected);
+});
