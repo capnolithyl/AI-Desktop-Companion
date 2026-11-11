@@ -108,3 +108,18 @@ test("distinguishes empty recall from successful recall", () => {
   assert.ok(result.includes("Selected facts: 0 / 10 maximum"));
   assert.ok(result.includes("No user facts were included in this model prompt."));
 });
+
+
+test("exports Gemini HTTP failure and actual fallback model without leaking key", () => {
+  const result=formatDebugLog([{
+    id:"fallback",role:"assistant",createdAt:Date.UTC(2026,10,11),content:"Using Qwen.",
+    diagnostics:{
+      elapsedMs:8700,firstTokenMs:6500,model:"qwen3.5:9b",
+      fallbackReason:"Gemini HTTP 503 (Google service error or timeout): temporarily overloaded",
+      stats:null
+    }
+  }],{conversationId:"gemini-test",model:"qwen3.5:9b",contextWindow:16384});
+  assert.match(result,/Model: qwen3\\.5:9b/);
+  assert.match(result,/Gemini fallback: Gemini HTTP 503/);
+  assert.doesNotMatch(result,/API key:/);
+});
