@@ -1,8 +1,8 @@
 //! First memory layer: local conversation archive and explicit user facts.
 //! Future self-identity / character canon and knowledge live in separate tables.
-use rusqlite::{params, Connection, OptionalExtension};
+use rusqlite::{params, Connection, OptionalExtension, TransactionBehavior};
 use serde::{Deserialize, Serialize};
-use std::{fs, time::Duration};
+use std::{fs, io::Write, path::Path, time::{Duration, SystemTime, UNIX_EPOCH}};
 use tauri::{AppHandle, Manager};
 
 pub(crate) fn open_db(app: &AppHandle) -> Result<Connection, String> {
@@ -235,8 +235,8 @@ pub struct ImportResult { inserted: usize, duplicates: usize }
 /// SQLite is authoritative. Import is all-or-nothing and never overwrites
 /// an existing memory's text, category, tags or pin.
 fn import_memories(db: &mut Connection, incoming: Vec<IncomingMemory>) -> Result<ImportResult, String> {
-    if incoming.is_empty() || incoming.len()>1000 {
-        return Err("Import 1–1000 facts at a time".into());
+    if incoming.is_empty() || incoming.len()>2000 {
+        return Err("Import 1–2000 facts at a time".into());
     }
     let mut validated=Vec::new();
     for item in incoming {
@@ -432,9 +432,7 @@ pub fn memory_search_archive(
     find_archive_messages(&open_db(&app)?,&query,&exclude_conversation)
 }
 
-#[tauri::command]
-pub fn memory_list_facts(app: AppHandle) -> Result<Vec<UserMemory>, String> {
-    let db = open_db(&app)?;
+fn list_user_facts(db: &Connection) -> Result<Vec<UserMemory>, String> {
     let mut statement = db.prepare(
         "SELECT m.id,m.fact,m.created_at,m.updated_at,
                 COALESCE(u.importance,50),COALESCE(u.reference_count,0),m.category,m.tags_json
@@ -443,6 +441,121 @@ pub fn memory_list_facts(app: AppHandle) -> Result<Vec<UserMemory>, String> {
     ).map_err(|e| e.to_string())?;
     let rows = statement.query_map([], read_memory).map_err(|e|e.to_string())?;
     rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn memory_list_facts(app: AppHandle) -> Result<Vec<UserMemory>, String> {
+    list_user_facts(&open_db(&app)?)
+}
+
+/// Round-trip JSON is accepted by the existing bulk importer. Historical IDs,
+/// timestamps and recall counts are included as inspection metadata.
+fn export_user_facts(db: &Connection) -> Result<(String, usize), String> {
+    let facts = list_user_facts(db)?;
+    let memories = facts.iter().map(|fact| serde_json::json!({
+        "id": fact.id, "fact": fact.fact, "category": fact.category,
+        "tags": fact.tags, "pinned": fact.importance >= 90,
+        "importance": fact.importance, "referenceCount": fact.reference_count,
+        "createdAt": fact.created_at, "updatedAt": fact.updated_at
+    })).collect::<Vec<_>>();
+    let text = serde_json::to_string_pretty(&serde_json::json!({
+        "schema": "mikan-user-memories", "version": 1, "memories": memories
+    })).map_err(|e| e.to_string())?;
+    Ok((text, facts.len()))
+}
+
+/// Never overwrite an existing backup. A failed write aborts replacement.
+fn save_user_facts_json(dir: &Path, text: &str) -> Result<String, String> {
+    fs::create_dir_all(dir).map_err(|e| format!("Cannot create memory backup directory: {e}"))?;
+    let timestamp = SystemTime::now().duration_since(UNIX_EPOCH)
+        .map_err(|e| e.to_string())?.as_millis();
+    let path = dir.join(format!("mikan-user-memories-{timestamp}.json"));
+    let mut file = fs::OpenOptions::new().write(true).create_new(true).open(&path)
+        .map_err(|e| format!("Cannot create memory backup: {e}"))?;
+    file.write_all(text.as_bytes()).and_then(|_| file.sync_all())
+        .map_err(|e| format!("Cannot finish memory backup: {e}"))?;
+    Ok(path.to_string_lossy().into_owned())
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExportFactsResult { path: String, count: usize }
+
+#[tauri::command]
+pub fn memory_export_facts(app: AppHandle) -> Result<ExportFactsResult, String> {
+    let (json, count) = export_user_facts(&open_db(&app)?)?;
+    let download_dir = app.path().download_dir().map_err(|e| e.to_string())?;
+    let path = save_user_facts_json(&download_dir, &json)?;
+    Ok(ExportFactsResult { path, count })
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReplaceFactsResult { inserted: usize, old_count: usize, backup_path: String }
+
+/// Atomic swap of *user facts only*, with an on-disk backup created before
+/// deleting anything. Chat history and character canon are never touched.
+fn replace_user_facts(
+    db: &mut Connection, incoming: Vec<IncomingMemory>, expected_count: usize,
+    backup_dir: &Path
+) -> Result<ReplaceFactsResult, String> {
+    if incoming.is_empty() || incoming.len() > 2000 {
+        return Err("Replacement needs 1–2000 reviewed facts".into());
+    }
+    let mut validated = Vec::with_capacity(incoming.len());
+    let mut seen = std::collections::HashSet::new();
+    for item in incoming {
+        let fact = clean_fact(&item.fact)?;
+        if !seen.insert(fact.to_lowercase()) {
+            return Err(format!("Duplicate replacement fact: {fact}"));
+        }
+        validated.push((
+            fact, clean_category(&item.category)?,
+            serde_json::to_string(&clean_tags(&item.tags)?).map_err(|e| e.to_string())?,
+            item.pinned
+        ));
+    }
+    // IMMEDIATE reserves the writer lock before snapshotting, preventing a
+    // concurrent automatic memory extraction from slipping past the backup.
+    let tx = db.transaction_with_behavior(TransactionBehavior::Immediate)
+        .map_err(|e| e.to_string())?;
+    let actual_count: i64 = tx.query_row("SELECT COUNT(*) FROM user_memories", [], |row| row.get(0))
+        .map_err(|e| e.to_string())?;
+    if actual_count as usize != expected_count {
+        return Err("Memories changed since preview. Refresh and review again.".into());
+    }
+    let (json, _) = export_user_facts(&tx)?;
+    let backup_path = save_user_facts_json(backup_dir, &json)?;
+    tx.execute("DELETE FROM automatic_memory_sources WHERE memory_kind='user'", [])
+        .map_err(|e| e.to_string())?;
+    tx.execute("DELETE FROM user_memories", []).map_err(|e| e.to_string())?;
+    for (fact, category, tags, pinned) in validated.iter() {
+        tx.execute(
+            "INSERT INTO user_memories(fact,category,tags_json) VALUES(?1,?2,?3)",
+            params![fact, category, tags]
+        ).map_err(|e| e.to_string())?;
+        if *pinned {
+            tx.execute(
+                "INSERT INTO user_memory_usage(memory_id,importance) VALUES(last_insert_rowid(),95)",
+                []
+            ).map_err(|e| e.to_string())?;
+        }
+    }
+    tx.commit().map_err(|e| e.to_string())?;
+    Ok(ReplaceFactsResult { inserted: validated.len(),
+        old_count: expected_count, backup_path })
+}
+
+#[tauri::command]
+pub fn memory_replace_facts(
+    app: AppHandle, items: Vec<IncomingMemory>, expected_count: usize, confirmation: String
+) -> Result<ReplaceFactsResult, String> {
+    if confirmation != "REPLACE" {
+        return Err("Type REPLACE to confirm a full replacement".into());
+    }
+    let dir = app.path().app_data_dir().map_err(|e| e.to_string())?
+        .join("memory-backups");
+    replace_user_facts(&mut open_db(&app)?, items, expected_count, &dir)
 }
 
 #[tauri::command]
@@ -694,6 +807,58 @@ mod tests {
         let count:i64=db.query_row("SELECT COUNT(*) FROM user_memories",[],|r|r.get(0)).unwrap();
         assert_eq!(count,2);
     }
+    #[test]
+    fn exported_facts_round_trip_with_tags_and_pin_metadata() {
+        let db = Connection::open_in_memory().unwrap();
+        initialize_database(&db).unwrap();
+        db.execute("INSERT INTO user_memories(fact,category,tags_json) VALUES(?1,?2,?3)",
+            params!["Loves Fear Factory","interests",r#"["metal","fear factory"]"#]).unwrap();
+        let id = db.last_insert_rowid();
+        set_importance(&db,id,true).unwrap();
+        let (json, count) = export_user_facts(&db).unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(count,1);
+        assert_eq!(parsed["memories"][0]["fact"],"Loves Fear Factory");
+        assert_eq!(parsed["memories"][0]["category"],"interests");
+        assert_eq!(parsed["memories"][0]["tags"][1],"fear factory");
+        assert_eq!(parsed["memories"][0]["pinned"],true);
+    }
+
+    #[test]
+    fn safe_rebuild_validates_and_keeps_other_memory_tables() {
+        let mut db = Connection::open_in_memory().unwrap();
+        initialize_database(&db).unwrap();
+        db.execute("INSERT INTO user_memories(fact) VALUES('Old duplicate')",[]).unwrap();
+        db.execute("INSERT INTO character_facts(persona_id,category,label,normalized_label,value)
+            VALUES('mikan','favorites','Music','music','Synthwave')",[]).unwrap();
+        db.execute("INSERT INTO conversations(id,title,created_at,updated_at)
+            VALUES('chat','Our chat',1,1)",[]).unwrap();
+        let dir = std::env::temp_dir().join(format!(
+            "mikan-rebuild-tests-{}", std::process::id()));
+        let _ = fs::create_dir_all(&dir);
+        let new_fact = || IncomingMemory {
+            fact:"Loves Fear Factory".into(), category:"interests".into(),
+            tags:vec!["music".into()], pinned:true
+        };
+        assert!(replace_user_facts(&mut db,vec![new_fact()],0,&dir).is_err());
+        assert!(replace_user_facts(&mut db,vec![new_fact(),new_fact()],1,&dir).is_err());
+        assert!(replace_user_facts(&mut db,vec![IncomingMemory {
+            fact:"  ".into(), category:"other".into(), tags:vec![], pinned:false
+        }],1,&dir).is_err());
+        assert_eq!(db.query_row("SELECT COUNT(*) FROM user_memories",[],|r|r.get::<_,i64>(0)).unwrap(),1);
+        let result=replace_user_facts(&mut db,vec![new_fact()],1,&dir).unwrap();
+        assert_eq!((result.old_count,result.inserted),(1,1));
+        let backup=fs::read_to_string(&result.backup_path).unwrap();
+        assert!(backup.contains("Old duplicate"));
+        assert_eq!(db.query_row("SELECT COUNT(*) FROM character_facts",[],|r|r.get::<_,i64>(0)).unwrap(),1);
+        assert_eq!(db.query_row("SELECT COUNT(*) FROM conversations",[],|r|r.get::<_,i64>(0)).unwrap(),1);
+        let loaded=list_user_facts(&db).unwrap();
+        assert_eq!(loaded.len(),1);
+        assert_eq!(loaded[0].fact,"Loves Fear Factory");
+        assert_eq!(loaded[0].importance,95);
+        let _ = fs::remove_file(&result.backup_path);
+    }
+
     #[test]
     fn legacy_user_memories_migrate_without_loss() {
         let db=Connection::open_in_memory().unwrap();
