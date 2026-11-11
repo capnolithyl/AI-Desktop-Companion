@@ -4,7 +4,7 @@
  * The CI checker detects unmapped Tauri commands, missing files and stale versions.
  * Add a feature here when adding capability, and update the matching source/docs.
  */
-export const CAPABILITY_RELEASE = "0.8.27";
+export const CAPABILITY_RELEASE = "0.8.28";
 
 export type CapabilityStage = "implemented" | "experimental" | "planned";
 export type RuntimeDependency = "none" | "ollama" | "search" | "mem0" | "voice" | "vision" | "pocket";
@@ -51,6 +51,13 @@ export const CAPABILITIES: readonly Capability[] = [
     sources:["src/App.tsx","src-tauri/src/lib.rs","src/conversation-engine.ts"],docs:["README.md","SETUP.md"],
     commands:["list_models","chat_stream","condense_local_context","cancel_chat"],
     slashCommands:["model","models","ollama","prompt"]
+  },
+  {
+    id:"gemini-cloud",label:"Gemini cloud inference with local fallback (experimental)",category:"AI",
+    description:"Optional Gemini API inference supports vision and native SearXNG search/read_webpage function calls. Choose Local, Gemini, or Auto; Auto falls back to Ollama if the key is missing or the cloud request fails. Google API key is stored in Windows Credential Manager, not chat or localStorage. Cloud final text is delivered after generation rather than token-streamed. Local Ollama is still used for memory planning and some auxiliary tasks.",
+    stage:"experimental",runtime:"none",keywords:["gemini","google","cloud","fallback","api key","tool calls","tool calling","provider","quota","vision"],
+    sources:["src-tauri/src/gemini.rs","src/App.tsx","src/storage.ts"],docs:["README.md"],
+    commands:["gemini_key_status","gemini_save_key","gemini_remove_key"]
   },
   {
     id:"web-search",label:"On-demand web search",category:"Research",
