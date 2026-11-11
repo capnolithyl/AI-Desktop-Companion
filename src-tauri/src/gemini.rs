@@ -209,13 +209,17 @@ async fn generate(
             .timeout(Duration::from_secs(timeout_seconds))
             .send().await
             .map_err(|error| {
-                if error.is_timeout() {
+                let transient = error.is_timeout() || error.is_connect();
+                let explanation = if error.is_timeout() {
                     format!("Gemini request timed out after {timeout_seconds} seconds")
                 } else if error.is_connect() {
                     "Gemini connection failed before receiving a response; check network, DNS, VPN or firewall".into()
                 } else {
                     format!("Gemini transport error: {}",error.to_string().replace(key,"[redacted]"))
-                }
+                };
+                // Don't repeat the same 28-second outage every chat turn.
+                if transient { cool_down(90, &explanation); }
+                explanation
             })?;
         if response.status().as_u16() == 503 && attempt == 0 {
             attempt += 1;
