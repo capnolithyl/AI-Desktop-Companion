@@ -225,6 +225,7 @@ export const CAPABILITIES: readonly Capability[] = [
 export function isSelfKnowledgeQuestion(query: string): boolean {
   const q = query.trim().toLowerCase();
   return /\b(?:your (?:own )?(?:code|source|implementation|documentation|features|capabilities|abilities|tools|architecture|version)|mikan(?:'s)? (?:code|source|features|capabilities|architecture)|what can you (?:do|actually do)|how (?:do|does) (?:you|mikan) (?:work|remember|search|speak)|are you able to|do you (?:have|support|know how to)|can you (?:see|hear|listen|speak|talk|search|browse|remember|read my|control|click|use the|inspect|access))\b/i.test(q)
+    || /\b(?:what|which)\s+(?:llm|(?:ai\s+|language\s+|inference\s+)?model)\s+(?:are you|is mikan)\s+(?:(?:currently|right now)\s+)?(?:using|running)\b/i.test(q)
     || /\b(?:implemented|available|supported|planned|not yet built)\b.*\b(?:in mikan|in your app|by you)\b/i.test(q)
     || /\b(?:can you|do you|are you able to)\s+(?:open|read|analy[sz]e|upload|attach)\b.{0,45}\b(?:pdf|file|document|image|photo|picture|spreadsheet)\b/i.test(q)
     || /\bwhat (?:file|image|document) formats (?:can you|do you) support\b/i.test(q)
