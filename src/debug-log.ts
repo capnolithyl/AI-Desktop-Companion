@@ -94,6 +94,8 @@ export type DebugLogMessage = {
 export type DebugLogOptions = {
   conversationId: string | null;
   model: string;
+  provider?: "local" | "auto" | "gemini";
+  geminiModel?: string;
   contextWindow: number | null;
   exportedAt?: Date;
 };
@@ -215,6 +217,8 @@ export function formatDebugLog(messages: readonly DebugLogMessage[], options: De
     "Exported: " + (options.exportedAt ?? new Date()).toISOString(),
     "Conversation ID: " + (options.conversationId ?? "none"),
     "Current selected model: " + options.model,
+    ...(options.provider ? ["Inference provider setting: " + options.provider] : []),
+    ...(options.geminiModel && options.provider !== "local" ? ["Configured cloud model: " + options.geminiModel] : []),
     "Context window: " + (options.contextWindow == null ? "Ollama default" : options.contextWindow + " tokens"),
     "Message count: " + messages.length,
     "Note: Contains conversation text, source excerpts and selected personal-memory facts. Review before sharing.",

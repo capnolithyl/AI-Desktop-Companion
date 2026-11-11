@@ -4,7 +4,7 @@
  * The CI checker detects unmapped Tauri commands, missing files and stale versions.
  * Add a feature here when adding capability, and update the matching source/docs.
  */
-export const CAPABILITY_RELEASE = "0.8.29";
+export const CAPABILITY_RELEASE = "0.8.30";
 
 export type CapabilityStage = "implemented" | "experimental" | "planned";
 export type RuntimeDependency = "none" | "ollama" | "search" | "mem0" | "voice" | "vision" | "pocket";
@@ -54,7 +54,7 @@ export const CAPABILITIES: readonly Capability[] = [
   },
   {
     id:"gemini-cloud",label:"Gemini cloud inference with local fallback (experimental)",category:"AI",
-    description:"Optional Gemini API inference supports vision and native SearXNG search/read_webpage function calls. Choose Local, Gemini, or Auto; Auto falls back to Ollama if the key is missing or the cloud request fails. Google API key is stored in Windows Credential Manager, not chat or localStorage. Cloud final text is delivered after generation rather than token-streamed. Cloud failures and temporary 503 overloads trigger a local fallback whose reason is saved in chat diagnostics; Settings includes a direct API connection test. Local Ollama is still used for memory planning and some auxiliary tasks.",
+    description:"Optional Gemini API inference supports vision and native SearXNG search/read_webpage function calls. Choose Local, Gemini, or Auto; Auto falls back to Ollama if the key is missing or the cloud request fails. Google API key is stored in Windows Credential Manager, not chat or localStorage. Cloud final text is delivered after generation rather than token-streamed. Model-identity questions are answered from runtime settings and actual last reply without web search. Auto cloud requests have a short overall deadline before local fallback. Cloud failures and temporary 503 overloads trigger a local fallback whose reason is saved in chat diagnostics; Settings includes a direct API connection test. Local Ollama is still used for memory planning and some auxiliary tasks.",
     stage:"experimental",runtime:"none",keywords:["gemini","google","cloud","fallback","api key","tool calls","tool calling","provider","quota","vision"],
     sources:["src-tauri/src/gemini.rs","src/App.tsx","src/storage.ts"],docs:["README.md"],
     commands:["gemini_key_status","gemini_save_key","gemini_remove_key","gemini_test_connection"]
@@ -225,6 +225,7 @@ export const CAPABILITIES: readonly Capability[] = [
 export function isSelfKnowledgeQuestion(query: string): boolean {
   const q = query.trim().toLowerCase();
   return /\b(?:your (?:own )?(?:code|source|implementation|documentation|features|capabilities|abilities|tools|architecture|version)|mikan(?:'s)? (?:code|source|features|capabilities|architecture)|what can you (?:do|actually do)|how (?:do|does) (?:you|mikan) (?:work|remember|search|speak)|are you able to|do you (?:have|support|know how to)|can you (?:see|hear|listen|speak|talk|search|browse|remember|read my|control|click|use the|inspect|access))\b/i.test(q)
+    || /\b(?:what|which)\s+(?:llm|(?:ai\s+|language\s+|inference\s+)?model)\s+(?:are you|is mikan)\s+(?:(?:currently|right now)\s+)?(?:using|running)\b/i.test(q)
     || /\b(?:implemented|available|supported|planned|not yet built)\b.*\b(?:in mikan|in your app|by you)\b/i.test(q)
     || /\b(?:can you|do you|are you able to)\s+(?:open|read|analy[sz]e|upload|attach)\b.{0,45}\b(?:pdf|file|document|image|photo|picture|spreadsheet)\b/i.test(q)
     || /\bwhat (?:file|image|document) formats (?:can you|do you) support\b/i.test(q)
