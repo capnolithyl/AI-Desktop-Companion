@@ -2418,10 +2418,12 @@ export default function App() {
       if (remembered.ids.length) {
         void memoryApi.markRecalled(remembered.ids).catch(() => {});
       }
-      // Preserve user-authored personal memory during Live Vision, but never
-      // extract Mikan canon from image-grounded assistant text. Ordinary
-      // automatic session summaries are also skipped for image turns.
-      if (!screenshot && !attachment) {
+      // Approved fiction is reference knowledge, not a new personal fact.
+      // Never turn a model's book critique into persistent user memories or
+      // session-summary "evidence" that could contaminate later readings.
+      // Chat history itself is still saved by persistMessage above.
+      // Live Vision also avoids extracting Mikan canon from image text.
+      if (!screenshot && !attachment && !groundedChapterTurn) {
         queueAutomaticMemory(conversationId,user.id,assistant.id,!!liveFrame);
         if (!liveFrame) queueSessionMemory(conversationId);
       }
