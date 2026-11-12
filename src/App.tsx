@@ -2275,6 +2275,9 @@ export default function App() {
         }
       });
 
+      if(groundedChapterTurn && settings.provider==="auto" && chapterModelProvider==="local") {
+        setActivity("Manuscript review: local Ollama");
+      }
       const completion = await invoke<ChatCompletion>("chat_stream", {
         request: {
           requestId,
