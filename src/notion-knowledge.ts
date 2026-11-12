@@ -248,7 +248,7 @@ export function unavailableChapterResponse(
   if(matchedPage && /Linked scenes are missing|linked scene has no cached manuscript text/.test(readContext))
     return "I found "+matchedPage.title+", but some of its linked scene manuscripts are missing from my Notion cache. Share the Scenes database with Mikan and press Sync now in Settings → Notion, then I can read the whole chapter without guessing.";
   if(matchedPage && /The local model could not produce reliable section notes/.test(readContext)) {
-    const section=/for (?:reading|consolidation) section (\\d+\\/\\d+)/.exec(readContext);
+    const section=/for (?:reading|consolidation) section (\d+\/\d+)/.exec(readContext);
     return "I found "+matchedPage.title+" and its linked scenes, but my local model couldn't finish processing "+
       (section?"section "+section[1]:"one section")+" into reading notes. "+
       "This is a chapter-note processing problem, not a Notion sync problem. "+
