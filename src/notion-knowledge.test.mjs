@@ -231,6 +231,13 @@ test("rereads that request feedback still generate a critique instead of a bare 
     "Reread chapter 2 and give me your honest critique.",chapter),false);
   assert.equal(asksToRereadNotionPage("Please read chapter 2",chapter),false);
   assert.equal(asksToRereadNotionPage("Reread it",null),false);
+  const failed=unavailableChapterResponse(
+    "Please re-cache Chapter 2",chapter,
+    "NOTION FULL READING FAILED: The linked scene has no cached manuscript text.",5);
+  assert.match(failed,/linked scene manuscripts are missing/);
+  assert.match(unavailableChapterResponse(
+    "Please re-cache chapter 2",chapter,"NOTION FULL READING FAILED: timeout",5),
+    /couldn't finish reading/);
   const plan=planNotionRetrieval(
     "Can you reread Chapter 2 and summarize it?",[],[chapter]);
   assert.equal(plan.reread,true);
