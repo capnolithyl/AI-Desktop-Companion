@@ -60,7 +60,6 @@ export const CAPABILITIES: readonly Capability[] = [
     commands:["openrouter_key_status","openrouter_save_key","openrouter_remove_key","openrouter_test_connection"]
   },
   {
-  {
     id:"gemini-cloud",label:"Optional Gemini cloud inference (experimental)",category:"AI",
     description:"Optional Gemini API inference supports vision and native SearXNG search/read_webpage function calls. Choose Gemini-only to use the Google API directly; Auto now uses OpenRouter free instead. Google API key is stored in Windows Credential Manager, not chat or localStorage. Cloud final text is delivered after generation rather than token-streamed. Model-identity questions are answered from runtime settings and actual last reply without web search. Gemini requests have a 35-second total deadline. Cloud failures are recorded in chat diagnostics; Settings includes a direct API connection test. Local Ollama is still used for memory planning and some auxiliary tasks.",
     stage:"experimental",runtime:"none",keywords:["gemini","google","cloud","fallback","api key","tool calls","tool calling","provider","quota","vision"],
