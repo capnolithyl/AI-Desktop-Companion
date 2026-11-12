@@ -3,6 +3,7 @@ import { IkiMotion, IkiPlayer } from "@ikijs/engine";
 import { parseIkiModel, StandardParameter } from "@ikijs/format";
 import bundledRigUrl from "../assets/iki/mikan-v02/iki-ready/mikan-auto-rig-v3.iki?url";
 import type { AvatarReaction } from "./avatar-reactions";
+import type { AvatarDebugSnapshot } from "./avatar-debug";
 
 /**
  * Animated 2D Mikan. Framing is handled by the renderer, not by cropping
@@ -12,19 +13,29 @@ export function IkiAvatar({
   customRig,
   speaking,
   reaction,
+  rigLabel,
+  debugVisible,
+  onDebug,
   onError
 }: {
   customRig: Blob | null;
   speaking: boolean;
   reaction: AvatarReaction | null;
+  rigLabel: string;
+  debugVisible: boolean;
+  onDebug: (snapshot: AvatarDebugSnapshot) => void;
   onError: (message: string) => void;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const speakingRef = useRef(speaking);
   const errorRef = useRef(onError);
   const reactionRef = useRef(reaction);
+  const debugRef = useRef(onDebug);
+  const debugVisibleRef = useRef(debugVisible);
   speakingRef.current = speaking;
   reactionRef.current = reaction;
+  debugRef.current = onDebug;
+  debugVisibleRef.current = debugVisible;
   errorRef.current = onError;
 
   useEffect(() => {
@@ -35,6 +46,14 @@ export function IkiAvatar({
     let frame = 0;
     let player: IkiPlayer | null = null;
     let observer: ResizeObserver | null = null;
+    // Snapshot at mount start: events arriving while the model is loading
+    // should still play once the renderer becomes ready.
+    let seenReaction = reactionRef.current?.serial ?? 0;
+    debugRef.current({
+      status: "loading", rig: rigLabel, fps: 0, expressions: [], motions: [],
+      lastReaction: null, activeExpression: null, activeMotion: null,
+      speaking: speakingRef.current, mouthOpen: 0, breath: null, eyeL: null, eyeR: null
+    });
 
     async function mount() {
       try {
@@ -89,11 +108,32 @@ export function IkiAvatar({
         const motionNames = Object.keys(model.motions ?? {});
         const findMotion = (name: string) =>
           motionNames.find(group => group.toLowerCase() === name.toLowerCase());
-        let seenReaction = reactionRef.current?.serial ?? 0;
         let expressionEndsAt = 0;
         let expressionActive = false;
+        let activeExpression: string | null = null;
+        let activeMotion: string | null = null;
+        let motionEndsAt = 0;
+        let lastReaction: AvatarDebugSnapshot["lastReaction"] = null;
         let mouthOpen = 0;
         let previous = 0;
+        let fps = 0;
+        let frames = 0;
+        let fpsSampleAt = performance.now();
+        let lastDebugAt = 0;
+        const parameter = (name: string): number | null => {
+          try {
+            const value = currentPlayer.getParameter(name);
+            return typeof value === "number" && Number.isFinite(value) ? value : null;
+          } catch { return null; }
+        };
+        const publishDebug = () => debugRef.current({
+          status: "ready", rig: rigLabel, fps, expressions: [...expressionNames.values()],
+          motions: motionNames, lastReaction, activeExpression, activeMotion,
+          speaking: speakingRef.current, mouthOpen,
+          breath: parameter("ParamBreath"), eyeL: parameter("ParamEyeLOpen"),
+          eyeR: parameter("ParamEyeROpen")
+        });
+        publishDebug();
         const tick = (now: number) => {
           if (cancelled) return;
           if (!document.hidden) {
@@ -104,20 +144,36 @@ export function IkiAvatar({
               const expression = kind === "nod" ? "smile"
                 : kind === "shake" ? "sad" : kind;
               const expressionId = expressionNames.get(expression);
-              if (expressionId && motion.playExpression(expressionId)) {
+              const playedExpression = Boolean(expressionId && motion.playExpression(expressionId));
+              if (playedExpression) {
                 expressionActive = true;
+                activeExpression = expressionId ?? null;
                 expressionEndsAt = now + (kind === "laugh" ? 3100 : 2400);
               }
               const gesture = kind === "nod" ? "Nod"
                 : kind === "shake" ? "Shake"
                 : kind === "surprised" ? "Tilt" : null;
               const group = gesture ? findMotion(gesture) : undefined;
-              if (group) motion.playMotion(group, 0);
+              if (group) {
+                motion.playMotion(group, 0);
+                activeMotion = group;
+                motionEndsAt = now + 1200;
+              }
+              lastReaction = {
+                serial: nextReaction.serial, kind, source: nextReaction.source ?? "reply",
+                result: playedExpression
+                  ? (group ? `expression ${expressionId} + motion ${group}` : `expression ${expressionId}`)
+                  : group ? `motion ${group}; expression ${expression} not available`
+                    : `no matching expression (${expression}) or gesture`
+              };
+              publishDebug();
             }
             if (expressionActive && now >= expressionEndsAt) {
               motion.stopExpression();
               expressionActive = false;
+              activeExpression = null;
             }
+            if (activeMotion && now >= motionEndsAt) activeMotion = null;
             motion.update(now);
             // Lightweight interim lip motion while Pocket/Qwen WAV is playing.
             // Actual audio-amplitude lip-sync can replace this later.
@@ -125,13 +181,32 @@ export function IkiAvatar({
             const target = speakingRef.current ? 0.16 + syllable * 0.72 : 0;
             mouthOpen += (target - mouthOpen) * Math.min(1, (previous ? now - previous : 16) / 65);
             currentPlayer.setParameter(StandardParameter.MouthOpen, mouthOpen);
+            frames++;
+            if (now - fpsSampleAt >= 1000) {
+              fps = frames * 1000 / Math.max(1, now - fpsSampleAt);
+              frames = 0;
+              fpsSampleAt = now;
+            }
+            if (debugVisibleRef.current && now - lastDebugAt >= 350) {
+              lastDebugAt = now;
+              publishDebug();
+            }
           }
           previous = now;
           frame = requestAnimationFrame(tick);
         };
         frame = requestAnimationFrame(tick);
       } catch (error) {
-        if (!cancelled) errorRef.current(error instanceof Error ? error.message : String(error));
+        if (!cancelled) {
+          const message = error instanceof Error ? error.message : String(error);
+          debugRef.current({
+            status: "error", rig: rigLabel, fps: 0, expressions: [], motions: [],
+            lastReaction: null, activeExpression: null, activeMotion: null,
+            speaking: speakingRef.current, mouthOpen: 0, breath: null, eyeL: null, eyeR: null,
+            error: message
+          });
+          errorRef.current(message);
+        }
       }
     }
 

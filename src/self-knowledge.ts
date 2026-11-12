@@ -4,7 +4,7 @@
  * The CI checker detects unmapped Tauri commands, missing files and stale versions.
  * Add a feature here when adding capability, and update the matching source/docs.
  */
-export const CAPABILITY_RELEASE = "0.8.30";
+export const CAPABILITY_RELEASE = "0.8.31";
 
 export type CapabilityStage = "implemented" | "experimental" | "planned";
 export type RuntimeDependency = "none" | "ollama" | "search" | "mem0" | "voice" | "vision" | "pocket";
@@ -144,11 +144,17 @@ export const CAPABILITIES: readonly Capability[] = [
   },
   {
     id:"portrait",label:"Static companion portrait",category:"Avatar",
-    description:"Bundled static portrait with optional locally uploaded image. No live 3D model, eye-tracking or lip sync yet.",
+    description:"Bundled static fallback portrait with optional locally uploaded image. Choose this alternative when the animated 2D Iki rig is disabled or unavailable.",
     stage:"implemented",runtime:"none",keywords:["portrait","image","appearance","avatar","catgirl","character"],
     sources:["src/App.tsx","src/storage.ts"],docs:["README.md"],
     commands:[],
     slashCommands:["portrait"]
+  },
+  {
+    id:"animated-2d-avatar",label:"Animated 2D Iki character with reactions",category:"Avatar",
+    description:"The Windows desktop includes an animated, local Iki Mikan v3 rig with blinking, hair physics, idle breathing, a separate tail, simple speech-linked mouth movement, and short expressions/gestures when replies begin with recognizable cues. Select a custom .iki file or restore the bundled one. Appearance settings offer optional live animation diagnostics and manual reaction test buttons. It is a 2D rig, not 3D; not every reply triggers a reaction and mouth movement uses a lightweight animation rather than true phoneme analysis.",
+    stage:"implemented",runtime:"none",keywords:["iki","animated","animation","avatar","catgirl","breathing","blink","expression","reaction","tail","rig","lip","gesture","debug"],
+    sources:["src/IkiAvatar.tsx","src/avatar-reactions.ts","src/avatar-debug.ts","src/iki-avatar-storage.ts","src/App.tsx"],docs:[],commands:[]
   },
   {
     id:"voice",label:"Local voice synthesis and cloning",category:"Voice",
@@ -209,7 +215,7 @@ export const CAPABILITIES: readonly Capability[] = [
   },
   {
     id:"vrm-avatar",label:"Animated VRM avatar",category:"Future",
-    description:"Planned: three-vrm animated 3D avatar with expressions and lip syncing. Only static portraits work now.",
+    description:"Future possibility: three-vrm animated 3D avatar with expressions and lip syncing. The current Windows companion uses a 2D Iki avatar instead; 3D work is on hold.",
     stage:"planned",runtime:"none",keywords:["vrm","3d","animation","animate","blink","lip","tail","vroid"],
     sources:[],docs:[],commands:[]
   },
