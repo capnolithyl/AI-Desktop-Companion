@@ -2211,7 +2211,7 @@ export default function App() {
       unlistenActivity = await listen<Activity>("mikan://activity", event => {
         if (event.payload.requestId === requestId) setActivity(event.payload.text);
       });
-      if (maySpeakProgressively({
+      if (!groundedChapterTurn && maySpeakProgressively({
           autoSpeak:settings.voice.autoSpeak,
           progressiveSpeak:settings.voice.progressiveSpeak,
           localTurn:remoteText === undefined,
@@ -2228,11 +2228,11 @@ export default function App() {
         accumulated += event.payload.content;
         const visibleDelta = narrationFilter.append(event.payload.content);
         visibleAccumulated += visibleDelta;
-        progressiveFeed?.append(visibleDelta);
+        if(!groundedChapterTurn)progressiveFeed?.append(visibleDelta);
         // Source-bearing drafts remain private until the evidence check finishes.
         // Streaming an unverified invented release date is misleading.
         const researchAnswer = turn.verifyWebEvidence || plannedPublicSearch || cloudMaySearch;
-        if (!researchAnswer) {
+        if (!researchAnswer && !groundedChapterTurn) {
           const currentText = visibleAccumulated;
           // React once to an identifiable opening, while Mikan is still
           // streaming. Do not react to unverified research drafts.
@@ -2330,7 +2330,19 @@ export default function App() {
         : stripUnsupportedCitations(rawText);
       // The final stored text, rendered answer and streamed speech must agree.
       // Keep explicit roleplay unfiltered and do not mutate older saved chats.
-      const finalText = allowRoleplay ? verifiedText : stripNarratedActions(verifiedText);
+      let finalText = allowRoleplay ? verifiedText : stripNarratedActions(verifiedText);
+      if(groundedChapterTurn && chapterEvidence) {
+        const reviewCheck=auditNotionReview(finalText,chapterEvidence);
+        if(notionAudit) {
+          notionAudit={...notionAudit,groundingBlocked:reviewCheck.blocked,
+            unsupportedQuotes:reviewCheck.unsupportedQuotes.length,
+            unsupportedDetails:reviewCheck.unsupportedDetails.length};
+          diagnostics.notion=notionAudit;
+        }
+        if(reviewCheck.blocked) {
+          finalText=unverifiedNotionReviewResponse(chapterEvidence);
+        }
+      }
       if (!reactionIssued) {
         reactionIssued = reactToReply(finalText);
         if (!reactionIssued) setLastReplyCue("no recognized opening");
