@@ -1737,8 +1737,15 @@ export default function App() {
       let linkedSceneCharacters = 0;
       let notionReadFailure: string | undefined;
       if (useNotion && notionPlan.fullRead && notionPlan.selectedPage) {
-        setActivity("Opening full Notion chapter…");
-        try {
+        // A completed chapter read is already available for the current
+        // conversation. Follow-up summaries should not needlessly re-run
+        // every local map/reduce pass unless the owner asks for a re-read.
+        if (activeNotion?.page.id === notionPlan.selectedPage.id &&
+            !/\b(?:reread|re-read|read again|from scratch)\b/i.test(text)) {
+          readChapterContext = activeNotion.context;
+        } else {
+          setActivity("Opening full Notion chapter…");
+          try {
           const document = await invoke<NotionDocument>("notion_read_document",{
             id:notionPlan.selectedPage.id
           });
@@ -1757,12 +1764,13 @@ export default function App() {
           notionChapterRef.current = {
             conversationId,page:notionPlan.selectedPage,context:readChapterContext
           };
-        } catch (error) {
-          if (stopRequested.current) throw new Error("Generation stopped");
-          notionReadFailure=errorText(error);
-          readChapterContext = "NOTION FULL READING FAILED: "+notionReadFailure+
-            ". Do not claim to have read the complete chapter. "+
-            "You may discuss retrieved excerpts, but explain the limitation.";
+          } catch (error) {
+            if (stopRequested.current) throw new Error("Generation stopped");
+            notionReadFailure=errorText(error);
+            readChapterContext = "NOTION FULL READING FAILED: "+notionReadFailure+
+              ". Do not claim to have read the complete chapter. "+
+              "You may discuss retrieved excerpts, but explain the limitation.";
+          }
         }
       }
       // Always refresh authoritative SQLite facts before answering. Optional
