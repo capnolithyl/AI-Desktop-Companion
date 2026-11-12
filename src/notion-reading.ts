@@ -280,3 +280,93 @@ export async function readNotionChapter(
     "Never claim that a detail appears in the original prose merely because a model note says so.\n"+
     compressed;
 }
+
+
+export type NotionReviewGrounding = {
+  blocked:boolean;
+  unsupportedQuotes:string[];
+  unsupportedDetails:string[];
+};
+
+/** This deterministic check isn't a semantic truth oracle. It catches
+ * invented *verbatim dialogue* and conspicuous concrete nouns absent from
+ * every source scene. Prefer a cautious response to a vivid false critique.
+ */
+export function auditNotionReview(answer:string,evidence:NotionChapterEvidence):NotionReviewGrounding {
+  const prose=evidence.scenes.map(scene=>scene.prose).join("\n");
+  const normalize=(value:string)=>value.normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g,"").toLowerCase()
+    .replace(/[\u2018\u2019]/g,"'").replace(/[^a-z0-9]+/g," ").trim()
+    .replace(/\s+/g," ");
+  const source=normalize(prose);
+  const unsupportedQuotes:string[]=[];
+  const quotePattern=/["“]([^"”\n]{12,160})["”]/g;
+  for(const match of answer.matchAll(quotePattern)) {
+    const quote=normalize(match[1]);
+    if(quote.length>=14 && quote.split(" ").length>=3 && !source.includes(quote)) {
+      unsupportedQuotes.push(match[1].slice(0,100));
+    }
+  }
+  const stem=(word:string)=>word.replace(/(?:'s|ies|ing|ed|es|s)$/,"");
+  const corpus=new Set(source.split(" ").map(stem));
+  // Generic critique vocabulary does not have to appear in the story itself.
+  const general=new Set(("chapter scene scenes moment moments passage writing prose prose-style "+
+    "story novel storylines characters character narrator narration author reader readers "+
+    "literary emotional emotion emotions poignant warm warmth gentle tender beautifully "+
+    "beautiful interesting interest compelling engaging meaningful detail details specific "+
+    "small little subtle effective well strong stronger weaker opening ending middle "+
+    "beginning final first second third fourth last earlier later lovely nice nicely "+
+    "good great excellent wonderful favorite sweet touching funny humor humour humorously "+
+    "dialogue conversations dialogue-like realistic believable convincing natural "+
+    "relatable charming clear clear-cut clever consistent smoothly smoothly-paced "+
+    "pacing pace rhythm voice tone atmosphere atmospheric descriptive descriptions "+
+    "characterization development relationship relationships storytelling "+
+    "tension suspense stakes buildup payoffs foreshadowing setting exposition "+
+    "genuinely authentic truthfully impressive polished polished-looking "+
+    "seems seem feel feels felt reads read highlights highlight especially "+
+    "overall instead whether matter matters payoff focus focused softness "+
+    "could would should might subtlety contrast chapter-wide texture textures "+
+    "momentum thematic theme themes emotionality portrayal effect cadence "+
+    "suggest suggests suggestion written scene-by-scene standalone "+
+    "narrative observation observations beat beats broad broader picture "+
+    "memorable scene-setting moving beginning-to-end").split(/\s+/));
+  const skip=new Set(("the and with from into that this these those there their "+
+    "about where while which were when what they then than them would could "+
+    "his her him she he has had have having some much very more most "+
+    "after before though just also little real really another around because "+
+    "being been even only theyre youre myself yourself looks look like "+
+    "does doesnt dont isnt it its for not all one two three four "+
+    "are was were can did got get its them you your our out and "+
+    "who how why any yet now sure such over under very "+
+    "something everything nothing").split(/\s+/));
+  const unsupportedDetails:string[]=[];
+  // Check concrete noun phrases rather than subjective opinions. The strong
+  // version of this audit would require independently verified claim spans.
+  const candidate=/\b(?:the|an?|that)\s+((?:[a-z][a-z'-]{3,}\s+){0,2}[a-z][a-z'-]{3,})/gi;
+  for(const match of answer.matchAll(candidate)) {
+    const phrase=match[1].trim();
+    const terms=normalize(phrase).split(" ").filter(Boolean);
+    const meaningful=terms.filter(w=>w.length>=4 && !general.has(w) && !skip.has(w));
+    if(!meaningful.length)continue;
+    const supported=meaningful.some(word=>corpus.has(stem(word)));
+    const missing=meaningful.filter(word=>!corpus.has(stem(word)));
+    if(supported || !missing.length)continue;
+    const surrounding=answer.slice(Math.max(0,match.index-75),Math.min(answer.length,match.index+phrase.length+95));
+    const concrete=/\b(?:matt|lisa|will|william|when|says|said|asks|asked|moment|scene|joke|incident|happens|happened|wearing|sees|saw|spots|found|finds|driving|drives|landed|caught|catching|eating)\b/i.test(surrounding);
+    if((missing.length>=2 && concrete) ||
+      (missing.length>=1 && /\b(?:says|said|asks|asked|wearing|spots|caught|diaper|sheep|poop)\b/i.test(surrounding))) {
+      if(!unsupportedDetails.includes(phrase))unsupportedDetails.push(phrase.slice(0,75));
+    }
+  }
+  return {blocked:unsupportedQuotes.length>0 || unsupportedDetails.length>=2,
+    unsupportedQuotes:unsupportedQuotes.slice(0,6),unsupportedDetails:unsupportedDetails.slice(0,8)};
+}
+
+export function unverifiedNotionReviewResponse(evidence:NotionChapterEvidence):string {
+  return "I opened the approved manuscript of "+evidence.title+
+    ", but my draft critique included details I couldn't verify in the actual text. "+
+    "I'm not going to pretend those events happened. "+
+    "The approved scenes I can confirm are: "+
+    evidence.scenes.map(scene=>scene.title).join(", ")+
+    ". I need to re-check the original passages before giving you reliable literary feedback.";
+}
