@@ -63,6 +63,7 @@ import { CAPTURE_INTERVAL_MIN,CAPTURE_INTERVAL_MAX,ANALYSIS_POLICY,type RegionCh
 import { attachmentQuestion, attachmentPromptText, loadChatAttachment, type PendingAttachment, type ExtractedDocument } from "./chat-attachments";
 import { parseIkiModel } from "@ikijs/format";
 import { IkiAvatar } from "./IkiAvatar";
+import { DEFAULT_AVATAR_VERTICAL_OFFSET, MIN_AVATAR_VERTICAL_OFFSET, MAX_AVATAR_VERTICAL_OFFSET } from "./avatar-viewport";
 import {
   loadAvatarPresencePreferences, saveAvatarPresencePreferences,
   type AvatarPresencePreferences
@@ -2526,6 +2527,8 @@ export default function App() {
           debugVisible={showAvatarDebug || (screen === "settings" && settingsTab === "appearance")}
           presencePreferences={avatarPresence}
           dragging={avatarDragging}
+          verticalOffset={screen === "settings" && settingsTab === "appearance"
+            ? draft.appearance.avatarVerticalOffset : settings.appearance.avatarVerticalOffset}
           onDebug={setAvatarDebug}
           onError={message => {
             setIkiError(message);
@@ -3438,6 +3441,23 @@ export default function App() {
             </select>
             <small>Animated Mikan v3 is the default. The full rig stays intact; the viewer frames her upper body.</small>
           </label>
+          <label className="setting-field">Vertical position · {draft.appearance.avatarVerticalOffset > 0 ? "+" : ""}{draft.appearance.avatarVerticalOffset}
+            <input type="range" min={MIN_AVATAR_VERTICAL_OFFSET} max={MAX_AVATAR_VERTICAL_OFFSET}
+              step="10" aria-label="Avatar vertical position"
+              value={draft.appearance.avatarVerticalOffset} disabled={avatarDisplay !== "animated"}
+              onChange={event => setDraft(current => ({ ...current, appearance: {
+                ...current.appearance, avatarVerticalOffset: Number(event.target.value)
+              } }))}/>
+            <span className="avatar-position-labels" aria-hidden="true">
+              <span>Lower</span><span>Higher</span>
+            </span>
+            <small>Move Mikan inside her viewport to reveal more or less of her outfit. Live preview; save to keep this position.</small>
+          </label>
+          <button type="button" className="inline-action"
+            disabled={avatarDisplay !== "animated" || draft.appearance.avatarVerticalOffset === DEFAULT_AVATAR_VERTICAL_OFFSET}
+            onClick={() => setDraft(current => ({ ...current, appearance: {
+              ...current.appearance, avatarVerticalOffset: DEFAULT_AVATAR_VERTICAL_OFFSET
+            } }))}>Reset vertical position</button>
           <label className="setting-field">Mikan's outfits
             <select aria-label="Select saved Iki outfit" value={ikiRig?.id ?? ""}
               disabled={ikiBusy || !ikiReady}

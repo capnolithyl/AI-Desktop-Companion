@@ -179,6 +179,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px
 .setting-field select:focus-visible { outline: 2px solid #ffc69e; outline-offset: 2px; }
 .setting-field input:focus, .setting-field textarea:focus { outline: none; border-color: #eda077; }
 .setting-field .field-error { color: #ffc0c0; }
+.avatar-position-labels { display: flex; justify-content: space-between; color: #baa7b4; font-size: 11px; font-weight: 400; }
 .portrait-ready { color: #a8e8be; display: flex; align-items: center; gap: 7px; font-size: 11px; }
 .inline-action { background: transparent; border: none; padding: 0; color: #ffbd97; display: inline-flex; align-items: center; gap: 6px; margin: -9px 0 21px; font-size: 12px; }
 .inline-action:hover { text-decoration: underline; }
