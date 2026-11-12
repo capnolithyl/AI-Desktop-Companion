@@ -1,4 +1,4 @@
-import { stripEmojis } from "./emoji-reactions";
+import { stripEmojis } from "./emoji-reactions.ts";
 
 /** Wait for closing Markdown emphasis before dispatching streaming speech. */
 function hasUnclosedEmphasis(markdown: string): boolean {
