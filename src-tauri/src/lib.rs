@@ -17,6 +17,7 @@ mod voice;
 mod screen_vision;
 mod vision_region;
 mod file_attachments;
+mod iki_outfits;
 mod notion;
 use futures_util::{future::{AbortHandle, Abortable}, StreamExt};
 use std::{collections::HashMap, sync::Mutex};
@@ -762,6 +763,8 @@ pub fn run() {
             vision_region::vision_region_complete,
             vision_region::vision_region_cancel,
             file_attachments::extract_document,
+            iki_outfits::pick_iki_outfit,
+            iki_outfits::pick_iki_outfit_folder,
             notion::notion_status,
             notion::notion_connect,
             notion::notion_disconnect,
