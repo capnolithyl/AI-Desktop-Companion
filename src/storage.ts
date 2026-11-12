@@ -118,8 +118,11 @@ export function loadSettings(): Settings {
       structuredResearch: data.structuredResearch !== false,
       autoManageSearch: typeof data.autoManageSearch === "boolean" ? data.autoManageSearch : data.autoSearch === true,
       cacheHours: typeof data.cacheHours === "number" && Number.isFinite(data.cacheHours) ? Math.max(1, Math.min(720, data.cacheHours)) : DEFAULT_SETTINGS.cacheHours,
-      contextWindow: [4096, 8192, 16384, 32768].includes(Number(data.contextWindow)) && data.contextWindow != null
-        ? Number(data.contextWindow) : DEFAULT_SETTINGS.contextWindow,
+      // A deliberate "Ollama default" (null) must survive a restart.
+      contextWindow: data.contextWindow === null && Object.prototype.hasOwnProperty.call(data,"contextWindow")
+        ? null
+        : [4096, 8192, 16384, 32768].includes(Number(data.contextWindow)) && data.contextWindow != null
+          ? Number(data.contextWindow) : DEFAULT_SETTINGS.contextWindow,
       reasoningMode: data.reasoningMode === "fast" || data.reasoningMode === "deep"
         ? data.reasoningMode : DEFAULT_SETTINGS.reasoningMode,
       autoRememberUser: data.autoRememberUser !== false,

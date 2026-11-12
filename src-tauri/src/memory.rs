@@ -451,7 +451,7 @@ fn find_archive_messages(
 }
 
 // BM25-ranked lexical memory candidates, separate from conversation history.
-fn find_fact_ids(db: &Connection, query: &str) -> Result<Vec<i64>, String> {
+pub(crate) fn find_fact_ids(db: &Connection, query: &str) -> Result<Vec<i64>, String> {
     if query.chars().count() > 800 { return Ok(vec![]); }
     let terms = message_search_terms(query);
     if terms.is_empty() { return Ok(vec![]); }

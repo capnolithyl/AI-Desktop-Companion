@@ -353,13 +353,25 @@ pub async fn memory_process_turn(
     ).optional().map_err(|e| e.to_string())?.is_some() {
         return Ok(MemoryProcessingResult { skipped: true, ..Default::default() });
     }
-    // A small subset of existing facts helps prevent semantic near-duplicates.
-    // The full conversation archive and web pages are intentionally excluded.
+    // Prefer topically related existing facts, even if they were imported
+    // months ago. Looking only at the newest 25 missed older contradictions.
+    // Curated memories are never automatically overwritten or deleted.
     let existing_user: Vec<String> = if capture_user {
-        let mut statement = db.prepare("SELECT fact FROM user_memories ORDER BY updated_at DESC LIMIT 25")
+        let mut facts: Vec<String> = Vec::new();
+        for id in memory::find_fact_ids(&db,&user)?.into_iter().take(20) {
+            let fact: Option<String> = db.query_row(
+                "SELECT fact FROM user_memories WHERE id=?1",params![id],|row|row.get(0)
+            ).optional().map_err(|e| e.to_string())?;
+            if let Some(fact) = fact { facts.push(fact); }
+        }
+        let mut statement = db.prepare("SELECT fact FROM user_memories ORDER BY updated_at DESC LIMIT 15")
             .map_err(|e| e.to_string())?;
-        let facts = statement.query_map([], |row| row.get(0)).map_err(|e| e.to_string())?
-            .collect::<Result<_,_>>().map_err(|e| e.to_string())?;
+        let recent = statement.query_map([], |row| row.get::<_,String>(0))
+            .map_err(|e| e.to_string())?
+            .collect::<Result<Vec<_>,_>>().map_err(|e| e.to_string())?;
+        for fact in recent {
+            if !facts.contains(&fact) && facts.len()<30 { facts.push(fact); }
+        }
         facts
     } else { Vec::new() };
     let existing_canon: Vec<String> = if capture_character {
