@@ -14,7 +14,7 @@ test("extracts emoji into at most three distinct thought bubbles without rewriti
 test("keeps joined emoji, modifiers, flags and keycaps intact as single bubbles", () => {
   const result = extractReplyEmojis("Great 👩🏽‍💻! 🇺🇸 or 1️⃣? 🏳️‍🌈");
   assert.deepEqual(result.emojis, ["👩🏽‍💻", "🇺🇸", "1️⃣"]);
-  assert.equal(result.visibleText, "Great! or ?");
+  assert.equal(result.visibleText, "Great! or?");
   assert.equal(stripEmojis("Hi ❤️👨‍👩‍👧👩🏽‍💻🇺🇸1️⃣!").replace(/\s+([!?])/g, "$1").trim(), "Hi!");
 });
 
