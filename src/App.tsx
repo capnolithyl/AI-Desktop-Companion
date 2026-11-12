@@ -2241,7 +2241,7 @@ export default function App() {
         <IkiAvatar customRig={ikiRig?.file ?? null} speaking={voiceState === "playing"}
           reaction={avatarReaction}
           rigLabel={ikiRig?.name ?? "Mikan v3 (bundled)"}
-          debugVisible={showAvatarDebug}
+          debugVisible={showAvatarDebug || (screen === "settings" && settingsTab === "appearance")}
           onDebug={setAvatarDebug}
           onError={message => {
             setIkiError(message);
