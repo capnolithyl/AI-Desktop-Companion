@@ -7,6 +7,17 @@ const EMOJI = /(?:\p{Regional_Indicator}{1,2}|[#*0-9]\uFE0F?\u20E3|\p{Extended_P
 const STRAY_EMOJI_PARTS = /[\uFE0E\uFE0F\u200D\u20E3\u{1F3FB}-\u{1F3FF}\u{E0020}-\u{E007F}]/gu;
 const CODE = /(\x60{3}[\s\S]*?\x60{3}|\x60[^\x60\n]*\x60)/g;
 
+export const DEFAULT_EMOJI_BUBBLE_SECONDS = 6;
+export const MIN_EMOJI_BUBBLE_SECONDS = 2;
+export const MAX_EMOJI_BUBBLE_SECONDS = 15;
+
+/** Restore a persisted duration safely; old installs use the shorter new default. */
+export function readEmojiBubbleSeconds(value: unknown): number {
+  return typeof value === "number" && Number.isFinite(value)
+    ? Math.max(MIN_EMOJI_BUBBLE_SECONDS, Math.min(MAX_EMOJI_BUBBLE_SECONDS, Math.round(value)))
+    : DEFAULT_EMOJI_BUBBLE_SECONDS;
+}
+
 function cleanGaps(text: string): string {
   return text
     .replace(/[ \t]+([,.!?;:])/g, "$1")

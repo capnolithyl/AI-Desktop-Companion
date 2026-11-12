@@ -913,7 +913,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px
   border-radius: 42% 47% 42% 45%;
   background: rgba(255, 249, 238, .97); font-size: clamp(23px, 7vw, 31px);
   line-height: 1; box-shadow: 0 6px 17px #22121d37;
-  animation: avatar-emoji-float 11s ease-out both;
+  animation: avatar-emoji-float var(--emoji-duration, 6s) ease-out both;
   animation-delay: calc(var(--emoji-index) * 130ms);
 }
 .avatar-emoji-thought:nth-child(even) { margin-top: 16px; }
@@ -929,6 +929,12 @@ button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px
   15%, 78% { opacity: 1; transform: translateY(-3px) scale(1); }
   100% { opacity: 0; transform: translateY(-13px) scale(.9); }
 }
+/* Reduced motion still respects the duration and fades out, rather than
+   leaving bubbles indefinitely over the avatar. */
+@keyframes avatar-emoji-fade {
+  0%, 100% { opacity: 0; }
+  9%, 78% { opacity: 1; }
+}
 @media (prefers-reduced-motion: reduce) {
-  .avatar-emoji-thought { animation: none; }
+  .avatar-emoji-thought { animation-name: avatar-emoji-fade; }
 }
