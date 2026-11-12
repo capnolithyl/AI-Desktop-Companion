@@ -1905,6 +1905,7 @@ export default function App() {
           // "What happens in them?", without falsely marking prose as read.
           notionChapterRef.current={conversationId,page:notionPlan.selectedPage,
             context:activeNotion?.page.id===notionPlan.selectedPage.id ? activeNotion.context : "",
+            syncedAt:activeNotion?.page.id===notionPlan.selectedPage.id ? activeNotion.syncedAt : undefined,
             evidence:activeNotion?.page.id===notionPlan.selectedPage.id ? activeNotion.evidence : undefined};
         } catch(error) {
           lookupFailure=errorText(error);
@@ -1931,6 +1932,7 @@ export default function App() {
       }
       let readChapterContext = "";
       let chapterEvidence:NotionChapterEvidence | null = null;
+      let chapterSyncedAt = activeNotion?.syncedAt ?? 0;
       let linkedScenesRead = 0;
       let linkedSceneCharacters = 0;
       let notionReadFailure: string | undefined;
@@ -1943,6 +1945,7 @@ export default function App() {
             !notionPlan.reread) {
           readChapterContext = activeNotion.context;
           chapterEvidence = activeNotion.evidence ?? null;
+          chapterSyncedAt = activeNotion.syncedAt ?? 0;
         } else {
           setActivity("Opening full Notion chapter…");
           try {
@@ -1950,6 +1953,7 @@ export default function App() {
               id:notionPlan.selectedPage.id
             });
             const countLoadedScenes = (source:NotionDocument) => {
+              chapterSyncedAt=source.syncedAt;
               linkedScenesRead=source.relatedPages?.length ?? 0;
               linkedSceneCharacters=(source.relatedPages ?? [])
                 .reduce((n,scene)=>n+scene.chunks.reduce((total,chunk)=>total+chunk.length,0),0);
@@ -1988,7 +1992,7 @@ export default function App() {
             chapterEvidence = buildNotionChapterEvidence(document);
             notionChapterRef.current = {
               conversationId,page:notionPlan.selectedPage,context:readChapterContext,
-              evidence:chapterEvidence
+              syncedAt:chapterSyncedAt,evidence:chapterEvidence
             };
           } catch (error) {
             if (stopRequested.current) throw new Error("Generation stopped");
@@ -2163,10 +2167,7 @@ export default function App() {
         // This is a verified filesystem/cache operation. Never ask a random
         // language model to decide whether the integration exists, and never
         // route a bare "read it again" request into a fabricated book review.
-        const response=notionRereadReceipt(
-          chapterEvidence,notionPlan.selectedPage?.id===chapterEvidence.title
-            ? 0 : chapterEvidence.scenes.length ? cachedNotionPages.find(p=>p.id===notionPlan.selectedPage?.id)?.characters ?? 0 : 0
-        );
+        const response=notionRereadReceipt(chapterEvidence,chapterSyncedAt);
         const assistant:LogMessage={
           id:assistantId,role:"assistant",content:response,createdAt:Date.now(),
           diagnostics:{elapsedMs:performance.now()-started,firstTokenMs:null,
