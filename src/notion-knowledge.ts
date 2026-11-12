@@ -19,6 +19,7 @@ export type NotionRetrievalPlan = {
   query: string;
   selectedPage: NotionCachedPage | null;
   fullRead: boolean;
+  sceneLookup: boolean;
 };
 
 // Generic writing intent, not a fixed set of book and character names.
@@ -144,6 +145,16 @@ export function asksToReadFullNotionPage(text:string, selectedPage:NotionCachedP
   return document && (direct || synopsis || coverageQuestion || critique);
 }
 
+/** Listing the scenes linked to a chapter is a metadata lookup, not a
+ * request to run the full local prose summarizer. A subsequent "read these"
+ * still uses the regular complete-chapter path.
+ */
+export function asksToListNotionScenes(text:string, selectedPage:NotionCachedPage|null=null):boolean {
+  if(!selectedPage || !/\bscenes?\b/i.test(text))return false;
+  if(/\b(?:read|summari[sz]e|review|critique|analy[sz]e|recap|explain|discuss)\b/i.test(text))return false;
+  return /\b(?:see|show|list|find|locate|open|access|available|linked|which|what|how\s+many|have|got|there)\b/i.test(text);
+}
+
 function namedCandidates(text:string):string[] {
   const tokens=[...text.matchAll(/\b[A-Z][a-zA-Z]{3,}\b/g)]
     // A word at the beginning of ANY sentence is not necessarily a person's
@@ -216,7 +227,9 @@ export function planNotionRetrieval(
   const relevant=bookIntent || !!page || possibleName;
   const overview=bookIntent && !page ? overviewForConversation(text+" "+priorTopic,pages) : null;
   const query=(text+" "+priorTopic+" "+(page?.title||overview?.title||"")).trim().slice(0,600);
-  return {relevant,query,selectedPage:page,fullRead:!!page && asksToReadFullNotionPage(text,page)};
+  const fullRead=!!page && asksToReadFullNotionPage(text,page);
+  const sceneLookup=!!page && !fullRead && asksToListNotionScenes(text,page);
+  return {relevant,query,selectedPage:page,fullRead,sceneLookup};
 }
 
 /** Return a deterministic response instead of giving the model a chance
