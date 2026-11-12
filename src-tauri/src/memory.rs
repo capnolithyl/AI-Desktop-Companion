@@ -129,6 +129,34 @@ pub(crate) fn initialize_database(connection: &Connection) -> Result<(), String>
          );
          CREATE INDEX IF NOT EXISTS idx_automatic_memory_jobs_due
            ON automatic_memory_jobs(status,retry_after,created_at);
+         -- Corrections are suggestions, not automatic changes. A review is
+         -- never injected as a current fact until the owner explicitly acts.
+         CREATE TABLE IF NOT EXISTS memory_fact_reviews (
+           id INTEGER PRIMARY KEY AUTOINCREMENT,
+           existing_memory_id INTEGER REFERENCES user_memories(id) ON DELETE SET NULL,
+           existing_fact TEXT,
+           proposed_fact TEXT NOT NULL,
+           evidence TEXT NOT NULL,
+           source_message_id TEXT NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+           status TEXT NOT NULL DEFAULT 'pending'
+             CHECK(status IN ('pending','replaced','saved','dismissed')),
+           created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+           resolved_at INTEGER,
+           UNIQUE(source_message_id, proposed_fact COLLATE NOCASE)
+         );
+         CREATE INDEX IF NOT EXISTS idx_memory_fact_reviews_pending
+           ON memory_fact_reviews(status,created_at);
+         CREATE TABLE IF NOT EXISTS memory_fact_history (
+           id INTEGER PRIMARY KEY AUTOINCREMENT,
+           memory_id INTEGER NOT NULL REFERENCES user_memories(id) ON DELETE CASCADE,
+           previous_fact TEXT NOT NULL,
+           replacement_fact TEXT NOT NULL,
+           previous_source_message_id TEXT REFERENCES messages(id) ON DELETE SET NULL,
+           previous_evidence TEXT,
+           change_source_message_id TEXT REFERENCES messages(id) ON DELETE SET NULL,
+           change_evidence TEXT NOT NULL,
+           changed_at INTEGER NOT NULL DEFAULT (unixepoch())
+         );
          -- Search only user-authored messages, never generated assistant text.
          CREATE VIRTUAL TABLE IF NOT EXISTS message_search USING fts5(
            content, tokenize='unicode61 remove_diacritics 2'
