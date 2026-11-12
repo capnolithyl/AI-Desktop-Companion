@@ -17,6 +17,8 @@
     "build:mobile": "tsc --noEmit && vite build --mode mobile --outDir android/app/src/main/assets --base ./"
   },
   "dependencies": {
+    "@ikijs/engine": "^0.10.0",
+    "@ikijs/format": "^0.10.0",
     "@tauri-apps/api": "^2.0.0",
     "@tauri-apps/plugin-global-shortcut": "^2.0.0",
     "lucide-react": "^0.468.0",
