@@ -16,6 +16,15 @@ export type NotionChapterSession = {
 };
 export type ChapterSummarizer = (prompt:string) => Promise<string>;
 
+/** Retry from owner-authorized live Notion only when the cached manuscript is
+ * incomplete. Model failures, cancellation and unrelated errors must not
+ * trigger surprise network calls.
+ */
+export function shouldRefetchNotionDocument(error:unknown):boolean {
+  const message=error instanceof Error ? error.message : String(error);
+  return /Only chapter planning notes were cached|Linked scenes are missing|A linked scene has no cached manuscript text/i.test(message);
+}
+
 /** The Rust chunker stores 1,800-codepoint windows with 220-codepoint
  * overlap. Reassemble once so characters at the overlaps are not read twice.
  */
