@@ -94,7 +94,7 @@ test("a pinned identity remains saved but is not injected into normal chat",asyn
 
 
 test("new default recall is deterministic and does not need Ollama",()=>{
-  const query="Tell me about my WordPress experience";
+  const query="Tell me about my WordPress and React experience";
   const one=selectDeterministicMemoryIds(facts,query,[],[12,13],5);
   const two=selectDeterministicMemoryIds(facts,query,[],[12,13],5);
   assert.equal(one.mode,"hybrid-rrf");
