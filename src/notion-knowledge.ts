@@ -23,7 +23,7 @@ export type NotionRetrievalPlan = {
 
 // Generic writing intent, not a fixed set of book and character names.
 const WRITING = /\b(notion|my\s+(?:book|novel|story|stories|manuscript|writing|draft|characters?|chapters?|notes|lore)|(?:the|this|that)\s+(?:chapter|manuscript|draft|story\s+bible)|story\s+bible|character\s+(?:arc|sheet|backstory|development)|worldbuilding|my\s+fiction|hollow\s+meridian|charlotte|(?:first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth|\d+(?:st|nd|rd|th)?)\s+chapter\b|chapter\s+(?:of|from|in)\s+(?:(?:my|the)\s+)?(?:book|novel|manuscript))\b/i;
-const FOLLOWUP = /\b(she|he|they|it|her|him|them|their|chapter|scene|plot|ending|story|book|novel|then|after|next|backstory|development|relationship|character|that|those|this)\b|\bwhat\s+(?:happened|happens|about|did|should|comes)\b/i;
+const FOLLOWUP = /\b(she|he|they|it|her|him|them|their|chapter|scene|plot|ending|story|book|novel|then|after|next|backstory|development|relationship|character|that|those|this|summary|synopsis|rundown|recap|summari[sz]e)\b|\bcliffs?[\s-]*notes\b|\bwhat\s+(?:happened|happens|about|did|should|comes)\b/i;
 const NAME_STOP = new Set(("what where which when who whose why how can could would should will please tell "+
   "give show help about explain compare analyze analyse read review summarize summarise "+
   "recommend suggest suggesting find finding search searching interested interesting surprise recent latest "+
@@ -50,7 +50,7 @@ function lastBookTopic(recent: ReadonlyArray<{role:string; content:string}>): st
   let looking=true;
   for(let i=owners.length-1;i>=0&&looking;i--) {
     const t=owners[i];
-    if(WRITING.test(t))return t.slice(0,180);
+    if(WRITING.test(t) || chapterNumber(t)!==null)return t.slice(0,180);
     if(!isFollowup(t))looking=false;
   }
   return "";
