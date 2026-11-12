@@ -81,7 +81,8 @@ test("chapter editorial notes alone are not mistaken for the linked manuscript",
   const content=await readNotionChapter(d,async()=>{throw Error("Not necessary")});
   assert.match(content,/linked scenes included/);
   assert.match(content,/William and Lisa pack the last boxes/);
-  assert.match(content,/You HAVE just read the cached original text/);
+  assert.match(content,/AUTHORITATIVE SOURCE/);
+  assert.match(content,/COMPLETE TEXT OF THE CACHED PAGE/);
   d.relatedPages[0].chunks=[];
   await assert.rejects(()=>readNotionChapter(d,async()=>""),/linked scene has no cached manuscript text/);
 });
@@ -219,6 +220,12 @@ test("a linked scene with only planning notes cannot masquerade as an approved s
   await assert.rejects(()=>readNotionChapter(chapter,async()=>""),/has no approved manuscript prose/);
   assert.equal(extractApprovedManuscriptProse("## Approved manuscript prose\nThe storm reached Gaylord.\n## Research notes\nA fake sheep"),"The storm reached Gaylord.");
   assert.equal(extractApprovedManuscriptProse("## Research notes\nA sheep"),"");
+  // Native Notion indexing prefixes headings with one # and prepends page properties.
+  const nativeCache="Notion property Goal: discarded sheep idea\n\n# Approved manuscript prose\n"+
+    "The windstorm snapped trees outside Gaylord.\n\n# Research and continuity notes\n"+
+    "Earlier abandoned diaper joke.";
+  assert.equal(extractApprovedManuscriptProse(nativeCache),
+    "The windstorm snapped trees outside Gaylord.");
 });
 
 test("manuscript review audit catches fabricated dialogue and concrete scene details",()=>{
