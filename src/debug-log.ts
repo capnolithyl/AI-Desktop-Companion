@@ -23,7 +23,7 @@ export type MemoryRecallAudit = {
   semanticReason?: string;
   semanticCandidates: number;
   strongSemanticMatches: number;
-  selectionMethod?: "ai-reranked" | "fallback" | "small-talk" | "empty";
+  selectionMethod?: "ai-reranked" | "hybrid-rrf" | "fallback" | "small-talk" | "empty";
   selectionCandidates?: number;
   selectionTimeMs?: number;
   selectionNote?: string;
@@ -204,7 +204,7 @@ function performanceLines(diagnostics: Diagnostics): string[] {
           "  [" + (index + 1) + "] ID " + fact.id + " | " + fact.category +
             " | " + (fact.pinned ? "pinned" : "not pinned") +
             " | " + (fact.semantic ? "semantic match" : fact.pinned ? "pinned core" :
-              memory.selectionMethod === "ai-reranked" ? "AI-selected" : "keyword/category/tag match") +
+              memory.selectionMethod === "ai-reranked" ? "AI-selected" : memory.selectionMethod === "hybrid-rrf" ? "FTS5 + semantic fusion" : "keyword/category/tag match") +
             (fact.tags.length ? " | tags: " + fact.tags.join(", ") : ""),
           "    " + fact.fact
         ])
