@@ -1086,9 +1086,9 @@ export default function App() {
         if (cancelled) return;
         if (result.userSaved) void refreshFacts();
         if (result.characterSaved) void refreshCharacter();
-        if (result.failed) setAutomaticMemoryError(
-          `${result.failed} automatic memory job(s) need manual retry in Memory settings.`
-        );
+        setAutomaticMemoryError(result.failed
+          ? `${result.failed} automatic memory job(s) need manual retry in Memory settings.`
+          : null);
       } catch (error) {
         if (!cancelled) console.warn("Memory queue recovery unavailable:",errorText(error));
       }
