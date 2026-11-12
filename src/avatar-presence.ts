@@ -94,8 +94,8 @@ export function motionTarget(
     headX: clamp(dx / 600 * 3.3, -3.3, 3.3),
     headY: clamp(dy / 620 * 2.3, -2.3, 2.3),
     weight,
-    dragX: -clamp(sample.velocityX / 1700, -1, 1) * moveWeight,
-    dragY: clamp(sample.velocityY / 1700, -1, 1) * moveWeight
+    dragX: moveWeight > 0 ? -clamp(sample.velocityX / 1700, -1, 1) * moveWeight : 0,
+    dragY: moveWeight > 0 ? clamp(sample.velocityY / 1700, -1, 1) * moveWeight : 0
   };
 }
 
