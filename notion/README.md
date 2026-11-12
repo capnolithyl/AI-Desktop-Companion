@@ -46,3 +46,10 @@ Notion API is version-pinned to `2025-09-03`. API reference: https://developers.
 ## Linked chapter scenes
 
 Mikan can answer questions such as **“Can you see the scenes for Chapter 1?”** by inspecting the chapter's **Scenes** relation. She lists the actual related scene titles in manuscript order without requesting that you paste individual titles. Questions like **“Read those scenes”** or **“What happens in those scenes?”** trigger the full chapter-reading pipeline, including the linked scene prose and bounded local notes. A stale or incomplete cached relation triggers an owner-requested live, read-only Notion fetch; this does not permanently store the fetched manuscript. If that fetch fails, check that the chapter and the **Scenes** database are shared with Mikan's own Notion integration token, not merely another Notion connection.
+
+
+## Source-grounded manuscript review (v0.8.40)
+
+`Chapter 02 · North` and similar chapter pages usually contain editorial planning notes separate from approved scene manuscripts. Full chapter review now follows the chapter's `Scenes` relation and extracts only each scene's `## Approved manuscript prose` block, stopping at the next major Markdown heading. The chapter page's planning/research text is not treated as fiction. Missing approved prose fails explicitly instead of inventing a plot.
+
+With the usual 16K context window, original scene prose is sent to the final model directly when it fits the reserved prompt budget. Large chapters are summarized locally scene by scene with original excerpts and clear model-note provenance. Final critiques with unsupported quotes or conspicuous invented details are withheld; `Notion retrieval` in the debug log reports source mode, approved prose character count and grounding counts without including the manuscript or raw notes. Grounding checks are conservative, not a proof that every interpretive claim is correct. Public-web search stays disabled for private chapter reads.
