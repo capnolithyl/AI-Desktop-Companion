@@ -4,7 +4,7 @@
  * The CI checker detects unmapped Tauri commands, missing files and stale versions.
  * Add a feature here when adding capability, and update the matching source/docs.
  */
-export const CAPABILITY_RELEASE = "0.8.31";
+export const CAPABILITY_RELEASE = "0.8.32";
 
 export type CapabilityStage = "implemented" | "experimental" | "planned";
 export type RuntimeDependency = "none" | "ollama" | "search" | "mem0" | "voice" | "vision" | "pocket";
@@ -53,8 +53,16 @@ export const CAPABILITIES: readonly Capability[] = [
     slashCommands:["model","models","ollama","prompt"]
   },
   {
-    id:"gemini-cloud",label:"Gemini cloud inference with local fallback (experimental)",category:"AI",
-    description:"Optional Gemini API inference supports vision and native SearXNG search/read_webpage function calls. Choose Local, Gemini, or Auto; Auto falls back to Ollama if the key is missing or the cloud request fails. Google API key is stored in Windows Credential Manager, not chat or localStorage. Cloud final text is delivered after generation rather than token-streamed. Model-identity questions are answered from runtime settings and actual last reply without web search. Auto cloud requests have a short overall deadline before local fallback. Cloud failures and temporary 503 overloads trigger a local fallback whose reason is saved in chat diagnostics; Settings includes a direct API connection test. Local Ollama is still used for memory planning and some auxiliary tasks.",
+    id:"openrouter-cloud",label:"OpenRouter free cloud models and automatic Qwen fallback (experimental)",category:"AI",
+    description:"Optional OpenRouter free-only API provider uses the openrouter/free router or explicit :free model IDs, including image and read-only SearXNG/webpage function calls. Auto mode tries OpenRouter then falls back to Ollama Qwen when the key is missing or OpenRouter hits 429/quota, stalls or fails. OpenRouter's 50 requests/day free allowance (20/min) counts every API round trip including model tool calls and failed requests; a model's behavior and vision support vary by route. API key is in Windows Credential Manager and must be provided in AI & Models. Paid models are rejected. Gemini remains separately selectable. Memory/Notion auxiliary processing and TTS still run locally.",
+    stage:"experimental",runtime:"none",keywords:["openrouter","free","free tier","cloud","fallback","rate limit","quota","llm","inference","function calling","vision","api"],
+    sources:["src-tauri/src/openrouter.rs","src-tauri/src/cloud_web_tools.rs","src/App.tsx","src/storage.ts"],docs:["README.md"],
+    commands:["openrouter_key_status","openrouter_save_key","openrouter_remove_key","openrouter_test_connection"]
+  },
+  {
+  {
+    id:"gemini-cloud",label:"Optional Gemini cloud inference (experimental)",category:"AI",
+    description:"Optional Gemini API inference supports vision and native SearXNG search/read_webpage function calls. Choose Gemini-only to use the Google API directly; Auto now uses OpenRouter free instead. Google API key is stored in Windows Credential Manager, not chat or localStorage. Cloud final text is delivered after generation rather than token-streamed. Model-identity questions are answered from runtime settings and actual last reply without web search. Gemini requests have a 35-second total deadline. Cloud failures are recorded in chat diagnostics; Settings includes a direct API connection test. Local Ollama is still used for memory planning and some auxiliary tasks.",
     stage:"experimental",runtime:"none",keywords:["gemini","google","cloud","fallback","api key","tool calls","tool calling","provider","quota","vision"],
     sources:["src-tauri/src/gemini.rs","src/App.tsx","src/storage.ts"],docs:["README.md"],
     commands:["gemini_key_status","gemini_save_key","gemini_remove_key","gemini_test_connection"]
