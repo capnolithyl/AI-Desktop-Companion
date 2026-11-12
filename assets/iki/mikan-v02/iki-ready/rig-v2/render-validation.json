@@ -1,0 +1,842 @@
+{
+  "ok": true,
+  "failedTextures": [],
+  "poseCount": 13,
+  "folds": {
+    "poses": 634,
+    "thresholds": {
+      "flip": 0,
+      "collapse": 0.1
+    },
+    "targets": [
+      {
+        "target": {
+          "kind": "deformer",
+          "id": "bodyWarp"
+        },
+        "kind": "ok",
+        "worst": {
+          "ratio": 0.529103247531336,
+          "where": {
+            "col": 0,
+            "row": 2
+          },
+          "pose": {
+            "name": "ParamAngleX=30 ParamAngleY=-30 ParamAngleZ=-30 ParamBodyAngleX=10 ParamBodyAngleY=-10 ParamBodyAngleZ=-10",
+            "values": {
+              "ParamAngleX": 30,
+              "ParamAngleY": -30,
+              "ParamAngleZ": -30,
+              "ParamBodyAngleX": 10,
+              "ParamBodyAngleY": -10,
+              "ParamBodyAngleZ": -10
+            }
+          },
+          "rest": {
+            "x": -425.05999999999995,
+            "y": 13.85
+          }
+        }
+      },
+      {
+        "target": {
+          "kind": "deformer",
+          "id": "eyeWarp_L"
+        },
+        "kind": "ok",
+        "worst": {
+          "ratio": 0.7972971598307286,
+          "where": {
+            "col": 3,
+            "row": 0
+          },
+          "pose": {
+            "name": "ParamAngleX=30",
+            "values": {
+              "ParamAngleX": 30
+            }
+          },
+          "rest": {
+            "x": 124.69999893879866,
+            "y": 330.7499953201986
+          }
+        }
+      },
+      {
+        "target": {
+          "kind": "deformer",
+          "id": "eyeWarp_R"
+        },
+        "kind": "ok",
+        "worst": {
+          "ratio": 0.7982454801860607,
+          "where": {
+            "col": 2,
+            "row": 0
+          },
+          "pose": {
+            "name": "ParamAngleX=-30",
+            "values": {
+              "ParamAngleX": -30
+            }
+          },
+          "rest": {
+            "x": -56.000001061201345,
+            "y": 329.4999953201986
+          }
+        }
+      },
+      {
+        "target": {
+          "kind": "deformer",
+          "id": "browWarp_L"
+        },
+        "kind": "ok",
+        "worst": {
+          "ratio": 0.9999995328373193,
+          "where": {
+            "col": 2,
+            "row": 1
+          },
+          "pose": {
+            "name": "ParamAngleX=-30",
+            "values": {
+              "ParamAngleX": -30
+            }
+          },
+          "rest": {
+            "x": 110.49999893879865,
+            "y": 372.2299953201986
+          }
+        }
+      },
+      {
+        "target": {
+          "kind": "deformer",
+          "id": "browWarp_R"
+        },
+        "kind": "ok",
+        "worst": {
+          "ratio": 0.9999992758107108,
+          "where": {
+            "col": 0,
+            "row": 1
+          },
+          "pose": {
+            "name": "ParamAngleX=30",
+            "values": {
+              "ParamAngleX": 30
+            }
+          },
+          "rest": {
+            "x": -94.43500106120135,
+            "y": 370.66499532019856
+          }
+        }
+      },
+      {
+        "target": {
+          "kind": "deformer",
+          "id": "noseWarp"
+        },
+        "kind": "ok",
+        "worst": {
+          "ratio": 0.9947269001228292,
+          "where": {
+            "col": 1,
+            "row": 0
+          },
+          "pose": {
+            "name": "ParamAngleX=30",
+            "values": {
+              "ParamAngleX": 30
+            }
+          },
+          "rest": {
+            "x": 26.999998938798655,
+            "y": 274.9999953201986
+          }
+        }
+      },
+      {
+        "target": {
+          "kind": "deformer",
+          "id": "mouthWarp"
+        },
+        "kind": "ok",
+        "worst": {
+          "ratio": 0.9999989803131611,
+          "where": {
+            "col": 6,
+            "row": 2
+          },
+          "pose": {
+            "name": "ParamAngleY=30",
+            "values": {
+              "ParamAngleY": 30
+            }
+          },
+          "rest": {
+            "x": 73.96499893879866,
+            "y": 238.3799953201986
+          }
+        }
+      },
+      {
+        "target": {
+          "kind": "part",
+          "id": "hair_back"
+        },
+        "kind": "ok",
+        "worst": {
+          "ratio": 0.9148309867803368,
+          "where": {
+            "triangle": 384
+          },
+          "pose": {
+            "name": "ParamAngleX=30 ParamAngleY=-30 ParamAngleZ=-30 ParamBodyAngleX=-10 ParamBodyAngleY=-10 ParamBodyAngleZ=-10",
+            "values": {
+              "ParamAngleX": 30,
+              "ParamAngleY": -30,
+              "ParamAngleZ": -30,
+              "ParamBodyAngleX": -10,
+              "ParamBodyAngleY": -10,
+              "ParamBodyAngleZ": -10
+            }
+          },
+          "rest": {
+            "x": -412.9375010612014,
+            "y": -171.62921134646805
+          }
+        }
+      },
+      {
+        "target": {
+          "kind": "part",
+          "id": "body"
+        },
+        "kind": "ok",
+        "worst": {
+          "ratio": 0.5335650850517119,
+          "where": {
+            "triangle": 159
+          },
+          "pose": {
+            "name": "ParamAngleX=-30 ParamAngleY=-30 ParamAngleZ=30 ParamBodyAngleX=-10 ParamBodyAngleY=-10 ParamBodyAngleZ=10",
+            "values": {
+              "ParamAngleX": -30,
+              "ParamAngleY": -30,
+              "ParamAngleZ": 30,
+              "ParamBodyAngleX": -10,
+              "ParamBodyAngleY": -10,
+              "ParamBodyAngleZ": 10
+            }
+          },
+          "rest": {
+            "x": 404.2708333333333,
+            "y": 34.48160000000001
+          }
+        }
+      },
+      {
+        "target": {
+          "kind": "part",
+          "id": "face"
+        },
+        "kind": "ok",
+        "worst": {
+          "ratio": 0.9775978635379622,
+          "where": {
+            "triangle": 147
+          },
+          "pose": {
+            "name": "ParamAngleX=30 ParamAngleY=-30 ParamAngleZ=-30 ParamBodyAngleX=-10 ParamBodyAngleY=-10 ParamBodyAngleZ=-10",
+            "values": {
+              "ParamAngleX": 30,
+              "ParamAngleY": -30,
+              "ParamAngleZ": -30,
+              "ParamBodyAngleX": -10,
+              "ParamBodyAngleY": -10,
+              "ParamBodyAngleZ": -10
+            }
+          },
+          "rest": {
+            "x": -67.88918439453468,
+            "y": 355.6666619868653
+          }
+        }
+      },
+      {
+        "target": {
+          "kind": "part",
+          "id": "nose"
+        },
+        "kind": "ok",
+        "worst": {
+          "ratio": 0.9971121090541905,
+          "where": {
+            "triangle": 1
+          },
+          "pose": {
+            "name": "ParamAngleX=-30 ParamAngleY=30 ParamAngleZ=-30 ParamBodyAngleX=-10 ParamBodyAngleY=-10 ParamBodyAngleZ=10",
+            "values": {
+              "ParamAngleX": -30,
+              "ParamAngleY": 30,
+              "ParamAngleZ": -30,
+              "ParamBodyAngleX": -10,
+              "ParamBodyAngleY": -10,
+              "ParamBodyAngleZ": 10
+            }
+          },
+          "rest": {
+            "x": 22.333332272131987,
+            "y": 270.9999953201986
+          }
+        }
+      },
+      {
+        "target": {
+          "kind": "part",
+          "id": "mouth"
+        },
+        "kind": "ok",
+        "worst": {
+          "ratio": 0.9699988391285744,
+          "where": {
+            "triangle": 2
+          },
+          "pose": {
+            "name": "ParamMouthForm=-1",
+            "values": {
+              "ParamMouthForm": -1
+            }
+          },
+          "rest": {
+            "x": 4.555642272131986,
+            "y": 238.16666198686528
+          }
+        }
+      },
+      {
+        "target": {
+          "kind": "part",
+          "id": "eye_L"
+        },
+        "kind": "ok",
+        "worst": {
+          "ratio": 0.797294431121697,
+          "where": {
+            "triangle": 10
+          },
+          "pose": {
+            "name": "ParamAngleX=30 ParamAngleY=-30 ParamAngleZ=-30 ParamBodyAngleX=-10 ParamBodyAngleY=-10 ParamBodyAngleZ=10",
+            "values": {
+              "ParamAngleX": 30,
+              "ParamAngleY": -30,
+              "ParamAngleZ": -30,
+              "ParamBodyAngleX": -10,
+              "ParamBodyAngleY": -10,
+              "ParamBodyAngleZ": 10
+            }
+          },
+          "rest": {
+            "x": 121.88872560546531,
+            "y": 313.77785532019857
+          }
+        },
+        "expected": {
+          "ratio": -0.00020098789935206807,
+          "where": {
+            "triangle": 15
+          },
+          "pose": {
+            "name": "ParamAngleX=-30 ParamAngleY=30 ParamAngleZ=30 ParamBodyAngleX=10 ParamBodyAngleY=10 ParamBodyAngleZ=10 ParamEyeLOpen=0 ParamEyeROpen=0 ParamMouthOpenY=0",
+            "values": {
+              "ParamAngleX": -30,
+              "ParamAngleY": 30,
+              "ParamAngleZ": 30,
+              "ParamBodyAngleX": 10,
+              "ParamBodyAngleY": 10,
+              "ParamBodyAngleZ": 10,
+              "ParamEyeLOpen": 0,
+              "ParamEyeROpen": 0,
+              "ParamMouthOpenY": 0
+            }
+          },
+          "rest": {
+            "x": 77.27769560546533,
+            "y": 305.55559198686524
+          }
+        }
+      },
+      {
+        "target": {
+          "kind": "part",
+          "id": "eye_R"
+        },
+        "kind": "ok",
+        "worst": {
+          "ratio": 0.7982428324917437,
+          "where": {
+            "triangle": 5
+          },
+          "pose": {
+            "name": "ParamAngleX=-30 ParamAngleY=30 ParamAngleZ=-30 ParamBodyAngleX=-10 ParamBodyAngleY=-10 ParamBodyAngleZ=-10",
+            "values": {
+              "ParamAngleX": -30,
+              "ParamAngleY": 30,
+              "ParamAngleZ": -30,
+              "ParamBodyAngleX": -10,
+              "ParamBodyAngleY": -10,
+              "ParamBodyAngleZ": -10
+            }
+          },
+          "rest": {
+            "x": -50.11119439453468,
+            "y": 317.5555953201986
+          }
+        },
+        "expected": {
+          "ratio": -0.00019950919728359346,
+          "where": {
+            "triangle": 14
+          },
+          "pose": {
+            "name": "ParamAngleX=30 ParamAngleY=30 ParamAngleZ=30 ParamBodyAngleX=-10 ParamBodyAngleY=-10 ParamBodyAngleZ=-10 ParamEyeLOpen=0 ParamEyeROpen=0 ParamMouthOpenY=0",
+            "values": {
+              "ParamAngleX": 30,
+              "ParamAngleY": 30,
+              "ParamAngleZ": 30,
+              "ParamBodyAngleX": -10,
+              "ParamBodyAngleY": -10,
+              "ParamBodyAngleZ": -10,
+              "ParamEyeLOpen": 0,
+              "ParamEyeROpen": 0,
+              "ParamMouthOpenY": 0
+            }
+          },
+          "rest": {
+            "x": -66.55547439453468,
+            "y": 299.77772865353194
+          }
+        }
+      },
+      {
+        "target": {
+          "kind": "part",
+          "id": "iris_L"
+        },
+        "kind": "ok",
+        "worst": {
+          "ratio": 0.7989164428371375,
+          "where": {
+            "triangle": 17
+          },
+          "pose": {
+            "name": "ParamAngleX=30 ParamAngleY=30 ParamAngleZ=30 ParamBodyAngleX=10 ParamBodyAngleY=-10 ParamBodyAngleZ=-10",
+            "values": {
+              "ParamAngleX": 30,
+              "ParamAngleY": 30,
+              "ParamAngleZ": 30,
+              "ParamBodyAngleX": 10,
+              "ParamBodyAngleY": -10,
+              "ParamBodyAngleZ": -10
+            }
+          },
+          "rest": {
+            "x": 69.49999893879865,
+            "y": 292.9999153201986
+          }
+        }
+      },
+      {
+        "target": {
+          "kind": "part",
+          "id": "iris_R"
+        },
+        "kind": "ok",
+        "worst": {
+          "ratio": 0.7982432484359608,
+          "where": {
+            "triangle": 1
+          },
+          "pose": {
+            "name": "ParamAngleX=-30 ParamAngleY=30 ParamAngleZ=-30 ParamBodyAngleX=-10 ParamBodyAngleY=-10 ParamBodyAngleZ=-10",
+            "values": {
+              "ParamAngleX": -30,
+              "ParamAngleY": 30,
+              "ParamAngleZ": -30,
+              "ParamBodyAngleX": -10,
+              "ParamBodyAngleY": -10,
+              "ParamBodyAngleZ": -10
+            }
+          },
+          "rest": {
+            "x": -54.16666772786802,
+            "y": 314.1111453201986
+          }
+        }
+      },
+      {
+        "target": {
+          "kind": "part",
+          "id": "lash_L"
+        },
+        "kind": "ok",
+        "worst": {
+          "ratio": 0.3986473228041297,
+          "where": {
+            "triangle": 43
+          },
+          "pose": {
+            "name": "ParamAngleX=30 ParamAngleY=-30 ParamAngleZ=-30 ParamBodyAngleX=-10 ParamBodyAngleY=-10 ParamBodyAngleZ=10 ParamEyeLOpen=0 ParamEyeROpen=0 ParamMouthOpenY=0",
+            "values": {
+              "ParamAngleX": 30,
+              "ParamAngleY": -30,
+              "ParamAngleZ": -30,
+              "ParamBodyAngleX": -10,
+              "ParamBodyAngleY": -10,
+              "ParamBodyAngleZ": 10,
+              "ParamEyeLOpen": 0,
+              "ParamEyeROpen": 0,
+              "ParamMouthOpenY": 0
+            }
+          },
+          "rest": {
+            "x": 63.33351893879865,
+            "y": 290.1666619868652
+          }
+        }
+      },
+      {
+        "target": {
+          "kind": "part",
+          "id": "lash_R"
+        },
+        "kind": "ok",
+        "worst": {
+          "ratio": 0.39912106131761127,
+          "where": {
+            "triangle": 63
+          },
+          "pose": {
+            "name": "ParamAngleX=-30 ParamAngleY=30 ParamAngleZ=-30 ParamBodyAngleX=10 ParamBodyAngleY=-10 ParamBodyAngleZ=-10 ParamEyeLOpen=0 ParamEyeROpen=0 ParamMouthOpenY=0",
+            "values": {
+              "ParamAngleX": -30,
+              "ParamAngleY": 30,
+              "ParamAngleZ": -30,
+              "ParamBodyAngleX": 10,
+              "ParamBodyAngleY": -10,
+              "ParamBodyAngleZ": -10,
+              "ParamEyeLOpen": 0,
+              "ParamEyeROpen": 0,
+              "ParamMouthOpenY": 0
+            }
+          },
+          "rest": {
+            "x": -9.250001061201345,
+            "y": 296.9999953201986
+          }
+        }
+      },
+      {
+        "target": {
+          "kind": "part",
+          "id": "brow_L"
+        },
+        "kind": "ok",
+        "worst": {
+          "ratio": 0.9999967440511993,
+          "where": {
+            "triangle": 9
+          },
+          "pose": {
+            "name": "ParamAngleX=-30 ParamAngleY=-30 ParamAngleZ=30 ParamBodyAngleX=10 ParamBodyAngleY=10 ParamBodyAngleZ=10",
+            "values": {
+              "ParamAngleX": -30,
+              "ParamAngleY": -30,
+              "ParamAngleZ": 30,
+              "ParamBodyAngleX": 10,
+              "ParamBodyAngleY": 10,
+              "ParamBodyAngleZ": 10
+            }
+          },
+          "rest": {
+            "x": 118.222132272132,
+            "y": 367.1666619868653
+          }
+        }
+      },
+      {
+        "target": {
+          "kind": "part",
+          "id": "brow_R"
+        },
+        "kind": "ok",
+        "worst": {
+          "ratio": 0.9999965975496027,
+          "where": {
+            "triangle": 0
+          },
+          "pose": {
+            "name": "ParamBodyAngleZ=10",
+            "values": {
+              "ParamBodyAngleZ": 10
+            }
+          },
+          "rest": {
+            "x": -86.95230106120134,
+            "y": 361.6666619868653
+          }
+        }
+      },
+      {
+        "target": {
+          "kind": "part",
+          "id": "hair_front"
+        },
+        "kind": "ok",
+        "worst": {
+          "ratio": 0.7490531311543802,
+          "where": {
+            "triangle": 480
+          },
+          "pose": {
+            "name": "ParamAngleX=-30 ParamAngleY=-30 ParamAngleZ=-30 ParamBodyAngleX=10 ParamBodyAngleY=-10 ParamBodyAngleZ=-10",
+            "values": {
+              "ParamAngleX": -30,
+              "ParamAngleY": -30,
+              "ParamAngleZ": -30,
+              "ParamBodyAngleX": 10,
+              "ParamBodyAngleY": -10,
+              "ParamBodyAngleZ": -10
+            }
+          },
+          "rest": {
+            "x": -233.88075106120135,
+            "y": 50.98168532019858
+          }
+        }
+      },
+      {
+        "target": {
+          "kind": "part",
+          "id": "tail"
+        },
+        "kind": "ok",
+        "worst": {
+          "ratio": 0.5335650850517119,
+          "where": {
+            "triangle": 159
+          },
+          "pose": {
+            "name": "ParamAngleX=-30 ParamAngleY=-30 ParamAngleZ=30 ParamBodyAngleX=-10 ParamBodyAngleY=-10 ParamBodyAngleZ=10",
+            "values": {
+              "ParamAngleX": -30,
+              "ParamAngleY": -30,
+              "ParamAngleZ": 30,
+              "ParamBodyAngleX": -10,
+              "ParamBodyAngleY": -10,
+              "ParamBodyAngleZ": 10
+            }
+          },
+          "rest": {
+            "x": 404.2708333333333,
+            "y": 34.48160000000001
+          }
+        }
+      },
+      {
+        "target": {
+          "kind": "part",
+          "id": "tail_root_underlap"
+        },
+        "kind": "ok",
+        "worst": {
+          "ratio": 0.5335650850517119,
+          "where": {
+            "triangle": 159
+          },
+          "pose": {
+            "name": "ParamAngleX=-30 ParamAngleY=-30 ParamAngleZ=30 ParamBodyAngleX=-10 ParamBodyAngleY=-10 ParamBodyAngleZ=10",
+            "values": {
+              "ParamAngleX": -30,
+              "ParamAngleY": -30,
+              "ParamAngleZ": 30,
+              "ParamBodyAngleX": -10,
+              "ParamBodyAngleY": -10,
+              "ParamBodyAngleZ": 10
+            }
+          },
+          "rest": {
+            "x": 404.2708333333333,
+            "y": 34.48160000000001
+          }
+        }
+      },
+      {
+        "target": {
+          "kind": "part",
+          "id": "mouth_open"
+        },
+        "kind": "ok",
+        "worst": {
+          "ratio": 0.6304989935015278,
+          "where": {
+            "triangle": 3
+          },
+          "pose": {
+            "name": "ParamMouthForm=-1",
+            "values": {
+              "ParamMouthForm": -1
+            }
+          },
+          "rest": {
+            "x": 8.94435560546532,
+            "y": 242.0833286535319
+          }
+        }
+      }
+    ],
+    "offenders": []
+  },
+  "physics": {
+    "thresholds": {
+      "displacementPx": 1,
+      "pinnedFrames": 60
+    },
+    "targets": [
+      {
+        "rig": {
+          "kind": "spring",
+          "id": "hairSway"
+        },
+        "input": [
+          "ParamAngleX",
+          "ParamAmbientSway"
+        ],
+        "output": "ParamHairSwayX",
+        "drives": [
+          {
+            "kind": "part",
+            "id": "hair_front"
+          }
+        ],
+        "kind": "ok",
+        "step": {
+          "values": {
+            "ParamAngleX": 30
+          },
+          "peak": -13.700555555256111,
+          "at": 0.016666666666666666,
+          "final": 1.232557758079622e-7,
+          "displacementPx": 23.46563720703125
+        },
+        "idle": {
+          "peak": 3.6678251561002684,
+          "at": 26.916666666666668,
+          "displacementPx": 6.282073974609375
+        }
+      },
+      {
+        "rig": {
+          "kind": "spring",
+          "id": "hairTilt"
+        },
+        "input": [
+          "ParamAngleZ"
+        ],
+        "output": "ParamHairSwayZ",
+        "drives": [
+          {
+            "kind": "part",
+            "id": "hair_front"
+          }
+        ],
+        "kind": "ok",
+        "step": {
+          "values": {
+            "ParamAngleZ": 30
+          },
+          "peak": -8.8074999998075,
+          "at": 0.016666666666666666,
+          "final": 7.923585587654713e-8,
+          "displacementPx": 15.085052490234375
+        },
+        "idle": {
+          "peak": 0.02180109897534663,
+          "at": 0.21666666666666667,
+          "displacementPx": 0.03733932971954346
+        }
+      },
+      {
+        "rig": {
+          "kind": "spring",
+          "id": "hairBack"
+        },
+        "input": [
+          "ParamAngleX",
+          "ParamAngleZ",
+          "ParamAmbientSway"
+        ],
+        "output": "ParamHairBackSway",
+        "drives": [
+          {
+            "kind": "part",
+            "id": "hair_back"
+          }
+        ],
+        "kind": "ok",
+        "step": {
+          "values": {
+            "ParamAmbientSway": 1
+          },
+          "peak": -12.00235555544791,
+          "at": 0.016666666666666666,
+          "final": -0.00007028555444699158,
+          "displacementPx": 20.55194091796875
+        },
+        "idle": {
+          "peak": 4.174353050692977,
+          "at": 0.31666666666666665,
+          "displacementPx": 7.147857666015625
+        }
+      },
+      {
+        "rig": {
+          "kind": "spring",
+          "id": "tailSway"
+        },
+        "input": [
+          "ParamBodyAngleX",
+          "ParamAngleX",
+          "ParamBodyAngleZ",
+          "ParamAmbientSway"
+        ],
+        "output": "ParamTailSway",
+        "drives": [
+          {
+            "kind": "part",
+            "id": "tail"
+          }
+        ],
+        "kind": "ok",
+        "step": {
+          "values": {
+            "ParamBodyAngleX": 10
+          },
+          "peak": -0.6369914529884445,
+          "at": 0.016666666666666666,
+          "final": -6.325594872791385e-7,
+          "displacementPx": 18.11789316331093
+        },
+        "idle": {
+          "peak": 0.47780456726718645,
+          "at": 27.099999999999998,
+          "displacementPx": 13.590153879116631
+        }
+      }
+    ],
+    "offenders": []
+  }
+}

@@ -1,0 +1,367 @@
+[
+  {
+    "path": "mikan-auto-rig-v3.iki",
+    "bytes": 5771730,
+    "sha256": "839b80586bab6f7b44c08d9424cd0ffaca0822c223604f6101dab75af25a0481"
+  },
+  {
+    "path": "rig-v3/assets/tail-clean-source.png",
+    "bytes": 983092,
+    "sha256": "25e9f831693b655f95ef895b467a4c037c6771cf2c4f57a6cf5a32dbba4d5e75"
+  },
+  {
+    "path": "rig-v3/assets/tail-generated.png",
+    "bytes": 1007829,
+    "sha256": "64239fb8917a5cf65beb1d2c340d4842f7488d8fe9ad698bf60f5ebfd09b13a2"
+  },
+  {
+    "path": "rig-v3/assets/tail.png",
+    "bytes": 247013,
+    "sha256": "8afa3e879b0b69251dadd09527b1fd59f968429477de51a61d357bec97174e75"
+  },
+  {
+    "path": "rig-v3/before-after.jpg",
+    "bytes": 266365,
+    "sha256": "d143b89ad462965339a331bc60b48a529d0895f78ec5e977c520731b069fffb6"
+  },
+  {
+    "path": "rig-v3/build-validation.json",
+    "bytes": 6290,
+    "sha256": "65b155e6e2c408dd55f4229ea610ead26da4079734f2912179f4cf9ed7d59de2"
+  },
+  {
+    "path": "rig-v3/build_v3.py",
+    "bytes": 4721,
+    "sha256": "d7c3d090a0b26496b22f3503f88849a8cdefbdb9cdd8617c011efe384dc1b94b"
+  },
+  {
+    "path": "rig-v3/combined-tilts.jpg",
+    "bytes": 350782,
+    "sha256": "389f3400dd0cbb8c42bc93053bfb63a0b7d5e4bec013f9a34c29b49651ba32b5"
+  },
+  {
+    "path": "rig-v3/comparison-validation.json",
+    "bytes": 2685,
+    "sha256": "524325273dc599a4c5586c4e36a1faf765272198c1407c740b7920fb5a2aded9"
+  },
+  {
+    "path": "rig-v3/generation-prompt.txt",
+    "bytes": 1766,
+    "sha256": "14dc98fec9e577c7b047afcc6c67743f8ed69200cf281e75f9229700a51c8fb1"
+  },
+  {
+    "path": "rig-v3/head-body-tilts.jpg",
+    "bytes": 352796,
+    "sha256": "cc38ec7844c84049f0ad7cb3f11a3779b31ce151694f2b9b87cf23316b63c304"
+  },
+  {
+    "path": "rig-v3/make_review.py",
+    "bytes": 4042,
+    "sha256": "998e8d8b65e648fcc1a919da31099071d31a9a5350d8a77735cb4ffc508e5cff"
+  },
+  {
+    "path": "rig-v3/motion-comparison-sheet.jpg",
+    "bytes": 232584,
+    "sha256": "a2c97e942c19e6156b39ecd67a8654108b664e92f6d742f6b3e47d54265ff927"
+  },
+  {
+    "path": "rig-v3/motion-comparison.webp",
+    "bytes": 9862596,
+    "sha256": "5719a89c030f6013e36fef2663e9fd9bbe382574f389b89acff88a79024d2a91"
+  },
+  {
+    "path": "rig-v3/motion-v2/frame-000.png",
+    "bytes": 426904,
+    "sha256": "5d5a896908abf80750afb31d6b41ae10da1d77ba088608b1550d714ba16e429d"
+  },
+  {
+    "path": "rig-v3/motion-v2/frame-018.png",
+    "bytes": 427164,
+    "sha256": "094dc7afb6bc21ac05fd8d5180d8c87aacc52b1bfb80103dd7b61d52c39279d1"
+  },
+  {
+    "path": "rig-v3/motion-v2/frame-036.png",
+    "bytes": 427592,
+    "sha256": "7f35c3d6df4aa4f4dde8e26d67277c071e836431e46d7884d4580ddcab0ce947"
+  },
+  {
+    "path": "rig-v3/motion-v2/frame-054.png",
+    "bytes": 426590,
+    "sha256": "65f943490c11a9cd77981638ce77c916031083332a7b11dc79982f3c5cff80db"
+  },
+  {
+    "path": "rig-v3/motion-v2/frame-072.png",
+    "bytes": 427116,
+    "sha256": "cace85a673018c6b46d67295124f1332f96e09c4341e34ad741d0f290cfe126a"
+  },
+  {
+    "path": "rig-v3/motion-v2/frame-090.png",
+    "bytes": 421096,
+    "sha256": "30043193ffa38d54ba10c95cb630c0a0c831f4db7d6106490b15bfeabe98669d"
+  },
+  {
+    "path": "rig-v3/motion-v2/frame-108.png",
+    "bytes": 426640,
+    "sha256": "7f36e4f1dacca3045559e0760bcaf55e8ad8801a95d1218badd61dc0b8261cf1"
+  },
+  {
+    "path": "rig-v3/motion-v2/frame-126.png",
+    "bytes": 436462,
+    "sha256": "83c68368ae6801076a4c23837f0985c6767c9234ae31e5d4f8ac1e70e0ee7791"
+  },
+  {
+    "path": "rig-v3/motion-v2/frame-143.png",
+    "bytes": 428274,
+    "sha256": "1b418ee843cfa9dabb9f9c56b86a354409e5e059799e1f9241490443bf2e4a46"
+  },
+  {
+    "path": "rig-v3/motion-v2-sheet.png",
+    "bytes": 856421,
+    "sha256": "b29e2da11f2eb5a01d72d89ffcb50e9bb5c15aec800f6bc9fd8979d32ac91bb3"
+  },
+  {
+    "path": "rig-v3/motion-v3/frame-000.png",
+    "bytes": 430367,
+    "sha256": "070fc42fee9841e70937a39a6ef15a61749ab28d521075f969b5e3f58543f094"
+  },
+  {
+    "path": "rig-v3/motion-v3/frame-018.png",
+    "bytes": 430541,
+    "sha256": "bc3d382aa3e2d54ac5feaae2f0eab2e68a108d9c32139082f2820063e24d7cf8"
+  },
+  {
+    "path": "rig-v3/motion-v3/frame-036.png",
+    "bytes": 430916,
+    "sha256": "5a840eabec8f3baa2c66cacef580a0673ecc530d2155bc92de9a47fe988d0ba6"
+  },
+  {
+    "path": "rig-v3/motion-v3/frame-054.png",
+    "bytes": 429907,
+    "sha256": "3808899e65a033ec6bc70228933e9b0147db8dfa103c05dc3b27d5b6c6685793"
+  },
+  {
+    "path": "rig-v3/motion-v3/frame-072.png",
+    "bytes": 430458,
+    "sha256": "1ebdff3d5a5b11ef9e55cd5ae44523e52e00d12f21961f61962997b08aa24d02"
+  },
+  {
+    "path": "rig-v3/motion-v3/frame-090.png",
+    "bytes": 419858,
+    "sha256": "1eca8a0d9d8a27992b796ecfb633f7f15a523184ab34b0a48a7dc70b2375601d"
+  },
+  {
+    "path": "rig-v3/motion-v3/frame-108.png",
+    "bytes": 429843,
+    "sha256": "1e6add0e48aec147ad05030d074648087dcf5e9bce87912a36706e5155e85925"
+  },
+  {
+    "path": "rig-v3/motion-v3/frame-126.png",
+    "bytes": 443510,
+    "sha256": "4373e30aeeb76a12b548731d57df6358b0060c5570c25bb17987ac6c2a2487f0"
+  },
+  {
+    "path": "rig-v3/motion-v3/frame-143.png",
+    "bytes": 432155,
+    "sha256": "f7d2036b33214d95d492203fb37d7678fbc9ff5a41df059c0bde0bac0aff41ad"
+  },
+  {
+    "path": "rig-v3/motion-v3-sheet.png",
+    "bytes": 863911,
+    "sha256": "2744a636032d8e77e7c6894a928aa8cac34ae89ca75acf259b8f93b6b60fe18d"
+  },
+  {
+    "path": "rig-v3/motion-validation.json",
+    "bytes": 132461,
+    "sha256": "6bbd2aeee7849c11124d95f3d7c2a5e7455890488380a7ff19d62c8860d4e4c7"
+  },
+  {
+    "path": "rig-v3/neutral-blink-mouth.jpg",
+    "bytes": 264365,
+    "sha256": "9a703f5b5648a25280e6320519ae571d903364f34761a480fba4adf505b5400c"
+  },
+  {
+    "path": "rig-v3/poses.json",
+    "bytes": 1826,
+    "sha256": "b2f6680f964f464a26daee067cbd276b1b25f165544dcf1e1351a923b75d40dc"
+  },
+  {
+    "path": "rig-v3/README.md",
+    "bytes": 5255,
+    "sha256": "8bb3c253023b442de5ff04f2280ff5b747a0f1b6cdfcc3595844384a35e9c9a9"
+  },
+  {
+    "path": "rig-v3/render-validation-v2.json",
+    "bytes": 24313,
+    "sha256": "71016eda57b85be26fc9e978d4ae6543b0aa7c54b22f04e10318ca91d977ebc9"
+  },
+  {
+    "path": "rig-v3/render-validation-v3.json",
+    "bytes": 23200,
+    "sha256": "e7a48088eead81efab92717d6d098ba271a9818ab4b7d3d79381fe4258240d4d"
+  },
+  {
+    "path": "rig-v3/render_motion.mjs",
+    "bytes": 4954,
+    "sha256": "a1edff1c6b3cb4812ff590f8625b9b91650af605c733071944aee2f018d6937f"
+  },
+  {
+    "path": "rig-v3/renders-v2/blink.png",
+    "bytes": 426045,
+    "sha256": "a6d5529a8510b970a531bca37398b76617caf5635447e033c3d86d3aafd007b2"
+  },
+  {
+    "path": "rig-v3/renders-v2/body-tilt-left.png",
+    "bytes": 428042,
+    "sha256": "7b40a831fcace64f9037be203a0a5fdd393d1c53840fd7de208f6e097cbe2dcb"
+  },
+  {
+    "path": "rig-v3/renders-v2/body-tilt-right.png",
+    "bytes": 427447,
+    "sha256": "ce20817edcbb32db16e40f7a4397b65e07d8b2888155958dcb53d85ed40b51a0"
+  },
+  {
+    "path": "rig-v3/renders-v2/combined-tilt-left.png",
+    "bytes": 436218,
+    "sha256": "d3598dda5268fda204b53f4c6bb13a2049fedc11c589fbd6704ff082a12d931a"
+  },
+  {
+    "path": "rig-v3/renders-v2/combined-tilt-right.png",
+    "bytes": 419324,
+    "sha256": "bea101934a950a36a7d95a064503337e9d976a60d801850cfcaa0157961e8caa"
+  },
+  {
+    "path": "rig-v3/renders-v2/head-tilt-left.png",
+    "bytes": 435241,
+    "sha256": "4112d07fbb3bd2a48877f55b4bbda0aa7ef40eccea95b93ebd31d33cf5ce930b"
+  },
+  {
+    "path": "rig-v3/renders-v2/head-tilt-right.png",
+    "bytes": 420244,
+    "sha256": "df51d8653c99446258ad767595048e0ef61bc0a19e3f9a578f654c17d6a4cb67"
+  },
+  {
+    "path": "rig-v3/renders-v2/mouth-open.png",
+    "bytes": 427162,
+    "sha256": "214c8bd9530b5f0c10a1e1129d0273bae945fbd351f5df51b78f86af44f2772b"
+  },
+  {
+    "path": "rig-v3/renders-v2/opposed-left.png",
+    "bytes": 433621,
+    "sha256": "15c515b07f6a2d2a8f3582f96509e7b751f3e55b3540c5107b7bcb1e3b0328d7"
+  },
+  {
+    "path": "rig-v3/renders-v2/opposed-right.png",
+    "bytes": 418115,
+    "sha256": "82e22934e8b80f172d2ab544e28dba08b3fae2464a5b57002c67594e14d17931"
+  },
+  {
+    "path": "rig-v3/renders-v2/rest.png",
+    "bytes": 426904,
+    "sha256": "5d5a896908abf80750afb31d6b41ae10da1d77ba088608b1550d714ba16e429d"
+  },
+  {
+    "path": "rig-v3/renders-v2/stress-left.png",
+    "bytes": 432108,
+    "sha256": "5e086ebbb71cbd741c322f5553d111dc83ee6fc8276daa816afcab662a5a03c8"
+  },
+  {
+    "path": "rig-v3/renders-v2/stress-right.png",
+    "bytes": 418519,
+    "sha256": "37a1c2f008f156557e00da37f7d5be5f8d283a8b2ee90847a590605ad70cb7f6"
+  },
+  {
+    "path": "rig-v3/renders-v2/tail-left.png",
+    "bytes": 426813,
+    "sha256": "8e57f45728b7807c01f2026b619547140b8f05f4449e8cc7d907f5cd9edf82e6"
+  },
+  {
+    "path": "rig-v3/renders-v2/tail-right.png",
+    "bytes": 426387,
+    "sha256": "ca226f2fcced03e7b825a612f8a9919d97f855739ca57c097f009fb7fb19ae95"
+  },
+  {
+    "path": "rig-v3/renders-v3/blink.png",
+    "bytes": 429544,
+    "sha256": "e7787cb7219e92e2f324d856716fc9e9dd68ea2e380f969e7f96bad68c26ea4a"
+  },
+  {
+    "path": "rig-v3/renders-v3/body-tilt-left.png",
+    "bytes": 432418,
+    "sha256": "32f6c7603d407bb0c9d071a451386178d5c15a78db2bf3103883483e60e64dce"
+  },
+  {
+    "path": "rig-v3/renders-v3/body-tilt-right.png",
+    "bytes": 429315,
+    "sha256": "814c1adf7c684e60b2d38051cf60969baf0f24d2869dfb9da2acfdace927aee5"
+  },
+  {
+    "path": "rig-v3/renders-v3/combined-tilt-left.png",
+    "bytes": 443698,
+    "sha256": "4346512be23a383fa6a3b9b0bdb2ccb057bf367a332d3f481c55816ca04ffde6"
+  },
+  {
+    "path": "rig-v3/renders-v3/combined-tilt-right.png",
+    "bytes": 418757,
+    "sha256": "872a03985c1762cef749e10308cd2aea3e662529a159f73b1f4cbcd06073905a"
+  },
+  {
+    "path": "rig-v3/renders-v3/head-tilt-left.png",
+    "bytes": 441608,
+    "sha256": "b869b496cc3d02c10f322e597419fa574a6f6e88b99e6619ac8ff59e98007807"
+  },
+  {
+    "path": "rig-v3/renders-v3/head-tilt-right.png",
+    "bytes": 420673,
+    "sha256": "785ccd4ba6c5304812ffa642c35b8ad6d0069acc37b8739c26e20b902c6403f4"
+  },
+  {
+    "path": "rig-v3/renders-v3/mouth-open.png",
+    "bytes": 430664,
+    "sha256": "03b11664dcc0983f832c2bbf0d5b5405c80706eca730ee2e64d924aa65475e22"
+  },
+  {
+    "path": "rig-v3/renders-v3/opposed-left.png",
+    "bytes": 439866,
+    "sha256": "198a2fa4f5b7a9786a121868d01b284baeaa3afddd6986db7def7cb48899ec08"
+  },
+  {
+    "path": "rig-v3/renders-v3/opposed-right.png",
+    "bytes": 419742,
+    "sha256": "6f7218858e27503c2a6e39a8ef4fe884227c24ac17f4864eccdfdd5200dab6c2"
+  },
+  {
+    "path": "rig-v3/renders-v3/rest.png",
+    "bytes": 430367,
+    "sha256": "070fc42fee9841e70937a39a6ef15a61749ab28d521075f969b5e3f58543f094"
+  },
+  {
+    "path": "rig-v3/renders-v3/stress-left.png",
+    "bytes": 439730,
+    "sha256": "67fa547f6584b251eecb30fded2caf90a3a4b7e9603e395a6c049d520d38b224"
+  },
+  {
+    "path": "rig-v3/renders-v3/stress-right.png",
+    "bytes": 421695,
+    "sha256": "02653d096a0cd318ee266323fb4544429f4c64113ae7de4423c92559ecd7b7be"
+  },
+  {
+    "path": "rig-v3/renders-v3/tail-left.png",
+    "bytes": 431434,
+    "sha256": "4e89367c6dabf7e29c02b8ec3e3f0ccd2fb876ff5263814c6a45eaa73dbcc29b"
+  },
+  {
+    "path": "rig-v3/renders-v3/tail-right.png",
+    "bytes": 429136,
+    "sha256": "a32b80077974f69503dac0ab2a7f7bd3c84dd12cc5db6ae21a1c552280c91a8a"
+  },
+  {
+    "path": "rig-v3/stress-tilts.jpg",
+    "bytes": 174693,
+    "sha256": "573bc1bfbee888462170c341674b9cee0a9fa9f169b309bd115ce352092cc65d"
+  },
+  {
+    "path": "rig-v3/v3-pose-sheet.jpg",
+    "bytes": 529267,
+    "sha256": "5bb9c626d47cfee11bad98903428e11e2cd907a71fa577e471982af9701b67da"
+  }
+]

@@ -1,0 +1,72 @@
+{
+  "rest": {
+    "changed_pixels": 2239,
+    "difference_bbox": [
+      80,
+      324,
+      456,
+      549
+    ],
+    "upper_face_region_exact": true
+  },
+  "turn-left": {
+    "changed_pixels": 2137,
+    "difference_bbox": [
+      80,
+      285,
+      456,
+      549
+    ],
+    "upper_face_region_exact": true
+  },
+  "turn-right": {
+    "changed_pixels": 2219,
+    "difference_bbox": [
+      80,
+      272,
+      456,
+      549
+    ],
+    "upper_face_region_exact": true
+  },
+  "blink": {
+    "changed_pixels": 2239,
+    "difference_bbox": [
+      80,
+      324,
+      456,
+      549
+    ],
+    "upper_face_region_exact": true
+  },
+  "gaze": {
+    "changed_pixels": 2239,
+    "difference_bbox": [
+      80,
+      324,
+      456,
+      549
+    ],
+    "upper_face_region_exact": true
+  },
+  "combined-left": {
+    "changed_pixels": 11382,
+    "difference_bbox": [
+      69,
+      187,
+      456,
+      549
+    ],
+    "upper_face_region_exact": true
+  },
+  "combined-right": {
+    "changed_pixels": 12910,
+    "difference_bbox": [
+      74,
+      171,
+      456,
+      549
+    ],
+    "upper_face_region_exact": false
+  }
+}

@@ -1,0 +1,162 @@
+{
+  "pose_differences": {
+    "blink": {
+      "changed_pixels": 17254,
+      "bbox": [
+        70,
+        197,
+        234,
+        451
+      ]
+    },
+    "body-tilt-left": {
+      "changed_pixels": 17049,
+      "bbox": [
+        68,
+        197,
+        236,
+        451
+      ]
+    },
+    "body-tilt-right": {
+      "changed_pixels": 17650,
+      "bbox": [
+        70,
+        190,
+        236,
+        452
+      ]
+    },
+    "combined-tilt-left": {
+      "changed_pixels": 17662,
+      "bbox": [
+        64,
+        197,
+        236,
+        452
+      ]
+    },
+    "combined-tilt-right": {
+      "changed_pixels": 17945,
+      "bbox": [
+        70,
+        187,
+        235,
+        452
+      ]
+    },
+    "head-tilt-left": {
+      "changed_pixels": 17491,
+      "bbox": [
+        70,
+        197,
+        236,
+        452
+      ]
+    },
+    "head-tilt-right": {
+      "changed_pixels": 17173,
+      "bbox": [
+        70,
+        196,
+        235,
+        452
+      ]
+    },
+    "mouth-open": {
+      "changed_pixels": 17254,
+      "bbox": [
+        70,
+        197,
+        234,
+        451
+      ]
+    },
+    "opposed-left": {
+      "changed_pixels": 17209,
+      "bbox": [
+        68,
+        195,
+        236,
+        452
+      ]
+    },
+    "opposed-right": {
+      "changed_pixels": 16623,
+      "bbox": [
+        71,
+        196,
+        235,
+        452
+      ]
+    },
+    "rest": {
+      "changed_pixels": 17254,
+      "bbox": [
+        70,
+        197,
+        234,
+        451
+      ]
+    },
+    "stress-left": {
+      "changed_pixels": 16864,
+      "bbox": [
+        68,
+        197,
+        235,
+        452
+      ]
+    },
+    "stress-right": {
+      "changed_pixels": 18237,
+      "bbox": [
+        71,
+        183,
+        236,
+        452
+      ]
+    },
+    "tail-left": {
+      "changed_pixels": 17162,
+      "bbox": [
+        68,
+        197,
+        234,
+        451
+      ]
+    },
+    "tail-right": {
+      "changed_pixels": 17098,
+      "bbox": [
+        71,
+        196,
+        234,
+        451
+      ]
+    }
+  },
+  "neutral_blink_and_mouth_face_crop_exact": true,
+  "motion_frames_each_version": 144,
+  "idle_tail_parameter_range": {
+    "2": [
+      -0.46194954972454766,
+      0.46643524403692177
+    ],
+    "3": [
+      -0.32705143394072683,
+      0.3271597562445526
+    ]
+  },
+  "tilt_tail_parameter_range": {
+    "2": [
+      -0.49355351335669084,
+      0.49917841127624174
+    ],
+    "3": [
+      -0.4061923872225144,
+      0.40723900859681567
+    ]
+  },
+  "source_hashes_unchanged": true
+}

@@ -1,0 +1,3762 @@
+{
+  "engineBundle": "C:/Users/marcu/AppData/Local/npm-cache/_npx/9914f1ebc890932f/node_modules/@ikijs/mcp/dist/render-page.global.js",
+  "fps": 12,
+  "durationSeconds": 12,
+  "description": "0-6 seconds ambient idle; 6-12 seconds combined head/body tilts. Actual engine physics, 60 Hz.",
+  "versions": {
+    "2": {
+      "failedTextures": [],
+      "frames": [
+        {
+          "t": 0,
+          "values": {
+            "ParamAmbientSway": 0,
+            "ParamBreath": 0,
+            "ParamAngleZ": 0,
+            "ParamBodyAngleZ": 0,
+            "ParamHairSwayX": 0,
+            "ParamHairSwayZ": 0,
+            "ParamHairBackSway": 0,
+            "ParamTailSway": 0
+          }
+        },
+        {
+          "t": 0.08333333333333333,
+          "values": {
+            "ParamAmbientSway": 0.1201368388346471,
+            "ParamBreath": 0.0013695261579316775,
+            "ParamAngleZ": 0,
+            "ParamBodyAngleZ": 0,
+            "ParamHairSwayX": 0.054287790397011745,
+            "ParamHairSwayZ": 0,
+            "ParamHairBackSway": -1.371899142089915,
+            "ParamTailSway": 0.0016118684171742969
+          }
+        },
+        {
+          "t": 0.16666666666666666,
+          "values": {
+            "ParamAmbientSway": 0.23853345757858088,
+            "ParamBreath": 0.005463099816548578,
+            "ParamAngleZ": 0,
+            "ParamBodyAngleZ": 0,
+            "ParamHairSwayX": 0.273880710740679,
+            "ParamHairSwayZ": 0,
+            "ParamHairBackSway": -2.429438504218318,
+            "ParamTailSway": 0.009120539240786261
+          }
+        },
+        {
+          "t": 0.25,
+          "values": {
+            "ParamAmbientSway": 0.35347484377925714,
+            "ParamBreath": 0.012235870926211617,
+            "ParamAngleZ": 0,
+            "ParamBodyAngleZ": 0,
+            "ParamHairSwayX": 0.6600369351037368,
+            "ParamHairSwayZ": 0,
+            "ParamHairBackSway": -3.049715119748642,
+            "ParamTailSway": 0.02519260527103799
+          }
+        },
+        {
+          "t": 0.3333333333333333,
+          "values": {
+            "ParamAmbientSway": 0.4632960351198617,
+            "ParamBreath": 0.021613635589349783,
+            "ParamAngleZ": 0,
+            "ParamBodyAngleZ": 0,
+            "ParamHairSwayX": 1.1405128793476154,
+            "ParamHairSwayZ": 0,
+            "ParamHairBackSway": -3.226395867827307,
+            "ParamTailSway": 0.050641727312064656
+          }
+        },
+        {
+          "t": 0.4166666666666667,
+          "values": {
+            "ParamAmbientSway": 0.5664062369248328,
+            "ParamBreath": 0.03349364905389035,
+            "ParamAngleZ": 0,
+            "ParamBodyAngleZ": 0,
+            "ParamHairSwayX": 1.6304492994270787,
+            "ParamHairSwayZ": 0,
+            "ParamHairBackSway": -3.033725632348646,
+            "ParamTailSway": 0.08484049761412064
+          }
+        },
+        {
+          "t": 0.5,
+          "values": {
+            "ParamAmbientSway": 0.6613118653236518,
+            "ParamBreath": 0.04774575140626314,
+            "ParamAngleZ": 0,
+            "ParamBodyAngleZ": 0,
+            "ParamHairSwayX": 2.070336619187014,
+            "ParamHairSwayZ": 0,
+            "ParamHairBackSway": -2.587091179334668,
+            "ParamTailSway": 0.12615538628650325
+          }
+        },
+        {
+          "t": 0.5833333333333334,
+          "values": {
+            "ParamAmbientSway": 0.7466381822853914,
+            "ParamBreath": 0.06421379363065144,
+            "ParamAngleZ": 0,
+            "ParamBodyAngleZ": 0,
+            "ParamHairSwayX": 2.4363157344834314,
+            "ParamHairSwayZ": 0,
+            "ParamHairBackSway": -2.0086509495194806,
+            "ParamTailSway": 0.1723547455501314
+          }
+        },
+        {
+          "t": 0.6666666666666666,
+          "values": {
+            "ParamAmbientSway": 0.821149209133704,
+            "ParamBreath": 0.08271734841028544,
+            "ParamAngleZ": 0,
+            "ParamBodyAngleZ": 0,
+            "ParamHairSwayX": 2.7314606449360004,
+            "ParamHairSwayZ": 0,
+            "ParamHairBackSway": -1.402841523593622,
+            "ParamTailSway": 0.2209578234198517
+          }
+        },
+        {
+          "t": 0.75,
+          "values": {
+            "ParamAmbientSway": 0.8837656300886935,
+            "ParamBreath": 0.10305368692688172,
+            "ParamAngleZ": 0,
+            "ParamBodyAngleZ": 0,
+            "ParamHairSwayX": 2.9703896903584974,
+            "ParamHairSwayZ": 0,
+            "ParamHairBackSway": -0.8431629980881561,
+            "ParamTailSway": 0.2695084361301376
+          }
+        },
+        {
+          "t": 0.8333333333333334,
+          "values": {
+            "ParamAmbientSway": 0.9335804264972017,
+            "ParamBreath": 0.12500000000000003,
+            "ParamAngleZ": 0,
+            "ParamBodyAngleZ": 0,
+            "ParamHairSwayX": 3.166543420135124,
+            "ParamHairSwayZ": 0,
+            "ParamHairBackSway": -0.3690741062764331,
+            "ParamTailSway": 0.31576947956231916
+          }
+        },
+        {
+          "t": 0.9166666666666666,
+          "values": {
+            "ParamAmbientSway": 0.9698720152847468,
+            "ParamBreath": 0.1483158392310499,
+            "ParamAngleZ": 0,
+            "ParamBodyAngleZ": 0,
+            "ParamHairSwayX": 3.3260682616143886,
+            "ParamHairSwayZ": 0,
+            "ParamHairBackSway": 0.009693699152176771,
+            "ParamTailSway": 0.3578435284781729
+          }
+        },
+        {
+          "t": 1,
+          "values": {
+            "ParamAmbientSway": 0.9921147013144779,
+            "ParamBreath": 0.17274575140626314,
+            "ParamAngleZ": 0,
+            "ParamBodyAngleZ": 0,
+            "ParamHairSwayX": 3.4477465962459624,
+            "ParamHairSwayZ": 0,
+            "ParamHairBackSway": 0.3046189440500662,
+            "ParamTailSway": 0.394230523584874
+          }
+        },
+        {
+          "t": 1.0833333333333333,
+          "values": {
+            "ParamAmbientSway": 0.9999862922474267,
+            "ParamBreath": 0.19802207729556015,
+            "ParamAngleZ": 0,
+            "ParamBodyAngleZ": 0,
+            "ParamHairSwayX": 3.526220722458416,
+            "ParamHairSwayZ": 0,
+            "ParamHairBackSway": 0.5386367998297916,
+            "ParamTailSway": 0.4238364164734367
+          }
+        },
+        {
+          "t": 1.1666666666666667,
+          "values": {
+            "ParamAmbientSway": 0.9933727656003964,
+            "ParamBreath": 0.22386788418308665,
+            "ParamAngleZ": 0,
+            "ParamBodyAngleZ": 0,
+            "ParamHairSwayX": 3.5556928391990965,
+            "ParamHairSwayZ": 0,
+            "ParamHairBackSway": 0.7373912149148059,
+            "ParamTailSway": 0.44594722522439617
+          }
+        },
+        {
+          "t": 1.25,
+          "values": {
+            "ParamAmbientSway": 0.9723699203976767,
+            "ParamBreath": 0.24999999999999997,
+            "ParamAngleZ": 0,
+            "ParamBodyAngleZ": 0,
+            "ParamHairSwayX": 3.532388680636969,
+            "ParamHairSwayZ": 0,
+            "ParamHairBackSway": 0.9228214803881127,
+            "ParamTailSway": 0.4601818923208579
+          }
+        },
+        {
+          "t": 1.3333333333333333,
+          "values": {
+            "ParamAmbientSway": 0.9372819894918916,
+            "ParamBreath": 0.2761321158169133,
+            "ParamAngleZ": 0,
+            "ParamBodyAngleZ": 0,
+            "ParamHairSwayX": 3.455360124445964,
+            "ParamHairSwayZ": 0,
+            "ParamHairBackSway": 1.109544521489787,
+            "ParamTailSway": 0.46643524403692177
+          }
+        },
+        {
+          "t": 1.4166666666666667,
+          "values": {
+            "ParamAmbientSway": 0.8886172326549487,
+            "ParamBreath": 0.30197792270443985,
+            "ParamAngleZ": 0,
+            "ParamBodyAngleZ": 0,
+            "ParamHairSwayX": 3.3260665280247608,
+            "ParamHairSwayZ": 0,
+            "ParamHairBackSway": 1.3038198469136997,
+            "ParamTailSway": 0.4648197559639158
+          }
+        },
+        {
+          "t": 1.5,
+          "values": {
+            "ParamAmbientSway": 0.8270805742745617,
+            "ParamBreath": 0.32725424859373686,
+            "ParamAngleZ": 0,
+            "ParamBodyAngleZ": 0,
+            "ParamHairSwayX": 3.1474614555471465,
+            "ParamHairSwayZ": 0,
+            "ParamHairBackSway": 1.5044672874288147,
+            "ParamTailSway": 0.45561215075887795
+          }
+        },
+        {
+          "t": 1.5833333333333333,
+          "values": {
+            "ParamAmbientSway": 0.753563392301638,
+            "ParamBreath": 0.35168416076895004,
+            "ParamAngleZ": 0,
+            "ParamBodyAngleZ": 0,
+            "ParamHairSwayX": 2.923171683596039,
+            "ParamHairSwayZ": 0,
+            "ParamHairBackSway": 1.7049435514529878,
+            "ParamTailSway": 0.4392083899982578
+          }
+        },
+        {
+          "t": 1.6666666666666667,
+          "values": {
+            "ParamAmbientSway": 0.669130606358858,
+            "ParamBreath": 0.37500000000000006,
+            "ParamAngleZ": 0,
+            "ParamBodyAngleZ": 0,
+            "ParamHairSwayX": 2.657042772765287,
+            "ParamHairSwayZ": 0,
+            "ParamHairBackSway": 1.8958214720877684,
+            "ParamTailSway": 0.4160885575325102
+          }
+        },
+        {
+          "t": 1.75,
+          "values": {
+            "ParamAmbientSway": 0.5750052520432787,
+            "ParamBreath": 0.39694631307311823,
+            "ParamAngleZ": 0,
+            "ParamBodyAngleZ": 0,
+            "ParamHairSwayX": 2.3530465567057335,
+            "ParamHairSwayZ": 0,
+            "ParamHairBackSway": 2.0670833302256044,
+            "ParamTailSway": 0.3867915550658205
+          }
+        },
+        {
+          "t": 1.8333333333333333,
+          "values": {
+            "ParamAmbientSway": 0.4725507648690541,
+            "ParamBreath": 0.41728265158971445,
+            "ParamAngleZ": 0,
+            "ParamBodyAngleZ": 0,
+            "ParamHairSwayX": 2.015398047482632,
+            "ParamHairSwayZ": 0,
+            "ParamHairBackSway": 2.209863511228459,
+            "ParamTailSway": 0.3518984535395109
+          }
+        },
+        {
+          "t": 1.9166666666666667,
+          "values": {
+            "ParamAmbientSway": 0.3632512304729784,
+            "ParamBreath": 0.4357862063693486,
+            "ParamAngleZ": 0,
+            "ParamBodyAngleZ": 0,
+            "ParamHairSwayX": 1.6487118073445006,
+            "ParamHairSwayZ": 0,
+            "ParamHairBackSway": 2.317495767140469,
+            "ParamTailSway": 0.3120227237806165
+          }
+        },
+        {
+          "t": 2,
+          "values": {
+            "ParamAmbientSway": 0.24868988716485482,
+            "ParamBreath": 0.45225424859373686,
+            "ParamAngleZ": 0,
+            "ParamBodyAngleZ": 0,
+            "ParamHairSwayX": 1.258087629420343,
+            "ParamHairSwayZ": 0,
+            "ParamHairBackSway": 2.3858964572401313,
+            "ParamTailSway": 0.26780533095709735
+          }
+        },
+        {
+          "t": 2.0833333333333335,
+          "values": {
+            "ParamAmbientSway": 0.13052619222005157,
+            "ParamBreath": 0.4665063509461097,
+            "ParamAngleZ": 0,
+            "ParamBodyAngleZ": 0,
+            "ParamHairSwayX": 0.8490925368149119,
+            "ParamHairSwayZ": 0,
+            "ParamHairBackSway": 2.4134284497865917,
+            "ParamTailSway": 0.2199127283448039
+          }
+        },
+        {
+          "t": 2.1666666666666665,
+          "values": {
+            "ParamAmbientSway": 0.010471784116246153,
+            "ParamBreath": 0.4783863644106502,
+            "ParamAngleZ": 0,
+            "ParamBodyAngleZ": 0,
+            "ParamHairSwayX": 0.42766141472317454,
+            "ParamHairSwayZ": 0,
+            "ParamHairBackSway": 2.400439896138231,
+            "ParamTailSway": 0.16903603391655797
+          }
+        },
+        {
+          "t": 2.25,
+          "values": {
+            "ParamAmbientSway": -0.10973431109104541,
+            "ParamBreath": 0.4877641290737884,
+            "ParamAngleZ": 0,
+            "ParamBodyAngleZ": 0,
+            "ParamHairSwayX": -0.000040223880686215656,
+            "ParamHairSwayZ": 0,
+            "ParamHairBackSway": 2.348669142243686,
+            "ParamTailSway": 0.1158900337773359
+          }
+        },
+        {
+          "t": 2.3333333333333335,
+          "values": {
+            "ParamAmbientSway": -0.22835087011065594,
+            "ParamBreath": 0.4945369001834514,
+            "ParamAngleZ": 0,
+            "ParamBodyAngleZ": 0,
+            "ParamHairSwayX": -0.42775355791226555,
+            "ParamHairSwayZ": 0,
+            "ParamHairBackSway": 2.260669133509141,
+            "ParamTailSway": 0.06121105925528062
+          }
+        },
+        {
+          "t": 2.4166666666666665,
+          "values": {
+            "ParamAmbientSway": -0.3436596945856159,
+            "ParamBreath": 0.4986304738420683,
+            "ParamAngleZ": 0,
+            "ParamBodyAngleZ": 0,
+            "ParamHairSwayX": -0.849243942302454,
+            "ParamHairSwayZ": 0,
+            "ParamHairBackSway": 2.1393502216401474,
+            "ParamTailSway": 0.005753176288984734
+          }
+        },
+        {
+          "t": 2.5,
+          "values": {
+            "ParamAmbientSway": -0.4539904997395467,
+            "ParamBreath": 0.5,
+            "ParamAngleZ": 0,
+            "ParamBodyAngleZ": 0,
+            "ParamHairSwayX": -1.2583957883899177,
+            "ParamHairSwayZ": 0,
+            "ParamHairBackSway": 1.9876848784785217,
+            "ParamTailSway": -0.0497175294251672
+          }
+        },
+        {
+          "t": 2.5833333333333335,
+          "values": {
+            "ParamAmbientSway": -0.5577451089796904,
+            "ParamBreath": 0.4986304738420683,
+            "ParamAngleZ": 0,
+            "ParamBodyAngleZ": 0,
+            "ParamHairSwayX": -1.649291901784422,
+            "ParamHairSwayZ": 0,
+            "ParamHairBackSway": 1.8085721931525256,
+            "ParamTailSway": -0.10443051074137288
+          }
+        },
+        {
+          "t": 2.6666666666666665,
+          "values": {
+            "ParamAmbientSway": -0.6534206039901054,
+            "ParamBreath": 0.4945369001834514,
+            "ParamAngleZ": 0,
+            "ParamBodyAngleZ": 0,
+            "ParamHairSwayX": -2.016286259184847,
+            "ParamHairSwayZ": 0,
+            "ParamHairBackSway": 1.6048296054335986,
+            "ParamTailSway": -0.15761989785701291
+          }
+        },
+        {
+          "t": 2.75,
+          "values": {
+            "ParamAmbientSway": -0.7396310949786097,
+            "ParamBreath": 0.4877641290737884,
+            "ParamAngleZ": 0,
+            "ParamBodyAngleZ": 0,
+            "ParamHairSwayX": -2.354076111022739,
+            "ParamHairSwayZ": 0,
+            "ParamHairBackSway": 1.3792649308764484,
+            "ParamTailSway": -0.20853482549353017
+          }
+        },
+        {
+          "t": 2.8333333333333335,
+          "values": {
+            "ParamAmbientSway": -0.8151277957285543,
+            "ParamBreath": 0.4783863644106502,
+            "ParamAngleZ": 0,
+            "ParamBodyAngleZ": 0,
+            "ParamHairSwayX": -2.657774781153706,
+            "ParamHairSwayZ": 0,
+            "ParamHairBackSway": 1.134780907026453,
+            "ParamTailSway": -0.25645049170946627
+          }
+        },
+        {
+          "t": 2.9166666666666665,
+          "values": {
+            "ParamAmbientSway": -0.8788171126619653,
+            "ParamBreath": 0.4665063509461097,
+            "ParamAngleZ": 0,
+            "ParamBodyAngleZ": 0,
+            "ParamHairSwayX": -2.922983112992569,
+            "ParamHairSwayZ": 0,
+            "ParamHairBackSway": 0.8744730220499652,
+            "ParamTailSway": -0.30067947912492365
+          }
+        },
+        {
+          "t": 3,
+          "values": {
+            "ParamAmbientSway": -0.9297764858882515,
+            "ParamBreath": 0.45225424859373686,
+            "ParamAngleZ": 0,
+            "ParamBodyAngleZ": 0,
+            "ParamHairSwayX": -3.14585609950769,
+            "ParamHairSwayZ": 0,
+            "ParamHairBackSway": 0.6016946656328466,
+            "ParamTailSway": -0.3405828954793252
+          }
+        },
+        {
+          "t": 3.0833333333333335,
+          "values": {
+            "ParamAmbientSway": -0.9672677527758767,
+            "ParamBreath": 0.43578620636934856,
+            "ParamAngleZ": 0,
+            "ParamBodyAngleZ": 0,
+            "ParamHairSwayX": -3.3231615171534705,
+            "ParamHairSwayZ": 0,
+            "ParamHairBackSway": 0.3200776504956475,
+            "ParamTailSway": -0.3755809420473141
+          }
+        },
+        {
+          "t": 3.1666666666666665,
+          "values": {
+            "ParamAmbientSway": -0.9907478404714435,
+            "ParamBreath": 0.4172826515897146,
+            "ParamAngleZ": 0,
+            "ParamBodyAngleZ": 0,
+            "ParamHairSwayX": -3.452328510765567,
+            "ParamHairSwayZ": 0,
+            "ParamHairBackSway": 0.03350803239271993,
+            "ParamTailSway": -0.405162583970418
+          }
+        },
+        {
+          "t": 3.25,
+          "values": {
+            "ParamAmbientSway": -0.9998766324816606,
+            "ParamBreath": 0.39694631307311834,
+            "ParamAngleZ": 0,
+            "ParamBodyAngleZ": 0,
+            "ParamHairSwayX": -3.5314852530717227,
+            "ParamHairSwayZ": 0,
+            "ParamHairBackSway": -0.25393463142522155,
+            "ParamTailSway": -0.428894066759581
+          }
+        },
+        {
+          "t": 3.3333333333333335,
+          "values": {
+            "ParamAmbientSway": -0.9945218953682733,
+            "ParamBreath": 0.3749999999999999,
+            "ParamAngleZ": 0,
+            "ParamBodyAngleZ": 0,
+            "ParamHairSwayX": -3.5594855851051674,
+            "ParamHairSwayZ": 0,
+            "ParamHairBackSway": -0.5380622559114934,
+            "ParamTailSway": -0.446426091305362
+          }
+        },
+        {
+          "t": 3.4166666666666665,
+          "values": {
+            "ParamAmbientSway": -0.9747611941912218,
+            "ParamBreath": 0.35168416076895026,
+            "ParamAngleZ": 0,
+            "ParamBodyAngleZ": 0,
+            "ParamHairSwayX": -3.5359248563092502,
+            "ParamHairSwayZ": 0,
+            "ParamHairBackSway": -0.814674425484287,
+            "ParamTailSway": -0.45749952130205784
+          }
+        },
+        {
+          "t": 3.5,
+          "values": {
+            "ParamAmbientSway": -0.9408807689542256,
+            "ParamBreath": 0.32725424859373686,
+            "ParamAngleZ": 0,
+            "ParamBodyAngleZ": 0,
+            "ParamHairSwayX": -3.461145176991737,
+            "ParamHairSwayZ": 0,
+            "ParamHairBackSway": -1.0796546331844812,
+            "ParamTailSway": -0.46194954972454766
+          }
+        },
+        {
+          "t": 3.5833333333333335,
+          "values": {
+            "ParamAmbientSway": -0.8933713883278375,
+            "ParamBreath": 0.30197792270443974,
+            "ParamAngleZ": 0,
+            "ParamBodyAngleZ": 0,
+            "ParamHairSwayX": -3.336230182736573,
+            "ParamHairSwayZ": 0,
+            "ParamHairBackSway": -1.3290585648963984,
+            "ParamTailSway": -0.45970829421221904
+          }
+        },
+        {
+          "t": 3.6666666666666665,
+          "values": {
+            "ParamAmbientSway": -0.8329212407100997,
+            "ParamBreath": 0.27613211581691355,
+            "ParamAngleZ": 0,
+            "ParamBodyAngleZ": 0,
+            "ParamHairSwayX": -3.1629893478977285,
+            "ParamHairSwayZ": 0,
+            "ParamHairBackSway": -1.5591899441225052,
+            "ParamTailSway": -0.4508058254145908
+          }
+        },
+        {
+          "t": 3.75,
+          "values": {
+            "ParamAmbientSway": -0.7604059656000308,
+            "ParamBreath": 0.25000000000000006,
+            "ParamAngleZ": 0,
+            "ParamBodyAngleZ": 0,
+            "ParamHairSwayX": -2.943931937049619,
+            "ParamHairSwayZ": 0,
+            "ParamHairBackSway": -1.7666625354678056,
+            "ParamTailSway": -0.4353696587805731
+          }
+        },
+        {
+          "t": 3.8333333333333335,
+          "values": {
+            "ParamAmbientSway": -0.6768759696826608,
+            "ParamBreath": 0.22386788418308654,
+            "ParamAngleZ": 0,
+            "ParamBodyAngleZ": 0,
+            "ParamHairSwayX": -2.6822308357912954,
+            "ParamHairSwayZ": 0,
+            "ParamHairBackSway": -1.9484491279442169,
+            "ParamTailSway": -0.4136227605302925
+          }
+        },
+        {
+          "t": 3.9166666666666665,
+          "values": {
+            "ParamAmbientSway": -0.5835412113561179,
+            "ParamBreath": 0.19802207729556037,
+            "ParamAngleZ": 0,
+            "ParamBodyAngleZ": 0,
+            "ParamHairSwayX": -2.381676705234061,
+            "ParamHairSwayZ": 0,
+            "ParamHairBackSway": -2.10191955452653,
+            "ParamTailSway": -0.38588013429819745
+          }
+        },
+        {
+          "t": 4,
+          "values": {
+            "ParamAmbientSway": -0.4817536741017153,
+            "ParamBreath": 0.1727457514062632,
+            "ParamAngleZ": 0,
+            "ParamBodyAngleZ": 0,
+            "ParamHairSwayX": -2.046623107184118,
+            "ParamHairSwayZ": 0,
+            "ParamHairBackSway": -2.22487015259839,
+            "ParamTailSway": -0.3525440676892938
+          }
+        },
+        {
+          "t": 4.083333333333333,
+          "values": {
+            "ParamAmbientSway": -0.37298778257580933,
+            "ParamBreath": 0.14831583923105007,
+            "ParamAngleZ": 0,
+            "ParamBodyAngleZ": 0,
+            "ParamHairSwayX": -1.6819234183589673,
+            "ParamHairSwayZ": 0,
+            "ParamHairBackSway": -2.3155467671656287,
+            "ParamTailSway": -0.3140981289739598
+          }
+        },
+        {
+          "t": 4.166666666666667,
+          "values": {
+            "ParamAmbientSway": -0.2588190451025207,
+            "ParamBreath": 0.12499999999999997,
+            "ParamAngleZ": 0,
+            "ParamBodyAngleZ": 0,
+            "ParamHairSwayX": -1.2928604832169837,
+            "ParamHairSwayZ": 0,
+            "ParamHairBackSway": -2.372662728406044,
+            "ParamTailSway": -0.2711000142440656
+          }
+        },
+        {
+          "t": 4.25,
+          "values": {
+            "ParamAmbientSway": -0.140901231937583,
+            "ParamBreath": 0.10305368692688177,
+            "ParamAngleZ": 0,
+            "ParamBodyAngleZ": 0,
+            "ParamHairSwayX": -0.8850700523016262,
+            "ParamHairSwayZ": 0,
+            "ParamHairBackSway": -2.395412459244745,
+            "ParamTailSway": -0.22417335509847613
+          }
+        },
+        {
+          "t": 4.333333333333333,
+          "values": {
+            "ParamAmbientSway": -0.020942419883357676,
+            "ParamBreath": 0.08271734841028555,
+            "ParamAngleZ": 0,
+            "ParamBodyAngleZ": 0,
+            "ParamHairSwayX": -0.4644591274973047,
+            "ParamHairSwayZ": 0,
+            "ParamHairBackSway": -2.3834806851932604,
+            "ParamTailSway": -0.17399860653910926
+          }
+        },
+        {
+          "t": 4.416666666666667,
+          "values": {
+            "ParamAmbientSway": 0.09931974974363968,
+            "ParamBreath": 0.06421379363065144,
+            "ParamAngleZ": 0,
+            "ParamBodyAngleZ": 0,
+            "ParamHairSwayX": -0.037120396009716554,
+            "ParamHairSwayZ": 0,
+            "ParamHairBackSway": -2.33704674489972,
+            "ParamTailSway": -0.12130314420290107
+          }
+        },
+        {
+          "t": 4.5,
+          "values": {
+            "ParamAmbientSway": 0.21814324139654281,
+            "ParamBreath": 0.047745751406263165,
+            "ParamAngleZ": 0,
+            "ParamBodyAngleZ": 0,
+            "ParamHairSwayX": 0.39075601524740605,
+            "ParamHairSwayZ": 0,
+            "ParamHairBackSway": -2.2567832759778255,
+            "ParamTailSway": -0.06685070910649032
+          }
+        },
+        {
+          "t": 4.583333333333333,
+          "values": {
+            "ParamAmbientSway": 0.33380685923377085,
+            "ParamBreath": 0.033493649053890406,
+            "ParamAngleZ": 0,
+            "ParamBodyAngleZ": 0,
+            "ParamHairSwayX": 0.8129721948674895,
+            "ParamHairSwayZ": 0,
+            "ParamHairBackSway": -2.1438485569963506,
+            "ParamTailSway": -0.011430346398274885
+          }
+        },
+        {
+          "t": 4.666666666666667,
+          "values": {
+            "ParamAmbientSway": 0.44463517918492784,
+            "ParamBreath": 0.021613635589349756,
+            "ParamAngleZ": 0,
+            "ParamBodyAngleZ": 0,
+            "ParamHairSwayX": 1.2234122182800369,
+            "ParamHairSwayZ": 0,
+            "ParamHairBackSway": -1.9998719661248805,
+            "ParamTailSway": 0.04415500819741749
+          }
+        },
+        {
+          "t": 4.75,
+          "values": {
+            "ParamAmbientSway": 0.5490228179981318,
+            "ParamBreath": 0.012235870926211617,
+            "ParamAngleZ": 0,
+            "ParamBodyAngleZ": 0,
+            "ParamHairSwayX": 1.6161307362640907,
+            "ParamHairSwayZ": 0,
+            "ParamHairBackSway": -1.8269322981912561,
+            "ParamTailSway": 0.09910013489148799
+          }
+        },
+        {
+          "t": 4.833333333333333,
+          "values": {
+            "ParamAmbientSway": 0.6454576877239503,
+            "ParamBreath": 0.0054630998165486055,
+            "ParamAngleZ": 0,
+            "ParamBodyAngleZ": 0,
+            "ParamHairSwayX": 1.9854390962473714,
+            "ParamHairSwayZ": 0,
+            "ParamHairBackSway": -1.627528996350578,
+            "ParamTailSway": 0.15260916615322342
+          }
+        },
+        {
+          "t": 4.916666666666667,
+          "values": {
+            "ParamAmbientSway": 0.7325428987873789,
+            "ParamBreath": 0.0013695261579316775,
+            "ParamAngleZ": 0,
+            "ParamBodyAngleZ": 0,
+            "ParamHairSwayX": 2.325987746802704,
+            "ParamHairSwayZ": 0,
+            "ParamHairBackSway": -1.4045466485129605,
+            "ParamTailSway": 0.20390708807596758
+          }
+        },
+        {
+          "t": 5,
+          "values": {
+            "ParamAmbientSway": 0.8090169943749472,
+            "ParamBreath": 0,
+            "ParamAngleZ": 0,
+            "ParamBodyAngleZ": 0,
+            "ParamHairSwayX": 2.6328437299410674,
+            "ParamHairSwayZ": 0,
+            "ParamHairBackSway": -1.1612133382965026,
+            "ParamTailSway": 0.2522509427593804
+          }
+        },
+        {
+          "t": 5.083333333333333,
+          "values": {
+            "ParamAmbientSway": 0.8737722230354649,
+            "ParamBreath": 0.0013695261579316498,
+            "ParamAngleZ": 0,
+            "ParamBodyAngleZ": 0,
+            "ParamHairSwayX": 2.901562137849713,
+            "ParamHairSwayZ": 0,
+            "ParamHairBackSway": -0.9010536113137737,
+            "ParamTailSway": 0.29694057091256004
+          }
+        },
+        {
+          "t": 5.166666666666667,
+          "values": {
+            "ParamAmbientSway": 0.9258705848099951,
+            "ParamBreath": 0.0054630998165486055,
+            "ParamAngleZ": 0,
+            "ParamBodyAngleZ": 0,
+            "ParamHairSwayX": 3.1282504989762288,
+            "ParamHairSwayZ": 0,
+            "ParamHairBackSway": -0.6278369215644617,
+            "ParamTailSway": 0.33732873962968857
+          }
+        },
+        {
+          "t": 5.25,
+          "values": {
+            "ParamAmbientSway": 0.9645574184577982,
+            "ParamBreath": 0.01223587092621159,
+            "ParamAngleZ": 0,
+            "ParamBodyAngleZ": 0,
+            "ParamHairSwayX": 3.3096251612343424,
+            "ParamHairSwayZ": 0,
+            "ParamHairBackSway": -0.3455224713078562,
+            "ParamTailSway": 0.37283050850586685
+          }
+        },
+        {
+          "t": 5.333333333333333,
+          "values": {
+            "ParamAmbientSway": 0.9892723329629883,
+            "ParamBreath": 0.021613635589349728,
+            "ParamAngleZ": 0,
+            "ParamBodyAngleZ": 0,
+            "ParamHairSwayX": 3.44305885610241,
+            "ParamHairSwayZ": 0,
+            "ParamHairBackSway": -0.05820136731802461,
+            "ParamTailSway": 0.4029316978280013
+          }
+        },
+        {
+          "t": 5.416666666666667,
+          "values": {
+            "ParamAmbientSway": 0.9996573249755573,
+            "ParamBreath": 0.03349364905389035,
+            "ParamAngleZ": 0,
+            "ParamBodyAngleZ": 0,
+            "ParamHairSwayX": 3.5266187549689736,
+            "ParamHairSwayZ": 0,
+            "ParamHairBackSway": 0.22996299689285338,
+            "ParamTailSway": 0.42719633531927975
+          }
+        },
+        {
+          "t": 5.5,
+          "values": {
+            "ParamAmbientSway": 0.99556196460308,
+            "ParamBreath": 0.04774575140626311,
+            "ParamAngleZ": 0,
+            "ParamBodyAngleZ": 0,
+            "ParamHairSwayX": 3.559094466578461,
+            "ParamHairSwayZ": 0,
+            "ParamHairBackSway": 0.5147954464066598,
+            "ParamTailSway": 0.44527297261588283
+          }
+        },
+        {
+          "t": 5.583333333333333,
+          "values": {
+            "ParamAmbientSway": 0.9770455744352639,
+            "ParamBreath": 0.06421379363065136,
+            "ParamAngleZ": 0,
+            "ParamBodyAngleZ": 0,
+            "ParamHairSwayX": 3.540015569971003,
+            "ParamHairSwayZ": 0,
+            "ParamHairBackSway": 0.792169555805923,
+            "ParamTailSway": 0.4568997790566951
+          }
+        },
+        {
+          "t": 5.666666666666667,
+          "values": {
+            "ParamAmbientSway": 0.944376370237481,
+            "ParamBreath": 0.08271734841028544,
+            "ParamAngleZ": 0,
+            "ParamBodyAngleZ": 0,
+            "ParamHairSwayX": 3.4696584288248578,
+            "ParamHairSwayZ": 0,
+            "ParamHairBackSway": 1.0580673658813926,
+            "ParamTailSway": 0.46190833819177757
+          }
+        },
+        {
+          "t": 5.75,
+          "values": {
+            "ParamAmbientSway": 0.8980275757606158,
+            "ParamBreath": 0.10305368692688166,
+            "ParamAngleZ": 0,
+            "ParamBodyAngleZ": 0,
+            "ParamHairSwayX": 3.34904218838527,
+            "ParamHairSwayZ": 0,
+            "ParamHairBackSway": 1.3086374664960545,
+            "ParamTailSway": 0.4602260913677773
+          }
+        },
+        {
+          "t": 5.833333333333333,
+          "values": {
+            "ParamAmbientSway": 0.8386705679454244,
+            "ParamBreath": 0.12499999999999986,
+            "ParamAngleZ": 0,
+            "ParamBodyAngleZ": 0,
+            "ParamHairSwayX": 3.1799140129080916,
+            "ParamHairSwayZ": 0,
+            "ParamHairBackSway": 1.5402506467517256,
+            "ParamTailSway": 0.45187739252309617
+          }
+        },
+        {
+          "t": 5.916666666666667,
+          "values": {
+            "ParamAmbientSway": 0.7671651518152991,
+            "ParamBreath": 0.14831583923104996,
+            "ParamAngleZ": 0,
+            "ParamBodyAngleZ": 0,
+            "ParamHairSwayX": 2.964723777451603,
+            "ParamHairSwayZ": 0,
+            "ParamHairBackSway": 1.7495523389147094,
+            "ParamTailSway": 0.4369831586132226
+          }
+        },
+        {
+          "t": 6,
+          "values": {
+            "ParamAmbientSway": 0.6845471059286884,
+            "ParamBreath": 0.17274575140626308,
+            "ParamAngleZ": 0,
+            "ParamBodyAngleZ": 0,
+            "ParamHairSwayX": 2.7065885806370815,
+            "ParamHairSwayZ": 0,
+            "ParamHairBackSway": 1.9335111161615364,
+            "ParamTailSway": 0.4157591205780487
+          }
+        },
+        {
+          "t": 6.083333333333333,
+          "values": {
+            "ParamAmbientSway": 0.5920131787992196,
+            "ParamBreath": 0.19802207729556,
+            "ParamAngleZ": 2.6146722824297357,
+            "ParamBodyAngleZ": 0.8715574274765786,
+            "ParamHairSwayX": 2.4092475924519055,
+            "ParamHairSwayZ": -0.6831914445865684,
+            "ParamHairBackSway": 1.8593328247072887,
+            "ParamTailSway": 0.3648527531565837
+          }
+        },
+        {
+          "t": 6.166666666666667,
+          "values": {
+            "ParamAmbientSway": 0.4909037536151412,
+            "ParamBreath": 0.22386788418308662,
+            "ParamAngleZ": 5.20944533000792,
+            "ParamBodyAngleZ": 1.7364817766693066,
+            "ParamHairSwayX": 2.077007891160455,
+            "ParamHairSwayZ": -1.0515040843778194,
+            "ParamHairBackSway": 1.806010150253324,
+            "ParamTailSway": 0.31123036594606907
+          }
+        },
+        {
+          "t": 6.25,
+          "values": {
+            "ParamAmbientSway": 0.3826834323650905,
+            "ParamBreath": 0.24999999999999992,
+            "ParamAngleZ": 7.764571353075622,
+            "ParamBodyAngleZ": 2.5881904510252074,
+            "ParamHairSwayX": 1.7146820739004547,
+            "ParamHairSwayZ": -1.09386179949098,
+            "ParamHairBackSway": 1.7911208764702256,
+            "ParamTailSway": 0.2568066173484793
+          }
+        },
+        {
+          "t": 6.333333333333333,
+          "values": {
+            "ParamAmbientSway": 0.26891982061526687,
+            "ParamBreath": 0.2761321158169132,
+            "ParamAngleZ": 10.260604299770051,
+            "ParamBodyAngleZ": 3.420201433256684,
+            "ParamHairSwayX": 1.3275185446928102,
+            "ParamHairSwayZ": -0.9342122862310018,
+            "ParamHairBackSway": 1.8136900728685426,
+            "ParamTailSway": 0.20273995846663176
+          }
+        },
+        {
+          "t": 6.416666666666667,
+          "values": {
+            "ParamAmbientSway": 0.151260820247219,
+            "ParamBreath": 0.30197792270444,
+            "ParamAngleZ": 12.67854785222099,
+            "ParamBodyAngleZ": 4.226182617406997,
+            "ParamHairSwayX": 0.9211254896581907,
+            "ParamHairSwayZ": -0.7190133978883504,
+            "ParamHairBackSway": 1.8602562042021407,
+            "ParamTailSway": 0.14961550596800105
+          }
+        },
+        {
+          "t": 6.5,
+          "values": {
+            "ParamAmbientSway": 0.03141075907812848,
+            "ParamBreath": 0.32725424859373675,
+            "ParamAngleZ": 14.999999999999998,
+            "ParamBodyAngleZ": 4.999999999999999,
+            "ParamHairSwayX": 0.5013896406766508,
+            "ParamHairSwayZ": -0.547625085181977,
+            "ParamHairBackSway": 1.911410667242277,
+            "ParamTailSway": 0.09763283883830079
+          }
+        },
+        {
+          "t": 6.583333333333333,
+          "values": {
+            "ParamAmbientSway": -0.08889429686644094,
+            "ParamBreath": 0.3516841607689497,
+            "ParamAngleZ": 17.207293090531376,
+            "ParamBodyAngleZ": 5.735764363510459,
+            "ParamHairSwayX": 0.07439100422072753,
+            "ParamHairSwayZ": -0.4539554393280463,
+            "ParamHairBackSway": 1.9474299543743039,
+            "ParamTailSway": 0.04677717640705457
+          }
+        },
+        {
+          "t": 6.666666666666667,
+          "values": {
+            "ParamAmbientSway": -0.20791169081776012,
+            "ParamBreath": 0.3750000000000002,
+            "ParamAngleZ": 19.283628290596184,
+            "ParamBodyAngleZ": 6.427876096865395,
+            "ParamHairSwayX": -0.35368520945911275,
+            "ParamHairSwayZ": -0.42310094625244044,
+            "ParamHairBackSway": 1.9522345012091098,
+            "ParamTailSway": -0.003039358215486754
+          }
+        },
+        {
+          "t": 6.75,
+          "values": {
+            "ParamAmbientSway": -0.3239174181981498,
+            "ParamBreath": 0.39694631307311823,
+            "ParamAngleZ": 21.213203435596423,
+            "ParamBodyAngleZ": 7.071067811865475,
+            "ParamHairSwayX": -0.7766381810617794,
+            "ParamHairSwayZ": -0.4200692307594499,
+            "ParamHairBackSway": 1.9154685065759622,
+            "ParamTailSway": -0.0518726039375621
+          }
+        },
+        {
+          "t": 6.833333333333333,
+          "values": {
+            "ParamAmbientSway": -0.4352310993723275,
+            "ParamBreath": 0.4172826515897143,
+            "ParamAngleZ": 22.981333293569335,
+            "ParamBodyAngleZ": 7.660444431189779,
+            "ParamHairSwayX": -1.1883413030658043,
+            "ParamHairSwayZ": -0.41337074847008315,
+            "ParamHairBackSway": 1.8329130627572001,
+            "ParamTailSway": -0.0996780143679177
+          }
+        },
+        {
+          "t": 6.916666666666667,
+          "values": {
+            "ParamAmbientSway": -0.5402403204776547,
+            "ParamBreath": 0.4357862063693487,
+            "ParamAngleZ": 24.57456132866976,
+            "ParamBodyAngleZ": 8.191520442889919,
+            "ParamHairSwayX": -1.5828309255782236,
+            "ParamHairSwayZ": -0.386299091069328,
+            "ParamHairBackSway": 1.7056882106858249,
+            "ParamTailSway": -0.14627581722948407
+          }
+        },
+        {
+          "t": 7,
+          "values": {
+            "ParamAmbientSway": -0.6374239897486891,
+            "ParamBreath": 0.4522542485937368,
+            "ParamAngleZ": 25.980762113533157,
+            "ParamBodyAngleZ": 8.660254037844386,
+            "ParamHairSwayX": -1.9543927416897393,
+            "ParamHairSwayZ": -0.33702234153126154,
+            "ParamHairBackSway": 1.5387787892302418,
+            "ParamTailSway": -0.19134398421483625
+          }
+        },
+        {
+          "t": 7.083333333333333,
+          "values": {
+            "ParamAmbientSway": -0.7253743710122869,
+            "ParamBreath": 0.4665063509461095,
+            "ParamAngleZ": 27.189233611099496,
+            "ParamBodyAngleZ": 9.063077870366499,
+            "ParamHairSwayX": -2.2976445610169707,
+            "ParamHairSwayZ": -0.27261877318557337,
+            "ParamHairBackSway": 1.3393722607920906,
+            "ParamTailSway": -0.23443219925179495
+          }
+        },
+        {
+          "t": 7.166666666666667,
+          "values": {
+            "ParamAmbientSway": -0.8028174751911147,
+            "ParamBreath": 0.4783863644106503,
+            "ParamAngleZ": 28.190778623577252,
+            "ParamBodyAngleZ": 9.396926207859085,
+            "ParamHairSwayX": -2.607614272431425,
+            "ParamHairSwayZ": -0.20226909157997497,
+            "ParamHairBackSway": 1.115373504973272,
+            "ParamTailSway": -0.27498991306814385
+          }
+        },
+        {
+          "t": 7.25,
+          "values": {
+            "ParamAmbientSway": -0.8686315144381912,
+            "ParamBreath": 0.48776412907378836,
+            "ParamAngleZ": 28.97777478867205,
+            "ParamBodyAngleZ": 9.659258262890683,
+            "ParamHairSwayX": -2.8798118666607153,
+            "ParamHairSwayZ": -0.13274976482431844,
+            "ParamHairBackSway": 0.8743097219823088,
+            "ParamTailSway": -0.3124021875301005
+          }
+        },
+        {
+          "t": 7.333333333333333,
+          "values": {
+            "ParamAmbientSway": -0.9218631515885003,
+            "ParamBreath": 0.4945369001834513,
+            "ParamAngleZ": 29.544232590366242,
+            "ParamBodyAngleZ": 9.84807753012208,
+            "ParamHairSwayX": -3.110294475492083,
+            "ParamHairSwayZ": -0.06698697554948319,
+            "ParamHairBackSway": 0.6226958574450796,
+            "ParamTailSway": -0.34602808420635267
+          }
+        },
+        {
+          "t": 7.416666666666667,
+          "values": {
+            "ParamAmbientSway": -0.9617413095492116,
+            "ParamBreath": 0.4986304738420684,
+            "ParamAngleZ": 29.885840942752367,
+            "ParamBodyAngleZ": 9.961946980917455,
+            "ParamHairSwayX": -3.295723485464981,
+            "ParamHairSwayZ": -0.004840583403582177,
+            "ParamHairBackSway": 0.3658212197273938,
+            "ParamTailSway": -0.375237599704142
+          }
+        },
+        {
+          "t": 7.5,
+          "values": {
+            "ParamAmbientSway": -0.9876883405951378,
+            "ParamBreath": 0.5,
+            "ParamAngleZ": 30,
+            "ParamBodyAngleZ": 10,
+            "ParamHairSwayX": -3.433412898742684,
+            "ParamHairSwayZ": 0.05523142300967221,
+            "ParamHairBackSway": 0.10785117659068844,
+            "ParamTailSway": -0.39944441046764406
+          }
+        },
+        {
+          "t": 7.583333333333333,
+          "values": {
+            "ParamAmbientSway": -0.9993283937786562,
+            "ParamBreath": 0.4986304738420684,
+            "ParamAngleZ": 29.885840942752367,
+            "ParamBodyAngleZ": 9.961946980917455,
+            "ParamHairSwayX": -3.5213682406402995,
+            "ParamHairSwayZ": 0.1147102281813539,
+            "ParamHairBackSway": -0.1478873296366645,
+            "ParamTailSway": -0.4181328324528879
+          }
+        },
+        {
+          "t": 7.666666666666667,
+          "values": {
+            "ParamAmbientSway": -0.9964928592495044,
+            "ParamBreath": 0.49453690018345137,
+            "ParamAngleZ": 29.544232590366242,
+            "ParamBodyAngleZ": 9.84807753012208,
+            "ParamHairSwayX": -3.558315450221297,
+            "ParamHairSwayZ": 0.17425560171507726,
+            "ParamHairBackSway": -0.3985599350965541,
+            "ParamTailSway": -0.4308783485663681
+          }
+        },
+        {
+          "t": 7.75,
+          "values": {
+            "ParamAmbientSway": -0.979222810621766,
+            "ParamBreath": 0.4877641290737884,
+            "ParamAngleZ": 28.97777478867205,
+            "ParamBodyAngleZ": 9.659258262890683,
+            "ParamHairSwayX": -3.5437193354730567,
+            "ParamHairSwayZ": 0.23363226120069047,
+            "ParamHairBackSway": -0.6415135529047207,
+            "ParamTailSway": -0.4373617748124796
+          }
+        },
+        {
+          "t": 7.833333333333333,
+          "values": {
+            "ParamAmbientSway": -0.947768410009586,
+            "ParamBreath": 0.4783863644106504,
+            "ParamAngleZ": 28.190778623577256,
+            "ParamBodyAngleZ": 9.396926207859085,
+            "ParamHairSwayX": -3.4777913257323902,
+            "ParamHairSwayZ": 0.29203690739025945,
+            "ParamHairBackSway": -0.8740571492777687,
+            "ParamTailSway": -0.43737762429654925
+          }
+        },
+        {
+          "t": 7.916666666666667,
+          "values": {
+            "ParamAmbientSway": -0.9025852843498605,
+            "ParamBreath": 0.4665063509461096,
+            "ParamAngleZ": 27.189233611099496,
+            "ParamBodyAngleZ": 9.063077870366499,
+            "ParamHairSwayX": -3.361486409064736,
+            "ParamHairSwayZ": 0.3485097300909009,
+            "ParamHairBackSway": -1.093355885230165,
+            "ParamTailSway": -0.4308375095469547
+          }
+        },
+        {
+          "t": 8,
+          "values": {
+            "ParamAmbientSway": -0.8443279255020152,
+            "ParamBreath": 0.4522542485937369,
+            "ParamAngleZ": 25.98076211353316,
+            "ParamBodyAngleZ": 8.660254037844387,
+            "ParamHairSwayX": -3.1964892989600444,
+            "ParamHairSwayZ": 0.40222609051435,
+            "ParamHairBackSway": -1.296431225092673,
+            "ParamTailSway": -0.41776953491605684
+          }
+        },
+        {
+          "t": 8.083333333333334,
+          "values": {
+            "ParamAmbientSway": -0.7738402097265054,
+            "ParamBreath": 0.4357862063693485,
+            "ParamAngleZ": 24.574561328669745,
+            "ParamBodyAngleZ": 8.191520442889914,
+            "ParamHairSwayX": -2.985190030725222,
+            "ParamHairSwayZ": 0.45260696586114935,
+            "ParamHairBackSway": -1.4802414391318368,
+            "ParamTailSway": -0.39831461484377173
+          }
+        },
+        {
+          "t": 8.166666666666666,
+          "values": {
+            "ParamAmbientSway": -0.6921431738704075,
+            "ParamBreath": 0.4172826515897147,
+            "ParamAngleZ": 22.98133329356935,
+            "ParamBodyAngleZ": 7.6604444311897835,
+            "ParamHairSwayX": -2.730649341067039,
+            "ParamHairSwayZ": 0.4992884362434553,
+            "ParamHairBackSway": -1.6418092953110495,
+            "ParamTailSway": -0.37272055300058327
+          }
+        },
+        {
+          "t": 8.25,
+          "values": {
+            "ParamAmbientSway": -0.6004202253258837,
+            "ParamBreath": 0.39694631307311834,
+            "ParamAngleZ": 21.213203435596427,
+            "ParamBodyAngleZ": 7.0710678118654755,
+            "ParamHairSwayX": -2.4365543323532037,
+            "ParamHairSwayZ": 0.542028869293893,
+            "ParamHairBackSway": -1.778364686568871,
+            "ParamTailSway": -0.3413345697424551
+          }
+        },
+        {
+          "t": 8.333333333333334,
+          "values": {
+            "ParamAmbientSway": -0.4999999999999999,
+            "ParamBreath": 0.37499999999999994,
+            "ParamAngleZ": 19.283628290596173,
+            "ParamBodyAngleZ": 6.427876096865392,
+            "ParamHairSwayX": -2.107165063768854,
+            "ParamHairSwayZ": 0.5806212446459271,
+            "ParamHairBackSway": -1.887476538611185,
+            "ParamTailSway": -0.30459480189025734
+          }
+        },
+        {
+          "t": 8.416666666666666,
+          "values": {
+            "ParamAmbientSway": -0.39233711660356174,
+            "ParamBreath": 0.35168416076895026,
+            "ParamAngleZ": 17.2072930905314,
+            "ParamBodyAngleZ": 5.735764363510468,
+            "ParamHairSwayX": -1.7472528430123564,
+            "ParamHairSwayZ": 0.6148447186616056,
+            "ParamHairBackSway": -1.9671575416855331,
+            "ParamTailSway": -0.26302114256479076
+          }
+        },
+        {
+          "t": 8.5,
+          "values": {
+            "ParamAmbientSway": -0.2789911060392299,
+            "ParamBreath": 0.327254248593737,
+            "ParamAngleZ": 14.999999999999998,
+            "ParamBodyAngleZ": 4.999999999999999,
+            "ParamHairSwayX": -1.3620311123947277,
+            "ParamHairSwayZ": 0.6444577858492251,
+            "ParamHairBackSway": -2.0159344974903823,
+            "ParamTailSway": -0.21720565473790782
+          }
+        },
+        {
+          "t": 8.583333333333334,
+          "values": {
+            "ParamAmbientSway": -0.1616038211033604,
+            "ParamBreath": 0.3019779227044398,
+            "ParamAngleZ": 12.678547852220973,
+            "ParamBodyAngleZ": 4.226182617406991,
+            "ParamHairSwayX": -0.957079930479476,
+            "ParamHairSwayZ": 0.6692173607242048,
+            "ParamHairBackSway": -2.032884633826525,
+            "ParamTailSway": -0.16780268834646275
+          }
+        },
+        {
+          "t": 8.666666666666666,
+          "values": {
+            "ParamAmbientSway": -0.041875653729201066,
+            "ParamBreath": 0.2761321158169136,
+            "ParamAngleZ": 10.260604299770092,
+            "ParamBodyAngleZ": 3.4202014332566972,
+            "ParamHairSwayX": -0.5382651431700378,
+            "ParamHairSwayZ": 0.6889047462371776,
+            "ParamHairBackSway": -2.0176432570611738,
+            "ParamTailSway": -0.11551875959764087
+          }
+        },
+        {
+          "t": 8.75,
+          "values": {
+            "ParamAmbientSway": 0.0784590957278449,
+            "ParamBreath": 0.2500000000000001,
+            "ParamAngleZ": 7.76457135307563,
+            "ParamBodyAngleZ": 2.58819045102521,
+            "ParamHairSwayX": -0.11165341507723267,
+            "ParamHairSwayZ": 0.7033453496843339,
+            "ParamHairBackSway": -1.970390483378663,
+            "ParamTailSway": -0.06110221059841847
+          }
+        },
+        {
+          "t": 8.833333333333334,
+          "values": {
+            "ParamAmbientSway": 0.19765734037912747,
+            "ParamBreath": 0.2238678841830866,
+            "ParamAngleZ": 5.209445330007895,
+            "ParamBodyAngleZ": 1.7364817766692984,
+            "ParamHairSwayX": 0.31657564803567106,
+            "ParamHairSwayZ": 0.712417492218799,
+            "ParamHairBackSway": -1.891824941948111,
+            "ParamTailSway": -0.005332653048957309
+          }
+        },
+        {
+          "t": 8.916666666666666,
+          "values": {
+            "ParamAmbientSway": 0.31399245596740416,
+            "ParamBreath": 0.19802207729556043,
+            "ParamAngleZ": 2.6146722824297592,
+            "ParamBodyAngleZ": 0.8715574274765864,
+            "ParamHairSwayX": 0.7402190127962677,
+            "ParamHairSwayZ": 0.7160521021851617,
+            "ParamHairBackSway": -1.7831309829328572,
+            "ParamTailSway": 0.050989794618317846
+          }
+        },
+        {
+          "t": 9,
+          "values": {
+            "ParamAmbientSway": 0.42577929156507316,
+            "ParamBreath": 0.17274575140626325,
+            "ParamAngleZ": 3.67394039744206e-15,
+            "ParamBodyAngleZ": 1.2246467991473533e-15,
+            "ParamHairSwayX": 1.153140071122655,
+            "ParamHairSwayZ": 0.714227821002635,
+            "ParamHairBackSway": -1.6459438127874073,
+            "ParamTailSway": 0.10705544806172669
+          }
+        },
+        {
+          "t": 9.083333333333334,
+          "values": {
+            "ParamAmbientSway": 0.531398579518083,
+            "ParamBreath": 0.1483158392310499,
+            "ParamAngleZ": -2.6146722824297517,
+            "ParamBodyAngleZ": -0.8715574274765838,
+            "ParamHairSwayX": 1.5493575309316592,
+            "ParamHairSwayZ": 0.7069656882408117,
+            "ParamHairBackSway": -1.4823147749718264,
+            "ParamTailSway": 0.16205612053713866
+          }
+        },
+        {
+          "t": 9.166666666666666,
+          "values": {
+            "ParamAmbientSway": 0.6293203910498373,
+            "ParamBreath": 0.12500000000000022,
+            "ParamAngleZ": -5.209445330007887,
+            "ParamBodyAngleZ": -1.736481776669296,
+            "ParamHairSwayX": 1.9231320570457908,
+            "ParamHairSwayZ": 0.6943256904909825,
+            "ParamHairBackSway": -1.2946771574108782,
+            "ParamTailSway": 0.21519622486667914
+          }
+        },
+        {
+          "t": 9.25,
+          "values": {
+            "ParamAmbientSway": 0.7181262977631884,
+            "ParamBreath": 0.1030536869268818,
+            "ParamAngleZ": -7.764571353075624,
+            "ParamBodyAngleZ": -2.588190451025208,
+            "ParamHairSwayX": 2.269049407277923,
+            "ParamHairSwayZ": 0.6764055220426847,
+            "ParamHairBackSway": -1.0858116810873204,
+            "ParamTailSway": 0.26570380252659415
+          }
+        },
+        {
+          "t": 9.333333333333334,
+          "values": {
+            "ParamAmbientSway": 0.7965299180241967,
+            "ParamBreath": 0.08271734841028541,
+            "ParamAngleZ": -10.260604299770085,
+            "ParamBodyAngleZ": -3.420201433256695,
+            "ParamHairSwayX": 2.582098859441144,
+            "ParamHairSwayZ": 0.6533407244105467,
+            "ParamHairBackSway": -0.858810255394147,
+            "ParamTailSway": 0.3128413460856911
+          }
+        },
+        {
+          "t": 9.416666666666666,
+          "values": {
+            "ParamAmbientSway": 0.863395550606771,
+            "ParamBreath": 0.06421379363065163,
+            "ParamAngleZ": -12.678547852220966,
+            "ParamBodyAngleZ": -4.226182617406989,
+            "ParamHairSwayX": 2.857745793243904,
+            "ParamHairSwayZ": 0.6253050762199371,
+            "ParamHairBackSway": -0.6170365828854467,
+            "ParamTailSway": 0.3559162652286778
+          }
+        },
+        {
+          "t": 9.5,
+          "values": {
+            "ParamAmbientSway": 0.9177546256839811,
+            "ParamBreath": 0.04774575140626322,
+            "ParamAngleZ": -14.999999999999991,
+            "ParamBodyAngleZ": -4.999999999999997,
+            "ParamHairSwayX": 3.091997375698665,
+            "ParamHairSwayZ": 0.5925104061847396,
+            "ParamHairBackSway": -0.36408258835697693,
+            "ParamTailSway": 0.3942908377860264
+          }
+        },
+        {
+          "t": 9.583333333333334,
+          "values": {
+            "ParamAmbientSway": 0.9588197348681935,
+            "ParamBreath": 0.03349364905389032,
+            "ParamAngleZ": -17.207293090531394,
+            "ParamBodyAngleZ": -5.735764363510465,
+            "ParamHairSwayX": 3.2814603985701005,
+            "ParamHairSwayZ": 0.555205503033475,
+            "ParamHairBackSway": -0.10372024319135575,
+            "ParamTailSway": 0.4273914855487439
+          }
+        },
+        {
+          "t": 9.666666666666666,
+          "values": {
+            "ParamAmbientSway": 0.9859960370705048,
+            "ParamBreath": 0.021613635589349894,
+            "ParamAngleZ": -19.28362829059616,
+            "ParamBodyAngleZ": -6.427876096865386,
+            "ParamHairSwayX": 3.423390430069263,
+            "ParamHairSwayZ": 0.5136742028684721,
+            "ParamHairBackSway": 0.16015101436046808,
+            "ParamTailSway": 0.45471721960575584
+          }
+        },
+        {
+          "t": 9.75,
+          "values": {
+            "ParamAmbientSway": 0.99888987496197,
+            "ParamBreath": 0.012235870926211645,
+            "ParamAngleZ": -21.213203435596412,
+            "ParamBodyAngleZ": -7.071067811865471,
+            "ParamHairSwayX": 3.515731568815715,
+            "ParamHairSwayZ": 0.4682329264685534,
+            "ParamHairBackSway": 0.42356052238435926,
+            "ParamTailSway": 0.47584711058997353
+          }
+        },
+        {
+          "t": 9.833333333333334,
+          "values": {
+            "ParamAmbientSway": 0.9973144772244581,
+            "ParamBreath": 0.005463099816548578,
+            "ParamAngleZ": -22.981333293569353,
+            "ParamBodyAngleZ": -7.660444431189784,
+            "ParamHairSwayX": 3.557146224219067,
+            "ParamHairSwayZ": 0.41922793870641384,
+            "ParamHairBackSway": 0.6825251803500165,
+            "ParamTailSway": 0.4904466544718733
+          }
+        },
+        {
+          "t": 9.916666666666666,
+          "values": {
+            "ParamAmbientSway": 0.9812926639922452,
+            "ParamBreath": 0.0013695261579317053,
+            "ParamAngleZ": -24.57456132866975,
+            "ParamBodyAngleZ": -8.191520442889916,
+            "ParamHairSwayX": 3.5470344919015817,
+            "ParamHairSwayZ": 0.3670324993365821,
+            "ParamHairBackSway": 0.9331094512758991,
+            "ParamTailSway": 0.49827292327759737
+          }
+        },
+        {
+          "t": 10,
+          "values": {
+            "ParamAmbientSway": 0.9510565162951538,
+            "ParamBreath": 0,
+            "ParamAngleZ": -25.980762113533153,
+            "ParamBodyAngleZ": -8.660254037844386,
+            "ParamHairSwayX": 3.4855428435027545,
+            "ParamHairSwayZ": 0.3120439586728204,
+            "ParamHairBackSway": 1.1714852130119864,
+            "ParamTailSway": 0.49917841127624174
+          }
+        },
+        {
+          "t": 10.083333333333334,
+          "values": {
+            "ParamAmbientSway": 0.9070440142914646,
+            "ParamBreath": 0.0013695261579316775,
+            "ParamAngleZ": -27.189233611099503,
+            "ParamBodyAngleZ": -9.0630778703665,
+            "ParamHairSwayX": 3.3735620049913138,
+            "ParamHairSwayZ": 0.2546807765169895,
+            "ParamHairBackSway": 1.3939901670927588,
+            "ParamTailSway": 0.4931135098451071
+          }
+        },
+        {
+          "t": 10.166666666666666,
+          "values": {
+            "ParamAmbientSway": 0.8498926929868647,
+            "ParamBreath": 0.005463099816548522,
+            "ParamAngleZ": -28.190778623577245,
+            "ParamBodyAngleZ": -9.396926207859082,
+            "ParamHairSwayX": 3.2127140542179355,
+            "ParamHairSwayZ": 0.19537942034935551,
+            "ParamHairBackSway": 1.5971836623783457,
+            "ParamTailSway": 0.480127567600696
+          }
+        },
+        {
+          "t": 10.25,
+          "values": {
+            "ParamAmbientSway": 0.7804304073383297,
+            "ParamBreath": 0.012235870926211562,
+            "ParamAngleZ": -28.97777478867205,
+            "ParamBodyAngleZ": -9.659258262890683,
+            "ParamHairSwayX": 3.00532892460474,
+            "ParamHairSwayZ": 0.1345911143672439,
+            "ParamHairBackSway": 1.7778989682157995,
+            "ParamTailSway": 0.4603685158511859
+          }
+        },
+        {
+          "t": 10.333333333333334,
+          "values": {
+            "ParamAmbientSway": 0.6996633405133644,
+            "ParamBreath": 0.021613635589349783,
+            "ParamAngleZ": -29.544232590366246,
+            "ParamBodyAngleZ": -9.848077530122083,
+            "ParamHairSwayX": 2.7544106553230137,
+            "ParamHairSwayZ": 0.07277844103676168,
+            "ParamHairBackSway": 1.9332912052268456,
+            "ParamTailSway": 0.43408106250005973
+          }
+        },
+        {
+          "t": 10.416666666666666,
+          "values": {
+            "ParamAmbientSway": 0.6087614290087212,
+            "ParamBreath": 0.03349364905389021,
+            "ParamAngleZ": -29.885840942752363,
+            "ParamBodyAngleZ": -9.961946980917455,
+            "ParamHairSwayX": 2.4635938768360095,
+            "ParamHairSwayZ": 0.010411822853212627,
+            "ParamHairBackSway": 2.060880291446071,
+            "ParamTailSway": 0.4016034798479542
+          }
+        },
+        {
+          "t": 10.5,
+          "values": {
+            "ParamAmbientSway": 0.5090414157503708,
+            "ParamBreath": 0.047745751406263054,
+            "ParamAngleZ": -30,
+            "ParamBodyAngleZ": -10,
+            "ParamHairSwayX": 2.137091162127562,
+            "ParamHairSwayZ": -0.052034074428557675,
+            "ParamHairBackSway": 2.1585883802729766,
+            "ParamTailSway": 0.3633630330313271
+          }
+        },
+        {
+          "t": 10.583333333333334,
+          "values": {
+            "ParamAmbientSway": 0.40194777665595993,
+            "ParamBreath": 0.06421379363065144,
+            "ParamAngleZ": -29.885840942752363,
+            "ParamBodyAngleZ": -9.961946980917455,
+            "ParamHairSwayX": 1.7796320062505093,
+            "ParamHairSwayZ": -0.11408397429373507,
+            "ParamHairBackSway": 2.224771357053415,
+            "ParamTailSway": 0.3198701158996262
+          }
+        },
+        {
+          "t": 10.666666666666666,
+          "values": {
+            "ParamAmbientSway": 0.28903179694447173,
+            "ParamBreath": 0.08271734841028525,
+            "ParamAngleZ": -29.544232590366246,
+            "ParamBodyAngleZ": -9.848077530122083,
+            "ParamHairSwayX": 1.3963943180955112,
+            "ParamHairSwayZ": -0.17526562036382043,
+            "ParamHairBackSway": 2.258244031390768,
+            "ParamTailSway": 0.2717111798077143
+          }
+        },
+        {
+          "t": 10.75,
+          "values": {
+            "ParamAmbientSway": 0.17192910027941005,
+            "ParamBreath": 0.1030536869268816,
+            "ParamAngleZ": -28.977774788672054,
+            "ParamBodyAngleZ": -9.659258262890685,
+            "ParamHairSwayX": 0.992929416743708,
+            "ParamHairSwayZ": -0.23511337537726718,
+            "ParamHairBackSway": 2.258298722964673,
+            "ParamTailSway": 0.21954055795210203
+          }
+        },
+        {
+          "t": 10.833333333333334,
+          "values": {
+            "ParamAmbientSway": 0.05233595624294297,
+            "ParamBreath": 0.125,
+            "ParamAngleZ": -28.19077862357725,
+            "ParamBodyAngleZ": -9.396926207859083,
+            "ParamHairSwayX": 0.5750816188546551,
+            "ParamHairSwayZ": -0.2931717630385853,
+            "ParamHairBackSway": 2.2247169994172227,
+            "ParamTailSway": 0.1640713033841272
+          }
+        },
+        {
+          "t": 10.916666666666666,
+          "values": {
+            "ParamAmbientSway": -0.06801529066524688,
+            "ParamBreath": 0.14831583923104968,
+            "ParamAngleZ": -27.189233611099507,
+            "ParamBodyAngleZ": -9.063077870366502,
+            "ParamHairSwayX": 0.1489035818916798,
+            "ParamHairSwayZ": -0.34899892968490565,
+            "ParamHairBackSway": 2.1577743928603654,
+            "ParamTailSway": 0.10606517257058226
+          }
+        },
+        {
+          "t": 11,
+          "values": {
+            "ParamAmbientSway": -0.1873813145857247,
+            "ParamBreath": 0.17274575140626303,
+            "ParamAngleZ": -25.980762113533157,
+            "ParamBodyAngleZ": -8.660254037844386,
+            "ParamHairSwayX": -0.2794313705350868,
+            "ParamHairSwayZ": -0.4021700026790138,
+            "ParamHairBackSway": 2.058238000510952,
+            "ParamTailSway": 0.046321898223325886
+          }
+        },
+        {
+          "t": 11.083333333333334,
+          "values": {
+            "ParamAmbientSway": -0.30403306092549,
+            "ParamBreath": 0.19802207729556018,
+            "ParamAngleZ": -24.574561328669756,
+            "ParamBodyAngleZ": -8.191520442889917,
+            "ParamHairSwayX": -0.7037186712130516,
+            "ParamHairSwayZ": -0.4522803215563199,
+            "ParamHairBackSway": 1.927356965358681,
+            "ParamTailSway": -0.014332095032743731
+          }
+        },
+        {
+          "t": 11.166666666666666,
+          "values": {
+            "ParamAmbientSway": -0.41628079226039894,
+            "ParamBreath": 0.22386788418308634,
+            "ParamAngleZ": -22.981333293569342,
+            "ParamBodyAngleZ": -7.660444431189781,
+            "ParamHairSwayX": -1.1178123844449592,
+            "ParamHairSwayZ": -0.49894851738291723,
+            "ParamHairBackSway": 1.7668459325462136,
+            "ParamTailSway": -0.07505537085014691
+          }
+        },
+        {
+          "t": 11.25,
+          "values": {
+            "ParamAmbientSway": -0.5224985647159479,
+            "ParamBreath": 0.24999999999999986,
+            "ParamAngleZ": -21.21320343559643,
+            "ParamBodyAngleZ": -7.071067811865477,
+            "ParamHairSwayX": -1.51571423187057,
+            "ParamHairSwayZ": -0.5418194160896433,
+            "ParamHairBackSway": 1.5788616825817812,
+            "ParamTailSway": -0.13500339038431328
+          }
+        },
+        {
+          "t": 11.333333333333334,
+          "values": {
+            "ParamAmbientSway": -0.6211477802783106,
+            "ParamBreath": 0.2761321158169134,
+            "ParamAngleZ": -19.283628290596166,
+            "ParamBodyAngleZ": -6.427876096865389,
+            "ParamHairSwayX": -1.8916604794252185,
+            "ParamHairSwayZ": -0.580566742754741,
+            "ParamHairBackSway": 1.3659732492545098,
+            "ParamTailSway": -0.19334048050641106
+          }
+        },
+        {
+          "t": 11.416666666666666,
+          "values": {
+            "ParamAmbientSway": -0.7107994738729911,
+            "ParamBreath": 0.30197792270443957,
+            "ParamAngleZ": -17.207293090531415,
+            "ParamBodyAngleZ": -5.735764363510471,
+            "ParamHairSwayX": -2.2402054268500793,
+            "ParamHairSwayZ": -0.6148956056285638,
+            "ParamHairBackSway": 1.131125933935497,
+            "ParamTailSway": -0.2492516900863856
+          }
+        },
+        {
+          "t": 11.5,
+          "values": {
+            "ParamAmbientSway": -0.7901550123756901,
+            "ParamBreath": 0.32725424859373675,
+            "ParamAngleZ": -15.000000000000014,
+            "ParamBodyAngleZ": -5.000000000000004,
+            "ParamHairSwayX": -2.556300290382136,
+            "ParamHairSwayZ": -0.6445447407881559,
+            "ParamHairBackSway": 0.8775997252146968,
+            "ParamTailSway": -0.3019543649454436
+          }
+        },
+        {
+          "t": 11.583333333333334,
+          "values": {
+            "ParamAmbientSway": -0.858064905723645,
+            "ParamBreath": 0.35168416076895004,
+            "ParamAngleZ": -12.678547852220952,
+            "ParamBodyAngleZ": -4.226182617406984,
+            "ParamHairSwayX": -2.8353663359832946,
+            "ParamHairSwayZ": -0.6692885004390557,
+            "ParamHairBackSway": 0.6089627208362751,
+            "ParamTailSway": -0.35070927597796714
+          }
+        },
+        {
+          "t": 11.666666666666666,
+          "values": {
+            "ParamAmbientSway": -0.9135454576426004,
+            "ParamBreath": 0.3749999999999998,
+            "ParamAngleZ": -10.260604299770083,
+            "ParamBodyAngleZ": -3.420201433256694,
+            "ParamHairSwayX": -3.073361203750598,
+            "ParamHairSwayZ": -0.6889385699587925,
+            "ParamHairBackSway": 0.3290202258617021,
+            "ParamTailSway": -0.39483114119173657
+          }
+        },
+        {
+          "t": 11.75,
+          "values": {
+            "ParamAmbientSway": -0.9557930147983301,
+            "ParamBreath": 0.3969463130731182,
+            "ParamAngleZ": -7.764571353075647,
+            "ParamBodyAngleZ": -2.588190451025216,
+            "ParamHairSwayX": -3.2668374627774592,
+            "ParamHairSwayZ": -0.703345400816286,
+            "ParamHairBackSway": 0.04176026589966364,
+            "ParamTailSway": -0.4336983909400245
+          }
+        },
+        {
+          "t": 11.833333333333334,
+          "values": {
+            "ParamAmbientSway": -0.9841956079692422,
+            "ParamBreath": 0.41728265158971456,
+            "ParamAngleZ": -5.209445330007911,
+            "ParamBodyAngleZ": -1.736481776669304,
+            "ParamHairSwayX": -3.412992548280341,
+            "ParamHairSwayZ": -0.712399348568262,
+            "ParamHairBackSway": -0.2487036933304041,
+            "ParamTailSway": -0.4667620363111201
+          }
+        },
+        {
+          "t": 11.916666666666666,
+          "values": {
+            "ParamAmbientSway": -0.9983418166140283,
+            "ParamBreath": 0.4357862063693484,
+            "ParamAngleZ": -2.614672282429776,
+            "ParamBodyAngleZ": -0.871557427476592,
+            "ParamHairSwayX": -3.509709357635741,
+            "ParamHairSwayZ": -0.7160315072851424,
+            "ParamHairBackSway": -0.5381919889618114,
+            "ParamTailSway": -0.49355351335669084
+          }
+        }
+      ]
+    },
+    "3": {
+      "failedTextures": [],
+      "frames": [
+        {
+          "t": 0,
+          "values": {
+            "ParamAmbientSway": 0,
+            "ParamBreath": 0,
+            "ParamAngleZ": 0,
+            "ParamBodyAngleZ": 0,
+            "ParamHairSwayX": 0,
+            "ParamHairSwayZ": 0,
+            "ParamHairBackSway": 0,
+            "ParamTailSway": 0
+          }
+        },
+        {
+          "t": 0.08333333333333333,
+          "values": {
+            "ParamAmbientSway": 0.1201368388346471,
+            "ParamBreath": 0.0013695261579316775,
+            "ParamAngleZ": 0,
+            "ParamBodyAngleZ": 0,
+            "ParamHairSwayX": 0.054287790397011745,
+            "ParamHairSwayZ": 0,
+            "ParamHairBackSway": -1.371899142089915,
+            "ParamTailSway": 0.0018144691561494406
+          }
+        },
+        {
+          "t": 0.16666666666666666,
+          "values": {
+            "ParamAmbientSway": 0.23853345757858088,
+            "ParamBreath": 0.005463099816548578,
+            "ParamAngleZ": 0,
+            "ParamBodyAngleZ": 0,
+            "ParamHairSwayX": 0.273880710740679,
+            "ParamHairSwayZ": 0,
+            "ParamHairBackSway": -2.429438504218318,
+            "ParamTailSway": 0.009464350751780181
+          }
+        },
+        {
+          "t": 0.25,
+          "values": {
+            "ParamAmbientSway": 0.35347484377925714,
+            "ParamBreath": 0.012235870926211617,
+            "ParamAngleZ": 0,
+            "ParamBodyAngleZ": 0,
+            "ParamHairSwayX": 0.6600369351037368,
+            "ParamHairSwayZ": 0,
+            "ParamHairBackSway": -3.049715119748642,
+            "ParamTailSway": 0.024301686836736718
+          }
+        },
+        {
+          "t": 0.3333333333333333,
+          "values": {
+            "ParamAmbientSway": 0.4632960351198617,
+            "ParamBreath": 0.021613635589349783,
+            "ParamAngleZ": 0,
+            "ParamBodyAngleZ": 0,
+            "ParamHairSwayX": 1.1405128793476154,
+            "ParamHairSwayZ": 0,
+            "ParamHairBackSway": -3.226395867827307,
+            "ParamTailSway": 0.045791915104190145
+          }
+        },
+        {
+          "t": 0.4166666666666667,
+          "values": {
+            "ParamAmbientSway": 0.5664062369248328,
+            "ParamBreath": 0.03349364905389035,
+            "ParamAngleZ": 0,
+            "ParamBodyAngleZ": 0,
+            "ParamHairSwayX": 1.6304492994270787,
+            "ParamHairSwayZ": 0,
+            "ParamHairBackSway": -3.033725632348646,
+            "ParamTailSway": 0.07250431527206397
+          }
+        },
+        {
+          "t": 0.5,
+          "values": {
+            "ParamAmbientSway": 0.6613118653236518,
+            "ParamBreath": 0.04774575140626314,
+            "ParamAngleZ": 0,
+            "ParamBodyAngleZ": 0,
+            "ParamHairSwayX": 2.070336619187014,
+            "ParamHairSwayZ": 0,
+            "ParamHairBackSway": -2.587091179334668,
+            "ParamTailSway": 0.1027085494535554
+          }
+        },
+        {
+          "t": 0.5833333333333334,
+          "values": {
+            "ParamAmbientSway": 0.7466381822853914,
+            "ParamBreath": 0.06421379363065144,
+            "ParamAngleZ": 0,
+            "ParamBodyAngleZ": 0,
+            "ParamHairSwayX": 2.4363157344834314,
+            "ParamHairSwayZ": 0,
+            "ParamHairBackSway": -2.0086509495194806,
+            "ParamTailSway": 0.13470331372390937
+          }
+        },
+        {
+          "t": 0.6666666666666666,
+          "values": {
+            "ParamAmbientSway": 0.821149209133704,
+            "ParamBreath": 0.08271734841028544,
+            "ParamAngleZ": 0,
+            "ParamBodyAngleZ": 0,
+            "ParamHairSwayX": 2.7314606449360004,
+            "ParamHairSwayZ": 0,
+            "ParamHairBackSway": -1.402841523593622,
+            "ParamTailSway": 0.166973719787053
+          }
+        },
+        {
+          "t": 0.75,
+          "values": {
+            "ParamAmbientSway": 0.8837656300886935,
+            "ParamBreath": 0.10305368692688172,
+            "ParamAngleZ": 0,
+            "ParamBodyAngleZ": 0,
+            "ParamHairSwayX": 2.9703896903584974,
+            "ParamHairSwayZ": 0,
+            "ParamHairBackSway": -0.8431629980881561,
+            "ParamTailSway": 0.19824673915217048
+          }
+        },
+        {
+          "t": 0.8333333333333334,
+          "values": {
+            "ParamAmbientSway": 0.9335804264972017,
+            "ParamBreath": 0.12500000000000003,
+            "ParamAngleZ": 0,
+            "ParamBodyAngleZ": 0,
+            "ParamHairSwayX": 3.166543420135124,
+            "ParamHairSwayZ": 0,
+            "ParamHairBackSway": -0.3690741062764331,
+            "ParamTailSway": 0.22749152786372845
+          }
+        },
+        {
+          "t": 0.9166666666666666,
+          "values": {
+            "ParamAmbientSway": 0.9698720152847468,
+            "ParamBreath": 0.1483158392310499,
+            "ParamAngleZ": 0,
+            "ParamBodyAngleZ": 0,
+            "ParamHairSwayX": 3.3260682616143886,
+            "ParamHairSwayZ": 0,
+            "ParamHairBackSway": 0.009693699152176771,
+            "ParamTailSway": 0.25389430785541045
+          }
+        },
+        {
+          "t": 1,
+          "values": {
+            "ParamAmbientSway": 0.9921147013144779,
+            "ParamBreath": 0.17274575140626314,
+            "ParamAngleZ": 0,
+            "ParamBodyAngleZ": 0,
+            "ParamHairSwayX": 3.4477465962459624,
+            "ParamHairSwayZ": 0,
+            "ParamHairBackSway": 0.3046189440500662,
+            "ParamTailSway": 0.27682525332762736
+          }
+        },
+        {
+          "t": 1.0833333333333333,
+          "values": {
+            "ParamAmbientSway": 0.9999862922474267,
+            "ParamBreath": 0.19802207729556015,
+            "ParamAngleZ": 0,
+            "ParamBodyAngleZ": 0,
+            "ParamHairSwayX": 3.526220722458416,
+            "ParamHairSwayZ": 0,
+            "ParamHairBackSway": 0.5386367998297916,
+            "ParamTailSway": 0.2958066212697745
+          }
+        },
+        {
+          "t": 1.1666666666666667,
+          "values": {
+            "ParamAmbientSway": 0.9933727656003964,
+            "ParamBreath": 0.22386788418308665,
+            "ParamAngleZ": 0,
+            "ParamBodyAngleZ": 0,
+            "ParamHairSwayX": 3.5556928391990965,
+            "ParamHairSwayZ": 0,
+            "ParamHairBackSway": 0.7373912149148059,
+            "ParamTailSway": 0.31048619494744206
+          }
+        },
+        {
+          "t": 1.25,
+          "values": {
+            "ParamAmbientSway": 0.9723699203976767,
+            "ParamBreath": 0.24999999999999997,
+            "ParamAngleZ": 0,
+            "ParamBodyAngleZ": 0,
+            "ParamHairSwayX": 3.532388680636969,
+            "ParamHairSwayZ": 0,
+            "ParamHairBackSway": 0.9228214803881127,
+            "ParamTailSway": 0.3206170942288406
+          }
+        },
+        {
+          "t": 1.3333333333333333,
+          "values": {
+            "ParamAmbientSway": 0.9372819894918916,
+            "ParamBreath": 0.2761321158169133,
+            "ParamAngleZ": 0,
+            "ParamBodyAngleZ": 0,
+            "ParamHairSwayX": 3.455360124445964,
+            "ParamHairSwayZ": 0,
+            "ParamHairBackSway": 1.109544521489787,
+            "ParamTailSway": 0.326043430856095
+          }
+        },
+        {
+          "t": 1.4166666666666667,
+          "values": {
+            "ParamAmbientSway": 0.8886172326549487,
+            "ParamBreath": 0.30197792270443985,
+            "ParamAngleZ": 0,
+            "ParamBodyAngleZ": 0,
+            "ParamHairSwayX": 3.3260665280247608,
+            "ParamHairSwayZ": 0,
+            "ParamHairBackSway": 1.3038198469136997,
+            "ParamTailSway": 0.32669061222633794
+          }
+        },
+        {
+          "t": 1.5,
+          "values": {
+            "ParamAmbientSway": 0.8270805742745617,
+            "ParamBreath": 0.32725424859373686,
+            "ParamAngleZ": 0,
+            "ParamBodyAngleZ": 0,
+            "ParamHairSwayX": 3.1474614555471465,
+            "ParamHairSwayZ": 0,
+            "ParamHairBackSway": 1.5044672874288147,
+            "ParamTailSway": 0.32255894468741086
+          }
+        },
+        {
+          "t": 1.5833333333333333,
+          "values": {
+            "ParamAmbientSway": 0.753563392301638,
+            "ParamBreath": 0.35168416076895004,
+            "ParamAngleZ": 0,
+            "ParamBodyAngleZ": 0,
+            "ParamHairSwayX": 2.923171683596039,
+            "ParamHairSwayZ": 0,
+            "ParamHairBackSway": 1.7049435514529878,
+            "ParamTailSway": 0.31371930505016543
+          }
+        },
+        {
+          "t": 1.6666666666666667,
+          "values": {
+            "ParamAmbientSway": 0.669130606358858,
+            "ParamBreath": 0.37500000000000006,
+            "ParamAngleZ": 0,
+            "ParamBodyAngleZ": 0,
+            "ParamHairSwayX": 2.657042772765287,
+            "ParamHairSwayZ": 0,
+            "ParamHairBackSway": 1.8958214720877684,
+            "ParamTailSway": 0.30030988038891276
+          }
+        },
+        {
+          "t": 1.75,
+          "values": {
+            "ParamAmbientSway": 0.5750052520432787,
+            "ParamBreath": 0.39694631307311823,
+            "ParamAngleZ": 0,
+            "ParamBodyAngleZ": 0,
+            "ParamHairSwayX": 2.3530465567057335,
+            "ParamHairSwayZ": 0,
+            "ParamHairBackSway": 2.0670833302256044,
+            "ParamTailSway": 0.28253323131566116
+          }
+        },
+        {
+          "t": 1.8333333333333333,
+          "values": {
+            "ParamAmbientSway": 0.4725507648690541,
+            "ParamBreath": 0.41728265158971445,
+            "ParamAngleZ": 0,
+            "ParamBodyAngleZ": 0,
+            "ParamHairSwayX": 2.015398047482632,
+            "ParamHairSwayZ": 0,
+            "ParamHairBackSway": 2.209863511228459,
+            "ParamTailSway": 0.26065316680555584
+          }
+        },
+        {
+          "t": 1.9166666666666667,
+          "values": {
+            "ParamAmbientSway": 0.3632512304729784,
+            "ParamBreath": 0.4357862063693486,
+            "ParamAngleZ": 0,
+            "ParamBodyAngleZ": 0,
+            "ParamHairSwayX": 1.6487118073445006,
+            "ParamHairSwayZ": 0,
+            "ParamHairBackSway": 2.317495767140469,
+            "ParamTailSway": 0.2349911104946673
+          }
+        },
+        {
+          "t": 2,
+          "values": {
+            "ParamAmbientSway": 0.24868988716485482,
+            "ParamBreath": 0.45225424859373686,
+            "ParamAngleZ": 0,
+            "ParamBodyAngleZ": 0,
+            "ParamHairSwayX": 1.258087629420343,
+            "ParamHairSwayZ": 0,
+            "ParamHairBackSway": 2.3858964572401313,
+            "ParamTailSway": 0.20592178576950645
+          }
+        },
+        {
+          "t": 2.0833333333333335,
+          "values": {
+            "ParamAmbientSway": 0.13052619222005157,
+            "ParamBreath": 0.4665063509461097,
+            "ParamAngleZ": 0,
+            "ParamBodyAngleZ": 0,
+            "ParamHairSwayX": 0.8490925368149119,
+            "ParamHairSwayZ": 0,
+            "ParamHairBackSway": 2.4134284497865917,
+            "ParamTailSway": 0.1738681542756077
+          }
+        },
+        {
+          "t": 2.1666666666666665,
+          "values": {
+            "ParamAmbientSway": 0.010471784116246153,
+            "ParamBreath": 0.4783863644106502,
+            "ParamAngleZ": 0,
+            "ParamBodyAngleZ": 0,
+            "ParamHairSwayX": 0.42766141472317454,
+            "ParamHairSwayZ": 0,
+            "ParamHairBackSway": 2.400439896138231,
+            "ParamTailSway": 0.1392956170950298
+          }
+        },
+        {
+          "t": 2.25,
+          "values": {
+            "ParamAmbientSway": -0.10973431109104541,
+            "ParamBreath": 0.4877641290737884,
+            "ParamAngleZ": 0,
+            "ParamBodyAngleZ": 0,
+            "ParamHairSwayX": -0.000040223880686215656,
+            "ParamHairSwayZ": 0,
+            "ParamHairBackSway": 2.348669142243686,
+            "ParamTailSway": 0.10270553758873116
+          }
+        },
+        {
+          "t": 2.3333333333333335,
+          "values": {
+            "ParamAmbientSway": -0.22835087011065594,
+            "ParamBreath": 0.4945369001834514,
+            "ParamAngleZ": 0,
+            "ParamBodyAngleZ": 0,
+            "ParamHairSwayX": -0.42775355791226555,
+            "ParamHairSwayZ": 0,
+            "ParamHairBackSway": 2.260669133509141,
+            "ParamTailSway": 0.06462817667751655
+          }
+        },
+        {
+          "t": 2.4166666666666665,
+          "values": {
+            "ParamAmbientSway": -0.3436596945856159,
+            "ParamBreath": 0.4986304738420683,
+            "ParamAngleZ": 0,
+            "ParamBodyAngleZ": 0,
+            "ParamHairSwayX": -0.849243942302454,
+            "ParamHairSwayZ": 0,
+            "ParamHairBackSway": 2.1393502216401474,
+            "ParamTailSway": 0.025615150661397038
+          }
+        },
+        {
+          "t": 2.5,
+          "values": {
+            "ParamAmbientSway": -0.4539904997395467,
+            "ParamBreath": 0.5,
+            "ParamAngleZ": 0,
+            "ParamBodyAngleZ": 0,
+            "ParamHairSwayX": -1.2583957883899177,
+            "ParamHairSwayZ": 0,
+            "ParamHairBackSway": 1.9876848784785217,
+            "ParamTailSway": -0.01376846735908568
+          }
+        },
+        {
+          "t": 2.5833333333333335,
+          "values": {
+            "ParamAmbientSway": -0.5577451089796904,
+            "ParamBreath": 0.4986304738420683,
+            "ParamAngleZ": 0,
+            "ParamBodyAngleZ": 0,
+            "ParamHairSwayX": -1.649291901784422,
+            "ParamHairSwayZ": 0,
+            "ParamHairBackSway": 1.8085721931525256,
+            "ParamTailSway": -0.0529522759496148
+          }
+        },
+        {
+          "t": 2.6666666666666665,
+          "values": {
+            "ParamAmbientSway": -0.6534206039901054,
+            "ParamBreath": 0.4945369001834514,
+            "ParamAngleZ": 0,
+            "ParamBodyAngleZ": 0,
+            "ParamHairSwayX": -2.016286259184847,
+            "ParamHairSwayZ": 0,
+            "ParamHairBackSway": 1.6048296054335986,
+            "ParamTailSway": -0.09136877539431512
+          }
+        },
+        {
+          "t": 2.75,
+          "values": {
+            "ParamAmbientSway": -0.7396310949786097,
+            "ParamBreath": 0.4877641290737884,
+            "ParamAngleZ": 0,
+            "ParamBodyAngleZ": 0,
+            "ParamHairSwayX": -2.354076111022739,
+            "ParamHairSwayZ": 0,
+            "ParamHairBackSway": 1.3792649308764484,
+            "ParamTailSway": -0.12846157174651643
+          }
+        },
+        {
+          "t": 2.8333333333333335,
+          "values": {
+            "ParamAmbientSway": -0.8151277957285543,
+            "ParamBreath": 0.4783863644106502,
+            "ParamAngleZ": 0,
+            "ParamBodyAngleZ": 0,
+            "ParamHairSwayX": -2.657774781153706,
+            "ParamHairSwayZ": 0,
+            "ParamHairBackSway": 1.134780907026453,
+            "ParamTailSway": -0.16369342986038735
+          }
+        },
+        {
+          "t": 2.9166666666666665,
+          "values": {
+            "ParamAmbientSway": -0.8788171126619653,
+            "ParamBreath": 0.4665063509461097,
+            "ParamAngleZ": 0,
+            "ParamBodyAngleZ": 0,
+            "ParamHairSwayX": -2.922983112992569,
+            "ParamHairSwayZ": 0,
+            "ParamHairBackSway": 0.8744730220499652,
+            "ParamTailSway": -0.19655405446545146
+          }
+        },
+        {
+          "t": 3,
+          "values": {
+            "ParamAmbientSway": -0.9297764858882515,
+            "ParamBreath": 0.45225424859373686,
+            "ParamAngleZ": 0,
+            "ParamBodyAngleZ": 0,
+            "ParamHairSwayX": -3.14585609950769,
+            "ParamHairSwayZ": 0,
+            "ParamHairBackSway": 0.6016946656328466,
+            "ParamTailSway": -0.22656748377378033
+          }
+        },
+        {
+          "t": 3.0833333333333335,
+          "values": {
+            "ParamAmbientSway": -0.9672677527758767,
+            "ParamBreath": 0.43578620636934856,
+            "ParamAngleZ": 0,
+            "ParamBodyAngleZ": 0,
+            "ParamHairSwayX": -3.3231615171534705,
+            "ParamHairSwayZ": 0,
+            "ParamHairBackSway": 0.3200776504956475,
+            "ParamTailSway": -0.2532989868137623
+          }
+        },
+        {
+          "t": 3.1666666666666665,
+          "values": {
+            "ParamAmbientSway": -0.9907478404714435,
+            "ParamBreath": 0.4172826515897146,
+            "ParamAngleZ": 0,
+            "ParamBodyAngleZ": 0,
+            "ParamHairSwayX": -3.452328510765567,
+            "ParamHairSwayZ": 0,
+            "ParamHairBackSway": 0.03350803239271993,
+            "ParamTailSway": -0.2763613636257811
+          }
+        },
+        {
+          "t": 3.25,
+          "values": {
+            "ParamAmbientSway": -0.9998766324816606,
+            "ParamBreath": 0.39694631307311834,
+            "ParamAngleZ": 0,
+            "ParamBodyAngleZ": 0,
+            "ParamHairSwayX": -3.5314852530717227,
+            "ParamHairSwayZ": 0,
+            "ParamHairBackSway": -0.25393463142522155,
+            "ParamTailSway": -0.2954205565932259
+          }
+        },
+        {
+          "t": 3.3333333333333335,
+          "values": {
+            "ParamAmbientSway": -0.9945218953682733,
+            "ParamBreath": 0.3749999999999999,
+            "ParamAngleZ": 0,
+            "ParamBodyAngleZ": 0,
+            "ParamHairSwayX": -3.5594855851051674,
+            "ParamHairSwayZ": 0,
+            "ParamHairBackSway": -0.5380622559114934,
+            "ParamTailSway": -0.3102004914563262
+          }
+        },
+        {
+          "t": 3.4166666666666665,
+          "values": {
+            "ParamAmbientSway": -0.9747611941912218,
+            "ParamBreath": 0.35168416076895026,
+            "ParamAngleZ": 0,
+            "ParamBodyAngleZ": 0,
+            "ParamHairSwayX": -3.5359248563092502,
+            "ParamHairSwayZ": 0,
+            "ParamHairBackSway": -0.814674425484287,
+            "ParamTailSway": -0.3204870778781522
+          }
+        },
+        {
+          "t": 3.5,
+          "values": {
+            "ParamAmbientSway": -0.9408807689542256,
+            "ParamBreath": 0.32725424859373686,
+            "ParamAngleZ": 0,
+            "ParamBodyAngleZ": 0,
+            "ParamHairSwayX": -3.461145176991737,
+            "ParamHairSwayZ": 0,
+            "ParamHairBackSway": -1.0796546331844812,
+            "ParamTailSway": -0.3261313116846933
+          }
+        },
+        {
+          "t": 3.5833333333333335,
+          "values": {
+            "ParamAmbientSway": -0.8933713883278375,
+            "ParamBreath": 0.30197792270443974,
+            "ParamAngleZ": 0,
+            "ParamBodyAngleZ": 0,
+            "ParamHairSwayX": -3.336230182736573,
+            "ParamHairSwayZ": 0,
+            "ParamHairBackSway": -1.3290585648963984,
+            "ParamTailSway": -0.32705143394072683
+          }
+        },
+        {
+          "t": 3.6666666666666665,
+          "values": {
+            "ParamAmbientSway": -0.8329212407100997,
+            "ParamBreath": 0.27613211581691355,
+            "ParamAngleZ": 0,
+            "ParamBodyAngleZ": 0,
+            "ParamHairSwayX": -3.1629893478977285,
+            "ParamHairSwayZ": 0,
+            "ParamHairBackSway": -1.5591899441225052,
+            "ParamTailSway": -0.3232341156844915
+          }
+        },
+        {
+          "t": 3.75,
+          "values": {
+            "ParamAmbientSway": -0.7604059656000308,
+            "ParamBreath": 0.25000000000000006,
+            "ParamAngleZ": 0,
+            "ParamBodyAngleZ": 0,
+            "ParamHairSwayX": -2.943931937049619,
+            "ParamHairSwayZ": 0,
+            "ParamHairBackSway": -1.7666625354678056,
+            "ParamTailSway": -0.3147346512439532
+          }
+        },
+        {
+          "t": 3.8333333333333335,
+          "values": {
+            "ParamAmbientSway": -0.6768759696826608,
+            "ParamBreath": 0.22386788418308654,
+            "ParamAngleZ": 0,
+            "ParamBodyAngleZ": 0,
+            "ParamHairSwayX": -2.6822308357912954,
+            "ParamHairSwayZ": 0,
+            "ParamHairBackSway": -1.9484491279442169,
+            "ParamTailSway": -0.3016761574002707
+          }
+        },
+        {
+          "t": 3.9166666666666665,
+          "values": {
+            "ParamAmbientSway": -0.5835412113561179,
+            "ParamBreath": 0.19802207729556037,
+            "ParamAngleZ": 0,
+            "ParamBodyAngleZ": 0,
+            "ParamHairSwayX": -2.381676705234061,
+            "ParamHairSwayZ": 0,
+            "ParamHairBackSway": -2.10191955452653,
+            "ParamTailSway": -0.28424779004697814
+          }
+        },
+        {
+          "t": 4,
+          "values": {
+            "ParamAmbientSway": -0.4817536741017153,
+            "ParamBreath": 0.1727457514062632,
+            "ParamAngleZ": 0,
+            "ParamBodyAngleZ": 0,
+            "ParamHairSwayX": -2.046623107184118,
+            "ParamHairSwayZ": 0,
+            "ParamHairBackSway": -2.22487015259839,
+            "ParamTailSway": -0.2627020042102464
+          }
+        },
+        {
+          "t": 4.083333333333333,
+          "values": {
+            "ParamAmbientSway": -0.37298778257580933,
+            "ParamBreath": 0.14831583923105007,
+            "ParamAngleZ": 0,
+            "ParamBodyAngleZ": 0,
+            "ParamHairSwayX": -1.6819234183589673,
+            "ParamHairSwayZ": 0,
+            "ParamHairBackSway": -2.3155467671656287,
+            "ParamTailSway": -0.23735089714110716
+          }
+        },
+        {
+          "t": 4.166666666666667,
+          "values": {
+            "ParamAmbientSway": -0.2588190451025207,
+            "ParamBreath": 0.12499999999999997,
+            "ParamAngleZ": 0,
+            "ParamBodyAngleZ": 0,
+            "ParamHairSwayX": -1.2928604832169837,
+            "ParamHairSwayZ": 0,
+            "ParamHairBackSway": -2.372662728406044,
+            "ParamTailSway": -0.20856168746401477
+          }
+        },
+        {
+          "t": 4.25,
+          "values": {
+            "ParamAmbientSway": -0.140901231937583,
+            "ParamBreath": 0.10305368692688177,
+            "ParamAngleZ": 0,
+            "ParamBodyAngleZ": 0,
+            "ParamHairSwayX": -0.8850700523016262,
+            "ParamHairSwayZ": 0,
+            "ParamHairBackSway": -2.395412459244745,
+            "ParamTailSway": -0.17675139587481947
+          }
+        },
+        {
+          "t": 4.333333333333333,
+          "values": {
+            "ParamAmbientSway": -0.020942419883357676,
+            "ParamBreath": 0.08271734841028555,
+            "ParamAngleZ": 0,
+            "ParamBodyAngleZ": 0,
+            "ParamHairSwayX": -0.4644591274973047,
+            "ParamHairSwayZ": 0,
+            "ParamHairBackSway": -2.3834806851932604,
+            "ParamTailSway": -0.14238080444329518
+          }
+        },
+        {
+          "t": 4.416666666666667,
+          "values": {
+            "ParamAmbientSway": 0.09931974974363968,
+            "ParamBreath": 0.06421379363065144,
+            "ParamAngleZ": 0,
+            "ParamBodyAngleZ": 0,
+            "ParamHairSwayX": -0.037120396009716554,
+            "ParamHairSwayZ": 0,
+            "ParamHairBackSway": -2.33704674489972,
+            "ParamTailSway": -0.10594778202277186
+          }
+        },
+        {
+          "t": 4.5,
+          "values": {
+            "ParamAmbientSway": 0.21814324139654281,
+            "ParamBreath": 0.047745751406263165,
+            "ParamAngleZ": 0,
+            "ParamBodyAngleZ": 0,
+            "ParamHairSwayX": 0.39075601524740605,
+            "ParamHairSwayZ": 0,
+            "ParamHairBackSway": -2.2567832759778255,
+            "ParamTailSway": -0.06798007245035724
+          }
+        },
+        {
+          "t": 4.583333333333333,
+          "values": {
+            "ParamAmbientSway": 0.33380685923377085,
+            "ParamBreath": 0.033493649053890406,
+            "ParamAngleZ": 0,
+            "ParamBodyAngleZ": 0,
+            "ParamHairSwayX": 0.8129721948674895,
+            "ParamHairSwayZ": 0,
+            "ParamHairBackSway": -2.1438485569963506,
+            "ParamTailSway": -0.029027650002304534
+          }
+        },
+        {
+          "t": 4.666666666666667,
+          "values": {
+            "ParamAmbientSway": 0.44463517918492784,
+            "ParamBreath": 0.021613635589349756,
+            "ParamAngleZ": 0,
+            "ParamBodyAngleZ": 0,
+            "ParamHairSwayX": 1.2234122182800369,
+            "ParamHairSwayZ": 0,
+            "ParamHairBackSway": -1.9998719661248805,
+            "ParamTailSway": 0.010345247162649462
+          }
+        },
+        {
+          "t": 4.75,
+          "values": {
+            "ParamAmbientSway": 0.5490228179981318,
+            "ParamBreath": 0.012235870926211617,
+            "ParamAngleZ": 0,
+            "ParamBodyAngleZ": 0,
+            "ParamHairSwayX": 1.6161307362640907,
+            "ParamHairSwayZ": 0,
+            "ParamHairBackSway": -1.8269322981912561,
+            "ParamTailSway": 0.04956829017466699
+          }
+        },
+        {
+          "t": 4.833333333333333,
+          "values": {
+            "ParamAmbientSway": 0.6454576877239503,
+            "ParamBreath": 0.0054630998165486055,
+            "ParamAngleZ": 0,
+            "ParamBodyAngleZ": 0,
+            "ParamHairSwayX": 1.9854390962473714,
+            "ParamHairSwayZ": 0,
+            "ParamHairBackSway": -1.627528996350578,
+            "ParamTailSway": 0.08807332084861189
+          }
+        },
+        {
+          "t": 4.916666666666667,
+          "values": {
+            "ParamAmbientSway": 0.7325428987873789,
+            "ParamBreath": 0.0013695261579316775,
+            "ParamAngleZ": 0,
+            "ParamBodyAngleZ": 0,
+            "ParamHairSwayX": 2.325987746802704,
+            "ParamHairSwayZ": 0,
+            "ParamHairBackSway": -1.4045466485129605,
+            "ParamTailSway": 0.12530258163586358
+          }
+        },
+        {
+          "t": 5,
+          "values": {
+            "ParamAmbientSway": 0.8090169943749472,
+            "ParamBreath": 0,
+            "ParamAngleZ": 0,
+            "ParamBodyAngleZ": 0,
+            "ParamHairSwayX": 2.6328437299410674,
+            "ParamHairSwayZ": 0,
+            "ParamHairBackSway": -1.1612133382965026,
+            "ParamTailSway": 0.16071679491905488
+          }
+        },
+        {
+          "t": 5.083333333333333,
+          "values": {
+            "ParamAmbientSway": 0.8737722230354649,
+            "ParamBreath": 0.0013695261579316498,
+            "ParamAngleZ": 0,
+            "ParamBodyAngleZ": 0,
+            "ParamHairSwayX": 2.901562137849713,
+            "ParamHairSwayZ": 0,
+            "ParamHairBackSway": -0.9010536113137737,
+            "ParamTailSway": 0.1938029746188542
+          }
+        },
+        {
+          "t": 5.166666666666667,
+          "values": {
+            "ParamAmbientSway": 0.9258705848099951,
+            "ParamBreath": 0.0054630998165486055,
+            "ParamAngleZ": 0,
+            "ParamBodyAngleZ": 0,
+            "ParamHairSwayX": 3.1282504989762288,
+            "ParamHairSwayZ": 0,
+            "ParamHairBackSway": -0.6278369215644617,
+            "ParamTailSway": 0.22408185695936544
+          }
+        },
+        {
+          "t": 5.25,
+          "values": {
+            "ParamAmbientSway": 0.9645574184577982,
+            "ParamBreath": 0.01223587092621159,
+            "ParamAngleZ": 0,
+            "ParamBodyAngleZ": 0,
+            "ParamHairSwayX": 3.3096251612343424,
+            "ParamHairSwayZ": 0,
+            "ParamHairBackSway": -0.3455224713078562,
+            "ParamTailSway": 0.25111484275524937
+          }
+        },
+        {
+          "t": 5.333333333333333,
+          "values": {
+            "ParamAmbientSway": 0.9892723329629883,
+            "ParamBreath": 0.021613635589349728,
+            "ParamAngleZ": 0,
+            "ParamBodyAngleZ": 0,
+            "ParamHairSwayX": 3.44305885610241,
+            "ParamHairSwayZ": 0,
+            "ParamHairBackSway": -0.05820136731802461,
+            "ParamTailSway": 0.27451035065939927
+          }
+        },
+        {
+          "t": 5.416666666666667,
+          "values": {
+            "ParamAmbientSway": 0.9996573249755573,
+            "ParamBreath": 0.03349364905389035,
+            "ParamAngleZ": 0,
+            "ParamBodyAngleZ": 0,
+            "ParamHairSwayX": 3.5266187549689736,
+            "ParamHairSwayZ": 0,
+            "ParamHairBackSway": 0.22996299689285338,
+            "ParamTailSway": 0.2939294893423966
+          }
+        },
+        {
+          "t": 5.5,
+          "values": {
+            "ParamAmbientSway": 0.99556196460308,
+            "ParamBreath": 0.04774575140626311,
+            "ParamAngleZ": 0,
+            "ParamBodyAngleZ": 0,
+            "ParamHairSwayX": 3.559094466578461,
+            "ParamHairSwayZ": 0,
+            "ParamHairBackSway": 0.5147954464066598,
+            "ParamTailSway": 0.30909096644043466
+          }
+        },
+        {
+          "t": 5.583333333333333,
+          "values": {
+            "ParamAmbientSway": 0.9770455744352639,
+            "ParamBreath": 0.06421379363065136,
+            "ParamAngleZ": 0,
+            "ParamBodyAngleZ": 0,
+            "ParamHairSwayX": 3.540015569971003,
+            "ParamHairSwayZ": 0,
+            "ParamHairBackSway": 0.792169555805923,
+            "ParamTailSway": 0.3197751631640518
+          }
+        },
+        {
+          "t": 5.666666666666667,
+          "values": {
+            "ParamAmbientSway": 0.944376370237481,
+            "ParamBreath": 0.08271734841028544,
+            "ParamAngleZ": 0,
+            "ParamBodyAngleZ": 0,
+            "ParamHairSwayX": 3.4696584288248578,
+            "ParamHairSwayZ": 0,
+            "ParamHairBackSway": 1.0580673658813926,
+            "ParamTailSway": 0.3258273155456692
+          }
+        },
+        {
+          "t": 5.75,
+          "values": {
+            "ParamAmbientSway": 0.8980275757606158,
+            "ParamBreath": 0.10305368692688166,
+            "ParamAngleZ": 0,
+            "ParamBodyAngleZ": 0,
+            "ParamHairSwayX": 3.34904218838527,
+            "ParamHairSwayZ": 0,
+            "ParamHairBackSway": 1.3086374664960545,
+            "ParamTailSway": 0.3271597562445526
+          }
+        },
+        {
+          "t": 5.833333333333333,
+          "values": {
+            "ParamAmbientSway": 0.8386705679454244,
+            "ParamBreath": 0.12499999999999986,
+            "ParamAngleZ": 0,
+            "ParamBodyAngleZ": 0,
+            "ParamHairSwayX": 3.1799140129080916,
+            "ParamHairSwayZ": 0,
+            "ParamHairBackSway": 1.5402506467517256,
+            "ParamTailSway": 0.32375318443593626
+          }
+        },
+        {
+          "t": 5.916666666666667,
+          "values": {
+            "ParamAmbientSway": 0.7671651518152991,
+            "ParamBreath": 0.14831583923104996,
+            "ParamAngleZ": 0,
+            "ParamBodyAngleZ": 0,
+            "ParamHairSwayX": 2.964723777451603,
+            "ParamHairSwayZ": 0,
+            "ParamHairBackSway": 1.7495523389147094,
+            "ParamTailSway": 0.31565694538955835
+          }
+        },
+        {
+          "t": 6,
+          "values": {
+            "ParamAmbientSway": 0.6845471059286884,
+            "ParamBreath": 0.17274575140626308,
+            "ParamAngleZ": 0,
+            "ParamBodyAngleZ": 0,
+            "ParamHairSwayX": 2.7065885806370815,
+            "ParamHairSwayZ": 0,
+            "ParamHairBackSway": 1.9335111161615364,
+            "ParamTailSway": 0.3029883156878216
+          }
+        },
+        {
+          "t": 6.083333333333333,
+          "values": {
+            "ParamAmbientSway": 0.5920131787992196,
+            "ParamBreath": 0.19802207729556,
+            "ParamAngleZ": 2.6146722824297357,
+            "ParamBodyAngleZ": 0.8715574274765786,
+            "ParamHairSwayX": 2.4092475924519055,
+            "ParamHairSwayZ": -0.6831914445865684,
+            "ParamHairBackSway": 1.8593328247072887,
+            "ParamTailSway": 0.25283578467991696
+          }
+        },
+        {
+          "t": 6.166666666666667,
+          "values": {
+            "ParamAmbientSway": 0.4909037536151412,
+            "ParamBreath": 0.22386788418308662,
+            "ParamAngleZ": 5.20944533000792,
+            "ParamBodyAngleZ": 1.7364817766693066,
+            "ParamHairSwayX": 2.077007891160455,
+            "ParamHairSwayZ": -1.0515040843778194,
+            "ParamHairBackSway": 1.806010150253324,
+            "ParamTailSway": 0.2037991312737577
+          }
+        },
+        {
+          "t": 6.25,
+          "values": {
+            "ParamAmbientSway": 0.3826834323650905,
+            "ParamBreath": 0.24999999999999992,
+            "ParamAngleZ": 7.764571353075622,
+            "ParamBodyAngleZ": 2.5881904510252074,
+            "ParamHairSwayX": 1.7146820739004547,
+            "ParamHairSwayZ": -1.09386179949098,
+            "ParamHairBackSway": 1.7911208764702256,
+            "ParamTailSway": 0.15764649075459297
+          }
+        },
+        {
+          "t": 6.333333333333333,
+          "values": {
+            "ParamAmbientSway": 0.26891982061526687,
+            "ParamBreath": 0.2761321158169132,
+            "ParamAngleZ": 10.260604299770051,
+            "ParamBodyAngleZ": 3.420201433256684,
+            "ParamHairSwayX": 1.3275185446928102,
+            "ParamHairSwayZ": -0.9342122862310018,
+            "ParamHairBackSway": 1.8136900728685426,
+            "ParamTailSway": 0.11462822815399602
+          }
+        },
+        {
+          "t": 6.416666666666667,
+          "values": {
+            "ParamAmbientSway": 0.151260820247219,
+            "ParamBreath": 0.30197792270444,
+            "ParamAngleZ": 12.67854785222099,
+            "ParamBodyAngleZ": 4.226182617406997,
+            "ParamHairSwayX": 0.9211254896581907,
+            "ParamHairSwayZ": -0.7190133978883504,
+            "ParamHairBackSway": 1.8602562042021407,
+            "ParamTailSway": 0.07431173650235323
+          }
+        },
+        {
+          "t": 6.5,
+          "values": {
+            "ParamAmbientSway": 0.03141075907812848,
+            "ParamBreath": 0.32725424859373675,
+            "ParamAngleZ": 14.999999999999998,
+            "ParamBodyAngleZ": 4.999999999999999,
+            "ParamHairSwayX": 0.5013896406766508,
+            "ParamHairSwayZ": -0.547625085181977,
+            "ParamHairBackSway": 1.911410667242277,
+            "ParamTailSway": 0.03607361779145403
+          }
+        },
+        {
+          "t": 6.583333333333333,
+          "values": {
+            "ParamAmbientSway": -0.08889429686644094,
+            "ParamBreath": 0.3516841607689497,
+            "ParamAngleZ": 17.207293090531376,
+            "ParamBodyAngleZ": 5.735764363510459,
+            "ParamHairSwayX": 0.07439100422072753,
+            "ParamHairSwayZ": -0.4539554393280463,
+            "ParamHairBackSway": 1.9474299543743039,
+            "ParamTailSway": -0.0006394636087261318
+          }
+        },
+        {
+          "t": 6.666666666666667,
+          "values": {
+            "ParamAmbientSway": -0.20791169081776012,
+            "ParamBreath": 0.3750000000000002,
+            "ParamAngleZ": 19.283628290596184,
+            "ParamBodyAngleZ": 6.427876096865395,
+            "ParamHairSwayX": -0.35368520945911275,
+            "ParamHairSwayZ": -0.42310094625244044,
+            "ParamHairBackSway": 1.9522345012091098,
+            "ParamTailSway": -0.03619661963716869
+          }
+        },
+        {
+          "t": 6.75,
+          "values": {
+            "ParamAmbientSway": -0.3239174181981498,
+            "ParamBreath": 0.39694631307311823,
+            "ParamAngleZ": 21.213203435596423,
+            "ParamBodyAngleZ": 7.071067811865475,
+            "ParamHairSwayX": -0.7766381810617794,
+            "ParamHairSwayZ": -0.4200692307594499,
+            "ParamHairBackSway": 1.9154685065759622,
+            "ParamTailSway": -0.07075493428748497
+          }
+        },
+        {
+          "t": 6.833333333333333,
+          "values": {
+            "ParamAmbientSway": -0.4352310993723275,
+            "ParamBreath": 0.4172826515897143,
+            "ParamAngleZ": 22.981333293569335,
+            "ParamBodyAngleZ": 7.660444431189779,
+            "ParamHairSwayX": -1.1883413030658043,
+            "ParamHairSwayZ": -0.41337074847008315,
+            "ParamHairBackSway": 1.8329130627572001,
+            "ParamTailSway": -0.10427750870848804
+          }
+        },
+        {
+          "t": 6.916666666666667,
+          "values": {
+            "ParamAmbientSway": -0.5402403204776547,
+            "ParamBreath": 0.4357862063693487,
+            "ParamAngleZ": 24.57456132866976,
+            "ParamBodyAngleZ": 8.191520442889919,
+            "ParamHairSwayX": -1.5828309255782236,
+            "ParamHairSwayZ": -0.386299091069328,
+            "ParamHairBackSway": 1.7056882106858249,
+            "ParamTailSway": -0.1365718173065988
+          }
+        },
+        {
+          "t": 7,
+          "values": {
+            "ParamAmbientSway": -0.6374239897486891,
+            "ParamBreath": 0.4522542485937368,
+            "ParamAngleZ": 25.980762113533157,
+            "ParamBodyAngleZ": 8.660254037844386,
+            "ParamHairSwayX": -1.9543927416897393,
+            "ParamHairSwayZ": -0.33702234153126154,
+            "ParamHairBackSway": 1.5387787892302418,
+            "ParamTailSway": -0.16733343722248245
+          }
+        },
+        {
+          "t": 7.083333333333333,
+          "values": {
+            "ParamAmbientSway": -0.7253743710122869,
+            "ParamBreath": 0.4665063509461095,
+            "ParamAngleZ": 27.189233611099496,
+            "ParamBodyAngleZ": 9.063077870366499,
+            "ParamHairSwayX": -2.2976445610169707,
+            "ParamHairSwayZ": -0.27261877318557337,
+            "ParamHairBackSway": 1.3393722607920906,
+            "ParamTailSway": -0.19618728134518948
+          }
+        },
+        {
+          "t": 7.166666666666667,
+          "values": {
+            "ParamAmbientSway": -0.8028174751911147,
+            "ParamBreath": 0.4783863644106503,
+            "ParamAngleZ": 28.190778623577252,
+            "ParamBodyAngleZ": 9.396926207859085,
+            "ParamHairSwayX": -2.607614272431425,
+            "ParamHairSwayZ": -0.20226909157997497,
+            "ParamHairBackSway": 1.115373504973272,
+            "ParamTailSway": -0.2227228840487514
+          }
+        },
+        {
+          "t": 7.25,
+          "values": {
+            "ParamAmbientSway": -0.8686315144381912,
+            "ParamBreath": 0.48776412907378836,
+            "ParamAngleZ": 28.97777478867205,
+            "ParamBodyAngleZ": 9.659258262890683,
+            "ParamHairSwayX": -2.8798118666607153,
+            "ParamHairSwayZ": -0.13274976482431844,
+            "ParamHairBackSway": 0.8743097219823088,
+            "ParamTailSway": -0.24652284400198696
+          }
+        },
+        {
+          "t": 7.333333333333333,
+          "values": {
+            "ParamAmbientSway": -0.9218631515885003,
+            "ParamBreath": 0.4945369001834513,
+            "ParamAngleZ": 29.544232590366242,
+            "ParamBodyAngleZ": 9.84807753012208,
+            "ParamHairSwayX": -3.110294475492083,
+            "ParamHairSwayZ": -0.06698697554948319,
+            "ParamHairBackSway": 0.6226958574450796,
+            "ParamTailSway": -0.2671848491424665
+          }
+        },
+        {
+          "t": 7.416666666666667,
+          "values": {
+            "ParamAmbientSway": -0.9617413095492116,
+            "ParamBreath": 0.4986304738420684,
+            "ParamAngleZ": 29.885840942752367,
+            "ParamBodyAngleZ": 9.961946980917455,
+            "ParamHairSwayX": -3.295723485464981,
+            "ParamHairSwayZ": -0.004840583403582177,
+            "ParamHairBackSway": 0.3658212197273938,
+            "ParamTailSway": -0.28433826402811513
+          }
+        },
+        {
+          "t": 7.5,
+          "values": {
+            "ParamAmbientSway": -0.9876883405951378,
+            "ParamBreath": 0.5,
+            "ParamAngleZ": 30,
+            "ParamBodyAngleZ": 10,
+            "ParamHairSwayX": -3.433412898742684,
+            "ParamHairSwayZ": 0.05523142300967221,
+            "ParamHairBackSway": 0.10785117659068844,
+            "ParamTailSway": -0.29765637723271565
+          }
+        },
+        {
+          "t": 7.583333333333333,
+          "values": {
+            "ParamAmbientSway": -0.9993283937786562,
+            "ParamBreath": 0.4986304738420684,
+            "ParamAngleZ": 29.885840942752367,
+            "ParamBodyAngleZ": 9.961946980917455,
+            "ParamHairSwayX": -3.5213682406402995,
+            "ParamHairSwayZ": 0.1147102281813539,
+            "ParamHairBackSway": -0.1478873296366645,
+            "ParamTailSway": -0.30686530214385327
+          }
+        },
+        {
+          "t": 7.666666666666667,
+          "values": {
+            "ParamAmbientSway": -0.9964928592495044,
+            "ParamBreath": 0.49453690018345137,
+            "ParamAngleZ": 29.544232590366242,
+            "ParamBodyAngleZ": 9.84807753012208,
+            "ParamHairSwayX": -3.558315450221297,
+            "ParamHairSwayZ": 0.17425560171507726,
+            "ParamHairBackSway": -0.3985599350965541,
+            "ParamTailSway": -0.31175033145208786
+          }
+        },
+        {
+          "t": 7.75,
+          "values": {
+            "ParamAmbientSway": -0.979222810621766,
+            "ParamBreath": 0.4877641290737884,
+            "ParamAngleZ": 28.97777478867205,
+            "ParamBodyAngleZ": 9.659258262890683,
+            "ParamHairSwayX": -3.5437193354730567,
+            "ParamHairSwayZ": 0.23363226120069047,
+            "ParamHairBackSway": -0.6415135529047207,
+            "ParamTailSway": -0.3121603391238631
+          }
+        },
+        {
+          "t": 7.833333333333333,
+          "values": {
+            "ParamAmbientSway": -0.947768410009586,
+            "ParamBreath": 0.4783863644106504,
+            "ParamAngleZ": 28.190778623577256,
+            "ParamBodyAngleZ": 9.396926207859085,
+            "ParamHairSwayX": -3.4777913257323902,
+            "ParamHairSwayZ": 0.29203690739025945,
+            "ParamHairBackSway": -0.8740571492777687,
+            "ParamTailSway": -0.3080106413222766
+          }
+        },
+        {
+          "t": 7.916666666666667,
+          "values": {
+            "ParamAmbientSway": -0.9025852843498605,
+            "ParamBreath": 0.4665063509461096,
+            "ParamAngleZ": 27.189233611099496,
+            "ParamBodyAngleZ": 9.063077870366499,
+            "ParamHairSwayX": -3.361486409064736,
+            "ParamHairSwayZ": 0.3485097300909009,
+            "ParamHairBackSway": -1.093355885230165,
+            "ParamTailSway": -0.2992845840799464
+          }
+        },
+        {
+          "t": 8,
+          "values": {
+            "ParamAmbientSway": -0.8443279255020152,
+            "ParamBreath": 0.4522542485937369,
+            "ParamAngleZ": 25.98076211353316,
+            "ParamBodyAngleZ": 8.660254037844387,
+            "ParamHairSwayX": -3.1964892989600444,
+            "ParamHairSwayZ": 0.40222609051435,
+            "ParamHairBackSway": -1.296431225092673,
+            "ParamTailSway": -0.28603402206963724
+          }
+        },
+        {
+          "t": 8.083333333333334,
+          "values": {
+            "ParamAmbientSway": -0.7738402097265054,
+            "ParamBreath": 0.4357862063693485,
+            "ParamAngleZ": 24.574561328669745,
+            "ParamBodyAngleZ": 8.191520442889914,
+            "ParamHairSwayX": -2.985190030725222,
+            "ParamHairSwayZ": 0.45260696586114935,
+            "ParamHairBackSway": -1.4802414391318368,
+            "ParamTailSway": -0.268378784712598
+          }
+        },
+        {
+          "t": 8.166666666666666,
+          "values": {
+            "ParamAmbientSway": -0.6921431738704075,
+            "ParamBreath": 0.4172826515897147,
+            "ParamAngleZ": 22.98133329356935,
+            "ParamBodyAngleZ": 7.6604444311897835,
+            "ParamHairSwayX": -2.730649341067039,
+            "ParamHairSwayZ": 0.4992884362434553,
+            "ParamHairBackSway": -1.6418092953110495,
+            "ParamTailSway": -0.24650518588249176
+          }
+        },
+        {
+          "t": 8.25,
+          "values": {
+            "ParamAmbientSway": -0.6004202253258837,
+            "ParamBreath": 0.39694631307311834,
+            "ParamAngleZ": 21.213203435596427,
+            "ParamBodyAngleZ": 7.0710678118654755,
+            "ParamHairSwayX": -2.4365543323532037,
+            "ParamHairSwayZ": 0.542028869293893,
+            "ParamHairBackSway": -1.778364686568871,
+            "ParamTailSway": -0.22066361421828823
+          }
+        },
+        {
+          "t": 8.333333333333334,
+          "values": {
+            "ParamAmbientSway": -0.4999999999999999,
+            "ParamBreath": 0.37499999999999994,
+            "ParamAngleZ": 19.283628290596173,
+            "ParamBodyAngleZ": 6.427876096865392,
+            "ParamHairSwayX": -2.107165063768854,
+            "ParamHairSwayZ": 0.5806212446459271,
+            "ParamHairBackSway": -1.887476538611185,
+            "ParamTailSway": -0.19116523608539182
+          }
+        },
+        {
+          "t": 8.416666666666666,
+          "values": {
+            "ParamAmbientSway": -0.39233711660356174,
+            "ParamBreath": 0.35168416076895026,
+            "ParamAngleZ": 17.2072930905314,
+            "ParamBodyAngleZ": 5.735764363510468,
+            "ParamHairSwayX": -1.7472528430123564,
+            "ParamHairSwayZ": 0.6148447186616056,
+            "ParamHairBackSway": -1.9671575416855331,
+            "ParamTailSway": -0.1583778473559723
+          }
+        },
+        {
+          "t": 8.5,
+          "values": {
+            "ParamAmbientSway": -0.2789911060392299,
+            "ParamBreath": 0.327254248593737,
+            "ParamAngleZ": 14.999999999999998,
+            "ParamBodyAngleZ": 4.999999999999999,
+            "ParamHairSwayX": -1.3620311123947277,
+            "ParamHairSwayZ": 0.6444577858492251,
+            "ParamHairBackSway": -2.0159344974903823,
+            "ParamTailSway": -0.12272091955867814
+          }
+        },
+        {
+          "t": 8.583333333333334,
+          "values": {
+            "ParamAmbientSway": -0.1616038211033604,
+            "ParamBreath": 0.3019779227044398,
+            "ParamAngleZ": 12.678547852220973,
+            "ParamBodyAngleZ": 4.226182617406991,
+            "ParamHairSwayX": -0.957079930479476,
+            "ParamHairSwayZ": 0.6692173607242048,
+            "ParamHairBackSway": -2.032884633826525,
+            "ParamTailSway": -0.08465989784586594
+          }
+        },
+        {
+          "t": 8.666666666666666,
+          "values": {
+            "ParamAmbientSway": -0.041875653729201066,
+            "ParamBreath": 0.2761321158169136,
+            "ParamAngleZ": 10.260604299770092,
+            "ParamBodyAngleZ": 3.4202014332566972,
+            "ParamHairSwayX": -0.5382651431700378,
+            "ParamHairSwayZ": 0.6889047462371776,
+            "ParamHairBackSway": -2.0176432570611738,
+            "ParamTailSway": -0.044699820806774634
+          }
+        },
+        {
+          "t": 8.75,
+          "values": {
+            "ParamAmbientSway": 0.0784590957278449,
+            "ParamBreath": 0.2500000000000001,
+            "ParamAngleZ": 7.76457135307563,
+            "ParamBodyAngleZ": 2.58819045102521,
+            "ParamHairSwayX": -0.11165341507723267,
+            "ParamHairSwayZ": 0.7033453496843339,
+            "ParamHairBackSway": -1.970390483378663,
+            "ParamTailSway": -0.003378344240985161
+          }
+        },
+        {
+          "t": 8.833333333333334,
+          "values": {
+            "ParamAmbientSway": 0.19765734037912747,
+            "ParamBreath": 0.2238678841830866,
+            "ParamAngleZ": 5.209445330007895,
+            "ParamBodyAngleZ": 1.7364817766692984,
+            "ParamHairSwayX": 0.31657564803567106,
+            "ParamHairSwayZ": 0.712417492218799,
+            "ParamHairBackSway": -1.891824941948111,
+            "ParamTailSway": 0.0387417381175818
+          }
+        },
+        {
+          "t": 8.916666666666666,
+          "values": {
+            "ParamAmbientSway": 0.31399245596740416,
+            "ParamBreath": 0.19802207729556043,
+            "ParamAngleZ": 2.6146722824297592,
+            "ParamBodyAngleZ": 0.8715574274765864,
+            "ParamHairSwayX": 0.7402190127962677,
+            "ParamHairSwayZ": 0.7160521021851617,
+            "ParamHairBackSway": -1.7831309829328572,
+            "ParamTailSway": 0.08108037467864604
+          }
+        },
+        {
+          "t": 9,
+          "values": {
+            "ParamAmbientSway": 0.42577929156507316,
+            "ParamBreath": 0.17274575140626325,
+            "ParamAngleZ": 3.67394039744206e-15,
+            "ParamBodyAngleZ": 1.2246467991473533e-15,
+            "ParamHairSwayX": 1.153140071122655,
+            "ParamHairSwayZ": 0.714227821002635,
+            "ParamHairBackSway": -1.6459438127874073,
+            "ParamTailSway": 0.12304842720331934
+          }
+        },
+        {
+          "t": 9.083333333333334,
+          "values": {
+            "ParamAmbientSway": 0.531398579518083,
+            "ParamBreath": 0.1483158392310499,
+            "ParamAngleZ": -2.6146722824297517,
+            "ParamBodyAngleZ": -0.8715574274765838,
+            "ParamHairSwayX": 1.5493575309316592,
+            "ParamHairSwayZ": 0.7069656882408117,
+            "ParamHairBackSway": -1.4823147749718264,
+            "ParamTailSway": 0.16405601797285185
+          }
+        },
+        {
+          "t": 9.166666666666666,
+          "values": {
+            "ParamAmbientSway": 0.6293203910498373,
+            "ParamBreath": 0.12500000000000022,
+            "ParamAngleZ": -5.209445330007887,
+            "ParamBodyAngleZ": -1.736481776669296,
+            "ParamHairSwayX": 1.9231320570457908,
+            "ParamHairSwayZ": 0.6943256904909825,
+            "ParamHairBackSway": -1.2946771574108782,
+            "ParamTailSway": 0.2035209342074014
+          }
+        },
+        {
+          "t": 9.25,
+          "values": {
+            "ParamAmbientSway": 0.7181262977631884,
+            "ParamBreath": 0.1030536869268818,
+            "ParamAngleZ": -7.764571353075624,
+            "ParamBodyAngleZ": -2.588190451025208,
+            "ParamHairSwayX": 2.269049407277923,
+            "ParamHairSwayZ": 0.6764055220426847,
+            "ParamHairBackSway": -1.0858116810873204,
+            "ParamTailSway": 0.24087696942205605
+          }
+        },
+        {
+          "t": 9.333333333333334,
+          "values": {
+            "ParamAmbientSway": 0.7965299180241967,
+            "ParamBreath": 0.08271734841028541,
+            "ParamAngleZ": -10.260604299770085,
+            "ParamBodyAngleZ": -3.420201433256695,
+            "ParamHairSwayX": 2.582098859441144,
+            "ParamHairSwayZ": 0.6533407244105467,
+            "ParamHairBackSway": -0.858810255394147,
+            "ParamTailSway": 0.275582081707784
+          }
+        },
+        {
+          "t": 9.416666666666666,
+          "values": {
+            "ParamAmbientSway": 0.863395550606771,
+            "ParamBreath": 0.06421379363065163,
+            "ParamAngleZ": -12.678547852220966,
+            "ParamBodyAngleZ": -4.226182617406989,
+            "ParamHairSwayX": 2.857745793243904,
+            "ParamHairSwayZ": 0.6253050762199371,
+            "ParamHairBackSway": -0.6170365828854467,
+            "ParamTailSway": 0.30712625107257174
+          }
+        },
+        {
+          "t": 9.5,
+          "values": {
+            "ParamAmbientSway": 0.9177546256839811,
+            "ParamBreath": 0.04774575140626322,
+            "ParamAngleZ": -14.999999999999991,
+            "ParamBodyAngleZ": -4.999999999999997,
+            "ParamHairSwayX": 3.091997375698665,
+            "ParamHairSwayZ": 0.5925104061847396,
+            "ParamHairBackSway": -0.36408258835697693,
+            "ParamTailSway": 0.33503892190330964
+          }
+        },
+        {
+          "t": 9.583333333333334,
+          "values": {
+            "ParamAmbientSway": 0.9588197348681935,
+            "ParamBreath": 0.03349364905389032,
+            "ParamAngleZ": -17.207293090531394,
+            "ParamBodyAngleZ": -5.735764363510465,
+            "ParamHairSwayX": 3.2814603985701005,
+            "ParamHairSwayZ": 0.555205503033475,
+            "ParamHairBackSway": -0.10372024319135575,
+            "ParamTailSway": 0.3588959222284799
+          }
+        },
+        {
+          "t": 9.666666666666666,
+          "values": {
+            "ParamAmbientSway": 0.9859960370705048,
+            "ParamBreath": 0.021613635589349894,
+            "ParamAngleZ": -19.28362829059616,
+            "ParamBodyAngleZ": -6.427876096865386,
+            "ParamHairSwayX": 3.423390430069263,
+            "ParamHairSwayZ": 0.5136742028684721,
+            "ParamHairBackSway": 0.16015101436046808,
+            "ParamTailSway": 0.3783257586768623
+          }
+        },
+        {
+          "t": 9.75,
+          "values": {
+            "ParamAmbientSway": 0.99888987496197,
+            "ParamBreath": 0.012235870926211645,
+            "ParamAngleZ": -21.213203435596412,
+            "ParamBodyAngleZ": -7.071067811865471,
+            "ParamHairSwayX": 3.515731568815715,
+            "ParamHairSwayZ": 0.4682329264685534,
+            "ParamHairBackSway": 0.42356052238435926,
+            "ParamTailSway": 0.39301519472382174
+          }
+        },
+        {
+          "t": 9.833333333333334,
+          "values": {
+            "ParamAmbientSway": 0.9973144772244581,
+            "ParamBreath": 0.005463099816548578,
+            "ParamAngleZ": -22.981333293569353,
+            "ParamBodyAngleZ": -7.660444431189784,
+            "ParamHairSwayX": 3.557146224219067,
+            "ParamHairSwayZ": 0.41922793870641384,
+            "ParamHairBackSway": 0.6825251803500165,
+            "ParamTailSway": 0.4027140298636245
+          }
+        },
+        {
+          "t": 9.916666666666666,
+          "values": {
+            "ParamAmbientSway": 0.9812926639922452,
+            "ParamBreath": 0.0013695261579317053,
+            "ParamAngleZ": -24.57456132866975,
+            "ParamBodyAngleZ": -8.191520442889916,
+            "ParamHairSwayX": 3.5470344919015817,
+            "ParamHairSwayZ": 0.3670324993365821,
+            "ParamHairBackSway": 0.9331094512758991,
+            "ParamTailSway": 0.40723900859681567
+          }
+        },
+        {
+          "t": 10,
+          "values": {
+            "ParamAmbientSway": 0.9510565162951538,
+            "ParamBreath": 0,
+            "ParamAngleZ": -25.980762113533153,
+            "ParamBodyAngleZ": -8.660254037844386,
+            "ParamHairSwayX": 3.4855428435027545,
+            "ParamHairSwayZ": 0.3120439586728204,
+            "ParamHairBackSway": 1.1714852130119864,
+            "ParamTailSway": 0.40647680041376644
+          }
+        },
+        {
+          "t": 10.083333333333334,
+          "values": {
+            "ParamAmbientSway": 0.9070440142914646,
+            "ParamBreath": 0.0013695261579316775,
+            "ParamAngleZ": -27.189233611099503,
+            "ParamBodyAngleZ": -9.0630778703665,
+            "ParamHairSwayX": 3.3735620049913138,
+            "ParamHairSwayZ": 0.2546807765169895,
+            "ParamHairBackSway": 1.3939901670927588,
+            "ParamTailSway": 0.40038600511303074
+          }
+        },
+        {
+          "t": 10.166666666666666,
+          "values": {
+            "ParamAmbientSway": 0.8498926929868647,
+            "ParamBreath": 0.005463099816548522,
+            "ParamAngleZ": -28.190778623577245,
+            "ParamBodyAngleZ": -9.396926207859082,
+            "ParamHairSwayX": 3.2127140542179355,
+            "ParamHairSwayZ": 0.19537942034935551,
+            "ParamHairBackSway": 1.5971836623783457,
+            "ParamTailSway": 0.3889981516281334
+          }
+        },
+        {
+          "t": 10.25,
+          "values": {
+            "ParamAmbientSway": 0.7804304073383297,
+            "ParamBreath": 0.012235870926211562,
+            "ParamAngleZ": -28.97777478867205,
+            "ParamBodyAngleZ": -9.659258262890683,
+            "ParamHairSwayX": 3.00532892460474,
+            "ParamHairSwayZ": 0.1345911143672439,
+            "ParamHairBackSway": 1.7778989682157995,
+            "ParamTailSway": 0.37241767285106264
+          }
+        },
+        {
+          "t": 10.333333333333334,
+          "values": {
+            "ParamAmbientSway": 0.6996633405133644,
+            "ParamBreath": 0.021613635589349783,
+            "ParamAngleZ": -29.544232590366246,
+            "ParamBodyAngleZ": -9.848077530122083,
+            "ParamHairSwayX": 2.7544106553230137,
+            "ParamHairSwayZ": 0.07277844103676168,
+            "ParamHairBackSway": 1.9332912052268456,
+            "ParamTailSway": 0.35082085353036185
+          }
+        },
+        {
+          "t": 10.416666666666666,
+          "values": {
+            "ParamAmbientSway": 0.6087614290087212,
+            "ParamBreath": 0.03349364905389021,
+            "ParamAngleZ": -29.885840942752363,
+            "ParamBodyAngleZ": -9.961946980917455,
+            "ParamHairSwayX": 2.4635938768360095,
+            "ParamHairSwayZ": 0.010411822853212627,
+            "ParamHairBackSway": 2.060880291446071,
+            "ParamTailSway": 0.32445376297737805
+          }
+        },
+        {
+          "t": 10.5,
+          "values": {
+            "ParamAmbientSway": 0.5090414157503708,
+            "ParamBreath": 0.047745751406263054,
+            "ParamAngleZ": -30,
+            "ParamBodyAngleZ": -10,
+            "ParamHairSwayX": 2.137091162127562,
+            "ParamHairSwayZ": -0.052034074428557675,
+            "ParamHairBackSway": 2.1585883802729766,
+            "ParamTailSway": 0.2936291988257121
+          }
+        },
+        {
+          "t": 10.583333333333334,
+          "values": {
+            "ParamAmbientSway": 0.40194777665595993,
+            "ParamBreath": 0.06421379363065144,
+            "ParamAngleZ": -29.885840942752363,
+            "ParamBodyAngleZ": -9.961946980917455,
+            "ParamHairSwayX": 1.7796320062505093,
+            "ParamHairSwayZ": -0.11408397429373507,
+            "ParamHairBackSway": 2.224771357053415,
+            "ParamTailSway": 0.25872268224782685
+          }
+        },
+        {
+          "t": 10.666666666666666,
+          "values": {
+            "ParamAmbientSway": 0.28903179694447173,
+            "ParamBreath": 0.08271734841028525,
+            "ParamAngleZ": -29.544232590366246,
+            "ParamBodyAngleZ": -9.848077530122083,
+            "ParamHairSwayX": 1.3963943180955112,
+            "ParamHairSwayZ": -0.17526562036382043,
+            "ParamHairBackSway": 2.258244031390768,
+            "ParamTailSway": 0.2201675586355561
+          }
+        },
+        {
+          "t": 10.75,
+          "values": {
+            "ParamAmbientSway": 0.17192910027941005,
+            "ParamBreath": 0.1030536869268816,
+            "ParamAngleZ": -28.977774788672054,
+            "ParamBodyAngleZ": -9.659258262890685,
+            "ParamHairSwayX": 0.992929416743708,
+            "ParamHairSwayZ": -0.23511337537726718,
+            "ParamHairBackSway": 2.258298722964673,
+            "ParamTailSway": 0.17844927060202806
+          }
+        },
+        {
+          "t": 10.833333333333334,
+          "values": {
+            "ParamAmbientSway": 0.05233595624294297,
+            "ParamBreath": 0.125,
+            "ParamAngleZ": -28.19077862357725,
+            "ParamBodyAngleZ": -9.396926207859083,
+            "ParamHairSwayX": 0.5750816188546551,
+            "ParamHairSwayZ": -0.2931717630385853,
+            "ParamHairBackSway": 2.2247169994172227,
+            "ParamTailSway": 0.134098882076029
+          }
+        },
+        {
+          "t": 10.916666666666666,
+          "values": {
+            "ParamAmbientSway": -0.06801529066524688,
+            "ParamBreath": 0.14831583923104968,
+            "ParamAngleZ": -27.189233611099507,
+            "ParamBodyAngleZ": -9.063077870366502,
+            "ParamHairSwayX": 0.1489035818916798,
+            "ParamHairSwayZ": -0.34899892968490565,
+            "ParamHairBackSway": 2.1577743928603654,
+            "ParamTailSway": 0.08768594306420267
+          }
+        },
+        {
+          "t": 11,
+          "values": {
+            "ParamAmbientSway": -0.1873813145857247,
+            "ParamBreath": 0.17274575140626303,
+            "ParamAngleZ": -25.980762113533157,
+            "ParamBodyAngleZ": -8.660254037844386,
+            "ParamHairSwayX": -0.2794313705350868,
+            "ParamHairSwayZ": -0.4021700026790138,
+            "ParamHairBackSway": 2.058238000510952,
+            "ParamTailSway": 0.039810794195516155
+          }
+        },
+        {
+          "t": 11.083333333333334,
+          "values": {
+            "ParamAmbientSway": -0.30403306092549,
+            "ParamBreath": 0.19802207729556018,
+            "ParamAngleZ": -24.574561328669756,
+            "ParamBodyAngleZ": -8.191520442889917,
+            "ParamHairSwayX": -0.7037186712130516,
+            "ParamHairSwayZ": -0.4522803215563199,
+            "ParamHairBackSway": 1.927356965358681,
+            "ParamTailSway": -0.008903581701960539
+          }
+        },
+        {
+          "t": 11.166666666666666,
+          "values": {
+            "ParamAmbientSway": -0.41628079226039894,
+            "ParamBreath": 0.22386788418308634,
+            "ParamAngleZ": -22.981333293569342,
+            "ParamBodyAngleZ": -7.660444431189781,
+            "ParamHairSwayX": -1.1178123844449592,
+            "ParamHairSwayZ": -0.49894851738291723,
+            "ParamHairBackSway": 1.7668459325462136,
+            "ParamTailSway": -0.05782004712766545
+          }
+        },
+        {
+          "t": 11.25,
+          "values": {
+            "ParamAmbientSway": -0.5224985647159479,
+            "ParamBreath": 0.24999999999999986,
+            "ParamAngleZ": -21.21320343559643,
+            "ParamBodyAngleZ": -7.071067811865477,
+            "ParamHairSwayX": -1.51571423187057,
+            "ParamHairSwayZ": -0.5418194160896433,
+            "ParamHairBackSway": 1.5788616825817812,
+            "ParamTailSway": -0.10629601767761947
+          }
+        },
+        {
+          "t": 11.333333333333334,
+          "values": {
+            "ParamAmbientSway": -0.6211477802783106,
+            "ParamBreath": 0.2761321158169134,
+            "ParamAngleZ": -19.283628290596166,
+            "ParamBodyAngleZ": -6.427876096865389,
+            "ParamHairSwayX": -1.8916604794252185,
+            "ParamHairSwayZ": -0.580566742754741,
+            "ParamHairBackSway": 1.3659732492545098,
+            "ParamTailSway": -0.1536922678890834
+          }
+        },
+        {
+          "t": 11.416666666666666,
+          "values": {
+            "ParamAmbientSway": -0.7107994738729911,
+            "ParamBreath": 0.30197792270443957,
+            "ParamAngleZ": -17.207293090531415,
+            "ParamBodyAngleZ": -5.735764363510471,
+            "ParamHairSwayX": -2.2402054268500793,
+            "ParamHairSwayZ": -0.6148956056285638,
+            "ParamHairBackSway": 1.131125933935497,
+            "ParamTailSway": -0.19938171142732064
+          }
+        },
+        {
+          "t": 11.5,
+          "values": {
+            "ParamAmbientSway": -0.7901550123756901,
+            "ParamBreath": 0.32725424859373675,
+            "ParamAngleZ": -15.000000000000014,
+            "ParamBodyAngleZ": -5.000000000000004,
+            "ParamHairSwayX": -2.556300290382136,
+            "ParamHairSwayZ": -0.6445447407881559,
+            "ParamHairBackSway": 0.8775997252146968,
+            "ParamTailSway": -0.24275803207765756
+          }
+        },
+        {
+          "t": 11.583333333333334,
+          "values": {
+            "ParamAmbientSway": -0.858064905723645,
+            "ParamBreath": 0.35168416076895004,
+            "ParamAngleZ": -12.678547852220952,
+            "ParamBodyAngleZ": -4.226182617406984,
+            "ParamHairSwayX": -2.8353663359832946,
+            "ParamHairSwayZ": -0.6692885004390557,
+            "ParamHairBackSway": 0.6089627208362751,
+            "ParamTailSway": -0.2832440439643811
+          }
+        },
+        {
+          "t": 11.666666666666666,
+          "values": {
+            "ParamAmbientSway": -0.9135454576426004,
+            "ParamBreath": 0.3749999999999998,
+            "ParamAngleZ": -10.260604299770083,
+            "ParamBodyAngleZ": -3.420201433256694,
+            "ParamHairSwayX": -3.073361203750598,
+            "ParamHairSwayZ": -0.6889385699587925,
+            "ParamHairBackSway": 0.3290202258617021,
+            "ParamTailSway": -0.32029966311127395
+          }
+        },
+        {
+          "t": 11.75,
+          "values": {
+            "ParamAmbientSway": -0.9557930147983301,
+            "ParamBreath": 0.3969463130731182,
+            "ParamAngleZ": -7.764571353075647,
+            "ParamBodyAngleZ": -2.588190451025216,
+            "ParamHairSwayX": -3.2668374627774592,
+            "ParamHairSwayZ": -0.703345400816286,
+            "ParamHairBackSway": 0.04176026589966364,
+            "ParamTailSway": -0.35342937783495576
+          }
+        },
+        {
+          "t": 11.833333333333334,
+          "values": {
+            "ParamAmbientSway": -0.9841956079692422,
+            "ParamBreath": 0.41728265158971456,
+            "ParamAngleZ": -5.209445330007911,
+            "ParamBodyAngleZ": -1.736481776669304,
+            "ParamHairSwayX": -3.412992548280341,
+            "ParamHairSwayZ": -0.712399348568262,
+            "ParamHairBackSway": -0.2487036933304041,
+            "ParamTailSway": -0.3821891124457507
+          }
+        },
+        {
+          "t": 11.916666666666666,
+          "values": {
+            "ParamAmbientSway": -0.9983418166140283,
+            "ParamBreath": 0.4357862063693484,
+            "ParamAngleZ": -2.614672282429776,
+            "ParamBodyAngleZ": -0.871557427476592,
+            "ParamHairSwayX": -3.509709357635741,
+            "ParamHairSwayZ": -0.7160315072851424,
+            "ParamHairBackSway": -0.5381919889618114,
+            "ParamTailSway": -0.4061923872225144
+          }
+        }
+      ]
+    }
+  }
+}
