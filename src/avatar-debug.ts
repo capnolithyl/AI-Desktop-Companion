@@ -19,6 +19,9 @@ export type AvatarDebugSnapshot = {
   breath: number | null;
   eyeL: number | null;
   eyeR: number | null;
+  gazeX?: number;
+  gazeY?: number;
+  dragMomentum?: number;
   error?: string;
 };
 
@@ -47,6 +50,10 @@ export function avatarDebugText(
     "Mouth open: " + number(snapshot.mouthOpen),
     "Breath: " + number(snapshot.breath),
     "Eyes L / R: " + number(snapshot.eyeL) + " / " + number(snapshot.eyeR),
+    ...(snapshot.gazeX === undefined ? [] : [
+      "Cursor gaze X / Y: " + number(snapshot.gazeX) + " / " + number(snapshot.gazeY ?? null),
+      "Drag hair momentum: " + number(snapshot.dragMomentum ?? null)
+    ]),
     ...(snapshot.error ? ["Error: " + snapshot.error] : [])
   ].join("\n");
 }
