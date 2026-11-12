@@ -22,6 +22,10 @@ fn initialize_database(connection: &Connection) -> Result<(), String> {
         "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='message_search')",
         [], |row| row.get(0)
     ).map_err(|e| e.to_string())?;
+    let had_fact_search: bool = connection.query_row(
+        "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='user_memory_search')",
+        [], |row| row.get(0)
+    ).map_err(|e| e.to_string())?;
     connection.execute_batch(
         "PRAGMA foreign_keys=ON;
          PRAGMA journal_mode=WAL;
@@ -90,6 +94,19 @@ fn initialize_database(connection: &Connection) -> Result<(), String> {
            processed_at INTEGER NOT NULL DEFAULT (unixepoch())
          );
          -- Search only user-authored messages, never generated assistant text.
+         CREATE VIRTUAL TABLE IF NOT EXISTS user_memory_search USING fts5(
+           fact, tokenize='unicode61 remove_diacritics 2'
+         );
+         CREATE TRIGGER IF NOT EXISTS user_memory_search_insert AFTER INSERT ON user_memories BEGIN
+           INSERT INTO user_memory_search(rowid,fact) VALUES(new.id,new.fact);
+         END;
+         CREATE TRIGGER IF NOT EXISTS user_memory_search_delete AFTER DELETE ON user_memories BEGIN
+           DELETE FROM user_memory_search WHERE rowid=old.id;
+         END;
+         CREATE TRIGGER IF NOT EXISTS user_memory_search_update AFTER UPDATE OF fact ON user_memories BEGIN
+           DELETE FROM user_memory_search WHERE rowid=old.id;
+           INSERT INTO user_memory_search(rowid,fact) VALUES(new.id,new.fact);
+         END;
          CREATE VIRTUAL TABLE IF NOT EXISTS message_search USING fts5(
            content, tokenize='unicode61 remove_diacritics 2'
          );
@@ -127,6 +144,11 @@ fn initialize_database(connection: &Connection) -> Result<(), String> {
             "INSERT INTO message_search(rowid,content)
              SELECT rowid,content FROM messages WHERE role='user'", []
         ).map_err(|e| format!("Cannot index existing conversations: {e}"))?;
+    }
+    if !had_fact_search {
+        connection.execute(
+            "INSERT INTO user_memory_search(rowid,fact) SELECT id,fact FROM user_memories", []
+        ).map_err(|e| format!("Cannot index existing user memories: {e}"))?;
     }
     Ok(())
 }
@@ -401,6 +423,34 @@ fn message_search_terms(query: &str) -> String {
         .take(8)
         .map(|term| format!(r#""{term}""#))
         .collect::<Vec<_>>().join(" OR ")
+}
+
+/// Fetch relevant historic memories rather than considering only the newest entries.
+pub(crate) fn related_user_facts(db: &Connection, query: &str) -> Result<Vec<String>, String> {
+    let mut matches: Vec<String> = Vec::new();
+    let terms = message_search_terms(query);
+    if !terms.is_empty() {
+        let mut stmt = db.prepare(
+            "SELECT m.fact FROM user_memory_search
+             JOIN user_memories m ON m.id=user_memory_search.rowid
+             WHERE user_memory_search MATCH ?1
+             ORDER BY bm25(user_memory_search) LIMIT 24"
+        ).map_err(|e| e.to_string())?;
+        matches.extend(stmt.query_map(params![terms], |row| row.get::<_,String>(0))
+            .map_err(|e| e.to_string())?
+            .collect::<Result<Vec<_>,_>>().map_err(|e| e.to_string())?);
+    }
+    let mut stmt = db.prepare("SELECT fact FROM user_memories ORDER BY updated_at DESC,id DESC LIMIT 8")
+        .map_err(|e| e.to_string())?;
+    let recent = stmt.query_map([], |row| row.get::<_,String>(0))
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>,_>>().map_err(|e| e.to_string())?;
+    for fact in recent {
+        if !matches.iter().any(|previous| previous.eq_ignore_ascii_case(&fact)) {
+            matches.push(fact);
+        }
+    }
+    Ok(matches)
 }
 
 fn find_archive_messages(
@@ -757,6 +807,24 @@ pub fn memory_delete_character_fact(app: AppHandle, id: i64, persona_id: String)
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn fact_search_includes_older_facts_and_follows_edits() {
+        let db = Connection::open_in_memory().unwrap();
+        initialize_database(&db).unwrap();
+        db.execute("INSERT INTO user_memories(fact) VALUES('The user loves WordPress development')",[]).unwrap();
+        let id = db.last_insert_rowid();
+        for n in 0..35 {
+            db.execute("INSERT INTO user_memories(fact) VALUES(?1)",params![format!("The user likes item {n}")]).unwrap();
+        }
+        assert!(related_user_facts(&db,"I changed my WordPress preference").unwrap()
+            .iter().any(|fact|fact.contains("WordPress")));
+        db.execute("UPDATE user_memories SET fact='The user prefers Astro development' WHERE id=?1",params![id]).unwrap();
+        assert!(!related_user_facts(&db,"WordPress").unwrap().iter().any(|fact|fact.contains("WordPress")));
+        assert!(related_user_facts(&db,"Astro").unwrap().iter().any(|fact|fact.contains("Astro")));
+        initialize_database(&db).unwrap();
+        assert!(related_user_facts(&db,"Astro").unwrap().iter().any(|fact|fact.contains("Astro")));
+    }
 
     #[test]
     fn referenced_and_pinned_facts_are_persistent_and_cascade_on_delete() {

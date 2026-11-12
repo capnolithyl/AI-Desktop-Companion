@@ -33,9 +33,12 @@ pub async fn prepare(
         }}
     ]);
     for _ in 0..2 {
-        let mut payload = json!({"model":model,"messages":messages,"tools":tools,"stream":false,"think":false});
+        let mut payload = json!({
+            "model":model,"messages":messages,"tools":tools,"stream":false,"think":false,
+            "keep_alive":"10m","options":{"temperature":0,"num_predict":300}
+        });
         if let Some(num_ctx) = context_window {
-            payload["options"] = json!({"num_ctx":num_ctx});
+            payload["options"]["num_ctx"] = json!(num_ctx);
         }
         let response = client.post(ollama_url)
             .json(&payload)
@@ -62,6 +65,11 @@ pub async fn prepare(
                 "search_web" => {
                     let query = arguments["query"].as_str().unwrap_or("").trim().to_string();
                     let _ = app.emit("mikan://activity", json!({"requestId":request_id,"text":"Searching the web…"}));
+                    if query.is_empty() || query.len() > 300 {
+                        messages.push(json!({"role":"tool","tool_name":name,
+                            "content":"Invalid search_web arguments: query must be 1–300 characters."}));
+                        continue;
+                    }
                     match source_priority::search(
                         search_endpoint.to_owned(),query,false,source_preferences,source_topic
                     ).await {
@@ -79,6 +87,11 @@ pub async fn prepare(
                 "read_webpage" => {
                     let url = arguments["url"].as_str().unwrap_or("");
                     let _ = app.emit("mikan://activity", json!({"requestId":request_id,"text":"Reading a webpage…"}));
+                    if !url.starts_with("https://") {
+                        messages.push(json!({"role":"tool","tool_name":name,
+                            "content":"Invalid read_webpage arguments: supply a public HTTPS URL."}));
+                        continue;
+                    }
                     match web_reader::read_page_impl(app, url, false, cache_hours).await {
                         Ok(page) => {
                             if sources.len() < 8 && !sources.iter().any(|s: &web_search::SearchResult| s.url == page.url) {
