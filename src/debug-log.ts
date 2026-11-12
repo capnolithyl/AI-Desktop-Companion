@@ -97,6 +97,7 @@ export type DebugLogOptions = {
   provider?: "local" | "auto" | "gemini";
   geminiModel?: string;
   contextWindow: number | null;
+  avatarAnimation?: string;
   exportedAt?: Date;
 };
 
@@ -221,6 +222,7 @@ export function formatDebugLog(messages: readonly DebugLogMessage[], options: De
     ...(options.geminiModel && options.provider !== "local" ? ["Configured cloud model: " + options.geminiModel] : []),
     "Context window: " + (options.contextWindow == null ? "Ollama default" : options.contextWindow + " tokens"),
     "Message count: " + messages.length,
+    ...(options.avatarAnimation ? ["Avatar animation (snapshot at export):", options.avatarAnimation] : []),
     "Note: Contains conversation text, source excerpts and selected personal-memory facts. Review before sharing.",
     ""
   ];
