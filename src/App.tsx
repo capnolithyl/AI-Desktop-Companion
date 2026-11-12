@@ -26,7 +26,8 @@ import {
 import { PersonalityPresets, PersonalitySliders } from "./PersonalityControls";
 import { parseSlashCommand, SLASH_HELP } from "./slash-commands";
 import { runtimeContext, chatRuntimeContext } from "./runtime-context";
-import { decideDesktopTurn, clearlySocialChat } from "./desktop-turn-routing";
+import { decideDesktopTurn } from "./desktop-turn-routing";
+import { planDesktopWebExecution } from "./turn-execution-policy";
 import { isModelStatusQuestion, modelStatusAnswer } from "./model-status";
 import { modelSwitcherStatus, modelSwitcherChoice } from "./model-switcher";
 import { formatDebugLog, type Diagnostics, type MemoryRecallAudit, type OllamaStats, type ResearchAudit } from "./debug-log";
@@ -2046,9 +2047,16 @@ export default function App() {
       // is synchronizing or the local inference engine is busy.
       setActivity("Preparing relevant memory…");
       const personalTurn=isPersonalMemoryQuestion(text);
-      const canPlanPublicWeb = settings.autoSearch && !useNotion && !turn.capabilityQuestion &&
-        !personalTurn &&
-        !withSearch && !attachment && !screenshot && !liveFrame && !allowRoleplay;
+      // Public tool permissions are decided once, separately from fact recall.
+      // The native backend still enforces its own no-web privacy boundary.
+      const webPolicy = planDesktopWebExecution({
+        question:text, autoSearch:settings.autoSearch, provider:settings.provider,
+        planMode:researchPlan.mode, notion:useNotion,
+        capabilityQuestion:turn.capabilityQuestion, personalTurn,
+        existingSearch:!!withSearch, attachment:!!attachment,
+        screenshot:!!screenshot, liveFrame:!!liveFrame, roleplay:allowRoleplay
+      });
+      const canPlanPublicWeb = webPolicy.canPlanPublicWeb;
       const selection = selectDeterministicMemoryIds(
         liveFacts,text,semanticMatches,lexicalIds,budget.maxFacts
       );
@@ -2059,7 +2067,7 @@ export default function App() {
           endpoint:settings.endpoint,model:settings.model,prompt,
           contextWindow:settings.contextWindow,maxOutputTokens:250,timeoutMs:20000
         }),{
-          automaticWebEnabled:canPlanPublicWeb && researchPlan.mode==="chat",
+          automaticWebEnabled:canPlanPublicWeb,
           sourcePreferences:settings.sourcePreferences
         }
       );
@@ -2070,12 +2078,7 @@ export default function App() {
         researchPlan = {mode:"research",query:plannerWeb.query,recent:false};
         setActivity("Preparing evidence-backed answer…");
       }
-      const cloudMaySearch = settings.provider !== "local" && settings.autoSearch &&
-        !useNotion && !turn.capabilityQuestion && !personalTurn && !withSearch &&
-        !attachment && !screenshot && !liveFrame && !allowRoleplay &&
-        // Unmistakable greetings and small talk need no public web tools;
-        // everything factual/ambiguous keeps native cloud tool calling.
-        !clearlySocialChat(text);
+      const cloudMaySearch = webPolicy.cloudMaySearch;
       // Cloud providers independently decide when read-only web tools are useful.
       // Local Qwen still respects the existing deterministic/planned routes.
       const effectiveWeb = turn.allowAutomaticWeb || plannedPublicSearch;
@@ -2088,13 +2091,7 @@ export default function App() {
           : plannerWeb.method,
         reason:plannedPublicSearch ? plannerWeb.reason :
           turn.allowAutomaticWeb ? "Explicit or factual research routing" :
-            !settings.autoSearch ? "Automatic web tools disabled in Settings" :
-            useNotion ? "Owner-shared Notion document routing; public web blocked" :
-            personalTurn ? "Personal memory question; public web blocked" :
-            turn.capabilityQuestion ? "Mikan capability question; public web blocked" :
-            allowRoleplay ? "Roleplay conversation; public web blocked" :
-            attachment || screenshot || liveFrame ? "Attached private material; public web blocked" :
-            withSearch ? "Search panel supplied results already" : plannerWeb.reason,
+            (webPolicy.blockedReason ?? plannerWeb.reason),
         query:plannedPublicSearch ? plannerWeb.query : researchPlan.mode==="research" ? researchPlan.query : undefined,
         topic:preferredTopic,
         publicWebAllowed:effectiveWeb || cloudMaySearch
