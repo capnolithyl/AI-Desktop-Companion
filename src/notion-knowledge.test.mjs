@@ -167,3 +167,20 @@ test("Cliff Notes and full-text availability questions actually trigger a comple
   assert.equal(planNotionRetrieval("Summarize Boxes",prior,doc).fullRead,true);
   assert.equal(asksToReadFullNotionPage("Can you see the chapter title?"),false);
 });
+
+test("scene-availability questions traverse the chapter relation instead of asking for scene titles",()=>{
+  const chapter={id:"boxes",title:"Chapter 01 · Boxes",url:"https://www.notion.so/boxes",chunkCount:8,characters:14000};
+  const docs=[chapter];
+  const question="let's try it again. can you see the scenes for chapter 1 now?";
+  const plan=planNotionRetrieval(question,[],docs);
+  assert.equal(plan.selectedPage?.id,"boxes");
+  assert.equal(plan.sceneLookup,true);
+  assert.equal(plan.fullRead,false);
+  const recent=[{role:"user",content:question},{role:"assistant",content:"Yes, there are four scenes."}];
+  assert.equal(planNotionRetrieval("Can you open those scenes?",recent,docs,chapter).sceneLookup,true);
+  assert.equal(planNotionRetrieval("Read the scenes linked in chapter 1",recent,docs,chapter).fullRead,true);
+  assert.equal(planNotionRetrieval("What happens in those scenes?",recent,docs,chapter).fullRead,true);
+  assert.equal(planNotionRetrieval("What did you think of Chapter One?",recent,docs,chapter).fullRead,true);
+  assert.equal(planNotionRetrieval("Give me the Cliff Notes",recent,docs,chapter).sceneLookup,false);
+  assert.equal(planNotionRetrieval("Show me my notes",[],docs).sceneLookup,false);
+});
