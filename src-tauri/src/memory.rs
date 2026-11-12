@@ -15,7 +15,7 @@ pub(crate) fn open_db(app: &AppHandle) -> Result<Connection, String> {
     Ok(connection)
 }
 
-fn initialize_database(connection: &Connection) -> Result<(), String> {
+pub(crate) fn initialize_database(connection: &Connection) -> Result<(), String> {
     // Populate the index once when upgrading an existing SQLite archive.
     // Opening the app repeatedly must never rebuild the index.
     let had_search: bool = connection.query_row(
@@ -109,6 +109,26 @@ fn initialize_database(connection: &Connection) -> Result<(), String> {
            assistant_message_id TEXT PRIMARY KEY REFERENCES messages(id) ON DELETE CASCADE,
            processed_at INTEGER NOT NULL DEFAULT (unixepoch())
          );
+         -- Jobs retain only message references and model settings. Conversation
+         -- deletion cascades into queued work, preventing memory resurrection.
+         CREATE TABLE IF NOT EXISTS automatic_memory_jobs (
+           assistant_message_id TEXT PRIMARY KEY REFERENCES messages(id) ON DELETE CASCADE,
+           user_message_id TEXT NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+           conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+           endpoint TEXT NOT NULL,
+           model TEXT NOT NULL,
+           context_window INTEGER,
+           capture_user INTEGER NOT NULL CHECK(capture_user IN (0,1)),
+           capture_character INTEGER NOT NULL CHECK(capture_character IN (0,1)),
+           status TEXT NOT NULL DEFAULT 'queued' CHECK(status IN ('queued','processing','failed')),
+           attempts INTEGER NOT NULL DEFAULT 0,
+           retry_after INTEGER NOT NULL DEFAULT 0,
+           last_error TEXT,
+           created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+           updated_at INTEGER NOT NULL DEFAULT (unixepoch())
+         );
+         CREATE INDEX IF NOT EXISTS idx_automatic_memory_jobs_due
+           ON automatic_memory_jobs(status,retry_after,created_at);
          -- Search only user-authored messages, never generated assistant text.
          CREATE VIRTUAL TABLE IF NOT EXISTS message_search USING fts5(
            content, tokenize='unicode61 remove_diacritics 2'

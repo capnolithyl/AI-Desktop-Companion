@@ -12,6 +12,7 @@ mod source_enrichment;
 mod evidence_pack;
 mod memory;
 mod memory_extraction;
+mod memory_jobs;
 mod advanced_memory;
 mod session_memory;
 mod voice;
@@ -810,6 +811,10 @@ pub fn run() {
             memory::memory_update_character_fact,
             memory::memory_delete_character_fact,
             memory_extraction::memory_process_turn,
+            memory_jobs::memory_enqueue_turn,
+            memory_jobs::memory_process_pending_jobs,
+            memory_jobs::memory_jobs_status,
+            memory_jobs::memory_retry_failed_jobs,
             memory::memory_mark_recalled,
             memory::memory_pin_fact,
             session_memory::memory_session_candidate,
