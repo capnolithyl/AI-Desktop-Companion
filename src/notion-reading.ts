@@ -31,7 +31,7 @@ export function shouldRefetchNotionDocument(error:unknown):boolean {
  */
 export function orderedNotionScenes(document:NotionDocument):NonNullable<NotionDocument["relatedPages"]> {
   const number=(title:string):[number,number]|null=>{
-    const m=/^\\s*(\\d+)\\.(\\d+)(?=\\D|$)/.exec(title);
+    const m=/^\s*(\d+)\.(\d+)(?=\D|$)/.exec(title);
     return m?[Number(m[1]),Number(m[2])]:null;
   };
   return [...(document.relatedPages??[])].sort((a,b)=>{
@@ -56,8 +56,8 @@ export function describeNotionSceneLinks(document:NotionDocument):string {
     throw new Error("Not all linked scene manuscripts were available for this chapter.");
   }
   return "Yes! I can see "+scenes.length+" scenes linked to "+document.title+
-    " in Notion:\\n"+scenes.map((scene,i)=>(i+1)+". "+scene.title).join("\\n")+
-    "\\n\\nThese are the actual scene pages, not just the chapter outline. "+
+    " in Notion:\n"+scenes.map((scene,i)=>(i+1)+". "+scene.title).join("\n")+
+    "\n\nThese are the actual scene pages, not just the chapter outline. "+
     "You don't need to paste individual scene titles. I can open and read "+
     "them together when we discuss the chapter.";
 }
