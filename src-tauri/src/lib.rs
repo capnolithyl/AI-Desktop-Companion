@@ -68,6 +68,8 @@ struct ChatRequest {
     #[serde(default)]
     research_recent: bool,
     #[serde(default)]
+    thinking_requested: bool,
+    #[serde(default)]
     searxng_endpoint: String,
     #[serde(default = "default_cache_hours")]
     cache_hours: u64,
@@ -635,7 +637,8 @@ async fn chat_stream_impl(
         "model": request.model,
         "messages": messages,
         "stream": true,
-        "think": false
+        "think": request.thinking_requested,
+        "keep_alive": "10m"
     });
     let mut options = json!({});
     if let Some(num_ctx) = selected_context {
@@ -791,6 +794,7 @@ pub fn run() {
             memory::memory_create_conversation,
             memory::memory_list_messages,
             memory::memory_search_archive,
+            memory::memory_search_fact_ids,
             memory::memory_save_message,
             memory::memory_delete_conversation,
             memory::memory_list_facts,

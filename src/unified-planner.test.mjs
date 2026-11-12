@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {extendPlanningPrompt,parseWebToolDecision,planMemoriesAndTools} from "./unified-planner.ts";
+import {extendPlanningPrompt,parseWebToolDecision,planMemoriesAndTools,planPublicWebTools} from "./unified-planner.ts";
 import {DEFAULT_SOURCE_PREFERENCES} from "./preferred-sources.ts";
 
 const facts=[
@@ -95,4 +95,13 @@ test("an unsafe planner query gets exactly one locally validated retry",async()=
  assert.equal(result.web.search,true);
  assert.equal(result.web.query,"2026 metal album reviews");
  assert.match(result.web.reason,/rewritten locally/);
+});
+
+
+test("web-only planning still checks saved private names before external search",async()=>{
+  const choice=await planPublicWebTools("Find music news",facts,
+    async()=>JSON.stringify({web:{search:true,query:"Alex Example music news",topic:"music",reason:"news"}}),
+    {automaticWebEnabled:true,sourcePreferences:prefs});
+  assert.equal(choice.search,false);
+  assert.match(choice.reason,/private identity/);
 });

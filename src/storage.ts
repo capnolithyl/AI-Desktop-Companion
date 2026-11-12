@@ -1,4 +1,5 @@
 import { DEFAULT_PERSONALITY, readPersonality, type Personality } from "./personality";
+import type { ReasoningMode } from "./reasoning-mode";
 import { captureInterval, restoreRegion, type RegionChoice } from "./capture-region";
 import { DEFAULT_SOURCE_PREFERENCES, readSourcePreferences, type SourcePreference } from "./preferred-sources";
 import { DEFAULT_VOICE_VOLUME, readVoiceVolume } from "./speech";
@@ -7,7 +8,7 @@ import { DEFAULT_AVATAR_VERTICAL_OFFSET, readAvatarVerticalOffset } from "./avat
 
 export type ChatRole = "user" | "assistant";
 export type Message = { id: string; role: ChatRole; content: string };
-export type Settings = { voice: VoiceSettings; endpoint: string; model: string; provider: "local" | "auto" | "gemini" | "openrouter"; geminiModel: string; openrouterModel: string; systemPrompt: string; appearance: Appearance; personality: Personality; searxngEndpoint: string; autoSearch: boolean; structuredResearch: boolean; autoManageSearch: boolean; sourcePreferences: SourcePreference[]; cacheHours: number; contextWindow: number | null; autoRememberUser: boolean; autoRememberMikan: boolean; visionCaptureIntervalSeconds:number; visionRegion:RegionChoice|null };
+export type Settings = { voice: VoiceSettings; endpoint: string; model: string; provider: "local" | "auto" | "gemini" | "openrouter"; geminiModel: string; openrouterModel: string; systemPrompt: string; appearance: Appearance; personality: Personality; searxngEndpoint: string; autoSearch: boolean; structuredResearch: boolean; autoManageSearch: boolean; sourcePreferences: SourcePreference[]; cacheHours: number; contextWindow: number | null; reasoningMode: ReasoningMode; autoRememberUser: boolean; autoRememberMikan: boolean; visionCaptureIntervalSeconds:number; visionRegion:RegionChoice|null };
 
 export type VoiceSettings = {
   engine: "qwen" | "pocket";
@@ -89,7 +90,8 @@ export const DEFAULT_SETTINGS: Settings = {
   structuredResearch: true,
   autoManageSearch: false,
   cacheHours: 24,
-  contextWindow: null,
+  contextWindow: 16384,
+  reasoningMode: "auto",
   autoRememberUser: true,
   autoRememberMikan: true,
   visionCaptureIntervalSeconds:15,
@@ -120,8 +122,13 @@ export function loadSettings(): Settings {
       structuredResearch: data.structuredResearch !== false,
       autoManageSearch: typeof data.autoManageSearch === "boolean" ? data.autoManageSearch : data.autoSearch === true,
       cacheHours: typeof data.cacheHours === "number" && Number.isFinite(data.cacheHours) ? Math.max(1, Math.min(720, data.cacheHours)) : DEFAULT_SETTINGS.cacheHours,
-      contextWindow: [4096, 8192, 16384, 32768].includes(Number(data.contextWindow)) && data.contextWindow != null
-        ? Number(data.contextWindow) : null,
+      // A deliberate "Ollama default" (null) must survive a restart.
+      contextWindow: data.contextWindow === null && Object.prototype.hasOwnProperty.call(data,"contextWindow")
+        ? null
+        : [4096, 8192, 16384, 32768].includes(Number(data.contextWindow)) && data.contextWindow != null
+          ? Number(data.contextWindow) : DEFAULT_SETTINGS.contextWindow,
+      reasoningMode: data.reasoningMode === "fast" || data.reasoningMode === "deep"
+        ? data.reasoningMode : DEFAULT_SETTINGS.reasoningMode,
       autoRememberUser: data.autoRememberUser !== false,
       autoRememberMikan: data.autoRememberMikan !== false,
       visionCaptureIntervalSeconds:captureInterval(data.visionCaptureIntervalSeconds),

@@ -84,6 +84,24 @@ export function parseWebToolDecision(
   }
 }
 
+// Public-web planning no longer doubles as a memory relevance pass.
+export async function planPublicWebTools(
+  query:string, ownerFacts:readonly RankableMemory[], localSelect:(prompt:string)=>Promise<string>,
+  options:{automaticWebEnabled:boolean;sourcePreferences:readonly SourcePreference[]}
+):Promise<WebToolDecision>{
+  if(!options.automaticWebEnabled)
+    return {search:false,reason:"Automatic web tools disabled",method:"disabled"};
+  // The model sees no personal facts in its routing prompt. Still validate the
+  // proposed PUBLIC query against locally saved names before external search.
+  const plan=(await planMemoriesAndTools([],query,[],0,localSelect,options)).web;
+  if(!plan.search)return plan;
+  const checked=parseWebToolDecision(
+    JSON.stringify({web:{search:true,query:plan.query,topic:plan.topic??"",reason:plan.reason}}),
+    true,options.sourcePreferences,ownerFacts
+  );
+  return checked.search?plan:{...checked,method:"fallback"};
+}
+
 export async function planMemoriesAndTools<T extends RankableMemory>(
   facts:T[],query:string,neighbors:SemanticRecallMatch[],maxFacts:number,
   localSelect:(prompt:string)=>Promise<string>,
