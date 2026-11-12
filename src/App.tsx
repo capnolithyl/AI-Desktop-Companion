@@ -1869,7 +1869,7 @@ export default function App() {
       const carryChapter = activeNotion &&
         (!notionPlan.selectedPage || notionPlan.selectedPage.id === activeNotion.page.id)
         && isNotionTopic(text,messages) ? activeNotion.context : "";
-      const missingChapter = useNotion && asksToReadFullNotionPage(text) &&
+      const missingChapter = useNotion && asksToReadFullNotionPage(text,notionPlan.selectedPage) &&
         !notionPlan.selectedPage
         ? "NOTION PAGE SELECTION: No unique cached page matched the chapter request. "+
           "Ask the owner for its exact title instead of claiming to have read it. "+
