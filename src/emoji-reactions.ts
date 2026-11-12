@@ -30,6 +30,6 @@ export function extractReplyEmojis(reply: string, maxEmojis = 3): {
       if (emojis.length < maxEmojis && !emojis.includes(emoji)) emojis.push(emoji);
       return " ";
     }).replace(STRAY_EMOJI_PARTS, ""));
-  }).join("");
+  }).join("").trimEnd();
   return { visibleText, emojis };
 }
