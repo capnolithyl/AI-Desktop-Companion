@@ -69,6 +69,8 @@ export type Diagnostics = {
   elapsedMs: number;
   firstTokenMs: number | null;
   model: string;
+  /** Provider configured for the turn, not necessarily the backend that replied. */
+  provider?: "local" | "auto" | "openrouter" | "gemini";
   fallbackReason?: string | null;
   stats: OllamaStats | null;
   research?: ResearchAudit;

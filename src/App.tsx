@@ -28,6 +28,7 @@ import { parseSlashCommand, SLASH_HELP } from "./slash-commands";
 import { runtimeContext, chatRuntimeContext } from "./runtime-context";
 import { decideDesktopTurn } from "./desktop-turn-routing";
 import { isModelStatusQuestion, modelStatusAnswer } from "./model-status";
+import { modelSwitcherStatus, modelSwitcherChoice } from "./model-switcher";
 import { formatDebugLog, type Diagnostics, type MemoryRecallAudit, type OllamaStats, type ResearchAudit } from "./debug-log";
 import { strongSemanticIds } from "./memory-ranking";
 import { planMemoriesAndTools, type WebToolDecision } from "./unified-planner";
@@ -1266,12 +1267,18 @@ export default function App() {
   // Switch between local models without reopening Settings or restarting Mikan.
   // Existing chat context is retained; choose New chat for a fresh comparison.
   const switchModel = (model: string) => {
-    if (busy || !model || model === settings.model) return;
-    const updated = { ...settings, model };
-    setSettings(updated);
-    saveSettings(updated);
+    if (busy || !model || (model === settings.model && settings.provider === "local")) return;
+    // Choosing any Ollama model explicitly switches inference to local while
+    // retaining the cloud API keys and their independent settings.
+    applySetting({ model, provider: "local" });
     setVisionModel(null);
-    setDraft(current => ({ ...current, model }));
+  };
+  const switchDockModel = (selected: string) => {
+    if (busy) return;
+    const choice = modelSwitcherChoice(selected, availableModels);
+    if (!choice) return;
+    if (choice.provider === "local") switchModel(choice.model);
+    else applySetting({ provider: choice.provider });
   };
 
   const saveConfiguration = () => {
@@ -2164,6 +2171,7 @@ export default function App() {
         elapsedMs: duration,
         firstTokenMs,
         model: completion.modelUsed || settings.model,
+        provider: settings.provider,
         fallbackReason: completion.fallbackReason,
         stats: completion.stats,
         research: completion.researchAudit ?? undefined,
@@ -2338,6 +2346,17 @@ export default function App() {
   };
 
   const lastReply = [...messages].reverse().find(m => m.role === "assistant");
+  // Read the actual routed model from the last completed inference, not the
+  // configured Ollama fallback. Old chats without provider metadata are supported.
+  const lastModelReply = [...messages].reverse().find(m =>
+    m.role === "assistant" && !m.failed && !!m.diagnostics?.model
+  );
+  const dockModel = modelSwitcherStatus(settings,lastModelReply?.diagnostics,busy,activity);
+  const dockOption = settings.provider === "local" && availableModels.includes(settings.model) && !busy
+    ? `local:${settings.model}` : "__status__";
+  const dockDot = dockModel.cloudActive ? "online"
+    : settings.provider !== "local" && !dockModel.label.includes("Local")
+      ? "loading" : connection.mode;
   const replyText = busy ? (lastReply?.content || activity) : (feedback ?? lastReply?.content ?? greeting);
   const { visibleText: visibleReplyText, emojis: replyEmojis } = extractReplyEmojis(replyText);
 
@@ -2583,18 +2602,27 @@ export default function App() {
         )}
       </div>
       <div className="dock-footer">
-        <div className="model-switcher" title={connection.text}>
-          <span className={`status-dot ${connection.mode}`} />
+        <div className="model-switcher" title={dockModel.title}>
+          <span className={`status-dot ${dockDot}`} />
           <select
-            aria-label="Active Ollama model"
-            title="Switch Ollama model"
-            value={availableModels.includes(settings.model) ? settings.model : "__current__"}
-            disabled={busy || connection.mode !== "online" || !availableModels.length}
-            onChange={event => switchModel(event.target.value)}
+            aria-label="Active inference provider and model"
+            title={dockModel.title}
+            value={dockOption}
+            disabled={busy}
+            onChange={event => switchDockModel(event.target.value)}
           >
-            {!availableModels.includes(settings.model) &&
-              <option value="__current__">{settings.model || "No model selected"} (not detected)</option>}
-            {availableModels.map(name => <option key={name} value={name}>{name}</option>)}
+            {dockOption === "__status__" &&
+              <option value="__status__" disabled>{dockModel.label}</option>}
+            <optgroup label="Cloud and automatic routing">
+              <option value="auto">☁ Auto · OpenRouter free → Ollama</option>
+              <option value="openrouter">☁ OpenRouter · free only</option>
+              <option value="gemini">☁ Gemini · cloud only</option>
+            </optgroup>
+            <optgroup label="Local Ollama models">
+              {availableModels.map(name =>
+                <option key={name} value={`local:${name}`}>● Local · {name}</option>
+              )}
+            </optgroup>
           </select>
           <button type="button" className="refresh-model-button" title="Refresh installed Ollama models"
             aria-label="Refresh installed models" disabled={busy || connection.mode === "loading"}
@@ -2661,7 +2689,7 @@ export default function App() {
           </div>}
           {m.role === "assistant" && <ReplyMetrics diagnostics={m.diagnostics}/>}
           {m.role === "assistant" && m.diagnostics?.fallbackReason &&
-            <div className="research-warning" role="status">Gemini fallback: {m.diagnostics.fallbackReason}</div>}
+            <div className="research-warning" role="status">Cloud fallback: {m.diagnostics.fallbackReason}</div>}
         </article>)}
       </div>
       <footer className="drawer-footer"><Clock3 size={14}/> Token counts and timings come from Ollama; wall time includes app overhead.</footer>

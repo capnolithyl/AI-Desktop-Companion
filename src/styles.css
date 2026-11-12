@@ -322,7 +322,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px
 /* Inherit the selected message size inside Markdown log paragraphs. */
 .log-message .message-content p { font-size: inherit; line-height: inherit; }
 
-/* Local Ollama model picker lives in the compact chat dock. */
+/* Compact dock model picker: actual cloud provider, routed model and local choices. */
 .model-switcher {
   display: flex;
   align-items: center;
@@ -346,6 +346,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px
 .model-switcher select:not(:disabled) { cursor: pointer; }
 .model-switcher select:disabled { opacity: .65; cursor: default; }
 .model-switcher select option { background: #2b2230; color: #ffe4d6; }
+.model-switcher select optgroup { background: #2b2230; color: #ffad7e; font-weight: 600; }
 .refresh-model-button {
   flex: 0 0 25px;
   display: grid;
