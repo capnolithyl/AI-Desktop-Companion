@@ -616,16 +616,17 @@ mod tests {
         ).unwrap();
         let proposed = Extracted {
             user_facts: vec![ProposedUserFact{fact:"The user loves black metal".into(),
-                evidence:"I love black metal".into(),scope:"long_term".into()}],
+                evidence:"I love black metal".into(),scope:"long_term".into(),
+                relation:"new".into(), related_memory_id:None}],
             character_facts: vec![ProposedCharacterFact{category:"favorites".into(),
                 label:"Favorite color".into(),value:"Orange".into(),
                 evidence:"My favorite color is orange".into()}]
         };
         let saved = persist(&mut db, proposed, "I love black metal",
-            "My favorite color is orange", "u", "a", true, true).unwrap();
+            "My favorite color is orange", "u", "a", true, true, &[]).unwrap();
         assert_eq!(saved.user_saved, 1);
         assert_eq!(saved.character_saved, 0);
-        let second = persist(&mut db, Extracted::default(), "", "", "u", "a", true, true).unwrap();
+        let second = persist(&mut db, Extracted::default(), "", "", "u", "a", true, true, &[]).unwrap();
         assert!(second.skipped);
         let color: String = db.query_row("SELECT value FROM character_facts",[],|row|row.get(0)).unwrap();
         assert_eq!(color,"Blue");

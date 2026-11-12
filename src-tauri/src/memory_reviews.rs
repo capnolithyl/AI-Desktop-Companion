@@ -58,12 +58,13 @@ fn list_reviews(db:&Connection)->Result<Vec<MemoryReview>,String> {
          FROM memory_fact_reviews r WHERE r.status='pending'
          ORDER BY r.created_at ASC,r.id ASC LIMIT 500"
     ).map_err(|e|e.to_string())?;
-    stmt.query_map([],|r|Ok(MemoryReview{
+    let reviews=stmt.query_map([],|r|Ok(MemoryReview{
         id:r.get(0)?, existing_memory_id:r.get(1)?,
         existing_fact:r.get(2)?, proposed_fact:r.get(3)?,
         evidence:r.get(4)?,created_at:r.get(5)?
     })).map_err(|e|e.to_string())?
-      .collect::<Result<Vec<_>,_>>().map_err(|e|e.to_string())
+      .collect::<Result<Vec<_>,_>>().map_err(|e|e.to_string())?;
+    Ok(reviews)
 }
 
 #[tauri::command]
@@ -149,11 +150,12 @@ pub fn memory_list_fact_history(app:AppHandle)->Result<Vec<FactHistory>,String> 
         "SELECT id,memory_id,previous_fact,replacement_fact,changed_at
          FROM memory_fact_history ORDER BY changed_at DESC,id DESC LIMIT 100"
     ).map_err(|e|e.to_string())?;
-    stmt.query_map([],|r|Ok(FactHistory{
+    let history=stmt.query_map([],|r|Ok(FactHistory{
         id:r.get(0)?,memory_id:r.get(1)?,previous_fact:r.get(2)?,
         replacement_fact:r.get(3)?,changed_at:r.get(4)?
     })).map_err(|e|e.to_string())?
-      .collect::<Result<Vec<_>,_>>().map_err(|e|e.to_string())
+      .collect::<Result<Vec<_>,_>>().map_err(|e|e.to_string())?;
+    Ok(history)
 }
 
 #[cfg(test)]
