@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { isNotionTopic, notionContext, planNotionRetrieval, selectNotionPage, asksToReadFullNotionPage, hasNamedNotionMatch, chapterNumber, unavailableChapterResponse } from "./notion-knowledge.ts";
+import { isNotionTopic, notionContext, planNotionRetrieval, selectNotionPage, asksToReadFullNotionPage, asksToRereadNotionPage, asksOnlyToRereadNotionPage, hasNamedNotionMatch, chapterNumber, unavailableChapterResponse } from "./notion-knowledge.ts";
 
 const pages=[
   {id:"1",title:"Charlotte Universe | Master Story Bible",url:"https://www.notion.so/1",chunkCount:5,characters:8000},
@@ -194,4 +194,52 @@ test("failed local section notes report the right cause without blaming Notion s
   assert.match(message,/local model couldn't finish processing section 17\/19/);
   assert.match(message,/not a Notion sync problem/);
   assert.doesNotMatch(message,/press Sync now|Share the Scenes database/);
+});
+
+
+test("the exact November chapter 2 'read it again and re-cache it' follow-up forces a real reread",()=>{
+  const chapter={id:"north",title:"Chapter 02 · North",
+    url:"https://www.notion.so/north",chunkCount:20,characters:35000};
+  const docs=[chapter];
+  const previous=[
+    {role:"user",content:"would you like to read chapter 2 of my book?"},
+    {role:"assistant",content:"I read chapter 2! Here is a completely invented sheep and diaper review."},
+    {role:"user",content:"alright. i fixed a bit of your code. can you please try to read chapter 2 again?"},
+    {role:"assistant",content:"I already read it and gave you my thoughts. You need to resync."}
+  ];
+  const recheck="you might've read it and cached it. but you completely invented its content. "+
+    "i changed the code so you should be able to read it properly this time. "+
+    "can you read it again and re-cache it?";
+  const plan=planNotionRetrieval(recheck,previous,docs,chapter);
+  assert.equal(plan.selectedPage?.id,"north");
+  assert.equal(plan.fullRead,true);
+  assert.equal(plan.reread,true);
+  assert.equal(plan.sceneLookup,false);
+  assert.equal(asksOnlyToRereadNotionPage(recheck,chapter),true);
+  assert.equal(asksOnlyToRereadNotionPage(
+    "alright. i fixed a bit of your code. can you please try to read chapter 2 again?",chapter),true);
+});
+
+test("rereads that request feedback still generate a critique instead of a bare receipt",()=>{
+  const chapter={id:"north",title:"Chapter 02 · North",
+    url:"https://www.notion.so/north",chunkCount:20,characters:35000};
+  assert.equal(asksToRereadNotionPage("Reread it from scratch",chapter),true);
+  assert.equal(asksToRereadNotionPage("Could you review chapter 2 again?",chapter),true);
+  assert.equal(asksOnlyToRereadNotionPage(
+    "Read chapter 2 again and tell me what happens in each scene.",chapter),false);
+  assert.equal(asksOnlyToRereadNotionPage(
+    "Reread chapter 2 and give me your honest critique.",chapter),false);
+  assert.equal(asksToRereadNotionPage("Please read chapter 2",chapter),false);
+  assert.equal(asksToRereadNotionPage("Reread it",null),false);
+  const failed=unavailableChapterResponse(
+    "Please re-cache Chapter 2",chapter,
+    "NOTION FULL READING FAILED: The linked scene has no cached manuscript text.",5);
+  assert.match(failed,/linked scene manuscripts are missing/);
+  assert.match(unavailableChapterResponse(
+    "Please re-cache chapter 2",chapter,"NOTION FULL READING FAILED: timeout",5),
+    /couldn't finish reading/);
+  const plan=planNotionRetrieval(
+    "Can you reread Chapter 2 and summarize it?",[],[chapter]);
+  assert.equal(plan.reread,true);
+  assert.equal(plan.fullRead,true);
 });
