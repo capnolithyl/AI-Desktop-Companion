@@ -1,0 +1,379 @@
+"""
+Binary processing utilities for reading and writing PSD file structures.
+
+This module provides low-level utilities for reading and writing binary data
+in the Adobe Photoshop PSD file format. All functions handle big-endian byte
+order as specified by the PSD format.
+
+These utilities are used throughout the ``psd_tools.psd`` package for parsing
+and serializing PSD file structures.
+"""
+
+import array
+import io
+import logging
+import re
+import struct
+import sys
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
+from typing import IO, Any, cast
+
+from psd_tools.psd.parse_limits import consume_bytes, consume_objects
+
+logger = logging.getLogger(__name__)
+
+
+def _remaining_bytes(fp: IO[bytes]) -> int:
+    position = fp.tell()
+    try:
+        end = fp.seek(0, 2)
+    finally:
+        fp.seek(position)
+    return end - position
+
+
+def read_exact(fp: IO[bytes], size: int) -> bytes:
+    """Read exactly size bytes, validating availability before allocation."""
+    if size < 0 or size > _remaining_bytes(fp):
+        raise OSError("Invalid data section size: %d" % size)
+    consume_bytes(size)
+    data = fp.read(size)
+    if len(data) != size:
+        raise OSError(
+            "Failed to read data section: read=%d, expected=%d." % (len(data), size)
+        )
+    return data
+
+
+def read_remaining(fp: IO[bytes]) -> bytes:
+    """Read the remaining section with allocation checks."""
+    return read_exact(fp, _remaining_bytes(fp))
+
+
+class _BoundedReader(io.IOBase):
+    """Expose a section of a seekable stream using absolute positions."""
+
+    def __init__(self, fp: IO[bytes], length: int):
+        if length < 0 or length > _remaining_bytes(fp):
+            raise OSError("Invalid data section size: %d" % length)
+        self._fp = fp
+        self._start = fp.tell()
+        self._end = self._start + length
+
+    def tell(self) -> int:
+        return self._fp.tell()
+
+    def seek(self, offset: int, whence: int = 0) -> int:
+        if whence == 0:
+            position = offset
+        elif whence == 1:
+            position = self.tell() + offset
+        elif whence == 2:
+            position = self._end + offset
+        else:
+            raise ValueError("Invalid whence: %d" % whence)
+        if not self._start <= position <= self._end:
+            raise OSError("Seek outside data section: %d" % position)
+        return self._fp.seek(position)
+
+    def read(self, size: int = -1) -> bytes:
+        remaining = self._end - self.tell()
+        return self._fp.read(remaining if size < 0 else min(size, remaining))
+
+
+@contextmanager
+def bounded_reader(fp: IO[bytes], length: int) -> Iterator[IO[bytes]]:
+    """Limit reads and seeks to a section, skipping its remainder on success."""
+    reader = _BoundedReader(fp, length)
+    yield cast(IO[bytes], reader)
+    reader.seek(0, 2)
+
+
+def pack(fmt: str, *args: Any) -> bytes:
+    """Pack values into big-endian binary data."""
+    fmt = str(">" + fmt)
+    return struct.pack(fmt, *args)
+
+
+def unpack(fmt: str, data: bytes) -> tuple[Any, ...]:
+    """Unpack big-endian binary data."""
+    fmt = str(">" + fmt)
+    consume_objects(_format_objects(fmt))
+    return struct.unpack(fmt, data)
+
+
+def _format_objects(fmt: str) -> int:
+    return sum(
+        0 if code == "x" else 1 if code in "sp" else int(count or "1")
+        for count, code in re.findall(r"(\d*)([xcbB?hHiIlLqQnNefdspP])", fmt)
+    )
+
+
+def read_fmt(fmt: str, fp: IO[bytes]) -> tuple[Any, ...]:
+    """Read data from ``fp`` according to ``fmt``."""
+    fmt = str(">" + fmt)
+    fmt_size = struct.calcsize(fmt)
+    if fmt_size > _remaining_bytes(fp):
+        raise OSError(
+            "Failed to read data section: read=%d, expected=%d. "
+            "Likely the file is corrupted." % (_remaining_bytes(fp), fmt_size)
+        )
+    consume_objects(_format_objects(fmt))
+    position = fp.tell()
+    try:
+        data = read_exact(fp, fmt_size)
+    except OSError:
+        fp.seek(position)
+        raise
+    return struct.unpack(fmt, data)
+
+
+def write_fmt(fp: IO[bytes], fmt: str, *args: Any) -> int:
+    """Write data to ``fp`` according to ``fmt``."""
+    fmt = str(">" + fmt)
+    fmt_size = struct.calcsize(fmt)
+    written = write_bytes(fp, struct.pack(fmt, *args))
+    if written != fmt_size:
+        raise OSError(
+            "Failed to write data section: written=%d, expected=%d."
+            % (written, fmt_size)
+        )
+    return written
+
+
+def write_bytes(fp: IO[bytes], data: bytes) -> int:
+    """
+    Write bytes to the file object and returns bytes written.
+
+    :return: written byte size
+    """
+    pos = fp.tell()
+    fp.write(data)
+    written = fp.tell() - pos
+    if written != len(data):
+        raise OSError(
+            "Failed to write data: written=%d, expected=%d." % (written, len(data))
+        )
+    return written
+
+
+def read_length_block(fp: IO[bytes], fmt: str = "I", padding: int = 1) -> bytes:
+    """
+    Read a block of data with a length marker at the beginning.
+
+    :param fp: file-like
+    :param fmt: format of the length marker
+    :return: bytes object
+    """
+    length = read_fmt(fmt, fp)[0]
+    data = read_exact(fp, length)
+    read_padding(fp, length, padding)
+    return data
+
+
+def write_length_block(
+    fp: IO[bytes],
+    writer: Callable[..., int],
+    fmt: str = "I",
+    padding: int = 1,
+    **kwargs: Any,
+) -> int:
+    r"""
+    Write a block of data with a length marker at the beginning.
+
+    Example::
+
+        with io.BytesIO() as fp:
+            write_length_block(fp, lambda f: f.write(b'\x00\x00'))
+
+    :param fp: file-like
+    :param writer: function object that takes file-like object as an argument
+    :param fmt: format of the length marker
+    :param padding: divisor for padding not included in length marker
+    :return: written byte size
+    """
+    length_position = reserve_position(fp, fmt)
+    written = writer(fp, **kwargs)
+    written += write_position(fp, length_position, written, fmt)
+    written += write_padding(fp, written, padding)
+    return written
+
+
+def reserve_position(fp: IO[bytes], fmt: str = "I") -> int:
+    """
+    Reserves the current position for write.
+
+    Use with `write_position`.
+
+    :param fp: file-like object
+    :param fmt: format of the reserved position
+    :return: the position
+    """
+    position = fp.tell()
+    fp.seek(struct.calcsize(str(">" + fmt)), 1)
+    return position
+
+
+def write_position(fp: IO[bytes], position: int, value: int, fmt: str = "I") -> int:
+    """
+    Write a value to the specified position.
+
+    :param fp: file-like object
+    :param position: position of the value marker
+    :param value: value to write
+    :param fmt: format of the value
+    :return: written byte size
+    """
+    current_position = fp.tell()
+    fp.seek(position)
+    written = write_bytes(fp, struct.pack(str(">" + fmt), value))
+    fp.seek(current_position)
+    return written
+
+
+def read_padding(fp: IO[bytes], size: int, divisor: int = 2) -> bytes:
+    """
+    Read padding bytes for the given byte size.
+
+    :param fp: file-like object
+    :param divisor: divisor of the byte alignment
+    :return: read byte size
+    """
+    remainder = size % divisor
+    if remainder:
+        return read_exact(fp, divisor - remainder)
+    return b""
+
+
+def write_padding(fp: IO[bytes], size: int, divisor: int = 2) -> int:
+    """
+    Write padding bytes given the currently written size.
+
+    :param fp: file-like object
+    :param divisor: divisor of the byte alignment
+    :return: written byte size
+    """
+    remainder = size % divisor
+    if remainder:
+        return write_bytes(fp, struct.pack("%dx" % (divisor - remainder)))
+    return 0
+
+
+def is_readable(fp: IO[bytes], size: int = 1) -> bool:
+    """
+    Check if the file-like object is readable.
+
+    :param fp: file-like object
+    :param size: byte size
+    :return: bool
+    """
+    return 0 <= size <= _remaining_bytes(fp)
+
+
+def pad(number: int, divisor: int) -> int:
+    """Round a number up to a multiple of a divisor."""
+    if number % divisor:
+        number = (number // divisor + 1) * divisor
+    return number
+
+
+def read_pascal_string(
+    fp: IO[bytes], encoding: str = "macroman", padding: int = 2
+) -> str:
+    """
+    Read pascal string (length + bytes).
+
+    :param fp: file-like object
+    :param encoding: string encoding
+    :param padding: padding size
+    :return: str
+    """
+    start_pos = fp.tell()
+    # read_length_block doesn't work for a byte.
+    length = read_fmt("B", fp)[0]
+    data = read_exact(fp, length)
+    read_padding(fp, fp.tell() - start_pos, padding)
+    return data.decode(encoding)
+
+
+def write_pascal_string(
+    fp: IO[bytes], value: str, encoding: str = "macroman", padding: int = 2
+) -> int:
+    """Write a Pascal string and return the number of bytes written."""
+    data = value.encode(encoding)
+    written = write_fmt(fp, "B", len(data))
+    written += write_bytes(fp, data)
+    written += write_padding(fp, written, padding)
+    return written
+
+
+def read_unicode_string(fp: IO[bytes], padding: int = 1) -> str:
+    """Read a length-prefixed UTF-16 string."""
+    num_chars = read_fmt("I", fp)[0]
+    data = read_exact(fp, num_chars * 2)
+    read_padding(fp, struct.calcsize("I") + num_chars * 2, padding)
+    return data.decode("utf-16-be")
+
+
+def write_unicode_string(fp: IO[bytes], value: str, padding: int = 1) -> int:
+    """Write a length-prefixed UTF-16 string and return the number of bytes written."""
+    encoded = value.encode("utf-16-be")
+    written = write_fmt(fp, "I", len(encoded) // 2)
+    written += write_bytes(fp, encoded)
+    written += write_padding(fp, written, padding)
+    return written
+
+
+def read_be_array(fmt: str, count: int, fp: IO[bytes]) -> array.array:
+    """Read an array from a file with big-endian data."""
+    if count < 0:
+        raise OSError("Invalid array size: %d" % count)
+    consume_objects(count)
+    arr = array.array(str(fmt))
+    arr.frombytes(read_exact(fp, count * arr.itemsize))
+    return fix_byteorder(arr)
+
+
+def write_be_array(fp: IO[bytes], arr: array.array) -> int:
+    """Write an array to a file with big-endian data."""
+    return write_bytes(fp, be_array_to_bytes(arr))
+
+
+def fix_byteorder(arr: array.array) -> array.array:
+    """Fix the byte order of an array, assuming it was read from big-endian data."""
+    if sys.byteorder == "little":
+        arr.byteswap()
+    return arr
+
+
+def be_array_from_bytes(fmt: str, data: bytes) -> array.array:
+    """Read an array from bytestring with big-endian data."""
+    itemsize = array.array(str(fmt)).itemsize
+    consume_objects(len(data) // itemsize)
+    consume_bytes(len(data))
+    arr = array.array(str(fmt), data)
+    return fix_byteorder(arr)
+
+
+def be_array_to_bytes(arr: array.array) -> bytes:
+    """Write an array to bytestring with big-endian data without modifying it."""
+    data = fix_byteorder(arr[:])
+    if hasattr(arr, "tobytes"):
+        return data.tobytes()
+    else:
+        return data.tostring()  # type: ignore[attr-defined]
+
+
+def trimmed_repr(data: Any, trim_length: int = 16) -> str:
+    """Return a repr with long bytes truncated."""
+    if isinstance(data, bytes) and len(data) > trim_length:
+        return repr(data[:trim_length] + b" ... =" + str(len(data)).encode("ascii"))
+    return repr(data)
+
+
+def decode_fixed_point_32bit(data: bytes) -> float:
+    """Decode ``data`` as an unsigned 4-byte fixed-point number."""
+    lo, hi = unpack("2H", data)
+    # XXX: shouldn't denominator be 2**16 ?
+    return lo + hi / (2**16 - 1)

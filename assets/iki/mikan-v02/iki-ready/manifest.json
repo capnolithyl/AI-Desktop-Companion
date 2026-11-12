@@ -1,0 +1,231 @@
+{
+  "source": "H:\\_FunProjects\\AI-Desktop-Companion\\AI-Desktop-Companion\\assets\\iki\\mikan-v02\\mikan-cleaned.psd",
+  "source_sha256_before": "56a60b0890081fca30c6c7c71521435cb9222543594836f51b7ca6bff3a2fcab",
+  "source_sha256_after": "56a60b0890081fca30c6c7c71521435cb9222543594836f51b7ca6bff3a2fcab",
+  "canvas": [
+    1280,
+    1280
+  ],
+  "source_stack_bottom_to_top": [
+    "cat_ears.png",
+    "back hair Merged",
+    "bottomwear Merged",
+    "topwear Merged",
+    "neckwear Merged",
+    "face Merged",
+    "nose Merged",
+    "mouth Merged",
+    "eyebrow Merged",
+    "eyewhite Merged",
+    "eyelash Merged",
+    "irides Merged",
+    "front hair Merged",
+    "headwear Merged",
+    "tail.png"
+  ],
+  "role_stack_bottom_to_top": [
+    "hair_back",
+    "body",
+    "face",
+    "nose",
+    "mouth",
+    "brow_R",
+    "brow_L",
+    "eye_R",
+    "eye_L",
+    "lash_R",
+    "lash_L",
+    "iris_R",
+    "iris_L",
+    "hair_front"
+  ],
+  "tail": "Included over clothing in body; independent preserved/tail.png retained. Do not add the independent copy again. No native tail role assigned.",
+  "splits": {
+    "eyebrow Merged": {
+      "empty_split_column": 660,
+      "R": "viewer left",
+      "L": "viewer right"
+    },
+    "eyewhite Merged": {
+      "empty_split_column": 660,
+      "R": "viewer left",
+      "L": "viewer right"
+    },
+    "eyelash Merged": {
+      "empty_split_column": 660,
+      "R": "viewer left",
+      "L": "viewer right"
+    },
+    "irides Merged": {
+      "empty_split_column": 660,
+      "R": "viewer left",
+      "L": "viewer right"
+    }
+  },
+  "original_vs_source_exports": {
+    "changed_pixels": 436655,
+    "pixels_over_2_levels": 207538,
+    "max_channel_delta": 64,
+    "mean_channel_delta": 0.6635281372070313
+  },
+  "source_exports_vs_recomposed": {
+    "changed_pixels": 878,
+    "pixels_over_2_levels": 0,
+    "max_channel_delta": 2,
+    "mean_channel_delta": 0.00016571044921875
+  },
+  "original_vs_recomposed": {
+    "changed_pixels": 437447,
+    "pixels_over_2_levels": 207543,
+    "max_channel_delta": 64,
+    "mean_channel_delta": 0.6636848449707031
+  },
+  "tail_in_body_candidate_vs_source": {
+    "changed_pixels": 878,
+    "pixels_over_2_levels": 0,
+    "max_channel_delta": 2,
+    "mean_channel_delta": 0.00016571044921875
+  },
+  "layers": [
+    {
+      "role": "hair_back",
+      "path": "layers/hair_back.png",
+      "bbox": [
+        209,
+        8,
+        1076,
+        1149
+      ]
+    },
+    {
+      "role": "body",
+      "path": "layers/body.png",
+      "bbox": [
+        160,
+        0,
+        1108,
+        1280
+      ]
+    },
+    {
+      "role": "face",
+      "path": "layers/face.png",
+      "bbox": [
+        525,
+        187,
+        789,
+        481
+      ]
+    },
+    {
+      "role": "nose",
+      "path": "layers/nose.png",
+      "bbox": [
+        652,
+        366,
+        681,
+        388
+      ]
+    },
+    {
+      "role": "mouth",
+      "path": "layers/mouth.png",
+      "bbox": [
+        627,
+        395,
+        705,
+        440
+      ]
+    },
+    {
+      "role": "brow_R",
+      "path": "layers/brow_R.png",
+      "bbox": [
+        548,
+        271,
+        633,
+        295
+      ]
+    },
+    {
+      "role": "brow_L",
+      "path": "layers/brow_L.png",
+      "bbox": [
+        697,
+        270,
+        775,
+        291
+      ]
+    },
+    {
+      "role": "eye_R",
+      "path": "layers/eye_R.png",
+      "bbox": [
+        557,
+        319,
+        631,
+        358
+      ]
+    },
+    {
+      "role": "eye_L",
+      "path": "layers/eye_L.png",
+      "bbox": [
+        697,
+        318,
+        769,
+        355
+      ]
+    },
+    {
+      "role": "lash_R",
+      "path": "layers/lash_R.png",
+      "bbox": [
+        533,
+        306,
+        635,
+        361
+      ]
+    },
+    {
+      "role": "lash_L",
+      "path": "layers/lash_L.png",
+      "bbox": [
+        694,
+        304,
+        792,
+        358
+      ]
+    },
+    {
+      "role": "iris_R",
+      "path": "layers/iris_R.png",
+      "bbox": [
+        578,
+        322,
+        624,
+        356
+      ]
+    },
+    {
+      "role": "iris_L",
+      "path": "layers/iris_L.png",
+      "bbox": [
+        702,
+        319,
+        747,
+        354
+      ]
+    },
+    {
+      "role": "hair_front",
+      "path": "layers/hair_front.png",
+      "bbox": [
+        397,
+        100,
+        821,
+        661
+      ]
+    }
+  ]
+}

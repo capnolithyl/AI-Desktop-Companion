@@ -1,0 +1,219 @@
+"""Linked layer structure."""
+
+import logging
+from typing import IO, Any, Self
+
+from attrs import define, field
+
+from psd_tools.constants import LinkedLayerType
+from psd_tools.psd.base import BaseElement, ListElement
+from psd_tools.psd.bin_utils import (
+    bounded_reader,
+    is_readable,
+    read_exact,
+    read_fmt,
+    read_padding,
+    read_pascal_string,
+    read_unicode_string,
+    write_bytes,
+    write_fmt,
+    write_length_block,
+    write_padding,
+    write_pascal_string,
+    write_unicode_string,
+)
+from psd_tools.psd.descriptor import DescriptorBlock
+from psd_tools.validators import in_, range_
+
+logger = logging.getLogger(__name__)
+
+
+class LinkedLayers(ListElement):
+    """List of LinkedLayer structure. See :py:class:`.LinkedLayer`."""
+
+    @classmethod
+    def read(cls, fp: IO[bytes], **kwargs: Any) -> Self:
+        """Read the structure from a file-like object.
+
+        Each item is parsed from a bounded substream over *fp* instead of a
+        copy of its bytes, so a payload that dominates the file is
+        materialized once, by :py:meth:`LinkedLayer.read` itself (#899).
+        """
+        items = []
+        while is_readable(fp, 8):
+            length = read_fmt("Q", fp)[0]
+            start = fp.tell()
+            if not is_readable(fp, length):
+                raise OSError("Invalid data section size: %d" % length)
+            with bounded_reader(fp, length) as body:
+                item = LinkedLayer.read(body)
+                if body.tell() - start != length:
+                    raise ValueError(
+                        "Linked layer item consumed %d of %d bytes"
+                        % (body.tell() - start, length)
+                    )
+            read_padding(fp, length, 4)
+            items.append(item)
+        fp.read()  # a tail too short to frame another item is dropped
+        return cls(items)  # type: ignore[arg-type]
+
+    def write(self, fp: IO[bytes], **kwargs: Any) -> int:
+        """Write the structure to a file-like object and return the bytes written."""
+        written = 0
+        for item in self:
+            written += write_length_block(fp, item.write, fmt="Q", padding=4)
+        return written
+
+
+@define(repr=False)
+class LinkedLayer(BaseElement):
+    """
+    LinkedLayer structure.
+
+    .. py:attribute:: kind
+    .. py:attribute:: version
+    .. py:attribute:: uuid
+    .. py:attribute:: filename
+    .. py:attribute:: filetype
+    .. py:attribute:: creator
+    .. py:attribute:: filesize
+    .. py:attribute:: open_file
+    .. py:attribute:: linked_file
+    .. py:attribute:: timestamp
+    .. py:attribute:: data
+    .. py:attribute:: child_id
+    .. py:attribute:: mod_time
+    .. py:attribute:: lock_state
+    .. py:attribute:: content_descriptor
+
+        Version 8 only: a descriptor holding a ``contentID``.
+    """
+
+    kind: LinkedLayerType = field(
+        default=LinkedLayerType.ALIAS, validator=in_(tuple(LinkedLayerType))
+    )
+    version: int = field(default=1, validator=range_(1, 8))
+    uuid: str = ""
+    filename: str = ""
+    filetype: bytes = b"\x00\x00\x00\x00"
+    creator: bytes = b"\x00\x00\x00\x00"
+    filesize: int | None = None
+    open_file: DescriptorBlock | None = None
+    linked_file: DescriptorBlock | None = None
+    timestamp: tuple | None = None
+    data: bytes | None = None
+    child_id: str | None = None
+    mod_time: float | None = None
+    lock_state: int | None = None
+    content_descriptor: DescriptorBlock | None = None
+
+    @classmethod
+    def read(cls, fp: IO[bytes], **kwargs: Any) -> Self:
+        """Read the structure from a file-like object."""
+        kind = LinkedLayerType(read_fmt("4s", fp)[0])
+        version = read_fmt("I", fp)[0]
+        if not 1 <= version <= 8:
+            raise ValueError("Invalid version %d" % (version))
+        uuid = read_pascal_string(fp, "macroman", padding=1)
+        filename = read_unicode_string(fp)
+        filetype, creator, datasize, open_file = read_fmt("4s4sQB", fp)
+        open_file = DescriptorBlock.read(fp, padding=1) if open_file else None
+
+        linked_file = None
+        timestamp = None
+        data = None
+        filesize = None
+        child_id = None
+        mod_time = None
+        lock_state = None
+        content_descriptor = None
+
+        if kind == LinkedLayerType.EXTERNAL:
+            linked_file = DescriptorBlock.read(fp, padding=1)
+            if version > 3:
+                timestamp = read_fmt("I4Bd", fp)
+            filesize = read_fmt("Q", fp)[0]  # External file size.
+            if version > 2:
+                data = read_exact(fp, datasize)
+        elif kind == LinkedLayerType.ALIAS:
+            read_fmt("8x", fp)
+        if kind == LinkedLayerType.DATA:
+            data = read_exact(fp, datasize)
+            if len(data) != datasize:
+                raise ValueError("(%d vs %d)" % (len(data), datasize))
+
+        # The followings are not well documented...
+        if version >= 5:
+            child_id = read_unicode_string(fp)
+        if version >= 6:
+            mod_time = read_fmt("d", fp)[0]
+        if version >= 7:
+            lock_state = read_fmt("B", fp)[0]
+        if version >= 8:
+            content_descriptor = DescriptorBlock.read(fp, padding=1)
+        if kind == LinkedLayerType.EXTERNAL and version == 2:
+            data = read_exact(fp, datasize)
+
+        return cls(
+            kind,
+            version,
+            uuid,
+            filename,
+            filetype,
+            creator,
+            filesize,
+            open_file,
+            linked_file,
+            timestamp,
+            data,
+            child_id,
+            mod_time,
+            lock_state,
+            content_descriptor,
+        )
+
+    def write(self, fp: IO[bytes], padding: int = 1, **kwargs: Any) -> int:
+        """Write the structure to a file-like object and return the bytes written."""
+        written = write_fmt(fp, "4sI", self.kind.value, self.version)
+        written += write_pascal_string(fp, self.uuid, "macroman", padding=1)
+        written += write_unicode_string(fp, self.filename)
+        written += write_fmt(
+            fp,
+            "4s4sQB",
+            self.filetype,
+            self.creator,
+            len(self.data) if self.data is not None else 0,
+            self.open_file is not None,
+        )
+        if self.open_file is not None:
+            written += self.open_file.write(fp, padding=1)
+
+        if self.kind == LinkedLayerType.EXTERNAL:
+            written += self.linked_file.write(fp, padding=1)  # type: ignore[union-attr]
+            if self.version > 3:
+                written += write_fmt(fp, "I4Bd", *self.timestamp)  # type: ignore[misc,operator]
+            written += write_fmt(fp, "Q", self.filesize)
+            if self.version > 2:
+                assert self.data is not None
+                written += write_bytes(fp, self.data)
+        elif self.kind == LinkedLayerType.ALIAS:
+            written += write_fmt(fp, "8x")
+        if self.kind == LinkedLayerType.DATA:
+            assert self.data is not None
+            written += write_bytes(fp, self.data)
+
+        if self.child_id is not None:
+            written += write_unicode_string(fp, self.child_id)
+        if self.mod_time is not None:
+            written += write_fmt(fp, "d", self.mod_time)
+        if self.lock_state is not None:
+            written += write_fmt(fp, "B", self.lock_state)
+        if self.content_descriptor is not None:
+            written += self.content_descriptor.write(fp, padding=1)
+
+        if self.kind == LinkedLayerType.EXTERNAL and self.version == 2:
+            assert self.data is not None
+            written += write_bytes(fp, self.data)
+
+        written += write_padding(fp, written, padding)
+        return written

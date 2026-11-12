@@ -1,0 +1,535 @@
+"""
+EngineData structure.
+
+PSD file embeds text formatting data in its own markup language referred
+EngineData. The format looks like the following::
+
+    <<
+      /EngineDict
+      <<
+        /Editor
+        <<
+          /Text (˛ˇMake a change and save.)
+        >>
+      >>
+      /Font
+      <<
+        /Name (˛ˇHelveticaNeue-Light)
+        /FillColor
+        <<
+          /Type 1
+          /Values [ 1.0 0.0 0.0 0.0 ]
+        >>
+        /StyleSheetSet [
+        <<
+          /Name (˛ˇNormal RGB)
+        >>
+        ]
+      >>
+    >>
+"""
+
+from __future__ import annotations
+
+import codecs
+import logging
+import re
+from collections.abc import Iterator
+from enum import Enum
+from typing import Any
+
+from attrs import frozen
+
+from psd_tools.psd.base import (
+    BooleanElement,
+    DictElement,
+    IntegerElement,
+    ListElement,
+    NumericElement,
+    ValueElement,
+)
+from psd_tools.psd.bin_utils import read_remaining, write_bytes
+from psd_tools.psd.parse_limits import (
+    ParseLimits,
+    consume_bytes,
+    parse_container,
+    parse_context,
+)
+from psd_tools.registry import new_registry
+
+logger = logging.getLogger(__name__)
+
+TOKEN_CLASSES, register = new_registry()
+
+
+def compile_re(pattern: str) -> re.Pattern[bytes]:
+    """Compile a byte pattern for the tokenizer."""
+    return re.compile(pattern.encode("macroman"), re.S)
+
+
+class EngineToken(Enum):
+    """Token types of engine data."""
+
+    ARRAY_END = compile_re(r"^\]$")
+    ARRAY_START = compile_re(r"^\[$")
+    BOOLEAN = compile_re(r"^(true|false)$")
+    DICT_END = compile_re(r"^>>(\x00)*$")  # Buggy one?
+    DICT_START = compile_re(r"^<<$")
+    NOOP = compile_re(r"^$")
+    NUMBER = compile_re(r"^-?\d+$")
+    NUMBER_WITH_DECIMAL = compile_re(r"^-?\d*\.\d+$")
+    PROPERTY = compile_re(r"^\/[a-zA-Z0-9_]+$")
+    STRING = compile_re(r"^\((\xfe\xff([^\)]|\\\))*)\)$")
+    # Unknown tags: b'(hwid)', b'(fwid)', b'(aalt)'
+    UNKNOWN_TAG = compile_re(r"^\([a-zA-Z0-9]*\)$")
+    UNKNOWN_TAG2 = compile_re(r"^--\(\.-0$")
+
+
+class Tokenizer:
+    """
+    Tokenize engine data.
+
+    Example::
+
+        tokenizer = Tokenizer(data)
+        for token, token_type in tokenizer:
+            print('%s: %r' % (token_type.name, token))
+    """
+
+    DIVIDER = compile_re(r"[ \n\t]+")
+    UTF16_START = b"(\xfe\xff"
+    UTF16_END = compile_re(r"[^\\]\)")
+
+    def __init__(self, data: bytes) -> None:
+        self.data = data
+        self.index = 0
+
+    def __iter__(self) -> Iterator[tuple[bytes, EngineToken]]:
+        return self
+
+    def __len__(self) -> int:
+        return len(self.data) - self.index
+
+    def next(self) -> tuple[bytes, EngineToken]:
+        """Return the next token."""
+        return self.__next__()
+
+    def __next__(self) -> tuple[bytes, EngineToken]:
+        if len(self) == 0:
+            raise StopIteration
+
+        index = self.index
+        if self.data.startswith(self.UTF16_START, index):
+            match = self.UTF16_END.search(self.data, index)
+            if match is None:
+                raise ValueError(f"Invalid token: {self.data[index:]!r}")
+            token = self.data[index : match.end()]
+            self.index = match.end()
+        else:
+            match = self.DIVIDER.search(self.data, index)
+            if match is None:
+                token = self.data[index:]
+                self.index = len(self.data)
+            else:
+                token = self.data[index : match.start()]
+                self.index = match.end()
+                if token == b"":
+                    return self.__next__()
+
+        for token_type in EngineToken:
+            if token_type.value.search(token):
+                return token, token_type
+
+        raise ValueError(f"Unknown token: {token!r}")
+
+
+@register(EngineToken.DICT_START)
+class Dict(DictElement):
+    """Dict-like element."""
+
+    @classmethod
+    def read(cls, fp: Any, **kwargs: Any) -> Dict:
+        """Read the structure from a file-like object."""
+        with parse_context(kwargs.pop("parse_limits", None)):
+            return cls.frombytes(read_remaining(fp), **kwargs)
+
+    @classmethod
+    def frombytes(
+        cls,
+        data: bytes | Tokenizer,
+        *args: Any,
+        parse_limits: ParseLimits | None = None,
+        **kwargs: Any,
+    ) -> Dict:
+        """Parse the element from raw bytes or a token stream."""
+        with parse_context(parse_limits) as is_root, parse_container():
+            if is_root or not isinstance(data, Tokenizer):
+                consume_bytes(len(data))
+            tokenizer = data if isinstance(data, Tokenizer) else Tokenizer(data)
+            self = cls()
+            for k_token, k_token_type in tokenizer:
+                if k_token_type == EngineToken.PROPERTY:
+                    key = Property.frombytes(k_token)
+                    try:
+                        v_token, v_token_type = next(tokenizer)
+                    except StopIteration:
+                        raise ValueError(
+                            f"Missing value for property {key!r}"
+                        ) from None
+                    kls = TOKEN_CLASSES.get(v_token_type)
+                    if v_token_type in (
+                        EngineToken.ARRAY_START,
+                        EngineToken.DICT_START,
+                    ):
+                        if kls is None:
+                            raise ValueError("Unknown type")
+                        value = kls.frombytes(tokenizer)
+                    elif kls:
+                        value = kls.frombytes(v_token)
+                    else:
+                        raise ValueError(f"Invalid token: {v_token!r}")
+                    self[key] = value
+                elif k_token_type == EngineToken.DICT_END:
+                    return self
+            return self
+
+    def write(
+        self,
+        fp: Any,
+        indent: int | None = 0,
+        write_container: bool = True,
+        **kwargs: Any,
+    ) -> int:
+        """Write the structure to a file-like object and return the bytes written."""
+        inner_indent = indent if indent is None else indent + 1
+        written = 0
+        if write_container:
+            if indent == 0:
+                written += self._write_newline(fp, indent)
+            written += self._write_newline(fp, indent)
+            written += self._write_indent(fp, indent)
+            written += write_bytes(fp, b"<<")
+            written += self._write_newline(fp, indent)
+
+        for key in self:
+            written += self._write_indent(fp, inner_indent)
+            written += key.write(fp)
+            value = self[key]
+            if isinstance(value, Dict):
+                written += value.write(fp, indent=inner_indent)
+            else:
+                written += write_bytes(fp, b" ")
+                if isinstance(value, List):
+                    if len(value) > 0 and isinstance(value[0], Dict):
+                        written += value.write(fp, indent=inner_indent)
+                    else:
+                        written += value.write(fp, indent=None)
+                else:
+                    written += value.write(fp)
+            written += self._write_newline(fp, indent)
+
+        if write_container:
+            written += self._write_indent(fp, indent)
+            written += write_bytes(fp, b">>")
+        return written
+
+    def _write_indent(self, fp: Any, indent: int | None, default: bytes = b" ") -> int:
+        if indent is None:
+            return write_bytes(fp, default)
+        return write_bytes(fp, b"\t" * (indent))
+
+    def _write_newline(self, fp: Any, indent: int | None) -> int:
+        if indent is None:
+            return 0
+        return write_bytes(fp, b"\n")
+
+    def __getitem__(self, key: str | Property) -> Any:
+        key = key if isinstance(key, Property) else Property(key)
+        return super().__getitem__(key)
+
+    def __setitem__(self, key: str | Property, value: Any) -> None:
+        key = key if isinstance(key, Property) else Property(key)
+        super().__setitem__(key, value)
+
+    def __detitem__(self, key: str | Property) -> None:
+        key = key if isinstance(key, Property) else Property(key)
+        super().__delitem__(key)
+
+    def __contains__(self, key: str | Property) -> bool:  # type: ignore[override]
+        key = key if isinstance(key, Property) else Property(key)
+        return self._items.__contains__(key)
+
+    def get(self, key: str | Property, *args: Any) -> Any:
+        """Return the value of a key given as a string or a `Property`."""
+        key = key if isinstance(key, Property) else Property(key)
+        return super().get(key, *args)
+
+
+class EngineData(Dict):
+    """
+    Dict-like element.
+
+    TYPE_TOOL_OBJECT_SETTING tagged block contains this object in its
+    descriptor.
+    """
+
+
+class EngineData2(Dict):
+    """
+    Dict-like element.
+
+    TEXT_ENGINE_DATA tagged block has this object.
+    """
+
+    def write(
+        self,
+        fp: Any,
+        indent: int | None = None,
+        write_container: bool = False,
+        **kwargs: Any,
+    ) -> int:
+        """Write the structure to a file-like object and return the bytes written."""
+        return super().write(fp, indent=indent, write_container=write_container)
+
+
+@register(EngineToken.ARRAY_START)
+class List(ListElement):
+    """List-like element."""
+
+    @classmethod
+    def read(cls, fp: Any, **kwargs: Any) -> List:
+        """Read the structure from a file-like object."""
+        with parse_context(kwargs.pop("parse_limits", None)):
+            return cls.frombytes(read_remaining(fp), **kwargs)
+
+    @classmethod
+    def frombytes(
+        cls,
+        data: bytes | Tokenizer,
+        *args: Any,
+        parse_limits: ParseLimits | None = None,
+        **kwargs: Any,
+    ) -> List:
+        """Parse the element from raw bytes or a token stream."""
+        with parse_context(parse_limits) as is_root, parse_container():
+            if is_root or not isinstance(data, Tokenizer):
+                consume_bytes(len(data))
+            tokenizer = data if isinstance(data, Tokenizer) else Tokenizer(data)
+            self = cls()
+            for token, token_type in tokenizer:
+                if token_type == EngineToken.ARRAY_END:
+                    return self
+
+                kls = TOKEN_CLASSES.get(token_type)
+                if token_type in (EngineToken.ARRAY_START, EngineToken.DICT_START):
+                    if kls is None:
+                        raise ValueError("Unknown type")
+                    value = kls.frombytes(tokenizer)
+                else:
+                    if kls is None:
+                        raise ValueError("Unknown type")
+                    value = kls.frombytes(token)
+                self.append(value)
+
+            return self
+
+    def write(self, fp: Any, indent: int | None = None, **kwargs: Any) -> int:
+        """Write the structure to a file-like object and return the bytes written."""
+        written = write_bytes(fp, b"[")
+        if indent is None:
+            for item in self:
+                if isinstance(item, Dict):
+                    written += item.write(fp, indent=None)
+                else:
+                    written += write_bytes(fp, b" ")
+                    written += item.write(fp)
+            written += write_bytes(fp, b" ")
+        else:
+            for item in self:
+                written += item.write(fp, indent=indent)
+            written += self._write_newline(fp, indent)
+            written += self._write_indent(fp, indent)
+        written += write_bytes(fp, b"]")
+        return written
+
+    def _write_indent(self, fp: Any, indent: int | None) -> int:
+        if indent is None:
+            return write_bytes(fp, b" ")
+        return write_bytes(fp, b"\t" * (indent))
+
+    def _write_newline(self, fp: Any, indent: int | None) -> int:
+        if indent is None:
+            return 0
+        return write_bytes(fp, b"\n")
+
+
+@register(EngineToken.STRING)
+class String(ValueElement):
+    """String element."""
+
+    _ESCAPED_CHARS = (b"\\", b"(", b")")
+
+    @classmethod
+    def read(cls, fp: Any, **kwargs: Any) -> String:
+        """Read the structure from a file-like object."""
+        with parse_context(kwargs.pop("parse_limits", None)):
+            return cls.frombytes(read_remaining(fp), **kwargs)
+
+    @classmethod
+    def frombytes(
+        cls,
+        data: bytes,
+        *args: Any,
+        parse_limits: ParseLimits | None = None,
+        **kwargs: Any,
+    ) -> String:
+        """Parse the element from raw bytes."""
+        with parse_context(parse_limits):
+            consume_bytes(len(data))
+            value = data[1:-1]
+            for c in cls._ESCAPED_CHARS:
+                value = value.replace(b"\\" + c, c)
+            return cls(value.decode("utf-16"))
+
+    def write(self, fp: Any, **kwargs: Any) -> int:
+        """Write the structure to a file-like object and return the bytes written."""
+        assert isinstance(self.value, str)
+        value = self.value.encode("utf-16-be")
+        for c in self._ESCAPED_CHARS:
+            value = value.replace(c, b"\\" + c)
+        return write_bytes(fp, b"(" + codecs.BOM_UTF16_BE + value + b")")
+
+
+@register(EngineToken.BOOLEAN)
+class Bool(BooleanElement):
+    """Bool element."""
+
+    @classmethod
+    def read(cls, fp: Any, **kwargs: Any) -> Bool:
+        """Read the structure from a file-like object."""
+        with parse_context(kwargs.pop("parse_limits", None)):
+            return cls.frombytes(read_remaining(fp), **kwargs)
+
+    @classmethod
+    def frombytes(
+        cls,
+        data: bytes,
+        *args: Any,
+        parse_limits: ParseLimits | None = None,
+        **kwargs: Any,
+    ) -> Bool:
+        """Parse the element from raw bytes."""
+        with parse_context(parse_limits):
+            consume_bytes(len(data))
+            return cls(data == b"true")
+
+    def write(self, fp: Any, indent: int = 0, **kwargs: Any) -> int:
+        """Write the structure to a file-like object and return the bytes written."""
+        return write_bytes(fp, b"true" if self.value else b"false")
+
+
+@register(EngineToken.NUMBER)
+class Integer(IntegerElement):
+    """Integer element."""
+
+    @classmethod
+    def read(cls, fp: Any, **kwargs: Any) -> Integer:
+        """Read the structure from a file-like object."""
+        with parse_context(kwargs.pop("parse_limits", None)):
+            return cls.frombytes(read_remaining(fp), **kwargs)
+
+    @classmethod
+    def frombytes(
+        cls,
+        data: bytes,
+        *args: Any,
+        parse_limits: ParseLimits | None = None,
+        **kwargs: Any,
+    ) -> Integer:
+        """Parse the element from raw bytes."""
+        with parse_context(parse_limits):
+            consume_bytes(len(data))
+            return cls(int(data))
+
+    def write(self, fp: Any, indent: int = 0, **kwargs: Any) -> int:
+        """Write the structure to a file-like object and return the bytes written."""
+        return write_bytes(fp, b"%d" % (self.value))
+
+
+@register(EngineToken.NUMBER_WITH_DECIMAL)
+class Float(NumericElement):
+    """Float element."""
+
+    @classmethod
+    def read(cls, fp: Any, **kwargs: Any) -> Float:
+        """Read the structure from a file-like object."""
+        with parse_context(kwargs.pop("parse_limits", None)):
+            return cls.frombytes(read_remaining(fp), **kwargs)
+
+    @classmethod
+    def frombytes(
+        cls,
+        data: bytes,
+        *args: Any,
+        parse_limits: ParseLimits | None = None,
+        **kwargs: Any,
+    ) -> Float:
+        """Parse the element from raw bytes."""
+        with parse_context(parse_limits):
+            consume_bytes(len(data))
+            return cls(float(data))
+
+    def write(self, fp: Any, **kwargs: Any) -> int:
+        """Write the structure to a file-like object and return the bytes written."""
+        value = b"%.8f" % (self.value)
+        value = value.rstrip(b"0")
+        value = value + b"0" if value.endswith(b".") else value
+        if abs(self.value) > 0.0 and abs(self.value) < 1.0:
+            value = value.replace(b"0.", b".")
+        return write_bytes(fp, value)
+
+
+@register(EngineToken.PROPERTY)
+@frozen(repr=False, eq=False, order=False)
+class Property(ValueElement):
+    """Property element."""
+
+    @classmethod
+    def read(cls, fp: Any, **kwargs: Any) -> Property:
+        """Read the structure from a file-like object."""
+        with parse_context(kwargs.pop("parse_limits", None)):
+            return cls.frombytes(read_remaining(fp), **kwargs)
+
+    @classmethod
+    def frombytes(
+        cls,
+        data: bytes,
+        *args: Any,
+        parse_limits: ParseLimits | None = None,
+        **kwargs: Any,
+    ) -> Property:
+        """Parse the element from raw bytes."""
+        with parse_context(parse_limits):
+            consume_bytes(len(data))
+            return cls(data.replace(b"/", b"").decode("macroman"))
+
+    def write(self, fp: Any, **kwargs: Any) -> int:
+        """Write the structure to a file-like object and return the bytes written."""
+        assert isinstance(self.value, str)
+        return write_bytes(fp, b"/" + self.value.encode("macroman"))
+
+
+@register(EngineToken.UNKNOWN_TAG)
+@register(EngineToken.UNKNOWN_TAG2)
+class Tag(ValueElement):
+    """Tag element."""
+
+    @classmethod
+    def read(cls, fp: Any, **kwargs: Any) -> Tag:
+        """Read the structure from a file-like object."""
+        with parse_context(kwargs.pop("parse_limits", None)):
+            return cls(read_remaining(fp))
+
+    def write(self, fp: Any, **kwargs: Any) -> int:
+        """Write the structure to a file-like object and return the bytes written."""
+        return write_bytes(fp, self.value)  # type: ignore[arg-type]

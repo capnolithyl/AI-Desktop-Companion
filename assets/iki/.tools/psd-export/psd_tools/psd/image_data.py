@@ -1,0 +1,211 @@
+"""
+Image data section structure.
+
+:py:class:`ImageData` corresponds to the last section of the PSD/PSB file
+where a composited image is stored. When the file does not contain layers,
+this is the only place pixels are saved.
+"""
+
+import io
+import logging
+from collections.abc import Sequence
+from typing import IO, Any, Self
+
+from attrs import define, field
+
+from psd_tools.compression import (
+    compress,
+    decompress,
+    decompressed_size_bound,
+)
+from psd_tools.constants import Compression
+from psd_tools.psd.base import BaseElement
+from psd_tools.psd.bin_utils import (
+    pack,
+    read_fmt,
+    read_remaining,
+    write_bytes,
+    write_fmt,
+)
+from psd_tools.psd.header import FileHeader
+from psd_tools.validators import in_
+
+logger = logging.getLogger(__name__)
+
+
+def _solid_bitmap_plane(color: object, width: int, height: int) -> bytes:
+    """One solid bitmap plane.
+
+    ``0`` is black, a set bit, and ``1`` is white. Bits past ``width`` stay
+    clear: a reader trims them, a byte compare does not.
+    """
+    if color not in (0, 1):
+        raise ValueError(f"Invalid bitmap color {color!r}. Expected 0 or 1")
+    row_bytes = (width + 7) // 8
+    if color == 1:
+        return b"\x00" * (row_bytes * height)
+    full, remainder = divmod(width, 8)
+    row = b"\xff" * full
+    if remainder:
+        # Pixels occupy the high bits. The rest of the byte is padding.
+        row += bytes(((0xFF << (8 - remainder)) & 0xFF,))
+    return row * height
+
+
+@define(repr=False)
+class ImageData(BaseElement):
+    """
+    Merged channel image data.
+
+    .. py:attribute:: compression
+
+        See :py:class:`~psd_tools.constants.Compression`.
+
+    .. py:attribute:: data
+
+        `bytes` as compressed in the `compression` flag.
+    """
+
+    compression: Compression = field(
+        default=Compression.RAW,
+        converter=Compression,
+        validator=in_(tuple(Compression)),
+    )
+    data: bytes = b""
+
+    @classmethod
+    def read(cls, fp: IO[bytes], **kwargs: Any) -> Self:
+        """Read the structure from a file-like object."""
+        start_pos = fp.tell()
+        compression = Compression(read_fmt("H", fp)[0])
+        data = read_remaining(fp)
+        logger.debug("  read image data, len=%d" % (fp.tell() - start_pos))
+        return cls(compression, data)
+
+    def write(self, fp: IO[bytes], **kwargs: Any) -> int:
+        """Write the structure to a file-like object and return the bytes written."""
+        start_pos = fp.tell()
+        written = write_fmt(fp, "H", self.compression.value)
+        written += write_bytes(fp, self.data)
+        logger.debug("  wrote image data, len=%d" % (fp.tell() - start_pos))
+        return written
+
+    def get_data(
+        self,
+        header: FileHeader,
+        split: bool = True,
+        *,
+        max_output_bytes: int | None = None,
+    ) -> list[bytes] | bytes:
+        """
+        Get decompressed data.
+
+        :param header: See :py:class:`~psd_tools.psd.header.FileHeader`.
+        :param max_output_bytes: optional ceiling on the combined channel bytes.
+        :return: `list` of bytes corresponding each channel.
+        """
+        data = decompress(
+            self.data,
+            self.compression,
+            header.width,
+            header.height * header.channels,
+            header.depth,
+            header.version,
+            max_output_bytes=max_output_bytes,
+        )
+        if split:
+            plane_size = len(data) // header.channels
+            with io.BytesIO(data) as f:
+                return [f.read(plane_size) for _ in range(header.channels)]
+        return data
+
+    def decompressed_size_bound(self, header: FileHeader) -> int:
+        """
+        Upper bound on the number of bytes :py:meth:`get_data` will decompress.
+
+        Answerable without decompressing anything, so a caller can size the
+        array before it exists -- see
+        :py:func:`psd_tools.compression.decompressed_size_bound`. It lives next
+        to :py:meth:`get_data` because it has to mirror that call exactly,
+        including the part a caller would most easily get wrong: every channel
+        is decompressed in one pass, ``height * channels`` rows at a time.
+
+        A public utility with no caller in the tree: the allocation guard
+        reads the header instead, because the decompressed array is one
+        float32 per pixel at every depth (#737, #768).
+
+        :param header: See :py:class:`~psd_tools.psd.header.FileHeader`.
+        :return: the maximum byte count, for all channels together.
+        """
+        return decompressed_size_bound(
+            self.data,
+            self.compression,
+            header.width,
+            header.height * header.channels,
+            header.depth,
+            header.version,
+        )
+
+    def set_data(self, data: Sequence[bytes], header: FileHeader) -> int:
+        """
+        Set raw data and compress.
+
+        :param data: list of raw data bytes corresponding channels.
+        :param compression: compression type,
+            see :py:class:`~psd_tools.constants.Compression`.
+        :param header: See :py:class:`~psd_tools.psd.header.FileHeader`.
+        :return: length of compressed data.
+        """
+        self.data = compress(
+            b"".join(data),
+            self.compression,
+            header.width,
+            header.height * header.channels,
+            header.depth,
+            header.version,
+        )
+        return len(self.data)
+
+    @classmethod
+    def new(
+        cls,
+        header: FileHeader,
+        color: int | Sequence[int] = 0,
+        compression: Compression = Compression.RAW,
+    ) -> Self:
+        """
+        Create a new image data object.
+
+        :param header: FileHeader.
+        :param compression: compression type.
+        :param color: default color, as a raw value for the header's depth --
+            what :py:func:`~psd_tools.api.utils.denormalize_color` produces.
+            int or iterable for channel length.
+        """
+        plane_size = header.width * header.height
+        if isinstance(color, (bool, int, float)):
+            color = (color,) * header.channels
+        if len(color) != header.channels:
+            raise ValueError(
+                "Invalid color %s for channel size %d" % (color, header.channels)
+            )
+        # Bitmap is a bit a pixel, and an inked -- black -- one is a *set* bit,
+        # the sense `numpy_io._parse_array()` inverts on the way out (#873).
+        # Depth 32 is a *float* channel in [0, 1] whose raw form is packed as a
+        # float: `0xffffffff`, white at that depth, is a quiet NaN read back as
+        # `>f4` (#866).
+        depth = header.depth
+        if depth == 1:
+            data = [
+                _solid_bitmap_plane(color[i], header.width, header.height)
+                for i in range(header.channels)
+            ]
+        else:
+            fmt = {8: "B", 16: "H", 32: "f"}[depth]
+            data = []
+            for i in range(header.channels):
+                value = color[i] / 0xFFFFFFFF if depth == 32 else color[i]
+                data.append(pack(fmt, value) * plane_size)
+        self = cls(compression=compression)
+        self.set_data(data, header)
+        return self

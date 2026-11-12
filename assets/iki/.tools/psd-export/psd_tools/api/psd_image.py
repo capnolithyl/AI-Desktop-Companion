@@ -1,0 +1,1092 @@
+"""
+PSD Image module.
+
+This module provides the main :py:class:`PSDImage` class, which is the primary
+entry point for users of psd-tools. It represents a complete Photoshop document
+and provides high-level methods for reading, manipulating, and saving PSD/PSB files.
+
+The :py:class:`PSDImage` class wraps the low-level :py:class:`~psd_tools.psd.PSD`
+structure and reconstructs the layer tree from the flat layer list, making it much
+easier to work with layers and groups.
+
+Key functionality:
+
+- **Opening files**: :py:meth:`PSDImage.open` and :py:meth:`PSDImage.new`
+- **Layer access**: Iterate, index, and search layers
+- **Compositing**: Render layers to PIL Images via :py:meth:`~PSDImage.composite`
+- **Saving**: Write modified documents back to PSD format
+- **Metadata access**: Document properties, ICC profiles, resolution, etc.
+
+Example usage::
+
+    from psd_tools import PSDImage
+
+    # Open a PSD file
+    psd = PSDImage.open('document.psd')
+
+    # Access document properties
+    print(f"Size: {psd.width}x{psd.height}")
+    print(f"Color mode: {psd.color_mode}")
+
+    # Iterate through layers
+    for layer in psd:
+        print(f"{layer.name}: {layer.kind}")
+
+    # Access layers by index
+    layer = psd[0]  # First layer
+
+    # Modify layers
+    layer.visible = False
+    layer.opacity = 128
+
+    # Composite to image
+    image = psd.composite()
+    image.save('output.png')
+
+    # Save changes
+    psd.save('modified.psd')
+
+The class inherits from :py:class:`~psd_tools.api.layers.GroupMixin`, providing
+group-like behavior for accessing child layers.
+"""
+
+from __future__ import annotations
+
+import logging
+import os
+from collections.abc import Callable, Sequence
+from typing import IO, Any, Literal, Self
+
+import numpy as np
+from PIL import Image
+
+from psd_tools.api import adjustments, layers, numpy_io, pil_io
+from psd_tools.api.protocols import PSDProtocol
+from psd_tools.api.utils import (
+    AllocBudget,
+    ColorInput,
+    color_channels,
+    denormalize_color,
+    get_color_channels,
+    normalize_color,
+    validate_alloc_budget,
+)
+from psd_tools.constants import (
+    ChannelID,
+    ColorMode,
+    CompatibilityMode,
+    Compression,
+    Resource,
+    SectionDivider,
+    Tag,
+)
+from psd_tools.psd.color_mode_data import HDRT_DEFAULT, ColorModeData
+from psd_tools.psd.document import PSD
+from psd_tools.psd.header import FileHeader
+from psd_tools.psd.image_data import ImageData
+from psd_tools.psd.image_resources import ImageResources
+from psd_tools.psd.layer_and_mask import (
+    ChannelImageData,
+    GlobalLayerMaskInfo,
+    LayerInfo,
+    LayerRecord,
+    LayerRecords,
+)
+from psd_tools.psd.parse_limits import ParseLimits
+from psd_tools.psd.tagged_blocks import SectionDividerSetting, TaggedBlocks
+
+logger = logging.getLogger(__name__)
+
+
+class PSDImage(layers.GroupMixin, PSDProtocol):
+    """
+    Photoshop PSD/PSB document.
+
+    The low-level data structure is accessible at :py:attr:`PSDImage._record`.
+
+    Example::
+
+        from psd_tools import PSDImage
+
+        psdimage = PSDImage.open('example.psd')
+        image = psdimage.composite()
+
+        for layer in psdimage:
+            layer_image = layer.composite()
+    """
+
+    def __init__(self, data: PSD):
+        if not isinstance(data, PSD):
+            raise TypeError(f"Expected PSD instance, got {type(data).__name__}")
+        self._record = data
+        self._layers: list[layers.Layer] = []
+        self._compatibility_mode = CompatibilityMode.DEFAULT
+        self._background_color: float | tuple[float, ...] | None = None
+        self._updated: bool = False  # See mark_updated() for what this gates.
+        self._max_alloc_bytes: AllocBudget | None = None  # See max_alloc_bytes.
+        # Whether the merged image data's first alpha channel holds the
+        # composite's transparency. The layer count records this as a negative
+        # sign, but a count of zero has no sign, so a rebuild that momentarily
+        # sees no layers would lose it. See _update_record().
+        self._merged_alpha: bool = False
+
+        self._psd = self  # For GroupMixin protocol compatibility.
+        self._init()
+
+    @classmethod
+    def new(
+        cls,
+        mode: str,
+        size: tuple[int, int],
+        color: ColorInput = 0,
+        depth: Literal[1, 8, 16, 32] | None = None,
+        **kwargs: Any,
+    ) -> Self:
+        """
+        Create a new PSD document.
+
+        :param mode: The color mode to use for the new image.
+        :param size: A tuple containing (width, height) in pixels.
+        :param color: What color to use for the image. Default is black.
+            Accepts a single integer (0-255 for 8-bit, 0 or 1 at depth 1)
+            or float in the [0.0, 1.0] range, or a sequence of per-channel
+            values using the same ranges (e.g., 3 values for ``"RGB"``, 4 for
+            ``"CMYK"``). Mixed int/float sequences are allowed. The color
+            is used both as the initial image data fill and as the
+            :py:attr:`~PSDImage.background_color` compositing backdrop
+            when saving.
+        :param depth: Bit depth, or ``None`` to select 1 for mode ``"1"`` and
+            8 otherwise. Mode ``"1"`` accepts only 1; every other mode accepts
+            8, 16 or 32.
+        :return: A :py:class:`~psd_tools.api.psd_image.PSDImage` object.
+
+        .. note::
+            A ``depth=32`` document carries the default ``hdrt`` (HDR toning)
+            block in its color mode data, which Photoshop requires of every
+            32-bit file (#869).
+        """
+        header = cls._make_header(mode, size, depth)
+        # Strip alpha channel(s) from color for background_color since
+        # composite() only expects color channels (alpha is separate).
+        bg_input: ColorInput = color
+        # Read from the header rather than from EXPECTED_CHANNELS: that table
+        # reports 64 for a multichannel document -- the format's maximum, not
+        # this file's count -- so the strip below could never fire for one and
+        # the validator then rejected the unstripped sequence outright.
+        expected_channels = color_channels(header.color_mode, header.channels)
+        if isinstance(color, Sequence) and len(color) > expected_channels:
+            bg_input = tuple(color[:expected_channels])
+        bg_color = normalize_color(
+            bg_input, header.depth, header.color_mode, expected_channels
+        )
+        fill_color = denormalize_color(color, header.depth)
+        image_data = ImageData.new(header, color=fill_color, **kwargs)
+        # TODO: Add default metadata.
+        psdimage = cls(
+            PSD(
+                header=header,
+                color_mode_data=ColorModeData(
+                    HDRT_DEFAULT if header.depth == 32 else b""
+                ),
+                image_data=image_data,
+                image_resources=ImageResources.new(),
+            )
+        )
+        psdimage._background_color = bg_color
+        return psdimage
+
+    @classmethod
+    def frompil(
+        cls,
+        image: Image.Image,
+        compression: Compression = Compression.RLE,
+        color: ColorInput | None = None,
+    ) -> Self:
+        """
+        Create a new layer-less PSD document from PIL Image.
+
+        :param image: PIL Image object.
+        :param compression: ImageData compression option. See
+            :py:class:`~psd_tools.constants.Compression`.
+        :param color: Background color for the compositing backdrop when
+            saving. Accepts the same types as
+            :py:meth:`~PSDImage.new` ``color``. When set,
+            :py:meth:`~PSDImage.save` will composite layers against an
+            opaque backdrop of this color.
+        :return: A :py:class:`~psd_tools.api.psd_image.PSDImage` object.
+        """
+        header = cls._make_header(image.mode, image.size)
+        # TODO: Add default metadata.
+        # TODO: Perhaps make this smart object.
+        image_data = ImageData(compression=compression)
+        # A bitmap channel is the complement of PIL mode "1". ``encode_channel``
+        # is the depth-1 writer the other paths use.
+        if header.depth == 1:
+            planes = [pil_io.encode_channel(channel, 1) for channel in image.split()]
+        else:
+            planes = [channel.tobytes() for channel in image.split()]
+        image_data.set_data(planes, header)
+        psdimage = cls(
+            PSD(
+                header=header,
+                image_data=image_data,
+                image_resources=ImageResources.new(),
+            )
+        )
+        if color is not None:
+            psdimage.background_color = color
+        return psdimage
+
+    @classmethod
+    def open(
+        cls,
+        fp: IO[bytes] | str | bytes | os.PathLike,
+        max_alloc_bytes: AllocBudget | None = None,
+        parse_limits: ParseLimits | None = None,
+        **kwargs: Any,
+    ) -> Self:
+        """
+        Open a PSD document.
+
+        :param fp: filename or file-like object.
+        :param parse_limits: structural read and object limits; ``None`` uses
+            :py:class:`~psd_tools.ParseLimits` defaults. Exceeding a limit
+            raises :py:class:`~psd_tools.ParseLimitError` before the allocation.
+        :param max_alloc_bytes: initial :py:attr:`max_alloc_bytes`, checked
+            before the file is read. Caps (bytes) what
+            :py:meth:`composite`/:py:meth:`numpy`/:py:meth:`topil`/:py:meth:`thumbnail`
+            allocate; rendering raises :class:`ValueError`, or skips a layer
+            effect, if the estimate exceeds it.
+            :py:meth:`numpy` and :py:meth:`topil` estimate their allocation *at
+            its peak*, intermediates included, so the estimate depends on the
+            colour mode, the depth and the compression method rather than on the
+            declared geometry alone. ``Layer.numpy()`` and ``Layer.topil()`` apply
+            the same ceiling to each layer read, at the layer's own size, and
+            :py:meth:`composite` to each stroke or pattern canvas that a
+            descriptor's size grows. A layer effect over the ceiling is
+            skipped rather than raising; a vector stroke or a fill layer over
+            it raises :class:`ValueError`.
+            :py:meth:`composite` bounds the canvas it
+            builds instead, from the geometry: what follows that guard grows with
+            the layer count, which no such estimate can bound. Note that
+            :py:meth:`composite` reaches the other two in the ordinary cases --
+            it returns the preview through :py:meth:`topil` when the document has
+            one, and a document with no layers falls through to :py:meth:`numpy`.
+            See :doc:`/untrusted` for the precedence and what it does not bound.
+        :param encoding: charset encoding of the pascal string within the file,
+            default 'macroman'. Some psd files need explicit encoding option.
+        :return: A :py:class:`~psd_tools.api.psd_image.PSDImage` object.
+        :raises TypeError: if ``max_alloc_bytes`` is not an int, a string or
+            ``None``, or is a bool.
+        :raises ValueError: if ``max_alloc_bytes`` is not positive or is a
+            string other than ``"unlimited"``.
+        """
+        max_alloc_bytes = validate_alloc_budget(max_alloc_bytes)
+        if parse_limits is not None and not isinstance(parse_limits, ParseLimits):
+            raise TypeError("parse_limits must be a ParseLimits instance or None")
+        if isinstance(fp, (str, bytes, os.PathLike)):
+            with open(fp, "rb") as f:
+                self = cls(PSD.read(f, parse_limits=parse_limits, **kwargs))
+        else:
+            self = cls(PSD.read(fp, parse_limits=parse_limits, **kwargs))
+        self._max_alloc_bytes = max_alloc_bytes
+        return self
+
+    def save(
+        self,
+        fp: IO[bytes] | str | bytes | os.PathLike,
+        mode: str = "wb",
+        **kwargs: Any,
+    ) -> None:
+        """
+        Save the PSD file. Updates the ImageData section if the document has been edited.
+
+        :param fp: filename or file-like object.
+        :param encoding: charset encoding of the pascal string within the file,
+            default 'macroman'.
+        :param mode: file open mode, default 'wb'.
+        """
+        if self.is_updated():
+            # Update the preview image if the document has been edited.
+            # TODO: Set a `has_composite` flag in VersionInfo resource.
+            try:
+                self._update_preview()
+            except ImportError as e:
+                logger.warning(
+                    "Failed to update preview image: %s. "
+                    "Install composite dependencies with: pip install 'psd-tools[composite]'",
+                    e,
+                )
+
+        if isinstance(fp, (str, bytes, os.PathLike)):
+            with open(fp, mode) as f:
+                self._record.write(f, **kwargs)  # type: ignore[arg-type]
+        else:
+            self._record.write(fp, **kwargs)  # type: ignore[arg-type]
+
+    def _update_preview(self) -> None:
+        """Regenerate the merged image data section from the layers.
+
+        Rendered through :py:func:`psd_tools.composite.composite` -- the array
+        form -- rather than through a PIL image, because a PIL image describes
+        PIL: it holds one byte per channel whatever the header's depth says,
+        only the channels its mode has a letter for, and an ICC-corrected sRGB
+        copy of a document whose profile resource is still attached. Going
+        that way wrote a 16-bit document a section half its declared length
+        (#866). :py:func:`psd_tools.api.numpy_io.encode_image_data` packs the
+        arrays into the document's own channels and depth instead.
+
+        :raises ImportError: when the composite extra is not installed;
+            :py:meth:`save` catches it and keeps the stored preview.
+        """
+        from psd_tools.composite import composite  # noqa: PLC0415
+
+        if self._background_color is not None:
+            color, _, alpha = composite(self, color=self._background_color, alpha=1.0)
+        else:
+            color, _, alpha = composite(self)
+        self._record.image_data.set_data(
+            numpy_io.encode_image_data(self, color, alpha),
+            self._record.header,
+        )
+
+    def topil(
+        self, channel: int | ChannelID | None = None, apply_icc: bool = True
+    ) -> Image.Image | None:
+        """
+        Get PIL Image.
+
+        :param channel: Which channel to return; e.g., 0 for 'R' channel in RGB
+            image. See :py:class:`~psd_tools.constants.ChannelID`. When `None`,
+            the method returns all the channels supported by PIL modes.
+        :param apply_icc: Whether to apply ICC profile conversion to sRGB.
+        :return: :py:class:`PIL.Image`, or `None` if the composed image is not
+            available.
+        """
+        if self.has_preview():
+            return pil_io.convert_image_data_to_pil(self, channel, apply_icc)
+        return None
+
+    def numpy(
+        self, channel: Literal["color", "shape", "alpha", "mask"] | None = None
+    ) -> np.ndarray:
+        """
+        Get NumPy array of the layer.
+
+        :param channel: Which channel to return, can be 'color',
+            'shape', 'alpha', or 'mask'. Default is 'color+alpha'.
+        :return: :py:class:`numpy.ndarray`
+        """
+        array = numpy_io.get_array(self, channel)
+        assert array is not None
+        return array
+
+    def composite(
+        self,
+        viewport: tuple[int, int, int, int] | None = None,
+        force: bool = False,
+        color: float | Sequence[float] | np.ndarray | None = 1.0,
+        alpha: float | np.ndarray = 0.0,
+        layer_filter: Callable | None = None,
+        ignore_preview: bool = False,
+        apply_icc: bool = True,
+    ) -> Image.Image:
+        """
+        Composite the PSD image.
+
+        :param viewport: Viewport bounding box specified by (x1, y1, x2, y2)
+            tuple. Default is the viewbox of the PSD.
+        :param ignore_preview: Boolean flag to whether skip compositing when a
+            pre-composited preview is available.
+        :param force: Boolean flag to force vector drawing.
+        :param color: Backdrop color, as a scalar, a per-channel sequence, or a
+            full ``(height, width, channels)`` array.
+            The color value should be in [0.0, 1.0]. For example, (1., 0., 0.)
+            specifies red in RGB color mode.
+        :param alpha: Backdrop alpha in [0.0, 1.0].
+        :param layer_filter: Callable that takes a layer as argument and
+            returns whether if the layer is composited. Default is
+            :py:func:`~psd_tools.api.layers.PixelLayer.is_visible`.
+        :return: :py:class:`PIL.Image`.
+        """
+        from psd_tools.composite import composite_pil  # noqa: PLC0415
+
+        if (
+            not (ignore_preview or force or layer_filter)
+            and self.has_preview()
+            and not self.is_updated()
+        ):
+            result = self.topil(apply_icc=apply_icc)
+            if result is None:
+                raise ValueError("Failed to composite PSD image from preview")
+            return result
+        result = composite_pil(
+            self,
+            color if color is not None else 1.0,
+            alpha,
+            viewport,
+            layer_filter,
+            force,
+            apply_icc=apply_icc,
+        )
+        if result is None:
+            raise ValueError("Failed to composite PSD image")
+        return result
+
+    def mark_updated(self) -> None:
+        """
+        Mark the document's stored preview as stale.
+
+        While marked, :py:meth:`save` regenerates the flattened preview from
+        the layers, :py:meth:`composite` re-renders instead of returning the
+        stored preview, and :py:meth:`Layer.composite()
+        <psd_tools.api.layers.Layer.composite>` redraws vectors instead of
+        using a layer's stored pixels.
+
+        Call this after an edit this API cannot see, such as one through an
+        effect's ``descriptor``, a layer's ``tagged_blocks``, or any other
+        low-level record. Most edits made through this API set it themselves.
+
+        It marks the preview only. Wrappers that memoise on first access
+        (``mask``, ``vector_mask``, ``origination``, ``stroke``, smart object
+        and typesetting), the ``_data`` of an adjustment or fill layer, and a
+        group's bbox keep the record they read.
+
+        Nothing clears the flag, ``save()`` included. It lives on the
+        :py:class:`PSDImage`, so reach it there rather than through
+        ``Layer.parent``.
+        """
+        self._updated = True
+
+    def is_updated(self) -> bool:
+        """
+        Return whether the document has been edited.
+
+        See :py:meth:`mark_updated` for what sets this and what it gates.
+
+        :return: `bool`
+        """
+        return self._updated
+
+    @property
+    def parent(self) -> None:
+        """Parent of this layer."""
+        return None
+
+    @property
+    def max_alloc_bytes(self) -> AllocBudget | None:
+        """
+        Allocation budget for this document and its layers.
+
+        A positive int is a byte ceiling on each estimated allocation, and
+        ``"unlimited"`` disables it. ``None``, the default, defers to
+        ``psd_tools.api.utils.MAX_ALLOC_BYTES`` whenever the budget is
+        checked. Gives the setting, not the resolved ceiling; use
+        ``psd_tools.api.utils.resolve_alloc_budget()`` for that.
+        See :doc:`/untrusted`.
+
+        :raises TypeError: on assigning a bool or a value that is not an int,
+            a string or ``None``.
+        :raises ValueError: on assigning a non-positive int or a string other
+            than ``"unlimited"``.
+        """
+        return self._max_alloc_bytes
+
+    @max_alloc_bytes.setter
+    def max_alloc_bytes(self, value: AllocBudget | None) -> None:
+        self._max_alloc_bytes = validate_alloc_budget(value)
+
+    def has_preview(self) -> bool:
+        """
+        Whether the document has real merged data.
+
+        When True, `topil()` returns pre-composed data.
+        """
+        version_info = self.image_resources.get_data(Resource.VERSION_INFO)
+        if version_info:
+            return version_info.has_composite
+        return True  # Assuming the image data is valid by default.
+
+    @property
+    def name(self) -> str:
+        """
+        Element name.
+
+        :return: `'Root'`
+        """
+        return "Root"
+
+    @property
+    def kind(self) -> str:
+        """
+        Kind.
+
+        :return: `'psdimage'`
+        """
+        return self.__class__.__name__.lower()
+
+    @property
+    def visible(self) -> bool:
+        """
+        Visibility.
+
+        :return: `True`
+        """
+        return True
+
+    @property
+    def left(self) -> int:
+        """
+        Left coordinate.
+
+        :return: `0`
+        """
+        return 0
+
+    @property
+    def top(self) -> int:
+        """
+        Top coordinate.
+
+        :return: `0`
+        """
+        return 0
+
+    @property
+    def right(self) -> int:
+        """
+        Right coordinate.
+
+        :return: `int`
+        """
+        return self.width
+
+    @property
+    def bottom(self) -> int:
+        """
+        Bottom coordinate.
+
+        :return: `int`
+        """
+        return self.height
+
+    @property
+    def width(self) -> int:
+        """
+        Document width.
+
+        :return: `int`
+        """
+        return self._record.header.width
+
+    @property
+    def height(self) -> int:
+        """
+        Document height.
+
+        :return: `int`
+        """
+        return self._record.header.height
+
+    @property
+    def size(self) -> tuple[int, int]:
+        """
+        (width, height) tuple.
+
+        :return: `tuple`
+        """
+        return self.width, self.height
+
+    @property
+    def offset(self) -> tuple[int, int]:
+        """
+        (left, top) tuple.
+
+        :return: `tuple`
+        """
+        return self.left, self.top
+
+    @property
+    def bbox(self) -> tuple[int, int, int, int]:
+        """
+        Minimal bounding box that contains all the visible layers.
+
+        Use :py:attr:`~psd_tools.api.psd_image.PSDImage.viewbox` to get
+        viewport bounding box. When the psd is empty, bbox is equal to the
+        canvas bounding box.
+
+        :return: (left, top, right, bottom) `tuple`.
+        """
+        bbox = super().bbox
+        if bbox == (0, 0, 0, 0):
+            bbox = self.viewbox
+        return bbox
+
+    @property
+    def viewbox(self) -> tuple[int, int, int, int]:
+        """
+        Return bounding box of the viewport.
+
+        :return: (left, top, right, bottom) `tuple`.
+        """
+        return self.left, self.top, self.right, self.bottom
+
+    @property
+    def color_mode(self) -> ColorMode:
+        """
+        Document color mode, such as 'RGB' or 'GRAYSCALE'.
+
+        See :py:class:`~psd_tools.constants.ColorMode`.
+
+        :return: :py:class:`~psd_tools.constants.ColorMode`
+        """
+        return self._record.header.color_mode
+
+    @property
+    def channels(self) -> int:
+        """
+        Number of color channels.
+
+        :return: `int`
+        """
+        return self._record.header.channels
+
+    @property
+    def depth(self) -> int:
+        """
+        Pixel depth bits.
+
+        :return: `int`
+        """
+        return self._record.header.depth
+
+    @property
+    def version(self) -> int:
+        """
+        Document version. PSD file is 1, and PSB file is 2.
+
+        :return: `int`
+        """
+        return self._record.header.version
+
+    @property
+    def image_resources(self) -> ImageResources:
+        """
+        Document image resources.
+
+        A dict-like structure of document settings. See
+        :py:class:`psd_tools.constants.Resource` for available keys.
+
+        :return: :py:class:`~psd_tools.psd.image_resources.ImageResources`
+
+        Example::
+
+            from psd_tools.constants import Resource
+            version_info = psd.image_resources.get_data(Resource.VERSION_INFO)
+            slices = psd.image_resources.get_data(Resource.SLICES)
+
+        To export a TIFF file, which holds any color mode, with the embedded
+        ICC profile::
+
+            from psd_tools.constants import Resource
+            icc_profile = psd.image_resources.get_data(Resource.ICC_PROFILE)
+            image = psd.composite(apply_icc=False)
+            image.save('output.tif', icc_profile=icc_profile)
+        """
+        return self._record.image_resources
+
+    @property
+    def tagged_blocks(self) -> TaggedBlocks | None:
+        """
+        Document tagged blocks that is a dict-like container of settings.
+
+        See :py:class:`psd_tools.constants.Tag` for available
+        keys.
+
+        :return: :py:class:`~psd_tools.psd.tagged_blocks.TaggedBlocks` or
+            `None`.
+
+        Example::
+
+            from psd_tools.constants import Tag
+            patterns = psd.tagged_blocks.get_data(Tag.PATTERNS1)
+        """
+        return self._record.layer_and_mask_information.tagged_blocks
+
+    @property
+    def compatibility_mode(self) -> CompatibilityMode:
+        """
+        Set the compositing and layer organization compatibility mode. Writable.
+
+        This property checks whether the PSD file is compatible with
+        specific authoring tools, such as Photoshop or CLIP Studio Paint.
+        Different authoring tools may have different ways of handling layers,
+        such as the use of clipping masks for groups.
+        Default is Photoshop compatibility mode.
+
+        :return: :py:class:`~psd_tools.constants.CompatibilityMode`
+        """
+        return self._compatibility_mode
+
+    @compatibility_mode.setter
+    def compatibility_mode(self, value: CompatibilityMode) -> None:
+        if self._compatibility_mode != value:
+            self.mark_updated()
+        self._compatibility_mode = value
+
+    @property
+    def background_color(self) -> float | tuple[float, ...] | None:
+        """
+        Background color for the merged composite image. Writable.
+
+        When set, :py:meth:`~PSDImage.save` composites layers against an
+        opaque backdrop of this color instead of a transparent one.
+
+        Values are in [0.0, 1.0] range, matching the
+        :py:meth:`~PSDImage.composite` ``color`` parameter:
+
+        - **RGB / Grayscale**: ``1.0`` = white, ``0.0`` = black
+        - **CMYK**: ``(1.0, 1.0, 1.0, 1.0)`` = white, ``(1.0, 1.0, 1.0, 0.0)``
+          = black. Values count the ink left, so 1.0 is no ink, as in the
+          ``color`` parameter and :py:meth:`~PSDImage.numpy`.
+
+        Use a scalar for uniform color or a tuple for per-channel values.
+        Set to ``None`` for a transparent backdrop.
+
+        :py:meth:`~PSDImage.new` sets it from the ``color`` parameter.
+
+        :return: `float`, `tuple[float, ...]`, or `None`
+
+        Example::
+
+            psd = PSDImage.new('RGB', (640, 480), color=1.0)
+            psd.save('output.psd')  # White background, 3 channels (no alpha)
+        """
+        return self._background_color
+
+    @background_color.setter
+    def background_color(
+        self,
+        value: ColorInput | None,
+    ) -> None:
+        if value is not None:
+            value = normalize_color(
+                value,
+                self._record.header.depth,
+                self.color_mode,
+                get_color_channels(self),
+            )
+        if self._background_color != value:
+            self.mark_updated()
+        self._background_color = value
+
+    @property
+    def pil_mode(self) -> str:
+        """PIL mode matching the color mode and the number of channels."""
+        alpha = self.channels - pil_io.get_pil_channels(
+            pil_io.get_pil_mode(self.color_mode)
+        )
+        # TODO: Check when alpha > 1; Photoshop allows multiple alpha channels.
+        return pil_io.get_pil_mode(self.color_mode, alpha > 0)
+
+    def has_thumbnail(self) -> bool:
+        """Return True if the PSDImage has a thumbnail resource."""
+        return (
+            Resource.THUMBNAIL_RESOURCE in self.image_resources
+            or Resource.THUMBNAIL_RESOURCE_PS4 in self.image_resources
+        )
+
+    def thumbnail(self) -> Image.Image | None:
+        """
+        Return a thumbnail image in PIL.Image.
+
+        Gives None when the file contains no embedded thumbnail image.
+
+        :raises ValueError: if the thumbnail's dimensions exceed the PSD spec
+            limit, or :py:attr:`max_alloc_bytes`.
+        """
+        if Resource.THUMBNAIL_RESOURCE in self.image_resources:
+            return pil_io.convert_thumbnail_to_pil(
+                self.image_resources.get_data(Resource.THUMBNAIL_RESOURCE),
+                max_alloc_bytes=self._max_alloc_bytes,
+            )
+        elif Resource.THUMBNAIL_RESOURCE_PS4 in self.image_resources:
+            return pil_io.convert_thumbnail_to_pil(
+                self.image_resources.get_data(Resource.THUMBNAIL_RESOURCE_PS4),
+                max_alloc_bytes=self._max_alloc_bytes,
+            )
+        return None
+
+    # TODO: Add more editing APIs, such as duplicate_layers, resize_canvas, etc.
+
+    # Private methods
+    def __repr__(self) -> str:
+        return ("%s(mode=%s size=%dx%d depth=%d channels=%d)") % (
+            self.__class__.__name__,
+            self.color_mode,
+            self.width,
+            self.height,
+            self._record.header.depth,
+            self._record.header.channels,
+        )
+
+    def _repr_pretty_(self, p: Any, cycle: bool) -> None:
+        if cycle:
+            p.text(self.__repr__())
+            return
+
+        def _pretty(layer: layers.Layer | PSDImage, p: Any) -> None:
+            p.text(layer.__repr__())
+            if isinstance(layer, layers.GroupMixin):
+                with p.indent(2):
+                    for idx, child in enumerate(layer):
+                        p.break_()
+                        p.text("[%d] " % idx)
+                        if child.clipping:
+                            p.text("+")
+                        _pretty(child, p)
+
+        _pretty(self, p)
+
+    @classmethod
+    def _make_header(
+        cls,
+        mode: str,
+        size: tuple[int, int],
+        depth: Literal[1, 8, 16, 32] | None = None,
+    ) -> FileHeader:
+        color_mode = pil_io.get_color_mode(mode)
+        if color_mode == ColorMode.BITMAP:
+            # One bit a channel is the only depth a bitmap document stores (#873).
+            if depth not in (None, 1):
+                raise ValueError(f"Invalid depth: {depth}. Must be 1")
+            depth = 1
+        elif depth is None:
+            depth = 8
+        elif depth not in (8, 16, 32):
+            raise ValueError(f"Invalid depth: {depth}. Must be 8, 16, or 32")
+        if size[0] > 300000:
+            raise ValueError(f"Width too large: {size[0]} > 300,000")
+        if size[1] > 300000:
+            raise ValueError(f"Height too large: {size[1]} > 300,000")
+        version = 1
+        if size[0] > 30000 or size[1] > 30000:
+            logger.debug("Width or height larger than 30,000 pixels")
+            version = 2
+        alpha = mode.upper().endswith("A")
+        channels = ColorMode.channels(color_mode, alpha)
+        return FileHeader(
+            version=version,
+            width=size[0],
+            height=size[1],
+            depth=depth,
+            channels=channels,
+            color_mode=color_mode,
+        )
+
+    def _get_pattern(self, pattern_id: str) -> Any | None:
+        """Get pattern item by id."""
+        if self.tagged_blocks is None:
+            return None
+        for key in (Tag.PATTERNS1, Tag.PATTERNS2, Tag.PATTERNS3):
+            data = self.tagged_blocks.get_data(key)
+            if data is not None:
+                for pattern in data:
+                    if pattern.pattern_id == pattern_id:
+                        return pattern
+        return None
+
+    @staticmethod
+    def _divider(record: LayerRecord) -> SectionDividerSetting | None:
+        blocks = record.tagged_blocks
+        divider = blocks.get_data(Tag.SECTION_DIVIDER_SETTING, None)
+        return blocks.get_data(Tag.NESTED_SECTION_DIVIDER_SETTING, divider)
+
+    @classmethod
+    def _unmatched_dividers(cls, records: list[tuple[Any, Any]]) -> set[int]:
+        """Return the indices of group dividers that do not pair up, as ``_init`` reads them."""
+        opened: list[int] = []
+        unmatched: set[int] = set()
+        for index, (record, _) in enumerate(records):
+            divider = cls._divider(record)
+            if divider is None:
+                continue
+            if divider.kind == SectionDivider.BOUNDING_SECTION_DIVIDER:
+                opened.append(index)
+            elif divider.kind in (
+                SectionDivider.OPEN_FOLDER,
+                SectionDivider.CLOSED_FOLDER,
+            ):
+                if opened:
+                    opened.pop()
+                else:
+                    unmatched.add(index)
+        return unmatched | set(opened)
+
+    def _init(self) -> None:
+        """Initialize layer structure."""
+        group_stack: list[layers.Group | PSDImage] = [self]
+        records = list(self._record._iter_layers())
+        unmatched = self._unmatched_dividers(records)
+
+        for index, (record, channels) in enumerate(records):
+            current_group = group_stack[-1]
+
+            blocks = record.tagged_blocks
+            end_of_group = False
+            layer: layers.Layer | PSDImage | None = None
+            divider = self._divider(record)
+            if index in unmatched:
+                logger.warning("Ignoring an unbalanced section divider.")
+                divider = None
+            if (
+                divider is not None
+                and
+                # Some PSDs contain dividers with SectionDivider.OTHER.
+                # Ignoring them, allows the correct categorization of the layer.
+                # Issue : https://github.com/psd-tools/psd-tools/issues/338
+                divider.kind is not SectionDivider.OTHER
+            ):
+                if divider.kind == SectionDivider.BOUNDING_SECTION_DIVIDER:
+                    layer = layers.Group(  # type: ignore
+                        parent=current_group,
+                        # We need to fill in the record and channels later.
+                        record=None,  # type: ignore
+                        channels=None,  # type: ignore
+                    )
+                    layer._set_bounding_records(record, channels)
+                    group_stack.append(layer)
+                elif divider.kind in (
+                    SectionDivider.OPEN_FOLDER,
+                    SectionDivider.CLOSED_FOLDER,
+                ):
+                    layer = group_stack.pop()
+                    if not isinstance(layer, layers.Group):
+                        raise TypeError(
+                            f"Expected Group layer, got {type(layer).__name__}"
+                        )
+                    # Set the record and channels now.
+                    layer._record = record
+                    layer._channels = channels
+
+                    # If the group is an artboard, convert it.
+                    for key in (
+                        Tag.ARTBOARD_DATA1,
+                        Tag.ARTBOARD_DATA2,
+                        Tag.ARTBOARD_DATA3,
+                    ):
+                        if key in blocks:
+                            layer = layers.Artboard._move(layer)
+                    end_of_group = True
+                else:
+                    logger.warning(f"Divider {divider.kind} found.")
+            elif Tag.TYPE_TOOL_OBJECT_SETTING in blocks or Tag.TYPE_TOOL_INFO in blocks:
+                layer = layers.TypeLayer(current_group, record, channels)
+            elif (
+                Tag.SMART_OBJECT_LAYER_DATA1 in blocks
+                or Tag.SMART_OBJECT_LAYER_DATA2 in blocks
+                or Tag.PLACED_LAYER1 in blocks
+                or Tag.PLACED_LAYER2 in blocks
+            ):
+                layer = layers.SmartObjectLayer(current_group, record, channels)
+            else:
+                for key in adjustments.TYPES:
+                    if key in blocks:
+                        layer = adjustments.TYPES[key](current_group, record, channels)
+                        break
+
+            # If nothing applies, this is either a shape or pixel layer.
+            shape_condition = record.flags.pixel_data_irrelevant and (
+                Tag.VECTOR_ORIGINATION_DATA in blocks
+                or Tag.VECTOR_MASK_SETTING1 in blocks
+                or Tag.VECTOR_MASK_SETTING2 in blocks
+                or Tag.VECTOR_STROKE_DATA in blocks
+                or Tag.VECTOR_STROKE_CONTENT_DATA in blocks
+            )
+            if isinstance(layer, (type(None), layers.FillLayer)) and shape_condition:
+                layer = layers.ShapeLayer(current_group, record, channels)
+
+            if layer is None:
+                layer = layers.PixelLayer(current_group, record, channels)
+
+            if layer is None:
+                raise ValueError("Failed to create layer from record")
+
+            if not end_of_group:
+                if isinstance(layer, PSDImage):
+                    raise TypeError("Cannot add PSDImage as a layer")
+                current_group._layers.append(layer)
+
+    def _update_record(self) -> None:
+        """
+        Compile the tree layer structure back into flat lists.
+
+        Walks the API layer structure recursively, producing the records and
+        channels list, and stores them where the reader takes them from: an
+        ``Lr16``/``Lr32`` tagged block where the document has one, the layer
+        info section itself otherwise.
+        """
+        # Initialize the layer structure information if not present.
+        if self._record.layer_and_mask_information.layer_info is None:
+            self._record.layer_and_mask_information.layer_info = LayerInfo()
+        if self._record.layer_and_mask_information.global_layer_mask_info is None:
+            self._record.layer_and_mask_information.global_layer_mask_info = (
+                GlobalLayerMaskInfo()
+            )
+        if self._record.layer_and_mask_information.tagged_blocks is None:
+            self._record.layer_and_mask_information.tagged_blocks = TaggedBlocks()
+
+        # Set layer records and channel image data. A Photoshop-written 16- or
+        # 32-bit document carries them in an Lr16/Lr32 tagged block and leaves
+        # the layer info section empty, so rebuild whichever of the two the
+        # reader consults rather than assuming it is the section.
+        layer_records, channel_image_data = _build_record_tree(self)
+        shadowed = self._record.layer_and_mask_information.layer_info
+        layer_info = self._record._get_layer_info()
+        # Either the tagged block, or the section initialized just above.
+        assert layer_info is not None
+        # A negative count means the first alpha channel of the merged image
+        # data holds the composite's transparency, so carry the sign over. It
+        # is remembered rather than read straight back, because an empty tree
+        # writes a count of zero and zero cannot hold a sign: `move_up()` and
+        # `move_down()` remove before they insert, so a document with a single
+        # top-level entry passes through empty on an ordinary reorder.
+        if layer_info.layer_count != 0:
+            self._merged_alpha = layer_info.layer_count < 0
+        sign = -1 if self._merged_alpha else 1
+        layer_info.layer_records = layer_records
+        layer_info.channel_image_data = channel_image_data
+        layer_info.layer_count = sign * len(layer_records)
+        if layer_info is not shadowed and shadowed is not None:
+            # A tagged block won, so the section is dead weight the writer
+            # would emit anyway. Empty it in place -- rebinding it would
+            # detach any reference taken before the edit.
+            shadowed.layer_count = 0
+            shadowed.layer_records = LayerRecords()
+            shadowed.channel_image_data = ChannelImageData()
+
+        # Flag as updated.
+        self.mark_updated()
+
+
+def _build_record_tree(
+    layer_group: layers.GroupMixin,
+) -> tuple[LayerRecords, ChannelImageData]:
+    """Build the layer tree structure from records and channels list, recursively."""
+    layer_records = LayerRecords()
+    channel_image_data = ChannelImageData()
+
+    for layer in layer_group:
+        if isinstance(layer, (layers.Group, layers.Artboard)):
+            layer_records.append(layer._bounding_record)
+            channel_image_data.append(layer._bounding_channels)
+
+            tmp_layer_records, tmp_channel_image_data = _build_record_tree(layer)
+
+            layer_records.extend(tmp_layer_records)
+            channel_image_data.extend(tmp_channel_image_data)
+
+        layer_records.append(layer._record)
+        channel_image_data.append(layer._channels)
+
+    return (layer_records, channel_image_data)
