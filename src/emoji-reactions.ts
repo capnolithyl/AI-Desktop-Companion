@@ -24,12 +24,19 @@ export function extractReplyEmojis(reply: string, maxEmojis = 3): {
   emojis: string[];
 } {
   const emojis: string[] = [];
-  const visibleText = reply.split(CODE).map((part, index) => {
+  let moved = false;
+  const text = reply.split(CODE).map((part, index) => {
     if (index % 2 === 1) return part; // Preserve Markdown code verbatim.
-    return cleanGaps(part.replace(EMOJI, (emoji) => {
-      if (emojis.length < maxEmojis && !emojis.includes(emoji)) emojis.push(emoji);
-      return " ";
-    }).replace(STRAY_EMOJI_PARTS, ""));
-  }).join("").trimEnd();
-  return { visibleText, emojis };
+    // Only tidy lines where we actually removed emoji. Other lines may rely
+    // on whitespace for Markdown indentation, tables and hard line breaks.
+    return part.split(/(\r?\n)/).map(line => {
+      if (line.search(EMOJI) < 0) return line;
+      return cleanGaps(line.replace(EMOJI, (emoji) => {
+        moved = true;
+        if (emojis.length < maxEmojis && !emojis.includes(emoji)) emojis.push(emoji);
+        return " ";
+      }).replace(STRAY_EMOJI_PARTS, ""));
+    }).join("");
+  }).join("");
+  return { visibleText: moved ? text.trimEnd() : text, emojis };
 }
