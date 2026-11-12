@@ -29,3 +29,11 @@ test("ordinary typography and replies without emoji stay intact", () => {
   const input = "Qwen3.5:9b says 2 + 2 = 4. Read *this*.";
   assert.deepEqual(extractReplyEmojis(input), { visibleText: input, emojis: [] });
 });
+
+
+test("leaves unrelated Markdown whitespace untouched while moving emoji", () => {
+  const source = "Hello 😸!\n\n  - Nested item\n\nTwo spaces for Markdown.  \nNext line.";
+  const result = extractReplyEmojis(source);
+  assert.equal(result.visibleText, "Hello!\n\n  - Nested item\n\nTwo spaces for Markdown.  \nNext line.");
+  assert.deepEqual(result.emojis, ["😸"]);
+});
