@@ -153,13 +153,15 @@ test("chapter notes accept valid fenced JSON with Qwen reasoning and plain bulle
 test("invalid JSON note output retries as plain bullet notes without discarding earlier sections",async()=>{
   const story="Lisa and William sort moving boxes and debate whether to keep the framed photographs. ".repeat(165);
   let calls=0,retries=0;
-  const context=await readNotionChapter(doc(story),async(prompt)=>{
+  const context=await readNotionChapter(doc(story),async(prompt,plainText)=>{
     calls++;
     if(!prompt.includes("No JSON, code fences or preamble")) {
+      assert.equal(plainText,false);
       return calls===3 ? '{"notes":"unterminated' :
         JSON.stringify({notes:"Lisa and William sort boxes and discuss what belongings to keep."});
     }
     retries++;
+    assert.equal(plainText,true);
     assert.match(prompt,/plain-text chronological bullet notes/);
     return "- Lisa and William sort moving boxes together.\n- They discuss whether to keep their framed photographs.";
   });
