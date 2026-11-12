@@ -26,7 +26,7 @@ import {
 import { PersonalityPresets, PersonalitySliders } from "./PersonalityControls";
 import { parseSlashCommand, SLASH_HELP } from "./slash-commands";
 import { runtimeContext, chatRuntimeContext } from "./runtime-context";
-import { decideDesktopTurn } from "./desktop-turn-routing";
+import { decideDesktopTurn, clearlySocialChat } from "./desktop-turn-routing";
 import { isModelStatusQuestion, modelStatusAnswer } from "./model-status";
 import { modelSwitcherStatus, modelSwitcherChoice } from "./model-switcher";
 import { formatDebugLog, type Diagnostics, type MemoryRecallAudit, type OllamaStats, type ResearchAudit } from "./debug-log";
@@ -1951,7 +1951,10 @@ export default function App() {
       }
       const cloudMaySearch = settings.provider !== "local" && settings.autoSearch &&
         !useNotion && !turn.capabilityQuestion && !personalTurn && !withSearch &&
-        !attachment && !screenshot && !liveFrame && !allowRoleplay;
+        !attachment && !screenshot && !liveFrame && !allowRoleplay &&
+        // Unmistakable greetings and small talk need no public web tools;
+        // everything factual/ambiguous keeps native cloud tool calling.
+        !clearlySocialChat(text);
       // Cloud providers independently decide when read-only web tools are useful.
       // Local Qwen still respects the existing deterministic/planned routes.
       const effectiveWeb = turn.allowAutomaticWeb || plannedPublicSearch;
