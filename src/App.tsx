@@ -31,7 +31,8 @@ import { isModelStatusQuestion, modelStatusAnswer } from "./model-status";
 import { modelSwitcherStatus, modelSwitcherChoice } from "./model-switcher";
 import { formatDebugLog, type Diagnostics, type MemoryRecallAudit, type OllamaStats, type ResearchAudit } from "./debug-log";
 import { strongSemanticIds } from "./memory-ranking";
-import { planMemoriesAndTools, type WebToolDecision } from "./unified-planner";
+import { selectDeterministicMemoryIds } from "./memory-retrieval";
+import { planPublicWebTools, type WebToolDecision } from "./unified-planner";
 import { matchingSourceTopic } from "./preferred-sources";
 import { isPersonalMemoryQuestion } from "./personal-memory";
 import {
@@ -1718,6 +1719,8 @@ export default function App() {
     const semanticPromise = invoke<Array<{id:number;fact:string;score:number|null}>>(
       "memory_semantic_recall",{query:text}
     ).catch(() => []);
+    const lexicalPromise = invoke<number[]>("memory_search_fact_ids",{query:text})
+      .catch(() => []);
     const semanticStatusPromise = invoke<{ready:boolean;reason?:string}>(
       "memory_semantic_status"
     ).catch(() => null);
@@ -1984,8 +1987,8 @@ export default function App() {
       // Mem0 OSS reorders facts by meaning (e.g. "website" => WordPress skills).
       // With no sidecar, the Rust command returns [] and normal chat continues.
       setActivity("Recalling relevant context…");
-      const [liveFacts,semanticMatches,semanticStatus] = await Promise.all([
-        factsPromise,semanticPromise,semanticStatusPromise
+      const [liveFacts,semanticMatches,semanticStatus,lexicalIds] = await Promise.all([
+        factsPromise,semanticPromise,semanticStatusPromise,lexicalPromise
       ]);
       parallelTimings.push({
         name:"preparation critical path",elapsedMs:performance.now()-parallelStarted,status:"complete"
@@ -1993,27 +1996,28 @@ export default function App() {
       const semanticIds = strongSemanticIds(semanticMatches,text);
       if (liveFacts !== userFacts) setUserFacts(liveFacts);
       const budget = memoryBudget(settings.contextWindow);
-      // For a small memory collection the local model can judge every fact.
-      // At larger sizes combine approximate semantic and full-word lexical
-      // candidates first. Invalid/slow local selection falls back safely.
-      setActivity("Planning memory and tools…");
+      // Deterministic local recall works even when the optional Mem0 index
+      // is synchronizing or the local inference engine is busy.
+      setActivity("Preparing relevant memory…");
       const personalTurn=isPersonalMemoryQuestion(text);
       const canPlanPublicWeb = settings.autoSearch && !useNotion && !turn.capabilityQuestion &&
         !personalTurn &&
         !withSearch && !attachment && !screenshot && !liveFrame && !allowRoleplay;
-      const unified = await planMemoriesAndTools(
-        liveFacts,text,semanticMatches,budget.maxFacts,
+      const selection = selectDeterministicMemoryIds(
+        liveFacts,text,semanticMatches,lexicalIds,budget.maxFacts
+      );
+      // Only ambiguous public chat needs a model-assisted web decision.
+      // Explicit research and Notion routing already have deterministic paths.
+      const plannerWeb:WebToolDecision = await planPublicWebTools(text,
         prompt => invoke<string>("condense_local_context",{
           endpoint:settings.endpoint,model:settings.model,prompt,
           contextWindow:settings.contextWindow,maxOutputTokens:250,timeoutMs:20000
         }),{
-          automaticWebEnabled:canPlanPublicWeb,
+          automaticWebEnabled:canPlanPublicWeb && researchPlan.mode==="chat",
           sourcePreferences:settings.sourcePreferences
         }
       );
       if(stopRequested.current)throw new Error("Generation stopped");
-      const selection = unified.memory;
-      const plannerWeb:WebToolDecision = unified.web;
       const plannedPublicSearch = canPlanPublicWeb && plannerWeb.search && !!plannerWeb.query &&
         researchPlan.mode === "chat";
       if(plannedPublicSearch) {

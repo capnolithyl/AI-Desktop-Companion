@@ -85,7 +85,7 @@ export const DEFAULT_SETTINGS: Settings = {
   structuredResearch: true,
   autoManageSearch: false,
   cacheHours: 24,
-  contextWindow: null,
+  contextWindow: 16384,
   autoRememberUser: true,
   autoRememberMikan: true,
   visionCaptureIntervalSeconds:15,
@@ -117,7 +117,7 @@ export function loadSettings(): Settings {
       autoManageSearch: typeof data.autoManageSearch === "boolean" ? data.autoManageSearch : data.autoSearch === true,
       cacheHours: typeof data.cacheHours === "number" && Number.isFinite(data.cacheHours) ? Math.max(1, Math.min(720, data.cacheHours)) : DEFAULT_SETTINGS.cacheHours,
       contextWindow: [4096, 8192, 16384, 32768].includes(Number(data.contextWindow)) && data.contextWindow != null
-        ? Number(data.contextWindow) : null,
+        ? Number(data.contextWindow) : DEFAULT_SETTINGS.contextWindow,
       autoRememberUser: data.autoRememberUser !== false,
       autoRememberMikan: data.autoRememberMikan !== false,
       visionCaptureIntervalSeconds:captureInterval(data.visionCaptureIntervalSeconds),
