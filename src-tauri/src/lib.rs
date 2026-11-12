@@ -4,6 +4,8 @@ mod web_reader;
 mod search_service;
 mod agent_tools;
 mod gemini;
+mod cloud_web_tools;
+mod openrouter;
 mod research_intent;
 mod source_enrichment;
 mod evidence_pack;
@@ -45,6 +47,8 @@ struct ChatRequest {
     provider: Option<String>,
     #[serde(default)]
     gemini_model: Option<String>,
+    #[serde(default)]
+    openrouter_model: Option<String>,
     #[serde(default)]
     cloud_allow_web: bool,
     messages: Vec<ChatMessage>,
@@ -318,7 +322,40 @@ async fn chat_stream_impl(
     screen_vision::validate_request_images(&request.messages)?;
     let provider = request.provider.as_deref().unwrap_or("local");
     let mut fallback_reason: Option<String> = None;
-    if matches!(provider, "auto" | "gemini") {
+    if matches!(provider, "auto" | "openrouter") {
+        // Auto is intentionally OpenRouter-free -> local. Gemini remains
+        // available as a manual provider and is not retried on every timeout.
+        if provider == "auto" {
+            fallback_reason = openrouter::cooldown_reason()
+                .map(|reason| format!("OpenRouter temporarily paused after: {reason}"));
+        }
+        if fallback_reason.is_none() {
+            match openrouter::key() {
+                Ok(Some(key)) => {
+                    let result = match tokio::time::timeout(
+                        Duration::from_secs(45), openrouter::chat(&app, &request, &key)
+                    ).await {
+                        Ok(result) => result,
+                        Err(_) => {
+                            if provider=="auto" {openrouter::note_slow_request();}
+                            Err("OpenRouter timed out after 45 seconds (cloud deadline)".into())
+                        }
+                    };
+                    match result {
+                        Ok(completion) => return Ok(completion),
+                        Err(reason) if provider=="openrouter" => return Err(reason),
+                        Err(reason) => fallback_reason=Some(reason)
+                    }
+                },
+                Ok(None) if provider=="openrouter" =>
+                    return Err("Add an OpenRouter API key in Settings → AI & Models".into()),
+                Ok(None) => fallback_reason=Some("No OpenRouter API key configured".into()),
+                Err(reason) if provider=="openrouter" => return Err(reason),
+                Err(reason) => fallback_reason=Some(reason)
+            }
+        }
+    }
+    if provider=="gemini" {
         // Only read-only web calls may be repeated after a failed cloud attempt.
         if provider == "auto" {
             fallback_reason = gemini::cooldown_reason()
@@ -689,6 +726,10 @@ pub fn run() {
             gemini::gemini_save_key,
             gemini::gemini_remove_key,
             gemini::gemini_test_connection,
+            openrouter::openrouter_key_status,
+            openrouter::openrouter_save_key,
+            openrouter::openrouter_remove_key,
+            openrouter::openrouter_test_connection,
             web_search::web_search,
             search_service::search_service,
             web_reader::read_page,
