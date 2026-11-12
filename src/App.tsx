@@ -60,6 +60,12 @@ import {
 } from "./live-vision";
 import { CAPTURE_INTERVAL_MIN,CAPTURE_INTERVAL_MAX,ANALYSIS_POLICY,type RegionChoice } from "./capture-region";
 import { attachmentQuestion, attachmentPromptText, loadChatAttachment, type PendingAttachment, type ExtractedDocument } from "./chat-attachments";
+import { parseIkiModel } from "@ikijs/format";
+import { IkiAvatar } from "./IkiAvatar";
+import {
+  deleteIkiRig, loadAvatarDisplay, loadIkiRig, saveAvatarDisplay, saveIkiRig,
+  type AvatarDisplay, type SavedIkiRig
+} from "./iki-avatar-storage";
 
 type Screen = "compact" | "log" | "settings" | "search" | "page" | "personality" | "help" | "memory" | "capabilities";
 type SettingsTab = "ai" | "internet" | "notion" | "voice" | "appearance";
@@ -228,6 +234,11 @@ export default function App() {
   const [stopping, setStopping] = useState(false);
   const [portrait, setPortrait] = useState<string | null>(BUNDLED_PORTRAIT);
   const [imageError, setImageError] = useState<string | null>(null);
+  const [avatarDisplay, setAvatarDisplay] = useState<AvatarDisplay>(loadAvatarDisplay);
+  const [ikiRig, setIkiRig] = useState<SavedIkiRig | null>(null);
+  const [ikiReady, setIkiReady] = useState(false);
+  const [ikiBusy, setIkiBusy] = useState(false);
+  const [ikiError, setIkiError] = useState<string | null>(null);
   const [availableModels, setAvailableModels] = useState<string[]>([]);
   // Secret remains exclusively in Windows Credential Manager, never Settings/localStorage.
   const [geminiKeyInput,setGeminiKeyInput] = useState("");
@@ -784,6 +795,15 @@ export default function App() {
   }, [showPortrait]);
 
   useEffect(() => {
+    let active = true;
+    void loadIkiRig()
+      .then(saved => { if (active) setIkiRig(saved); })
+      .catch(error => { if (active) setIkiError("Could not restore the custom avatar: " + errorText(error)); })
+      .finally(() => { if (active) setIkiReady(true); });
+    return () => { active = false; };
+  }, []);
+
+  useEffect(() => {
     let hotkeyRegistered = false;
     let unlisten: UnlistenFn | null = null;
     let disposed = false;
@@ -1125,9 +1145,48 @@ export default function App() {
     try {
       await savePortrait(file);
       showPortrait(file);
+      setAvatarDisplay("portrait");
+      saveAvatarDisplay("portrait");
       setImageError(null);
     } catch (error) {
       setImageError(errorText(error));
+    }
+  };
+
+  const chooseIkiRig = async (file?: File) => {
+    if (!file) return;
+    if (!file.name.toLowerCase().endsWith(".iki") || file.size < 2 || file.size > 25 * 1024 * 1024) {
+      setIkiError("Choose an .iki character file smaller than 25 MB.");
+      return;
+    }
+    setIkiBusy(true);
+    setIkiError(null);
+    try {
+      // Validate before saving or replacing the active character.
+      parseIkiModel(JSON.parse(await file.text()) as unknown);
+      await saveIkiRig(file);
+      setIkiRig({ name: file.name, file });
+      setAvatarDisplay("animated");
+      saveAvatarDisplay("animated");
+    } catch (error) {
+      setIkiError("Could not import the .iki model: " + errorText(error));
+    } finally {
+      setIkiBusy(false);
+    }
+  };
+
+  const resetIkiRig = async () => {
+    setIkiBusy(true);
+    setIkiError(null);
+    try {
+      await deleteIkiRig();
+      setIkiRig(null);
+      setAvatarDisplay("animated");
+      saveAvatarDisplay("animated");
+    } catch (error) {
+      setIkiError("Could not restore bundled Mikan: " + errorText(error));
+    } finally {
+      setIkiBusy(false);
     }
   };
 
@@ -2141,7 +2200,14 @@ export default function App() {
 
   return <main className="companion" style={theme}>
     <div className="portrait-space" title="Drag Mikan to move the window" onMouseDown={dragPortrait}>
-      {portrait ? (
+      {avatarDisplay === "animated" && ikiReady ? (
+        <IkiAvatar customRig={ikiRig?.file ?? null} speaking={voiceState === "playing"}
+          onError={message => {
+            setIkiError(message);
+            setAvatarDisplay("portrait");
+            saveAvatarDisplay("portrait");
+          }}/>
+      ) : portrait ? (
         <img className="character-portrait" src={portrait} alt="Mikan, your desktop companion" draggable={false}
           onError={() => setPortrait(null)}/>
       ) : (
@@ -2972,7 +3038,31 @@ export default function App() {
         </>}
         {settingsTab === "appearance" && <>
           <div className="settings-section-title">Character</div>
-          <label className="setting-field">Portrait
+          <label className="setting-field">Avatar display
+            <select value={avatarDisplay} onChange={event => {
+              const next = event.target.value as AvatarDisplay;
+              setAvatarDisplay(next);
+              saveAvatarDisplay(next);
+              if (next === "animated") setIkiError(null);
+            }}>
+              <option value="animated">Animated Iki character</option>
+              <option value="portrait">Static portrait</option>
+            </select>
+            <small>Animated Mikan v3 is the default. The full rig stays intact; the viewer frames her upper body.</small>
+          </label>
+          <label className="setting-field">Animated model (.iki)
+            <input type="file" accept=".iki,application/json" disabled={ikiBusy}
+              onChange={event => {
+                const file = event.target.files?.[0];
+                event.target.value = "";
+                void chooseIkiRig(file);
+              }}/>
+            <small>Current model: {ikiRig?.name ?? "Mikan v3 (bundled)"}. Upload a new .iki file for a different character or outfit. Changes are saved on this PC.</small>
+            {ikiError && <small className="field-error">{ikiError}</small>}
+          </label>
+          {ikiRig && <button className="inline-action" type="button" disabled={ikiBusy}
+            onClick={() => void resetIkiRig()}>Restore bundled Mikan v3</button>}
+          <label className="setting-field">Static portrait
             <input type="file" accept="image/png,image/jpeg,image/webp"
               onChange={event => void choosePortrait(event.target.files?.[0])}/>
             <small>Your existing Mikan portrait remains stored on this device.</small>
