@@ -63,6 +63,9 @@ export type NotionRetrievalAudit = {
   groundingBlocked?: boolean;
   unsupportedQuotes?: number;
   unsupportedDetails?: number;
+  rereadRequested?: boolean;
+  modelPolicy?: string;
+  falseAccessDenialBlocked?: boolean;
   readFailure?: string;
 };
 
@@ -180,13 +183,22 @@ function performanceLines(diagnostics: Diagnostics): string[] {
       "  Complete chapter read succeeded: " + (diagnostics.notion.readSucceeded ? "yes" : "no"),
       "  Linked scene pages read: " + (diagnostics.notion.linkedScenesRead ?? 0),
       "  Linked scene characters cached: " + (diagnostics.notion.linkedSceneCharacters ?? 0),
+      ...(diagnostics.notion.rereadRequested !== undefined ? [
+        "  Explicit reread requested: " + (diagnostics.notion.rereadRequested ? "yes" : "no")
+      ] : []),
       ...(diagnostics.notion.sourceMode ? [
         "  Manuscript source mode: " + diagnostics.notion.sourceMode,
         "  Approved prose characters: " + (diagnostics.notion.approvedProseCharacters ?? 0),
         "  Approved scenes: " + (diagnostics.notion.sceneTitles?.join(" | ") ?? "n/a"),
         "  Manuscript grounding blocked reply: " + (diagnostics.notion.groundingBlocked ? "yes" : "no"),
         "  Unsupported dialogue excerpts: " + (diagnostics.notion.unsupportedQuotes ?? 0),
-        "  Suspect concrete details: " + (diagnostics.notion.unsupportedDetails ?? 0)
+        "  Suspect concrete details: " + (diagnostics.notion.unsupportedDetails ?? 0),
+        ...(diagnostics.notion.modelPolicy ? [
+          "  Document-analysis model policy: " + diagnostics.notion.modelPolicy
+        ] : []),
+        ...(diagnostics.notion.falseAccessDenialBlocked !== undefined ? [
+          "  False Notion-access denial blocked: " + (diagnostics.notion.falseAccessDenialBlocked ? "yes" : "no")
+        ] : [])
       ] : []),
       ...(diagnostics.notion.readFailure ? ["  Reading failure: " + diagnostics.notion.readFailure] : [])
     ] : []),
