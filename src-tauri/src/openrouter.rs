@@ -238,7 +238,7 @@ pub(crate) async fn chat(app:&AppHandle,request:&ChatRequest,key:&str)
                     if name=="search_web" {
                         if let Some(query)=args["query"].as_str(){search_query=Some(query.to_owned());}
                     }
-                    cloud_web_tools::execute_tool(app,request,&json!(name),&args,
+                    cloud_web_tools::execute_tool(app,request,name,&args,
                         &mut sources,"OpenRouter").await
                 } else {
                     json!({"error":"Invalid JSON tool arguments"})
