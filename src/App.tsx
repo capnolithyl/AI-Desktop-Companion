@@ -62,7 +62,8 @@ import { CAPTURE_INTERVAL_MIN,CAPTURE_INTERVAL_MAX,ANALYSIS_POLICY,type RegionCh
 import { attachmentQuestion, attachmentPromptText, loadChatAttachment, type PendingAttachment, type ExtractedDocument } from "./chat-attachments";
 import { parseIkiModel } from "@ikijs/format";
 import { IkiAvatar } from "./IkiAvatar";
-import { reactionFromReply, type AvatarReaction } from "./avatar-reactions";
+import { reactionFromReply, type AvatarReaction, type AvatarReactionKind } from "./avatar-reactions";
+import { avatarDebugText, type AvatarDebugSnapshot } from "./avatar-debug";
 import {
   deleteIkiRig, loadAvatarDisplay, loadIkiRig, saveAvatarDisplay, saveIkiRig,
   type AvatarDisplay, type SavedIkiRig
@@ -241,6 +242,17 @@ export default function App() {
   const [ikiBusy, setIkiBusy] = useState(false);
   const [ikiError, setIkiError] = useState<string | null>(null);
   const [avatarReaction, setAvatarReaction] = useState<AvatarReaction | null>(null);
+  const [avatarDebug, setAvatarDebug] = useState<AvatarDebugSnapshot | null>(null);
+  const [lastReplyCue, setLastReplyCue] = useState("waiting for a reply");
+  const [showAvatarDebug, setShowAvatarDebug] = useState(() => {
+    try { return localStorage.getItem("mikan/avatar-debug/v1") === "yes"; }
+    catch { return false; }
+  });
+  const toggleAvatarDebug = (enabled: boolean) => {
+    setShowAvatarDebug(enabled);
+    try { localStorage.setItem("mikan/avatar-debug/v1", enabled ? "yes" : "no"); }
+    catch { /* Debug overlay still works for this session. */ }
+  };
   const [availableModels, setAvailableModels] = useState<string[]>([]);
   // Secret remains exclusively in Windows Credential Manager, never Settings/localStorage.
   const [geminiKeyInput,setGeminiKeyInput] = useState("");
@@ -303,8 +315,12 @@ export default function App() {
   const reactToReply = (reply: string): boolean => {
     const kind = reactionFromReply(reply);
     if (!kind) return false;
-    setAvatarReaction({ serial: ++reactionSerial.current, kind });
+    setLastReplyCue(kind);
+    setAvatarReaction({ serial: ++reactionSerial.current, kind, source: "reply" });
     return true;
+  };
+  const testAvatarReaction = (kind: AvatarReactionKind) => {
+    setAvatarReaction({ serial: ++reactionSerial.current, kind, source: "test" });
   };
   const preparingSend = useRef(false);
   // Full-chapter reading notes belong to this conversation, never global memory.
@@ -1695,6 +1711,7 @@ export default function App() {
     let accumulated = "";
     let visibleAccumulated = "";
     let reactionIssued = false;
+    setLastReplyCue("waiting for reply text");
     const allowRoleplay = roleplayActive(text, messages);
     const narrationFilter = new NarrationFilter(!allowRoleplay);
     let unlisten: UnlistenFn | null = null;
@@ -2061,7 +2078,10 @@ export default function App() {
       // The final stored text, rendered answer and streamed speech must agree.
       // Keep explicit roleplay unfiltered and do not mutate older saved chats.
       const finalText = allowRoleplay ? verifiedText : stripNarratedActions(verifiedText);
-      if (!reactionIssued) reactionIssued = reactToReply(finalText);
+      if (!reactionIssued) {
+        reactionIssued = reactToReply(finalText);
+        if (!reactionIssued) setLastReplyCue("no recognized opening");
+      }
       const assistant: LogMessage = {
         id: assistantId, role: "assistant", content: finalText, createdAt: Date.now(),
         diagnostics, sources: verifiedSources,
@@ -2190,7 +2210,8 @@ export default function App() {
         model: settings.model,
         provider: settings.provider,
         geminiModel: settings.geminiModel,
-        contextWindow: settings.contextWindow
+        contextWindow: settings.contextWindow,
+        avatarAnimation: avatarDebugText(avatarDebug, avatarDisplay, lastReplyCue)
       }));
       setCopyLogState("copied");
     } catch (error) {
@@ -2219,6 +2240,9 @@ export default function App() {
       {avatarDisplay === "animated" && ikiReady ? (
         <IkiAvatar customRig={ikiRig?.file ?? null} speaking={voiceState === "playing"}
           reaction={avatarReaction}
+          rigLabel={ikiRig?.name ?? "Mikan v3 (bundled)"}
+          debugVisible={showAvatarDebug}
+          onDebug={setAvatarDebug}
           onError={message => {
             setIkiError(message);
             setAvatarDisplay("portrait");
@@ -2234,6 +2258,21 @@ export default function App() {
           <button type="button" onClick={openSettings}>Choose portrait</button>
         </div>
       )}
+      {showAvatarDebug && <div className="avatar-debug-overlay" aria-label="Live Iki animation diagnostics">
+        <strong>IKI DEBUG · v0.8.31</strong>
+        <span>Renderer: {avatarDisplay === "portrait" ? "portrait" : avatarDebug?.status ?? "initializing"}</span>
+        <span>Rig: {ikiRig?.name ?? "bundled v3"}</span>
+        <span>FPS: {avatarDebug?.fps.toFixed(0) ?? "n/a"}</span>
+        <span>Reply cue: {lastReplyCue}</span>
+        <span>Triggered: {avatarDebug?.lastReaction
+          ? `${avatarDebug.lastReaction.kind} #${avatarDebug.lastReaction.serial} (${avatarDebug.lastReaction.source})`
+          : "none"}</span>
+        <span>Result: {avatarDebug?.lastReaction?.result ?? "waiting"}</span>
+        <span>Expression: {avatarDebug?.activeExpression ?? "neutral"}</span>
+        <span>Speech: {avatarDebug?.speaking ? "playing" : "idle"}
+          {" · "}mouth {avatarDebug?.mouthOpen.toFixed(2) ?? "n/a"}</span>
+        <span>Breath: {avatarDebug?.breath?.toFixed(2) ?? "n/a"}</span>
+      </div>}
     </div>
 
     <section className="dock" aria-label="Chat with Mikan">
@@ -3079,6 +3118,26 @@ export default function App() {
           </label>
           {ikiRig && <button className="inline-action" type="button" disabled={ikiBusy}
             onClick={() => void resetIkiRig()}>Restore bundled Mikan v3</button>}
+          <div className="settings-section-title">Animation diagnostics</div>
+          <label className="avatar-debug-toggle">
+            <input type="checkbox" checked={showAvatarDebug}
+              onChange={event => toggleAvatarDebug(event.target.checked)}/>
+            Show live animation stats over Mikan
+          </label>
+          <pre className="avatar-debug-readout">{avatarDebugText(avatarDebug, avatarDisplay, lastReplyCue)}</pre>
+          <div className="avatar-debug-tests">
+            <small>Test a reaction without asking the AI:</small>
+            <div>
+              {(["smile", "laugh", "surprised", "sad", "angry", "nod", "shake"] as const).map(kind =>
+                <button key={kind} type="button"
+                  disabled={avatarDisplay !== "animated" || !ikiReady}
+                  onClick={() => testAvatarReaction(kind)}>{kind}</button>
+              )}
+            </div>
+          </div>
+          <button type="button" className="inline-action" onClick={() =>
+            void copyTextToClipboard(avatarDebugText(avatarDebug, avatarDisplay, lastReplyCue))
+          }>Copy animation diagnostics</button>
           <label className="setting-field">Static portrait
             <input type="file" accept="image/png,image/jpeg,image/webp"
               onChange={event => void choosePortrait(event.target.files?.[0])}/>
