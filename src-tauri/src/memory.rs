@@ -22,6 +22,10 @@ fn initialize_database(connection: &Connection) -> Result<(), String> {
         "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='message_search')",
         [], |row| row.get(0)
     ).map_err(|e| e.to_string())?;
+    let had_fact_search: bool = connection.query_row(
+        "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='user_memory_search')",
+        [], |row| row.get(0)
+    ).map_err(|e| e.to_string())?;
     connection.execute_batch(
         "PRAGMA foreign_keys=ON;
          PRAGMA journal_mode=WAL;
@@ -57,6 +61,22 @@ fn initialize_database(connection: &Connection) -> Result<(), String> {
            created_at INTEGER NOT NULL DEFAULT (unixepoch()),
            updated_at INTEGER NOT NULL DEFAULT (unixepoch())
          );
+         -- Local lexical recall stays available while the optional embedding index syncs.
+         CREATE VIRTUAL TABLE IF NOT EXISTS user_memory_search USING fts5(
+           fact, category, tags, tokenize='unicode61 remove_diacritics 2'
+         );
+         CREATE TRIGGER IF NOT EXISTS user_memory_search_insert AFTER INSERT ON user_memories BEGIN
+           INSERT INTO user_memory_search(rowid,fact,category,tags)
+             VALUES(new.id,new.fact,new.category,new.tags_json);
+         END;
+         CREATE TRIGGER IF NOT EXISTS user_memory_search_delete AFTER DELETE ON user_memories BEGIN
+           DELETE FROM user_memory_search WHERE rowid=old.id;
+         END;
+         CREATE TRIGGER IF NOT EXISTS user_memory_search_update AFTER UPDATE ON user_memories BEGIN
+           DELETE FROM user_memory_search WHERE rowid=old.id;
+           INSERT INTO user_memory_search(rowid,fact,category,tags)
+             VALUES(new.id,new.fact,new.category,new.tags_json);
+         END;
          CREATE TABLE IF NOT EXISTS user_memory_usage (
            memory_id INTEGER PRIMARY KEY REFERENCES user_memories(id) ON DELETE CASCADE,
            importance INTEGER NOT NULL DEFAULT 50 CHECK (importance BETWEEN 0 AND 100),
@@ -127,6 +147,12 @@ fn initialize_database(connection: &Connection) -> Result<(), String> {
             "INSERT INTO message_search(rowid,content)
              SELECT rowid,content FROM messages WHERE role='user'", []
         ).map_err(|e| format!("Cannot index existing conversations: {e}"))?;
+    }
+    if !had_fact_search {
+        connection.execute(
+            "INSERT INTO user_memory_search(rowid,fact,category,tags)
+             SELECT id,fact,category,tags_json FROM user_memories", []
+        ).map_err(|e| format!("Cannot index saved facts: {e}"))?;
     }
     Ok(())
 }
@@ -422,6 +448,25 @@ fn find_archive_messages(
         content:row.get(2)?, created_at:row.get(3)?
     })).map_err(|e| e.to_string())?;
     rows.collect::<Result<Vec<_>,_>>().map_err(|e| e.to_string())
+}
+
+// BM25-ranked lexical memory candidates, separate from conversation history.
+fn find_fact_ids(db: &Connection, query: &str) -> Result<Vec<i64>, String> {
+    if query.chars().count() > 800 { return Ok(vec![]); }
+    let terms = message_search_terms(query);
+    if terms.is_empty() { return Ok(vec![]); }
+    let mut statement = db.prepare(
+        "SELECT rowid FROM user_memory_search WHERE user_memory_search MATCH ?1
+         ORDER BY bm25(user_memory_search) LIMIT 32"
+    ).map_err(|e| e.to_string())?;
+    let matches = statement.query_map(params![terms], |row| row.get(0))
+        .map_err(|e| e.to_string())?;
+    matches.collect::<Result<Vec<i64>, _>>().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn memory_search_fact_ids(app: AppHandle, query: String) -> Result<Vec<i64>, String> {
+    find_fact_ids(&open_db(&app)?, &query)
 }
 
 #[tauri::command]
@@ -757,6 +802,34 @@ pub fn memory_delete_character_fact(app: AppHandle, id: i64, persona_id: String)
 #[cfg(test)]
 mod tests {
     use super::*;
+
+
+    #[test]
+    fn fact_search_backfills_and_tracks_updates() {
+        let db = Connection::open_in_memory().unwrap();
+        // Simulate the owner upgrading a database with existing facts.
+        db.execute_batch(
+            "CREATE TABLE user_memories (
+               id INTEGER PRIMARY KEY AUTOINCREMENT,
+               fact TEXT NOT NULL COLLATE NOCASE UNIQUE,
+               category TEXT NOT NULL DEFAULT 'other',
+               tags_json TEXT NOT NULL DEFAULT '[]',
+               created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+               updated_at INTEGER NOT NULL DEFAULT (unixepoch())
+             );
+             INSERT INTO user_memories(fact) VALUES ('The user enjoys industrial metal');"
+        ).unwrap();
+        initialize_database(&db).unwrap();
+        let ids = find_fact_ids(&db,"industrial metal").unwrap();
+        assert_eq!(ids.len(),1);
+        db.execute("UPDATE user_memories SET fact='The user enjoys synthwave' WHERE id=?1",
+            params![ids[0]]).unwrap();
+        assert!(find_fact_ids(&db,"industrial metal").unwrap().is_empty());
+        assert_eq!(find_fact_ids(&db,"synthwave").unwrap(),ids);
+        db.execute("DELETE FROM user_memories WHERE id=?1",params![ids[0]]).unwrap();
+        assert!(find_fact_ids(&db,"synthwave").unwrap().is_empty());
+        initialize_database(&db).unwrap();
+    }
 
     #[test]
     fn referenced_and_pinned_facts_are_persistent_and_cascade_on_delete() {
