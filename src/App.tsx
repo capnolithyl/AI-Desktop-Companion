@@ -2009,7 +2009,7 @@ export default function App() {
       );
       // Only ambiguous public chat needs a model-assisted web decision.
       // Explicit research and Notion routing already have deterministic paths.
-      const plannerWeb:WebToolDecision = await planPublicWebTools(text,
+      const plannerWeb:WebToolDecision = await planPublicWebTools(text,liveFacts,
         prompt => invoke<string>("condense_local_context",{
           endpoint:settings.endpoint,model:settings.model,prompt,
           contextWindow:settings.contextWindow,maxOutputTokens:250,timeoutMs:20000
