@@ -63,7 +63,7 @@ import { attachmentQuestion, attachmentPromptText, loadChatAttachment, type Pend
 import { parseIkiModel } from "@ikijs/format";
 import { IkiAvatar } from "./IkiAvatar";
 import { reactionFromReply, type AvatarReaction, type AvatarReactionKind } from "./avatar-reactions";
-import { extractReplyEmojis } from "./emoji-reactions";
+import { extractReplyEmojis, MIN_EMOJI_BUBBLE_SECONDS, MAX_EMOJI_BUBBLE_SECONDS } from "./emoji-reactions";
 import { avatarDebugText, type AvatarDebugSnapshot } from "./avatar-debug";
 import { version as DESKTOP_VERSION } from "../package.json";
 import {
@@ -2329,7 +2329,8 @@ export default function App() {
         </div>
       )}
       {!feedback && lastReply?.content && replyEmojis.length > 0 && <div
-        key={lastReply.id} className="avatar-emoji-thoughts" aria-hidden="true">
+        key={lastReply.id} className="avatar-emoji-thoughts" aria-hidden="true"
+        style={{ "--emoji-duration": `${settings.appearance.emojiBubbleSeconds}s` } as CSSProperties}>
         {replyEmojis.map((emoji, index) => <span
           key={index + ":" + emoji}
           className="avatar-emoji-thought"
@@ -3223,6 +3224,15 @@ export default function App() {
           </label>
           {ikiRig && <button className="inline-action" type="button" disabled={ikiBusy}
             onClick={() => void resetIkiRig()}>Restore bundled Mikan v3</button>}
+          <div className="settings-section-title">Emoji thought bubbles</div>
+          <label className="setting-field">Display duration · {draft.appearance.emojiBubbleSeconds} seconds
+            <input type="range" min={MIN_EMOJI_BUBBLE_SECONDS} max={MAX_EMOJI_BUBBLE_SECONDS}
+              step="1" value={draft.appearance.emojiBubbleSeconds}
+              onChange={event => setDraft(current => ({ ...current, appearance: {
+                ...current.appearance, emojiBubbleSeconds: Number(event.target.value)
+              } }))}/>
+            <small>How long emoji reactions float above Mikan before fading out. Save to apply to new replies.</small>
+          </label>
           <div className="settings-section-title">Animation diagnostics · desktop v{DESKTOP_VERSION}</div>
           <label className="avatar-debug-toggle">
             <input type="checkbox" checked={showAvatarDebug}

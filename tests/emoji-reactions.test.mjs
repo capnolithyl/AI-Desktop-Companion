@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { extractReplyEmojis, stripEmojis } from "../src/emoji-reactions.ts";
+import { extractReplyEmojis, stripEmojis, readEmojiBubbleSeconds, DEFAULT_EMOJI_BUBBLE_SECONDS, MIN_EMOJI_BUBBLE_SECONDS, MAX_EMOJI_BUBBLE_SECONDS } from "../src/emoji-reactions.ts";
 
 test("extracts emoji into at most three distinct thought bubbles without rewriting stored messages", () => {
   const original = "That's adorable 😸😸! Let's read 📚 and celebrate ✨❤️.";
@@ -36,4 +36,17 @@ test("leaves unrelated Markdown whitespace untouched while moving emoji", () => 
   const result = extractReplyEmojis(source);
   assert.equal(result.visibleText, "Hello!\n\n  - Nested item\n\nTwo spaces for Markdown.  \nNext line.");
   assert.deepEqual(result.emojis, ["😸"]);
+});
+
+test("emoji display timing defaults to six seconds, with bounded persisted values", () => {
+  assert.equal(DEFAULT_EMOJI_BUBBLE_SECONDS, 6);
+  assert.equal(MIN_EMOJI_BUBBLE_SECONDS, 2);
+  assert.equal(MAX_EMOJI_BUBBLE_SECONDS, 15);
+  for (const value of [undefined, null, "11", NaN, Infinity, -Infinity]) {
+    assert.equal(readEmojiBubbleSeconds(value), 6);
+  }
+  assert.equal(readEmojiBubbleSeconds(1), 2);
+  assert.equal(readEmojiBubbleSeconds(4), 4);
+  assert.equal(readEmojiBubbleSeconds(9.7), 10);
+  assert.equal(readEmojiBubbleSeconds(100), 15);
 });
