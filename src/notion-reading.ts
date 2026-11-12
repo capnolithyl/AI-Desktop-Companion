@@ -370,3 +370,65 @@ export function unverifiedNotionReviewResponse(evidence:NotionChapterEvidence):s
     evidence.scenes.map(scene=>scene.title).join(", ")+
     ". I need to re-check the original passages before giving you reliable literary feedback.";
 }
+
+
+/** The application, not a free chat model, reports what Notion it actually
+ * loaded. A reread refreshes the in-conversation material, not the offline
+ * SQLite index or the remote Notion workspace.
+ */
+export function notionRereadReceipt(evidence:NotionChapterEvidence, syncedAt:number):string {
+  const sceneCount=evidence.scenes.length;
+  const date=Number.isFinite(syncedAt) && syncedAt>0
+    ? new Date(syncedAt*1000).toLocaleString()
+    : "unknown";
+  return "I reread "+evidence.title+" from my locally synced Notion library and refreshed "+
+    "the chapter material for this conversation. I have all "+sceneCount+
+    " approved "+(sceneCount===1?"scene":"scenes")+" ("+
+    evidence.scenes.map(scene=>scene.title).join(", ")+"), with "+
+    notionManuscriptCharacterCount(evidence).toLocaleString()+
+    " characters of approved prose. This was a fresh read of the local chapter cache, "+
+    "not a new online Notion sync (last synced: "+date+"). "+
+    "I won't use my earlier critique as evidence of what happened in the story.";
+}
+
+/** Auto's generic OpenRouter/free router may pick a tiny 1–3B model without
+ * warning. Manuscript reviews instead use the owner's configured local model.
+ * An explicit cloud-provider selection remains the owner's decision.
+ */
+export function manuscriptReviewProvider(
+  provider:"local"|"auto"|"openrouter"|"gemini",
+  openrouterModel:string
+):"local"|"auto"|"openrouter"|"gemini" {
+  return provider==="auto" && openrouterModel.trim().toLowerCase()==="openrouter/free"
+    ? "local" : provider;
+}
+
+/** No prior model-generated dialogue or session summaries may become proof of
+ * manuscript events. The current user query and freshly loaded source suffice.
+ * This affects only an actively source-grounded chapter turn.
+ */
+export function groundedManuscriptHistory<T extends {id:string;role:string}>(
+  turns:readonly T[],currentUserId:string
+):T[] {
+  return turns.filter(turn=>turn.role==="user" && turn.id===currentUserId);
+}
+
+/** A model may still deny its own available Notion integration, despite the
+ * application having loaded the actual chapter in this turn. Detect that
+ * contradiction independently of the story-fact audit.
+ */
+export function deniesLoadedNotionAccess(answer:string):boolean {
+  const text=answer.toLowerCase().replace(/[\u2018\u2019]/g,"'");
+  return /\bi (?:can't|cannot|can not|don't|do not|am unable to|have no way to)\b.{0,100}\b(?:access|open|read|log into|connect to|browse)\b.{0,50}\bnotion\b/s.test(text)
+    || /\bi (?:can't|cannot|can not|don't|do not|am unable to|have no way to)\b.{0,55}\bnotion\b.{0,40}\b(?:access|open|read|connect|integration)\b/s.test(text)
+    || /\bi (?:only|just) (?:work|have access|see)\b.{0,85}\b(?:pasted|paste|provided|sent)\b.{0,60}\b(?:chat|here|text)\b/s.test(text)
+    || /\bi (?:don't|do not|can't|cannot) have (?:a |any )?(?:notion (?:access|integration|connection)|access to notion)\b/s.test(text);
+}
+
+export function unavailableNotionModelResponse(evidence:NotionChapterEvidence):string {
+  return "I have "+evidence.title+" loaded from the local Notion integration, including "+
+    evidence.scenes.length+" approved "+(evidence.scenes.length===1?"scene":"scenes")+
+    ". My draft reply incorrectly claimed I couldn't access the chapter, "+
+    "so I withheld it instead of misleading you. The manuscript is available; "+
+    "the response model failed to use that context reliably.";
+}
