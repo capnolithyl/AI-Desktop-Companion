@@ -9,6 +9,7 @@ export type AvatarReactionKind =
 export type AvatarReaction = {
   serial: number;
   kind: AvatarReactionKind;
+  source?: "reply" | "test";
 };
 
 export function reactionFromReply(reply: string): AvatarReactionKind | null {
