@@ -1945,7 +1945,7 @@ export default function App() {
         // conversation. Follow-up summaries should not needlessly re-run
         // every local map/reduce pass unless the owner asks for a re-read.
         if (activeNotion?.page.id === notionPlan.selectedPage.id &&
-            !!activeNotion.context &&
+            !!activeNotion.context && !!activeNotion.evidence &&
             !notionPlan.reread) {
           readChapterContext = activeNotion.context;
           chapterEvidence = activeNotion.evidence ?? null;
