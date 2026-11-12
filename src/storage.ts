@@ -5,7 +5,7 @@ import { DEFAULT_VOICE_VOLUME, readVoiceVolume } from "./speech";
 
 export type ChatRole = "user" | "assistant";
 export type Message = { id: string; role: ChatRole; content: string };
-export type Settings = { voice: VoiceSettings; endpoint: string; model: string; provider: "local" | "auto" | "gemini"; geminiModel: string; systemPrompt: string; appearance: Appearance; personality: Personality; searxngEndpoint: string; autoSearch: boolean; structuredResearch: boolean; autoManageSearch: boolean; sourcePreferences: SourcePreference[]; cacheHours: number; contextWindow: number | null; autoRememberUser: boolean; autoRememberMikan: boolean; visionCaptureIntervalSeconds:number; visionRegion:RegionChoice|null };
+export type Settings = { voice: VoiceSettings; endpoint: string; model: string; provider: "local" | "auto" | "gemini" | "openrouter"; geminiModel: string; openrouterModel: string; systemPrompt: string; appearance: Appearance; personality: Personality; searxngEndpoint: string; autoSearch: boolean; structuredResearch: boolean; autoManageSearch: boolean; sourcePreferences: SourcePreference[]; cacheHours: number; contextWindow: number | null; autoRememberUser: boolean; autoRememberMikan: boolean; visionCaptureIntervalSeconds:number; visionRegion:RegionChoice|null };
 
 export type VoiceSettings = {
   engine: "qwen" | "pocket";
@@ -73,6 +73,7 @@ export const DEFAULT_SETTINGS: Settings = {
   endpoint: "http://127.0.0.1:11434",
   provider: "local",
   geminiModel: "gemini-3.8-flash",
+  openrouterModel: "openrouter/free",
   voice: { ...DEFAULT_VOICE },
   searxngEndpoint: "http://127.0.0.1:8888",
   autoSearch: false,
@@ -101,7 +102,8 @@ export function loadSettings(): Settings {
     const data = JSON.parse(localStorage.getItem(SETTINGS_KEY) ?? "{}") as Partial<Settings>;
     return {
       endpoint: typeof data.endpoint === "string" ? data.endpoint : DEFAULT_SETTINGS.endpoint,
-      provider: data.provider === "auto" || data.provider === "gemini" ? data.provider : "local",
+      provider: data.provider === "auto" || data.provider === "gemini" || data.provider === "openrouter" ? data.provider : "local",
+      openrouterModel: typeof data.openrouterModel === "string" && (data.openrouterModel === "openrouter/free" || /^[a-zA-Z0-9_./-]+:free$/.test(data.openrouterModel)) ? data.openrouterModel : DEFAULT_SETTINGS.openrouterModel,
       geminiModel: typeof data.geminiModel === "string" && /^gemini-[a-zA-Z0-9.-]{1,90}$/.test(data.geminiModel) ? data.geminiModel : DEFAULT_SETTINGS.geminiModel,
       voice: readVoice(data.voice),
       searxngEndpoint: typeof data.searxngEndpoint === "string" ? data.searxngEndpoint : DEFAULT_SETTINGS.searxngEndpoint,
