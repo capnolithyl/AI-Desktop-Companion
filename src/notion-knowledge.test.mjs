@@ -147,3 +147,23 @@ test("a normal exhausting day does not look like a Notion character named Today"
     {title:"Will's Arc",url:"",content:"Will remembers the family",syncedAt:1794000000}
   ]),true);
 });
+
+test("Cliff Notes and full-text availability questions actually trigger a complete chapter read",()=>{
+  const doc=[{id:"boxes",title:"Chapter 01 · Boxes",url:"https://www.notion.so/boxes",chunkCount:8,characters:14000}];
+  const prior=[{role:"user",content:"The book is Akidameg. Chapter One is called Boxes."}];
+  const summary="Are you able to see the entire first chapter? Can you give me some cliff notes of what happens?";
+  assert.equal(asksToReadFullNotionPage(summary),true);
+  assert.equal(asksToReadFullNotionPage("Give me the Cliff Notes",doc[0]),true);
+  assert.equal(asksToReadFullNotionPage("Summarize Boxes",doc[0]),true);
+  assert.equal(asksToReadFullNotionPage("What happens in Chapter One?"),true);
+  assert.equal(asksToReadFullNotionPage("What happens next in Chapter One?"),false);
+  const plan=planNotionRetrieval(summary,prior,doc);
+  assert.equal(plan.selectedPage?.id,"boxes");
+  assert.equal(plan.fullRead,true);
+  assert.match(unavailableChapterResponse(summary,doc[0],"",1),/couldn't finish reading/);
+  assert.equal(unavailableChapterResponse(summary,doc[0],"COMPLETE TEXT OF THE CACHED PAGE: chapter",1),null);
+  assert.match(unavailableChapterResponse(summary,doc[0],"NOTION FULL READING FAILED: Linked scenes are missing",1),/Scenes database/);
+  assert.equal(planNotionRetrieval("Give me the Cliff Notes",prior,doc,doc[0]).fullRead,true);
+  assert.equal(planNotionRetrieval("Summarize Boxes",prior,doc).fullRead,true);
+  assert.equal(asksToReadFullNotionPage("Can you see the chapter title?"),false);
+});

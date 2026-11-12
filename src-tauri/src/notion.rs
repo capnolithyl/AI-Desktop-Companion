@@ -716,6 +716,78 @@ pub fn notion_read_document(app: AppHandle, id: String) -> Result<NotionDocument
         related_pages,missing_related_pages })
 }
 
+
+/** On-demand recovery when the local chapter catalog predates scene relations.
+ * This reads only a chapter already indexed locally and its explicitly linked
+ * Notion scenes. It does not persist manuscript text in SQLite; notes are kept
+ * only in the active conversation by the desktop UI.
+ */
+#[tauri::command]
+pub async fn notion_read_document_live(app: AppHandle, id: String) -> Result<NotionDocument, String> {
+    // Require an owner-synced chapter ID, not an arbitrary UUID from a renderer.
+    let cached = notion_read_document(app.clone(), id.clone())?;
+    let token = need_token(&app)?;
+    let client = http()?;
+    let live = request(&client, &token, reqwest::Method::GET,
+        &format!("/v1/pages/{id}"), None).await?;
+    let chapter_page = page_from_json(&live)
+        .ok_or("Notion no longer exposes this chapter to Mikan")?;
+    let scene_property = &live["properties"]["Scenes"];
+    if scene_property["has_more"].as_bool() == Some(true) {
+        return Err("The chapter's Scenes relation is incomplete in the Notion page response. Refresh the chapter relation before a complete read.".into());
+    }
+    let (mut chapter_blocks, scene_ids) = indexed_properties(&live["properties"]);
+    if scene_ids.is_empty() {
+        return Err("The live Notion chapter contains no readable Scenes relation. The Scenes database may not be shared with Mikan's Notion integration.".into());
+    }
+    let mut unused_discoveries = VecDeque::new();
+    chapter_blocks.extend(fetch_page_text(&client, &token, &chapter_page,
+        &mut unused_discoveries).await?);
+    let chunks = chunk_text(&chapter_blocks);
+    let mut total_bytes = chunks.iter().map(String::len).sum::<usize>();
+    if total_bytes > 2_000_000 {
+        return Err("The chapter exceeds the complete-reading size limit".into());
+    }
+
+    let mut scenes = Vec::with_capacity(scene_ids.len());
+    for (position, scene_id) in scene_ids.into_iter().enumerate() {
+        // Each related ID comes from Notion itself, not user-supplied text.
+        let details = request(&client, &token, reqwest::Method::GET,
+            &format!("/v1/pages/{scene_id}"), None).await
+            .map_err(|error| format!("Cannot open linked scene {}: {error}. Check the Scenes database sharing.",position+1))?;
+        let scene_page = page_from_json(&details)
+            .ok_or("Notion returned an unreadable linked scene page")?;
+        let order = details["properties"]["Order"]["number"].as_f64()
+            .unwrap_or(position as f64);
+        let (mut scene_blocks, _) = indexed_properties(&details["properties"]);
+        scene_blocks.extend(fetch_page_text(&client, &token, &scene_page,
+            &mut unused_discoveries).await
+            .map_err(|error| format!("Cannot read linked scene {}: {error}",scene_page.title))?);
+        let scene_chunks = chunk_text(&scene_blocks);
+        if scene_chunks.is_empty() {
+            return Err(format!("Linked scene {} contains no readable text",scene_page.title));
+        }
+        total_bytes += scene_chunks.iter().map(String::len).sum::<usize>();
+        if total_bytes > 2_000_000 {
+            return Err("The chapter and linked scenes exceed the complete-reading size limit".into());
+        }
+        scenes.push((order, position, NotionRelatedPage {
+            title:scene_page.title, url:scene_page.url, chunks:scene_chunks,
+        }));
+    }
+    // A relation's array order need not match manuscript order. Scene rows
+    // have a numeric Order property (e.g. 1.01, 1.02, 1.03, 1.04).
+    scenes.sort_by(|a,b| a.0.total_cmp(&b.0).then_with(|| a.1.cmp(&b.1)));
+    let related_pages = scenes.into_iter().map(|(_,_,scene)|scene).collect();
+    let synced_at = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|_| "System clock is invalid".to_owned())?.as_secs() as i64;
+    Ok(NotionDocument {
+        id, title:chapter_page.title, url:chapter_page.url,
+        synced_at, chunks, related_pages, missing_related_pages:0,
+    })
+}
+
 fn fts_terms(query: &str) -> String {
     const STOP: &[&str] = &[
         "what","when","where","which","who","why","how","this","that","with","from",

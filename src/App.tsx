@@ -43,7 +43,7 @@ import type {ImportMemory,MemoryCategory} from "./memory-import";
 import { NotionPanel } from "./NotionPanel";
 import { isNotionTopic, notionContext, planNotionRetrieval, asksToReadFullNotionPage, hasNamedNotionMatch, unavailableChapterResponse,
   type NotionHit, type NotionCachedPage } from "./notion-knowledge";
-import { readNotionChapter, type NotionDocument, type NotionChapterSession } from "./notion-reading";
+import { readNotionChapter, shouldRefetchNotionDocument, type NotionDocument, type NotionChapterSession } from "./notion-reading";
 import { splitSpeechText, toSpeechText, VOICE_TEST_LINE, ProgressiveSpeechFeed, FIRST_SPEECH_CHARS, POCKET_FINAL_SPEECH_CHARS, voiceEndpoint, POCKET_VOICE_ENDPOINT, canSaveVoiceReference, voicePlaybackGain } from "./speech";
 import { NarrationFilter, roleplayActive, stripNarratedActions } from "./narration-filter";
 import { memoryBudget, sessionMemoryContext, type SessionSummary } from "./memory-budget";
@@ -1775,32 +1775,60 @@ export default function App() {
       let linkedSceneCharacters = 0;
       let notionReadFailure: string | undefined;
       if (useNotion && notionPlan.fullRead && notionPlan.selectedPage) {
-        setActivity("Opening full Notion chapter…");
-        try {
-          const document = await invoke<NotionDocument>("notion_read_document",{
-            id:notionPlan.selectedPage.id
-          });
-          linkedScenesRead = document.relatedPages?.length ?? 0;
-          linkedSceneCharacters = (document.relatedPages ?? [])
-            .reduce((n,scene)=>n+scene.chunks.reduce((total,chunk)=>total+chunk.length,0),0);
-          readChapterContext = await readNotionChapter(
-            document,
-            prompt => invoke<string>("condense_local_context", {
+        // A completed chapter read is already available for the current
+        // conversation. Follow-up summaries should not needlessly re-run
+        // every local map/reduce pass unless the owner asks for a re-read.
+        if (activeNotion?.page.id === notionPlan.selectedPage.id &&
+            !/\b(?:reread|re-read|read again|from scratch)\b/i.test(text)) {
+          readChapterContext = activeNotion.context;
+        } else {
+          setActivity("Opening full Notion chapter…");
+          try {
+            let document = await invoke<NotionDocument>("notion_read_document",{
+              id:notionPlan.selectedPage.id
+            });
+            const summarizeSection = (prompt:string) => invoke<string>("condense_local_context", {
               endpoint:settings.endpoint,model:settings.model,prompt,
               contextWindow:settings.contextWindow,maxOutputTokens:500
-            }),
-            (part,total)=>setActivity(`Reading Notion chapter: section ${part} of ${total}…`),
-            ()=>stopRequested.current
-          );
-          notionChapterRef.current = {
-            conversationId,page:notionPlan.selectedPage,context:readChapterContext
-          };
-        } catch (error) {
-          if (stopRequested.current) throw new Error("Generation stopped");
-          notionReadFailure=errorText(error);
-          readChapterContext = "NOTION FULL READING FAILED: "+notionReadFailure+
-            ". Do not claim to have read the complete chapter. "+
-            "You may discuss retrieved excerpts, but explain the limitation.";
+            });
+            const progress = (part:number,total:number) =>
+              setActivity(`Reading Notion chapter: section ${part} of ${total}…`);
+            const interrupted = () => stopRequested.current;
+            try {
+              readChapterContext = await readNotionChapter(
+                document,summarizeSection,progress,interrupted
+              );
+            } catch (error) {
+              if (!shouldRefetchNotionDocument(error) || interrupted()) throw error;
+              // A cached chapter may predate the Scenes relation index. Read
+              // the latest owner-shared chapter + scene pages on demand instead
+              // of incorrectly insisting the owner sync again or paste prose.
+              setActivity("Finding linked scenes directly in Notion…");
+              try {
+                document = await invoke<NotionDocument>("notion_read_document_live",{
+                  id:notionPlan.selectedPage.id
+                });
+              } catch (liveError) {
+                throw new Error("Cached scenes are unavailable, and the live Notion read failed: "+
+                  errorText(liveError));
+              }
+              readChapterContext = await readNotionChapter(
+                document,summarizeSection,progress,interrupted
+              );
+            }
+            linkedScenesRead = document.relatedPages?.length ?? 0;
+            linkedSceneCharacters = (document.relatedPages ?? [])
+              .reduce((n,scene)=>n+scene.chunks.reduce((total,chunk)=>total+chunk.length,0),0);
+            notionChapterRef.current = {
+              conversationId,page:notionPlan.selectedPage,context:readChapterContext
+            };
+          } catch (error) {
+            if (stopRequested.current) throw new Error("Generation stopped");
+            notionReadFailure=errorText(error);
+            readChapterContext = "NOTION FULL READING FAILED: "+notionReadFailure+
+              ". Do not claim to have read the complete chapter. "+
+              "You may discuss retrieved excerpts, but explain the limitation.";
+          }
         }
       }
       // Always refresh authoritative SQLite facts before answering. Optional
@@ -1907,7 +1935,7 @@ export default function App() {
       const carryChapter = activeNotion &&
         (!notionPlan.selectedPage || notionPlan.selectedPage.id === activeNotion.page.id)
         && isNotionTopic(text,messages) ? activeNotion.context : "";
-      const missingChapter = useNotion && asksToReadFullNotionPage(text) &&
+      const missingChapter = useNotion && asksToReadFullNotionPage(text,notionPlan.selectedPage) &&
         !notionPlan.selectedPage
         ? "NOTION PAGE SELECTION: No unique cached page matched the chapter request. "+
           "Ask the owner for its exact title instead of claiming to have read it. "+

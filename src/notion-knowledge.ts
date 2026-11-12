@@ -23,7 +23,7 @@ export type NotionRetrievalPlan = {
 
 // Generic writing intent, not a fixed set of book and character names.
 const WRITING = /\b(notion|my\s+(?:book|novel|story|stories|manuscript|writing|draft|characters?|chapters?|notes|lore)|(?:the|this|that)\s+(?:chapter|manuscript|draft|story\s+bible)|story\s+bible|character\s+(?:arc|sheet|backstory|development)|worldbuilding|my\s+fiction|hollow\s+meridian|charlotte|(?:first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth|\d+(?:st|nd|rd|th)?)\s+chapter\b|chapter\s+(?:of|from|in)\s+(?:(?:my|the)\s+)?(?:book|novel|manuscript))\b/i;
-const FOLLOWUP = /\b(she|he|they|it|her|him|them|their|chapter|scene|plot|ending|story|book|novel|then|after|next|backstory|development|relationship|character|that|those|this)\b|\bwhat\s+(?:happened|happens|about|did|should|comes)\b/i;
+const FOLLOWUP = /\b(she|he|they|it|her|him|them|their|chapter|scene|plot|ending|story|book|novel|then|after|next|backstory|development|relationship|character|that|those|this|summary|synopsis|rundown|recap|summari[sz]e)\b|\bcliffs?[\s-]*notes\b|\bwhat\s+(?:happened|happens|about|did|should|comes)\b/i;
 const NAME_STOP = new Set(("what where which when who whose why how can could would should will please tell "+
   "give show help about explain compare analyze analyse read review summarize summarise "+
   "recommend suggest suggesting find finding search searching interested interesting surprise recent latest "+
@@ -50,7 +50,7 @@ function lastBookTopic(recent: ReadonlyArray<{role:string; content:string}>): st
   let looking=true;
   for(let i=owners.length-1;i>=0&&looking;i--) {
     const t=owners[i];
-    if(WRITING.test(t))return t.slice(0,180);
+    if(WRITING.test(t) || chapterNumber(t)!==null)return t.slice(0,180);
     if(!isFollowup(t))looking=false;
   }
   return "";
@@ -128,14 +128,20 @@ export function selectNotionPage(query:string,pages:readonly NotionCachedPage[])
   return ranked[0].page;
 }
 
-export function asksToReadFullNotionPage(text:string):boolean {
-  const document=/\b(?:full|whole|entire|all of|complete|chapter|draft|document|notion page|manuscript|book|story)\b/i.test(text);
+export function asksToReadFullNotionPage(text:string, selectedPage:NotionCachedPage|null=null):boolean {
+  // The matched page supplies document context for natural follow-ups such as
+  // "Give me the Cliff Notes" or "Summarize Boxes", without a magic keyword.
+  const document=/\b(?:full|whole|entire|all of|complete|chapter|draft|document|notion page|manuscript|book|story)\b/i.test(text)
+    || selectedPage!==null;
   const direct=/\b(?:read|review|analy[sz]e|summari[sz]e|recap|go through|look through|take a look at|critique)\b/i.test(text);
+  const synopsis=/\b(?:cliffs?[\s-]*notes|synopsis|summary|rundown|plot\s+(?:summary|recap|breakdown)|(?:key|main)\s+(?:events|moments)|what\s+happens?\s+(?:in|during|throughout)|walk\s+me\s+through|give\s+me\s+(?:a\s+|the\s+|some\s+)?(?:breakdown|highlights))\b/i.test(text);
+  const coverageQuestion=/\b(?:can|could|will|would|do|did|have|are)\b.{0,90}\b(?:read|see|view|open|access)\b/i.test(text)
+    && /\b(?:entire|full|whole|all|complete)\b/i.test(text);
   // A request for feedback on a particular chapter requires reading it, even
   // if the owner doesn't literally say "please read the chapter".
   const critique=/\b(?:what do you think|what did you think|your thoughts|opinion|impressions?|feedback|critique|how is|how's)\b/i.test(text)
-    && chapterNumber(text)!==null;
-  return document && (direct || critique);
+    && (chapterNumber(text)!==null || selectedPage!==null);
+  return document && (direct || synopsis || coverageQuestion || critique);
 }
 
 function namedCandidates(text:string):string[] {
@@ -210,7 +216,7 @@ export function planNotionRetrieval(
   const relevant=bookIntent || !!page || possibleName;
   const overview=bookIntent && !page ? overviewForConversation(text+" "+priorTopic,pages) : null;
   const query=(text+" "+priorTopic+" "+(page?.title||overview?.title||"")).trim().slice(0,600);
-  return {relevant,query,selectedPage:page,fullRead:asksToReadFullNotionPage(text) && !!page};
+  return {relevant,query,selectedPage:page,fullRead:!!page && asksToReadFullNotionPage(text,page)};
 }
 
 /** Return a deterministic response instead of giving the model a chance
@@ -222,10 +228,12 @@ export function unavailableChapterResponse(
   readContext:string,
   cachedCount:number
 ):string|null {
-  if(chapterNumber(query)===null || !asksToReadFullNotionPage(query))return null;
+  if(!asksToReadFullNotionPage(query,matchedPage) || (chapterNumber(query)===null && !matchedPage))return null;
   if(matchedPage && readContext.length>0 && !readContext.startsWith("NOTION FULL READING FAILED:"))
     return null;
   if(!cachedCount)return "I can't read that chapter yet because my Notion library is empty. Sync the book in Settings → Notion first, and I'll give you feedback based on the actual text instead of guessing.";
+  if(matchedPage && /Linked scenes are missing|linked scene has no cached manuscript text/.test(readContext))
+    return "I found "+matchedPage.title+", but some of its linked scene manuscripts are missing from my Notion cache. Share the Scenes database with Mikan and press Sync now in Settings → Notion, then I can read the whole chapter without guessing.";
   if(matchedPage && /Only chapter planning notes were cached/.test(readContext))
     return "I found "+matchedPage.title+" in Notion, but my offline cache contains its planning notes without the actual linked scene manuscripts. Open Settings → Notion and press Sync now. Make sure the Scenes database is shared with Mikan, too. Then I'll read the chapter itself rather than guessing.";
   if(matchedPage)return "I found the chapter in Notion, but couldn't finish reading it. I'd rather not pretend I've read scenes I haven't. Please check the Notion sync or try the chapter again.";
