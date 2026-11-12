@@ -29,6 +29,11 @@ export function modelSwitcherStatus(
   activity = ""
 ): ModelSwitcherStatus {
   const local = settings.model;
+  if (busy && settings.provider === "auto" && activity.startsWith("Manuscript review: local Ollama")) {
+    return {label:`● Local · ${local} · reviewing manuscript…`,
+      title:"Auto routes full Notion manuscript reviews to local Ollama instead of the unpredictable OpenRouter/free pool.",
+      cloudActive:false};
+  }
   if (busy && settings.provider === "auto" && activity.startsWith("Cloud fallback:")) {
     return {label:`↩ Local · ${local} (fallback)`,
       title:`Switching from OpenRouter to local Ollama: ${activity}`,cloudActive:false};
