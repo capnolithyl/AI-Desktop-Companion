@@ -56,6 +56,13 @@ export type NotionRetrievalAudit = {
   readSucceeded: boolean;
   linkedScenesRead?: number;
   linkedSceneCharacters?: number;
+  sourceMode?: "original-prose" | "per-scene-notes";
+  approvedProseCharacters?: number;
+  /** Scene titles and counts only: never export unpublished manuscript text. */
+  sceneTitles?: string[];
+  groundingBlocked?: boolean;
+  unsupportedQuotes?: number;
+  unsupportedDetails?: number;
   readFailure?: string;
 };
 
@@ -173,6 +180,14 @@ function performanceLines(diagnostics: Diagnostics): string[] {
       "  Complete chapter read succeeded: " + (diagnostics.notion.readSucceeded ? "yes" : "no"),
       "  Linked scene pages read: " + (diagnostics.notion.linkedScenesRead ?? 0),
       "  Linked scene characters cached: " + (diagnostics.notion.linkedSceneCharacters ?? 0),
+      ...(diagnostics.notion.sourceMode ? [
+        "  Manuscript source mode: " + diagnostics.notion.sourceMode,
+        "  Approved prose characters: " + (diagnostics.notion.approvedProseCharacters ?? 0),
+        "  Approved scenes: " + (diagnostics.notion.sceneTitles?.join(" | ") ?? "n/a"),
+        "  Manuscript grounding blocked reply: " + (diagnostics.notion.groundingBlocked ? "yes" : "no"),
+        "  Unsupported dialogue excerpts: " + (diagnostics.notion.unsupportedQuotes ?? 0),
+        "  Suspect concrete details: " + (diagnostics.notion.unsupportedDetails ?? 0)
+      ] : []),
       ...(diagnostics.notion.readFailure ? ["  Reading failure: " + diagnostics.notion.readFailure] : [])
     ] : []),
     ...(diagnostics.parallelTasks?.length ? [

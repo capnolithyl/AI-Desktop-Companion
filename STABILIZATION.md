@@ -1,7 +1,7 @@
 # Mikan stabilization
 
-Stabilization branch: `stabilization/local-tools-memory-v1` · draft PR #77.
-This branch is deliberately not merged until automated checks and a Windows smoke test pass.
+Reconciled stabilization of PR #77 and PR #79 on top of the latest main, including the new Notion and avatar updates.
+Automated CI validates builds and regressions; live owner-PC smoke tests remain recommended.
 
 ## Changes in this first pass
 

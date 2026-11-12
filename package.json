@@ -1,13 +1,13 @@
 {
   "name": "mikan-desktop-companion",
   "private": true,
-  "version": "0.8.38",
+  "version": "0.8.40",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "eval:local": "node scripts/eval-local.mjs",
-    "test:debug": "node --experimental-strip-types --test src/model-switcher.test.mjs tests/debug-log.test.mjs tests/speech.test.mjs tests/emoji-reactions.test.mjs tests/avatar-reactions.test.mjs tests/avatar-debug.test.mjs",
+    "test:debug": "node --experimental-strip-types --test src/model-switcher.test.mjs tests/debug-log.test.mjs tests/speech.test.mjs tests/emoji-reactions.test.mjs tests/avatar-reactions.test.mjs tests/avatar-debug.test.mjs tests/avatar-presence.test.mjs",
     "test:server": "node --test tests/remote-bridge.test.mjs",
     "server": "node server/index.mjs",
     "server:key": "node server/index.mjs --key",

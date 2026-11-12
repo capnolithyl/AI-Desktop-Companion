@@ -4,7 +4,7 @@
  * The CI checker detects unmapped Tauri commands, missing files and stale versions.
  * Add a feature here when adding capability, and update the matching source/docs.
  */
-export const CAPABILITY_RELEASE = "0.8.38";
+export const CAPABILITY_RELEASE = "0.8.40";
 
 export type CapabilityStage = "implemented" | "experimental" | "planned";
 export type RuntimeDependency = "none" | "ollama" | "search" | "mem0" | "voice" | "vision" | "pocket";
@@ -159,9 +159,9 @@ export const CAPABILITIES: readonly Capability[] = [
   },
   {
     id:"animated-2d-avatar",label:"Animated 2D Iki character with reactions",category:"Avatar",
-    description:"The Windows desktop includes an animated, local Iki Mikan v3 rig with blinking, hair physics, idle breathing, a separate tail, simple speech-linked mouth movement, and short expressions/gestures when replies begin with recognizable cues. Appearance settings include a saved local wardrobe of imported .iki files, instant switching, the bundled default rig, and a native file picker that remembers the costume directory. Removing an outfit from the list does not delete the original file. The existing custom rig is migrated into the wardrobe. Live animation diagnostics and manual reaction test buttons are available. It is a 2D rig, not 3D; not every reply triggers a reaction and mouth movement uses a lightweight animation rather than true phoneme analysis.",
-    stage:"implemented",runtime:"none",keywords:["iki","animated","animation","avatar","catgirl","breathing","blink","expression","reaction","tail","rig","lip","gesture","debug","outfit","costume","wardrobe","folder"],
-    sources:["src/IkiAvatar.tsx","src/avatar-reactions.ts","src/avatar-debug.ts","src/iki-avatar-storage.ts","src/App.tsx","src-tauri/src/iki_outfits.rs"],docs:[],commands:["pick_iki_outfit","pick_iki_outfit_folder"]
+    description:"The Windows desktop includes an animated, local Iki Mikan v3 rig with blinking, hair physics, idle breathing, a separate tail, simple speech-linked mouth movement, and short expressions/gestures when replies begin with recognizable cues. Appearance settings include a saved local wardrobe of imported .iki files, instant switching, the bundled default rig, and a native file picker that remembers the costume directory. Removing an outfit from the list does not delete the original file. The existing custom rig is migrated into the wardrobe. Live animation diagnostics and manual reaction test buttons are available. Cursor movement subtly guides her eyes and head, and moving the desktop overlay gently excites the existing hair/tail physics with settling momentum. Both effects can be toggled under Appearance and are sampled locally without screen capture. It is a 2D rig, not 3D; not every reply triggers a reaction and mouth movement uses a lightweight animation rather than true phoneme analysis.",
+    stage:"implemented",runtime:"none",keywords:["iki","animated","animation","avatar","catgirl","breathing","blink","expression","reaction","tail","rig","lip","gesture","debug","outfit","costume","wardrobe","folder","cursor","gaze","head tracking","hair physics","drag"],
+    sources:["src/IkiAvatar.tsx","src/avatar-presence.ts","src/avatar-reactions.ts","src/avatar-debug.ts","src/iki-avatar-storage.ts","src/App.tsx","src-tauri/src/iki_outfits.rs","src-tauri/src/avatar_motion.rs"],docs:[],commands:["pick_iki_outfit","pick_iki_outfit_folder","avatar_motion_sample"]
   },
   {
     id:"voice",label:"Local voice synthesis and cloning",category:"Voice",
