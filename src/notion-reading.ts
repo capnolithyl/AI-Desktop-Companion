@@ -14,7 +14,7 @@ export type NotionChapterSession = {
   page: NotionCachedPage;
   context: string;
 };
-export type ChapterSummarizer = (prompt:string) => Promise<string>;
+export type ChapterSummarizer = (prompt:string,plainText?:boolean) => Promise<string>;
 
 /** Retry from owner-authorized live Notion only when the cached manuscript is
  * incomplete. Model failures, cancellation and unrelated errors must not
@@ -173,7 +173,7 @@ export async function readNotionChapter(
     // Retry only unusable note text, not transport failures or cancellation.
     for(const plain of [false,true]) {
       if(interrupted())throw new Error("Generation stopped");
-      const output=await summarize(notePrompt(content,part,total,reduction,plain));
+      const output=await summarize(notePrompt(content,part,total,reduction,plain),plain);
       try {return parseNotes(output);}
       catch {
         if(plain)throw new Error("The local model could not produce reliable section notes "+
