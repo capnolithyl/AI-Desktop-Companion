@@ -45,6 +45,14 @@ export type CharacterFact = {
   updatedAt: number;
 };
 export type AutomaticMemoryResult = { userSaved: number; characterSaved: number; skipped: boolean };
+export type MemoryReview = {
+  id: number; existingMemoryId: number | null; existingFact: string | null;
+  proposedFact: string; evidence: string; createdAt: number;
+};
+export type MemoryFactHistory = {
+  id: number; memoryId: number; previousFact: string; replacementFact: string;
+  changedAt: number;
+};
 export type MemoryJobStatus = {
   processed: number; userSaved: number; characterSaved: number;
   queued: number; failed: number;
@@ -124,7 +132,11 @@ export const memoryApi = {
     invoke<boolean>("memory_enqueue_turn", {request}),
   processPendingJobs: () => invoke<MemoryJobStatus>("memory_process_pending_jobs"),
   memoryJobsStatus: () => invoke<MemoryJobStatus>("memory_jobs_status"),
-  retryFailedJobs: () => invoke<number>("memory_retry_failed_jobs")
+  retryFailedJobs: () => invoke<number>("memory_retry_failed_jobs"),
+  listReviews: () => invoke<MemoryReview[]>("memory_list_reviews"),
+  resolveReview: (id: number, action: "replace" | "keep_both" | "dismiss") =>
+    invoke<void>("memory_resolve_review", {id,action}),
+  listFactHistory: () => invoke<MemoryFactHistory[]>("memory_list_fact_history")
 };
 
 /**

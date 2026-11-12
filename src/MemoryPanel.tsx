@@ -4,6 +4,7 @@ import type { CharacterCategory, CharacterFact, MemoryConversation, UserFact } f
 import {MemoryImporter} from "./MemoryImporter";
 import {MEMORY_CATEGORIES,parseTags,type ImportMemory,type MemoryCategory} from "./memory-import";
 import { CharacterCanonTab } from "./CharacterCanonTab";
+import { MemoryReviews } from "./MemoryReviews";
 import type { SessionSummary } from "./memory-budget";
 
 type Props = {
@@ -110,6 +111,7 @@ export function MemoryPanel({
             <small>Checks explicit, lasting details after a reply. Sensitive information is skipped by default.</small>
           </span>
         </label>
+        <MemoryReviews onChanged={onRefresh}/>
         <MemoryImporter facts={facts} onImport={onImportFacts} onExport={onExportFacts} onReplace={onReplaceFacts}/>
         <form className="memory-add" onSubmit={e => {
           e.preventDefault();
