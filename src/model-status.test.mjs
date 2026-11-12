@@ -17,13 +17,22 @@ test("asks about Mikan's active model never need a public web lookup",()=>{
 });
 
 test("reported provider and actual last model are separate",()=>{
-  const settings={provider:"auto",model:"qwen3.5:9b",geminiModel:"gemini-3.8-flash"};
+  const settings={provider:"auto",model:"qwen3.5:9b",geminiModel:"gemini-3.8-flash",openrouterModel:"openrouter/free"};
   const answer=modelStatusAnswer(settings,[
     {role:"assistant",diagnostics:{model:"qwen3.5:9b",fallbackReason:"Gemini connection timed out after 35 seconds"}}
   ]);
   assert.match(answer,/configured for \*\*Auto\*\*/);
-  assert.match(answer,/Gemini `gemini-3\.8-flash`/);
+  assert.match(answer,/OpenRouter `openrouter\/free`/);
   assert.match(answer,/last model-generated reply used `qwen3\.5:9b`/);
   assert.match(answer,/timed out after 35 seconds/);
   assert.doesNotMatch(modelStatusAnswer({...settings,provider:"gemini"},[]),/last model-generated reply used/);
+});
+
+test("OpenRouter-only mode names its configured free router",()=>{
+  const answer=modelStatusAnswer({
+    provider:"openrouter",model:"qwen3.5:9b",
+    geminiModel:"gemini-3.8-flash",openrouterModel:"openrouter/free"
+  },[]);
+  assert.match(answer,/OpenRouter `openrouter\/free`/);
+  assert.match(answer,/free only/);
 });
