@@ -1036,7 +1036,7 @@ export default function App() {
     await memoryApi.deleteCharacterFact(id);
     await refreshCharacter();
   };
-  const queueAutomaticMemory = (conversationId: string, userMessageId: string, assistantMessageId: string, userOnly = false) => {
+  const queueAutomaticMemory = async (conversationId: string, userMessageId: string, assistantMessageId: string, userOnly = false) => {
     const captureUser = settings.autoRememberUser;
     // Live image replies may contain observations about the screen. Preserve
     // fact extraction from the owner's actual words, never from assistant
@@ -1050,11 +1050,17 @@ export default function App() {
     };
     // Journal immediately, outside the in-memory promise chain. The journal
     // survives process exit and replays from saved SQLite message IDs on boot.
-    const recorded = memoryApi.enqueueTurn(request);
+    try {
+      // Acknowledge the tiny SQLite write before this turn finishes. Ollama
+      // analysis remains asynchronous and can safely resume after a restart.
+      if (!await memoryApi.enqueueTurn(request)) return;
+    } catch (error) {
+      setAutomaticMemoryError(`Could not queue automatic memory: ${errorText(error)}`);
+      return;
+    }
     automaticMemoryQueue.current = automaticMemoryQueue.current
       .catch(() => {})
       .then(async () => {
-        await recorded;
         const result = await memoryApi.processPendingJobs();
         if (result.userSaved || result.characterSaved) {
           await Promise.all([
@@ -2405,7 +2411,7 @@ export default function App() {
       // extract Mikan canon from image-grounded assistant text. Ordinary
       // automatic session summaries are also skipped for image turns.
       if (!screenshot && !attachment) {
-        queueAutomaticMemory(conversationId,user.id,assistant.id,!!liveFrame);
+        await queueAutomaticMemory(conversationId,user.id,assistant.id,!!liveFrame);
         if (!liveFrame) queueSessionMemory(conversationId);
       }
     } catch (error) {
