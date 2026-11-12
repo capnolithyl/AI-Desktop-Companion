@@ -38,9 +38,10 @@ export function planDesktopWebExecution(input: DesktopWebInput): DesktopWebPolic
     input.existingSearch ? "Search panel supplied results already" : null;
   const eligible = reason === null;
   return {
-    // Deterministic research already has a route. Only normal chat can ask
-    // the optional model planner whether a new public lookup would help.
-    canPlanPublicWeb: eligible && input.planMode === "chat",
+    // Deterministic research already has a route. Skip the auxiliary
+    // local model call entirely for greetings and other obvious small talk.
+    canPlanPublicWeb: eligible && input.planMode === "chat"
+      && !clearlySocialChat(input.question),
     // Cloud providers may use read-only tools for ambiguous/public factual
     // turns even when local deterministic research isn't selected.
     cloudMaySearch: eligible && input.provider !== "local"

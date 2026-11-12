@@ -28,7 +28,7 @@ test("sensitive data and personal questions never activate automatic public tool
 test("cloud small talk stays tool-free and real public questions still can search",()=>{
   const hi=planDesktopWebExecution({...defaults,question:"Hello Mikan"});
   assert.equal(hi.cloudMaySearch,false);
-  assert.equal(hi.canPlanPublicWeb,true); // local planner can choose not to search
+  assert.equal(hi.canPlanPublicWeb,false); // no extra local planning call for greetings
   const news=planDesktopWebExecution({...defaults,question:"Search the web for NASA news"});
   assert.equal(news.cloudMaySearch,true);
   assert.equal(news.canPlanPublicWeb,true);
