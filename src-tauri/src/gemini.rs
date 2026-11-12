@@ -275,7 +275,7 @@ pub(crate) async fn chat(
         contents.push(model_content);
         let mut responses = Vec::new();
         for call in calls.iter().take(3) {
-            let answer = cloud_web_tools::execute_tool(app,request,&call["name"],&call["args"],&mut sources,"Gemini").await;
+            let answer = cloud_web_tools::execute_tool(app,request,call["name"].as_str().unwrap_or(""),&call["args"],&mut sources,"Gemini").await;
             let mut response = json!({"name":call["name"],"response":answer});
             if let Some(id) = call["id"].as_str() { response["id"] = json!(id); }
             responses.push(json!({"functionResponse":response}));
