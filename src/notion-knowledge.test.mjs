@@ -184,3 +184,14 @@ test("scene-availability questions traverse the chapter relation instead of aski
   assert.equal(planNotionRetrieval("Give me the Cliff Notes",recent,docs,chapter).sceneLookup,false);
   assert.equal(planNotionRetrieval("Show me my notes",[],docs).sceneLookup,false);
 });
+
+test("failed local section notes report the right cause without blaming Notion sync",()=>{
+  const chapter={id:"boxes",title:"Chapter 01 · Boxes",url:"https://www.notion.so/boxes",
+    chunkCount:9,characters:17000};
+  const q="Please read chapter 1 and summarize it.";
+  const error="NOTION FULL READING FAILED: The local model could not produce reliable section notes for reading section 17/19 even after a plain-text retry.";
+  const message=unavailableChapterResponse(q,chapter,error,262);
+  assert.match(message,/local model couldn't finish processing section 17\/19/);
+  assert.match(message,/not a Notion sync problem/);
+  assert.doesNotMatch(message,/press Sync now|Share the Scenes database/);
+});
