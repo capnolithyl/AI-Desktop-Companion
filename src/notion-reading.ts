@@ -26,7 +26,7 @@ export type ChapterSummarizer = (prompt:string,plainText?:boolean) => Promise<st
  */
 export function shouldRefetchNotionDocument(error:unknown):boolean {
   const message=error instanceof Error ? error.message : String(error);
-  return /Only chapter planning notes were cached|Linked scenes are missing|A linked scene has no cached manuscript text/i.test(message);
+  return /Only chapter planning notes were cached|Linked scenes are missing|A linked scene has no cached manuscript text|Linked scene .* has no approved manuscript prose/i.test(message);
 }
 
 /** Notion relation order is not manuscript order. Chapter scene labels
@@ -354,7 +354,7 @@ export function auditNotionReview(answer:string,evidence:NotionChapterEvidence):
     const surrounding=answer.slice(Math.max(0,match.index-75),Math.min(answer.length,match.index+phrase.length+95));
     const concrete=/\b(?:matt|lisa|will|william|when|says|said|asks|asked|moment|scene|joke|incident|happens|happened|wearing|sees|saw|spots|found|finds|driving|drives|landed|caught|catching|eating)\b/i.test(surrounding);
     if((missing.length>=2 && concrete) ||
-      (missing.length>=1 && /\b(?:says|said|asks|asked|wearing|spots|caught|diaper|sheep|poop)\b/i.test(surrounding))) {
+      (missing.length>=1 && /\b(?:says|said|asks|asked|wearing|spots|caught)\b/i.test(surrounding))) {
       if(!unsupportedDetails.includes(phrase))unsupportedDetails.push(phrase.slice(0,75));
     }
   }
