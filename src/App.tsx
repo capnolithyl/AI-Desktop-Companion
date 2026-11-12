@@ -26,7 +26,7 @@ import {
 import { PersonalityPresets, PersonalitySliders } from "./PersonalityControls";
 import { parseSlashCommand, SLASH_HELP } from "./slash-commands";
 import { runtimeContext, chatRuntimeContext } from "./runtime-context";
-import { decideDesktopTurn } from "./desktop-turn-routing";
+import { decideDesktopTurn, clearlySocialChat } from "./desktop-turn-routing";
 import { isModelStatusQuestion, modelStatusAnswer } from "./model-status";
 import { modelSwitcherStatus, modelSwitcherChoice } from "./model-switcher";
 import { formatDebugLog, type Diagnostics, type MemoryRecallAudit, type OllamaStats, type ResearchAudit } from "./debug-log";
@@ -45,7 +45,7 @@ import { NotionPanel } from "./NotionPanel";
 import { isNotionTopic, notionContext, planNotionRetrieval, asksToReadFullNotionPage, hasNamedNotionMatch, unavailableChapterResponse,
   type NotionHit, type NotionCachedPage } from "./notion-knowledge";
 import { readNotionChapter, shouldRefetchNotionDocument, notionSceneLinksNeedRefresh, describeNotionSceneLinks, type NotionDocument, type NotionChapterSession } from "./notion-reading";
-import { splitSpeechText, toSpeechText, VOICE_TEST_LINE, ProgressiveSpeechFeed, FIRST_SPEECH_CHARS, POCKET_FINAL_SPEECH_CHARS, voiceEndpoint, POCKET_VOICE_ENDPOINT, canSaveVoiceReference, voicePlaybackGain } from "./speech";
+import { splitSpeechText, toSpeechText, VOICE_TEST_LINE, ProgressiveSpeechFeed, FIRST_SPEECH_CHARS, POCKET_FINAL_SPEECH_CHARS, voiceEndpoint, POCKET_VOICE_ENDPOINT, canSaveVoiceReference, voicePlaybackGain, maySpeakProgressively } from "./speech";
 import { NarrationFilter, roleplayActive, stripNarratedActions } from "./narration-filter";
 import { memoryBudget, sessionMemoryContext, type SessionSummary } from "./memory-budget";
 import { archiveMemoryContext, shouldSearchArchive } from "./archive-memory";
@@ -190,6 +190,7 @@ function ReplyMetrics({ diagnostics }: { diagnostics?: Diagnostics }) {
   return <div className="reply-metrics" aria-label="Response performance">
     <Metric title="Wall time" value={seconds(diagnostics.elapsedMs)} />
     <Metric title="First token" value={diagnostics.firstTokenMs == null ? null : seconds(diagnostics.firstTokenMs)} />
+    <Metric title="First spoken audio" value={diagnostics.firstAudioMs == null ? null : seconds(diagnostics.firstAudioMs)} />
     <Metric title="Output" value={s?.outputTokens == null ? null : `${s.outputTokens} tokens`} />
     <Metric title="Speed" value={rate(s)} />
     <Metric title="Prompt" value={s?.promptTokens == null ? null : `${s.promptTokens} tokens`} />
@@ -434,7 +435,8 @@ export default function App() {
    * here; true PCM/sample streaming is a separate optimization.
    */
   const playSpeechChunks = useCallback(async (
-    chunks: AsyncIterable<string>, voice: VoiceSettings, feed?: ProgressiveSpeechFeed
+    chunks: AsyncIterable<string>, voice: VoiceSettings, feed?: ProgressiveSpeechFeed,
+    onFirstAudio?: () => void
   ) => {
     stopSpeech();
     voiceVolumeRef.current = voice.volume;
@@ -455,6 +457,7 @@ export default function App() {
       }
     };
     const iterator = chunks[Symbol.asyncIterator]();
+    let firstAudioStarted = false;
     try {
       let index = 0;
       const first = await iterator.next();
@@ -485,6 +488,10 @@ export default function App() {
         });
         await player.play();
         if (serial !== voiceSerial.current) return;
+        if (!firstAudioStarted) {
+          firstAudioStarted = true;
+          onFirstAudio?.();
+        }
         setVoiceState("playing");
         await playbackFinished;
         if (serial !== voiceSerial.current) return;
@@ -503,7 +510,9 @@ export default function App() {
     }
   }, [releaseVoiceAudio, stopSpeech]);
 
-  const speak = useCallback(async (source: string, voice: VoiceSettings = settings.voice) => {
+  const speak = useCallback(async (
+    source: string, voice: VoiceSettings = settings.voice, onFirstAudio?: () => void
+  ) => {
     // Read-aloud buttons on older stored chats must not pronounce unfiltered
     // action descriptions, even if they predate the streaming narration guard.
     const spoken = toSpeechText(stripNarratedActions(source));
@@ -520,7 +529,7 @@ export default function App() {
     async function* utterances() {
       for (const chunk of chunks) yield chunk;
     }
-    await playSpeechChunks(utterances(), voice);
+    await playSpeechChunks(utterances(), voice, undefined, onFirstAudio);
   }, [playSpeechChunks, settings.voice]);
 
   const checkVoice = async (endpoint: string) => {
@@ -1754,6 +1763,16 @@ export default function App() {
     goCompact();
     const started = performance.now();
     let firstTokenMs: number | null = null;
+    let firstAudioMs: number | null = null;
+    const noteFirstAudio = () => {
+      if (firstAudioMs !== null) return;
+      firstAudioMs = performance.now() - started;
+      console.info(`[Mikan voice] first spoken audio: ${seconds(firstAudioMs)} after send`);
+      // Audio can start after inference has already finished.
+      setMessages(current => current.map(message => message.id === assistantId && message.diagnostics
+        ? {...message, diagnostics:{...message.diagnostics, firstAudioMs:firstAudioMs ?? undefined}}
+        : message));
+    };
     let accumulated = "";
     let visibleAccumulated = "";
     let reactionIssued = false;
@@ -1932,7 +1951,10 @@ export default function App() {
       }
       const cloudMaySearch = settings.provider !== "local" && settings.autoSearch &&
         !useNotion && !turn.capabilityQuestion && !personalTurn && !withSearch &&
-        !attachment && !screenshot && !liveFrame && !allowRoleplay;
+        !attachment && !screenshot && !liveFrame && !allowRoleplay &&
+        // Unmistakable greetings and small talk need no public web tools;
+        // everything factual/ambiguous keeps native cloud tool calling.
+        !clearlySocialChat(text);
       // Cloud providers independently decide when read-only web tools are useful.
       // Local Qwen still respects the existing deterministic/planned routes.
       const effectiveWeb = turn.allowAutomaticWeb || plannedPublicSearch;
@@ -2093,11 +2115,16 @@ export default function App() {
       unlistenActivity = await listen<Activity>("mikan://activity", event => {
         if (event.payload.requestId === requestId) setActivity(event.payload.text);
       });
-      if (settings.voice.autoSpeak && settings.voice.progressiveSpeak &&
-          remoteText === undefined && !withSearch && !attachment && !screenshot &&
-          !liveFrame && !effectiveWeb && researchPlan.mode === "chat") {
+      if (maySpeakProgressively({
+          autoSpeak:settings.voice.autoSpeak,
+          progressiveSpeak:settings.voice.progressiveSpeak,
+          localTurn:remoteText === undefined,
+          withSearch:!!withSearch,attachment:!!attachment,screenshot:!!screenshot,
+          liveFrame:!!liveFrame,webResearch:effectiveWeb || turn.verifyWebEvidence || plannedPublicSearch,
+          cloudWebTools:cloudMaySearch,chatMode:researchPlan.mode === "chat"
+      })) {
         progressiveFeed = new ProgressiveSpeechFeed(settings.voice.engine);
-        void playSpeechChunks(progressiveFeed, settings.voice, progressiveFeed);
+        void playSpeechChunks(progressiveFeed, settings.voice, progressiveFeed, noteFirstAudio);
       }
       unlisten = await listen<ChatChunk>("mikan://chat", event => {
         if (event.payload.requestId !== requestId || !event.payload.content) return;
@@ -2174,6 +2201,7 @@ export default function App() {
       const diagnostics: Diagnostics = {
         elapsedMs: duration,
         firstTokenMs,
+        firstAudioMs:firstAudioMs ?? undefined,
         model: completion.modelUsed || settings.model,
         provider: settings.provider,
         fallbackReason: completion.fallbackReason,
@@ -2224,10 +2252,10 @@ export default function App() {
           // Respect an explicit Stop speech click: do not restart an aborted feed.
           if (voiceFeed.current === progressiveFeed && !progressiveFeed.finish(finalText)) {
             stopSpeech();
-            void speak(finalText);
+            void speak(finalText, settings.voice, noteFirstAudio);
           }
         } else {
-          void speak(finalText);
+          void speak(finalText, settings.voice, noteFirstAudio);
         }
       }
       await persistMessage(assistant);
@@ -3251,8 +3279,9 @@ export default function App() {
               onChange={event => setDraft(current => ({ ...current, voice: { ...current.voice, progressiveSpeak: event.target.checked } }))}/>
             <span><strong>Start speaking as Mikan types</strong>
               <small>Pocket starts after a completed sentence, then prefetches longer passages while Ollama continues.
-                Qwen retains its shorter experimental phrases. If audio gaps recur, turn this off
-                to wait for the finished reply; WAV streaming playback is not yet implemented.</small></span>
+                Local Ollama and OpenRouter conversations can start speaking after the first complete phrase.
+                Web research and cloud tool calls remain buffered until sources are checked.
+                WAV audio is still synthesized one phrase at a time.</small></span>
           </label>
           {draft.voice.engine === "qwen" && <label className="setting-field">VoiceDesign description (when no reference is saved)
             <textarea rows={6} value={draft.voice.prompt} maxLength={650}

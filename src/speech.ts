@@ -99,7 +99,23 @@ export function splitSpeechText(text: string, maxChars = SPEECH_CHUNK_CHARS, fir
 }
 
 
-/** A conservative, bounded feed of complete clauses from a streaming Ollama reply.
+/** Only feed speculative chunks to TTS when no web or source verification
+ * can replace the answer. Chat with active cloud web tools stays buffered
+ * until the final reply is checked, even when automatic research is optional.
+ */
+export function maySpeakProgressively(options: {
+  autoSpeak:boolean; progressiveSpeak:boolean; localTurn:boolean;
+  withSearch:boolean; attachment:boolean; screenshot:boolean;
+  liveFrame:boolean; webResearch:boolean; cloudWebTools:boolean;
+  chatMode:boolean;
+}):boolean {
+  return options.autoSpeak && options.progressiveSpeak && options.localTurn &&
+    !options.withSearch && !options.attachment && !options.screenshot &&
+    !options.liveFrame && !options.webResearch && !options.cloudWebTools &&
+    options.chatMode;
+}
+
+/** A conservative, bounded feed of complete clauses from a streaming model reply.
  * Qwen3-TTS itself still returns whole WAVs; this overlaps text generation with
  * synthesis and uses a shorter first phrase. It is NOT codec-level streaming.
  */

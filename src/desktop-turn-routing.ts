@@ -16,6 +16,23 @@ export type DesktopTurnDecision = {
 
 const chat: ResearchPlan = { mode: "chat", recent: false };
 
+/** Only obvious social small-talk should skip cloud web-tool declarations.
+ * Public questions and ambiguous requests still let the cloud model choose
+ * SearXNG itself. This enables low-latency, tool-free speech for greetings.
+ */
+export function clearlySocialChat(question:string):boolean {
+  const text=question.trim()
+    .replace(/^(?:hey|hi|hello)\s+mikan\b[,!. ]*/i,"")
+    .trim();
+  if (question.length>350 || /\b(?:search|browse|look\s+up|google|news|latest|recent|upcoming|release|announcement|weather|price|score)\b/i.test(text)){
+    return false;
+  }
+  return !text
+    || /^(?:hi|hello|hey|yo|good morning|good evening|good night|night night|thanks|thank you|thank you so much|lol|lmao|haha|hehe|how are you|how's it going|what's up|how are things|tell me a joke|let's chat|let's talk|goodbye|bye|see you later)\s*[!?.,]*$/i.test(text)
+    || /^(?:i(?:'m| am) (?:tired|exhausted|sad|happy|lonely|excited|bored|sleepy|feeling\s+\w+)|i love you|you're (?:cute|adorable|funny)|we did it)[!?. ]*$/i.test(text);
+}
+
+
 /** "Can you search the web?" asks about a feature; "Can you search the
  * web for Artemis news?" is an actual request to perform research. */
 function explicitPublicResearchTask(text: string): boolean {

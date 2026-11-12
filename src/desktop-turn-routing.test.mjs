@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {decideDesktopTurn} from "./desktop-turn-routing.ts";
+import {decideDesktopTurn,clearlySocialChat} from "./desktop-turn-routing.ts";
 
 test("screen vision capability query stays private local chat, never generic web search",()=>{
   const result=decideDesktopTurn("can you see my screen?",[],{automaticWebEnabled:true});
@@ -88,4 +88,17 @@ test("named public websites search only when auto search is enabled", () => {
   const personal=decideDesktopTurn("I'm working on discovermass.com",[],{automaticWebEnabled:true});
   assert.equal(personal.plan.mode,"chat");
   assert.equal(personal.allowAutomaticWeb,false);
+});
+
+
+test("only clearly social chat skips optional cloud web tools for fast speech",()=>{
+  for(const message of [
+    "Hey Mikan!", "Good morning!", "How are you?", "Thanks!",
+    "Hi Mikan, how's it going?", "I am exhausted.", "Let's chat."
+  ]) assert.equal(clearlySocialChat(message),true,message);
+  for(const message of [
+    "Hey Mikan, any Fear Factory news?", "What's the latest space news?",
+    "Could you search the web for Artemis?", "How does Vulkan inference work?",
+    "Hey Mikan, tell me about a new music release."
+  ]) assert.equal(clearlySocialChat(message),false,message);
 });

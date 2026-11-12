@@ -6,6 +6,7 @@ mod agent_tools;
 mod gemini;
 mod cloud_web_tools;
 mod openrouter;
+mod openrouter_stream;
 mod research_intent;
 mod source_enrichment;
 mod evidence_pack;
@@ -339,8 +340,10 @@ async fn chat_stream_impl(
         if fallback_reason.is_none() {
             match openrouter::key() {
                 Ok(Some(key)) => {
+                    let emitted = std::sync::atomic::AtomicBool::new(false);
                     let result = match tokio::time::timeout(
-                        Duration::from_secs(45), openrouter::chat(&app, &request, &key)
+                        Duration::from_secs(45),
+                        openrouter::chat(&app, &request, &key, &emitted)
                     ).await {
                         Ok(result) => result,
                         Err(_) => {
@@ -350,6 +353,11 @@ async fn chat_stream_impl(
                     };
                     match result {
                         Ok(completion) => return Ok(completion),
+                        // Never switch to local Qwen after we have already
+                        // streamed part of an OpenRouter answer. Otherwise
+                        // its text/speech would be joined to a second model.
+                        Err(reason) if emitted.load(std::sync::atomic::Ordering::Relaxed) =>
+                            return Err(format!("OpenRouter stream interrupted after output began: {reason}")),
                         Err(reason) if provider=="openrouter" => return Err(reason),
                         Err(reason) => fallback_reason=Some(reason)
                     }

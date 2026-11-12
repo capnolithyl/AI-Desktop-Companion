@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { splitSpeechText, toSpeechText, ProgressiveSpeechFeed, FIRST_SPEECH_CHARS, voiceEndpoint, canSaveVoiceReference, voicePlaybackGain, readVoiceVolume, DEFAULT_VOICE_VOLUME } from "../src/speech.ts";
+import { splitSpeechText, toSpeechText, ProgressiveSpeechFeed, FIRST_SPEECH_CHARS, voiceEndpoint, canSaveVoiceReference, voicePlaybackGain, readVoiceVolume, DEFAULT_VOICE_VOLUME, maySpeakProgressively } from "../src/speech.ts";
 import { NarrationFilter, stripNarratedActions, isNarratedAction, roleplayActive } from "../src/narration-filter.ts";
 
 test("short utterances and blank text", () => {
@@ -359,4 +359,33 @@ test("Pocket progressive speech sanitizes emojis before sending streamed WAV job
   for await (const part of feed) parts.push(part);
   assert.equal(parts.join(" "), toSpeechText(message));
   assert.ok(parts.every(part => !/[\p{Extended_Pictographic}\p{Regional_Indicator}]/u.test(part)));
+});
+
+
+test("OpenRouter plain chat can begin TTS before the whole reply finishes", async () => {
+  const flags={
+    autoSpeak:true,progressiveSpeak:true,localTurn:true,
+    withSearch:false,attachment:false,screenshot:false,liveFrame:false,
+    webResearch:false,cloudWebTools:false,chatMode:true
+  };
+  assert.equal(maySpeakProgressively(flags),true);
+  const feed=new ProgressiveSpeechFeed("pocket");
+  const iterator=feed[Symbol.asyncIterator]();
+  feed.append("Mikan is streaming from the cloud. She's speaking before the rest is done. ");
+  assert.equal((await iterator.next()).value,"Mikan is streaming from the cloud.");
+  feed.append("Now I can finish talking.");
+  assert.equal(feed.finish("Mikan is streaming from the cloud. She's speaking before the rest is done. Now I can finish talking."),true);
+});
+
+test("source-bearing and tool-enabled cloud turns cannot speak unchecked chunks", () => {
+  const safe={
+    autoSpeak:true,progressiveSpeak:true,localTurn:true,
+    withSearch:false,attachment:false,screenshot:false,liveFrame:false,
+    webResearch:false,cloudWebTools:false,chatMode:true
+  };
+  for (const flag of ["webResearch","cloudWebTools","withSearch","attachment","screenshot","liveFrame"]) {
+    assert.equal(maySpeakProgressively({...safe,[flag]:true}),false,flag);
+  }
+  assert.equal(maySpeakProgressively({...safe,chatMode:false}),false);
+  assert.equal(maySpeakProgressively({...safe,progressiveSpeak:false}),false);
 });

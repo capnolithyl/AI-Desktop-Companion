@@ -120,6 +120,16 @@ test("exports Gemini HTTP failure and actual fallback model without leaking key"
     }
   }],{conversationId:"gemini-test",model:"qwen3.5:9b",contextWindow:16384});
   assert.match(result,/Model: qwen3\.5:9b/);
-  assert.match(result,/Gemini fallback: Gemini HTTP 503/);
+  assert.match(result,/Cloud fallback: Gemini HTTP 503/);
   assert.doesNotMatch(result,/API key:/);
+});
+
+
+test("reports latency until first audible speech without exposing model reasoning",()=>{
+  const result=formatDebugLog([{
+    id:"s",role:"assistant",createdAt:Date.UTC(2026,10,12),content:"Good morning.",
+    diagnostics:{elapsedMs:3800,firstTokenMs:450,firstAudioMs:1200,model:"OpenRouter free/model:free",stats:null}
+  }],{conversationId:"speech-latency",model:"qwen3.5:9b",provider:"auto",contextWindow:16384});
+  assert.match(result,/First token: 450 ms/);
+  assert.match(result,/First spoken audio: 1\.20 s/);
 });
