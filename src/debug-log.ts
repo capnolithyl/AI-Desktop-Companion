@@ -94,8 +94,9 @@ export type DebugLogMessage = {
 export type DebugLogOptions = {
   conversationId: string | null;
   model: string;
-  provider?: "local" | "auto" | "gemini";
+  provider?: "local" | "auto" | "gemini" | "openrouter";
   geminiModel?: string;
+  openrouterModel?: string;
   contextWindow: number | null;
   avatarAnimation?: string;
   exportedAt?: Date;
@@ -219,7 +220,10 @@ export function formatDebugLog(messages: readonly DebugLogMessage[], options: De
     "Conversation ID: " + (options.conversationId ?? "none"),
     "Current selected model: " + options.model,
     ...(options.provider ? ["Inference provider setting: " + options.provider] : []),
-    ...(options.geminiModel && options.provider !== "local" ? ["Configured cloud model: " + options.geminiModel] : []),
+    ...(options.openrouterModel && (options.provider === "auto" || options.provider === "openrouter")
+      ? ["Configured OpenRouter model: " + options.openrouterModel] : []),
+    ...(options.geminiModel && options.provider === "gemini"
+      ? ["Configured Gemini model: " + options.geminiModel] : []),
     "Context window: " + (options.contextWindow == null ? "Ollama default" : options.contextWindow + " tokens"),
     "Message count: " + messages.length,
     ...(options.avatarAnimation ? ["Avatar animation (snapshot at export):", options.avatarAnimation] : []),
