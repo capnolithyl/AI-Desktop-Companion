@@ -14,9 +14,10 @@ export function isModelStatusQuestion(question: string): boolean {
 }
 
 type ModelStatusSettings = {
-  provider: "local" | "auto" | "gemini";
+  provider: "local" | "auto" | "gemini" | "openrouter";
   model: string;
   geminiModel: string;
+  openrouterModel: string;
 };
 type PriorMessage = {
   role: "user" | "assistant";
@@ -29,8 +30,11 @@ export function modelStatusAnswer(
 ): string {
   const local = "Ollama `" + settings.model + "`";
   const cloud = "Gemini `" + settings.geminiModel + "`";
+  const free = "OpenRouter `" + settings.openrouterModel + "` (free only)";
   const configured = settings.provider === "auto"
-    ? "I'm configured for **Auto**: try **" + cloud + "** first, then fall back to **" + local + "** if it isn't available."
+    ? "I'm configured for **Auto**: try **" + free + "** first, then fall back to **" + local + "** if it isn't available."
+    : settings.provider === "openrouter"
+      ? "I'm configured for **" + free + "** (no automatic local fallback)."
     : settings.provider === "gemini"
       ? "I'm configured for **" + cloud + "** (cloud only, no automatic local fallback)."
       : "I'm configured to use **" + local + "** locally.";
@@ -43,5 +47,5 @@ export function modelStatusAnswer(
   const reason = last.diagnostics.fallbackReason;
   return configured + " **My last model-generated reply used `" +
     last.diagnostics.model + "`.**" +
-    (reason ? " Gemini fallback reason: " + reason + "." : "");
+    (reason ? " Cloud fallback reason: " + reason + "." : "");
 }

@@ -1,6 +1,6 @@
 //! Optional Gemini inference with the same public, read-only SearXNG tools as Ollama.
 //! Keys live in Windows Credential Manager, never frontend storage or logs.
-use crate::{research_intent, source_priority, web_reader, web_search, ChatChunk, ChatCompletion,
+use crate::{cloud_web_tools, research_intent, source_priority, web_search, ChatChunk, ChatCompletion,
     ChatMessage, ChatRequest, ChatStats};
 use serde_json::{json, Value};
 use std::sync::{atomic::{AtomicU64, Ordering}, Mutex};
@@ -125,66 +125,6 @@ fn append_evidence(contents: &mut Vec<Value>, sources: &[web_search::SearchResul
             research_intent::evidence_data(sources))
     }]}));
 }
-fn add_sources(
-    existing: &mut Vec<web_search::SearchResult>,
-    incoming: &[web_search::SearchResult]
-) {
-    for item in incoming {
-        if existing.len() >= 8 { break; }
-        if !existing.iter().any(|previous| previous.url == item.url) {
-            existing.push(item.clone());
-        }
-    }
-}
-
-async fn execute_tool(
-    app: &AppHandle, request: &ChatRequest, call: &Value,
-    sources: &mut Vec<web_search::SearchResult>
-) -> Value {
-    let name = call["name"].as_str().unwrap_or("");
-    let args = &call["args"];
-    match name {
-        "search_web" => {
-            let query = args["query"].as_str().unwrap_or("").trim();
-            if query.is_empty() || query.len() > 300 {
-                return json!({"error":"Provide a short specific search query"});
-            }
-            let _ = app.emit("mikan://activity", json!({
-                "requestId":request.request_id,"text":format!("Gemini searching: {query}")
-            }));
-            match source_priority::search(
-                request.searxng_endpoint.clone(),query.to_owned(),false,
-                &request.source_preferences,request.source_topic.as_deref()
-            ).await {
-                Ok(found) => {
-                    add_sources(sources, &found);
-                    json!({"results":found})
-                },
-                Err(e) => json!({"error":format!("Search unavailable: {e}")})
-            }
-        },
-        "read_webpage" => {
-            let url = args["url"].as_str().unwrap_or("");
-            let _ = app.emit("mikan://activity", json!({
-                "requestId":request.request_id,"text":"Gemini reading a webpage…"
-            }));
-            match web_reader::read_page_impl(app,url,false,request.cache_hours).await {
-                Ok(page) => {
-                    add_sources(sources,&[web_search::SearchResult {
-                        title:page.title.clone(),url:page.url.clone(),
-                        content:page.content.chars().take(400).collect(),
-                        engine:"webpage".into(),published_date:None
-                    }]);
-                    json!({"title":page.title,"url":page.url,
-                        "content":page.content.chars().take(12000).collect::<String>()})
-                },
-                Err(e) => json!({"error":format!("Page unavailable: {e}")})
-            }
-        },
-        _ => json!({"error":"Unsupported function"})
-    }
-}
-
 async fn generate(
     client: &reqwest::Client, key: &str, model: &str, system: &str,
     contents: &[Value], allow_tools: bool, max_output_tokens: u32, timeout_seconds: u64
@@ -275,13 +215,13 @@ pub(crate) async fn chat(
             request.searxng_endpoint.clone(),query.to_owned(),request.research_recent,
             &request.source_preferences,request.source_topic.as_deref()
         ).await;
-        if let Ok(found) = found { add_sources(&mut sources,&found); }
+        if let Ok(found) = found { cloud_web_tools::add_sources(&mut sources,&found); }
         search_query = Some(query.to_owned());
     }
     if sources.is_empty() && request.research_route.as_deref() != Some("chat") {
         let prior = research_intent::clean_prior_sources(&request.prior_sources);
         if !prior.is_empty() {
-            add_sources(&mut sources,&prior);
+            cloud_web_tools::add_sources(&mut sources,&prior);
             sources_carried_over = true;
         }
     }
@@ -335,7 +275,7 @@ pub(crate) async fn chat(
         contents.push(model_content);
         let mut responses = Vec::new();
         for call in calls.iter().take(3) {
-            let answer = execute_tool(app,request,call,&mut sources).await;
+            let answer = cloud_web_tools::execute_tool(app,request,call["name"].as_str().unwrap_or(""),&call["args"],&mut sources,"Gemini").await;
             let mut response = json!({"name":call["name"],"response":answer});
             if let Some(id) = call["id"].as_str() { response["id"] = json!(id); }
             responses.push(json!({"functionResponse":response}));

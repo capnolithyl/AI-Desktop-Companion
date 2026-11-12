@@ -1,6 +1,6 @@
 [package]
 name = "mikan-companion"
-version = "0.8.31"
+version = "0.8.32"
 description = "Local-first AI desktop companion"
 authors = ["capnolithyl"]
 edition = "2021"

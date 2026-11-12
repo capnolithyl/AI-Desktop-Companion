@@ -262,6 +262,43 @@ export default function App() {
   const [geminiKeyError,setGeminiKeyError] = useState<string | null>(null);
   const [geminiTestBusy,setGeminiTestBusy] = useState(false);
   const [geminiTestResult,setGeminiTestResult] = useState<string | null>(null);
+  const [openrouterKeyInput,setOpenrouterKeyInput] = useState("");
+  const [openrouterKeyReady,setOpenrouterKeyReady] = useState(false);
+  const [openrouterKeyBusy,setOpenrouterKeyBusy] = useState(false);
+  const [openrouterKeyError,setOpenrouterKeyError] = useState<string | null>(null);
+  const [openrouterTestBusy,setOpenrouterTestBusy] = useState(false);
+  const [openrouterTestResult,setOpenrouterTestResult] = useState<string | null>(null);
+  useEffect(() => {
+    void invoke<boolean>("openrouter_key_status").then(setOpenrouterKeyReady)
+      .catch(error=>setOpenrouterKeyError(errorText(error)));
+  }, []);
+  const saveOpenrouterKey = async () => {
+    if (!openrouterKeyInput.trim() || openrouterKeyBusy) return;
+    setOpenrouterKeyBusy(true);setOpenrouterKeyError(null);
+    try {
+      await invoke("openrouter_save_key",{apiKey:openrouterKeyInput.trim()});
+      setOpenrouterKeyReady(true);setOpenrouterKeyInput("");setOpenrouterTestResult(null);
+    } catch(error) {setOpenrouterKeyError(errorText(error));}
+    finally {setOpenrouterKeyBusy(false);}
+  };
+  const testOpenrouterConnection = async () => {
+    if(openrouterTestBusy || !openrouterKeyReady)return;
+    setOpenrouterTestBusy(true);setOpenrouterTestResult(null);
+    try {
+      const result=await invoke<string>("openrouter_test_connection",{model:draft.openrouterModel.trim()});
+      setOpenrouterTestResult(result);
+    } catch(error) {setOpenrouterTestResult("Connection failed: "+errorText(error));}
+    finally {setOpenrouterTestBusy(false);}
+  };
+  const removeOpenrouterKey = async () => {
+    if(openrouterKeyBusy)return;
+    setOpenrouterKeyBusy(true);setOpenrouterKeyError(null);
+    try {
+      await invoke("openrouter_remove_key");
+      setOpenrouterKeyReady(false);setOpenrouterKeyInput("");setOpenrouterTestResult(null);
+    } catch(error) {setOpenrouterKeyError(errorText(error));}
+    finally {setOpenrouterKeyBusy(false);}
+  };
   useEffect(() => {
     void invoke<boolean>("gemini_key_status").then(setGeminiKeyReady)
       .catch(error => setGeminiKeyError(errorText(error)));
@@ -1808,7 +1845,7 @@ export default function App() {
       const cloudMaySearch = settings.provider !== "local" && settings.autoSearch &&
         !useNotion && !turn.capabilityQuestion && !personalTurn && !withSearch &&
         !attachment && !screenshot && !liveFrame && !allowRoleplay;
-      // Gemini independently decides when read-only web tools are useful.
+      // Cloud providers independently decide when read-only web tools are useful.
       // Local Qwen still respects the existing deterministic/planned routes.
       const effectiveWeb = turn.allowAutomaticWeb || plannedPublicSearch;
       const preferredTopic = effectiveWeb
@@ -2004,6 +2041,7 @@ export default function App() {
           model: settings.model,
           provider: settings.provider,
           geminiModel: settings.geminiModel,
+          openrouterModel: settings.openrouterModel,
           cloudAllowWeb: cloudMaySearch,
           autoSearch: effectiveWeb,
           structuredResearch: settings.structuredResearch && effectiveWeb,
@@ -2059,7 +2097,7 @@ export default function App() {
       };
       // The source-verification filter applies to actual researched answers,
       // NEVER to local conversational or capability answers.
-      const cloudResearched = cloudMaySearch && completion.modelUsed?.startsWith("Gemini ") &&
+      const cloudResearched = cloudMaySearch && (completion.modelUsed?.startsWith("Gemini ") || completion.modelUsed?.startsWith("OpenRouter ")) &&
         !!completion.sources?.length;
       const verifiedSources = (turn.verifyWebEvidence || plannedPublicSearch || cloudResearched)
         ? (completion.sources?.length ? completion.sources : withSearch?.results)
@@ -2211,6 +2249,7 @@ export default function App() {
         model: settings.model,
         provider: settings.provider,
         geminiModel: settings.geminiModel,
+        openrouterModel: settings.openrouterModel,
         contextWindow: settings.contextWindow,
         avatarAnimation: avatarDebugText(avatarDebug, avatarDisplay, lastReplyCue)
       }));
@@ -2697,7 +2736,7 @@ export default function App() {
           ...current,
           ...(settingsTab === "ai" ? {
             endpoint: DEFAULT_SETTINGS.endpoint, model: DEFAULT_SETTINGS.model,
-            provider: DEFAULT_SETTINGS.provider, geminiModel: DEFAULT_SETTINGS.geminiModel,
+            provider: DEFAULT_SETTINGS.provider, geminiModel: DEFAULT_SETTINGS.geminiModel, openrouterModel: DEFAULT_SETTINGS.openrouterModel,
             systemPrompt: DEFAULT_SETTINGS.systemPrompt,
             contextWindow: DEFAULT_SETTINGS.contextWindow
           } : settingsTab === "internet" ? {
@@ -2723,11 +2762,39 @@ export default function App() {
                 ...current,provider:event.target.value as Settings["provider"]
               }))}>
               <option value="local">Local Ollama only</option>
-              <option value="auto">Auto · Gemini with Ollama fallback</option>
+              <option value="auto">Auto · OpenRouter free → Ollama fallback</option>
+              <option value="openrouter">OpenRouter free only · show cloud errors</option>
               <option value="gemini">Gemini only · show cloud errors</option>
             </select>
-            <small>Auto uses Gemini when a key and quota are available, switching to local on API failure or rate limits. Memory, SearXNG and Pocket TTS stay unchanged.</small>
+            <small>Auto uses free OpenRouter first, switching to local Qwen when its quota or network fails. Gemini remains selectable separately. Memory, SearXNG, and Pocket TTS stay unchanged.</small>
           </label>
+          <div className="settings-section-title">OpenRouter · Free models only</div>
+          <label className="setting-field">OpenRouter model ID
+            <input spellCheck={false} value={draft.openrouterModel}
+              onChange={event=>setDraft(current=>({...current,openrouterModel:event.target.value}))}/>
+            <small>Default: openrouter/free. Automatically selects a free model compatible with the request's image and tool requirements. Other allowed IDs must end in :free. Paid models are blocked.</small>
+          </label>
+          <label className="setting-field">OpenRouter API key
+            <input type="password" spellCheck={false} autoComplete="off"
+              value={openrouterKeyInput}
+              placeholder={openrouterKeyReady?"Saved securely · enter a new key to replace":"Paste your OpenRouter API key"}
+              onChange={event=>setOpenrouterKeyInput(event.target.value)}/>
+            <small>{openrouterKeyReady?"Key stored in Windows Credential Manager.":"No key saved. Auto uses local Qwen until configured."}
+              {" "}Free tier: 50 API requests/day, 20/minute; failed requests and model tool rounds count. Only free model IDs are accepted.</small>
+          </label>
+          <div className="service-buttons">
+            <button type="button" className="secondary-action" disabled={openrouterKeyBusy||!openrouterKeyInput.trim()}
+              onClick={()=>void saveOpenrouterKey()}><Check size={14}/> Save OpenRouter key</button>
+            {openrouterKeyReady && <>
+              <button type="button" className="secondary-action" disabled={openrouterKeyBusy||openrouterTestBusy}
+                onClick={()=>void testOpenrouterConnection()}><RotateCw size={14}/> {openrouterTestBusy?"Testing OpenRouter…":"Test OpenRouter connection"}</button>
+              <button type="button" className="secondary-action" disabled={openrouterKeyBusy||openrouterTestBusy}
+                onClick={()=>void removeOpenrouterKey()}>Remove key</button>
+            </>}
+          </div>
+          {openrouterKeyError && <small className="field-error" role="alert">{openrouterKeyError}</small>}
+          {openrouterTestResult && <small className={openrouterTestResult.startsWith("Connection failed:")?"field-error":"settings-note"} role="status">{openrouterTestResult}</small>}
+          <div className="settings-section-title">Google Gemini · Optional</div>
           <label className="setting-field">Gemini model ID
             <input spellCheck={false} value={draft.geminiModel}
               onChange={event => setDraft(current=>({...current,geminiModel:event.target.value}))}/>
