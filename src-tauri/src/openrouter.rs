@@ -280,7 +280,7 @@ async fn stream_completion(
                 if let Some(piece)=delta { pending_text.push_str(&piece); }
                 if !pending_text.is_empty() && (
                     pending_text.chars().count()>=24 ||
-                    pending_text.ends_with(|ch:char| ch=='.'||ch=='!'||ch=='?'||ch=='\n') ||
+                    pending_text.chars().last().is_some_and(|ch| matches!(ch,'.'|'!'|'?'|'\n')) ||
                     last_emit.elapsed()>=Duration::from_millis(80)
                 ) {
                     emitted.store(true,Ordering::Relaxed);
