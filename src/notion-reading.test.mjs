@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { joinNotionChunks, splitNotionSections, readNotionChapter, shouldRefetchNotionDocument, orderedNotionScenes, notionSceneLinksNeedRefresh, describeNotionSceneLinks, extractApprovedManuscriptProse, buildNotionChapterEvidence, auditNotionReview, unverifiedNotionReviewResponse, directManuscriptLimit, notionManuscriptCharacterCount } from "./notion-reading.ts";
+import { joinNotionChunks, splitNotionSections, readNotionChapter, shouldRefetchNotionDocument, orderedNotionScenes, notionSceneLinksNeedRefresh, describeNotionSceneLinks, extractApprovedManuscriptProse, buildNotionChapterEvidence, auditNotionReview, unverifiedNotionReviewResponse, directManuscriptLimit, notionManuscriptCharacterCount, notionRereadReceipt, manuscriptReviewProvider, groundedManuscriptHistory, deniesLoadedNotionAccess, unavailableNotionModelResponse } from "./notion-reading.ts";
 
 const doc=(text)=>({
   id:"abc",title:"Chapter Three",url:"https://www.notion.so/chapter3",syncedAt:1794000000,
@@ -249,4 +249,62 @@ test("manuscript review audit catches fabricated dialogue and concrete scene det
   assert.match(fallback,/couldn't verify/);
   assert.match(fallback,/2\.2 · Gaylord/);
   assert.doesNotMatch(fallback,/sheep|diaper/i);
+});
+
+
+test("confirmed Notion reread receipt names actual scenes and distinguishes local reload from online sync",()=>{
+  const data={title:"Chapter 02 · North",scenes:[
+    {title:"2.1 · West Branch",url:"https://www.notion.so/one",prose:"Lunch by the road."},
+    {title:"2.2 · Gaylord",url:"https://www.notion.so/two",prose:"The storm uprooted trees."},
+    {title:"2.3 · Crossing North",url:"https://www.notion.so/three",prose:"They cross the bridge."}
+  ]};
+  const result=notionRereadReceipt(data,1794400000);
+  assert.match(result,/I reread Chapter 02 · North from my locally synced Notion library/);
+  assert.match(result,/2\.1 · West Branch/);
+  assert.match(result,/2\.2 · Gaylord/);
+  assert.match(result,/2\.3 · Crossing North/);
+  assert.match(result,/not a new online Notion sync/i);
+  assert.match(result,/I won't use my earlier critique as evidence/);
+  assert.doesNotMatch(result,/paste the text|can't access Notion|no Notion integration/i);
+});
+
+test("Auto free-router avoids randomly tiny cloud models for manuscript reviews",()=>{
+  assert.equal(manuscriptReviewProvider("auto","openrouter/free"),"local");
+  assert.equal(manuscriptReviewProvider("auto"," OPENROUTER/FREE "),"local");
+  assert.equal(manuscriptReviewProvider("auto","openai/gpt-oss-20b:free"),"auto");
+  assert.equal(manuscriptReviewProvider("openrouter","openrouter/free"),"openrouter");
+  assert.equal(manuscriptReviewProvider("gemini","openrouter/free"),"gemini");
+  assert.equal(manuscriptReviewProvider("local","openrouter/free"),"local");
+});
+
+test("a new manuscript review excludes old hallucinated assistant dialogue and summaries",()=>{
+  const turns=[
+    {id:"u1",role:"user",content:"Please read chapter 2"},
+    {id:"a1",role:"assistant",content:"Matt saw sheep and a diaper rash."},
+    {id:"u2",role:"user",content:"Those events never occurred."},
+    {id:"a2",role:"assistant",content:"I can't open Notion, please paste it."},
+    {id:"u3",role:"user",content:"Read chapter 2 again and summarize each scene."}
+  ];
+  const safe=groundedManuscriptHistory(turns,"u3");
+  assert.deepEqual(safe.map(t=>t.id),["u3"]);
+  assert.doesNotMatch(JSON.stringify(safe),/sheep|diaper|can't open Notion/);
+});
+
+test("verified local Notion access cannot be denied by the response model",()=>{
+  const bogus="Oh no, I can't actually log into Notion or refresh my local cache — "+
+    "I only work with the text you've pasted into our chat. "+
+    "Just drop the updated Chapter 2 here!";
+  assert.equal(deniesLoadedNotionAccess(bogus),true);
+  assert.equal(deniesLoadedNotionAccess("I don't have access to Notion."),true);
+  assert.equal(deniesLoadedNotionAccess("I cannot open Notion pages."),true);
+  assert.equal(deniesLoadedNotionAccess("I've read the chapter from the Notion cache."),false);
+  assert.equal(deniesLoadedNotionAccess(
+    "I read the locally synced Notion chapter. New online edits would need a separate sync."),false);
+  const data={title:"Chapter 02 · North",scenes:[
+    {title:"2.1 · West Branch",url:"https://www.notion.so/one",prose:"The family eats lunch."}
+  ]};
+  const response=unavailableNotionModelResponse(data);
+  assert.match(response,/I have Chapter 02 · North loaded/);
+  assert.match(response,/model failed to use that context reliably/);
+  assert.doesNotMatch(response,/paste the text|share the Notion page/);
 });
