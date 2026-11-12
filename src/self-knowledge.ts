@@ -4,7 +4,7 @@
  * The CI checker detects unmapped Tauri commands, missing files and stale versions.
  * Add a feature here when adding capability, and update the matching source/docs.
  */
-export const CAPABILITY_RELEASE = "0.8.34";
+export const CAPABILITY_RELEASE = "0.8.35";
 
 export type CapabilityStage = "implemented" | "experimental" | "planned";
 export type RuntimeDependency = "none" | "ollama" | "search" | "mem0" | "voice" | "vision" | "pocket";
@@ -86,7 +86,7 @@ export const CAPABILITIES: readonly Capability[] = [
   },
   {
     id:"notion-knowledge",label:"Notion personal knowledge library (experimental)",category:"Knowledge",
-    description:"Connect a private read-only Notion integration in Settings, choose shared pages or all pages available to the integration, and sync a local searchable text index. Mikan can recall chapters, notes, and creative lore by context or page title, and can read a complete chapter in sequential local model passes, separate from user memories. Sync is manual for the searchable library, but an explicit complete-chapter read may retrieve missing scene manuscripts directly from Notion without storing that new text permanently. Files and images are not imported. Requires a Notion integration token and explicit page sharing. Local SQLite cache is unencrypted.",
+    description:"Connect a private read-only Notion integration in Settings, choose shared pages or all pages available to the integration, and sync a local searchable text index. Mikan can recall chapters, notes, and creative lore by context or page title, list linked scene titles directly without asking the owner to paste them, and read a complete chapter in manuscript scene order through sequential local model passes, separate from user memories. Sync is manual for the searchable library, but an explicit complete-chapter read may retrieve missing scene manuscripts directly from Notion without storing that new text permanently. Files and images are not imported. Requires a Notion integration token and explicit page sharing. Local SQLite cache is unencrypted.",
     stage:"experimental",runtime:"none",keywords:["notion","book","novel","manuscript","charlotte","hollow meridian","story","writing","chapters","lore","knowledge","documents","integrations"],
     sources:["src-tauri/src/notion.rs","src/NotionPanel.tsx","src/notion-knowledge.ts","src/App.tsx"],
     docs:["notion/README.md"],

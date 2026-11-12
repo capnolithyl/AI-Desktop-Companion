@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { joinNotionChunks, splitNotionSections, readNotionChapter, shouldRefetchNotionDocument } from "./notion-reading.ts";
+import { joinNotionChunks, splitNotionSections, readNotionChapter, shouldRefetchNotionDocument, orderedNotionScenes, notionSceneLinksNeedRefresh, describeNotionSceneLinks } from "./notion-reading.ts";
 
 const doc=(text)=>({
   id:"abc",title:"Chapter Three",url:"https://www.notion.so/chapter3",syncedAt:1794000000,
@@ -97,4 +97,40 @@ test("only incomplete linked-scene caches trigger an on-demand Notion refetch",(
   assert.equal(shouldRefetchNotionDocument(new Error(
     "The local model could not produce reliable section notes")),false);
   assert.equal(shouldRefetchNotionDocument(new Error("Connection refused")),false);
+});
+
+test("chapter scene relations are discovered and read in numeric manuscript order",async()=>{
+  const chapter=doc("## Chapter responsibility: move north.");
+  chapter.relatedPages=[
+    {title:"1.1 · Last Boxes",url:"https://www.notion.so/one",chunks:chunk("A: boxes")},
+    {title:"1.3 · Goodbye to Friends",url:"https://www.notion.so/three",chunks:chunk("C: goodbye")},
+    {title:"1.4 · Last Walkthrough",url:"https://www.notion.so/four",chunks:chunk("D: walk")},
+    {title:"1.2 · Keep or Leave",url:"https://www.notion.so/two",chunks:chunk("B: decisions")}
+  ];
+  assert.equal(notionSceneLinksNeedRefresh(chapter),false);
+  assert.deepEqual(orderedNotionScenes(chapter).map(scene=>scene.title),[
+    "1.1 · Last Boxes","1.2 · Keep or Leave",
+    "1.3 · Goodbye to Friends","1.4 · Last Walkthrough"
+  ]);
+  const list=describeNotionSceneLinks(chapter);
+  assert.match(list,/4 scenes linked/);
+  assert.ok(list.indexOf("1.2 · Keep or Leave")<list.indexOf("1.3 · Goodbye to Friends"));
+  const context=await readNotionChapter(chapter,async()=>{throw Error("Short sample should not need summarization")});
+  assert.ok(context.indexOf("A: boxes")<context.indexOf("B: decisions"));
+  assert.ok(context.indexOf("B: decisions")<context.indexOf("C: goodbye"));
+  assert.ok(context.indexOf("C: goodbye")<context.indexOf("D: walk"));
+  // The original Notion relation array is not mutated.
+  assert.equal(chapter.relatedPages[1].title,"1.3 · Goodbye to Friends");
+  chapter.relatedPages=[];
+  assert.equal(notionSceneLinksNeedRefresh(chapter),true);
+  assert.throws(()=>describeNotionSceneLinks(chapter),/Not all linked/);
+});
+
+test("scene listing does not pretend to have read missing manuscript text",()=>{
+  const chapter=doc("Editorial notes");
+  chapter.relatedPages=[{title:"1.1 · Last Boxes",url:"https://www.notion.so/one",chunks:[]}];
+  assert.equal(notionSceneLinksNeedRefresh(chapter),true);
+  chapter.relatedPages[0].chunks=chunk("Short chapter prose.");
+  chapter.missingRelatedPages=1;
+  assert.equal(notionSceneLinksNeedRefresh(chapter),true);
 });

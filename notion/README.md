@@ -42,3 +42,7 @@ cd src-tauri && cargo test --lib notion
 Also test manually on Windows with a **throwaway integration** and a few nested pages. Confirm token entry never appears in a saved conversation or browser settings; sync with selected roots and all shared; verify a paragraph and nested child page can be recalled; revoke sharing and re-sync; disconnect; restart; and ask about a public subject to confirm public web research is still unaffected.
 
 Notion API is version-pinned to `2025-09-03`. API reference: https://developers.notion.com/reference. No SDK or separate Notion server is required.
+
+## Linked chapter scenes
+
+Mikan can answer questions such as **“Can you see the scenes for Chapter 1?”** by inspecting the chapter's **Scenes** relation. She lists the actual related scene titles in manuscript order without requesting that you paste individual titles. Questions like **“Read those scenes”** or **“What happens in those scenes?”** trigger the full chapter-reading pipeline, including the linked scene prose and bounded local notes. A stale or incomplete cached relation triggers an owner-requested live, read-only Notion fetch; this does not permanently store the fetched manuscript. If that fetch fails, check that the chapter and the **Scenes** database are shared with Mikan's own Notion integration token, not merely another Notion connection.
