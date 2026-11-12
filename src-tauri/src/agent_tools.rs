@@ -56,7 +56,8 @@ pub async fn prepare(
     for _ in 0..2 {
         let mut payload = json!({
             "model":model,"messages":messages,"tools":tools,"stream":false,"think":false,
-            "options":{"temperature":0,"num_predict":256}
+            "keep_alive":"10m",
+            "options":{"temperature":0,"num_predict":1024}
         });
         if let Some(num_ctx) = context_window {
             payload["options"]["num_ctx"] = json!(num_ctx);
