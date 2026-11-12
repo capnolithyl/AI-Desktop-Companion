@@ -73,6 +73,8 @@ struct ChatRequest {
     #[serde(default)]
     context_window: Option<u32>,
     #[serde(default)]
+    reasoning_mode: Option<String>,
+    #[serde(default)]
     prior_sources: Vec<web_search::SearchResult>,
     #[serde(default)]
     source_preferences: Vec<source_priority::SourcePreference>,
@@ -103,6 +105,35 @@ fn valid_context_window(context: Option<u32>) -> Option<u32> {
     context.filter(|v| matches!(*v, 4096 | 8192 | 16384 | 32768))
 }
 
+/// Optional thinking for supported local models, without delaying simple chat.
+fn local_thinking_enabled(model: &str, mode: Option<&str>, question: &str) -> bool {
+    let model = model.to_ascii_lowercase();
+    if !(model.starts_with("qwen3") || model.starts_with("deepseek-r1")) { return false; }
+    match mode.unwrap_or("fast") {
+        "deep" => true,
+        "auto" => {
+            let question = question.to_ascii_lowercase();
+            ["compare", "analyze", "analyse", "debug", "reason", "step by step",
+             "work through", "why does", "why did", "chess", "calculate",
+             "trade-off", "tradeoff", "architecture", "logic", "solve"]
+                .iter().any(|term| question.contains(term))
+        },
+        _ => false,
+    }
+}
+#[cfg(test)]
+mod local_thinking_tests {
+    use super::local_thinking_enabled;
+    #[test]
+    fn optional_thinking_respects_model_and_task() {
+        assert!(!local_thinking_enabled("qwen3.5:9b",Some("auto"),"Hello Mikan"));
+        assert!(local_thinking_enabled("qwen3.5:9b",Some("auto"),"Compare these options"));
+        assert!(local_thinking_enabled("qwen3.5:9b",Some("deep"),"Hello"));
+        assert!(!local_thinking_enabled("qwen3.5:9b",Some("fast"),"Analyze this"));
+        assert!(!local_thinking_enabled("llama3:8b",Some("deep"),"Analyze this"));
+        assert!(!local_thinking_enabled("qwen3.5:9b",None,"Analyze this"));
+    }
+}
 #[derive(Default)]
 struct ChatCancellation(Mutex<HashMap<String, AbortHandle>>);
 
@@ -630,11 +661,17 @@ async fn chat_stream_impl(
             messages.insert(latest_user, json!({"role":"user","content":notes}));
         }
     }
+    let latest_question = request.messages.iter().rev()
+        .find(|m| m.role == "user").map(|m| m.content.as_str()).unwrap_or("");
+    let use_thinking = local_thinking_enabled(
+        &request.model, request.reasoning_mode.as_deref(), latest_question
+    );
     let mut payload = json!({
         "model": request.model,
         "messages": messages,
         "stream": true,
-        "think": false
+        "think": use_thinking,
+        "keep_alive": "10m"
     });
     let mut options = json!({});
     if let Some(num_ctx) = selected_context {

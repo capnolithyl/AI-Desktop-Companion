@@ -6,7 +6,7 @@ import { DEFAULT_EMOJI_BUBBLE_SECONDS, readEmojiBubbleSeconds } from "./emoji-re
 
 export type ChatRole = "user" | "assistant";
 export type Message = { id: string; role: ChatRole; content: string };
-export type Settings = { voice: VoiceSettings; endpoint: string; model: string; provider: "local" | "auto" | "gemini" | "openrouter"; geminiModel: string; openrouterModel: string; systemPrompt: string; appearance: Appearance; personality: Personality; searxngEndpoint: string; autoSearch: boolean; structuredResearch: boolean; autoManageSearch: boolean; sourcePreferences: SourcePreference[]; cacheHours: number; contextWindow: number | null; autoRememberUser: boolean; autoRememberMikan: boolean; visionCaptureIntervalSeconds:number; visionRegion:RegionChoice|null };
+export type Settings = { voice: VoiceSettings; endpoint: string; model: string; provider: "local" | "auto" | "gemini" | "openrouter"; geminiModel: string; openrouterModel: string; systemPrompt: string; appearance: Appearance; personality: Personality; searxngEndpoint: string; autoSearch: boolean; structuredResearch: boolean; autoManageSearch: boolean; sourcePreferences: SourcePreference[]; cacheHours: number; contextWindow: number | null; reasoningMode: "fast" | "auto" | "deep"; autoRememberUser: boolean; autoRememberMikan: boolean; visionCaptureIntervalSeconds:number; visionRegion:RegionChoice|null };
 
 export type VoiceSettings = {
   engine: "qwen" | "pocket";
@@ -85,7 +85,8 @@ export const DEFAULT_SETTINGS: Settings = {
   structuredResearch: true,
   autoManageSearch: false,
   cacheHours: 24,
-  contextWindow: null,
+  contextWindow: 16384,
+  reasoningMode: "auto",
   autoRememberUser: true,
   autoRememberMikan: true,
   visionCaptureIntervalSeconds:15,
@@ -117,7 +118,9 @@ export function loadSettings(): Settings {
       autoManageSearch: typeof data.autoManageSearch === "boolean" ? data.autoManageSearch : data.autoSearch === true,
       cacheHours: typeof data.cacheHours === "number" && Number.isFinite(data.cacheHours) ? Math.max(1, Math.min(720, data.cacheHours)) : DEFAULT_SETTINGS.cacheHours,
       contextWindow: [4096, 8192, 16384, 32768].includes(Number(data.contextWindow)) && data.contextWindow != null
-        ? Number(data.contextWindow) : null,
+        ? Number(data.contextWindow) : DEFAULT_SETTINGS.contextWindow,
+      reasoningMode: data.reasoningMode === "fast" || data.reasoningMode === "deep"
+        ? data.reasoningMode : "auto",
       autoRememberUser: data.autoRememberUser !== false,
       autoRememberMikan: data.autoRememberMikan !== false,
       visionCaptureIntervalSeconds:captureInterval(data.visionCaptureIntervalSeconds),
