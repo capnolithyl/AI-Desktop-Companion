@@ -2249,6 +2249,7 @@ export default function App() {
         model: settings.model,
         provider: settings.provider,
         geminiModel: settings.geminiModel,
+        openrouterModel: settings.openrouterModel,
         contextWindow: settings.contextWindow,
         avatarAnimation: avatarDebugText(avatarDebug, avatarDisplay, lastReplyCue)
       }));
