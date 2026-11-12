@@ -1746,24 +1746,24 @@ export default function App() {
         } else {
           setActivity("Opening full Notion chapter…");
           try {
-          const document = await invoke<NotionDocument>("notion_read_document",{
-            id:notionPlan.selectedPage.id
-          });
-          linkedScenesRead = document.relatedPages?.length ?? 0;
-          linkedSceneCharacters = (document.relatedPages ?? [])
-            .reduce((n,scene)=>n+scene.chunks.reduce((total,chunk)=>total+chunk.length,0),0);
-          readChapterContext = await readNotionChapter(
-            document,
-            prompt => invoke<string>("condense_local_context", {
-              endpoint:settings.endpoint,model:settings.model,prompt,
-              contextWindow:settings.contextWindow,maxOutputTokens:500
-            }),
-            (part,total)=>setActivity(`Reading Notion chapter: section ${part} of ${total}…`),
-            ()=>stopRequested.current
-          );
-          notionChapterRef.current = {
-            conversationId,page:notionPlan.selectedPage,context:readChapterContext
-          };
+            const document = await invoke<NotionDocument>("notion_read_document",{
+              id:notionPlan.selectedPage.id
+            });
+            linkedScenesRead = document.relatedPages?.length ?? 0;
+            linkedSceneCharacters = (document.relatedPages ?? [])
+              .reduce((n,scene)=>n+scene.chunks.reduce((total,chunk)=>total+chunk.length,0),0);
+            readChapterContext = await readNotionChapter(
+              document,
+              prompt => invoke<string>("condense_local_context", {
+                endpoint:settings.endpoint,model:settings.model,prompt,
+                contextWindow:settings.contextWindow,maxOutputTokens:500
+              }),
+              (part,total)=>setActivity(`Reading Notion chapter: section ${part} of ${total}…`),
+              ()=>stopRequested.current
+            );
+            notionChapterRef.current = {
+              conversationId,page:notionPlan.selectedPage,context:readChapterContext
+            };
           } catch (error) {
             if (stopRequested.current) throw new Error("Generation stopped");
             notionReadFailure=errorText(error);
