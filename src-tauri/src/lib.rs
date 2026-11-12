@@ -202,6 +202,7 @@ async fn condense_local_context(
     context_window: Option<u32>,
     max_output_tokens: Option<u32>,
     timeout_ms: Option<u64>,
+    plain_text: Option<bool>,
 ) -> Result<String, String> {
     if model.trim().is_empty() || model.len() > 120 || prompt.len() > 14500 {
         return Err("Invalid context request".into());
@@ -212,7 +213,7 @@ async fn condense_local_context(
     if let Some(ctx) = valid_context_window(context_window) {
         options["num_ctx"] = json!(ctx);
     }
-    let payload = json!({
+    let mut payload = json!({
         "model": model,
         "stream": false,
         "think": false,
@@ -220,6 +221,12 @@ async fn condense_local_context(
         "options": options,
         "messages": [{"role":"user","content":prompt}]
     });
+    // Chapter-note recovery can request ordinary bullets. Do not force the
+    // local 9B model into Ollama JSON grammar on its plain-text retry.
+    // All existing callers keep the default JSON output constraint.
+    if plain_text.unwrap_or(false) {
+        payload.as_object_mut().expect("JSON object").remove("format");
+    }
     let response = client()?
         .post(url)
         .json(&payload)

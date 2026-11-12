@@ -1861,8 +1861,14 @@ export default function App() {
             let document = await invoke<NotionDocument>("notion_read_document",{
               id:notionPlan.selectedPage.id
             });
-            const summarizeSection = (prompt:string) => invoke<string>("condense_local_context", {
-              endpoint:settings.endpoint,model:settings.model,prompt,
+            const countLoadedScenes = (source:NotionDocument) => {
+              linkedScenesRead=source.relatedPages?.length ?? 0;
+              linkedSceneCharacters=(source.relatedPages ?? [])
+                .reduce((n,scene)=>n+scene.chunks.reduce((total,chunk)=>total+chunk.length,0),0);
+            };
+            countLoadedScenes(document);
+            const summarizeSection = (prompt:string,plainText=false) => invoke<string>("condense_local_context", {
+              endpoint:settings.endpoint,model:settings.model,prompt,plainText,
               contextWindow:settings.contextWindow,maxOutputTokens:500
             });
             const progress = (part:number,total:number) =>
@@ -1882,6 +1888,7 @@ export default function App() {
                 document = await invoke<NotionDocument>("notion_read_document_live",{
                   id:notionPlan.selectedPage.id
                 });
+                countLoadedScenes(document);
               } catch (liveError) {
                 throw new Error("Cached scenes are unavailable, and the live Notion read failed: "+
                   errorText(liveError));
@@ -1890,9 +1897,6 @@ export default function App() {
                 document,summarizeSection,progress,interrupted
               );
             }
-            linkedScenesRead = document.relatedPages?.length ?? 0;
-            linkedSceneCharacters = (document.relatedPages ?? [])
-              .reduce((n,scene)=>n+scene.chunks.reduce((total,chunk)=>total+chunk.length,0),0);
             notionChapterRef.current = {
               conversationId,page:notionPlan.selectedPage,context:readChapterContext
             };
