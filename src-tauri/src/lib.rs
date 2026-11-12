@@ -19,6 +19,7 @@ mod screen_vision;
 mod vision_region;
 mod file_attachments;
 mod iki_outfits;
+mod avatar_motion;
 mod notion;
 use futures_util::{future::{AbortHandle, Abortable}, StreamExt};
 use std::{collections::HashMap, sync::Mutex};
@@ -732,6 +733,7 @@ fn hide_companion(window: tauri::WebviewWindow) {
 pub fn run() {
     tauri::Builder::default()
         .manage(ChatCancellation::default())
+        .manage(avatar_motion::AvatarWindowMotion::default())
         .manage(screen_vision::LiveVisionState::default())
         .manage(vision_region::RegionPickerState::default())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
@@ -773,6 +775,7 @@ pub fn run() {
             file_attachments::extract_document,
             iki_outfits::pick_iki_outfit,
             iki_outfits::pick_iki_outfit_folder,
+            avatar_motion::avatar_motion_sample,
             notion::notion_status,
             notion::notion_connect,
             notion::notion_disconnect,
@@ -854,6 +857,9 @@ pub fn run() {
         })
         .on_window_event(|window, event| {
             if window.label()=="main" {
+                if let tauri::WindowEvent::Moved(position) = event {
+                    window.app_handle().state::<avatar_motion::AvatarWindowMotion>().moved(*position);
+                }
                 if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                     api.prevent_close();
                     let _=window.hide();
