@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { joinNotionChunks, splitNotionSections, readNotionChapter, shouldRefetchNotionDocument, orderedNotionScenes, notionSceneLinksNeedRefresh, describeNotionSceneLinks } from "./notion-reading.ts";
+import { joinNotionChunks, splitNotionSections, readNotionChapter, shouldRefetchNotionDocument, orderedNotionScenes, notionSceneLinksNeedRefresh, describeNotionSceneLinks, extractApprovedManuscriptProse, buildNotionChapterEvidence, auditNotionReview, unverifiedNotionReviewResponse, directManuscriptLimit, notionManuscriptCharacterCount } from "./notion-reading.ts";
 
 const doc=(text)=>({
   id:"abc",title:"Chapter Three",url:"https://www.notion.so/chapter3",syncedAt:1794000000,
@@ -38,11 +38,11 @@ test("long chapter traverses every section and retains opening and ending",async
   const context=await readNotionChapter(doc(original),async(prompt)=>{
     scanned++;assert.match(prompt,/UNTRUSTED|untrusted/);
     return JSON.stringify({notes:"Charlotte and Will visit the forest, in the passage shown."});
-  },(n,total)=>positions.push([n,total]));
+  },(n,total)=>positions.push([n,total]),()=>false,4096);
   assert.equal(scanned,splitNotionSections(original).length);
   assert.equal(positions.at(-1)[0],scanned);
   assert.match(context,/COMPLETE DOCUMENT SCANNED IN/);
-  assert.match(context,/MODEL-GENERATED READING NOTES/);
+  assert.match(context,/MODEL-GENERATED NOTES ARE PROVISIONAL/);
   assert.match(context,/ORIGINAL OPENING/);
   assert.match(context,/ORIGINAL ENDING/);
 });
@@ -66,10 +66,10 @@ test("missing linked scenes block a falsely complete chapter reading",async()=>{
 });
 
 test("bad summaries and interrupted reading never pretend the document was read",async()=>{
-  await assert.rejects(()=>readNotionChapter(doc("sample ".repeat(3000)),async()=> "not JSON"),
+  await assert.rejects(()=>readNotionChapter(doc("sample ".repeat(3000)),async()=> "not JSON",()=>{},()=>false,4096),
     /could not produce reliable section notes/);
   await assert.rejects(()=>readNotionChapter(doc("sample ".repeat(3000)),async()=> "{}",
-    ()=>{},()=>true),/Generation stopped/);
+    ()=>{},()=>true,4096),/Generation stopped/);
 });
 
 
@@ -144,7 +144,7 @@ test("chapter notes accept valid fenced JSON with Qwen reasoning and plain bulle
     return "<think>Extract names and events first.</think>\n```json\n"+JSON.stringify({
       notes:"Charlotte and Will are walking along the forest road as the rain grows heavier."
     })+"\n```";
-  });
+  },()=>{},()=>false,4096);
   assert.match(result,/COMPLETE DOCUMENT SCANNED IN/);
   assert.match(result,/Charlotte and Will/);
   assert.equal(count,splitNotionSections(text).length);
@@ -164,7 +164,7 @@ test("invalid JSON note output retries as plain bullet notes without discarding 
     assert.equal(plainText,true);
     assert.match(prompt,/plain-text chronological bullet notes/);
     return "- Lisa and William sort moving boxes together.\n- They discuss whether to keep their framed photographs.";
-  });
+  },()=>{},()=>false,4096);
   assert.equal(retries,1);
   assert.equal(calls,splitNotionSections(story).length+1);
   assert.match(context,/COMPLETE DOCUMENT SCANNED IN/);
@@ -176,6 +176,70 @@ test("a completely unusable local note response identifies the failing section",
   let calls=0;
   await assert.rejects(()=>readNotionChapter(doc(story),async()=>{
     calls++;return "{}";
-  }),/could not produce reliable section notes for reading section 1\/\d+ even after a plain-text retry/);
+  },()=>{},()=>false,4096),/could not produce reliable section notes for reading section 1\/\d+ even after a plain-text retry/);
   assert.equal(calls,2);
+});
+
+
+test("approved manuscripts exclude chapter outlines, research, and discarded drafting notes",async()=>{
+  const chapter=doc("## Chapter responsibility\nInvented: a herd of sheep and a joke about diapers.\n## Writing and continuity\nThe author doesn't want these in the novel.");
+  chapter.title="Chapter 02 · North";
+  chapter.relatedPages=[
+    {title:"2.1 · West Branch",url:"https://www.notion.so/2-1",chunks:chunk(
+      "## Approved manuscript prose\nWill, Lisa and Matt stop at a restaurant for lunch before continuing north.\n\n"+
+      "## Research and continuity notes\nDiscarded scene: a sheep at the restaurant. No sheep are in the approved prose.")},
+    {title:"2.2 · Gaylord",url:"https://www.notion.so/2-2",chunks:chunk(
+      "## Approved manuscript prose\nThe radio reports a severe windstorm. Will and Lisa see uprooted trees and worry about the moving truck.\n\n"+
+      "## Original provisional scene brief\nOld draft: a joke about diaper rash.")},
+    {title:"2.3 · Crossing North",url:"https://www.notion.so/2-3",chunks:chunk(
+      "## Approved manuscript prose\nThey cross the great bridge over the water. Matt asks to explore the woods.\n\n"+
+      "## Drafting guardrail\nDo not add a flock of sheep or an invented bathroom prank.")}
+  ];
+  const evidence=buildNotionChapterEvidence(chapter);
+  assert.equal(evidence.scenes.length,3);
+  assert.deepEqual(evidence.scenes.map(x=>x.title),
+    ["2.1 · West Branch","2.2 · Gaylord","2.3 · Crossing North"]);
+  assert.ok(notionManuscriptCharacterCount(evidence)>100);
+  let summaries=0;
+  const context=await readNotionChapter(chapter,async()=>{summaries++;return "";});
+  assert.equal(summaries,0,"medium-sized approved chapters go directly into context");
+  assert.match(context,/COMPLETE TEXT OF THE CACHED PAGE/);
+  assert.match(context,/severe windstorm/);
+  assert.match(context,/uprooted trees/);
+  assert.doesNotMatch(context,/\b(?:sheep|diaper|prank|discarded)\b/i);
+  assert.doesNotMatch(context,/chapter responsibility|research and continuity notes/i);
+  assert.equal(directManuscriptLimit(16384),24000);
+  assert.ok(directManuscriptLimit(4096)<directManuscriptLimit(16384));
+});
+
+test("a linked scene with only planning notes cannot masquerade as an approved scene",async()=>{
+  const chapter=doc("## Chapter responsibility\nA longer plan with animal notes");
+  chapter.relatedPages=[{title:"2.2 · Storm",url:"https://www.notion.so/storm",chunks:chunk(
+    "## Research notes\nOld draft ideas, no finished prose here.")}];
+  await assert.rejects(()=>readNotionChapter(chapter,async()=>""),/has no approved manuscript prose/);
+  assert.equal(extractApprovedManuscriptProse("## Approved manuscript prose\nThe storm reached Gaylord.\n## Research notes\nA fake sheep"),"The storm reached Gaylord.");
+  assert.equal(extractApprovedManuscriptProse("## Research notes\nA sheep"),"");
+});
+
+test("manuscript review audit catches fabricated dialogue and concrete scene details",()=>{
+  const evidence={title:"Chapter 02 · North",scenes:[
+    {title:"2.1 · West Branch",url:"https://www.notion.so/one",
+      prose:"Will, Lisa and Matt stop at Wendy's for lunch on their drive north."},
+    {title:"2.2 · Gaylord",url:"https://www.notion.so/two",
+      prose:"The windstorm had uprooted whole trees near Gaylord, and the parents worried about the moving truck."},
+    {title:"2.3 · Crossing North",url:"https://www.notion.so/three",
+      prose:"Matt watches the Mackinac Bridge and wonders about catching a Weedle in the woods."}
+  ]};
+  const real="The uprooted trees near Gaylord give this chapter a powerful turning point, "+
+    "and Matt's interest in a Weedle brings warmth to the bridge scene.";
+  assert.equal(auditNotionReview(real,evidence).blocked,false);
+  const fake='The diaper rash moment, the sheep, and the crooked mailbox are hilarious. '+
+    'Will even says "Stop pooping on the sheep, Matt."';
+  const check=auditNotionReview(fake,evidence);
+  assert.equal(check.blocked,true);
+  assert.ok(check.unsupportedQuotes.length>=1);
+  const fallback=unverifiedNotionReviewResponse(evidence);
+  assert.match(fallback,/couldn't verify/);
+  assert.match(fallback,/2\.2 · Gaylord/);
+  assert.doesNotMatch(fallback,/sheep|diaper/i);
 });
