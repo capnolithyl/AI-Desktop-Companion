@@ -57,6 +57,9 @@ fn cool_down(seconds: u64, reason: &str) {
     NEXT_TRY_EPOCH.store(epoch().saturating_add(seconds), Ordering::Relaxed);
     if let Ok(mut last) = LAST_ERROR.lock() { *last = Some(reason.to_owned()); }
 }
+pub(crate) fn note_slow_request() {
+    cool_down(90, "Gemini exceeded the 35-second cloud response deadline");
+}
 fn api_error(status: u16, reason: &str, key: &str) -> String {
     let sanitized = reason.replace(key, "[redacted]");
     let hint = match status {
@@ -205,7 +208,19 @@ async fn generate(
             .json(&payload)
             .timeout(Duration::from_secs(timeout_seconds))
             .send().await
-            .map_err(|e| format!("Gemini connection failed: {e}"))?;
+            .map_err(|error| {
+                let transient = error.is_timeout() || error.is_connect();
+                let explanation = if error.is_timeout() {
+                    format!("Gemini request timed out after {timeout_seconds} seconds")
+                } else if error.is_connect() {
+                    "Gemini connection failed before receiving a response; check network, DNS, VPN or firewall".into()
+                } else {
+                    format!("Gemini transport error: {}",error.to_string().replace(key,"[redacted]"))
+                };
+                // Don't repeat the same 28-second outage every chat turn.
+                if transient { cool_down(90, &explanation); }
+                explanation
+            })?;
         if response.status().as_u16() == 503 && attempt == 0 {
             attempt += 1;
             tokio::time::sleep(Duration::from_secs(2)).await;
@@ -284,7 +299,7 @@ pub(crate) async fn chat(
     // Each iteration is a genuine Gemini function-calling turn. Read-only
     // web functions are the *only* side effects and are safe to retry locally.
     for turn in 0..4 {
-        result = generate(&client,key,model,&system,&contents,allow_tools,8192,150).await?;
+        result = generate(&client,key,model,&system,&contents,allow_tools,8192,28).await?;
         let model_content = result["candidates"][0]["content"].clone();
         let parts = model_content["parts"].as_array().ok_or_else(||
             format!("Gemini returned no response parts: {}",
@@ -344,7 +359,7 @@ pub(crate) async fn gemini_test_connection(model: String) -> Result<String, Stri
     let contents = vec![json!({"role":"user","parts":[{"text":"Reply with the single word OK."}]})];
     let result = generate(
         &client, &key, model, "This is a connection check, not a chat message.",
-        &contents, false, 256, 45
+        &contents, false, 256, 20
     ).await?;
     if result["candidates"].as_array().is_none() {
         return Err("Gemini returned no candidates. Check API access in Google AI Studio.".into());

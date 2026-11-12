@@ -326,10 +326,24 @@ async fn chat_stream_impl(
         }
         if fallback_reason.is_none() {
             match gemini::key() {
-                Ok(Some(key)) => match gemini::chat(&app,&request,&key).await {
-                    Ok(completion) => return Ok(completion),
-                    Err(reason) if provider == "gemini" => return Err(reason),
-                    Err(reason) => fallback_reason = Some(reason)
+                Ok(Some(key)) => {
+                    // A slow or hung cloud connection must never hold a desktop
+                    // chat hostage for minutes. This limits all Gemini tool rounds.
+                    let cloud = tokio::time::timeout(
+                        Duration::from_secs(35), gemini::chat(&app, &request, &key)
+                    ).await;
+                    let result = match cloud {
+                        Ok(result) => result,
+                        Err(_) => {
+                            if provider == "auto" { gemini::note_slow_request(); }
+                            Err("Gemini timed out after 35 seconds (cloud deadline)".into())
+                        }
+                    };
+                    match result {
+                        Ok(completion) => return Ok(completion),
+                        Err(reason) if provider == "gemini" => return Err(reason),
+                        Err(reason) => fallback_reason = Some(reason)
+                    }
                 },
                 Ok(None) if provider == "gemini" =>
                     return Err("Add your Gemini API key under Settings → AI & Models".into()),
