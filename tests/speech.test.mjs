@@ -340,3 +340,23 @@ test("Mikan's TTS volume defaults quieter and safely clamps every engine",()=>{
   assert.equal(voicePlaybackGain(999),1);
   assert.equal(voicePlaybackGain(NaN),0.55);
 });
+
+
+test("both TTS engines drop expressive emoji and complex Unicode emoji sequences", () => {
+  assert.equal(toSpeechText("Hello 😸! I love ❤️ this. 📚✨"), "Hello! I love this.");
+  assert.equal(toSpeechText("Meet 👩🏽‍💻, family 👨‍👩‍👧, 🇺🇸 flag and 1️⃣ keycap!"),
+    "Meet, family, flag and keycap!");
+  assert.equal(toSpeechText("😸✨"), "");
+});
+
+test("Pocket progressive speech sanitizes emojis before sending streamed WAV jobs", async () => {
+  const message = "That's a genuinely wonderful idea! 😸 Now I can explain it without strange audio noises. 📚✨";
+  const feed = new ProgressiveSpeechFeed("pocket");
+  feed.append(message.slice(0, 62));
+  feed.append(message.slice(62));
+  assert.equal(feed.finish(message), true);
+  const parts = [];
+  for await (const part of feed) parts.push(part);
+  assert.equal(parts.join(" "), toSpeechText(message));
+  assert.ok(parts.every(part => !/[\p{Extended_Pictographic}\p{Regional_Indicator}]/u.test(part)));
+});

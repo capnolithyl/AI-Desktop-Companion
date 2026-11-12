@@ -1,3 +1,5 @@
+import { stripEmojis } from "./emoji-reactions.ts";
+
 /** Wait for closing Markdown emphasis before dispatching streaming speech. */
 function hasUnclosedEmphasis(markdown: string): boolean {
   let open = false;
@@ -12,7 +14,7 @@ function hasUnclosedEmphasis(markdown: string): boolean {
 
 /** Strip Markdown markup but keep spoken emphasis (*really*, *meow*, etc.). */
 export function toSpeechText(markdown: string): string {
-  return markdown
+  return stripEmojis(markdown)
     .replace(/```[\s\S]*?```/g, " ")
     .replace(/^`{3}[\s\S]*$/gm, " ")
     .replace(/`[^`\n]*`/g, " ")
@@ -28,6 +30,7 @@ export function toSpeechText(markdown: string): string {
     .replace(/^\s{0,3}#{1,6}\s+/gm, "")
     .replace(/^\s{0,3}(?:>|[-+*]|\d+\.)\s+/gm, "")
     .replace(/[~#|]/g, " ")
+    .replace(/\s+([,.!?;:])/g, "$1")
     .replace(/\s+/g, " ")
     .trim();
 }
