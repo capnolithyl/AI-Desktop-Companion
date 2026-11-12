@@ -15,6 +15,8 @@ export type NotionChapterSession = {
   conversationId: string;
   page: NotionCachedPage;
   context: string;
+  /** Last real cache sync timestamp; never infer one from a model reply. */
+  syncedAt?: number;
   /** Local, volatile source text for checking a model's claims. Never persist. */
   evidence?: NotionChapterEvidence;
 };
