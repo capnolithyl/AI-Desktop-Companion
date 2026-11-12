@@ -636,7 +636,8 @@ async fn chat_stream_impl(
         "model": request.model,
         "messages": messages,
         "stream": true,
-        "think": request.thinking_requested
+        "think": request.thinking_requested,
+        "keep_alive": "10m"
     });
     let mut options = json!({});
     if let Some(num_ctx) = selected_context {
