@@ -64,6 +64,7 @@ import { parseIkiModel } from "@ikijs/format";
 import { IkiAvatar } from "./IkiAvatar";
 import { reactionFromReply, type AvatarReaction, type AvatarReactionKind } from "./avatar-reactions";
 import { avatarDebugText, type AvatarDebugSnapshot } from "./avatar-debug";
+import { version as DESKTOP_VERSION } from "../package.json";
 import {
   deleteIkiRig, loadAvatarDisplay, loadIkiRig, saveAvatarDisplay, saveIkiRig,
   type AvatarDisplay, type SavedIkiRig
@@ -2259,7 +2260,7 @@ export default function App() {
         </div>
       )}
       {showAvatarDebug && <div className="avatar-debug-overlay" aria-label="Live Iki animation diagnostics">
-        <strong>IKI DEBUG · v0.8.31</strong>
+        <strong>IKI DEBUG · v{DESKTOP_VERSION}</strong>
         <span>Renderer: {avatarDisplay === "portrait" ? "portrait" : avatarDebug?.status ?? "initializing"}</span>
         <span>Rig: {ikiRig?.name ?? "bundled v3"}</span>
         <span>FPS: {avatarDebug?.fps.toFixed(0) ?? "n/a"}</span>
@@ -3118,7 +3119,7 @@ export default function App() {
           </label>
           {ikiRig && <button className="inline-action" type="button" disabled={ikiBusy}
             onClick={() => void resetIkiRig()}>Restore bundled Mikan v3</button>}
-          <div className="settings-section-title">Animation diagnostics</div>
+          <div className="settings-section-title">Animation diagnostics · desktop v{DESKTOP_VERSION}</div>
           <label className="avatar-debug-toggle">
             <input type="checkbox" checked={showAvatarDebug}
               onChange={event => toggleAvatarDebug(event.target.checked)}/>
