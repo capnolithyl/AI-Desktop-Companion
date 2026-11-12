@@ -63,6 +63,10 @@ import { CAPTURE_INTERVAL_MIN,CAPTURE_INTERVAL_MAX,ANALYSIS_POLICY,type RegionCh
 import { attachmentQuestion, attachmentPromptText, loadChatAttachment, type PendingAttachment, type ExtractedDocument } from "./chat-attachments";
 import { parseIkiModel } from "@ikijs/format";
 import { IkiAvatar } from "./IkiAvatar";
+import {
+  loadAvatarPresencePreferences, saveAvatarPresencePreferences,
+  type AvatarPresencePreferences
+} from "./avatar-presence";
 import { reactionFromReply, type AvatarReaction, type AvatarReactionKind } from "./avatar-reactions";
 import { extractReplyEmojis, MIN_EMOJI_BUBBLE_SECONDS, MAX_EMOJI_BUBBLE_SECONDS } from "./emoji-reactions";
 import { avatarDebugText, type AvatarDebugSnapshot } from "./avatar-debug";
@@ -243,6 +247,15 @@ export default function App() {
   const [portrait, setPortrait] = useState<string | null>(BUNDLED_PORTRAIT);
   const [imageError, setImageError] = useState<string | null>(null);
   const [avatarDisplay, setAvatarDisplay] = useState<AvatarDisplay>(loadAvatarDisplay);
+  const [avatarPresence, setAvatarPresence] = useState(loadAvatarPresencePreferences);
+  const [avatarDragging, setAvatarDragging] = useState(false);
+  const updateAvatarPresence = (change: Partial<AvatarPresencePreferences>) => {
+    setAvatarPresence(previous => {
+      const next = { ...previous, ...change };
+      saveAvatarPresencePreferences(next);
+      return next;
+    });
+  };
   const [ikiRig, setIkiRig] = useState<SavedIkiOutfit | null>(null);
   const [ikiOutfits, setIkiOutfits] = useState<SavedIkiOutfit[]>([]);
   const [ikiOutfitFolder, setIkiOutfitFolder] = useState(loadIkiOutfitFolder);
@@ -2472,7 +2485,11 @@ export default function App() {
     "--mikan-font-size": `${settings.appearance.fontSize}px`
   } as CSSProperties;
   const dragPortrait = (event: ReactMouseEvent<HTMLElement>) => {
-    if (event.button === 0) void getCurrentWindow().startDragging().catch(console.warn);
+    if (event.button !== 0) return;
+    setAvatarDragging(true);
+    void getCurrentWindow().startDragging()
+      .catch(console.warn)
+      .finally(() => setAvatarDragging(false));
   };
 
   return <main className="companion" style={theme}>
@@ -2482,6 +2499,8 @@ export default function App() {
           reaction={avatarReaction}
           rigLabel={ikiRig?.name ?? "Mikan v3 (bundled)"}
           debugVisible={showAvatarDebug || (screen === "settings" && settingsTab === "appearance")}
+          presencePreferences={avatarPresence}
+          dragging={avatarDragging}
           onDebug={setAvatarDebug}
           onError={message => {
             setIkiError(message);
@@ -2520,6 +2539,8 @@ export default function App() {
         <span>Speech: {avatarDebug?.speaking ? "playing" : "idle"}
           {" · "}mouth {avatarDebug?.mouthOpen.toFixed(2) ?? "n/a"}</span>
         <span>Breath: {avatarDebug?.breath?.toFixed(2) ?? "n/a"}</span>
+        <span>Cursor: {avatarDebug?.gazeX?.toFixed(2) ?? "n/a"} / {avatarDebug?.gazeY?.toFixed(2) ?? "n/a"}</span>
+        <span>Hair momentum: {avatarDebug?.dragMomentum?.toFixed(2) ?? "n/a"}</span>
       </div>}
     </div>
 
@@ -3417,6 +3438,18 @@ export default function App() {
           {ikiRig && <button type="button" className="inline-action" disabled={ikiBusy}
             onClick={() => void forgetSelectedIkiOutfit()}>Remove selected outfit from list</button>}
           {ikiError && <p className="field-error" role="alert">{ikiError}</p>}
+          <div className="settings-section-title">Live avatar movement</div>
+          <label className="avatar-debug-toggle">
+            <input type="checkbox" checked={avatarPresence.followCursor}
+              onChange={event => updateAvatarPresence({ followCursor: event.target.checked })}/>
+            Gently follow the mouse with eyes and head
+          </label>
+          <label className="avatar-debug-toggle">
+            <input type="checkbox" checked={avatarPresence.dragSway}
+              onChange={event => updateAvatarPresence({ dragSway: event.target.checked })}/>
+            Hair and tail follow through when I drag Mikan
+          </label>
+          <small className="iki-wardrobe-path">Subtle movement is on by default. Both settings are saved locally and work with all compatible .iki outfits.</small>
           <div className="settings-section-title">Emoji thought bubbles</div>
           <label className="setting-field">Display duration · {draft.appearance.emojiBubbleSeconds} seconds
             <input type="range" min={MIN_EMOJI_BUBBLE_SECONDS} max={MAX_EMOJI_BUBBLE_SECONDS}
