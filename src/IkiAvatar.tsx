@@ -9,6 +9,7 @@ import { parseIkiModel, StandardParameter } from "@ikijs/format";
 import bundledRigUrl from "../assets/iki/mikan-v02/iki-ready/mikan-auto-rig-v3.iki?url";
 import type { AvatarReaction } from "./avatar-reactions";
 import type { AvatarDebugSnapshot } from "./avatar-debug";
+import { avatarViewport } from "./avatar-viewport";
 
 /**
  * Animated 2D Mikan. Framing is handled by the renderer, not by cropping
@@ -22,6 +23,7 @@ export function IkiAvatar({
   debugVisible,
   presencePreferences,
   dragging,
+  verticalOffset,
   onDebug,
   onError
 }: {
@@ -32,10 +34,13 @@ export function IkiAvatar({
   debugVisible: boolean;
   presencePreferences: AvatarPresencePreferences;
   dragging: boolean;
+  verticalOffset: number;
   onDebug: (snapshot: AvatarDebugSnapshot) => void;
   onError: (message: string) => void;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const playerRef = useRef<IkiPlayer | null>(null);
+  const verticalOffsetRef = useRef(verticalOffset);
   const speakingRef = useRef(speaking);
   const errorRef = useRef(onError);
   const reactionRef = useRef(reaction);
@@ -49,6 +54,7 @@ export function IkiAvatar({
   debugVisibleRef.current = debugVisible;
   presencePreferencesRef.current = presencePreferences;
   draggingRef.current = dragging;
+  verticalOffsetRef.current = verticalOffset;
   errorRef.current = onError;
 
   useEffect(() => {
@@ -106,7 +112,8 @@ export function IkiAvatar({
         // A portrait crop matching Mikan's reference: ears and tail remain
         // visible while most of the shorts / lower half are outside the view.
         // Model canvas is 1280 x 1280, with model-space Y increasing upward.
-        currentPlayer.setView({ x: 0, y: 110, width: 1150, height: 1050 });
+        currentPlayer.setView(avatarViewport(verticalOffsetRef.current));
+        playerRef.current = currentPlayer;
         currentPlayer.start();
 
         // Iki writes idle/blinks/expression values through this sink, then
@@ -290,9 +297,15 @@ export function IkiAvatar({
       cancelAnimationFrame(frame);
       if (sampleTimer) clearInterval(sampleTimer);
       observer?.disconnect();
+      if (playerRef.current === player) playerRef.current = null;
       player?.destroy();
     };
   }, [customRig]);
+
+  // Move only the viewport while preserving the loaded model and active physics.
+  useEffect(() => {
+    playerRef.current?.setView(avatarViewport(verticalOffset));
+  }, [verticalOffset]);
 
   return <canvas
     ref={canvasRef}

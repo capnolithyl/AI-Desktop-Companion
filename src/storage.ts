@@ -4,6 +4,7 @@ import { captureInterval, restoreRegion, type RegionChoice } from "./capture-reg
 import { DEFAULT_SOURCE_PREFERENCES, readSourcePreferences, type SourcePreference } from "./preferred-sources";
 import { DEFAULT_VOICE_VOLUME, readVoiceVolume } from "./speech";
 import { DEFAULT_EMOJI_BUBBLE_SECONDS, readEmojiBubbleSeconds } from "./emoji-reactions";
+import { DEFAULT_AVATAR_VERTICAL_OFFSET, readAvatarVerticalOffset } from "./avatar-viewport";
 
 export type ChatRole = "user" | "assistant";
 export type Message = { id: string; role: ChatRole; content: string };
@@ -49,6 +50,7 @@ export type Appearance = {
   fontFamily: "Segoe UI" | "Arial" | "Verdana" | "Georgia";
   fontSize: number;
   emojiBubbleSeconds: number;
+  avatarVerticalOffset: number;
 };
 export const DEFAULT_APPEARANCE: Appearance = {
   accent: "#ffad7e",
@@ -56,7 +58,8 @@ export const DEFAULT_APPEARANCE: Appearance = {
   opacity: 0.94,
   fontFamily: "Segoe UI",
   fontSize: 13,
-  emojiBubbleSeconds: DEFAULT_EMOJI_BUBBLE_SECONDS
+  emojiBubbleSeconds: DEFAULT_EMOJI_BUBBLE_SECONDS,
+  avatarVerticalOffset: DEFAULT_AVATAR_VERTICAL_OFFSET
 };
 function safeHex(value: unknown, fallback: string): string {
   return typeof value === "string" && /^#[0-9a-fA-F]{6}$/.test(value) ? value : fallback;
@@ -70,7 +73,8 @@ function readAppearance(value: unknown): Appearance {
     opacity: typeof v.opacity === "number" && Number.isFinite(v.opacity) ? Math.max(0.65, Math.min(1, v.opacity)) : DEFAULT_APPEARANCE.opacity,
     fontFamily: fonts.includes(String(v.fontFamily)) ? v.fontFamily as Appearance["fontFamily"] : DEFAULT_APPEARANCE.fontFamily,
     fontSize: typeof v.fontSize === "number" && Number.isFinite(v.fontSize) ? Math.max(11, Math.min(20, Math.round(v.fontSize))) : DEFAULT_APPEARANCE.fontSize,
-    emojiBubbleSeconds: readEmojiBubbleSeconds(v.emojiBubbleSeconds)
+    emojiBubbleSeconds: readEmojiBubbleSeconds(v.emojiBubbleSeconds),
+    avatarVerticalOffset: readAvatarVerticalOffset(v.avatarVerticalOffset)
   };
 }
 
