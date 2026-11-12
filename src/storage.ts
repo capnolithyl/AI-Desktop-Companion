@@ -140,10 +140,15 @@ export function saveSettings(settings: Settings): void {
 
 function openDatabase(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
-    const request = indexedDB.open("mikan-local-media", 1);
+    // Shared with the animated wardrobe. Both callers must use DB v2:
+    // opening the older version after a wardrobe upgrade throws VersionError.
+    const request = indexedDB.open("mikan-local-media", 2);
     request.onupgradeneeded = () => {
       if (!request.result.objectStoreNames.contains("assets")) {
         request.result.createObjectStore("assets");
+      }
+      if (!request.result.objectStoreNames.contains("iki-outfits")) {
+        request.result.createObjectStore("iki-outfits", { keyPath: "id" });
       }
     };
     request.onsuccess = () => resolve(request.result);

@@ -68,8 +68,10 @@ import { extractReplyEmojis, MIN_EMOJI_BUBBLE_SECONDS, MAX_EMOJI_BUBBLE_SECONDS 
 import { avatarDebugText, type AvatarDebugSnapshot } from "./avatar-debug";
 import { version as DESKTOP_VERSION } from "../package.json";
 import {
-  deleteIkiRig, loadAvatarDisplay, loadIkiRig, saveAvatarDisplay, saveIkiRig,
-  type AvatarDisplay, type SavedIkiRig
+  loadAvatarDisplay, saveAvatarDisplay,
+  loadIkiOutfitFolder, saveIkiOutfitFolder,
+  loadIkiWardrobe, saveIkiOutfit, selectIkiOutfit, removeIkiOutfit,
+  type AvatarDisplay, type SavedIkiOutfit
 } from "./iki-avatar-storage";
 
 type Screen = "compact" | "log" | "settings" | "search" | "page" | "personality" | "help" | "memory" | "capabilities";
@@ -241,7 +243,9 @@ export default function App() {
   const [portrait, setPortrait] = useState<string | null>(BUNDLED_PORTRAIT);
   const [imageError, setImageError] = useState<string | null>(null);
   const [avatarDisplay, setAvatarDisplay] = useState<AvatarDisplay>(loadAvatarDisplay);
-  const [ikiRig, setIkiRig] = useState<SavedIkiRig | null>(null);
+  const [ikiRig, setIkiRig] = useState<SavedIkiOutfit | null>(null);
+  const [ikiOutfits, setIkiOutfits] = useState<SavedIkiOutfit[]>([]);
+  const [ikiOutfitFolder, setIkiOutfitFolder] = useState(loadIkiOutfitFolder);
   const [ikiReady, setIkiReady] = useState(false);
   const [ikiBusy, setIkiBusy] = useState(false);
   const [ikiError, setIkiError] = useState<string | null>(null);
@@ -870,9 +874,13 @@ export default function App() {
 
   useEffect(() => {
     let active = true;
-    void loadIkiRig()
-      .then(saved => { if (active) setIkiRig(saved); })
-      .catch(error => { if (active) setIkiError("Could not restore the custom avatar: " + errorText(error)); })
+    void loadIkiWardrobe()
+      .then(wardrobe => {
+        if (!active) return;
+        setIkiOutfits(wardrobe.outfits);
+        setIkiRig(wardrobe.active);
+      })
+      .catch(error => { if (active) setIkiError("Could not restore saved outfits: " + errorText(error)); })
       .finally(() => { if (active) setIkiReady(true); });
     return () => { active = false; };
   }, []);
@@ -1227,7 +1235,13 @@ export default function App() {
     }
   };
 
-  const chooseIkiRig = async (file?: File) => {
+  const activateOutfit = () => {
+    setIkiError(null);
+    setAvatarDisplay("animated");
+    saveAvatarDisplay("animated");
+  };
+
+  const chooseIkiRig = async (file?: File, sourceFolder?: string) => {
     if (!file) return;
     if (!file.name.toLowerCase().endsWith(".iki") || file.size < 2 || file.size > 25 * 1024 * 1024) {
       setIkiError("Choose an .iki character file smaller than 25 MB.");
@@ -1236,32 +1250,89 @@ export default function App() {
     setIkiBusy(true);
     setIkiError(null);
     try {
-      // Validate before saving or replacing the active character.
+      // Each outfit's content is cached locally so quick switching never
+      // reads the original file again (even when the disk is disconnected).
       parseIkiModel(JSON.parse(await file.text()) as unknown);
-      await saveIkiRig(file);
-      setIkiRig({ name: file.name, file });
-      setAvatarDisplay("animated");
-      saveAvatarDisplay("animated");
+      const saved = await saveIkiOutfit(file);
+      setIkiOutfits(current => [...current.filter(item => item.id !== saved.id), saved]
+        .sort((a, b) => a.name.localeCompare(b.name)));
+      setIkiRig(saved);
+      if (sourceFolder) {
+        setIkiOutfitFolder(sourceFolder);
+        saveIkiOutfitFolder(sourceFolder);
+      }
+      activateOutfit();
     } catch (error) {
-      setIkiError("Could not import the .iki model: " + errorText(error));
-    } finally {
-      setIkiBusy(false);
-    }
+      setIkiError("Could not import the .iki outfit: " + errorText(error));
+    } finally { setIkiBusy(false); }
   };
 
-  const resetIkiRig = async () => {
+  const browseIkiOutfit = async () => {
     setIkiBusy(true);
     setIkiError(null);
     try {
-      await deleteIkiRig();
-      setIkiRig(null);
-      setAvatarDisplay("animated");
-      saveAvatarDisplay("animated");
+      // The OS picker opens in the last selected folder; on first use the
+      // native command looks for this PC's project outfits directory.
+      const picked = await invoke<{ name: string; folder: string; content: string } | null>(
+        "pick_iki_outfit", { folder: ikiOutfitFolder || null }
+      );
+      if (picked) {
+        await chooseIkiRig(
+          new File([picked.content], picked.name, { type: "application/json" }),
+          picked.folder
+        );
+      }
     } catch (error) {
-      setIkiError("Could not restore bundled Mikan: " + errorText(error));
-    } finally {
-      setIkiBusy(false);
+      setIkiError("Could not open the outfit picker: " + errorText(error));
+    } finally { setIkiBusy(false); }
+  };
+
+  const changeIkiOutfitFolder = async () => {
+    setIkiBusy(true);
+    setIkiError(null);
+    try {
+      const folder = await invoke<string | null>("pick_iki_outfit_folder", {
+        folder: ikiOutfitFolder || null
+      });
+      if (folder) {
+        setIkiOutfitFolder(folder);
+        saveIkiOutfitFolder(folder);
+      }
+    } catch (error) {
+      setIkiError("Could not choose the outfits folder: " + errorText(error));
+    } finally { setIkiBusy(false); }
+  };
+
+  const selectSavedIkiOutfit = async (id: string | null) => {
+    const selected = id ? ikiOutfits.find(item => item.id === id) : null;
+    if (id && !selected) {
+      setIkiError("That outfit is not in the saved wardrobe.");
+      return;
     }
+    setIkiBusy(true);
+    setIkiError(null);
+    try {
+      await selectIkiOutfit(selected?.id ?? null);
+      setIkiRig(selected ?? null);
+      activateOutfit();
+    } catch (error) {
+      setIkiError("Could not switch outfit: " + errorText(error));
+    } finally { setIkiBusy(false); }
+  };
+
+  const forgetSelectedIkiOutfit = async () => {
+    if (!ikiRig) return;
+    if (!window.confirm(`Remove "${ikiRig.name}" from Mikan's saved outfits? The original .iki file will not be deleted.`)) return;
+    setIkiBusy(true);
+    setIkiError(null);
+    try {
+      await removeIkiOutfit(ikiRig.id);
+      setIkiOutfits(current => current.filter(item => item.id !== ikiRig.id));
+      setIkiRig(null);
+      activateOutfit();
+    } catch (error) {
+      setIkiError("Could not remove the saved outfit: " + errorText(error));
+    } finally { setIkiBusy(false); }
   };
 
   // Quick controls and slash commands persist immediately without editing the system prompt.
@@ -3321,18 +3392,31 @@ export default function App() {
             </select>
             <small>Animated Mikan v3 is the default. The full rig stays intact; the viewer frames her upper body.</small>
           </label>
-          <label className="setting-field">Animated model (.iki)
-            <input type="file" accept=".iki,application/json" disabled={ikiBusy}
-              onChange={event => {
-                const file = event.target.files?.[0];
-                event.target.value = "";
-                void chooseIkiRig(file);
-              }}/>
-            <small>Current model: {ikiRig?.name ?? "Mikan v3 (bundled)"}. Upload a new .iki file for a different character or outfit. Changes are saved on this PC.</small>
-            {ikiError && <small className="field-error">{ikiError}</small>}
+          <label className="setting-field">Mikan's outfits
+            <select aria-label="Select saved Iki outfit" value={ikiRig?.id ?? ""}
+              disabled={ikiBusy || !ikiReady}
+              onChange={event => void selectSavedIkiOutfit(event.target.value || null)}>
+              <option value="">Original · Mikan v3 (bundled)</option>
+              {ikiOutfits.map(outfit =>
+                <option key={outfit.id} value={outfit.id}>{outfit.name}</option>
+              )}
+            </select>
+            <small>{ikiOutfits.length
+              ? `${ikiOutfits.length} outfit${ikiOutfits.length === 1 ? "" : "s"} saved on this PC. Switching does not reopen the file browser.`
+              : "Imported outfits will appear here for instant switching."}</small>
           </label>
-          {ikiRig && <button className="inline-action" type="button" disabled={ikiBusy}
-            onClick={() => void resetIkiRig()}>Restore bundled Mikan v3</button>}
+          <div className="iki-wardrobe-actions">
+            <button type="button" disabled={ikiBusy || !ikiReady}
+              onClick={() => void browseIkiOutfit()}>Add outfit (.iki)</button>
+            <button type="button" disabled={ikiBusy}
+              onClick={() => void changeIkiOutfitFolder()}>Choose outfits folder</button>
+          </div>
+          <small className="iki-wardrobe-path" title={ikiOutfitFolder || "Uses project outfits folder when available"}>
+            Folder: {ikiOutfitFolder || "Project outfits folder (or last-used location)"}
+          </small>
+          {ikiRig && <button type="button" className="inline-action" disabled={ikiBusy}
+            onClick={() => void forgetSelectedIkiOutfit()}>Remove selected outfit from list</button>}
+          {ikiError && <p className="field-error" role="alert">{ikiError}</p>}
           <div className="settings-section-title">Emoji thought bubbles</div>
           <label className="setting-field">Display duration · {draft.appearance.emojiBubbleSeconds} seconds
             <input type="range" min={MIN_EMOJI_BUBBLE_SECONDS} max={MAX_EMOJI_BUBBLE_SECONDS}

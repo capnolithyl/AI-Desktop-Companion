@@ -939,3 +939,21 @@ button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px
 @media (prefers-reduced-motion: reduce) {
   .avatar-emoji-thought { animation-name: avatar-emoji-fade; }
 }
+
+/* Local 2D costume wardrobe: quick switching without repeated file browsing. */
+.iki-wardrobe-actions {
+  display: flex; gap: 7px; flex-wrap: wrap; margin: -7px 0 9px;
+}
+.iki-wardrobe-actions button {
+  border: 1px solid #876478; border-radius: 8px;
+  padding: 9px 12px; color: #ffe1d0; background: #604352;
+  font-size: 12px; cursor: pointer;
+}
+.iki-wardrobe-actions button:first-child { background: #885546; border-color: #b47e65; }
+.iki-wardrobe-actions button:hover:not(:disabled) { background: #86596c; }
+.iki-wardrobe-actions button:disabled { opacity: .52; cursor: not-allowed; }
+.iki-wardrobe-path {
+  display: block; margin: 0 0 12px;
+  font-size: 10px; line-height: 1.4; color: #cab3c2;
+  overflow-wrap: anywhere;
+}

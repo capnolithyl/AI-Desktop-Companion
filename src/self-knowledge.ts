@@ -159,9 +159,9 @@ export const CAPABILITIES: readonly Capability[] = [
   },
   {
     id:"animated-2d-avatar",label:"Animated 2D Iki character with reactions",category:"Avatar",
-    description:"The Windows desktop includes an animated, local Iki Mikan v3 rig with blinking, hair physics, idle breathing, a separate tail, simple speech-linked mouth movement, and short expressions/gestures when replies begin with recognizable cues. Select a custom .iki file or restore the bundled one. Appearance settings offer optional live animation diagnostics and manual reaction test buttons. It is a 2D rig, not 3D; not every reply triggers a reaction and mouth movement uses a lightweight animation rather than true phoneme analysis.",
-    stage:"implemented",runtime:"none",keywords:["iki","animated","animation","avatar","catgirl","breathing","blink","expression","reaction","tail","rig","lip","gesture","debug"],
-    sources:["src/IkiAvatar.tsx","src/avatar-reactions.ts","src/avatar-debug.ts","src/iki-avatar-storage.ts","src/App.tsx"],docs:[],commands:[]
+    description:"The Windows desktop includes an animated, local Iki Mikan v3 rig with blinking, hair physics, idle breathing, a separate tail, simple speech-linked mouth movement, and short expressions/gestures when replies begin with recognizable cues. Appearance settings include a saved local wardrobe of imported .iki files, instant switching, the bundled default rig, and a native file picker that remembers the costume directory. Removing an outfit from the list does not delete the original file. The existing custom rig is migrated into the wardrobe. Live animation diagnostics and manual reaction test buttons are available. It is a 2D rig, not 3D; not every reply triggers a reaction and mouth movement uses a lightweight animation rather than true phoneme analysis.",
+    stage:"implemented",runtime:"none",keywords:["iki","animated","animation","avatar","catgirl","breathing","blink","expression","reaction","tail","rig","lip","gesture","debug","outfit","costume","wardrobe","folder"],
+    sources:["src/IkiAvatar.tsx","src/avatar-reactions.ts","src/avatar-debug.ts","src/iki-avatar-storage.ts","src/App.tsx","src-tauri/src/iki_outfits.rs"],docs:[],commands:["pick_iki_outfit","pick_iki_outfit_folder"]
   },
   {
     id:"voice",label:"Local voice synthesis and cloning",category:"Voice",
