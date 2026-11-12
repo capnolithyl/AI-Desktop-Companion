@@ -2133,6 +2133,8 @@ export default function App() {
       const chapterModelProvider=groundedChapterTurn
         ? manuscriptReviewProvider(settings.provider,settings.openrouterModel)
         : settings.provider;
+      const readOnlyReread=groundedChapterTurn &&
+        asksOnlyToRereadNotionPage(text,notionPlan.selectedPage);
       notionAudit=useNotion ? {
         selectedPage:notionPlan.selectedPage?.title,
         cachedPages:cachedNotionPages.length,
@@ -2147,10 +2149,11 @@ export default function App() {
         approvedProseCharacters:chapterEvidence ? notionManuscriptCharacterCount(chapterEvidence) : undefined,
         sceneTitles:chapterEvidence?.scenes.map(scene=>scene.title),
         rereadRequested:notionPlan.reread,
-        modelPolicy:groundedChapterTurn
-          ? chapterModelProvider==="local" && settings.provider==="auto"
-            ? "local (Auto free-router guard)" : "selected provider"
-          : undefined,
+        modelPolicy:readOnlyReread ? "deterministic reread receipt (no model)"
+          : groundedChapterTurn
+            ? chapterModelProvider==="local" && settings.provider==="auto"
+              ? "local (Auto free-router guard)" : "selected provider"
+            : undefined,
         readFailure:notionReadFailure
       } : undefined;
       const unavailableChapter=useNotion ? unavailableChapterResponse(
@@ -2170,8 +2173,7 @@ export default function App() {
         await persistMessage(assistant);
         return;
       }
-      if (groundedChapterTurn && chapterEvidence &&
-          asksOnlyToRereadNotionPage(text,notionPlan.selectedPage)) {
+      if (readOnlyReread && chapterEvidence) {
         // The application has already loaded the approved scenes. A pure
         // reread request is a confirmed cache operation, not a prompt for a
         // random free model to invent what integrations are available.
