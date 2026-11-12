@@ -43,7 +43,7 @@ import type {ImportMemory,MemoryCategory} from "./memory-import";
 import { NotionPanel } from "./NotionPanel";
 import { isNotionTopic, notionContext, planNotionRetrieval, asksToReadFullNotionPage, hasNamedNotionMatch, unavailableChapterResponse,
   type NotionHit, type NotionCachedPage } from "./notion-knowledge";
-import { readNotionChapter, type NotionDocument, type NotionChapterSession } from "./notion-reading";
+import { readNotionChapter, shouldRefetchNotionDocument, type NotionDocument, type NotionChapterSession } from "./notion-reading";
 import { splitSpeechText, toSpeechText, VOICE_TEST_LINE, ProgressiveSpeechFeed, FIRST_SPEECH_CHARS, POCKET_FINAL_SPEECH_CHARS, voiceEndpoint, POCKET_VOICE_ENDPOINT, canSaveVoiceReference, voicePlaybackGain } from "./speech";
 import { NarrationFilter, roleplayActive, stripNarratedActions } from "./narration-filter";
 import { memoryBudget, sessionMemoryContext, type SessionSummary } from "./memory-budget";
@@ -1746,21 +1746,41 @@ export default function App() {
         } else {
           setActivity("Opening full Notion chapter…");
           try {
-            const document = await invoke<NotionDocument>("notion_read_document",{
+            let document = await invoke<NotionDocument>("notion_read_document",{
               id:notionPlan.selectedPage.id
             });
+            const summarizeSection = (prompt:string) => invoke<string>("condense_local_context", {
+              endpoint:settings.endpoint,model:settings.model,prompt,
+              contextWindow:settings.contextWindow,maxOutputTokens:500
+            });
+            const progress = (part:number,total:number) =>
+              setActivity(`Reading Notion chapter: section ${part} of ${total}…`);
+            const interrupted = () => stopRequested.current;
+            try {
+              readChapterContext = await readNotionChapter(
+                document,summarizeSection,progress,interrupted
+              );
+            } catch (error) {
+              if (!shouldRefetchNotionDocument(error) || interrupted()) throw error;
+              // A cached chapter may predate the Scenes relation index. Read
+              // the latest owner-shared chapter + scene pages on demand instead
+              // of incorrectly insisting the owner sync again or paste prose.
+              setActivity("Finding linked scenes directly in Notion…");
+              try {
+                document = await invoke<NotionDocument>("notion_read_document_live",{
+                  id:notionPlan.selectedPage.id
+                });
+              } catch (liveError) {
+                throw new Error("Cached scenes are unavailable, and the live Notion read failed: "+
+                  errorText(liveError));
+              }
+              readChapterContext = await readNotionChapter(
+                document,summarizeSection,progress,interrupted
+              );
+            }
             linkedScenesRead = document.relatedPages?.length ?? 0;
             linkedSceneCharacters = (document.relatedPages ?? [])
               .reduce((n,scene)=>n+scene.chunks.reduce((total,chunk)=>total+chunk.length,0),0);
-            readChapterContext = await readNotionChapter(
-              document,
-              prompt => invoke<string>("condense_local_context", {
-                endpoint:settings.endpoint,model:settings.model,prompt,
-                contextWindow:settings.contextWindow,maxOutputTokens:500
-              }),
-              (part,total)=>setActivity(`Reading Notion chapter: section ${part} of ${total}…`),
-              ()=>stopRequested.current
-            );
             notionChapterRef.current = {
               conversationId,page:notionPlan.selectedPage,context:readChapterContext
             };
