@@ -266,7 +266,9 @@ export function unavailableChapterResponse(
   readContext:string,
   cachedCount:number
 ):string|null {
-  if(!asksToReadFullNotionPage(query,matchedPage) || (chapterNumber(query)===null && !matchedPage))return null;
+  if(!(asksToReadFullNotionPage(query,matchedPage) ||
+       asksToRereadNotionPage(query,matchedPage)) ||
+       (chapterNumber(query)===null && !matchedPage))return null;
   if(matchedPage && readContext.length>0 && !readContext.startsWith("NOTION FULL READING FAILED:"))
     return null;
   if(!cachedCount)return "I can't read that chapter yet because my Notion library is empty. Sync the book in Settings → Notion first, and I'll give you feedback based on the actual text instead of guessing.";
