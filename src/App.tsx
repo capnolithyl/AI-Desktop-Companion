@@ -62,6 +62,7 @@ import { CAPTURE_INTERVAL_MIN,CAPTURE_INTERVAL_MAX,ANALYSIS_POLICY,type RegionCh
 import { attachmentQuestion, attachmentPromptText, loadChatAttachment, type PendingAttachment, type ExtractedDocument } from "./chat-attachments";
 import { parseIkiModel } from "@ikijs/format";
 import { IkiAvatar } from "./IkiAvatar";
+import { reactionFromReply, type AvatarReaction } from "./avatar-reactions";
 import {
   deleteIkiRig, loadAvatarDisplay, loadIkiRig, saveAvatarDisplay, saveIkiRig,
   type AvatarDisplay, type SavedIkiRig
@@ -239,6 +240,7 @@ export default function App() {
   const [ikiReady, setIkiReady] = useState(false);
   const [ikiBusy, setIkiBusy] = useState(false);
   const [ikiError, setIkiError] = useState<string | null>(null);
+  const [avatarReaction, setAvatarReaction] = useState<AvatarReaction | null>(null);
   const [availableModels, setAvailableModels] = useState<string[]>([]);
   // Secret remains exclusively in Windows Credential Manager, never Settings/localStorage.
   const [geminiKeyInput,setGeminiKeyInput] = useState("");
@@ -297,6 +299,13 @@ export default function App() {
   const pageInputRef = useRef<HTMLInputElement>(null);
   const portraitUrl = useRef<string | null>(null);
   const activeRequestId = useRef<string | null>(null);
+  const reactionSerial = useRef(0);
+  const reactToReply = (reply: string): boolean => {
+    const kind = reactionFromReply(reply);
+    if (!kind) return false;
+    setAvatarReaction({ serial: ++reactionSerial.current, kind });
+    return true;
+  };
   const preparingSend = useRef(false);
   // Full-chapter reading notes belong to this conversation, never global memory.
   const notionChapterRef = useRef<NotionChapterSession | null>(null);
@@ -1685,6 +1694,7 @@ export default function App() {
     let firstTokenMs: number | null = null;
     let accumulated = "";
     let visibleAccumulated = "";
+    let reactionIssued = false;
     const allowRoleplay = roleplayActive(text, messages);
     const narrationFilter = new NarrationFilter(!allowRoleplay);
     let unlisten: UnlistenFn | null = null;
@@ -1958,6 +1968,11 @@ export default function App() {
         const researchAnswer = turn.verifyWebEvidence || plannedPublicSearch || cloudMaySearch;
         if (!researchAnswer) {
           const currentText = visibleAccumulated;
+          // React once to an identifiable opening, while Mikan is still
+          // streaming. Do not react to unverified research drafts.
+          if (!reactionIssued && currentText.length >= 18) {
+            reactionIssued = reactToReply(currentText);
+          }
           setMessages(current => current.map(m =>
             m.id === assistantId ? { ...m, content: currentText } : m
           ));
@@ -2046,6 +2061,7 @@ export default function App() {
       // The final stored text, rendered answer and streamed speech must agree.
       // Keep explicit roleplay unfiltered and do not mutate older saved chats.
       const finalText = allowRoleplay ? verifiedText : stripNarratedActions(verifiedText);
+      if (!reactionIssued) reactionIssued = reactToReply(finalText);
       const assistant: LogMessage = {
         id: assistantId, role: "assistant", content: finalText, createdAt: Date.now(),
         diagnostics, sources: verifiedSources,
@@ -2202,6 +2218,7 @@ export default function App() {
     <div className="portrait-space" title="Drag Mikan to move the window" onMouseDown={dragPortrait}>
       {avatarDisplay === "animated" && ikiReady ? (
         <IkiAvatar customRig={ikiRig?.file ?? null} speaking={voiceState === "playing"}
+          reaction={avatarReaction}
           onError={message => {
             setIkiError(message);
             setAvatarDisplay("portrait");
