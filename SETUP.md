@@ -1,8 +1,8 @@
-# Mikan Desktop Companion v0.8.10 · Windows setup
+# Mikan Desktop Companion v0.8.33 · Windows setup
 
 This is a local-first, single-PC prototype. User-specific settings and the selected character portrait remain saved locally across upgrades.
 
-## Feature setup checklist (v0.8.10)
+## Feature setup checklist (v0.8.33)
 
 Only the desktop executable, Ollama, and an installed chat model are required
 for ordinary conversation. The optional integrations built in recent releases
@@ -14,7 +14,9 @@ need these **one-time** steps:
 | SearXNG web research | Install Docker/WSL2 and [initialize SearXNG](tools/searxng/README.md) | Enable Docker login startup and Mikan's Internet auto-recovery, if wanted |
 | Advanced Mem0 memory | Python 3.11 + run `powershell -ExecutionPolicy Bypass -File .\scripts\setup-advanced-memory.ps1` | Mikan starts the installed Mem0 service automatically. SQLite still owns facts |
 | Qwen3-TTS speech | Keep your previously tested Python 3.12/ROCm venv, then register it once using `powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\setup-voice-autostart.ps1` | Mikan starts/retries the Python server; saved voice reference persists; needs desktop v0.8.10+ |
-| Notion book/reference library | [Create an internal read-only integration, share pages and sync](notion/README.md) | No extra server; cache works offline, re-sync manually for changes |
+| Notion book/reference library | [Create an internal read-only integration, share chapters and the Scenes database, and sync](notion/README.md) | Local cache works offline; on-demand full-chapter reads can recover linked scene prose directly from Notion if the cache is incomplete |
+| OpenRouter free inference | Add your own [OpenRouter API key](https://openrouter.ai/settings/keys) in Settings → AI & Models and select Auto or OpenRouter | Free-only cloud chat when enabled; Auto falls back to local Ollama when unavailable |
+| Emoji reaction bubbles | None; included with the Iki avatar | Reply emoji appear as temporary bubbles, and emoji glyphs are removed from synthesized speech |
 | Live Vision | Enable explicitly using the eye button or `/live on` | Screenshots are transient, and consent resets OFF on each launch |
 | File attachments | None beyond installing a recent build | One file per turn; model vision ability needed for images |
 | Remote browser chat | Optional [Node relay + Cloudflare Access + tunnel setup](server/README.md) | Still manual-start relay; desktop and PC must stay running |
