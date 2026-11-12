@@ -3,6 +3,27 @@ use crate::{web_search, web_reader, source_priority};
 use std::time::Duration;
 use tauri::{AppHandle, Emitter};
 
+// Model output is untrusted. Bad tool calls become feedback, never side effects.
+fn tool_arg(name: &str, args: &Value) -> Result<String, &'static str> {
+    let field=match name {
+        "search_web" => "query",
+        "read_webpage" => "url",
+        _ => return Err("Unknown tool name"),
+    };
+    let value=args.get(field).and_then(Value::as_str).map(str::trim)
+        .ok_or("Missing or invalid string argument")?;
+    if name=="search_web" && !(4..=180).contains(&value.len()) {
+        return Err("Search query must be 4 to 180 characters");
+    }
+    if name=="read_webpage" && (!value.starts_with("https://") || value.len()>2048) {
+        return Err("Page URL must be a public HTTPS URL");
+    }
+    if value.chars().any(|c| c.is_control()) {
+        return Err("Control characters are not allowed");
+    }
+    Ok(value.to_string())
+}
+
 pub struct PreparedTools {
     pub answer: Option<(String, Value)>,
     pub sources: Vec<web_search::SearchResult>,
@@ -33,15 +54,26 @@ pub async fn prepare(
         }}
     ]);
     for _ in 0..2 {
-        let mut payload = json!({"model":model,"messages":messages,"tools":tools,"stream":false,"think":false});
+        let mut payload = json!({
+            "model":model,"messages":messages,"tools":tools,"stream":false,"think":false,
+            "options":{"temperature":0,"num_predict":256}
+        });
         if let Some(num_ctx) = context_window {
-            payload["options"] = json!({"num_ctx":num_ctx});
+            payload["options"]["num_ctx"] = json!(num_ctx);
         }
         let response = client.post(ollama_url)
             .json(&payload)
             .timeout(Duration::from_secs(150)).send().await.map_err(|e| e.to_string())?;
         if !response.status().is_success() {
-            return Err(format!("Ollama tool calling returned {}. Disable auto search or use a model that supports tools.", response.status()));
+            let status=response.status();
+            let body=response.text().await.unwrap_or_default();
+            if status.as_u16()==400 && body.to_lowercase().contains("does not support tools") {
+                messages.push(json!({"role":"system","content":
+                    "The selected local model does not support native tool calls. No web tools ran. Never claim a live search was performed; explain when current facts cannot be verified."}));
+                return Ok(PreparedTools {answer:None,sources});
+            }
+            return Err(format!("Ollama tool calling returned {status}: {}",
+                body.chars().take(180).collect::<String>()));
         }
         let output: Value = response.json().await.map_err(|e| e.to_string())?;
         let message = &output["message"];
@@ -58,9 +90,10 @@ pub async fn prepare(
             let arguments = &call["function"]["arguments"];
             let arguments = if arguments.is_object() { arguments.clone() }
                 else { serde_json::from_str::<Value>(arguments.as_str().unwrap_or("")).unwrap_or(Value::Null) };
-            let result = match name {
-                "search_web" => {
-                    let query = arguments["query"].as_str().unwrap_or("").trim().to_string();
+            let result = match tool_arg(name, &arguments) {
+                Err(reason) => json!({"error":reason,"retryable":true}).to_string(),
+                Ok(argument) if name=="search_web" => {
+                    let query = argument;
                     let _ = app.emit("mikan://activity", json!({"requestId":request_id,"text":"Searching the web…"}));
                     match source_priority::search(
                         search_endpoint.to_owned(),query,false,source_preferences,source_topic
@@ -71,13 +104,20 @@ pub async fn prepare(
                                     sources.push(item.clone());
                                 }
                             }
-                            serde_json::to_string(&found).unwrap_or_default()
+                            // Bound tool results so a long search excerpt cannot
+                            // push the assistant's instructions out of context.
+                            let compact:Vec<Value>=found.iter().take(8).map(|hit|json!({
+                                "title":hit.title,"url":hit.url,
+                                "content":hit.content.chars().take(450).collect::<String>(),
+                                "published_date":hit.published_date
+                            })).collect();
+                            serde_json::to_string(&compact).unwrap_or_default()
                         },
                         Err(err) => format!("Search unavailable: {err}")
                     }
                 },
-                "read_webpage" => {
-                    let url = arguments["url"].as_str().unwrap_or("");
+                Ok(argument) if name=="read_webpage" => {
+                    let url = argument.as_str();
                     let _ = app.emit("mikan://activity", json!({"requestId":request_id,"text":"Reading a webpage…"}));
                     match web_reader::read_page_impl(app, url, false, cache_hours).await {
                         Ok(page) => {
@@ -89,12 +129,15 @@ pub async fn prepare(
                                     published_date: None
                                 });
                             }
-                            serde_json::to_string(&page).unwrap_or_default()
+                            json!({"title":page.title,"url":page.url,
+                                "content":page.content.chars().take(6500).collect::<String>(),
+                                "truncated":page.content.chars().count()>6500
+                            }).to_string()
                         },
                         Err(err) => format!("Page unavailable: {err}")
                     }
                 },
-                _ => "Unknown tool".into()
+                _ => json!({"error":"Unknown tool","retryable":false}).to_string()
             };
             messages.push(json!({
                 "role":"tool","tool_name":name,
@@ -103,4 +146,20 @@ pub async fn prepare(
         }
     }
     Ok(PreparedTools { answer: None, sources })
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn malformed_tool_calls_cannot_trigger_search_or_read() {
+        assert!(tool_arg("search_web",&json!({"query":""})).is_err());
+        assert!(tool_arg("search_web",&json!({"query":1})).is_err());
+        assert!(tool_arg("read_webpage",&json!({"url":"http://example.com"})).is_err());
+        assert!(tool_arg("read_webpage",&json!({"url":"https://example.com\nX"})).is_err());
+        assert!(tool_arg("delete_file",&json!({"path":"x"})).is_err());
+        assert_eq!(tool_arg("search_web",&json!({"query":"new metal albums"})).unwrap(),"new metal albums");
+        assert_eq!(tool_arg("read_webpage",&json!({"url":"https://example.com"})).unwrap(),"https://example.com");
+    }
 }
