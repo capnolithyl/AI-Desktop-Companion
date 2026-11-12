@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { joinNotionChunks, splitNotionSections, readNotionChapter } from "./notion-reading.ts";
+import { joinNotionChunks, splitNotionSections, readNotionChapter, shouldRefetchNotionDocument } from "./notion-reading.ts";
 
 const doc=(text)=>({
   id:"abc",title:"Chapter Three",url:"https://www.notion.so/chapter3",syncedAt:1794000000,
@@ -84,4 +84,17 @@ test("chapter editorial notes alone are not mistaken for the linked manuscript",
   assert.match(content,/You HAVE just read the cached original text/);
   d.relatedPages[0].chunks=[];
   await assert.rejects(()=>readNotionChapter(d,async()=>""),/linked scene has no cached manuscript text/);
+});
+
+test("only incomplete linked-scene caches trigger an on-demand Notion refetch",()=>{
+  assert.equal(shouldRefetchNotionDocument(new Error(
+    "Only chapter planning notes were cached, without its linked manuscript scenes")),true);
+  assert.equal(shouldRefetchNotionDocument(new Error(
+    "Linked scenes are missing from the synced Notion library (4)")),true);
+  assert.equal(shouldRefetchNotionDocument(new Error(
+    "A linked scene has no cached manuscript text")),true);
+  assert.equal(shouldRefetchNotionDocument(new Error("Generation stopped")),false);
+  assert.equal(shouldRefetchNotionDocument(new Error(
+    "The local model could not produce reliable section notes")),false);
+  assert.equal(shouldRefetchNotionDocument(new Error("Connection refused")),false);
 });
