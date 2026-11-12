@@ -1047,24 +1047,50 @@ export default function App() {
       userMessageId, assistantMessageId, captureUser, captureCharacter,
       contextWindow: settings.contextWindow
     };
-    // Save only after the visible answer is finished. Serialize extraction calls
-    // so several quick chats don't launch several competing Ollama analyses.
+    // Journal immediately, outside the in-memory promise chain. The journal
+    // survives process exit and replays from saved SQLite message IDs on boot.
+    const recorded = memoryApi.enqueueTurn(request);
     automaticMemoryQueue.current = automaticMemoryQueue.current
       .catch(() => {})
       .then(async () => {
-        const result = await memoryApi.processTurn(request);
+        await recorded;
+        const result = await memoryApi.processPendingJobs();
         if (result.userSaved || result.characterSaved) {
           await Promise.all([
             result.userSaved ? refreshFacts() : Promise.resolve(),
             result.characterSaved ? refreshCharacter() : Promise.resolve()
           ]);
         }
-        setAutomaticMemoryError(null);
+        setAutomaticMemoryError(result.failed
+          ? `${result.failed} automatic memory job(s) need manual retry in Memory settings.` : null);
       }).catch(error => {
-        console.warn("Automatic memory extraction skipped:", error);
-        setAutomaticMemoryError(`Automatic memory extraction failed: ${errorText(error)}`);
+        console.warn("Automatic memory extraction queued or unavailable:", error);
+        setAutomaticMemoryError(`Automatic memory queue unavailable: ${errorText(error)}`);
       });
   };
+  // Recover interrupted jobs after Mikan starts, and retry transient Ollama
+  // failures while idle. No active GPU polling or LLM work occurs when empty.
+  useEffect(() => {
+    if (!memoryReady || busy || (!settings.autoRememberUser && !settings.autoRememberMikan)) return;
+    let cancelled = false;
+    const recover = async () => {
+      try {
+        const result = await memoryApi.processPendingJobs();
+        if (cancelled) return;
+        if (result.userSaved) void refreshFacts();
+        if (result.characterSaved) void refreshCharacter();
+        if (result.failed) setAutomaticMemoryError(
+          `${result.failed} automatic memory job(s) need manual retry in Memory settings.`
+        );
+      } catch (error) {
+        if (!cancelled) console.warn("Memory queue recovery unavailable:",errorText(error));
+      }
+    };
+    void recover();
+    const timer = setInterval(() => void recover(), 60000);
+    return () => { cancelled = true; clearInterval(timer); };
+  }, [memoryReady,busy,settings.autoRememberUser,settings.autoRememberMikan]);
+
   const queueSessionMemory = (conversationId: string, force = false) => {
     const opts = {endpoint:settings.endpoint,model:settings.model,contextWindow:settings.contextWindow};
     sessionMemoryQueue.current = sessionMemoryQueue.current.catch(() => {}).then(async () => {

@@ -45,6 +45,10 @@ export type CharacterFact = {
   updatedAt: number;
 };
 export type AutomaticMemoryResult = { userSaved: number; characterSaved: number; skipped: boolean };
+export type MemoryJobStatus = {
+  processed: number; userSaved: number; characterSaved: number;
+  queued: number; failed: number;
+};
 export type AutomaticMemoryRequest = {
   endpoint: string;
   model: string;
@@ -112,8 +116,15 @@ export const memoryApi = {
     invoke<void>("memory_update_character_fact", { id, personaId, category, label, value }),
   deleteCharacterFact: (id: number, personaId = ACTIVE_PERSONA_ID) =>
     invoke<void>("memory_delete_character_fact", { id, personaId }),
+  // The old direct command remains compatible, but normal chat now journals
+  // its work before starting local Ollama so restarts cannot silently drop it.
   processTurn: (request: AutomaticMemoryRequest) =>
-    invoke<AutomaticMemoryResult>("memory_process_turn", request)
+    invoke<AutomaticMemoryResult>("memory_process_turn", request),
+  enqueueTurn: (request: AutomaticMemoryRequest) =>
+    invoke<boolean>("memory_enqueue_turn", {request}),
+  processPendingJobs: () => invoke<MemoryJobStatus>("memory_process_pending_jobs"),
+  memoryJobsStatus: () => invoke<MemoryJobStatus>("memory_jobs_status"),
+  retryFailedJobs: () => invoke<number>("memory_retry_failed_jobs")
 };
 
 /**
