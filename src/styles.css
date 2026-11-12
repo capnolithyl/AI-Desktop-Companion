@@ -171,6 +171,12 @@ button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px
 }
 .setting-field small { font-size: 11px; line-height: 1.5; color: #baa7b4; font-weight: 400; }
 .setting-field input[type=file] { font-size: 11px; padding: 8px; }
+.setting-field select {
+  width: 100%; color: #fff0eb; background: #40343f;
+  border: 1px solid #68515e; border-radius: 10px;
+  font-size: 13px; font-weight: 400; padding: 10px 12px;
+}
+.setting-field select:focus-visible { outline: 2px solid #ffc69e; outline-offset: 2px; }
 .setting-field input:focus, .setting-field textarea:focus { outline: none; border-color: #eda077; }
 .setting-field .field-error { color: #ffc0c0; }
 .portrait-ready { color: #a8e8be; display: flex; align-items: center; gap: 7px; font-size: 11px; }
@@ -201,6 +207,14 @@ button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px
 .portrait-space { pointer-events: none; }
 .character-portrait { pointer-events: auto; cursor: grab; }
 .character-portrait:active { cursor: grabbing; }
+/* The rig canvas is a viewport, not a destructive crop of the animation. */
+.iki-avatar-canvas {
+  display: block; width: 100%; height: 100%; max-width: 100%;
+  flex: 1 1 auto; min-width: 0; min-height: 0;
+  pointer-events: auto; cursor: grab; touch-action: none;
+  filter: drop-shadow(0 9px 19px #190e1a5c);
+}
+.iki-avatar-canvas:active { cursor: grabbing; }
 .dock {
   background: rgb(var(--panel-rgb, 33 27 37) / var(--panel-opacity, .94));
   border-color: rgb(var(--accent-rgb, 255 173 126) / .4);
