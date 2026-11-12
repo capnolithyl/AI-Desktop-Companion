@@ -897,3 +897,38 @@ button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px
 }
 .avatar-debug-tests button:hover:not(:disabled) { background: #825568; }
 .avatar-debug-tests button:disabled { opacity: .5; cursor: not-allowed; }
+
+
+/* Expressive emoji live above the portrait, outside the chat copy and TTS.
+   The rig canvas does not need to know about these lightweight DOM reactions. */
+.avatar-emoji-thoughts {
+  position: absolute; z-index: 3; top: 7px; right: 7%;
+  display: flex; align-items: flex-start; justify-content: flex-end; gap: 8px;
+  max-width: 70%; pointer-events: none; user-select: none;
+}
+.avatar-emoji-thought {
+  position: relative; width: clamp(40px, 12vw, 54px); height: clamp(40px, 12vw, 54px);
+  flex: 0 0 auto; display: grid; place-items: center;
+  border: 2px solid rgba(85, 53, 62, .85);
+  border-radius: 42% 47% 42% 45%;
+  background: rgba(255, 249, 238, .97); font-size: clamp(23px, 7vw, 31px);
+  line-height: 1; box-shadow: 0 6px 17px #22121d37;
+  animation: avatar-emoji-float 11s ease-out both;
+  animation-delay: calc(var(--emoji-index) * 130ms);
+}
+.avatar-emoji-thought:nth-child(even) { margin-top: 16px; }
+.avatar-emoji-thought::before, .avatar-emoji-thought::after {
+  content: ""; position: absolute; border: 2px solid rgba(85, 53, 62, .85);
+  background: rgba(255, 249, 238, .97); border-radius: 50%;
+}
+.avatar-emoji-thought::before { width: 11px; height: 11px; bottom: -15px; left: 9px; }
+.avatar-emoji-thought::after { width: 6px; height: 6px; bottom: -26px; left: 3px; }
+@keyframes avatar-emoji-float {
+  0% { opacity: 0; transform: translateY(14px) scale(.75); }
+  9% { opacity: 1; transform: translateY(0) scale(1.07); }
+  15%, 78% { opacity: 1; transform: translateY(-3px) scale(1); }
+  100% { opacity: 0; transform: translateY(-13px) scale(.9); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .avatar-emoji-thought { animation: none; }
+}

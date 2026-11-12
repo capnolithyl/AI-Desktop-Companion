@@ -63,6 +63,7 @@ import { attachmentQuestion, attachmentPromptText, loadChatAttachment, type Pend
 import { parseIkiModel } from "@ikijs/format";
 import { IkiAvatar } from "./IkiAvatar";
 import { reactionFromReply, type AvatarReaction, type AvatarReactionKind } from "./avatar-reactions";
+import { extractReplyEmojis } from "./emoji-reactions";
 import { avatarDebugText, type AvatarDebugSnapshot } from "./avatar-debug";
 import { version as DESKTOP_VERSION } from "../package.json";
 import {
@@ -2223,6 +2224,7 @@ export default function App() {
 
   const lastReply = [...messages].reverse().find(m => m.role === "assistant");
   const replyText = busy ? (lastReply?.content || activity) : (feedback ?? lastReply?.content ?? greeting);
+  const { visibleText: visibleReplyText, emojis: replyEmojis } = extractReplyEmojis(replyText);
 
   const theme = {
     "--accent": settings.appearance.accent,
@@ -2259,6 +2261,13 @@ export default function App() {
           <button type="button" onClick={openSettings}>Choose portrait</button>
         </div>
       )}
+      {!feedback && lastReply?.content && replyEmojis.length > 0 && <div
+        key={lastReply.id} className="avatar-emoji-thoughts" aria-hidden="true">
+        {replyEmojis.map((emoji, index) => <span
+          key={index + ":" + emoji}
+          className="avatar-emoji-thought"
+          style={{ "--emoji-index": index } as CSSProperties}>{emoji}</span>)}
+      </div>}
       {showAvatarDebug && <div className="avatar-debug-overlay" aria-label="Live Iki animation diagnostics">
         <strong>IKI DEBUG · v{DESKTOP_VERSION}</strong>
         <span>Renderer: {avatarDisplay === "portrait" ? "portrait" : avatarDebug?.status ?? "initializing"}</span>
@@ -2321,7 +2330,7 @@ export default function App() {
             <button className="dock-icon" title="Hide Mikan" aria-label="Hide Mikan" onClick={() => void invoke("hide_companion")}><X size={18}/></button>
           </div>
         </div>
-        <div className="latest-reply"><MarkdownText text={replyText}/></div>
+        <div className="latest-reply"><MarkdownText text={visibleReplyText}/></div>
         {voiceError && <div className="voice-error" role="alert">Voice: {voiceError}</div>}
       </div>
       {liveVision.enabled && <div className="live-vision-strip" role="status">
