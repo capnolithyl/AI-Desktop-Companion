@@ -120,7 +120,7 @@ test("exports Gemini HTTP failure and actual fallback model without leaking key"
     }
   }],{conversationId:"gemini-test",model:"qwen3.5:9b",contextWindow:16384});
   assert.match(result,/Model: qwen3\.5:9b/);
-  assert.match(result,/Gemini fallback: Gemini HTTP 503/);
+  assert.match(result,/Cloud fallback: Gemini HTTP 503/);
   assert.doesNotMatch(result,/API key:/);
 });
 
