@@ -34,7 +34,7 @@ impl MotionVelocity {
     fn at(&self, now: Instant) -> (f64, f64, f64) {
         let age_ms = self.last_motion_at
             .map(|then| now.duration_since(then).as_secs_f64() * 1000.0)
-            .unwrap_or(f64::INFINITY);
+            .unwrap_or(10000.0);
         if age_ms > 750.0 { return (0.0, 0.0, age_ms); }
         (self.vx, self.vy, age_ms)
     }
@@ -76,7 +76,7 @@ pub fn avatar_motion_sample(
     let size = window.outer_size().map_err(|e| e.to_string())?;
     let (velocity_x, velocity_y, motion_age_ms) = movement.0.lock()
         .map(|motion| motion.at(Instant::now()))
-        .unwrap_or((0.0, 0.0, f64::INFINITY));
+        .unwrap_or((0.0, 0.0, 10000.0));
     Ok(AvatarMotionSample {
         cursor_x: cursor.x, cursor_y: cursor.y,
         window_x: origin.x, window_y: origin.y,
