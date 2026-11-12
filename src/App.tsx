@@ -2539,6 +2539,8 @@ export default function App() {
         <span>Speech: {avatarDebug?.speaking ? "playing" : "idle"}
           {" · "}mouth {avatarDebug?.mouthOpen.toFixed(2) ?? "n/a"}</span>
         <span>Breath: {avatarDebug?.breath?.toFixed(2) ?? "n/a"}</span>
+        <span>Cursor: {avatarDebug?.gazeX?.toFixed(2) ?? "n/a"} / {avatarDebug?.gazeY?.toFixed(2) ?? "n/a"}</span>
+        <span>Hair momentum: {avatarDebug?.dragMomentum?.toFixed(2) ?? "n/a"}</span>
       </div>}
     </div>
 
