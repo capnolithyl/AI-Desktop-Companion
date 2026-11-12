@@ -42,9 +42,9 @@ import {
 import { MemoryPanel } from "./MemoryPanel";
 import type {ImportMemory,MemoryCategory} from "./memory-import";
 import { NotionPanel } from "./NotionPanel";
-import { isNotionTopic, notionContext, planNotionRetrieval, asksToReadFullNotionPage, hasNamedNotionMatch, unavailableChapterResponse,
+import { isNotionTopic, notionContext, planNotionRetrieval, asksToReadFullNotionPage, asksOnlyToRereadNotionPage, hasNamedNotionMatch, unavailableChapterResponse,
   type NotionHit, type NotionCachedPage } from "./notion-knowledge";
-import { readNotionChapter, buildNotionChapterEvidence, notionManuscriptCharacterCount, auditNotionReview, unverifiedNotionReviewResponse, shouldRefetchNotionDocument, notionSceneLinksNeedRefresh, describeNotionSceneLinks, type NotionDocument, type NotionChapterEvidence, type NotionChapterSession } from "./notion-reading";
+import { readNotionChapter, buildNotionChapterEvidence, notionManuscriptCharacterCount, auditNotionReview, unverifiedNotionReviewResponse, notionRereadReceipt, manuscriptReviewProvider, groundedManuscriptHistory, deniesLoadedNotionAccess, unavailableNotionModelResponse, shouldRefetchNotionDocument, notionSceneLinksNeedRefresh, describeNotionSceneLinks, type NotionDocument, type NotionChapterEvidence, type NotionChapterSession } from "./notion-reading";
 import { splitSpeechText, toSpeechText, VOICE_TEST_LINE, ProgressiveSpeechFeed, FIRST_SPEECH_CHARS, POCKET_FINAL_SPEECH_CHARS, voiceEndpoint, POCKET_VOICE_ENDPOINT, canSaveVoiceReference, voicePlaybackGain, maySpeakProgressively } from "./speech";
 import { NarrationFilter, roleplayActive, stripNarratedActions } from "./narration-filter";
 import { memoryBudget, sessionMemoryContext, type SessionSummary } from "./memory-budget";
@@ -1940,7 +1940,7 @@ export default function App() {
         // every local map/reduce pass unless the owner asks for a re-read.
         if (activeNotion?.page.id === notionPlan.selectedPage.id &&
             !!activeNotion.context &&
-            !/\b(?:reread|re-read|read again|from scratch)\b/i.test(text)) {
+            !notionPlan.reread) {
           readChapterContext = activeNotion.context;
           chapterEvidence = activeNotion.evidence ?? null;
         } else {
@@ -2134,6 +2134,11 @@ export default function App() {
           : undefined,
         approvedProseCharacters:chapterEvidence ? notionManuscriptCharacterCount(chapterEvidence) : undefined,
         sceneTitles:chapterEvidence?.scenes.map(scene=>scene.title),
+        rereadRequested:notionPlan.reread,
+        modelPolicy:groundedChapterTurn
+          ? manuscriptReviewProvider(settings.provider,settings.openrouterModel)==="local"
+            && settings.provider==="auto" ? "local (Auto free-router guard)" : "selected provider"
+          : undefined,
         readFailure:notionReadFailure
       } : undefined;
       const unavailableChapter=useNotion ? unavailableChapterResponse(
@@ -2150,6 +2155,26 @@ export default function App() {
         };
         setMessages(current=>current.map(m=>m.id===assistantId?assistant:m));
         if(settings.voice.autoSpeak && remoteText===undefined)void speak(unavailableChapter);
+        await persistMessage(assistant);
+        return;
+      }
+      if (groundedChapterTurn && chapterEvidence &&
+          asksOnlyToRereadNotionPage(text,notionPlan.selectedPage)) {
+        // This is a verified filesystem/cache operation. Never ask a random
+        // language model to decide whether the integration exists, and never
+        // route a bare "read it again" request into a fabricated book review.
+        const response=notionRereadReceipt(
+          chapterEvidence,notionPlan.selectedPage?.id===chapterEvidence.title
+            ? 0 : chapterEvidence.scenes.length ? cachedNotionPages.find(p=>p.id===notionPlan.selectedPage?.id)?.characters ?? 0 : 0
+        );
+        const assistant:LogMessage={
+          id:assistantId,role:"assistant",content:response,createdAt:Date.now(),
+          diagnostics:{elapsedMs:performance.now()-started,firstTokenMs:null,
+            model:"Notion local reader",stats:null,memory:memoryAudit,toolPlan:toolAudit,
+            notion:notionAudit,parallelTasks:parallelTimings}
+        };
+        setMessages(current=>current.map(m=>m.id===assistantId?assistant:m));
+        if(settings.voice.autoSpeak && remoteText===undefined)void speak(response);
         await persistMessage(assistant);
         return;
       }
