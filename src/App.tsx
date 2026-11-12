@@ -1792,7 +1792,8 @@ export default function App() {
           scenesFound=document.relatedPages?.length??0;
           // Preserve the chapter referent for "Okay, read those scenes" or
           // "What happens in them?", without falsely marking prose as read.
-          notionChapterRef.current={conversationId,page:notionPlan.selectedPage,context:""};
+          notionChapterRef.current={conversationId,page:notionPlan.selectedPage,
+            context:activeNotion?.page.id===notionPlan.selectedPage.id ? activeNotion.context : ""};
         } catch(error) {
           lookupFailure=errorText(error);
           response="I found "+notionPlan.selectedPage.title+
