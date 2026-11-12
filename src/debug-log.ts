@@ -68,6 +68,8 @@ export type PreparationTaskAudit = {
 export type Diagnostics = {
   elapsedMs: number;
   firstTokenMs: number | null;
+  /** Milliseconds from send to first audible WAV playback, if measured. */
+  firstAudioMs?: number;
   model: string;
   /** Provider configured for the turn, not necessarily the backend that replied. */
   provider?: "local" | "auto" | "openrouter" | "gemini";
@@ -128,6 +130,7 @@ function performanceLines(diagnostics: Diagnostics): string[] {
     "Performance:",
     "  Wall time: " + duration(diagnostics.elapsedMs),
     "  First token: " + duration(diagnostics.firstTokenMs),
+    ...(diagnostics.firstAudioMs == null ? [] : ["  First spoken audio: " + duration(diagnostics.firstAudioMs)]),
     "  Output: " + (s?.outputTokens == null ? "n/a" : s.outputTokens + " tokens"),
     "  Speed: " + speed,
     "  Prompt: " + (s?.promptTokens == null ? "n/a" : s.promptTokens + " tokens"),
@@ -135,7 +138,7 @@ function performanceLines(diagnostics: Diagnostics): string[] {
     "  Load time: " + fromNanoseconds(s?.loadDurationNs),
     "  Prompt eval: " + fromNanoseconds(s?.promptEvalDurationNs),
     "  Model: " + diagnostics.model,
-    ...(diagnostics.fallbackReason ? ["  Gemini fallback: " + diagnostics.fallbackReason] : []),
+    ...(diagnostics.fallbackReason ? ["  Cloud fallback: " + diagnostics.fallbackReason] : []),
     ...(diagnostics.research ? [
       "  Research evidence: " + diagnostics.research.status,
       "  Accepted source-anchored facts: " + diagnostics.research.accepted,
