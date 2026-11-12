@@ -25,6 +25,43 @@ export function shouldRefetchNotionDocument(error:unknown):boolean {
   return /Only chapter planning notes were cached|Linked scenes are missing|A linked scene has no cached manuscript text/i.test(message);
 }
 
+/** Notion relation order is not manuscript order. Chapter scene labels
+ * provide the canonical sequence (1.1, 1.2, ... 1.10), with stable order for
+ * unlabeled pages. Do not mutate the original document.
+ */
+export function orderedNotionScenes(document:NotionDocument):NonNullable<NotionDocument["relatedPages"]> {
+  const number=(title:string):[number,number]|null=>{
+    const m=/^\\s*(\\d+)\\.(\\d+)(?=\\D|$)/.exec(title);
+    return m?[Number(m[1]),Number(m[2])]:null;
+  };
+  return [...(document.relatedPages??[])].sort((a,b)=>{
+    const x=number(a.title),y=number(b.title);
+    if(!x || !y)return 0;
+    return x[0]-y[0] || x[1]-y[1];
+  });
+}
+
+/** A chapter with no relation data or cached scene prose needs a fresh
+ * owner-authorized Notion read before claiming that links were inspected.
+ */
+export function notionSceneLinksNeedRefresh(document:NotionDocument):boolean {
+  return (document.missingRelatedPages??0)>0 ||
+    !document.relatedPages?.length ||
+    document.relatedPages.some(scene=>!joinNotionChunks(scene.chunks).trim());
+}
+
+export function describeNotionSceneLinks(document:NotionDocument):string {
+  const scenes=orderedNotionScenes(document);
+  if(notionSceneLinksNeedRefresh(document)) {
+    throw new Error("Not all linked scene manuscripts were available for this chapter.");
+  }
+  return "Yes! I can see "+scenes.length+" scenes linked to "+document.title+
+    " in Notion:\\n"+scenes.map((scene,i)=>(i+1)+". "+scene.title).join("\\n")+
+    "\\n\\nThese are the actual scene pages, not just the chapter outline. "+
+    "You don't need to paste individual scene titles. I can open and read "+
+    "them together when we discuss the chapter.";
+}
+
 /** The Rust chunker stores 1,800-codepoint windows with 220-codepoint
  * overlap. Reassemble once so characters at the overlaps are not read twice.
  */
@@ -81,7 +118,7 @@ export async function readNotionChapter(
       document.missingRelatedPages+"). Share and sync the Scenes database before asking for a complete chapter review.");
   }
   const parentText=joinNotionChunks(document.chunks);
-  const linked=document.relatedPages??[];
+  const linked=orderedNotionScenes(document);
   const chapter=/\bchapter\s+(?:\d+|one|two|three|four|five|six|seven|eight|nine|ten)\b/i.test(document.title);
   const editorialOutline=/\b(?:chapter responsibility|writing and continuity|whole.chapter editorial audit|manuscript assembly note|scene.by.scene reread)\b/i.test(parentText);
   const actualProse=/\b(?:approved manuscript prose|full chapter prose|manuscript text)\b/i.test(parentText);
