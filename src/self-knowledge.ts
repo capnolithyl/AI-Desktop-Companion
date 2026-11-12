@@ -4,7 +4,7 @@
  * The CI checker detects unmapped Tauri commands, missing files and stale versions.
  * Add a feature here when adding capability, and update the matching source/docs.
  */
-export const CAPABILITY_RELEASE = "0.8.41";
+export const CAPABILITY_RELEASE = "0.9.0";
 
 export type CapabilityStage = "implemented" | "experimental" | "planned";
 export type RuntimeDependency = "none" | "ollama" | "search" | "mem0" | "voice" | "vision" | "pocket";
@@ -95,10 +95,10 @@ export const CAPABILITIES: readonly Capability[] = [
   },
   {
     id:"personal-facts",label:"Personal facts and automatic extraction",category:"Memory",
-    description:"Owner-editable SQLite user facts with previewed local JSON/CSV/TXT/Markdown bulk imports, category and tag editing, filters, exact-text deduplication, automatic evidence-grounded extraction, deletion and pinned core memories. Export all user facts to JSON in Downloads, or atomically replace the user-fact set after a typed confirmation and automatic JSON backup; replacements leave chat history, character canon, and Notion untouched. Similar but differently worded facts are not automatically merged. For relevant chat, deterministic SQLite FTS5 and optional semantic matches select memories without a separate LLM reranking call. The optional vector index may be unavailable during sync.",
+    description:"Owner-editable SQLite user facts with previewed local JSON/CSV/TXT/Markdown bulk imports, category and tag editing, filters, exact-text deduplication, automatic evidence-grounded extraction, deletion and pinned core memories. Export all user facts to JSON in Downloads, or atomically replace the user-fact set after a typed confirmation and automatic JSON backup; replacements leave chat history, character canon, and Notion untouched. Similar but differently worded facts are not silently merged. Completed chat turns enter a durable local SQLite extraction queue with restart recovery and bounded retries. Corrections are staged for owner approval, with Replace/Keep both/Dismiss controls and revision history rather than silent overwrites. Relevant chat uses deterministic SQLite FTS5 and optional semantic retrieval without a separate LLM reranking call. The optional vector index may be unavailable during sync.",
     stage:"implemented",runtime:"none",keywords:["remember","fact","profile","memory","pin","forget","personal","bulk","import","category","tags","csv","json"],
-    sources:["src-tauri/src/memory.rs","src-tauri/src/memory_extraction.rs","src/memory-client.ts","src/memory-retrieval.ts","src/MemoryImporter.tsx","src/memory-import.ts"],docs:["MEMORY.md"],
-    commands:["memory_list_facts","memory_search_fact_ids","memory_add_fact","memory_update_fact","memory_update_fact_metadata","memory_import_facts","memory_export_facts","memory_replace_facts","memory_delete_fact","memory_mark_recalled","memory_pin_fact","memory_process_turn"],
+    sources:["src-tauri/src/memory.rs","src-tauri/src/memory_extraction.rs","src-tauri/src/memory_jobs.rs","src-tauri/src/memory_reviews.rs","src/memory-client.ts","src/MemoryReviews.tsx","src/memory-retrieval.ts","src/MemoryImporter.tsx","src/memory-import.ts"],docs:["MEMORY.md"],
+    commands:["memory_list_facts","memory_search_fact_ids","memory_add_fact","memory_update_fact","memory_update_fact_metadata","memory_import_facts","memory_export_facts","memory_replace_facts","memory_delete_fact","memory_mark_recalled","memory_pin_fact","memory_process_turn","memory_enqueue_turn","memory_process_pending_jobs","memory_jobs_status","memory_retry_failed_jobs","memory_list_reviews","memory_resolve_review","memory_list_fact_history"],
     screens:["memory"],
     slashCommands:["memories","remember","forget"]
   },

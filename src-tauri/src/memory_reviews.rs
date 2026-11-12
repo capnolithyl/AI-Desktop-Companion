@@ -184,7 +184,7 @@ mod tests {
         let updated:String=db.query_row("SELECT fact FROM user_memories WHERE id=?1",
             params![old_id],|r|r.get(0)).unwrap();
         assert_eq!(updated,"The user dislikes metal");
-        assert!(memory::find_fact_ids(&db,"likes metal").unwrap().is_empty());
+        assert!(memory::find_fact_ids(&db,"likes").unwrap().is_empty());
         let history:String=db.query_row("SELECT previous_fact FROM memory_fact_history",[],
             |r|r.get(0)).unwrap();
         assert_eq!(history,"The user likes metal");
