@@ -4,14 +4,14 @@
  * A small local Ollama JSON pass judges relevance, not factual truth.
  */
 import {
-  filterStaleActivities, prioritizeCoreMemories, rankMemories, strongSemanticIds,
+  filterStaleActivities, prioritizeCoreMemories, rankMemories, strongSemanticIds, memoryTerms,
   type RankableMemory, type SemanticRecallMatch
 } from "./memory-ranking.ts";
 import { dialogueEligibleMemories } from "./identity-memory.ts";
 
 export type HybridRecallResult = {
   ids: number[];
-  mode: "ai-reranked" | "fallback" | "small-talk" | "empty";
+  mode: "ai-reranked" | "hybrid-rrf" | "fallback" | "small-talk" | "empty";
   candidateCount: number;
   elapsedMs: number;
   note?: string;
@@ -131,4 +131,58 @@ export async function selectHybridMemoryIds<T extends RankableMemory>(
   } catch {
     return fallback("Local reranker unavailable or timed out",represented.size);
   }
+}
+
+
+/**
+ * Fast default recall. A search hit must be independently useful; a high
+ * importance score alone never makes unrelated personal data topical.
+ * FTS5 is authoritative for exact terms; the optional vector sidecar
+ * supplies ranked semantic neighbors. Both are deterministic for a fixed
+ * database snapshot and never require a fresh LLM judgement.
+ */
+export function selectDeterministicMemoryIds<T extends RankableMemory>(
+  allFacts: T[], query: string, neighbors: SemanticRecallMatch[],
+  lexicalIds: number[], maxFacts: number
+): HybridRecallResult {
+  const started=Date.now();
+  const eligible=dialogueEligibleMemories(filterStaleActivities(allFacts,query),query);
+  if(!eligible.length||maxFacts<=0)
+    return {ids:[],mode:"empty",candidateCount:0,elapsedMs:0};
+  if(smallTalk.test(query.trim()))
+    return {ids:[],mode:"small-talk",candidateCount:0,elapsedMs:0};
+
+  const byId=new Map(eligible.map(f=>[f.id,f]));
+  const stop=new Set(["what","when","where","which","could","would","should",
+    "please","about","with","this","that","from","your","mine","our",
+    "have","just","some","there","how","any","tell","said","user","owner",
+    "mikan","remember","does","were","will","can","the","and","for","are"]);
+  const terms=new Set(memoryTerms(query).filter(t=>t.length>=3&&!stop.has(t)));
+  const topical=(f:T)=>{
+    const words=new Set(memoryTerms([f.fact,...(f.tags??[]),f.category??""].join(" ")));
+    return [...terms].some(t=>words.has(t));
+  };
+  const lexical=[...new Set(lexicalIds.length
+    ? lexicalIds.filter(id=>byId.has(id)&&topical(byId.get(id)!))
+    : rankMemories(eligible,query).filter(topical).map(f=>f.id))].slice(0,32);
+  const semantic=strongSemanticIds(neighbors,query).filter(id=>byId.has(id));
+  const scores=new Map<number,number>();
+  const fuse=(ids:number[])=>ids.forEach((id,index)=>{
+    scores.set(id,(scores.get(id)??0)+1/(60+index+1));
+  });
+  fuse(lexical);
+  fuse(semantic);
+  // Owner-pinned facts should not interrupt unrelated questions.
+  if(/\b(?:my|mine|me|our|ours|recommend|suggest|personal|based on|what should i)\b/i.test(query)){
+    for(const fact of rankMemories(eligible,query)
+      .filter(f=>(f.importance??50)>=90&&topical(f)).slice(0,2)){
+      scores.set(fact.id,(scores.get(fact.id)??0)+1/61);
+    }
+  }
+  const ids=[...scores.entries()]
+    .sort((a,b)=>b[1]-a[1]||a[0]-b[0])
+    .slice(0,maxFacts).map(([id])=>id);
+  return {ids,mode:"hybrid-rrf",candidateCount:scores.size,
+    elapsedMs:Date.now()-started,
+    note:lexicalIds.length?"SQLite BM25 + semantic recall":"Lexical fallback + semantic recall"};
 }

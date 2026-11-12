@@ -84,6 +84,16 @@ export function parseWebToolDecision(
   }
 }
 
+// Public-web planning no longer doubles as a memory relevance pass.
+export async function planPublicWebTools(
+  query:string, localSelect:(prompt:string)=>Promise<string>,
+  options:{automaticWebEnabled:boolean;sourcePreferences:readonly SourcePreference[]}
+):Promise<WebToolDecision>{
+  if(!options.automaticWebEnabled)
+    return {search:false,reason:"Automatic web tools disabled",method:"disabled"};
+  return (await planMemoriesAndTools([],query,[],0,localSelect,options)).web;
+}
+
 export async function planMemoriesAndTools<T extends RankableMemory>(
   facts:T[],query:string,neighbors:SemanticRecallMatch[],maxFacts:number,
   localSelect:(prompt:string)=>Promise<string>,

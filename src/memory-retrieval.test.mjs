@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
-  buildMemoryRerankPrompt, parseMemoryRerankIds, selectHybridMemoryIds
+  buildMemoryRerankPrompt, parseMemoryRerankIds, selectHybridMemoryIds, selectDeterministicMemoryIds
 } from "./memory-retrieval.ts";
 import { prioritizeCoreMemories } from "./memory-ranking.ts";
 import { shouldIncludeCharacterCanon } from "./character-canon-routing.ts";
@@ -90,4 +90,32 @@ test("a pinned identity remains saved but is not injected into normal chat",asyn
       return '{"ids":[41]}';
     });
   assert.deepEqual(who.ids,[41]);
+});
+
+
+test("new default recall is deterministic and does not need Ollama",()=>{
+  const query="Tell me about my WordPress experience";
+  const one=selectDeterministicMemoryIds(facts,query,[],[12,13],5);
+  const two=selectDeterministicMemoryIds(facts,query,[],[12,13],5);
+  assert.equal(one.mode,"hybrid-rrf");
+  assert.deepEqual(one.ids,[12,13]);
+  assert.deepEqual(one.ids,two.ids);
+});
+test("unrelated questions do not inject pinned or stale interests",()=>{
+  assert.deepEqual(selectDeterministicMemoryIds(facts,
+    "In what year did Napoleon become emperor?",[],[],5).ids,[]);
+  assert.deepEqual(selectDeterministicMemoryIds(facts,
+    "Hello!",[],[12,13],5).ids,[]);
+});
+test("a good semantic neighbor recalls facts without overlapping keywords",()=>{
+  const result=selectDeterministicMemoryIds(facts,
+    "What entertainment do I enjoy?",[{id:15,score:0.91}],[],5);
+  assert.deepEqual(result.ids,[15]);
+});
+test("FTS5 matches are combined with semantic neighbors",()=>{
+  const result=selectDeterministicMemoryIds(facts,
+    "Recommend metal music",[{id:15,score:0.88}], [14],5);
+  assert.equal(result.ids.length,2);
+  assert.ok(result.ids.includes(14));
+  assert.ok(result.ids.includes(15));
 });
