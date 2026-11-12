@@ -1848,8 +1848,8 @@ export default function App() {
                 .reduce((n,scene)=>n+scene.chunks.reduce((total,chunk)=>total+chunk.length,0),0);
             };
             countLoadedScenes(document);
-            const summarizeSection = (prompt:string) => invoke<string>("condense_local_context", {
-              endpoint:settings.endpoint,model:settings.model,prompt,
+            const summarizeSection = (prompt:string,plainText=false) => invoke<string>("condense_local_context", {
+              endpoint:settings.endpoint,model:settings.model,prompt,plainText,
               contextWindow:settings.contextWindow,maxOutputTokens:500
             });
             const progress = (part:number,total:number) =>
