@@ -16,11 +16,9 @@ pub(crate) fn add_sources(
 }
 
 pub(crate) async fn execute_tool(
-    app: &AppHandle, request: &ChatRequest, call: &Value,
+    app: &AppHandle, request: &ChatRequest, name: &str, args: &Value,
     sources: &mut Vec<web_search::SearchResult>, provider: &str
 ) -> Value {
-    let name = call["name"].as_str().unwrap_or("");
-    let args = &call["args"];
     match name {
         "search_web" => {
             let query = args["query"].as_str().unwrap_or("").trim();
