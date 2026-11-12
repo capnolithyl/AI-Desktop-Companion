@@ -43,7 +43,7 @@ import type {ImportMemory,MemoryCategory} from "./memory-import";
 import { NotionPanel } from "./NotionPanel";
 import { isNotionTopic, notionContext, planNotionRetrieval, asksToReadFullNotionPage, hasNamedNotionMatch, unavailableChapterResponse,
   type NotionHit, type NotionCachedPage } from "./notion-knowledge";
-import { readNotionChapter, shouldRefetchNotionDocument, type NotionDocument, type NotionChapterSession } from "./notion-reading";
+import { readNotionChapter, shouldRefetchNotionDocument, notionSceneLinksNeedRefresh, describeNotionSceneLinks, type NotionDocument, type NotionChapterSession } from "./notion-reading";
 import { splitSpeechText, toSpeechText, VOICE_TEST_LINE, ProgressiveSpeechFeed, FIRST_SPEECH_CHARS, POCKET_FINAL_SPEECH_CHARS, voiceEndpoint, POCKET_VOICE_ENDPOINT, canSaveVoiceReference, voicePlaybackGain } from "./speech";
 import { NarrationFilter, roleplayActive, stripNarratedActions } from "./narration-filter";
 import { memoryBudget, sessionMemoryContext, type SessionSummary } from "./memory-budget";
@@ -1770,6 +1770,52 @@ export default function App() {
     let parallelTimings: NonNullable<Diagnostics["parallelTasks"]> = [];
     try {
       await persistMessage(user);
+      if(useNotion && notionPlan.sceneLookup && notionPlan.selectedPage) {
+        // A scene-availability question needs an actual Notion relation lookup,
+        // not a 9B model guessing from cached chapter editorial excerpts.
+        // If an old index has no scene links, retrieve the owner-shared
+        // relation and scene pages directly through the existing read-only API.
+        setActivity("Checking linked Notion scenes…");
+        let response:string;
+        let lookupFailure:string|undefined;
+        let scenesFound=0;
+        try {
+          let document=await invoke<NotionDocument>("notion_read_document",{
+            id:notionPlan.selectedPage.id
+          });
+          if(notionSceneLinksNeedRefresh(document)) {
+            document=await invoke<NotionDocument>("notion_read_document_live",{
+              id:notionPlan.selectedPage.id
+            });
+          }
+          response=describeNotionSceneLinks(document);
+          scenesFound=document.relatedPages?.length??0;
+          // Preserve the chapter referent for "Okay, read those scenes" or
+          // "What happens in them?", without falsely marking prose as read.
+          notionChapterRef.current={conversationId,page:notionPlan.selectedPage,context:""};
+        } catch(error) {
+          lookupFailure=errorText(error);
+          response="I found "+notionPlan.selectedPage.title+
+            " in my Notion index, but I couldn't access its linked scene pages: "+
+            lookupFailure+". I don't need you to supply scene titles; "+
+            "the chapter's Scenes relation should provide them. "+
+            "Check that the Scenes database is shared with my Notion integration.";
+        }
+        const assistant:LogMessage={
+          id:assistantId,role:"assistant",content:response,createdAt:Date.now(),
+          diagnostics:{elapsedMs:performance.now()-started,firstTokenMs:null,
+            model:settings.model,stats:null,
+            notion:{selectedPage:notionPlan.selectedPage.title,
+              cachedPages:cachedNotionPages.length,excerptCount:notionHits.length,
+              fullReadAttempted:false,readSucceeded:false,
+              linkedScenesRead:scenesFound,linkedSceneCharacters:0,
+              readFailure:lookupFailure},parallelTasks:parallelTimings}
+        };
+        setMessages(current=>current.map(m=>m.id===assistantId?assistant:m));
+        if(settings.voice.autoSpeak && remoteText===undefined)void speak(response);
+        await persistMessage(assistant);
+        return;
+      }
       let readChapterContext = "";
       let linkedScenesRead = 0;
       let linkedSceneCharacters = 0;
@@ -1779,6 +1825,7 @@ export default function App() {
         // conversation. Follow-up summaries should not needlessly re-run
         // every local map/reduce pass unless the owner asks for a re-read.
         if (activeNotion?.page.id === notionPlan.selectedPage.id &&
+            !!activeNotion.context &&
             !/\b(?:reread|re-read|read again|from scratch)\b/i.test(text)) {
           readChapterContext = activeNotion.context;
         } else {
