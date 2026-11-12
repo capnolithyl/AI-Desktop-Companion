@@ -1,0 +1,211 @@
+{
+  "output": "H:\\_FunProjects\\AI-Desktop-Companion\\AI-Desktop-Companion\\assets\\iki\\mikan-v02\\iki-ready\\mikan-iki-ready.psd",
+  "canvas": [
+    1280,
+    1280
+  ],
+  "depth": 8,
+  "layer_count": 14,
+  "stack_bottom_to_top": [
+    "hair_back",
+    "body",
+    "face",
+    "nose",
+    "mouth",
+    "brow_R",
+    "brow_L",
+    "eye_R",
+    "eye_L",
+    "lash_R",
+    "lash_L",
+    "iris_R",
+    "iris_L",
+    "hair_front"
+  ],
+  "layers": [
+    {
+      "role": "hair_back",
+      "rgba_exact": true,
+      "visible": true,
+      "mask": false,
+      "blend_mode": "BlendMode.NORMAL",
+      "offset": [
+        0,
+        0
+      ]
+    },
+    {
+      "role": "body",
+      "rgba_exact": true,
+      "visible": true,
+      "mask": false,
+      "blend_mode": "BlendMode.NORMAL",
+      "offset": [
+        0,
+        0
+      ]
+    },
+    {
+      "role": "face",
+      "rgba_exact": true,
+      "visible": true,
+      "mask": false,
+      "blend_mode": "BlendMode.NORMAL",
+      "offset": [
+        0,
+        0
+      ]
+    },
+    {
+      "role": "nose",
+      "rgba_exact": true,
+      "visible": true,
+      "mask": false,
+      "blend_mode": "BlendMode.NORMAL",
+      "offset": [
+        0,
+        0
+      ]
+    },
+    {
+      "role": "mouth",
+      "rgba_exact": true,
+      "visible": true,
+      "mask": false,
+      "blend_mode": "BlendMode.NORMAL",
+      "offset": [
+        0,
+        0
+      ]
+    },
+    {
+      "role": "brow_R",
+      "rgba_exact": true,
+      "visible": true,
+      "mask": false,
+      "blend_mode": "BlendMode.NORMAL",
+      "offset": [
+        0,
+        0
+      ]
+    },
+    {
+      "role": "brow_L",
+      "rgba_exact": true,
+      "visible": true,
+      "mask": false,
+      "blend_mode": "BlendMode.NORMAL",
+      "offset": [
+        0,
+        0
+      ]
+    },
+    {
+      "role": "eye_R",
+      "rgba_exact": true,
+      "visible": true,
+      "mask": false,
+      "blend_mode": "BlendMode.NORMAL",
+      "offset": [
+        0,
+        0
+      ]
+    },
+    {
+      "role": "eye_L",
+      "rgba_exact": true,
+      "visible": true,
+      "mask": false,
+      "blend_mode": "BlendMode.NORMAL",
+      "offset": [
+        0,
+        0
+      ]
+    },
+    {
+      "role": "lash_R",
+      "rgba_exact": true,
+      "visible": true,
+      "mask": false,
+      "blend_mode": "BlendMode.NORMAL",
+      "offset": [
+        0,
+        0
+      ]
+    },
+    {
+      "role": "lash_L",
+      "rgba_exact": true,
+      "visible": true,
+      "mask": false,
+      "blend_mode": "BlendMode.NORMAL",
+      "offset": [
+        0,
+        0
+      ]
+    },
+    {
+      "role": "iris_R",
+      "rgba_exact": true,
+      "visible": true,
+      "mask": false,
+      "blend_mode": "BlendMode.NORMAL",
+      "offset": [
+        0,
+        0
+      ]
+    },
+    {
+      "role": "iris_L",
+      "rgba_exact": true,
+      "visible": true,
+      "mask": false,
+      "blend_mode": "BlendMode.NORMAL",
+      "offset": [
+        0,
+        0
+      ]
+    },
+    {
+      "role": "hair_front",
+      "rgba_exact": true,
+      "visible": true,
+      "mask": false,
+      "blend_mode": "BlendMode.NORMAL",
+      "offset": [
+        0,
+        0
+      ]
+    }
+  ],
+  "source_hashes_unchanged": true,
+  "input_sha256": {
+    "H:\\_FunProjects\\AI-Desktop-Companion\\AI-Desktop-Companion\\assets\\iki\\mikan-v02\\iki-ready\\layers\\hair_back.png": "e1e83a38cbcf0e191f79ac9cd6128dc572ad646ccdd8ca7755f008e097b150b4",
+    "H:\\_FunProjects\\AI-Desktop-Companion\\AI-Desktop-Companion\\assets\\iki\\mikan-v02\\iki-ready\\layers\\body.png": "ffb2729e214edd807108e82e43ef950a1fcb1f9fb29b522f10a7759bd86c107e",
+    "H:\\_FunProjects\\AI-Desktop-Companion\\AI-Desktop-Companion\\assets\\iki\\mikan-v02\\iki-ready\\layers\\face.png": "ebb0fe745f4f2dc96efc63e02342d31a3d0b8badfa50b0af22387ba64fff11c0",
+    "H:\\_FunProjects\\AI-Desktop-Companion\\AI-Desktop-Companion\\assets\\iki\\mikan-v02\\iki-ready\\layers\\nose.png": "21ad83323dbc01a8d3d627e8ff80012cde57b2c23d557105e98d3cfb43d24f09",
+    "H:\\_FunProjects\\AI-Desktop-Companion\\AI-Desktop-Companion\\assets\\iki\\mikan-v02\\iki-ready\\layers\\mouth.png": "8c69b2352302dd5ba25fac4f1ee64de0500455f0954749d86ac2dc518b30bde0",
+    "H:\\_FunProjects\\AI-Desktop-Companion\\AI-Desktop-Companion\\assets\\iki\\mikan-v02\\iki-ready\\layers\\brow_R.png": "8b227d2f5c9476214dbb159c3e6e3378557cbd96cfc7654e7def05374217877b",
+    "H:\\_FunProjects\\AI-Desktop-Companion\\AI-Desktop-Companion\\assets\\iki\\mikan-v02\\iki-ready\\layers\\brow_L.png": "e19addaf107b26e2d83ab7b27d667e3f28131552dfa04414ae1a76d562b06346",
+    "H:\\_FunProjects\\AI-Desktop-Companion\\AI-Desktop-Companion\\assets\\iki\\mikan-v02\\iki-ready\\layers\\eye_R.png": "ae0da1ffa750fb35aa33a29a7e0715519dd3133beb58fd9bcddc8b61544a2a64",
+    "H:\\_FunProjects\\AI-Desktop-Companion\\AI-Desktop-Companion\\assets\\iki\\mikan-v02\\iki-ready\\layers\\eye_L.png": "94f298b258ddfec2447dcd430d8b0eb40b20d86ca709f7a20d6af9e73ea96140",
+    "H:\\_FunProjects\\AI-Desktop-Companion\\AI-Desktop-Companion\\assets\\iki\\mikan-v02\\iki-ready\\layers\\lash_R.png": "7fe910fcfbdaa2d2420e91b39d1c92c362d1db4c286df9d752eb447d53c5b87a",
+    "H:\\_FunProjects\\AI-Desktop-Companion\\AI-Desktop-Companion\\assets\\iki\\mikan-v02\\iki-ready\\layers\\lash_L.png": "b03b18ac6220ca24e7902c2ecfb50e8fc23e738e3825406efc7aade22274682a",
+    "H:\\_FunProjects\\AI-Desktop-Companion\\AI-Desktop-Companion\\assets\\iki\\mikan-v02\\iki-ready\\layers\\iris_R.png": "5cbf18a83b4e11ddd14ad1fd8ecf66cf882d461e0cc3471ded110c24bf3d2e98",
+    "H:\\_FunProjects\\AI-Desktop-Companion\\AI-Desktop-Companion\\assets\\iki\\mikan-v02\\iki-ready\\layers\\iris_L.png": "7c385683628bd0204e769a0b0bbc2a390feb54a0ec03c1c5f8086086da59c29f",
+    "H:\\_FunProjects\\AI-Desktop-Companion\\AI-Desktop-Companion\\assets\\iki\\mikan-v02\\iki-ready\\layers\\hair_front.png": "a1022fe71cc7384c180f1396aea45d4910e5f110e1ae25e35341e055896d2bca",
+    "H:\\_FunProjects\\AI-Desktop-Companion\\AI-Desktop-Companion\\assets\\iki\\mikan-v02\\iki-ready\\manifest.json": "4973eccd2f8ec20ac55f61b907c81ab1243da33b5ef11ff880819b48f779f7bf",
+    "H:\\_FunProjects\\AI-Desktop-Companion\\AI-Desktop-Companion\\assets\\iki\\mikan-v02\\mikan-cleaned.psd": "56a60b0890081fca30c6c7c71521435cb9222543594836f51b7ca6bff3a2fcab"
+  },
+  "composition": {
+    "changed_pixels": 0,
+    "max_channel_delta": 0,
+    "mean_channel_delta": 0.0
+  },
+  "embedded_psd_preview": {
+    "changed_pixels": 387408,
+    "max_channel_delta": 2,
+    "mean_channel_delta": 0.10536422729492187
+  },
+  "auto_rigging_performed": false
+}
