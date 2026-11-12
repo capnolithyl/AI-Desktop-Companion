@@ -128,14 +128,20 @@ export function selectNotionPage(query:string,pages:readonly NotionCachedPage[])
   return ranked[0].page;
 }
 
-export function asksToReadFullNotionPage(text:string):boolean {
-  const document=/\b(?:full|whole|entire|all of|complete|chapter|draft|document|notion page|manuscript|book|story)\b/i.test(text);
+export function asksToReadFullNotionPage(text:string, selectedPage:NotionCachedPage|null=null):boolean {
+  // The matched page supplies document context for natural follow-ups such as
+  // "Give me the Cliff Notes" or "Summarize Boxes", without a magic keyword.
+  const document=/\b(?:full|whole|entire|all of|complete|chapter|draft|document|notion page|manuscript|book|story)\b/i.test(text)
+    || selectedPage!==null;
   const direct=/\b(?:read|review|analy[sz]e|summari[sz]e|recap|go through|look through|take a look at|critique)\b/i.test(text);
+  const synopsis=/\b(?:cliffs?[\s-]*notes|synopsis|summary|rundown|plot\s+(?:summary|recap|breakdown)|(?:key|main)\s+(?:events|moments)|what\s+happens?\s+(?:in|during|throughout)|walk\s+me\s+through|give\s+me\s+(?:a\s+|the\s+|some\s+)?(?:breakdown|highlights))\b/i.test(text);
+  const coverageQuestion=/\b(?:can|could|will|would|do|did|have|are)\b.{0,90}\b(?:read|see|view|open|access)\b/i.test(text)
+    && /\b(?:entire|full|whole|all|complete)\b/i.test(text);
   // A request for feedback on a particular chapter requires reading it, even
   // if the owner doesn't literally say "please read the chapter".
   const critique=/\b(?:what do you think|what did you think|your thoughts|opinion|impressions?|feedback|critique|how is|how's)\b/i.test(text)
-    && chapterNumber(text)!==null;
-  return document && (direct || critique);
+    && (chapterNumber(text)!==null || selectedPage!==null);
+  return document && (direct || synopsis || coverageQuestion || critique);
 }
 
 function namedCandidates(text:string):string[] {
@@ -210,7 +216,7 @@ export function planNotionRetrieval(
   const relevant=bookIntent || !!page || possibleName;
   const overview=bookIntent && !page ? overviewForConversation(text+" "+priorTopic,pages) : null;
   const query=(text+" "+priorTopic+" "+(page?.title||overview?.title||"")).trim().slice(0,600);
-  return {relevant,query,selectedPage:page,fullRead:asksToReadFullNotionPage(text) && !!page};
+  return {relevant,query,selectedPage:page,fullRead:!!page && asksToReadFullNotionPage(text,page)};
 }
 
 /** Return a deterministic response instead of giving the model a chance
@@ -222,7 +228,7 @@ export function unavailableChapterResponse(
   readContext:string,
   cachedCount:number
 ):string|null {
-  if(chapterNumber(query)===null || !asksToReadFullNotionPage(query))return null;
+  if(!asksToReadFullNotionPage(query,matchedPage) || (chapterNumber(query)===null && !matchedPage))return null;
   if(matchedPage && readContext.length>0 && !readContext.startsWith("NOTION FULL READING FAILED:"))
     return null;
   if(!cachedCount)return "I can't read that chapter yet because my Notion library is empty. Sync the book in Settings → Notion first, and I'll give you feedback based on the actual text instead of guessing.";
