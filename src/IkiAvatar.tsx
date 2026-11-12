@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import { IkiMotion, IkiPlayer } from "@ikijs/engine";
 import { parseIkiModel, StandardParameter } from "@ikijs/format";
 import bundledRigUrl from "../assets/iki/mikan-v02/iki-ready/mikan-auto-rig-v3.iki?url";
+import type { AvatarReaction } from "./avatar-reactions";
 
 /**
  * Animated 2D Mikan. Framing is handled by the renderer, not by cropping
@@ -10,16 +11,20 @@ import bundledRigUrl from "../assets/iki/mikan-v02/iki-ready/mikan-auto-rig-v3.i
 export function IkiAvatar({
   customRig,
   speaking,
+  reaction,
   onError
 }: {
   customRig: Blob | null;
   speaking: boolean;
+  reaction: AvatarReaction | null;
   onError: (message: string) => void;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const speakingRef = useRef(speaking);
   const errorRef = useRef(onError);
+  const reactionRef = useRef(reaction);
   speakingRef.current = speaking;
+  reactionRef.current = reaction;
   errorRef.current = onError;
 
   useEffect(() => {
@@ -76,11 +81,43 @@ export function IkiAvatar({
           (name) => currentPlayer.getParameter(name),
           (name, value) => currentPlayer.setParameter(name, value)
         );
+        // Reactions are events rather than permanent state. Matching the
+        // imported rig's declared names keeps seasonal costume rigs compatible.
+        const expressionNames = new Map(
+          (model.expressions ?? []).map(item => [item.id.toLowerCase(), item.id])
+        );
+        const motionNames = Object.keys(model.motions ?? {});
+        const findMotion = (name: string) =>
+          motionNames.find(group => group.toLowerCase() === name.toLowerCase());
+        let seenReaction = reactionRef.current?.serial ?? 0;
+        let expressionEndsAt = 0;
+        let expressionActive = false;
         let mouthOpen = 0;
         let previous = 0;
         const tick = (now: number) => {
           if (cancelled) return;
           if (!document.hidden) {
+            const nextReaction = reactionRef.current;
+            if (nextReaction && nextReaction.serial !== seenReaction) {
+              seenReaction = nextReaction.serial;
+              const kind = nextReaction.kind;
+              const expression = kind === "nod" ? "smile"
+                : kind === "shake" ? "sad" : kind;
+              const expressionId = expressionNames.get(expression);
+              if (expressionId && motion.playExpression(expressionId)) {
+                expressionActive = true;
+                expressionEndsAt = now + (kind === "laugh" ? 3100 : 2400);
+              }
+              const gesture = kind === "nod" ? "Nod"
+                : kind === "shake" ? "Shake"
+                : kind === "surprised" ? "Tilt" : null;
+              const group = gesture ? findMotion(gesture) : undefined;
+              if (group) motion.playMotion(group, 0);
+            }
+            if (expressionActive && now >= expressionEndsAt) {
+              motion.stopExpression();
+              expressionActive = false;
+            }
             motion.update(now);
             // Lightweight interim lip motion while Pocket/Qwen WAV is playing.
             // Actual audio-amplitude lip-sync can replace this later.
