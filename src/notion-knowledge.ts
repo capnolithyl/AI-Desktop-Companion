@@ -247,6 +247,13 @@ export function unavailableChapterResponse(
   if(!cachedCount)return "I can't read that chapter yet because my Notion library is empty. Sync the book in Settings → Notion first, and I'll give you feedback based on the actual text instead of guessing.";
   if(matchedPage && /Linked scenes are missing|linked scene has no cached manuscript text/.test(readContext))
     return "I found "+matchedPage.title+", but some of its linked scene manuscripts are missing from my Notion cache. Share the Scenes database with Mikan and press Sync now in Settings → Notion, then I can read the whole chapter without guessing.";
+  if(matchedPage && /The local model could not produce reliable section notes/.test(readContext)) {
+    const section=/for (?:reading|consolidation) section (\\d+\\/\\d+)/.exec(readContext);
+    return "I found "+matchedPage.title+" and its linked scenes, but my local model couldn't finish processing "+
+      (section?"section "+section[1]:"one section")+" into reading notes. "+
+      "This is a chapter-note processing problem, not a Notion sync problem. "+
+      "I haven't completed a trustworthy summary, so I won't invent one.";
+  }
   if(matchedPage && /Only chapter planning notes were cached/.test(readContext))
     return "I found "+matchedPage.title+" in Notion, but my offline cache contains its planning notes without the actual linked scene manuscripts. Open Settings → Notion and press Sync now. Make sure the Scenes database is shared with Mikan, too. Then I'll read the chapter itself rather than guessing.";
   if(matchedPage)return "I found the chapter in Notion, but couldn't finish reading it. I'd rather not pretend I've read scenes I haven't. Please check the Notion sync or try the chapter again.";
