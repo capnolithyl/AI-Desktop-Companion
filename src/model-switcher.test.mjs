@@ -55,3 +55,11 @@ test("cloud and local options are distinct and only installed local names are ac
   assert.equal(modelSwitcherChoice("local:not-installed",installed),null);
   assert.equal(modelSwitcherChoice("__status__",installed),null);
 });
+
+
+test("Auto manuscript analysis announces intentional local route instead of claiming OpenRouter is responding",()=>{
+  const state=modelSwitcherStatus(settings,undefined,true,"Manuscript review: local Ollama");
+  assert.match(state.label,/Local.*qwen3\.5:9b.*reviewing manuscript/);
+  assert.match(state.title,/instead of.*OpenRouter\/free/);
+  assert.equal(state.cloudActive,false);
+});
