@@ -33,6 +33,7 @@ export function InterestCollectionTab({items,onImport,onEdit,onDelete}:Props){
   const [editTags,setEditTags]=useState("");
   const [search,setSearch]=useState("");
   const [filterKind,setFilterKind]=useState<string>("all");
+  const [interestSort,setInterestSort]=useState<"newest"|"oldest"|"updated"|"alpha">("newest");
   const [error,setError]=useState<string|null>(null);
   const [result,setResult]=useState<string|null>(null);
   const [working,setWorking]=useState(false);
@@ -45,7 +46,11 @@ export function InterestCollectionTab({items,onImport,onEdit,onDelete}:Props){
   },[rows,existing]);
   const chosen=rows.filter((_,i)=>!duplicates.has(i)&&!excluded.has(i));
   const filtered=items.filter(item=>(filterKind==="all" || item.kind===filterKind) &&
-    [item.name,item.kind,item.status,item.notes,...item.tags].join(" ").toLowerCase().includes(search.toLowerCase()));
+    [item.name,item.kind,item.status,item.notes,...item.tags].join(" ").toLowerCase().includes(search.toLowerCase()))
+    .sort((a,b)=>interestSort==="alpha"?a.name.localeCompare(b.name):
+      interestSort==="oldest"?(a.createdAt-b.createdAt||a.id-b.id):
+      interestSort==="updated"?(b.updatedAt-a.updatedAt||b.id-a.id):
+      (b.createdAt-a.createdAt||b.id-a.id));
 
   function preview(text=content,mode=format){
     try{
@@ -189,6 +194,12 @@ export function InterestCollectionTab({items,onImport,onEdit,onDelete}:Props){
         <option value="all">All types</option>
         {INTEREST_KINDS.map(v=><option key={v} value={v}>{nameOf(v)}</option>)}
       </select>
+      <select aria-label="Sort interests" value={interestSort} onChange={e=>setInterestSort(e.target.value as typeof interestSort)}>
+        <option value="newest">Added newest first</option>
+        <option value="oldest">Added oldest first</option>
+        <option value="updated">Recently updated</option>
+        <option value="alpha">Alphabetical (A–Z)</option>
+      </select>
       <small>{filtered.length} of {items.length} entries</small>
     </div>
     {filtered.slice(0,100).map(item=><article className="memory-item" key={item.id}>
@@ -223,6 +234,7 @@ export function InterestCollectionTab({items,onImport,onEdit,onDelete}:Props){
         {item.notes && <p>{item.notes}</p>}
         {!!item.tags.length && <div className="memory-labels">{item.tags.map(tag=><span key={tag}>#{tag}</span>)}</div>}
         <div className="memory-actions">
+          <small>#{item.id} · Added {new Date(item.createdAt*1000).toLocaleDateString()} · Updated {new Date(item.updatedAt*1000).toLocaleDateString()}</small>
           <button type="button" disabled={working} onClick={()=>{setEditing(item.id);setEditingEntry(entryOf(item));setEditTags(item.tags.join(", "));}}>Edit</button>
           {confirmDelete===item.id ? <>
             <button type="button" className="memory-danger" disabled={working}

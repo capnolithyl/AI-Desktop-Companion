@@ -32,7 +32,16 @@ pub struct MemoryJobRequest {
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct ExtractionEntry {
+    kind: String,
+    description: String,
+    evidence: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct MemoryOutcome {
+    entries: Vec<ExtractionEntry>,
     user_saved: usize,
     character_saved: usize,
     interests_saved: usize,
@@ -109,14 +118,48 @@ fn status(db: &Connection) -> Result<MemoryJobStatus,String> {
     let failed=db.query_row("SELECT COUNT(*) FROM automatic_memory_jobs
         WHERE status='failed'",[],|r|r.get(0))
         .map_err(|e|e.to_string())?;
-    let last_outcome=db.query_row(
-        "SELECT user_saved,character_saved,interests_saved,review_queued,processed_at
+    let latest=db.query_row(
+        "SELECT assistant_message_id,user_saved,character_saved,interests_saved,review_queued,processed_at
          FROM automatic_memory_runs WHERE outcome_known=1
-         ORDER BY processed_at DESC,rowid DESC LIMIT 1",[],|r|Ok(MemoryOutcome {
-             user_saved:r.get(0)?,character_saved:r.get(1)?,interests_saved:r.get(2)?,
-             review_queued:r.get(3)?,processed_at:r.get(4)?
-         })
+         ORDER BY processed_at DESC,rowid DESC LIMIT 1",[],|r|Ok((
+             r.get::<_,String>(0)?,
+             MemoryOutcome {user_saved:r.get(1)?,character_saved:r.get(2)?,
+                interests_saved:r.get(3)?,review_queued:r.get(4)?,
+                processed_at:r.get(5)?,entries:Vec::new()}
+         ))
     ).optional().map_err(|e|e.to_string())?;
+    let last_outcome=if let Some((assistant_id,mut outcome))=latest {
+        let user_id:Option<String>=db.query_row(
+            "SELECT u.id FROM messages u
+             WHERE u.conversation_id=(SELECT conversation_id FROM messages WHERE id=?1)
+               AND u.role='user'
+               AND u.rowid<(SELECT rowid FROM messages WHERE id=?1)
+             ORDER BY u.rowid DESC LIMIT 1",
+            params![assistant_id],|r|r.get(0)
+        ).optional().map_err(|e|e.to_string())?;
+        let mut stmt=db.prepare(
+            "SELECT 'About you', m.fact, s.evidence
+             FROM automatic_memory_sources s JOIN user_memories m ON m.id=s.memory_id
+             WHERE s.memory_kind='user' AND s.source_message_id=?1
+             UNION ALL
+             SELECT 'About Mikan', c.label || ': ' || c.value, s.evidence
+             FROM automatic_memory_sources s JOIN character_facts c ON c.id=s.memory_id
+             WHERE s.memory_kind='character' AND s.source_message_id=?2
+             UNION ALL
+             SELECT 'Interest', i.kind || ': ' || i.name || ' [' || i.status || ']', COALESCE(i.source_quote,'')
+             FROM interest_items i WHERE i.source_message_id=?1
+             UNION ALL
+             SELECT 'Correction suggestion', r.proposed_fact, r.evidence
+             FROM memory_fact_reviews r WHERE r.source_message_id=?1
+             ORDER BY 1,2"
+        ).map_err(|e|e.to_string())?;
+        outcome.entries=stmt.query_map(
+            params![user_id.unwrap_or_default(),assistant_id],
+            |r|Ok(ExtractionEntry {kind:r.get(0)?,description:r.get(1)?,evidence:r.get(2)?})
+        ).map_err(|e|e.to_string())?
+          .collect::<Result<Vec<_>,_>>().map_err(|e|e.to_string())?;
+        Some(outcome)
+    }else{None};
     Ok(MemoryJobStatus{queued,failed,last_outcome,..Default::default()})
 }
 
@@ -296,6 +339,25 @@ mod tests {
         assert_eq!(status(&db).unwrap().last_outcome.unwrap().user_saved,2);
     }
 
+    #[test]
+    fn last_extraction_lists_exact_saved_items_and_source_quotes() {
+        let db=fixture();
+        db.execute(
+            "INSERT INTO interest_items(name,kind,status,source,source_message_id,source_quote)
+             VALUES('Gristle Licker','song','favorite','conversation',?1,?2)",
+            params![USER,"One of my favorite songs is Gristle Licker"]
+        ).unwrap();
+        db.execute(
+            "INSERT INTO automatic_memory_runs(assistant_message_id,outcome_known,interests_saved)
+             VALUES(?1,1,1)",params![ASSIST]
+        ).unwrap();
+        let outcome=status(&db).unwrap().last_outcome.unwrap();
+        assert_eq!(outcome.interests_saved,1);
+        assert_eq!(outcome.entries.len(),1);
+        assert_eq!(outcome.entries[0].kind,"Interest");
+        assert!(outcome.entries[0].description.contains("Gristle Licker"));
+        assert!(outcome.entries[0].evidence.contains("favorite songs"));
+    }
     #[test]
     fn successfully_processed_turns_cannot_be_queued_again() {
         let db=fixture();

@@ -46,8 +46,8 @@ export function MemoryReviews({onChanged}: {onChanged: () => Promise<void>}) {
         onClick={()=>void act(async()=>{})}><RotateCw size={13}/> Refresh</button>
     </div>
     <p className="memory-explainer">
-      If you correct something Mikan remembers, the old fact stays active until you review it.
-      No background process replaces or deletes your memories.
+      Explicit corrections to known facts can now update saved memories, including imports, while preserving revision history.
+      Ambiguous corrections appear here for your review.
     </p>
     {error&&<p className="memory-error" role="alert">{error}</p>}
     {notice&&<p role="status" className="memory-explainer">{notice}</p>}
@@ -60,19 +60,26 @@ export function MemoryReviews({onChanged}: {onChanged: () => Promise<void>}) {
           setNotice("Retried "+count+" job(s); "+result.queued+" still queued.");
         })}><RefreshCcw size={13}/> Retry failed jobs</button>}
     </p>}
-    {jobs?.lastOutcome && <p className="memory-explainer">
-      Last extraction: {new Date(jobs.lastOutcome.processedAt * 1000).toLocaleString()} · {
+    {jobs?.lastOutcome && <details className="memory-session-notes">
+      <summary>Last extraction: {new Date(jobs.lastOutcome.processedAt * 1000).toLocaleString()} · {
         (jobs.lastOutcome.userSaved + jobs.lastOutcome.characterSaved +
          jobs.lastOutcome.interestsSaved + jobs.lastOutcome.reviewQueued) === 0
-          ? "Completed, but no memories or corrections were accepted."
+          ? "No new memories accepted"
           : [
               jobs.lastOutcome.userSaved ? jobs.lastOutcome.userSaved + " user facts" : "",
               jobs.lastOutcome.characterSaved ? jobs.lastOutcome.characterSaved + " Mikan details" : "",
               jobs.lastOutcome.interestsSaved ? jobs.lastOutcome.interestsSaved + " interests" : "",
               jobs.lastOutcome.reviewQueued ? jobs.lastOutcome.reviewQueued + " correction suggestions" : ""
             ].filter(Boolean).join(", ")
-      }
-    </p>}
+      }</summary>
+      {jobs.lastOutcome.entries.length ? jobs.lastOutcome.entries.map((item,index)=>
+        <div className="memory-item" key={index}>
+          <small>{item.kind}</small>
+          <p>{item.description}</p>
+          {item.evidence && <small>From: “{item.evidence}”</small>}
+        </div>
+      ) : <p className="memory-explainer">Nothing new was saved, or its source message is no longer available. This panel shows committed records, not rejected model proposals.</p>}
+    </details>}
     {reviews.map(review=><article className="memory-item" key={review.id}>
       <small>Suggested from your words: “{review.evidence}”</small>
       {review.existingFact&&<p><strong>Currently saved:</strong> {review.existingFact}</p>}

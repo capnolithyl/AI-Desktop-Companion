@@ -64,6 +64,7 @@ export type MemoryFactHistory = {
 export type MemoryOutcome = {
   userSaved: number; characterSaved: number; interestsSaved: number;
   reviewQueued: number; processedAt: number;
+  entries: {kind: string; description: string; evidence: string}[];
 };
 export type InterestStatusChange = {
   name: string; previousStatus: string; status: string;

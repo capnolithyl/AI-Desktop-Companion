@@ -33,3 +33,18 @@ test("cloud small talk stays tool-free and real public questions still can searc
   assert.equal(news.cloudMaySearch,true);
   assert.equal(news.canPlanPublicWeb,true);
 });
+
+test("new personal preferences remain local chat rather than automatic research",()=>{
+  for(const question of [
+    "One of my favorite Cattle Decapitation songs is Gristle Licker",
+    "I think Terrasite is even better than Death Atlas",
+    "My favorite album is The Art of Balance",
+    "so have i told you about my latest obsession? Cattle Decapitation. the band"
+  ]){
+    const policy=planDesktopWebExecution({...defaults,question});
+    assert.equal(policy.canPlanPublicWeb,false,question);
+    assert.equal(policy.cloudMaySearch,false,question);
+  }
+  const lookup=planDesktopWebExecution({...defaults,question:"Search the web for Cattle Decapitation reviews"});
+  assert.equal(lookup.canPlanPublicWeb,true);
+});
