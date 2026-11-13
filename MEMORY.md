@@ -124,9 +124,9 @@ The new **Settings → Memory & chats → Interests** tab uses a separate local 
 with a maximum of 5,000 saved items. Core autobiographical facts, session notes,
 Mikan's character canon, and imported webpage knowledge remain separate.
 
-Every item has a name and kind (`band`, `album`, `anime`, `show`, `movie`,
+Every item has a name and kind (`band`, `album`, `song`, `anime`, `show`, `movie`,
 `game`, `book` or `other`) and a relationship: `favorite`, `like`, `dislike`,
-`interested`, `experienced` or `unknown`. An experience never implies approval.
+`interested`, `experienced` or `unknown`. Songs are separate from albums: an interest in one does not prove which record contains it. An experience never implies approval.
 Optional ratings use a 0–10 scale. Notes and tags are stored with the entry.
 Only a small set of relevant matches is supplied to chat; bulk lists are never
 placed wholesale in the model's context.
@@ -140,7 +140,7 @@ An import preview shows duplicate counts and a first-page sample. Confirm before
 saving. You can edit or remove records in the Interests tab afterward.
 
 When auto-remember is enabled, the existing local Ollama extractor may capture
-explicitly grounded media tastes into the collection. It needs exact supporting
+explicitly grounded media tastes into the collection, including songs/tracks. It needs exact supporting
 text in the current owner's message. Newer explicit favorites can promote an
 existing manually imported `like`, `interested`, `experienced` or `unknown`
 entry to `favorite` when its kind and name match exactly, preserving the
