@@ -46,8 +46,8 @@ export function MemoryReviews({onChanged}: {onChanged: () => Promise<void>}) {
         onClick={()=>void act(async()=>{})}><RotateCw size={13}/> Refresh</button>
     </div>
     <p className="memory-explainer">
-      If you correct something Mikan remembers, the old fact stays active until you review it.
-      No background process replaces or deletes your memories.
+      Explicit corrections to known facts can now update saved memories, including imports, while preserving revision history.
+      Ambiguous corrections appear here for your review.
     </p>
     {error&&<p className="memory-error" role="alert">{error}</p>}
     {notice&&<p role="status" className="memory-explainer">{notice}</p>}
