@@ -12,8 +12,8 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { register, unregister } from "@tauri-apps/plugin-global-shortcut";
 import {
-  ArrowLeft, ArrowUp, Brain, Camera, Cat, Check, Clock3, Copy, Crop, Eye, EyeOff, FileText, History, Paperclip,
-  BookOpen, ExternalLink, HardDrive, LoaderCircle, MessageCircle, RotateCw, Search, Settings2, SlidersHorizontal, Sparkles, Square, SquarePen, Volume2, X
+  ArrowLeft, ArrowUp, Brain, Camera, Cat, Check, ChevronLeft, ChevronRight, Clock3, Copy, Crop, Eye, EyeOff, FileText, Heart, History, Paperclip,
+  BookOpen, ExternalLink, HardDrive, LoaderCircle, MessageCircle, RotateCw, Search, Settings2, Shuffle, SlidersHorizontal, Sparkles, Square, SquarePen, Volume2, X
 } from "lucide-react";
 import {
   DEFAULT_SETTINGS, DEFAULT_APPEARANCE, DEFAULT_VOICE, loadPortrait, loadSettings, savePortrait, saveSettings,
@@ -80,6 +80,11 @@ import {
   loadIkiWardrobe, saveIkiOutfit, selectIkiOutfit, removeIkiOutfit,
   type AvatarDisplay, type SavedIkiOutfit
 } from "./iki-avatar-storage";
+import {
+  loadWardrobeConfig, saveWardrobeConfig, outfitMetadata, wardrobeKey,
+  localWardrobeDay, pickDailyOutfit, type WardrobeChoice, type WardrobeConfig,
+  type OutfitMetadata
+} from "./iki-wardrobe";
 
 type Screen = "compact" | "log" | "settings" | "search" | "page" | "personality" | "help" | "memory" | "capabilities";
 type SettingsTab = "ai" | "internet" | "notion" | "voice" | "appearance";
@@ -265,6 +270,9 @@ export default function App() {
   const [ikiReady, setIkiReady] = useState(false);
   const [ikiBusy, setIkiBusy] = useState(false);
   const [ikiError, setIkiError] = useState<string | null>(null);
+  const [wardrobeConfig, setWardrobeConfig] = useState<WardrobeConfig>(loadWardrobeConfig);
+  // undefined = no temporary preview, null = bundled Mikan v3.
+  const [previewOutfitId, setPreviewOutfitId] = useState<string | null | undefined>(undefined);
   const [avatarReaction, setAvatarReaction] = useState<AvatarReaction | null>(null);
   const [avatarDebug, setAvatarDebug] = useState<AvatarDebugSnapshot | null>(null);
   const [lastReplyCue, setLastReplyCue] = useState("waiting for a reply");
@@ -867,6 +875,7 @@ export default function App() {
 
   const goCompact = useCallback(() => {
     setScreen("compact");
+    setPreviewOutfitId(undefined);
     focusInput();
   }, [focusInput]);
 
@@ -900,6 +909,43 @@ export default function App() {
       .finally(() => { if (active) setIkiReady(true); });
     return () => { active = false; };
   }, []);
+
+  // No scheduler service: check the local calendar on startup and once a minute
+  // while Mikan is running. Never override a manual outfit change today or a pin.
+  useEffect(() => {
+    if (!ikiReady || !wardrobeConfig.auto || wardrobeConfig.pinned) return;
+    let disposed = false;
+    let applying = false;
+    const checkDay = async () => {
+      const config = loadWardrobeConfig();
+      const now = new Date();
+      const day = localWardrobeDay(now);
+      if (disposed || applying || ikiBusy || !config.auto || config.pinned || config.lastDay === day) return;
+      const choices: WardrobeChoice[] = [
+        { id: null, name: "Original Mikan v3 (bundled)" },
+        ...ikiOutfits.map(outfit => ({ id: outfit.id, name: outfit.name }))
+      ];
+      const chosen = pickDailyOutfit(choices, config, now);
+      if (!chosen) return;
+      applying = true;
+      try {
+        await selectIkiOutfit(chosen.id);
+        if (disposed) return;
+        setIkiRig(ikiOutfits.find(outfit => outfit.id === chosen.id) ?? null);
+        setAvatarDisplay("animated");
+        saveAvatarDisplay("animated");
+        const updated = { ...config, lastDay: day, lastId: wardrobeKey(chosen.id) };
+        saveWardrobeConfig(updated);
+        setWardrobeConfig(updated);
+        setIkiError(null);
+      } catch (error) {
+        if (!disposed) setIkiError("Automatic outfit selection failed: " + errorText(error));
+      } finally { applying = false; }
+    };
+    void checkDay();
+    const timer = setInterval(() => void checkDay(), 60_000);
+    return () => { disposed = true; clearInterval(timer); };
+  }, [ikiReady, ikiOutfits, ikiBusy, wardrobeConfig.auto, wardrobeConfig.pinned]);
 
   useEffect(() => {
     let hotkeyRegistered = false;
@@ -1226,6 +1272,7 @@ export default function App() {
     catch (error) { console.warn("Web cache unavailable:", error); }
   };
   const openSettingsTab = (tab: SettingsTab) => {
+    setPreviewOutfitId(tab === "appearance" ? ikiRig?.id ?? null : undefined);
     setSettingsTab(tab);
     setDraft(settings);
     if (tab === "ai") void refreshModels(settings.endpoint);
@@ -1251,6 +1298,28 @@ export default function App() {
     }
   };
 
+  const updateWardrobeConfig = (change: (previous: WardrobeConfig) => WardrobeConfig) => {
+    setWardrobeConfig(previous => {
+      const updated = change(previous);
+      saveWardrobeConfig(updated);
+      return updated;
+    });
+  };
+  const rememberManualOutfit = (id: string | null) => {
+    updateWardrobeConfig(previous => ({
+      ...previous, lastDay: localWardrobeDay(new Date()), lastId: wardrobeKey(id)
+    }));
+  };
+  const updateOutfitMetadata = (choice: WardrobeChoice, change: Partial<OutfitMetadata>) => {
+    updateWardrobeConfig(previous => ({
+      ...previous,
+      outfits: {
+        ...previous.outfits,
+        [wardrobeKey(choice.id)]: { ...outfitMetadata(previous, choice), ...change }
+      }
+    }));
+  };
+
   const activateOutfit = () => {
     setIkiError(null);
     setAvatarDisplay("animated");
@@ -1273,6 +1342,8 @@ export default function App() {
       setIkiOutfits(current => [...current.filter(item => item.id !== saved.id), saved]
         .sort((a, b) => a.name.localeCompare(b.name)));
       setIkiRig(saved);
+      setPreviewOutfitId(saved.id);
+      rememberManualOutfit(saved.id);
       if (sourceFolder) {
         setIkiOutfitFolder(sourceFolder);
         saveIkiOutfitFolder(sourceFolder);
@@ -1330,22 +1401,35 @@ export default function App() {
     try {
       await selectIkiOutfit(selected?.id ?? null);
       setIkiRig(selected ?? null);
+      setPreviewOutfitId(selected?.id ?? null);
+      rememberManualOutfit(selected?.id ?? null);
       activateOutfit();
     } catch (error) {
       setIkiError("Could not switch outfit: " + errorText(error));
     } finally { setIkiBusy(false); }
   };
 
-  const forgetSelectedIkiOutfit = async () => {
-    if (!ikiRig) return;
-    if (!window.confirm(`Remove "${ikiRig.name}" from Mikan's saved outfits? The original .iki file will not be deleted.`)) return;
+  const forgetSelectedIkiOutfit = async (id: string) => {
+    const selected = ikiOutfits.find(outfit => outfit.id === id);
+    if (!selected) return;
+    if (!window.confirm(`Remove "${selected.name}" from Mikan's saved outfits? The original .iki file will not be deleted.`)) return;
     setIkiBusy(true);
     setIkiError(null);
     try {
-      await removeIkiOutfit(ikiRig.id);
-      setIkiOutfits(current => current.filter(item => item.id !== ikiRig.id));
-      setIkiRig(null);
-      activateOutfit();
+      await removeIkiOutfit(id);
+      setIkiOutfits(current => current.filter(item => item.id !== id));
+      setPreviewOutfitId(null);
+      updateWardrobeConfig(previous => {
+        const outfits = { ...previous.outfits };
+        delete outfits[wardrobeKey(id)];
+        return { ...previous, outfits,
+          lastId: previous.lastId === wardrobeKey(id) ? null : previous.lastId };
+      });
+      if (ikiRig?.id === id) {
+        setIkiRig(null);
+        rememberManualOutfit(null);
+        activateOutfit();
+      }
     } catch (error) {
       setIkiError("Could not remove the saved outfit: " + errorText(error));
     } finally { setIkiBusy(false); }
@@ -2552,6 +2636,17 @@ export default function App() {
   const replyText = busy ? (lastReply?.content || activity) : (feedback ?? lastReply?.content ?? greeting);
   const { visibleText: visibleReplyText, emojis: replyEmojis } = extractReplyEmojis(replyText);
 
+  const wardrobeChoices: WardrobeChoice[] = [
+    { id: null, name: "Original · Mikan v3 (bundled)" },
+    ...ikiOutfits.map(outfit => ({ id: outfit.id, name: outfit.name }))
+  ];
+  const currentPreviewId = previewOutfitId === undefined ? ikiRig?.id ?? null : previewOutfitId;
+  const previewIndex = Math.max(0, wardrobeChoices.findIndex(choice => choice.id === currentPreviewId));
+  const previewChoice = wardrobeChoices[previewIndex];
+  const previewMetadata = outfitMetadata(wardrobeConfig, previewChoice);
+  const previewRig = ikiOutfits.find(outfit => outfit.id === previewChoice.id) ?? null;
+  const wardrobePreviewVisible = screen === "settings" && settingsTab === "appearance" && previewOutfitId !== undefined;
+
   const theme = {
     "--accent": settings.appearance.accent,
     "--accent-rgb": rgbOf(settings.appearance.accent),
@@ -2571,9 +2666,9 @@ export default function App() {
   return <main className="companion" style={theme}>
     <div className="portrait-space" title="Drag Mikan to move the window" onMouseDown={dragPortrait}>
       {avatarDisplay === "animated" && ikiReady ? (
-        <IkiAvatar customRig={ikiRig?.file ?? null} speaking={voiceState === "playing"}
+        <IkiAvatar customRig={wardrobePreviewVisible ? previewRig?.file ?? null : ikiRig?.file ?? null} speaking={voiceState === "playing"}
           reaction={avatarReaction}
-          rigLabel={ikiRig?.name ?? "Mikan v3 (bundled)"}
+          rigLabel={wardrobePreviewVisible ? previewRig?.name ?? "Mikan v3 (bundled)" : ikiRig?.name ?? "Mikan v3 (bundled)"}
           debugVisible={showAvatarDebug || (screen === "settings" && settingsTab === "appearance")}
           presencePreferences={avatarPresence}
           dragging={avatarDragging}
@@ -2582,8 +2677,13 @@ export default function App() {
           onDebug={setAvatarDebug}
           onError={message => {
             setIkiError(message);
-            setAvatarDisplay("portrait");
-            saveAvatarDisplay("portrait");
+            // A failed outfit preview must not disable the working animated rig.
+            if (wardrobePreviewVisible && currentPreviewId !== (ikiRig?.id ?? null)) {
+              setPreviewOutfitId(ikiRig?.id ?? null);
+            } else {
+              setAvatarDisplay("portrait");
+              saveAvatarDisplay("portrait");
+            }
           }}/>
       ) : portrait ? (
         <img className="character-portrait" src={portrait} alt="Mikan, your desktop companion" draggable={false}
@@ -3065,7 +3165,7 @@ export default function App() {
       <nav className="settings-tabs" aria-label="Settings categories">
         {([["ai", "AI & Models"], ["internet", "Internet"], ["notion", "Notion"], ["voice", "Voice"], ["appearance", "Appearance"]] as const).map(([tab, label]) =>
           <button type="button" key={tab} className={settingsTab === tab ? "settings-tab active" : "settings-tab"}
-            onClick={() => { setSettingsTab(tab); if (tab === "internet") { void refreshService(); void refreshCache(); } if (tab === "voice") void checkVoice(voiceEndpoint(draft.voice)); }}>
+            onClick={() => { setSettingsTab(tab); setPreviewOutfitId(tab === "appearance" ? ikiRig?.id ?? null : undefined); if (tab === "internet") { void refreshService(); void refreshCache(); } if (tab === "voice") void checkVoice(voiceEndpoint(draft.voice)); }}>
             {label}
           </button>
         )}
@@ -3520,19 +3620,87 @@ export default function App() {
             onClick={() => setDraft(current => ({ ...current, appearance: {
               ...current.appearance, avatarVerticalOffset: DEFAULT_AVATAR_VERTICAL_OFFSET
             } }))}>Reset vertical position</button>
-          <label className="setting-field">Mikan's outfits
-            <select aria-label="Select saved Iki outfit" value={ikiRig?.id ?? ""}
-              disabled={ikiBusy || !ikiReady}
-              onChange={event => void selectSavedIkiOutfit(event.target.value || null)}>
-              <option value="">Original · Mikan v3 (bundled)</option>
-              {ikiOutfits.map(outfit =>
-                <option key={outfit.id} value={outfit.id}>{outfit.name}</option>
-              )}
-            </select>
-            <small>{ikiOutfits.length
-              ? `${ikiOutfits.length} outfit${ikiOutfits.length === 1 ? "" : "s"} saved on this PC. Switching does not reopen the file browser.`
-              : "Imported outfits will appear here for instant switching."}</small>
+          <div className="settings-section-title">Mikan's wardrobe</div>
+          <div className="wardrobe-browser" aria-label="Mikan's wardrobe">
+            <div className="wardrobe-preview-heading">
+              <strong title={previewChoice.name}>{previewChoice.name}</strong>
+              <span>{previewIndex + 1} / {wardrobeChoices.length}</span>
+            </div>
+            <small className="wardrobe-hint">Browse to preview each outfit on animated Mikan. Nothing changes permanently until you choose Wear.</small>
+            <div className="wardrobe-navigation">
+              <button type="button" aria-label="Previous outfit" title="Previous outfit"
+                disabled={!ikiReady || ikiBusy || wardrobeChoices.length < 2}
+                onClick={() => setPreviewOutfitId(wardrobeChoices[(previewIndex + wardrobeChoices.length - 1) % wardrobeChoices.length].id)}>
+                <ChevronLeft size={19}/>
+              </button>
+              <input type="range" aria-label="Browse outfits" min="0" max={wardrobeChoices.length - 1}
+                step="1" value={previewIndex} disabled={!ikiReady || ikiBusy || wardrobeChoices.length < 2}
+                onChange={event => setPreviewOutfitId(wardrobeChoices[Number(event.target.value)].id)}/>
+              <button type="button" aria-label="Next outfit" title="Next outfit"
+                disabled={!ikiReady || ikiBusy || wardrobeChoices.length < 2}
+                onClick={() => setPreviewOutfitId(wardrobeChoices[(previewIndex + 1) % wardrobeChoices.length].id)}>
+                <ChevronRight size={19}/>
+              </button>
+            </div>
+            <div className="wardrobe-preview-actions">
+              <button type="button" className="wardrobe-wear" disabled={ikiBusy || !ikiReady || (ikiRig?.id ?? null) === previewChoice.id}
+                onClick={() => void selectSavedIkiOutfit(previewChoice.id)}>
+                <Check size={15}/> {(ikiRig?.id ?? null) === previewChoice.id ? "Currently wearing" : "Wear this outfit"}
+              </button>
+              <button type="button" disabled={!ikiReady || ikiBusy || (ikiRig?.id ?? null) === previewChoice.id}
+                onClick={() => setPreviewOutfitId(ikiRig?.id ?? null)}>Cancel preview</button>
+              <button type="button" title="Preview a random everyday outfit" aria-label="Surprise me"
+                disabled={!ikiReady || ikiBusy || wardrobeChoices.length < 2}
+                onClick={() => {
+                  const surprise = pickDailyOutfit(wardrobeChoices, {
+                    ...wardrobeConfig, holidays: false, lastId: wardrobeKey(currentPreviewId)
+                  }, new Date());
+                  if (surprise) setPreviewOutfitId(surprise.id);
+                }}><Shuffle size={16}/></button>
+            </div>
+            <div className="wardrobe-meta">
+              <button type="button" className={previewMetadata.favorite ? "wardrobe-favorite active" : "wardrobe-favorite"}
+                aria-pressed={previewMetadata.favorite}
+                onClick={() => updateOutfitMetadata(previewChoice, { favorite: !previewMetadata.favorite })}
+                title="Favorites appear more often in daily random selections">
+                <Heart size={15} fill={previewMetadata.favorite ? "currentColor" : "none"}/>
+                {previewMetadata.favorite ? "Favorite" : "Add favorite"}
+              </button>
+              <label>Season
+                <select value={previewMetadata.season}
+                  onChange={event => updateOutfitMetadata(previewChoice, { season: event.target.value as OutfitMetadata["season"] })}>
+                  <option value="all">Any season</option><option value="spring">Spring</option>
+                  <option value="summer">Summer</option><option value="autumn">Autumn</option>
+                  <option value="winter">Winter</option>
+                </select>
+              </label>
+              <label>Special occasion
+                <select value={previewMetadata.holiday}
+                  onChange={event => updateOutfitMetadata(previewChoice, { holiday: event.target.value as OutfitMetadata["holiday"] })}>
+                  <option value="none">None</option><option value="halloween">Halloween</option>
+                  <option value="christmas">Christmas</option><option value="easter">Easter</option>
+                </select>
+              </label>
+            </div>
+            <small className="wardrobe-hint">Favorites and outfit tags save immediately. The bundled outfit and all imported .iki files remain intact.</small>
+          </div>
+          <div className="settings-section-title">Automatic outfits</div>
+          <label className="avatar-debug-toggle">
+            <input type="checkbox" checked={wardrobeConfig.auto}
+              onChange={event => updateWardrobeConfig(previous => ({ ...previous, auto: event.target.checked }))}/>
+            Change to a random outfit each day
           </label>
+          <label className="avatar-debug-toggle">
+            <input type="checkbox" checked={wardrobeConfig.holidays} disabled={!wardrobeConfig.auto}
+              onChange={event => updateWardrobeConfig(previous => ({ ...previous, holidays: event.target.checked }))}/>
+            Prioritize holiday costumes (Halloween, Christmas, Easter)
+          </label>
+          <label className="avatar-debug-toggle">
+            <input type="checkbox" checked={wardrobeConfig.pinned} disabled={!wardrobeConfig.auto}
+              onChange={event => updateWardrobeConfig(previous => ({ ...previous, pinned: event.target.checked }))}/>
+            Keep this outfit until I unpin it
+          </label>
+          <small className="iki-wardrobe-path">Daily changes follow your PC's local calendar and run once per day. Manually choosing an outfit overrides the schedule until tomorrow, or indefinitely while pinned. The automatic wardrobe is off by default.</small>
           <div className="iki-wardrobe-actions">
             <button type="button" disabled={ikiBusy || !ikiReady}
               onClick={() => void browseIkiOutfit()}>Add outfit (.iki)</button>
@@ -3542,8 +3710,8 @@ export default function App() {
           <small className="iki-wardrobe-path" title={ikiOutfitFolder || "Uses project outfits folder when available"}>
             Folder: {ikiOutfitFolder || "Project outfits folder (or last-used location)"}
           </small>
-          {ikiRig && <button type="button" className="inline-action" disabled={ikiBusy}
-            onClick={() => void forgetSelectedIkiOutfit()}>Remove selected outfit from list</button>}
+          {previewChoice.id && <button type="button" className="inline-action" disabled={ikiBusy}
+            onClick={() => void forgetSelectedIkiOutfit(previewChoice.id!)}>Remove previewed outfit from list</button>}
           {ikiError && <p className="field-error" role="alert">{ikiError}</p>}
           <div className="settings-section-title">Live avatar movement</div>
           <label className="avatar-debug-toggle">

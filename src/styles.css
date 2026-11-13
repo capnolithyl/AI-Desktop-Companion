@@ -958,3 +958,104 @@ button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px
   font-size: 10px; line-height: 1.4; color: #cab3c2;
   overflow-wrap: anywhere;
 }
+
+/* Animated wardrobe carousel. The existing portrait is the live preview. */
+.wardrobe-browser {
+  border: 1px solid #684b5c;
+  background: #302631;
+  border-radius: 12px;
+  padding: 13px;
+  margin: 0 0 18px;
+  display: grid;
+  gap: 11px;
+}
+.wardrobe-preview-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: #ffe1d1;
+  font-size: 13px;
+}
+.wardrobe-preview-heading strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.wardrobe-preview-heading span {
+  white-space: nowrap;
+  font-size: 11px;
+  color: #c6afbd;
+}
+.wardrobe-hint {
+  display: block;
+  color: #cab3c2;
+  font-size: 11px;
+  line-height: 1.5;
+}
+.wardrobe-navigation {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+.wardrobe-navigation input[type="range"] {
+  min-width: 0;
+  width: 100%;
+  flex: 1;
+  accent-color: var(--accent, #ffad7e);
+  cursor: pointer;
+}
+.wardrobe-navigation button, .wardrobe-preview-actions button, .wardrobe-favorite {
+  background: #4a3645;
+  color: #ffe0d0;
+  border: 1px solid #795c6b;
+  border-radius: 9px;
+  padding: 7px 10px;
+  font-size: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  cursor: pointer;
+}
+.wardrobe-navigation button { flex: 0 0 34px; height: 34px; padding: 0; }
+.wardrobe-navigation button:hover:not(:disabled),
+.wardrobe-preview-actions button:hover:not(:disabled),
+.wardrobe-favorite:hover:not(:disabled) {
+  background: #705064;
+}
+.wardrobe-preview-actions {
+  display: flex;
+  gap: 7px;
+  flex-wrap: wrap;
+}
+.wardrobe-preview-actions .wardrobe-wear {
+  background: #865747;
+  border-color: #bd856e;
+}
+.wardrobe-navigation button:disabled, .wardrobe-preview-actions button:disabled,
+.wardrobe-favorite:disabled { cursor: not-allowed; opacity: .54; }
+.wardrobe-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: end;
+}
+.wardrobe-meta > label {
+  min-width: 130px;
+  flex: 1 1 130px;
+  display: grid;
+  gap: 5px;
+  color: #e6cedb;
+  font-size: 11px;
+}
+.wardrobe-meta select {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid #795c6b;
+  border-radius: 9px;
+  padding: 8px;
+  background: #40343f;
+  color: #ffefe9;
+  font-size: 12px;
+}
+.wardrobe-favorite.active { color: #ffb0b9; border-color: #ad6b80; }
