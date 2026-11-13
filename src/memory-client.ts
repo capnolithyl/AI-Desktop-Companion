@@ -60,7 +60,7 @@ export type MemoryFactHistory = {
   changedAt: number;
 };
 export type MemoryJobStatus = {
-  processed: number; userSaved: number; characterSaved: number;
+  processed: number; userSaved: number; characterSaved: number; interestsSaved: number;
   queued: number; failed: number;
 };
 export type AutomaticMemoryRequest = {

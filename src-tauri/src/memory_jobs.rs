@@ -36,6 +36,7 @@ pub struct MemoryJobStatus {
     processed: usize,
     user_saved: usize,
     character_saved: usize,
+    interests_saved: usize,
     queued: i64,
     failed: i64,
 }
@@ -178,6 +179,7 @@ pub async fn memory_process_pending_jobs(app: AppHandle) -> Result<MemoryJobStat
                 totals.processed+=1;
                 totals.user_saved+=saved.user_saved;
                 totals.character_saved+=saved.character_saved;
+                totals.interests_saved+=saved.interests_saved;
             },
             Err(err) => {
                 // Keep the original message references for owner-controlled retry.
