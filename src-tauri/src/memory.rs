@@ -331,10 +331,20 @@ fn migrate_interest_song_kind(db:&Connection)->Result<(),String>{
     db.execute(
         "UPDATE interest_items SET kind='song',updated_at=unixepoch()
          WHERE kind='album' AND source='conversation'
-           AND instr(lower(source_quote),lower(name))>0
-           AND (instr(' '||lower(source_quote)||' ',' song ')>0
-             OR instr(' '||lower(source_quote)||' ',' track ')>0)
-           AND instr(' '||lower(source_quote)||' ',' album ')=0
+           AND (
+             (instr(lower(source_quote),lower(name))>0
+               AND (instr(' '||lower(source_quote)||' ',' song ')>0
+                 OR instr(' '||lower(source_quote)||' ',' track ')>0)
+               AND instr(' '||lower(source_quote)||' ',' album ')=0)
+             OR EXISTS (
+               SELECT 1 FROM messages m
+               WHERE m.id=interest_items.source_message_id AND m.role='user'
+                 AND instr(lower(m.content),lower(interest_items.name))>0
+                 AND (instr(' '||lower(m.content)||' ',' song ')>0
+                   OR instr(' '||lower(m.content)||' ',' track ')>0)
+                 AND instr(' '||lower(m.content)||' ',' album ')=0
+             )
+           )
            AND NOT EXISTS (
              SELECT 1 FROM interest_items existing
              WHERE existing.kind='song' AND existing.name=interest_items.name
