@@ -8,7 +8,7 @@ import {
 
 type Props = {
   facts: CharacterFact[];
-  onImport: (items:IncomingCanon[])=>Promise<{inserted:number;duplicates:number}>;
+  onImport?: (items:IncomingCanon[])=>Promise<{inserted:number;duplicates:number}>;
   onAdd: (category: CharacterCategory, label: string, value: string) => Promise<void>;
   onEdit: (id: number, category: CharacterCategory, label: string, value: string) => Promise<void>;
   onDelete: (id: number) => Promise<void>;
@@ -56,7 +56,7 @@ export function CharacterCanonTab({ facts, onImport, onAdd, onEdit, onDelete }: 
       when enabled, and you can always add or correct details here.
     </p>
     {error && <div className="memory-error" role="alert">{error}</div>}
-    <CharacterBulkImporter facts={facts} onImport={onImport}/>
+    {onImport && <CharacterBulkImporter facts={facts} onImport={onImport}/>}
     <form className="memory-add character-form" onSubmit={event => {
       event.preventDefault();
       if (!label.trim() || !value.trim()) return;
