@@ -1,0 +1,151 @@
+[
+  {
+    "name": "rest",
+    "values": {}
+  },
+  {
+    "name": "head-tilt-left",
+    "values": {
+      "ParamAngleZ": -30
+    }
+  },
+  {
+    "name": "head-tilt-right",
+    "values": {
+      "ParamAngleZ": 30
+    }
+  },
+  {
+    "name": "body-tilt-left",
+    "values": {
+      "ParamBodyAngleZ": -10
+    }
+  },
+  {
+    "name": "body-tilt-right",
+    "values": {
+      "ParamBodyAngleZ": 10
+    }
+  },
+  {
+    "name": "combined-tilt-left",
+    "values": {
+      "ParamAngleZ": -30,
+      "ParamBodyAngleZ": -10,
+      "ParamTailSway": -0.5
+    }
+  },
+  {
+    "name": "combined-tilt-right",
+    "values": {
+      "ParamAngleZ": 30,
+      "ParamBodyAngleZ": 10,
+      "ParamTailSway": 0.5
+    }
+  },
+  {
+    "name": "opposed-left",
+    "values": {
+      "ParamAngleZ": -30,
+      "ParamBodyAngleZ": 10,
+      "ParamTailSway": -1
+    }
+  },
+  {
+    "name": "opposed-right",
+    "values": {
+      "ParamAngleZ": 30,
+      "ParamBodyAngleZ": -10,
+      "ParamTailSway": 1
+    }
+  },
+  {
+    "name": "stress-left",
+    "values": {
+      "ParamAngleX": -30,
+      "ParamAngleY": -30,
+      "ParamAngleZ": -30,
+      "ParamBodyAngleX": -10,
+      "ParamBodyAngleY": -10,
+      "ParamBodyAngleZ": -10,
+      "ParamTailSway": -1
+    }
+  },
+  {
+    "name": "stress-right",
+    "values": {
+      "ParamAngleX": 30,
+      "ParamAngleY": 30,
+      "ParamAngleZ": 30,
+      "ParamBodyAngleX": 10,
+      "ParamBodyAngleY": 10,
+      "ParamBodyAngleZ": 10,
+      "ParamTailSway": 1
+    }
+  },
+  {
+    "name": "blink",
+    "values": {
+      "ParamEyeLOpen": 0,
+      "ParamEyeROpen": 0
+    }
+  },
+  {
+    "name": "mouth-open",
+    "values": {
+      "ParamMouthOpenY": 1
+    }
+  },
+  {
+    "name": "tail-left",
+    "values": {
+      "ParamTailSway": -1
+    }
+  },
+  {
+    "name": "tail-right",
+    "values": {
+      "ParamTailSway": 1
+    }
+  },
+  {
+    "name": "head-turn-left",
+    "values": {
+      "ParamAngleX": -30
+    }
+  },
+  {
+    "name": "head-turn-right",
+    "values": {
+      "ParamAngleX": 30
+    }
+  },
+  {
+    "name": "mouth-half",
+    "values": {
+      "ParamMouthOpenY": 0.5
+    }
+  },
+  {
+    "name": "breath-full",
+    "values": {
+      "ParamBreath": 1
+    }
+  },
+  {
+    "name": "smile",
+    "values": {
+      "ParamMouthForm": 1,
+      "ParamBrowLY": 0.25,
+      "ParamBrowRY": 0.25
+    }
+  },
+  {
+    "name": "surprised",
+    "values": {
+      "ParamBrowLY": 0.8,
+      "ParamBrowRY": 0.8,
+      "ParamMouthOpenY": 0.9
+    }
+  }
+]

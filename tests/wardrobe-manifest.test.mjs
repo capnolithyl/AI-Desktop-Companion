@@ -20,13 +20,15 @@ test("real wardrobe.json and all checked-in .iki outfits stay in sync both direc
   assert.deepEqual(checkWardrobe(readWardrobeFile(), actual), []);
 });
 
-test("bundled renderer uses the exact .iki that wardrobe.json declares as default", () => {
-  const file = resolve(dirname(fileURLToPath(import.meta.url)), "../src/IkiAvatar.tsx");
-  const code = readFileSync(file, "utf8");
+test("bundled renderer derives the default URL from wardrobe.json, not a hardcoded filename", () => {
+  const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+  const player = readFileSync(join(root, "src/IkiAvatar.tsx"), "utf8");
+  const catalog = readFileSync(join(root, "src/bundled-iki-outfits.ts"), "utf8");
   const declared = readWardrobeFile().outfits.find(outfit => outfit.default)?.file;
   assert.ok(declared);
-  const matches = code.match(/from "\.\.\/assets\/iki\/mikan-v02\/outfits\/(.*?)\?url"/);
-  assert.equal(matches?.[1], declared);
+  assert.match(player, /import \{ defaultRigUrl as bundledRigUrl \} from "\.\/bundled-iki-outfits"/);
+  assert.match(catalog, /defaultRigUrl = assets\[prefix \+ defaultEntry\.file\]/);
+  assert.match(catalog, /import\.meta\.glob/);
 });
 
 test("missing manifest entries are detected, including files in nested folders", () => {

@@ -1,0 +1,158 @@
+{
+  "structure": {
+    "baseline": "black-shirt-v1/mikan-black-shirt-v1.iki",
+    "baseline_sha256": "960d8aed77433fbcb9ea9a92ad03a77845cbe65dad11c2dfb6c200ef13b02e7c",
+    "variant_sha256": "71f761369917bc4774f8c44bea2406243609126bf128ec632d95868a67aa815f",
+    "source_sha256": "49918818db3319e6abd34c7254587fab7ef9d74c6c48f19d617d70cf9dbd7ea6",
+    "body_sha256": "f42359b4b2ba17db60ea4b5a2bdee971a6302532bad753319b63d57ac56270a6",
+    "changed_json_paths": [
+      "/name",
+      "/textures/1/source"
+    ],
+    "all_other_rig_data_identical": true,
+    "body_alpha_identical": true,
+    "pixels_outside_print_identical": true,
+    "source_logo_rectangle": [
+      360,
+      850,
+      750,
+      1080
+    ],
+    "uniform_logo_scale": 0.86,
+    "placement": [
+      485,
+      812
+    ],
+    "maximum_curvature_pixels": 3,
+    "changed_body_pixels": 11697,
+    "protected_files_checked": 1389,
+    "protected_files_unchanged": true
+  },
+  "engine": {
+    "poses_per_version": 25,
+    "fold_checked_poses": 624,
+    "failed_textures": [],
+    "fold_offenders": [],
+    "physics_offenders": [],
+    "matched_render_checks": {
+      "rest": {
+        "alpha_identical": true,
+        "upper_face_identical": true
+      },
+      "head-tilt-left": {
+        "alpha_identical": true,
+        "upper_face_identical": true
+      },
+      "head-tilt-right": {
+        "alpha_identical": true,
+        "upper_face_identical": true
+      },
+      "body-tilt-left": {
+        "alpha_identical": true,
+        "upper_face_identical": true
+      },
+      "body-tilt-right": {
+        "alpha_identical": true,
+        "upper_face_identical": true
+      },
+      "combined-tilt-left": {
+        "alpha_identical": true,
+        "upper_face_identical": true
+      },
+      "combined-tilt-right": {
+        "alpha_identical": true,
+        "upper_face_identical": true
+      },
+      "opposed-left": {
+        "alpha_identical": true,
+        "upper_face_identical": true
+      },
+      "opposed-right": {
+        "alpha_identical": true,
+        "upper_face_identical": true
+      },
+      "stress-left": {
+        "alpha_identical": true,
+        "upper_face_identical": true
+      },
+      "stress-right": {
+        "alpha_identical": true,
+        "upper_face_identical": true
+      },
+      "blink": {
+        "alpha_identical": true,
+        "upper_face_identical": true
+      },
+      "mouth-open": {
+        "alpha_identical": true,
+        "upper_face_identical": true
+      },
+      "tail-left": {
+        "alpha_identical": true,
+        "upper_face_identical": true
+      },
+      "tail-right": {
+        "alpha_identical": true,
+        "upper_face_identical": true
+      },
+      "head-turn-left": {
+        "alpha_identical": true,
+        "upper_face_identical": true
+      },
+      "head-turn-right": {
+        "alpha_identical": true,
+        "upper_face_identical": true
+      },
+      "mouth-half": {
+        "alpha_identical": true,
+        "upper_face_identical": true
+      },
+      "breath-full": {
+        "alpha_identical": true,
+        "upper_face_identical": true
+      },
+      "smile": {
+        "alpha_identical": true,
+        "upper_face_identical": true
+      },
+      "surprised": {
+        "alpha_identical": true,
+        "upper_face_identical": true
+      },
+      "gaze-left": {
+        "alpha_identical": true,
+        "upper_face_identical": true
+      },
+      "gaze-right": {
+        "alpha_identical": true,
+        "upper_face_identical": true
+      },
+      "gaze-up": {
+        "alpha_identical": true,
+        "upper_face_identical": true
+      },
+      "gaze-down": {
+        "alpha_identical": true,
+        "upper_face_identical": true
+      }
+    }
+  },
+  "motion": {
+    "frames_per_version": 144,
+    "seconds": 12,
+    "capture_fps": 12,
+    "physics_hz": 60,
+    "parameter_traces_identical": true
+  },
+  "integrity": {
+    "protected_files_checked": 1389,
+    "all_unchanged": true
+  },
+  "application_import": {
+    "file_extension_and_size_valid": true,
+    "engine_parse_and_load_passed": true,
+    "live_selector_import_confirmed": false,
+    "reason": "Local checkout lacks app dependencies/build. Installed app wardrobe inspected; further computer-use access was denied before importing. No outfit/settings changed.",
+    "installed_app_observed": "0.8.42 wardrobe; currently wearing gothic blouse; Add outfit (.iki) and preview/Cancel preview available."
+  }
+}
