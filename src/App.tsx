@@ -15,7 +15,7 @@ import { register, unregister } from "@tauri-apps/plugin-global-shortcut";
 import {
   ArrowLeft, ArrowUp, Brain, Camera, Cat, Check, ChevronLeft, ChevronRight, Clock3, Copy, Crop, Eye, EyeOff, FileText, Heart, History, Paperclip,
   BookOpen, ExternalLink, HardDrive, LoaderCircle, MessageCircle, RotateCw, Search, Settings2, Shuffle, SlidersHorizontal, Sparkles, Square, SquarePen, Volume2, X,
-  Palette, Shirt, Globe2, Cpu, WandSparkles, Plug2, AudioLines
+  Palette, Shirt, Globe2, Cpu, WandSparkles, Plug2, AudioLines, VolumeX
 } from "lucide-react";
 import {
   DEFAULT_SETTINGS, DEFAULT_APPEARANCE, DEFAULT_VOICE, loadPortrait, loadSettings, savePortrait, saveSettings,
@@ -67,6 +67,8 @@ import { CAPTURE_INTERVAL_MIN,CAPTURE_INTERVAL_MAX,ANALYSIS_POLICY,type RegionCh
 import { attachmentQuestion, attachmentPromptText, loadChatAttachment, type PendingAttachment, type ExtractedDocument } from "./chat-attachments";
 import { parseIkiModel } from "@ikijs/format";
 import { IkiAvatar } from "./IkiAvatar";
+import { PortraitContextMenu, type PortraitMenuItem } from "./PortraitContextMenu";
+import type { MenuPoint } from "./portrait-context-menu";
 import { DEFAULT_AVATAR_VERTICAL_OFFSET, MIN_AVATAR_VERTICAL_OFFSET, MAX_AVATAR_VERTICAL_OFFSET } from "./avatar-viewport";
 import {
   loadAvatarPresencePreferences, saveAvatarPresencePreferences,
@@ -260,6 +262,7 @@ export default function App() {
   const [avatarDisplay, setAvatarDisplay] = useState<AvatarDisplay>(loadAvatarDisplay);
   const [avatarPresence, setAvatarPresence] = useState(loadAvatarPresencePreferences);
   const [avatarDragging, setAvatarDragging] = useState(false);
+  const [portraitMenuAt, setPortraitMenuAt] = useState<MenuPoint | null>(null);
   const updateAvatarPresence = (change: Partial<AvatarPresencePreferences>) => {
     setAvatarPresence(previous => {
       const next = { ...previous, ...change };
@@ -424,6 +427,8 @@ export default function App() {
   const [referenceText, setReferenceText] = useState("");
   const [referenceBusy, setReferenceBusy] = useState(false);
   const voiceSerial = useRef(0);
+  const voiceMutedRef = useRef(settings.voice.muted);
+  useEffect(() => { voiceMutedRef.current = settings.voice.muted; }, [settings.voice.muted]);
   const voiceAudio = useRef<HTMLAudioElement | null>(null);
   const voiceVolumeRef = useRef(settings.voice.volume);
   const voiceUrl = useRef<string | null>(null);
@@ -469,7 +474,9 @@ export default function App() {
     chunks: AsyncIterable<string>, voice: VoiceSettings, feed?: ProgressiveSpeechFeed,
     onFirstAudio?: () => void
   ) => {
+    if (voiceMutedRef.current) return;
     stopSpeech();
+    if (voiceMutedRef.current) return;
     voiceVolumeRef.current = voice.volume;
     if (feed) voiceFeed.current = feed;
     const serial = voiceSerial.current;
@@ -544,6 +551,7 @@ export default function App() {
   const speak = useCallback(async (
     source: string, voice: VoiceSettings = settings.voice, onFirstAudio?: () => void
   ) => {
+    if (voiceMutedRef.current) return;
     // Read-aloud buttons on older stored chats must not pronounce unfiltered
     // action descriptions, even if they predate the streaming narration guard.
     const spoken = toSpeechText(stripNarratedActions(source));
@@ -1468,6 +1476,12 @@ export default function App() {
     setDraft(current => ({ ...current, ...change }));
   };
   const updatePersonality = (personality: Personality) => applySetting({ personality });
+  const toggleVoiceMute = () => {
+    const muted = !settings.voice.muted;
+    voiceMutedRef.current = muted;
+    if (muted) stopSpeech();
+    applySetting({ voice: { ...settings.voice, muted } });
+  };
 
   // Switch between local models without reopening Settings or restarting Mikan.
   // Existing chat context is retained; choose New chat for a fresh comparison.
@@ -1497,6 +1511,7 @@ export default function App() {
       appearance: { ...draft.appearance },
       personality: { ...settings.personality }
     };
+    voiceMutedRef.current = updated.voice.muted;
     stopSpeech();
     setSettings(updated);
     saveSettings(updated);
@@ -1986,7 +2001,7 @@ export default function App() {
     // Pocket runs on CPU. Wake its service while the local GPU plans, without
     // waiting for voice readiness before starting text generation.
     const voiceReadyStarted = performance.now();
-    const voiceWarmup = settings.voice.autoSpeak && remoteText === undefined
+    const voiceWarmup = settings.voice.autoSpeak && !voiceMutedRef.current && remoteText === undefined
       ? invoke<VoiceHealth>("voice_health",{endpoint:voiceEndpoint(settings.voice)})
           .then(() => ({name:"voice readiness",elapsedMs:performance.now()-voiceReadyStarted,status:"ready" as const}))
           .catch(() => ({name:"voice readiness",elapsedMs:performance.now()-voiceReadyStarted,status:"unavailable" as const}))
@@ -2358,7 +2373,7 @@ export default function App() {
         if (event.payload.requestId === requestId) setActivity(event.payload.text);
       });
       if (!groundedChapterTurn && maySpeakProgressively({
-          autoSpeak:settings.voice.autoSpeak,
+          autoSpeak:settings.voice.autoSpeak && !voiceMutedRef.current,
           progressiveSpeak:settings.voice.progressiveSpeak,
           localTurn:remoteText === undefined,
           withSearch:!!withSearch,attachment:!!attachment,screenshot:!!screenshot,
@@ -2514,7 +2529,7 @@ export default function App() {
       setMessages(current => current.map(m => m.id === assistantId ? assistant : m));
       // Finish speech as soon as the final answer is checked; SQLite writes,
       // session summaries and memory extraction must not delay playback.
-      if (settings.voice.autoSpeak && remoteText === undefined) {
+      if (settings.voice.autoSpeak && !voiceMutedRef.current && remoteText === undefined) {
         if (progressiveFeed) {
           // Respect an explicit Stop speech click: do not restart an aborted feed.
           if (voiceFeed.current === progressiveFeed && !progressiveFeed.finish(finalText)) {
@@ -2680,6 +2695,21 @@ export default function App() {
     "--mikan-font": `"${settings.appearance.fontFamily}", system-ui, sans-serif`,
     "--mikan-font-size": `${settings.appearance.fontSize}px`
   } as CSSProperties;
+  const portraitMenuItems: PortraitMenuItem[] = [
+    { id: "outfits", label: "Change outfit", icon: <Shirt size={16}/>, disabled: !ikiReady || ikiBusy,
+      children: wardrobeChoices.map(choice => ({
+        id: wardrobeKey(choice.id), label: choice.name,
+        selected: avatarDisplay === "animated" && (ikiRig?.id ?? null) === choice.id,
+        onSelect: () => { void selectSavedIkiOutfit(choice.id); }
+      })) },
+    { id: "mute", label: settings.voice.muted ? "Unmute Mikan" : "Mute Mikan",
+      icon: settings.voice.muted ? <VolumeX size={16}/> : <Volume2 size={16}/>,
+      onSelect: toggleVoiceMute },
+    { id: "separator-main", separator: true },
+    { id: "chat", label: "Open chat", icon: <MessageCircle size={16}/>, onSelect: goCompact },
+    { id: "settings", label: "Settings", icon: <Settings2 size={16}/>, onSelect: openSettings },
+    { id: "hide", label: "Hide Mikan", icon: <EyeOff size={16}/>, onSelect: () => { void invoke("hide_companion"); } }
+  ];
   const dragPortrait = (event: ReactMouseEvent<HTMLElement>) => {
     if (event.button !== 0) return;
     setAvatarDragging(true);
@@ -2689,7 +2719,8 @@ export default function App() {
   };
 
   return <main className={screen === "settings" && settingsLayoutReady ? "companion settings-mode" : "companion"} style={theme}>
-    <div className="portrait-space" title="Drag Mikan to move the window" onMouseDown={dragPortrait}>
+    <div className="portrait-space" title="Drag Mikan to move the window" onMouseDown={dragPortrait}
+      onContextMenu={event => { event.preventDefault(); setPortraitMenuAt({ x: event.clientX, y: event.clientY }); }}>
       {avatarDisplay === "animated" && ikiReady ? (
         <IkiAvatar customRig={wardrobePreviewVisible ? previewRig?.file ?? null : ikiRig?.file ?? null} speaking={voiceState === "playing"}
           reaction={avatarReaction}
@@ -2746,6 +2777,9 @@ export default function App() {
       </div>}
     </div>
 
+    {portraitMenuAt && <PortraitContextMenu position={portraitMenuAt} items={portraitMenuItems}
+      onClose={() => setPortraitMenuAt(null)}/>}
+
     <section className="dock" aria-label="Chat with Mikan">
       <div className="reply-panel" aria-live="polite">
         <div className="reply-header">
@@ -2773,11 +2807,11 @@ export default function App() {
                 : liveVision.enabled?<Eye size={17}/>:<EyeOff size={17}/>}
               {liveVision.enabled&&<span className="live-vision-dot" aria-hidden="true"/>}
             </button>
-            <button type="button" className="dock-icon" disabled={!lastReply?.content || lastReply.failed}
-              title={voiceState === "idle" ? "Speak latest reply" : voiceState === "synthesizing" ? "Cancel pending speech" : "Stop speech"}
-              aria-label={voiceState === "idle" ? "Speak latest reply" : "Stop speech"}
-              onClick={() => voiceState === "idle" ? void speak(lastReply?.content ?? "") : stopSpeech()}>
-              {voiceState === "synthesizing" ? <LoaderCircle className="spin" size={17}/> :
+            <button type="button" className="dock-icon" disabled={!settings.voice.muted && (!lastReply?.content || lastReply.failed)}
+              title={settings.voice.muted ? "Unmute Mikan" : voiceState === "idle" ? "Speak latest reply" : voiceState === "synthesizing" ? "Cancel pending speech" : "Stop speech"}
+              aria-label={settings.voice.muted ? "Unmute Mikan" : voiceState === "idle" ? "Speak latest reply" : "Stop speech"}
+              onClick={() => settings.voice.muted ? toggleVoiceMute() : voiceState === "idle" ? void speak(lastReply?.content ?? "") : stopSpeech()}>
+              {settings.voice.muted ? <VolumeX size={17}/> : voiceState === "synthesizing" ? <LoaderCircle className="spin" size={17}/> :
                 voiceState === "playing" ? <Square size={15} fill="currentColor"/> : <Volume2 size={17}/>}
             </button>
             <button className="dock-icon" title="Conversation log (/log)" aria-label="Conversation log" onClick={() => setScreen("log")}><History size={17}/></button>
@@ -3585,6 +3619,11 @@ export default function App() {
             ? "Save or replace a WAV here. Mikan reloads its managed Pocket CPU server automatically and the Test voice button will use your new recording. No Qwen server or setup script needed after Pocket's initial installation."
             : "Saving requires the Qwen Python server. Your WAV and transcript persist in %LOCALAPPDATA%\\Mikan\\voice."}</small>
           </div>
+          <label className="settings-toggle">
+            <input type="checkbox" checked={draft.voice.muted}
+              onChange={event => setDraft(current => ({ ...current, voice: { ...current.voice, muted: event.target.checked } }))}/>
+            <span><strong>Mute Mikan</strong><small>Silences all voice playback after saving. Chat and subtitles keep working.</small></span>
+          </label>
           <label className="settings-toggle">
             <input type="checkbox" checked={draft.voice.autoSpeak}
               onChange={event => setDraft(current => ({ ...current, voice: { ...current.voice, autoSpeak: event.target.checked } }))}/>

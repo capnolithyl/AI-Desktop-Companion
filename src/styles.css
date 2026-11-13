@@ -200,6 +200,39 @@ button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px
   .dock-footer > span:last-child { display: none; }
 }
 
+
+/* Avatar quick actions stay outside the portrait crop, above the chat UI. */
+.portrait-context-menu {
+  position: fixed; z-index: 30; width: 246px;
+  max-height: min(76vh, 520px); overflow-y: auto; overflow-x: hidden;
+  padding: 7px; border-radius: 14px;
+  border: 1px solid rgb(var(--accent-rgb, 255 173 126) / .36);
+  background: linear-gradient(155deg, rgba(58, 42, 55, .98), rgba(31, 25, 35, .99));
+  color: #fce9e2; box-shadow: 0 12px 34px #100c18a8;
+  backdrop-filter: blur(20px); user-select: none;
+}
+.portrait-menu-heading {
+  padding: 8px 10px 10px; color: var(--accent, #ffad7e);
+  font-size: 10px; font-weight: 800; letter-spacing: .13em;
+}
+.portrait-menu-heading span { color: #b9a5b3; font-weight: 500; margin-left: 6px; }
+.portrait-menu-action {
+  width: 100%; min-height: 34px; display: flex; align-items: center; gap: 9px;
+  text-align: left; border: 0; border-radius: 8px; background: transparent;
+  color: inherit; padding: 7px 9px; font-size: 12px;
+}
+.portrait-menu-action:hover:not(:disabled),
+.portrait-menu-action:focus-visible { background: rgb(var(--accent-rgb, 255 173 126) / .17); color: #fff; }
+.portrait-menu-action:disabled { opacity: .45; cursor: not-allowed; }
+.portrait-menu-action.selected { color: #ffc6a8; }
+.portrait-menu-icon { flex: 0 0 17px; display: flex; align-items: center; color: var(--accent, #ffad7e); }
+.portrait-menu-label { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.portrait-menu-check, .portrait-menu-chevron { flex: 0 0 auto; color: var(--accent, #ffad7e); }
+.portrait-menu-chevron { transition: transform .15s ease; }
+.portrait-menu-chevron.expanded { transform: rotate(90deg); }
+.portrait-menu-submenu { margin: 2px 0 5px; border-left: 1px solid #916b7766; }
+.portrait-menu-separator { height: 1px; margin: 6px 7px; background: #c69c9b26; }
+
 /* v0.3: native window has no shadow; portrait itself becomes the drag target. */
 .companion {
   font-family: var(--mikan-font, "Segoe UI", system-ui, sans-serif);
