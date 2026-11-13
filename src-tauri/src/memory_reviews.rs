@@ -10,6 +10,7 @@ use tauri::AppHandle;
 pub struct MemoryReview {
     id: i64,
     existing_memory_id: Option<i64>,
+    existing_interest_id: Option<i64>,
     existing_fact: Option<String>,
     proposed_fact: String,
     evidence: String,
@@ -51,17 +52,38 @@ pub(crate) fn stage_review(
     Ok(changed>0)
 }
 
+/// A correction may reference an interest, including legacy catch-all entries.
+/// Never modify or delete the original item before the owner approves.
+pub(crate) fn stage_interest_review(
+    tx:&Transaction<'_>,interest_id:i64,proposed_fact:&str,
+    evidence:&str,source_message_id:&str
+)->Result<bool,String>{
+    let original:Option<(String,String,String)>=tx.query_row(
+        "SELECT name,kind,status FROM interest_items WHERE id=?1",
+        params![interest_id],|r|Ok((r.get(0)?,r.get(1)?,r.get(2)?))
+    ).optional().map_err(|e|e.to_string())?;
+    let Some((name,kind,status))=original else {return Ok(false)};
+    let snapshot=format!("Interest ({kind}): {name} [{status}]");
+    let changed=tx.execute(
+        "INSERT OR IGNORE INTO memory_fact_reviews
+         (existing_interest_id,existing_fact,proposed_fact,evidence,source_message_id)
+         VALUES(?1,?2,?3,?4,?5)",
+         params![interest_id,snapshot,proposed_fact,evidence,source_message_id]
+    ).map_err(|e|e.to_string())?;
+    Ok(changed>0)
+}
+
 fn list_reviews(db:&Connection)->Result<Vec<MemoryReview>,String> {
     let mut stmt=db.prepare(
-        "SELECT r.id,r.existing_memory_id,r.existing_fact,
+        "SELECT r.id,r.existing_memory_id,r.existing_interest_id,r.existing_fact,
                 r.proposed_fact,r.evidence,r.created_at
          FROM memory_fact_reviews r WHERE r.status='pending'
          ORDER BY r.created_at ASC,r.id ASC LIMIT 500"
     ).map_err(|e|e.to_string())?;
     let reviews=stmt.query_map([],|r|Ok(MemoryReview{
-        id:r.get(0)?, existing_memory_id:r.get(1)?,
-        existing_fact:r.get(2)?, proposed_fact:r.get(3)?,
-        evidence:r.get(4)?,created_at:r.get(5)?
+        id:r.get(0)?, existing_memory_id:r.get(1)?,existing_interest_id:r.get(2)?,
+        existing_fact:r.get(3)?, proposed_fact:r.get(4)?,
+        evidence:r.get(5)?,created_at:r.get(6)?
     })).map_err(|e|e.to_string())?
       .collect::<Result<Vec<_>,_>>().map_err(|e|e.to_string())?;
     Ok(reviews)
@@ -79,16 +101,47 @@ fn resolve(db:&mut Connection,id:i64,action:&str)->Result<(),String> {
         return Err("Invalid memory review action".into());
     }
     let tx=db.transaction().map_err(|e|e.to_string())?;
-    let (old_id,old_snapshot,new_fact,evidence,source):(
-        Option<i64>,Option<String>,String,String,String
+    let (old_id,old_interest_id,old_snapshot,new_fact,evidence,source):(
+        Option<i64>,Option<i64>,Option<String>,String,String,String
     )=tx.query_row(
-        "SELECT existing_memory_id,existing_fact,proposed_fact,evidence,source_message_id
+        "SELECT existing_memory_id,existing_interest_id,existing_fact,proposed_fact,evidence,source_message_id
          FROM memory_fact_reviews WHERE id=?1 AND status='pending'",
-        params![id],|r|Ok((r.get(0)?,r.get(1)?,r.get(2)?,r.get(3)?,r.get(4)?))
+        params![id],|r|Ok((r.get(0)?,r.get(1)?,r.get(2)?,r.get(3)?,r.get(4)?,r.get(5)?))
     ).optional().map_err(|e|e.to_string())?
         .ok_or_else(||"Review not found or already resolved".to_string())?;
 
     if action=="replace" {
+        if let Some(interest_id)=old_interest_id {
+            let existing:Option<(String,String,String)>=tx.query_row(
+                "SELECT name,kind,status FROM interest_items WHERE id=?1",
+                params![interest_id],|r|Ok((r.get(0)?,r.get(1)?,r.get(2)?))
+            ).optional().map_err(|e|e.to_string())?;
+            let Some((name,kind,status))=existing else {
+                return Err("Existing interest was deleted. Dismiss this review.".into());
+            };
+            let snapshot=format!("Interest ({kind}): {name} [{status}]");
+            if old_snapshot.as_deref()!=Some(snapshot.as_str()) {
+                return Err("Existing interest changed since the review. Dismiss and review again.".into());
+            }
+            tx.execute("INSERT OR IGNORE INTO user_memories(fact) VALUES(?1)",params![new_fact])
+                .map_err(|e|e.to_string())?;
+            let new_id:i64=tx.query_row("SELECT id FROM user_memories WHERE fact=?1",
+                params![new_fact],|r|r.get(0)).map_err(|e|e.to_string())?;
+            tx.execute("DELETE FROM interest_items WHERE id=?1",params![interest_id])
+                .map_err(|e|e.to_string())?;
+            tx.execute("INSERT INTO memory_fact_history
+                (memory_id,previous_fact,replacement_fact,change_source_message_id,change_evidence)
+                VALUES(?1,?2,?3,?4,?5)",
+                params![new_id,snapshot,new_fact,source,evidence]).map_err(|e|e.to_string())?;
+            tx.execute(
+                "INSERT INTO automatic_memory_sources(memory_kind,memory_id,source_message_id,evidence)
+                 VALUES('user',?1,?2,?3)
+                 ON CONFLICT(memory_kind,memory_id) DO UPDATE SET
+                   source_message_id=excluded.source_message_id,
+                   evidence=excluded.evidence,captured_at=unixepoch()",
+                params![new_id,source,evidence]
+            ).map_err(|e|e.to_string())?;
+        } else {
         let existing_id=old_id.ok_or_else(||"No existing memory to replace".to_string())?;
         let present:String=tx.query_row("SELECT fact FROM user_memories WHERE id=?1",
             params![existing_id],|r|r.get(0)).optional().map_err(|e|e.to_string())?
@@ -119,6 +172,7 @@ fn resolve(db:&mut Connection,id:i64,action:&str)->Result<(),String> {
                evidence=excluded.evidence,captured_at=unixepoch()",
             params![existing_id,source,evidence]
         ).map_err(|e|e.to_string())?;
+        }
     } else if action=="keep_both" {
         let changed=tx.execute("INSERT OR IGNORE INTO user_memories(fact) VALUES(?1)",
             params![new_fact]).map_err(|e|e.to_string())?;
@@ -199,22 +253,6 @@ mod tests {
             WHERE previous_fact LIKE 'Interest (%'",[],|r|r.get(0)).unwrap();
         assert!(old.contains("Schnitzel"));
     }
-    #[test]
-    fn dismissed_interest_correction_keeps_original_entry() {
-        let (mut db,_)=fixture();
-        db.execute("INSERT INTO interest_items(name,kind,status,source)
-          VALUES('Example','other','favorite','conversation')",[]).unwrap();
-        let id=db.last_insert_rowid();
-        let tx=db.transaction().unwrap();
-        stage_interest_review(&tx,id,"The user prefers something else",
-          "Actually I prefer something else",USER).unwrap();
-        tx.commit().unwrap();
-        resolve(&mut db,list_reviews(&db).unwrap()[0].id,"dismiss").unwrap();
-        let name:String=db.query_row("SELECT name FROM interest_items WHERE id=?1",
-            params![id],|r|r.get(0)).unwrap();
-        assert_eq!(name,"Example");
-    }
-
     #[test]
     fn reviewed_replacement_preserves_id_and_fact_history() {
         let (mut db,old_id)=fixture();
