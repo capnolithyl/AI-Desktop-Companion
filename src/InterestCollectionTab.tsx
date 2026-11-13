@@ -1,6 +1,7 @@
 import { useMemo, useState, type ChangeEvent } from "react";
 import { Check, FileUp, Plus, Trash2, X } from "lucide-react";
 import type { InterestItem } from "./memory-client";
+import { parseTags } from "./memory-import";
 import {
   INTEREST_KINDS, INTEREST_STATUSES, interestKey, parseInterests,
   type ImportFormat, type IncomingInterest, type InterestKind, type InterestStatus
@@ -27,6 +28,9 @@ export function InterestCollectionTab({items,onImport,onEdit,onDelete}:Props){
   const [excluded,setExcluded]=useState<Set<number>>(()=>new Set());
   const [editing,setEditing]=useState<number|null>(null);
   const [entry,setEntry]=useState<IncomingInterest>(empty);
+  const [addTags,setAddTags]=useState("");
+  const [editingEntry,setEditingEntry]=useState<IncomingInterest>(empty);
+  const [editTags,setEditTags]=useState("");
   const [search,setSearch]=useState("");
   const [filterKind,setFilterKind]=useState<string>("all");
   const [error,setError]=useState<string|null>(null);
@@ -152,8 +156,9 @@ export function InterestCollectionTab({items,onImport,onEdit,onDelete}:Props){
       e.preventDefault();
       void run(async()=>{
         if(!entry.name.trim())throw Error("Enter a title");
-        const result=await onImport([entry]);if(!result.inserted)throw Error("Already in your collection. Edit the existing entry.");
-        setEntry(empty);setResult("Interest saved.");
+        const result=await onImport([{...entry,tags:parseTags(addTags)}]);
+        if(!result.inserted)throw Error("Already in your collection. Edit the existing entry.");
+        setEntry(empty);setAddTags("");setResult("Interest saved.");
       });
     }}>
       <input aria-label="Interest title" placeholder="Add a band, anime, film…" maxLength={180}
@@ -168,6 +173,10 @@ export function InterestCollectionTab({items,onImport,onEdit,onDelete}:Props){
         <label>Rating <input type="number" min="0" max="10" step=".5" value={entry.rating??""}
           onChange={e=>setEntry(v=>({...v,rating:e.target.value===""?null:Number(e.target.value)}))}/></label>
       </div>
+      <label>Notes <textarea rows={2} maxLength={500} value={entry.notes}
+        onChange={e=>setEntry(v=>({...v,notes:e.target.value}))}/></label>
+      <label>Tags (comma-separated) <input value={addTags} maxLength={300}
+        onChange={e=>setAddTags(e.target.value)}/></label>
       <button className="save-button" type="submit" disabled={working||!entry.name.trim()}>
         <Plus size={15}/> Add interest</button>
     </form>
@@ -185,27 +194,27 @@ export function InterestCollectionTab({items,onImport,onEdit,onDelete}:Props){
     {filtered.slice(0,100).map(item=><article className="memory-item" key={item.id}>
       {editing===item.id ? <>
         <div className="character-form character-edit">
-          <input aria-label="Edit interest title" value={entry.name} maxLength={180}
-            onChange={e=>setEntry(v=>({...v,name:e.target.value}))}/>
+          <input aria-label="Edit interest title" value={editingEntry.name} maxLength={180}
+            onChange={e=>setEditingEntry(v=>({...v,name:e.target.value}))}/>
           <div className="memory-import-row-controls">
-            <label>Kind <select value={entry.kind}
-              onChange={e=>setEntry(v=>({...v,kind:e.target.value as InterestKind}))}>
+            <label>Kind <select value={editingEntry.kind}
+              onChange={e=>setEditingEntry(v=>({...v,kind:e.target.value as InterestKind}))}>
               {INTEREST_KINDS.map(v=><option key={v} value={v}>{nameOf(v)}</option>)}
             </select></label>
-            <label>Relationship <select value={entry.status}
-              onChange={e=>setEntry(v=>({...v,status:e.target.value as InterestStatus}))}>
+            <label>Relationship <select value={editingEntry.status}
+              onChange={e=>setEditingEntry(v=>({...v,status:e.target.value as InterestStatus}))}>
               {INTEREST_STATUSES.map(v=><option key={v} value={v}>{nameOf(v)}</option>)}
             </select></label>
-            <label>Rating <input type="number" min="0" max="10" step=".5" value={entry.rating??""}
-              onChange={e=>setEntry(v=>({...v,rating:e.target.value===""?null:Number(e.target.value)}))}/></label>
+            <label>Rating <input type="number" min="0" max="10" step=".5" value={editingEntry.rating??""}
+              onChange={e=>setEditingEntry(v=>({...v,rating:e.target.value===""?null:Number(e.target.value)}))}/></label>
           </div>
-          <label>Notes <textarea rows={2} maxLength={500} value={entry.notes}
-            onChange={e=>setEntry(v=>({...v,notes:e.target.value}))}/></label>
-          <label>Tags (comma-separated) <input value={entry.tags.join(", ")}
-            onChange={e=>setEntry(v=>({...v,tags:e.target.value.split(",").map(x=>x.trim()).filter(Boolean)}))}/></label>
+          <label>Notes <textarea rows={2} maxLength={500} value={editingEntry.notes}
+            onChange={e=>setEditingEntry(v=>({...v,notes:e.target.value}))}/></label>
+          <label>Tags (comma-separated) <input value={editTags}
+            onChange={e=>setEditTags(e.target.value)}/></label>
         </div>
         <div className="memory-actions">
-          <button disabled={working} onClick={()=>void run(async()=>{await onEdit(item.id,entry);setEditing(null);})}><Check size={13}/> Save</button>
+          <button disabled={working} onClick={()=>void run(async()=>{await onEdit(item.id,{...editingEntry,tags:parseTags(editTags)});setEditing(null);})}><Check size={13}/> Save</button>
           <button onClick={()=>setEditing(null)}><X size={13}/> Cancel</button>
         </div>
       </> : <>
@@ -214,7 +223,7 @@ export function InterestCollectionTab({items,onImport,onEdit,onDelete}:Props){
         {item.notes && <p>{item.notes}</p>}
         {!!item.tags.length && <div className="memory-labels">{item.tags.map(tag=><span key={tag}>#{tag}</span>)}</div>}
         <div className="memory-actions">
-          <button type="button" disabled={working} onClick={()=>{setEditing(item.id);setEntry(entryOf(item));}}>Edit</button>
+          <button type="button" disabled={working} onClick={()=>{setEditing(item.id);setEditingEntry(entryOf(item));setEditTags(item.tags.join(", "));}}>Edit</button>
           {confirmDelete===item.id ? <>
             <button type="button" className="memory-danger" disabled={working}
               onClick={()=>void run(async()=>{await onDelete(item.id);setConfirmDelete(null);})}>Confirm delete</button>
