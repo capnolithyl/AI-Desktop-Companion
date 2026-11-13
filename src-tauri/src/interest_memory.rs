@@ -134,19 +134,40 @@ pub fn memory_delete_interest(app: AppHandle, id: i64) -> Result<(),String> {
     Ok(())
 }
 
-/// A direct, explicit owner preference may promote a curated media entry from
-/// like/unknown/experienced/interested to favorite. All other curated statuses
-/// remain protected; no duplicate and no changes to notes, rating, tags or ID.
-fn explicit_favorite(text:&str)->bool {
-    text.split(|c:char|!c.is_alphabetic()).any(|word|
-        word.eq_ignore_ascii_case("favorite") || word.eq_ignore_ascii_case("favourite"))
+/// Only act on a preference explicitly stated in the owner's own quoted words.
+/// This applies to imported and manual entries too; provenance protects from
+/// model guesses, not from the owner changing their mind.
+fn evidence_supports_status(name:&str,status:&str,evidence:&str)->bool{
+    let lower=format!(" {} ",evidence.to_lowercase().replace(['\\n','\\r'], " "));
+    if !lower.contains(&name.to_lowercase()) { return false; }
+    let any=|words:&[&str]| words.iter().any(|word|lower.contains(word));
+    match status {
+        "favorite"=>any(&[" favorite "," favourite "]),
+        "like"=>any(&[" i like "," i love "," i enjoy "," really good "," great "," amazing ",
+                      " obsessed "," obsession "," i'm into "," i prefer "," digging "," better than "]),
+        "dislike"=>any(&[" i dislike "," i hate "," don't like "," do not like ",
+                         " not a fan "," can't stand "," cannot stand "]),
+        "interested"=>any(&[" want to "," planning to "," interested in "," curious about "]),
+        "experienced"=>any(&[" i watched "," i played "," i read "," i finished "," i listened "]),
+        _=>false,
+    }
+}
+fn explicit_status_revision(evidence:&str)->bool{
+    let lower=format!(" {} ",evidence.to_lowercase());
+    [" now "," no longer "," not anymore "," used to "," changed my mind ",
+     " actually "," instead "," not my favorite "," not my favourite "]
+        .iter().any(|phrase|lower.contains(phrase))
 }
 pub(crate) fn insert_from_conversation(
     db:&Connection, item:IncomingInterest, source_id:&str,
     evidence:&str
 )->Result<bool,String>{
     let item=checked(item)?;
-    let owner_favorite=item.status=="favorite" && explicit_favorite(evidence);
+    // Named, source-grounded statements can correct curated imports in place.
+    // A casual "I like X" must not demote an established favorite unless it
+    // explicitly indicates a changed preference.
+    let source_supported=evidence_supports_status(&item.name,&item.status,evidence);
+    let allow_demotion=explicit_status_revision(evidence);
     let tags=serde_json::to_string(&item.tags).map_err(|e|e.to_string())?;
     let changed=db.execute(
         "INSERT INTO interest_items
@@ -156,11 +177,10 @@ pub(crate) fn insert_from_conversation(
            status=excluded.status,source_quote=excluded.source_quote,
            source_message_id=excluded.source_message_id,updated_at=unixepoch()
          WHERE interest_items.status<>excluded.status
-           AND (interest_items.source='conversation'
-             OR (?9=1 AND excluded.status='favorite'
-                 AND interest_items.status IN ('like','interested','experienced','unknown')))",
+           AND ?9=1
+           AND (interest_items.status<>'favorite' OR excluded.status='favorite' OR ?10=1)",
         params![item.name,item.kind,item.status,item.rating,item.notes,tags,
-            source_id,evidence,owner_favorite]
+            source_id,evidence,source_supported,allow_demotion]
     ).map_err(|e|e.to_string())?;
     Ok(changed>0)
 }
@@ -284,7 +304,7 @@ mod tests {
         assert!(checked(invalid).is_err());
     }
     #[test]
-    fn separate_sqlite_collection_tracks_fts_and_protects_curated_entries() {
+    fn separate_sqlite_collection_tracks_fts_and_updates_curated_entries() {
         let db=Connection::open_in_memory().unwrap();
         memory::initialize_database(&db).unwrap();
         db.execute(
@@ -318,11 +338,11 @@ mod tests {
             name:"bathory".into(),kind:"band".into(),status:"dislike".into(),
             rating:None,notes:String::new(),tags:vec![]
         };
-        assert!(!insert_from_conversation(&db,curated,"u","I dislike Bathory").unwrap());
+        assert!(insert_from_conversation(&db,curated,"u","I dislike Bathory").unwrap());
         let preserved:String=db.query_row(
             "SELECT status FROM interest_items WHERE name='Bathory'",[],|r|r.get(0)
         ).unwrap();
-        assert_eq!(preserved,"favorite");
+        assert_eq!(preserved,"dislike");
     }
     #[test]
     fn newer_explicit_favorite_upgrades_import_without_losing_curated_data() {
@@ -362,7 +382,7 @@ mod tests {
     }
 
     #[test]
-    fn curator_protection_blocks_vague_or_conflicting_statuses() {
+    fn evidence_guard_protects_favorites_but_allows_explicit_updates() {
         let db=Connection::open_in_memory().unwrap();
         memory::initialize_database(&db).unwrap();
         db.execute("INSERT INTO conversations(id,title,created_at,updated_at) VALUES('c','test',0,0)",[]).unwrap();
@@ -384,13 +404,15 @@ mod tests {
         assert!(insert_from_conversation(&db,fav.clone(),"message-3",
             "Sakura Trick is my favourite anime").unwrap());
         let weaker=IncomingInterest{status:"like".into(),..fav.clone()};
-        assert!(!insert_from_conversation(&db,weaker,"message-4",
+        assert!(!insert_from_conversation(&db,weaker.clone(),"message-4",
             "I like Sakura Trick").unwrap());
+        assert!(insert_from_conversation(&db,weaker,"message-4",
+            "I used to call Sakura Trick a favorite, but now I like Sakura Trick").unwrap());
         let contrary=IncomingInterest{status:"dislike".into(),..fav};
-        assert!(!insert_from_conversation(&db,contrary,"message-5",
-            "I dislike Sakura Trick").unwrap());
+        assert!(insert_from_conversation(&db,contrary,"message-5",
+            "I dislike Sakura Trick now").unwrap());
         let status:String=db.query_row("SELECT status FROM interest_items",[],|r|r.get(0)).unwrap();
-        assert_eq!(status,"favorite");
+        assert_eq!(status,"dislike");
     }
 
     #[test]
