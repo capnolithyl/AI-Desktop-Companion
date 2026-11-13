@@ -1,5 +1,7 @@
 # Mikan Desktop Companion
 
+**v0.9.1 (memory classification and communication preferences):** Maintenance release of v0.9 with always-applied, editable communication preferences under Settings → AI; model-guided, evidence-checked separation of personal preferences from automatic media collections; owner-reviewed corrections across saved facts and older interest items; and visible outcomes for completed automatic memory extraction jobs. Includes v0.9.0 changes and current main wardrobe updates. Installed version and NSIS filename are now 0.9.1; install the new 0.9.1 artifact, not an earlier 0.9.0 build. Existing settings, conversations, and memory are preserved. Windows CI and real-device verification remain important.
+
 **v0.9.0 (durable memory and reviewed corrections):** Mikan now journals optional automatic memory extraction in SQLite before analyzing it, recovers interrupted work after restart, and allows retrying failed local-model jobs. Corrections to already saved personal facts are proposed under **Memory → About you → Suggested memory corrections**. Nothing overwrites a current fact until its owner approves; approved replacements preserve the fact ID, pin/category/tags and a visible revision history. Public-web permission checks for desktop chat now come from one tested policy module while Rust still enforces its own safety boundary. The existing 2D Iki avatar, screen vision, TTS, Notion, OpenRouter and Android paths remain unchanged. This is a local desktop upgrade; automated builds do not replace on-device Ollama/AMD smoke tests.
 
 
