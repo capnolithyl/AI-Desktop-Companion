@@ -4,7 +4,7 @@
  * The CI checker detects unmapped Tauri commands, missing files and stale versions.
  * Add a feature here when adding capability, and update the matching source/docs.
  */
-export const CAPABILITY_RELEASE = "0.9.5";
+export const CAPABILITY_RELEASE = "0.9.6";
 
 export type CapabilityStage = "implemented" | "experimental" | "planned";
 export type RuntimeDependency = "none" | "ollama" | "search" | "mem0" | "voice" | "vision" | "pocket";
@@ -39,8 +39,8 @@ export const CAPABILITIES: readonly Capability[] = [
   },
   {
     id:"remote-browser",label:"Remote browser companion (experimental)",category:"Platforms",
-    description:"Optional locally hosted, key-protected browser chat over Cloudflare Tunnel and Access. Shares the active desktop conversation, its local model, persona, SQLite memory and web tools by relaying text turns into the running desktop UI. Requires separate Node relay, Cloudflare setup and awake PC. No remote attachments, voice, or independent chats yet.",
-    stage:"experimental",runtime:"none",keywords:["server","remote","browser","cloudflare","tunnel","phone","web app","access"],
+    description:"Private, key-protected remote browser chat over Tailscale Serve (or a separately configured Cloudflare Tunnel). Uses the running desktop UI and its actual SQLite conversation archive, including selecting and creating chats from the phone; the desktop and browser share one active chat, model, persona, memories and web tools. The browser renders the selected Iki rig locally with idle animation and expressions, including imported outfits relayed in RAM. Requires awake PC, updated desktop app, separately running Node relay, and WebGL-capable browser. No remote phone voice, attachments, screen capture or independent simultaneous desktop/phone chat sessions yet.",
+    stage:"experimental",runtime:"none",keywords:["server","remote","browser","tailscale","cloudflare","tunnel","phone","web app","access","avatar","outfit","multiple chats"],
     sources:["server/index.mjs","server/public/index.html","src/App.tsx"],docs:["server/README.md"],
     commands:[]
   },
