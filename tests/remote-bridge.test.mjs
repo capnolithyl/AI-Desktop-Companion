@@ -49,7 +49,7 @@ test("browser relay requires a private key and delegates to the desktop, not a s
   const mainView = html.split('<div id="app" class="shell">')[1]
     ?.split('<div id="settingsSheet" class="settings-overlay" hidden>')[0];
   const settingsView = html.split('<div id="settingsSheet" class="settings-overlay" hidden>')[1]
-    ?.split('<div id="reportPanel">')[0];
+    ?.split('<div id="reportPanel" role="dialog"')[0];
   assert.ok(mainView && settingsView, "Remote app and settings drawer exist");
   assert.match(mainView, /id="menuToggle"[^>]+aria-controls="settingsSheet"/);
   assert.match(settingsView, /role="dialog" aria-modal="true"/);
