@@ -16,3 +16,20 @@ test("communication settings validate stored values and support alternate modes"
   assert.equal(readCommunicationPreferences({addressMode:"invalid"}).addressMode,"endearments");
   assert.match(communicationGuidance(readCommunicationPreferences({addressMode:"first-name"})),/may address the user by their first name/);
 });
+// Guard against a follow-up integration accidentally keeping the module
+// while dropping the actual user controls and system-prompt injection.
+test("communication preferences are wired into the desktop UI and chat", async()=>{
+  const {readFileSync} = await import("node:fs");
+  const app=readFileSync(new URL("./App.tsx",import.meta.url),"utf8");
+  assert.match(app,/communicationGuidance\(settings\.communication\)/);
+  assert.match(app,/Communication preferences/);
+  assert.match(app,/draft\.communication\.addressMode/);
+  assert.match(app,/draft\.communication\.customGuidance/);
+});
+test("reviewed corrections can replace earlier interest records",async()=>{
+  const {readFileSync} = await import("node:fs");
+  const client=readFileSync(new URL("./memory-client.ts",import.meta.url),"utf8");
+  const panel=readFileSync(new URL("./MemoryReviews.tsx",import.meta.url),"utf8");
+  assert.match(client,/existingInterestId:\s*number\s*\|\s*null/);
+  assert.match(panel,/review\.existingInterestId\s*!=\s*null/);
+});

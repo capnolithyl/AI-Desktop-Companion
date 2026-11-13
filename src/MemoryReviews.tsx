@@ -78,10 +78,10 @@ export function MemoryReviews({onChanged}: {onChanged: () => Promise<void>}) {
       {review.existingFact&&<p><strong>Currently saved:</strong> {review.existingFact}</p>}
       <p><strong>Suggested:</strong> {review.proposedFact}</p>
       <div className="memory-actions">
-        {review.existingMemoryId!=null&&(
+        {(review.existingMemoryId!=null || review.existingInterestId!=null)&&(
           confirmReplace===review.id
           ? <>
-              <span>Replace the existing fact and retain its revision history?</span>
+              <span>Replace the existing saved memory and retain its revision history?</span>
               <button type="button" className="save-button" disabled={working}
                 onClick={()=>void act(async()=>{
                   await memoryApi.resolveReview(review.id,"replace");
@@ -90,7 +90,7 @@ export function MemoryReviews({onChanged}: {onChanged: () => Promise<void>}) {
               <button type="button" onClick={()=>setConfirmReplace(null)}><X size={13}/> Cancel</button>
             </>
           : <button type="button" disabled={working} onClick={()=>setConfirmReplace(review.id)}>
-              Replace old fact
+              Replace old memory
             </button>
         )}
         <button type="button" disabled={working} onClick={()=>void act(

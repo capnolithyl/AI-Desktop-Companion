@@ -52,7 +52,7 @@ export type AutomaticMemoryResult = {
   userSaved: number; characterSaved: number; interestsSaved?: number; skipped: boolean;
 };
 export type MemoryReview = {
-  id: number; existingMemoryId: number | null; existingFact: string | null;
+  id: number; existingMemoryId: number | null; existingInterestId: number | null; existingFact: string | null;
   proposedFact: string; evidence: string; createdAt: number;
 };
 export type MemoryFactHistory = {
