@@ -47,6 +47,7 @@ pub struct MemoryJobStatus {
     user_saved: usize,
     character_saved: usize,
     interests_saved: usize,
+    interest_changes: Vec<memory_extraction::InterestStatusChange>,
     review_queued: usize,
     queued: i64,
     failed: i64,
@@ -208,6 +209,7 @@ pub async fn memory_process_pending_jobs(app: AppHandle) -> Result<MemoryJobStat
                 totals.user_saved+=saved.user_saved;
                 totals.character_saved+=saved.character_saved;
                 totals.interests_saved+=saved.interests_saved;
+                totals.interest_changes.extend(saved.interest_changes);
                 totals.review_queued+=saved.review_queued;
             },
             Err(err) => {

@@ -65,8 +65,12 @@ export type MemoryOutcome = {
   userSaved: number; characterSaved: number; interestsSaved: number;
   reviewQueued: number; processedAt: number;
 };
+export type InterestStatusChange = {
+  name: string; previousStatus: string; status: string;
+};
 export type MemoryJobStatus = {
   processed: number; userSaved: number; characterSaved: number; interestsSaved: number;
+  interestChanges: InterestStatusChange[];
   reviewQueued: number; queued: number; failed: number;
   lastOutcome: MemoryOutcome | null;
 };

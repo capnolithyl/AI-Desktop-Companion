@@ -47,12 +47,20 @@ struct ProposedInterest {
     evidence: String,
 }
 
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InterestStatusChange {
+    pub name: String,
+    pub previous_status: String,
+    pub status: String,
+}
 #[derive(Default, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MemoryProcessingResult {
     pub user_saved: usize,
     pub character_saved: usize,
     pub interests_saved: usize,
+    pub interest_changes: Vec<InterestStatusChange>,
     pub review_queued: usize,
     pub skipped: bool,
 }
@@ -395,10 +403,23 @@ fn persist(
     if capture_user {
         for candidate in proposed.interest_items.into_iter().take(3) {
             let Some(item) = clean_interest_candidate(&candidate, user_text) else { continue; };
+            // Capture the old status inside the same transaction as the write.
+            // Do not report an attempted change if curated data was protected.
+            let previous_status:Option<String>=tx.query_row(
+                "SELECT status FROM interest_items WHERE kind=?1 AND name=?2 COLLATE NOCASE",
+                params![&item.kind,&item.name],|r|r.get(0)
+            ).optional().map_err(|e|e.to_string())?;
+            let name=item.name.clone();
+            let status=item.status.clone();
             if interest_memory::insert_from_conversation(
                 &tx,item,user_message_id,&normalize(&candidate.evidence)
             )? {
                 result.interests_saved += 1;
+                if let Some(previous_status)=previous_status.filter(|old|old!=&status) {
+                    result.interest_changes.push(InterestStatusChange {
+                        name,previous_status,status
+                    });
+                }
             }
         }
     }
