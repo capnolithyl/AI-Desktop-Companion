@@ -133,11 +133,18 @@ export const CAPABILITIES: readonly Capability[] = [
     commands:["memory_semantic_recall","memory_semantic_status"]
   },
   {
+    id:"interest-collections",label:"Searchable interests and media collections",category:"Memory",
+    description:"Separate SQLite FTS5 catalog of the owner's bands, albums, anime, movies, TV, games and books. Bulk JSON/CSV/text import supports favorites, likes, dislikes, experienced or interested statuses plus optional ratings, notes and tags. Matching entries are recalled in a bounded chat context. Local automatic extraction adds only grounded, explicitly stated tastes, and never overwrites owner-curated imports. This is desktop memory, not synced to Pocket.",
+    stage:"experimental",runtime:"none",keywords:["interests","collection","anime","bands","movies","shows","favorite","watched","ratings","media","import"],
+    sources:["src-tauri/src/interest_memory.rs","src/InterestCollectionTab.tsx","src/interest-import.ts","src/memory-client.ts"],docs:["MEMORY.md"],
+    commands:["memory_list_interests","memory_search_interests","memory_import_interests","memory_update_interest","memory_delete_interest"]
+  },
+  {
     id:"character-canon",label:"Mikan's character canon",category:"Personality",
-    description:"Editable character preferences and lore kept distinct from information about the user.",
-    stage:"implemented",runtime:"none",keywords:["persona","canon","personality","character","favorite","fictional"],
-    sources:["src-tauri/src/memory.rs","src/CharacterCanonTab.tsx"],docs:["MEMORY.md"],
-    commands:["memory_list_character_facts","memory_add_character_fact","memory_update_character_fact","memory_delete_character_fact"],
+    description:"Editable character preferences and lore kept distinct from information about the user. Desktop also supports bulk JSON/CSV/text import of Mikan's favorites and traits without overwriting matching labels; Pocket retains its existing editor.",
+    stage:"implemented",runtime:"none",keywords:["persona","canon","personality","character","favorite","fictional","bulk import"],
+    sources:["src-tauri/src/memory.rs","src/CharacterCanonTab.tsx","src/CharacterBulkImporter.tsx"],docs:["MEMORY.md"],
+    commands:["memory_list_character_facts","memory_import_character_facts","memory_add_character_fact","memory_update_character_fact","memory_delete_character_fact"],
     slashCommands:["canon","canon-set","canon-forget"]
   },
   {
