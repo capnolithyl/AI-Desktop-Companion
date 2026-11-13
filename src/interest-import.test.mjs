@@ -25,7 +25,7 @@ test("JSON exports can carry collections in a named property",()=>{
 });
 
 test("watched and played imports mean experienced, never liked",()=>{
-  const rows=parseInterests("name,kind,status\\nHigurashi,anime,watched\\nSolasta,game,played","csv");
+  const rows=parseInterests("name,kind,status\nHigurashi,anime,watched\nSolasta,game,played","csv");
   assert.deepEqual(rows.map(r=>r.status),["experienced","experienced"]);
 });
 
