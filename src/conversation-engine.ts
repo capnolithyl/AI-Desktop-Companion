@@ -161,7 +161,7 @@ export function responseFocusGuidance(turns: ConversationTurn[], query: string):
   const stale = [...count].filter(([,hits])=>hits>=2)
     .sort((a,b)=>b[1]-a[1] || b[0].length-a[0].length)
     .slice(0,5).map(([word])=>word);
-  const multiPart=/(?:\\band\\s+(?:who|what|when|where|why|how|which)(?:'s|\\b)|\\?.+\\?)/i.test(query);
+  const multiPart=/(?:\band\s+(?:who|what|when|where|why|how|which)(?:'s|\b)|\?.+\?)/i.test(query);
   return [
     "CONVERSATION FOCUS: Respond to the owner's latest message first. Old dialogue, saved memories and screenshots provide context only.",
     multiPart ? "MULTI-PART REQUEST: The owner asked more than one question. Answer EACH requested part before ending your reply. If verification fails for one detail, say exactly which detail you could not confirm; do not silently omit it or replace it with banter." : "",

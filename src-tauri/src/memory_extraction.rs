@@ -144,6 +144,14 @@ fn contextual_user_candidate(previous_assistant: &str, user: &str) -> bool {
         .any(|word| matches!(word,"you" | "your" | "yours"))
 }
 
+/// Autobiographical preferences stated unprompted by Mikan can become
+/// character canon when the owner enables automatic Mikan memories.
+/// Restrict this path to explicit favorite claims, not ordinary banter.
+fn spontaneous_character_favorite(assistant:&str)->bool{
+    let lower=assistant.to_lowercase();
+    lower.contains("my favorite ") || lower.contains("my favourite ")
+        || lower.contains("one of my favorite ") || lower.contains("one of my favourite ")
+}
 fn character_question(text: &str) -> bool {
     let lower = text.to_lowercase();
     let targets_mikan =
@@ -593,7 +601,8 @@ pub async fn memory_process_turn(
     } else {None};
     let capture_user = capture_user &&
         (user_fact_candidate(&user) || contextual_user_candidate(&prior_assistant, &user));
-    let capture_character = capture_character && character_question(&user);
+    let capture_character = capture_character &&
+        (character_question(&user) || spontaneous_character_favorite(&assistant));
     if !capture_user && !capture_character {
         return Ok(MemoryProcessingResult { skipped: true, ..Default::default() });
     }
@@ -657,7 +666,7 @@ USER FACTS: Extract up to THREE personal facts grounded in the CURRENT user's ex
 
 INTEREST COLLECTION: ONLY for named bands, albums, songs/tracks/singles, anime, TV shows, movies, games and books. Songs are kind 'song', NEVER 'album'; distinguish individual tracks from full-length records using the owner's exact words. Other personal favorites (food, drinks, activities, hobbies, brands, places, etc.) are USER FACTS, never interest_items. If you cannot establish that the named item is a genuine media work or artist, do not include it. Extract up to THREE interest_items. Include a specific title/name and its kind (if known), one status and exact evidence from the USER. For favorite status, the exact quoted evidence MUST include both the item name and the owner’s actual word favorite/favourite (not only the title). favorite for the owner's genuine current favorite/one-of-my-favorites, including tentative preferences such as 'I think my favorite album might be X' or 'maybe X is my favorite'. Hesitation about ranking a known, enjoyed item is NOT 'interested' (which is reserved for not-yet-tried media). like for loves/likes/enjoys; dislike for hates/dislikes; interested for wants to try/watch/listen/read; experienced for finished/watched/listened/played/read with NO stated opinion. Mere mentions and hypothetical discussion are NOT evidence. Never guess an opinion or turn 'watched' into 'liked'. Specific named media tastes and favorites belong in interest_items, not as redundant user_facts. If the owner clearly upgrades an existing media title from like to favorite, output that same exact kind and name with status favorite, including when it was imported. Never infer favorite from only like. Conflicting manual interests are otherwise protected. A named hobby, music genre, or general preference belongs in user_facts instead of a fictitious collection title.
 
-MIKAN FACTS: Only when the user DIRECTLY asks about Mikan's own preferences/interests AND Mikan's actual assistant answer states a specific stable fictional preference or trait. Existing canon may already include several items in one value (e.g. favorite music); do not create a redundant 'likes X' detail when X is already included in an existing canon entry. Extract up to THREE facts using a short stable label (e.g. 'Favorite color'), category, and exact value clearly stated by Mikan. No gestures, roleplay descriptions, hypotheticals, or claims to real human physical experiences. Do not infer a favorite from the user's tastes. Do not override or contradict an existing character-canon label.
+MIKAN FACTS: When the user directly asks Mikan about herself OR when Mikan spontaneously makes an EXPLICIT first-person favorite claim (e.g. one of my favorite albums is X), extract up to THREE clearly grounded, stable fictional preferences from Mikan's actual answer. Never convert a comment about the user's tastes into Mikan's canon. Existing canon may already include several items in one value (e.g. favorite music); do not create a redundant 'likes X' detail when X is already included in an existing canon entry. Extract up to THREE facts using a short stable label (e.g. 'Favorite color'), category, and exact value clearly stated by Mikan. No gestures, roleplay descriptions, hypotheticals, or claims to real human physical experiences. Do not infer a favorite from the user's tastes. Do not override or contradict an existing character-canon label.
 
 Every proposed item MUST include a short, EXACT verbatim substring as evidence, copied from the correct speaker. Do not propose anything without direct textual evidence. Never extract passwords, credentials, exact addresses, financial data, health/medical information, religious/political/sexual data, or other sensitive information automatically. The owner can manually save private information if desired.
 If the text doesn't contain a supported durable memory, return all arrays empty.";
@@ -751,6 +760,32 @@ mod tests {
     }
 
     #[test]
+    fn existing_character_favorite_prevents_redundant_like_insertion() {
+        let mut db=Connection::open_in_memory().unwrap();
+        memory::initialize_database(&db).unwrap();
+        db.execute("INSERT INTO conversations(id,title,created_at,updated_at)
+             VALUES('c','test',0,0)",[]).unwrap();
+        db.execute("INSERT INTO messages(id,conversation_id,role,content,created_at)
+             VALUES('u','c','user','What music do you like?',0)",[]).unwrap();
+        db.execute("INSERT INTO messages(id,conversation_id,role,content,created_at)
+             VALUES('a','c','assistant','I love synthwave.',0)",[]).unwrap();
+        db.execute("INSERT INTO character_facts(persona_id,category,label,normalized_label,value)
+             VALUES('mikan','favorites','Favorite music','favorite music',
+                    'synthwave and atmospheric black metal')",[]).unwrap();
+        let proposed=Extracted{
+            user_facts:vec![],interest_items:vec![],
+            character_facts:vec![ProposedCharacterFact{
+                category:"likes".into(),label:"Music taste".into(),
+                value:"synthwave".into(),evidence:"I love synthwave".into()
+            }]
+        };
+        let result=persist(&mut db,proposed,"What music do you like?",
+            "I love synthwave.","u","a",false,true,&[],&[],None,None).unwrap();
+        assert_eq!(result.character_saved,0);
+        let count:i64=db.query_row("SELECT COUNT(*) FROM character_facts",[],|r|r.get(0)).unwrap();
+        assert_eq!(count,1);
+    }
+    #[test]
     fn source_quote_recognizes_favorite_song_and_tentative_album() {
         let song=ProposedInterest{
             kind:"album".into(),name:"Thoughts Without Words".into(),
@@ -797,6 +832,9 @@ mod tests {
 
     #[test]
     fn only_direct_self_questions_are_character_candidates() {
+        assert!(spontaneous_character_favorite("It's one of my favorite albums."));
+        assert!(!spontaneous_character_favorite("That's one of YOUR favorite albums."));
+        assert!(!spontaneous_character_favorite("I could listen to it someday."));
         assert!(character_question("What's your favorite music?"));
         assert!(character_question("Mikan, do you enjoy synthwave?"));
         assert!(!character_question("Do you remember my favorite music?"));
