@@ -7,6 +7,7 @@ import { CharacterCanonTab } from "./CharacterCanonTab";
 import type { SessionSummary } from "./memory-budget";
 
 type Props = {
+  embedded?: boolean;
   initialTab?: "chats" | "facts" | "character";
   conversations: MemoryConversation[];
   sessionSummaries: SessionSummary[];
@@ -46,7 +47,7 @@ function shortDate(seconds: number): string {
 
 /** Separate fact and conversation controls; no automatic memory extraction in phase one. */
 export function MemoryPanel({
-  initialTab = "facts", conversations, sessionSummaries, facts, characterFacts,
+  embedded = false, initialTab = "facts", conversations, sessionSummaries, facts, characterFacts,
   autoRememberUser, autoRememberMikan, automaticError, onAutoRememberUserChange, onAutoRememberMikanChange,
   currentId, busy, error, onClose, onNew,
   onOpen, onDeleteChat, onDeleteSessionSummary, onAddFact, onEditFact, onDeleteFact, onPinFact,
@@ -79,7 +80,8 @@ export function MemoryPanel({
   const filteredFacts=facts.filter(f=>(filterCategory==="all"||f.category===filterCategory) &&
     (!filterText.trim() || [f.fact,f.category??"other",...(f.tags??[])].join(" ").toLowerCase().includes(filterText.trim().toLowerCase())));
 
-  return <section className="drawer" role="dialog" aria-label="Mikan memory">
+  return <section className={embedded ? "drawer settings-inner-panel" : "drawer"}
+    role={embedded ? "region" : "dialog"} aria-label="Mikan memory">
     <header className="drawer-header">
       <button type="button" className="back-button" title="Back to companion" onClick={onClose}><ArrowLeft size={19}/></button>
       <div className="drawer-title"><strong>Memory</strong><span>Private SQLite storage on this PC</span></div>

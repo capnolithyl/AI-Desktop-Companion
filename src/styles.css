@@ -1081,3 +1081,91 @@ button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px
   max-height: 100%;
   filter: drop-shadow(0 6px 10px #130b166b);
 }
+
+/* Settings workspace: keep Mikan visible on the left while opening a real panel beside her.
+   Existing transparent chat window stays 520px wide whenever Settings is closed. */
+.companion.settings-mode .portrait-space {
+  left: 3px; right: auto; width: 514px;
+}
+.companion.settings-mode .floating-controls {
+  right: auto; width: 500px;
+}
+.companion.settings-mode .dock {
+  left: 10px; right: auto; width: 500px;
+}
+.companion.settings-mode > .drawer {
+  left: 520px; right: 8px; top: 8px; bottom: 8px;
+  border-color: rgb(var(--accent-rgb, 255 173 126) / .25);
+  background: linear-gradient(155deg, #312631 0%, #231d28 75%);
+  box-shadow: -12px 14px 45px #160e183b;
+}
+.companion.settings-mode .panel-scrim { display: none; }
+.companion.settings-mode .drawer-header {
+  min-height: 66px;
+  background: linear-gradient(90deg, rgb(var(--accent-rgb,255 173 126) / .10), transparent);
+}
+.settings-layout {
+  display: flex; flex: 1; overflow: hidden; min-height: 0;
+}
+.settings-layout .settings-tabs {
+  display: flex; flex-direction: column; align-items: stretch;
+  width: 168px; min-width: 168px;
+  gap: 15px; padding: 16px 10px;
+  border-bottom: 0; border-right: 1px solid #574452;
+  overflow-y: auto; background: rgba(23,19,29,.44);
+}
+.settings-nav-group { display: flex; flex-direction: column; gap: 4px; }
+.settings-nav-heading {
+  padding: 0 9px 5px;
+  color: #ad93a8; font-size: 9px; font-weight: 800;
+  text-transform: uppercase; letter-spacing: .11em;
+}
+.settings-layout .settings-tab {
+  display: flex; align-items: center; gap: 9px; text-align: left;
+  width: 100%; padding: 10px 9px;
+  color: #d9c4cf; background: transparent;
+  border: 1px solid transparent; border-radius: 9px;
+  font-size: 11px; font-weight: 600;
+  transition: background .12s ease, color .12s ease;
+}
+.settings-layout .settings-tab svg { flex: none; opacity: .84; }
+.settings-layout .settings-tab span { min-width: 0; }
+.settings-layout .settings-tab:hover {
+  background: #473444; color: #ffece2;
+}
+.settings-layout .settings-tab.active {
+  color: #ffe6d5; background: rgb(var(--accent-rgb,255 173 126) / .16);
+  border-color: rgb(var(--accent-rgb,255 173 126) / .32);
+}
+.settings-layout > .settings-body {
+  flex: 1; min-width: 0;
+  padding: 22px 19px 25px;
+}
+.settings-layout > .settings-body.settings-embedded {
+  padding: 0;
+  display: flex;
+  overflow: hidden;
+}
+.settings-layout .settings-inner-panel {
+  position: relative; inset: auto; flex: 1;
+  border: none; border-radius: 0; box-shadow: none;
+  background: transparent; min-height: 0; min-width: 0;
+}
+.settings-inner-panel .drawer-header { min-height: 60px; }
+.settings-inner-panel .drawer-title strong { font-size: 14px; }
+.settings-inner-panel .memory-body { min-height: 0; }
+.settings-layout .settings-section-title { color: #ffdbc6; }
+.settings-layout .settings-section-title:not(:first-child) { margin-top: 23px; }
+.settings-layout .setting-field { margin-bottom: 17px; }
+.settings-layout .settings-footer { border-top-color: #66505c; }
+.wardrobe-preview-note {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 10px; border-radius: 8px;
+  background: rgba(255,194,160,.08); color: #ead2c8; font-size: 11px;
+}
+.wardrobe-preview-note svg { color: var(--accent,#ffad7e); }
+@media (max-width: 980px) {
+  .settings-layout .settings-tabs { min-width: 136px; width: 136px; padding: 12px 6px; }
+  .settings-layout .settings-tab { padding: 9px 6px; gap: 6px; font-size: 10px; }
+  .settings-layout > .settings-body { padding: 16px 11px; }
+}

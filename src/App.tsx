@@ -10,10 +10,12 @@ import { resolveConversationQuestion, needsContextResolution, contextGuidance, r
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { setSettingsWindowMode } from "./settings-window";
 import { register, unregister } from "@tauri-apps/plugin-global-shortcut";
 import {
   ArrowLeft, ArrowUp, Brain, Camera, Cat, Check, ChevronLeft, ChevronRight, Clock3, Copy, Crop, Eye, EyeOff, FileText, Heart, History, Paperclip,
-  BookOpen, ExternalLink, HardDrive, LoaderCircle, MessageCircle, RotateCw, Search, Settings2, Shuffle, SlidersHorizontal, Sparkles, Square, SquarePen, Volume2, X
+  BookOpen, ExternalLink, HardDrive, LoaderCircle, MessageCircle, RotateCw, Search, Settings2, Shuffle, SlidersHorizontal, Sparkles, Square, SquarePen, Volume2, X,
+  Palette, Shirt, Globe2, Cpu, WandSparkles, Plug2, AudioLines
 } from "lucide-react";
 import {
   DEFAULT_SETTINGS, DEFAULT_APPEARANCE, DEFAULT_VOICE, loadPortrait, loadSettings, savePortrait, saveSettings,
@@ -86,8 +88,8 @@ import {
   type OutfitMetadata
 } from "./iki-wardrobe";
 
-type Screen = "compact" | "log" | "settings" | "search" | "page" | "personality" | "help" | "memory" | "capabilities";
-type SettingsTab = "ai" | "internet" | "notion" | "voice" | "appearance";
+type Screen = "compact" | "log" | "settings" | "search" | "page" | "help";
+type SettingsTab = "ai" | "internet" | "notion" | "voice" | "appearance" | "interface" | "personality" | "memory" | "capabilities";
 type VoiceHealth = { ready: boolean; modelLoaded: boolean; device: string | null };
 type VoiceReference = { configured: boolean; transcript: string | null; durationSeconds: number | null; fileName: string | null };
 type SearchService = { state: string; message: string };
@@ -225,7 +227,8 @@ export default function App() {
   const [screen, setScreen] = useState<Screen>("compact");
   const [settings, setSettings] = useState<Settings>(loadSettings);
   const [draft, setDraft] = useState<Settings>(settings);
-  const [settingsTab, setSettingsTab] = useState<SettingsTab>("ai");
+  const [settingsTab, setSettingsTab] = useState<SettingsTab>("appearance");
+  const [settingsLayoutReady, setSettingsLayoutReady] = useState(false);
   const [service, setService] = useState<SearchService | null>(null);
   const [serviceBusy, setServiceBusy] = useState(false);
   const [serviceError, setServiceError] = useState<string | null>(null);
@@ -879,6 +882,22 @@ export default function App() {
     focusInput();
   }, [focusInput]);
 
+  // A settings-only wider native window leaves the whole animated avatar visible
+  // beside the navigation. Closing settings restores the original compact size.
+  useEffect(() => {
+    let active = true;
+    const expanded = screen === "settings";
+    if (!expanded) setSettingsLayoutReady(false);
+    void setSettingsWindowMode(expanded).then(() => {
+      if (active) setSettingsLayoutReady(expanded && typeof window !== "undefined" &&
+        "__TAURI_INTERNALS__" in window);
+    }).catch(error => {
+      console.warn("Could not resize Mikan for side-by-side settings:", error);
+      if (active) setSettingsLayoutReady(false);
+    });
+    return () => { active = false; };
+  }, [screen]);
+
   const showPortrait = useCallback((blob: Blob | null) => {
     if (portraitUrl.current) URL.revokeObjectURL(portraitUrl.current);
     const url = blob ? URL.createObjectURL(blob) : BUNDLED_PORTRAIT;
@@ -1217,7 +1236,10 @@ export default function App() {
   };
   const openMemory = (tab: "chats" | "facts" | "character" = "facts") => {
     setMemoryInitialTab(tab);
-    setScreen("memory");
+    setPreviewOutfitId(undefined);
+    setSettingsTab("memory");
+    setDraft(settings);
+    setScreen("settings");
     void refreshMemory().catch(error => setMemoryError(errorText(error)));
   };
 
@@ -1277,9 +1299,12 @@ export default function App() {
     setDraft(settings);
     if (tab === "ai") void refreshModels(settings.endpoint);
     if (tab === "internet") { void refreshService(); void refreshCache(); }
+    if (tab === "capabilities") void checkCapabilities();
+    if (tab === "memory") void refreshMemory().catch(error => setMemoryError(errorText(error)));
+    if (tab === "voice") void checkVoice(voiceEndpoint(settings.voice));
     setScreen("settings");
   };
-  const openSettings = () => openSettingsTab("ai");
+  const openSettings = () => openSettingsTab("appearance");
 
   const choosePortrait = async (file?: File) => {
     if (!file) return;
@@ -1555,11 +1580,11 @@ export default function App() {
       }
       case "attach": uploadRef.current?.click(); return;
       case "capabilities":
-      case "features": setScreen("capabilities"); void checkCapabilities(); return;
+      case "features": openSettingsTab("capabilities"); return;
       case "personality":
-      case "presets": setScreen("personality"); return;
+      case "presets": openSettingsTab("personality"); return;
       case "preset": {
-        if (!argument) { setScreen("personality"); return; }
+        if (!argument) { openSettingsTab("personality"); return; }
         const preset = findPreset(argument);
         if (!preset) {
           setFeedback(`Unknown preset "${argument}". Choose: ${PERSONALITY_PRESETS.map(p => p.id).join(", ")}.`);
@@ -2663,12 +2688,12 @@ export default function App() {
       .finally(() => setAvatarDragging(false));
   };
 
-  return <main className="companion" style={theme}>
+  return <main className={screen === "settings" && settingsLayoutReady ? "companion settings-mode" : "companion"} style={theme}>
     <div className="portrait-space" title="Drag Mikan to move the window" onMouseDown={dragPortrait}>
-      {avatarDisplay === "animated" && ikiReady && !wardrobePreviewVisible ? (
-        <IkiAvatar customRig={ikiRig?.file ?? null} speaking={voiceState === "playing"}
+      {avatarDisplay === "animated" && ikiReady ? (
+        <IkiAvatar customRig={wardrobePreviewVisible ? previewRig?.file ?? null : ikiRig?.file ?? null} speaking={voiceState === "playing"}
           reaction={avatarReaction}
-          rigLabel={ikiRig?.name ?? "Mikan v3 (bundled)"}
+          rigLabel={wardrobePreviewVisible ? previewRig?.name ?? "Mikan v3 (bundled)" : ikiRig?.name ?? "Mikan v3 (bundled)"}
           debugVisible={showAvatarDebug || (screen === "settings" && settingsTab === "appearance")}
           presencePreferences={avatarPresence}
           dragging={avatarDragging}
@@ -2677,8 +2702,12 @@ export default function App() {
           onDebug={setAvatarDebug}
           onError={message => {
             setIkiError(message);
-            setAvatarDisplay("portrait");
-            saveAvatarDisplay("portrait");
+            if (wardrobePreviewVisible && currentPreviewId !== (ikiRig?.id ?? null)) {
+              setPreviewOutfitId(ikiRig?.id ?? null);
+            } else {
+              setAvatarDisplay("portrait");
+              saveAvatarDisplay("portrait");
+            }
           }}/>
       ) : portrait ? (
         <img className="character-portrait" src={portrait} alt="Mikan, your desktop companion" draggable={false}
@@ -2744,12 +2773,6 @@ export default function App() {
                 : liveVision.enabled?<Eye size={17}/>:<EyeOff size={17}/>}
               {liveVision.enabled&&<span className="live-vision-dot" aria-hidden="true"/>}
             </button>
-            <button className="dock-icon" title="Quick personality presets (/personality)" aria-label="Personality presets"
-              onClick={() => setScreen("personality")}><SlidersHorizontal size={17}/></button>
-            <button className="dock-icon" title="Mikan's features (/capabilities)" aria-label="Mikan capabilities"
-              onClick={() => {setScreen("capabilities");void checkCapabilities();}}><BookOpen size={17}/></button>
-            <button className="dock-icon" title="Memory and conversations (/memories)" aria-label="Memory and conversations"
-              onClick={() => openMemory("facts")}><Brain size={17}/></button>
             <button type="button" className="dock-icon" disabled={!lastReply?.content || lastReply.failed}
               title={voiceState === "idle" ? "Speak latest reply" : voiceState === "synthesizing" ? "Cancel pending speech" : "Stop speech"}
               aria-label={voiceState === "idle" ? "Speak latest reply" : "Stop speech"}
@@ -2929,7 +2952,7 @@ export default function App() {
       </div>
     </section>
 
-    {screen !== "compact" && <div className="panel-scrim" onMouseDown={goCompact} />}
+    {screen !== "compact" && screen !== "settings" && <div className="panel-scrim" onMouseDown={goCompact} />}
 
     {screen === "log" && <section className="drawer" role="dialog" aria-label="Chat history">
       <header className="drawer-header">
@@ -3088,43 +3111,6 @@ export default function App() {
       </footer>
     </section>}
 
-    {screen === "memory" && <MemoryPanel key={memoryInitialTab} initialTab={memoryInitialTab}
-      conversations={conversations} sessionSummaries={sessionSummaries} facts={userFacts} characterFacts={characterFacts} currentId={activeConversationId}
-      autoRememberUser={settings.autoRememberUser} autoRememberMikan={settings.autoRememberMikan}
-      onAutoRememberUserChange={enabled => applySetting({autoRememberUser: enabled})}
-      onAutoRememberMikanChange={enabled => applySetting({autoRememberMikan: enabled})}
-      automaticError={automaticMemoryError}
-      busy={busy} error={memoryError} onClose={goCompact} onNew={clearChat}
-      onOpen={openConversation} onDeleteChat={deleteConversation} onDeleteSessionSummary={deleteSessionNotes}
-      onAddFact={addUserFact} onEditFact={editUserFact} onDeleteFact={deleteUserFact} onPinFact={pinUserFact}
-      onImportFacts={importUserFacts} onExportFacts={exportUserFacts} onReplaceFacts={replaceUserFacts} onUpdateFactMetadata={updateUserFactMetadata}
-      onAddCharacter={addCharacter} onEditCharacter={editCharacter} onDeleteCharacter={deleteCharacter}
-      onRefresh={refreshMemory}/>}
-
-    {screen === "capabilities" && <CapabilitiesPanel health={capabilityHealth}
-      checking={capabilitiesChecking} onClose={goCompact}
-      onRefresh={() => void checkCapabilities()}
-      onAsk={question => {setInput(question);goCompact();focusInput();}}/>}
-
-    {screen === "personality" && <section className="drawer" role="dialog" aria-label="Quick personality controls">
-      <header className="drawer-header">
-        <button className="back-button" title="Back to companion" onClick={goCompact}><ArrowLeft size={19}/></button>
-        <div className="drawer-title"><strong>Mikan's personality</strong><span>Change her mood in one click</span></div>
-      </header>
-      <div className="settings-body">
-        <PersonalityPresets value={settings.personality} onChange={updatePersonality}/>
-        <div className="appearance-heading personality-heading">
-          <strong>Fine-tune</strong>
-          <small>Personality settings are saved instantly. They affect future replies.</small>
-        </div>
-        <PersonalitySliders value={settings.personality} onChange={updatePersonality}/>
-        <p className="settings-note"><Sparkles size={16}/> The presets and sliders guide Mikan's tone. They don't guarantee an exact behavior in every reply.</p>
-      </div>
-      <footer className="settings-footer">
-        <button type="button" className="secondary-action" onClick={openSettings}><Settings2 size={15}/> Full settings</button>
-      </footer>
-    </section>}
-
     {screen === "help" && <section className="drawer" role="dialog" aria-label="Slash commands">
       <header className="drawer-header">
         <button className="back-button" title="Back to companion" onClick={goCompact}><ArrowLeft size={19}/></button>
@@ -3143,29 +3129,83 @@ export default function App() {
       <header className="drawer-header">
         <button className="back-button" title="Back to companion" onClick={goCompact}><ArrowLeft size={19}/></button>
         <div className="drawer-title"><strong>Settings</strong><span>Mikan Desktop · Local first</span></div>
-        {settingsTab !== "notion" && <button className="secondary-action" onClick={() => setDraft(current => ({
-          ...current,
-          ...(settingsTab === "ai" ? {
-            endpoint: DEFAULT_SETTINGS.endpoint, model: DEFAULT_SETTINGS.model,
-            provider: DEFAULT_SETTINGS.provider, geminiModel: DEFAULT_SETTINGS.geminiModel, openrouterModel: DEFAULT_SETTINGS.openrouterModel,
-            systemPrompt: DEFAULT_SETTINGS.systemPrompt,
-            contextWindow: DEFAULT_SETTINGS.contextWindow,
-            reasoningMode: DEFAULT_SETTINGS.reasoningMode
-          } : settingsTab === "internet" ? {
-            searxngEndpoint: DEFAULT_SETTINGS.searxngEndpoint, autoSearch: false, cacheHours: 24
-          } : settingsTab === "voice" ? { voice: { ...DEFAULT_VOICE } }
-            : { appearance: { ...DEFAULT_APPEARANCE } })
-        }))}><RotateCw size={14}/> Reset tab</button>}
+        {(["ai", "internet", "voice", "appearance", "interface"] as SettingsTab[]).includes(settingsTab) &&
+          <button className="secondary-action" onClick={() => setDraft(current => ({
+            ...current,
+            ...(settingsTab === "ai" ? {
+              endpoint: DEFAULT_SETTINGS.endpoint, model: DEFAULT_SETTINGS.model,
+              provider: DEFAULT_SETTINGS.provider, geminiModel: DEFAULT_SETTINGS.geminiModel,
+              openrouterModel: DEFAULT_SETTINGS.openrouterModel,
+              systemPrompt: DEFAULT_SETTINGS.systemPrompt,
+              contextWindow: DEFAULT_SETTINGS.contextWindow,
+              reasoningMode: DEFAULT_SETTINGS.reasoningMode
+            } : settingsTab === "internet" ? {
+              searxngEndpoint: DEFAULT_SETTINGS.searxngEndpoint, autoSearch: false, cacheHours: 24
+            } : settingsTab === "voice" ? { voice: { ...DEFAULT_VOICE } }
+              : settingsTab === "appearance" ? {
+                appearance: { ...current.appearance, avatarVerticalOffset: DEFAULT_AVATAR_VERTICAL_OFFSET }
+              } : {
+                appearance: { ...DEFAULT_APPEARANCE, avatarVerticalOffset: current.appearance.avatarVerticalOffset }
+              })
+          }))}><RotateCw size={14}/> Reset</button>}
       </header>
-      <nav className="settings-tabs" aria-label="Settings categories">
-        {([["ai", "AI & Models"], ["internet", "Internet"], ["notion", "Notion"], ["voice", "Voice"], ["appearance", "Appearance"]] as const).map(([tab, label]) =>
-          <button type="button" key={tab} className={settingsTab === tab ? "settings-tab active" : "settings-tab"}
-            onClick={() => { setSettingsTab(tab); setPreviewOutfitId(tab === "appearance" ? ikiRig?.id ?? null : undefined); if (tab === "internet") { void refreshService(); void refreshCache(); } if (tab === "voice") void checkVoice(voiceEndpoint(draft.voice)); }}>
-            {label}
-          </button>
-        )}
-      </nav>
-      <div className="settings-body">
+      <div className="settings-layout">
+        <nav className="settings-tabs" aria-label="Settings categories">
+          {([
+            { group: "MIKAN", items: [
+              ["appearance", "Character", Shirt],
+              ["personality", "Personality", WandSparkles],
+              ["voice", "Voice", AudioLines]
+            ] },
+            { group: "KNOWLEDGE & TOOLS", items: [
+              ["memory", "Memory & chats", Brain],
+              ["ai", "AI & models", Cpu],
+              ["internet", "Web & research", Globe2],
+              ["notion", "Notion notes", BookOpen]
+            ] },
+            { group: "APPLICATION", items: [
+              ["interface", "Look & feel", Palette],
+              ["capabilities", "Capabilities", Plug2]
+            ] }
+          ] as const).map(group => <div key={group.group} className="settings-nav-group">
+            <div className="settings-nav-heading">{group.group}</div>
+            {group.items.map(([tab, label, Icon]) =>
+              <button type="button" key={tab} className={settingsTab === tab ? "settings-tab active" : "settings-tab"}
+                aria-current={settingsTab === tab ? "page" : undefined}
+                onClick={() => {
+                  setSettingsTab(tab);
+                  setPreviewOutfitId(tab === "appearance" ? ikiRig?.id ?? null : undefined);
+                  if (tab === "internet") { void refreshService(); void refreshCache(); }
+                  if (tab === "ai") void refreshModels(draft.endpoint);
+                  if (tab === "memory") void refreshMemory().catch(error => setMemoryError(errorText(error)));
+                  if (tab === "capabilities") void checkCapabilities();
+                  if (tab === "voice") void checkVoice(voiceEndpoint(draft.voice));
+                }}>
+                <Icon size={16} strokeWidth={1.9}/><span>{label}</span>
+              </button>
+            )}
+          </div>)}
+        </nav>
+        <div key={settingsTab} className={settingsTab === "memory" || settingsTab === "capabilities" ? "settings-body settings-embedded" : "settings-body"}>
+        {settingsTab === "memory" && <MemoryPanel embedded key={memoryInitialTab} initialTab={memoryInitialTab}
+          conversations={conversations} sessionSummaries={sessionSummaries} facts={userFacts}
+          characterFacts={characterFacts} currentId={activeConversationId}
+          autoRememberUser={settings.autoRememberUser} autoRememberMikan={settings.autoRememberMikan}
+          onAutoRememberUserChange={enabled => applySetting({autoRememberUser: enabled})}
+          onAutoRememberMikanChange={enabled => applySetting({autoRememberMikan: enabled})}
+          automaticError={automaticMemoryError}
+          busy={busy} error={memoryError} onClose={() => setSettingsTab("appearance")}
+          onNew={clearChat} onOpen={openConversation} onDeleteChat={deleteConversation}
+          onDeleteSessionSummary={deleteSessionNotes}
+          onAddFact={addUserFact} onEditFact={editUserFact} onDeleteFact={deleteUserFact}
+          onPinFact={pinUserFact} onImportFacts={importUserFacts} onExportFacts={exportUserFacts}
+          onReplaceFacts={replaceUserFacts} onUpdateFactMetadata={updateUserFactMetadata}
+          onAddCharacter={addCharacter} onEditCharacter={editCharacter}
+          onDeleteCharacter={deleteCharacter} onRefresh={refreshMemory}/>}
+        {settingsTab === "capabilities" && <CapabilitiesPanel embedded health={capabilityHealth}
+          checking={capabilitiesChecking} onClose={() => setSettingsTab("appearance")}
+          onRefresh={() => void checkCapabilities()}
+          onAsk={question => {setInput(question);goCompact();focusInput();}}/>}
         {settingsTab === "ai" && <>
           <div className="settings-section-title">Inference provider</div>
           <label className="setting-field">Primary model
@@ -3281,7 +3321,7 @@ export default function App() {
             <small>Core personality instructions. Presets and sliders live in the separate Personality panel.</small>
           </label>
           <button type="button" className="secondary-action"
-            onClick={() => setScreen("personality")}><SlidersHorizontal size={15}/> Open Personality controls</button>
+            onClick={() => setSettingsTab("personality")}><SlidersHorizontal size={15}/> Personality settings</button>
           <div className="settings-section-title"><Eye size={17}/> Live Vision</div>
           <div className="service-panel">
             <div><strong>Screen awareness</strong>
@@ -3584,6 +3624,64 @@ export default function App() {
               onChange={event => setDraft(current => ({ ...current, voice: { ...current.voice, speed: Number(event.target.value) } }))}/>
           </label>
         </>}
+        {settingsTab === "personality" && <>
+          <div className="settings-section-title">Mikan's personality</div>
+          <p className="settings-note"><Sparkles size={16}/> Adjust how Mikan talks and reacts. These changes are saved immediately.</p>
+          <PersonalityPresets value={settings.personality} onChange={updatePersonality}/>
+          <div className="settings-section-title">Fine-tune her personality</div>
+          <PersonalitySliders value={settings.personality} onChange={updatePersonality}/>
+          <small className="wardrobe-hint">These preferences guide future replies without requiring a restart.</small>
+        </>}
+        {settingsTab === "interface" && <>
+          <div className="settings-section-title">Colors and typography</div>
+          <div className="setting-field"><span>Accent color</span>
+            <div className="color-choices">
+              {ACCENTS.map(color => <button key={color} type="button"
+                className={draft.appearance.accent.toLowerCase() === color ? "color-swatch selected" : "color-swatch"}
+                style={{ backgroundColor: color }} aria-label={`Select accent ${color}`}
+                onClick={() => setDraft({ ...draft, appearance: { ...draft.appearance, accent: color } })}/>)}
+              <label className="custom-color">Custom
+                <input type="color" value={draft.appearance.accent}
+                  onChange={e => setDraft({ ...draft, appearance: { ...draft.appearance, accent: e.target.value } })}/>
+              </label>
+            </div>
+          </div>
+          <div className="setting-field"><span>Panel color</span>
+            <div className="color-choices">
+              {PANELS.map(color => <button key={color} type="button"
+                className={draft.appearance.panel.toLowerCase() === color ? "color-swatch selected" : "color-swatch"}
+                style={{ backgroundColor: color }} aria-label={`Select panel ${color}`}
+                onClick={() => setDraft({ ...draft, appearance: { ...draft.appearance, panel: color } })}/>)}
+              <label className="custom-color">Custom
+                <input type="color" value={draft.appearance.panel}
+                  onChange={e => setDraft({ ...draft, appearance: { ...draft.appearance, panel: e.target.value } })}/>
+              </label>
+            </div>
+          </div>
+          <label className="setting-field">Panel opacity: {Math.round(draft.appearance.opacity * 100)}%
+            <input type="range" min="65" max="100" step="5" value={Math.round(draft.appearance.opacity * 100)}
+              onChange={e => setDraft({ ...draft, appearance: { ...draft.appearance, opacity: Number(e.target.value) / 100 } })}/>
+          </label>
+          <label className="setting-field">Font family
+            <select value={draft.appearance.fontFamily}
+              onChange={e => setDraft({ ...draft, appearance: { ...draft.appearance, fontFamily: e.target.value as typeof draft.appearance.fontFamily } })}>
+              {FONTS.map(font => <option key={font} value={font}>{font}</option>)}
+            </select>
+          </label>
+          <label className="setting-field">Message font size: {draft.appearance.fontSize}px
+            <input type="range" min="11" max="20" step="1" value={draft.appearance.fontSize}
+              onChange={e => setDraft({ ...draft, appearance: { ...draft.appearance, fontSize: Number(e.target.value) } })}/>
+          </label>
+          <div className="settings-section-title">Emoji thought bubbles</div>
+          <label className="setting-field">Display duration · {draft.appearance.emojiBubbleSeconds} seconds
+            <input type="range" min={MIN_EMOJI_BUBBLE_SECONDS} max={MAX_EMOJI_BUBBLE_SECONDS}
+              step="1" value={draft.appearance.emojiBubbleSeconds}
+              onChange={event => setDraft(current => ({ ...current, appearance: {
+                ...current.appearance, emojiBubbleSeconds: Number(event.target.value)
+              } }))}/>
+            <small>How long emoji reactions float above Mikan before fading out. Save to apply to new replies.</small>
+          </label>
+        </>}
         {settingsTab === "appearance" && <>
           <div className="settings-section-title">Character</div>
           <label className="setting-field">Avatar display
@@ -3622,21 +3720,7 @@ export default function App() {
               <span>{previewIndex + 1} / {wardrobeChoices.length}</span>
             </div>
             <small className="wardrobe-hint">Browse to preview each outfit on animated Mikan. Nothing changes permanently until you choose Wear.</small>
-            <div className="wardrobe-live-preview" aria-label="Animated preview of selected outfit">
-              {ikiReady ? <IkiAvatar customRig={previewRig?.file ?? null}
-                speaking={voiceState === "playing"}
-                reaction={avatarReaction}
-                rigLabel={previewRig?.name ?? "Mikan v3 (bundled)"}
-                debugVisible={false}
-                presencePreferences={avatarPresence}
-                dragging={false}
-                verticalOffset={draft.appearance.avatarVerticalOffset}
-                onDebug={setAvatarDebug}
-                onError={message => {
-                  setIkiError("Could not preview this outfit: " + message);
-                  setPreviewOutfitId(ikiRig?.id ?? null);
-                }}/> : <span>Loading wardrobe…</span>}
-            </div>
+            <div className="wardrobe-preview-note"><Eye size={15}/> Previewing directly on Mikan to the left.</div>
             <div className="wardrobe-navigation">
               <button type="button" aria-label="Previous outfit" title="Previous outfit"
                 disabled={!ikiReady || ikiBusy || wardrobeChoices.length < 2}
@@ -3735,15 +3819,6 @@ export default function App() {
             Hair and tail follow through when I drag Mikan
           </label>
           <small className="iki-wardrobe-path">Subtle movement is on by default. Both settings are saved locally and work with all compatible .iki outfits.</small>
-          <div className="settings-section-title">Emoji thought bubbles</div>
-          <label className="setting-field">Display duration · {draft.appearance.emojiBubbleSeconds} seconds
-            <input type="range" min={MIN_EMOJI_BUBBLE_SECONDS} max={MAX_EMOJI_BUBBLE_SECONDS}
-              step="1" value={draft.appearance.emojiBubbleSeconds}
-              onChange={event => setDraft(current => ({ ...current, appearance: {
-                ...current.appearance, emojiBubbleSeconds: Number(event.target.value)
-              } }))}/>
-            <small>How long emoji reactions float above Mikan before fading out. Save to apply to new replies.</small>
-          </label>
           <div className="settings-section-title">Animation diagnostics · desktop v{DESKTOP_VERSION}</div>
           <label className="avatar-debug-toggle">
             <input type="checkbox" checked={showAvatarDebug}
@@ -3771,50 +3846,13 @@ export default function App() {
             {imageError && <small className="field-error">{imageError}</small>}
             {portrait && <span className="portrait-ready"><Check size={15}/> Portrait ready</span>}
           </label>
-          <div className="settings-section-title">Colors and typography</div>
-          <div className="setting-field"><span>Accent color</span>
-            <div className="color-choices">
-              {ACCENTS.map(color => <button key={color} type="button"
-                className={draft.appearance.accent.toLowerCase() === color ? "color-swatch selected" : "color-swatch"}
-                style={{ backgroundColor: color }} aria-label={`Select accent ${color}`}
-                onClick={() => setDraft({ ...draft, appearance: { ...draft.appearance, accent: color } })}/>)}
-              <label className="custom-color">Custom
-                <input type="color" value={draft.appearance.accent}
-                  onChange={e => setDraft({ ...draft, appearance: { ...draft.appearance, accent: e.target.value } })}/>
-              </label>
-            </div>
-          </div>
-          <div className="setting-field"><span>Panel color</span>
-            <div className="color-choices">
-              {PANELS.map(color => <button key={color} type="button"
-                className={draft.appearance.panel.toLowerCase() === color ? "color-swatch selected" : "color-swatch"}
-                style={{ backgroundColor: color }} aria-label={`Select panel ${color}`}
-                onClick={() => setDraft({ ...draft, appearance: { ...draft.appearance, panel: color } })}/>)}
-              <label className="custom-color">Custom
-                <input type="color" value={draft.appearance.panel}
-                  onChange={e => setDraft({ ...draft, appearance: { ...draft.appearance, panel: e.target.value } })}/>
-              </label>
-            </div>
-          </div>
-          <label className="setting-field">Panel opacity: {Math.round(draft.appearance.opacity * 100)}%
-            <input type="range" min="65" max="100" step="5" value={Math.round(draft.appearance.opacity * 100)}
-              onChange={e => setDraft({ ...draft, appearance: { ...draft.appearance, opacity: Number(e.target.value) / 100 } })}/>
-          </label>
-          <label className="setting-field">Font family
-            <select value={draft.appearance.fontFamily}
-              onChange={e => setDraft({ ...draft, appearance: { ...draft.appearance, fontFamily: e.target.value as typeof draft.appearance.fontFamily } })}>
-              {FONTS.map(font => <option key={font} value={font}>{font}</option>)}
-            </select>
-          </label>
-          <label className="setting-field">Message font size: {draft.appearance.fontSize}px
-            <input type="range" min="11" max="20" step="1" value={draft.appearance.fontSize}
-              onChange={e => setDraft({ ...draft, appearance: { ...draft.appearance, fontSize: Number(e.target.value) } })}/>
-          </label>
         </>}
+        </div>
       </div>
-      {settingsTab !== "notion" && <footer className="settings-footer">
-        <button className="save-button" onClick={saveConfiguration}><Check size={17}/> Save settings</button>
-      </footer>}
+      {(["ai", "internet", "voice", "appearance", "interface"] as SettingsTab[]).includes(settingsTab) &&
+        <footer className="settings-footer">
+          <button className="save-button" onClick={saveConfiguration}><Check size={17}/> Save settings</button>
+        </footer>}
     </section>}
   </main>;
 }

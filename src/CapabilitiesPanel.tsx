@@ -3,13 +3,14 @@ import { ArrowLeft, RefreshCw, Search, Sparkles } from "lucide-react";
 import { CAPABILITIES, CAPABILITY_RELEASE, capabilityState, type RuntimeReadiness } from "./self-knowledge";
 
 export function CapabilitiesPanel({
-  onClose, onRefresh, onAsk, health, checking
+  onClose, onRefresh, onAsk, health, checking, embedded = false
 }:{
   onClose:()=>void;
   onRefresh:()=>void;
   onAsk:(query:string)=>void;
   health:RuntimeReadiness;
   checking:boolean;
+  embedded?:boolean;
 }){
   const [filter,setFilter]=useState("");
   const terms=filter.toLowerCase().trim();
@@ -17,7 +18,8 @@ export function CapabilitiesPanel({
     feature.label,feature.description,feature.category,...feature.keywords
   ].join(" ").toLowerCase().includes(terms));
   const totalBuilt=CAPABILITIES.filter(f=>f.stage!=="planned").length;
-  return <section className="drawer" role="dialog" aria-label="Mikan capabilities">
+  return <section className={embedded ? "drawer settings-inner-panel" : "drawer"}
+    role={embedded ? "region" : "dialog"} aria-label="Mikan capabilities">
     <header className="drawer-header">
       <button className="back-button" title="Back to companion" onClick={onClose}><ArrowLeft size={19}/></button>
       <div className="drawer-title"><strong>My capabilities</strong>
