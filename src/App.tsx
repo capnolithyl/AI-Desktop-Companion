@@ -1075,7 +1075,10 @@ export default function App() {
         const summaries = await memoryApi.listSessionSummaries();
         const facts = await memoryApi.listFacts();
         const canon = await memoryApi.listCharacterFacts();
-        const collection = await memoryApi.listInterests();
+        const collection = await memoryApi.listInterests().catch(error => {
+          console.warn("Optional interest collection unavailable:", errorText(error));
+          return [] as InterestItem[];
+        });
         if (disposed) return;
         setConversations(archive);
         setSessionSummaries(summaries);
