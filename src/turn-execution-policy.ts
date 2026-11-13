@@ -32,7 +32,7 @@ export type DesktopWebPolicy = {
  */
 export function ownerDisclosure(question:string):boolean{
   const text=question.trim();
-  const firstPerson=/^(?:one of my\b|my\b|i(?:['’]m| am|['’]ve| have| just| really| think| feel| believe| love| like| enjoy| prefer| hate| dislike| consider| got| recently)\b|we(?:['’]re| are| have)\b|our\b)/i;
+  const firstPerson=/^(?:(?:so\s+)?(?:have i told you|did i tell you|did i mention)\b|one of my\b|my\b|i(?:['’]m| am|['’]ve| have| just| really| think| feel| believe| love| like| enjoy| prefer| hate| dislike| consider| got| recently)\b|we(?:['’]re| are| have)\b|our\b)/i;
   const explicitResearch=/\b(?:search(?: the web)?|browse|google|look up|research|verify|fact.check|check online)\b/i;
   return firstPerson.test(text) && !explicitResearch.test(text) && !text.includes("?");
 }
