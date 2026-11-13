@@ -143,10 +143,10 @@ fn explicit_favorite(text:&str)->bool {
 }
 pub(crate) fn insert_from_conversation(
     db:&Connection, item:IncomingInterest, source_id:&str,
-    evidence:&str, user_message:&str
+    evidence:&str
 )->Result<bool,String>{
     let item=checked(item)?;
-    let owner_favorite=item.status=="favorite" && explicit_favorite(user_message);
+    let owner_favorite=item.status=="favorite" && explicit_favorite(evidence);
     let tags=serde_json::to_string(&item.tags).map_err(|e|e.to_string())?;
     let changed=db.execute(
         "INSERT INTO interest_items
@@ -269,15 +269,15 @@ mod tests {
             name:"Higurashi".into(),kind:"anime".into(),status:"like".into(),
             rating:None,notes:String::new(),tags:vec![]
         };
-        assert!(insert_from_conversation(&db,preference.clone(),"u","I love Higurashi","I love Higurashi").unwrap());
-        assert!(!insert_from_conversation(&db,preference.clone(),"u","I love Higurashi","I love Higurashi").unwrap());
+        assert!(insert_from_conversation(&db,preference.clone(),"u","I love Higurashi").unwrap());
+        assert!(!insert_from_conversation(&db,preference.clone(),"u","I love Higurashi").unwrap());
         let hits:i64=db.query_row(
             "SELECT count(*) FROM interest_search WHERE interest_search MATCH 'higurashi'",
             [],|r|r.get(0)
         ).unwrap();
         assert_eq!(hits,1);
         preference.status="dislike".into();
-        assert!(insert_from_conversation(&db,preference,"u","I dislike Higurashi","I dislike Higurashi").unwrap());
+        assert!(insert_from_conversation(&db,preference,"u","I dislike Higurashi").unwrap());
         let saved:String=db.query_row(
             "SELECT status FROM interest_items WHERE name='Higurashi'",[],|r|r.get(0)
         ).unwrap();
@@ -289,7 +289,7 @@ mod tests {
             name:"bathory".into(),kind:"band".into(),status:"dislike".into(),
             rating:None,notes:String::new(),tags:vec![]
         };
-        assert!(!insert_from_conversation(&db,curated,"u","I dislike Bathory","I dislike Bathory").unwrap());
+        assert!(!insert_from_conversation(&db,curated,"u","I dislike Bathory").unwrap());
         let preserved:String=db.query_row(
             "SELECT status FROM interest_items WHERE name='Bathory'",[],|r|r.get(0)
         ).unwrap();
@@ -312,10 +312,12 @@ mod tests {
             name:"shadows fall".into(),kind:"band".into(),status:"favorite".into(),
             rating:None,notes:String::new(),tags:vec![]
         };
+        assert!(!insert_from_conversation(&db,fav.clone(),"message-1",
+            "shadows fall").unwrap());
         assert!(insert_from_conversation(&db,fav.clone(),"message-1",
-            "shadows fall","my favorite band is shadows fall").unwrap());
+            "my favorite band is shadows fall").unwrap());
         assert!(!insert_from_conversation(&db,fav,"message-1",
-            "shadows fall","my favorite band is shadows fall").unwrap());
+            "my favorite band is shadows fall").unwrap());
         let result:(i64,String,String,String,String,f64)=db.query_row(
             "SELECT id,status,source,notes,tags_json,rating FROM interest_items",[],
             |r|Ok((r.get(0)?,r.get(1)?,r.get(2)?,r.get(3)?,r.get(4)?,r.get(5)?))
@@ -349,15 +351,15 @@ mod tests {
             rating:None,notes:String::new(),tags:vec![]
         };
         assert!(!insert_from_conversation(&db,fav.clone(),"message-2",
-            "Sakura Trick","I like Sakura Trick").unwrap());
+            "I like Sakura Trick").unwrap());
         assert!(insert_from_conversation(&db,fav.clone(),"message-3",
-            "Sakura Trick","Sakura Trick is my favourite anime").unwrap());
+            "Sakura Trick is my favourite anime").unwrap());
         let weaker=IncomingInterest{status:"like".into(),..fav.clone()};
         assert!(!insert_from_conversation(&db,weaker,"message-4",
-            "Sakura Trick","I like Sakura Trick").unwrap());
+            "I like Sakura Trick").unwrap());
         let contrary=IncomingInterest{status:"dislike".into(),..fav};
         assert!(!insert_from_conversation(&db,contrary,"message-5",
-            "Sakura Trick","I dislike Sakura Trick").unwrap());
+            "I dislike Sakura Trick").unwrap());
         let status:String=db.query_row("SELECT status FROM interest_items",[],|r|r.get(0)).unwrap();
         assert_eq!(status,"favorite");
     }
