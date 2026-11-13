@@ -299,6 +299,9 @@ mod tests {
     fn newer_explicit_favorite_upgrades_import_without_losing_curated_data() {
         let db=Connection::open_in_memory().unwrap();
         memory::initialize_database(&db).unwrap();
+        db.execute("INSERT INTO conversations(id,title,created_at,updated_at) VALUES('c','test',0,0)",[]).unwrap();
+        db.execute("INSERT INTO messages(id,conversation_id,role,content,created_at)
+            VALUES('message-1','c','user','my favorite band is shadows fall',0)",[]).unwrap();
         db.execute(
             r#"INSERT INTO interest_items(name,kind,status,rating,notes,tags_json,source)
                VALUES('Shadows Fall','band','like',8.5,'Existing note','["metal"]','import')"#,
@@ -331,6 +334,12 @@ mod tests {
     fn curator_protection_blocks_vague_or_conflicting_statuses() {
         let db=Connection::open_in_memory().unwrap();
         memory::initialize_database(&db).unwrap();
+        db.execute("INSERT INTO conversations(id,title,created_at,updated_at) VALUES('c','test',0,0)",[]).unwrap();
+        for i in 2..=5 {
+            db.execute("INSERT INTO messages(id,conversation_id,role,content,created_at)
+                 VALUES(?1,'c','user','owner preference',0)",
+                params![format!("message-{i}")]).unwrap();
+        }
         db.execute(
             "INSERT INTO interest_items(name,kind,status,source)
              VALUES('Sakura Trick','anime','like','manual')",[]
