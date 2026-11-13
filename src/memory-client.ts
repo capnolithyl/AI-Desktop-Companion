@@ -252,7 +252,8 @@ export function characterAnswerGuidance(query: string): string {
 
 /** Only returned SQLite matches are visible to the model, never the entire collection. */
 export function interestContext(items: InterestItem[], query: string): string {
-  if (!items.length) return "";
+  // Do not inject the owner's tastes into questions about Mikan's own favorites.
+  if (!items.length || shouldIncludeCharacterCanon(query)) return "";
   const lines: string[]=[];
   let length=0;
   for(const item of items){
