@@ -101,7 +101,7 @@ pub(crate) fn initialize_database(connection: &Connection) -> Result<(), String>
          CREATE TABLE IF NOT EXISTS interest_items (
            id INTEGER PRIMARY KEY AUTOINCREMENT,
            name TEXT NOT NULL COLLATE NOCASE,
-           kind TEXT NOT NULL CHECK(kind IN ('band','album','anime','show','movie','game','book','other')),
+           kind TEXT NOT NULL CHECK(kind IN ('band','album','song','anime','show','movie','game','book','other')),
            status TEXT NOT NULL CHECK(status IN
              ('favorite','like','dislike','interested','experienced','unknown')),
            rating REAL CHECK(rating IS NULL OR rating BETWEEN 0 AND 10),
@@ -142,6 +142,54 @@ pub(crate) fn initialize_database(connection: &Connection) -> Result<(), String>
            assistant_message_id TEXT PRIMARY KEY REFERENCES messages(id) ON DELETE CASCADE,
            processed_at INTEGER NOT NULL DEFAULT (unixepoch())
          );
+         -- Jobs retain only message references and model settings. Conversation
+         -- deletion cascades into queued work, preventing memory resurrection.
+         CREATE TABLE IF NOT EXISTS automatic_memory_jobs (
+           assistant_message_id TEXT PRIMARY KEY REFERENCES messages(id) ON DELETE CASCADE,
+           user_message_id TEXT NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+           conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+           endpoint TEXT NOT NULL,
+           model TEXT NOT NULL,
+           context_window INTEGER,
+           capture_user INTEGER NOT NULL CHECK(capture_user IN (0,1)),
+           capture_character INTEGER NOT NULL CHECK(capture_character IN (0,1)),
+           status TEXT NOT NULL DEFAULT 'queued' CHECK(status IN ('queued','processing','failed')),
+           attempts INTEGER NOT NULL DEFAULT 0,
+           retry_after INTEGER NOT NULL DEFAULT 0,
+           last_error TEXT,
+           created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+           updated_at INTEGER NOT NULL DEFAULT (unixepoch())
+         );
+         CREATE INDEX IF NOT EXISTS idx_automatic_memory_jobs_due
+           ON automatic_memory_jobs(status,retry_after,created_at);
+         -- Corrections are suggestions, not automatic changes. A review is
+         -- never injected as a current fact until the owner explicitly acts.
+         CREATE TABLE IF NOT EXISTS memory_fact_reviews (
+           id INTEGER PRIMARY KEY AUTOINCREMENT,
+           existing_memory_id INTEGER REFERENCES user_memories(id) ON DELETE SET NULL,
+           existing_fact TEXT,
+           proposed_fact TEXT NOT NULL,
+           evidence TEXT NOT NULL,
+           source_message_id TEXT NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+           status TEXT NOT NULL DEFAULT 'pending'
+             CHECK(status IN ('pending','replaced','saved','dismissed')),
+           created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+           resolved_at INTEGER,
+           UNIQUE(source_message_id, proposed_fact COLLATE NOCASE)
+         );
+         CREATE INDEX IF NOT EXISTS idx_memory_fact_reviews_pending
+           ON memory_fact_reviews(status,created_at);
+         CREATE TABLE IF NOT EXISTS memory_fact_history (
+           id INTEGER PRIMARY KEY AUTOINCREMENT,
+           memory_id INTEGER NOT NULL REFERENCES user_memories(id) ON DELETE CASCADE,
+           previous_fact TEXT NOT NULL,
+           replacement_fact TEXT NOT NULL,
+           previous_source_message_id TEXT REFERENCES messages(id) ON DELETE SET NULL,
+           previous_evidence TEXT,
+           change_source_message_id TEXT REFERENCES messages(id) ON DELETE SET NULL,
+           change_evidence TEXT NOT NULL,
+           changed_at INTEGER NOT NULL DEFAULT (unixepoch())
+         );
          -- Search only user-authored messages, never generated assistant text.
          CREATE VIRTUAL TABLE IF NOT EXISTS message_search USING fts5(
            content, tokenize='unicode61 remove_diacritics 2'
@@ -175,6 +223,23 @@ pub(crate) fn initialize_database(connection: &Connection) -> Result<(), String>
     }
     connection.execute_batch("CREATE INDEX IF NOT EXISTS idx_user_category ON user_memories(category);")
         .map_err(|e| e.to_string())?;
+    // Allow corrections to target older interest records without migrating or deleting them.
+    let mut s=connection.prepare("PRAGMA table_info(memory_fact_reviews)").map_err(|e|e.to_string())?;
+    let names=s.query_map([],|r|r.get::<_,String>(1)).map_err(|e|e.to_string())?
+        .collect::<Result<Vec<_>,_>>().map_err(|e|e.to_string())?;
+    drop(s);
+    if !names.iter().any(|n|n=="existing_interest_id") {
+        connection.execute("ALTER TABLE memory_fact_reviews ADD COLUMN existing_interest_id INTEGER REFERENCES interest_items(id) ON DELETE SET NULL",[]).map_err(|e|e.to_string())?;
+    }
+    let mut s=connection.prepare("PRAGMA table_info(automatic_memory_runs)").map_err(|e|e.to_string())?;
+    let names=s.query_map([],|r|r.get::<_,String>(1)).map_err(|e|e.to_string())?
+        .collect::<Result<Vec<_>,_>>().map_err(|e|e.to_string())?;
+    drop(s);
+    for column in ["user_saved","character_saved","interests_saved","review_queued","outcome_known"] {
+        if !names.iter().any(|n|n==column) {
+            connection.execute(&format!("ALTER TABLE automatic_memory_runs ADD COLUMN {column} INTEGER NOT NULL DEFAULT 0"),[]).map_err(|e|e.to_string())?;
+        }
+    }
     if !had_search {
         connection.execute(
             "INSERT INTO message_search(rowid,content)
@@ -187,6 +252,107 @@ pub(crate) fn initialize_database(connection: &Connection) -> Result<(), String>
              SELECT id,fact,category,tags_json FROM user_memories", []
         ).map_err(|e| format!("Cannot index saved facts: {e}"))?;
     }
+    migrate_interest_song_kind(connection)?;
+    Ok(())
+}
+
+/// SQLite cannot ALTER an existing CHECK constraint, so older interest
+/// catalogs must be rebuilt once. Preserve all IDs, metadata and review FKs.
+/// Trigger/index recreation keeps the existing FTS5 rowids usable unchanged.
+fn migrate_interest_song_kind(db:&Connection)->Result<(),String>{
+    let schema:String=db.query_row(
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name='interest_items'",
+        [],|r|r.get(0)
+    ).map_err(|e|e.to_string())?;
+    if schema.contains("'song'"){return Ok(());}
+    let old_sequence:Option<i64>=db.query_row(
+        "SELECT seq FROM sqlite_sequence WHERE name='interest_items'",[],
+        |r|r.get(0)
+    ).optional().map_err(|e|e.to_string())?;
+    let migrated=db.execute_batch(
+        "PRAGMA foreign_keys=OFF;
+         BEGIN IMMEDIATE;
+         DROP TRIGGER IF EXISTS interest_search_insert;
+         DROP TRIGGER IF EXISTS interest_search_delete;
+         DROP TRIGGER IF EXISTS interest_search_update;
+         CREATE TABLE interest_items_song_migration (
+           id INTEGER PRIMARY KEY AUTOINCREMENT,
+           name TEXT NOT NULL COLLATE NOCASE,
+           kind TEXT NOT NULL CHECK(kind IN
+             ('band','album','song','anime','show','movie','game','book','other')),
+           status TEXT NOT NULL CHECK(status IN
+             ('favorite','like','dislike','interested','experienced','unknown')),
+           rating REAL CHECK(rating IS NULL OR rating BETWEEN 0 AND 10),
+           notes TEXT NOT NULL DEFAULT '',
+           tags_json TEXT NOT NULL DEFAULT '[]',
+           source TEXT NOT NULL DEFAULT 'manual',
+           source_message_id TEXT REFERENCES messages(id) ON DELETE SET NULL,
+           source_quote TEXT NOT NULL DEFAULT '',
+           created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+           updated_at INTEGER NOT NULL DEFAULT (unixepoch()),
+           UNIQUE(kind,name)
+         );
+         INSERT INTO interest_items_song_migration
+           (id,name,kind,status,rating,notes,tags_json,source,
+            source_message_id,source_quote,created_at,updated_at)
+           SELECT id,name,kind,status,rating,notes,tags_json,source,
+                  source_message_id,source_quote,created_at,updated_at
+           FROM interest_items;
+         DROP TABLE interest_items;
+         ALTER TABLE interest_items_song_migration RENAME TO interest_items;
+         CREATE INDEX idx_interest_kind_status ON interest_items(kind,status);
+         CREATE TRIGGER interest_search_insert AFTER INSERT ON interest_items BEGIN
+           INSERT INTO interest_search(rowid,name,kind,status,notes,tags)
+             VALUES(new.id,new.name,new.kind,new.status,new.notes,new.tags_json);
+         END;
+         CREATE TRIGGER interest_search_delete AFTER DELETE ON interest_items BEGIN
+           DELETE FROM interest_search WHERE rowid=old.id;
+         END;
+         CREATE TRIGGER interest_search_update AFTER UPDATE ON interest_items BEGIN
+           DELETE FROM interest_search WHERE rowid=old.id;
+           INSERT INTO interest_search(rowid,name,kind,status,notes,tags)
+             VALUES(new.id,new.name,new.kind,new.status,new.notes,new.tags_json);
+         END;
+         COMMIT;
+         PRAGMA foreign_keys=ON;"
+    );
+    if let Err(error)=migrated {
+        let _=db.execute_batch("ROLLBACK; PRAGMA foreign_keys=ON;");
+        return Err(format!("Could not upgrade interest song category: {error}"));
+    }
+    if let Some(seq)=old_sequence {
+        db.execute("UPDATE sqlite_sequence SET seq=MAX(seq,?1) WHERE name='interest_items'",
+            params![seq]).map_err(|e|e.to_string())?;
+    }
+    // Some earlier extractors filed explicit tracks as albums because "song"
+    // was not a supported kind. Repair only automatically captured entries
+    // whose own source quotation unambiguously says song/track (never imports).
+    // Keep their IDs, notes, source, status and existing review references.
+    db.execute(
+        "UPDATE interest_items SET kind='song',updated_at=unixepoch()
+         WHERE kind='album' AND source='conversation'
+           AND (
+             (instr(lower(source_quote),lower(name))>0
+               AND (instr(' '||lower(source_quote)||' ',' song ')>0
+                 OR instr(' '||lower(source_quote)||' ',' track ')>0)
+               AND instr(' '||lower(source_quote)||' ',' album ')=0)
+             OR EXISTS (
+               SELECT 1 FROM messages m
+               WHERE m.id=interest_items.source_message_id AND m.role='user'
+                 AND instr(lower(m.content),lower(interest_items.name))>0
+                 AND (instr(' '||lower(m.content)||' ',' song ')>0
+                   OR instr(' '||lower(m.content)||' ',' track ')>0)
+                 AND instr(' '||lower(m.content)||' ',' album ')=0
+             )
+           )
+           AND NOT EXISTS (
+             SELECT 1 FROM interest_items existing
+             WHERE existing.kind='song' AND existing.name=interest_items.name
+           )",[]
+    ).map_err(|e|format!("Could not recover explicitly labeled songs: {e}"))?;
+    let broken:Option<String>=db.query_row("PRAGMA foreign_key_check",[],|r|r.get(0))
+        .optional().map_err(|e|e.to_string())?;
+    if let Some(table)=broken{return Err(format!("Interest migration left invalid foreign keys in {table}"));}
     Ok(())
 }
 
@@ -1102,6 +1268,68 @@ mod tests {
         assert!(!valid_character_category("instructions"));
     }
 
+    #[test]
+    fn old_interest_schema_upgrades_in_place_without_losing_references_or_fts() {
+        let db=Connection::open_in_memory().unwrap();
+        db.execute_batch(
+            "PRAGMA foreign_keys=ON;
+             CREATE TABLE interest_items (
+               id INTEGER PRIMARY KEY AUTOINCREMENT,
+               name TEXT NOT NULL COLLATE NOCASE,
+               kind TEXT NOT NULL CHECK(kind IN
+                 ('band','album','anime','show','movie','game','book','other')),
+               status TEXT NOT NULL CHECK(status IN
+                 ('favorite','like','dislike','interested','experienced','unknown')),
+               rating REAL CHECK(rating IS NULL OR rating BETWEEN 0 AND 10),
+               notes TEXT NOT NULL DEFAULT '',
+               tags_json TEXT NOT NULL DEFAULT '[]',
+               source TEXT NOT NULL DEFAULT 'manual',
+               source_message_id TEXT,
+               source_quote TEXT NOT NULL DEFAULT '',
+               created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+               updated_at INTEGER NOT NULL DEFAULT (unixepoch()),
+               UNIQUE(kind,name)
+             );
+             INSERT INTO interest_items(id,name,kind,status,rating,notes,tags_json,source)
+               VALUES(248,'The War Within','album','favorite',9.0,'Important','[\"metal\"]','import');
+             INSERT INTO interest_items(id,name,kind,status,source,source_quote)
+               VALUES(249,'Thoughts Without Words','album','favorite','conversation',
+                 'my favorite Shadows Fall song is Thoughts Without Words');"
+        ).unwrap();
+        initialize_database(&db).unwrap();
+        db.execute(
+            "INSERT INTO memory_fact_reviews(existing_interest_id,proposed_fact,evidence,source_message_id)
+             VALUES(248,'updated album','test',NULL)",[]
+        ).err(); // source_message_id is non-null: validate the FK with real messages below.
+        db.execute("INSERT INTO conversations(id,title,created_at,updated_at) VALUES('c','test',0,0)",[]).unwrap();
+        db.execute("INSERT INTO messages(id,conversation_id,role,content,created_at)
+             VALUES('u','c','user','test',0)",[]).unwrap();
+        db.execute("INSERT INTO memory_fact_reviews(existing_interest_id,proposed_fact,evidence,source_message_id)
+             VALUES(248,'updated album','test','u')",[]).unwrap();
+        initialize_database(&db).unwrap();
+        let saved:(i64,String,String,String)=db.query_row(
+            "SELECT id,kind,notes,tags_json FROM interest_items WHERE name='The War Within'",
+            [],|r|Ok((r.get(0)?,r.get(1)?,r.get(2)?,r.get(3)?))
+        ).unwrap();
+        assert_eq!(saved,(248,"album".into(),"Important".into(),r#"["metal"]"#.into()));
+        let refs:i64=db.query_row(
+            "SELECT count(*) FROM memory_fact_reviews WHERE existing_interest_id=248",[],
+            |r|r.get(0)
+        ).unwrap();
+        assert_eq!(refs,1);
+        let recovered:String=db.query_row(
+            "SELECT kind FROM interest_items WHERE id=249",[],|r|r.get(0)).unwrap();
+        assert_eq!(recovered,"song");
+        db.execute("INSERT INTO interest_items(name,kind,status) VALUES
+              ('Another Song','song','favorite')",[]).unwrap();
+        let found:i64=db.query_row(
+            "SELECT COUNT(*) FROM interest_search WHERE interest_search MATCH 'another'",[],
+            |r|r.get(0)
+        ).unwrap();
+        assert_eq!(found,1);
+        let checks:i64=db.query_row("SELECT COUNT(*) FROM pragma_foreign_key_check",[],|r|r.get(0)).unwrap();
+        assert_eq!(checks,0);
+    }
     #[test]
     fn archive_fts_searches_only_user_messages_and_tracks_changes() {
         let db=Connection::open_in_memory().unwrap();

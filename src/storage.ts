@@ -1,4 +1,5 @@
 import { DEFAULT_PERSONALITY, readPersonality, type Personality } from "./personality";
+import { DEFAULT_COMMUNICATION, readCommunicationPreferences, type CommunicationPreferences } from "./communication-preferences";
 import type { ReasoningMode } from "./reasoning-mode";
 import { captureInterval, restoreRegion, type RegionChoice } from "./capture-region";
 import { DEFAULT_SOURCE_PREFERENCES, readSourcePreferences, type SourcePreference } from "./preferred-sources";
@@ -8,7 +9,7 @@ import { DEFAULT_AVATAR_VERTICAL_OFFSET, readAvatarVerticalOffset } from "./avat
 
 export type ChatRole = "user" | "assistant";
 export type Message = { id: string; role: ChatRole; content: string };
-export type Settings = { voice: VoiceSettings; endpoint: string; model: string; provider: "local" | "auto" | "gemini" | "openrouter"; geminiModel: string; openrouterModel: string; systemPrompt: string; appearance: Appearance; personality: Personality; searxngEndpoint: string; autoSearch: boolean; structuredResearch: boolean; autoManageSearch: boolean; sourcePreferences: SourcePreference[]; cacheHours: number; contextWindow: number | null; reasoningMode: ReasoningMode; autoRememberUser: boolean; autoRememberMikan: boolean; visionCaptureIntervalSeconds:number; visionRegion:RegionChoice|null };
+export type Settings = { voice: VoiceSettings; endpoint: string; model: string; provider: "local" | "auto" | "gemini" | "openrouter"; geminiModel: string; openrouterModel: string; systemPrompt: string; communication: CommunicationPreferences; appearance: Appearance; personality: Personality; searxngEndpoint: string; autoSearch: boolean; structuredResearch: boolean; autoManageSearch: boolean; sourcePreferences: SourcePreference[]; cacheHours: number; contextWindow: number | null; reasoningMode: ReasoningMode; autoRememberUser: boolean; autoRememberMikan: boolean; visionCaptureIntervalSeconds:number; visionRegion:RegionChoice|null };
 
 export type VoiceSettings = {
   engine: "qwen" | "pocket";
@@ -102,6 +103,7 @@ export const DEFAULT_SETTINGS: Settings = {
   visionRegion:null,
   appearance: { ...DEFAULT_APPEARANCE },
   personality: { ...DEFAULT_PERSONALITY },
+  communication: { ...DEFAULT_COMMUNICATION },
   model: "qwen3.5:9b",
   systemPrompt: "You are Mikan, a warm, witty, affectionate and occasionally teasing desktop AI companion. Be lively, conversational and playful in your actual words. Do not narrate physical gestures, stage directions, ear or tail movements, or imaginary touches unless the user specifically asks for roleplay. Keep factual answers well supported by evidence, and distinguish separate events and milestones carefully. Admit when you are uncertain. Never claim to have seen the user's screen or accessed the web unless you actually have."
 };
@@ -142,10 +144,11 @@ export function loadSettings(): Settings {
           data.systemPrompt !== PREVIOUS_GESTURE_DEFAULT_SYSTEM_PROMPT
         ? data.systemPrompt : DEFAULT_SETTINGS.systemPrompt,
       appearance: readAppearance(data.appearance),
-      personality: readPersonality(data.personality)
+      personality: readPersonality(data.personality),
+      communication: readCommunicationPreferences(data.communication)
     };
   } catch {
-    return { ...DEFAULT_SETTINGS, appearance: { ...DEFAULT_APPEARANCE }, voice: { ...DEFAULT_VOICE }, personality: { ...DEFAULT_PERSONALITY } };
+    return { ...DEFAULT_SETTINGS, appearance: { ...DEFAULT_APPEARANCE }, voice: { ...DEFAULT_VOICE }, personality: { ...DEFAULT_PERSONALITY }, communication: { ...DEFAULT_COMMUNICATION } };
   }
 }
 

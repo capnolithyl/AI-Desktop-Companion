@@ -53,3 +53,10 @@ test("Mikan canon import rejects missing values or unknown categories",()=>{
   assert.throws(()=>parseCanon("Favorite color: ","text"),/value/);
   assert.throws(()=>parseCanon("category,label,value\nmagic,Color,Orange","csv"),/unknown/);
 });
+
+test("song and track imports retain their media type instead of becoming albums",()=>{
+  const rows=parseInterests(["name,kind,status","Thoughts Without Words,song,favorite","Another Tune,track,like"].join("\n"),"csv");
+  assert.deepEqual(rows.map(r=>r.kind),["song","song"]);
+  assert.equal(rows[0].status,"favorite");
+  assert.notEqual(interestKey(rows[0]),interestKey({...rows[0],kind:"album"}));
+});

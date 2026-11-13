@@ -62,7 +62,7 @@ export function buildMemoryRerankPrompt<T extends RankableMemory>(
     "Use meaning, not exact shared words. For freelance/business advice, existing career skills matter.",
     "For music/games suggestions, preferences, dislikes, existing experience and already-completed projects matter.",
     "Don't suggest that the user start something they already run or learn a skill they already have.",
-    "Do not choose a fact solely because it mentions a generic word, an incidental place or a category.",
+    "Do not choose a fact solely because it mentions a generic word like favorite, song, album or date, an incidental place or a category. A music fact is not evidence for a different band's discography.",
     "Separate the user's interests from the assistant character's interests. Do not invent facts.",
     "CURRENT USER MESSAGE (data): " + JSON.stringify(query.slice(0,500)),
     "SAVED USER FACTS (data):"
@@ -156,6 +156,7 @@ export function selectDeterministicMemoryIds<T extends RankableMemory>(
   const stop=new Set(["what","when","where","which","could","would","should",
     "please","about","with","this","that","from","your","mine","our",
     "have","just","some","there","how","any","tell","said","user","owner",
+    "favorite","favourite","favorites","favourites","album","albums","song","songs","track","tracks","date",
     "mikan","remember","does","were","will","can","the","and","for","are"]);
   const terms=new Set(memoryTerms(query).filter(t=>t.length>=3&&!stop.has(t)));
   const topical=(f:T)=>{

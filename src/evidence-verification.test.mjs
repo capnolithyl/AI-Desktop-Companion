@@ -92,3 +92,18 @@ test("fallback never invents claims when retrieved headlines do not match the qu
   assert.match(answer,/couldn't establish/);
   assert.doesNotMatch(answer,/\[1\]/);
 });
+
+test("fallback prefers exact named album over a different artist's near-identical title",()=>{
+  const q="I think my favorite album might be The War Within";
+  const results=[
+    {title:"War Within (album) - Wikipedia",url:"https://example.org/other",
+     content:"War Within is an album by another artist."},
+    {title:"The War Within (Shadows Fall album) - Wikipedia",
+     url:"https://example.org/correct",
+     content:"The War Within is an album by Shadows Fall."}
+  ];
+  const answer=groundedResearchFallback(q,results);
+  assert.match(answer,/Shadows Fall album/);
+  assert.match(answer,/\[2\]/);
+  assert.doesNotMatch(answer,/\[1\]/);
+});
