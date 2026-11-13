@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { CharacterBulkImporter } from "./CharacterBulkImporter";
+import type { IncomingCanon } from "./interest-import";
 import { Check, Plus, Trash2, X } from "lucide-react";
 import {
   CHARACTER_CATEGORIES, type CharacterCategory, type CharacterFact
@@ -6,6 +8,7 @@ import {
 
 type Props = {
   facts: CharacterFact[];
+  onImport: (items:IncomingCanon[])=>Promise<{inserted:number;duplicates:number}>;
   onAdd: (category: CharacterCategory, label: string, value: string) => Promise<void>;
   onEdit: (id: number, category: CharacterCategory, label: string, value: string) => Promise<void>;
   onDelete: (id: number) => Promise<void>;
@@ -25,7 +28,7 @@ function characterDate(seconds: number): string {
 }
 
 /** Mikan's explicit self-identity editor, kept separate from user memories. */
-export function CharacterCanonTab({ facts, onAdd, onEdit, onDelete }: Props) {
+export function CharacterCanonTab({ facts, onImport, onAdd, onEdit, onDelete }: Props) {
   const [category, setCategory] = useState<CharacterCategory>("favorites");
   const [label, setLabel] = useState("");
   const [value, setValue] = useState("");
@@ -53,6 +56,7 @@ export function CharacterCanonTab({ facts, onAdd, onEdit, onDelete }: Props) {
       when enabled, and you can always add or correct details here.
     </p>
     {error && <div className="memory-error" role="alert">{error}</div>}
+    <CharacterBulkImporter facts={facts} onImport={onImport}/>
     <form className="memory-add character-form" onSubmit={event => {
       event.preventDefault();
       if (!label.trim() || !value.trim()) return;
