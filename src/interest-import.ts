@@ -90,8 +90,16 @@ export function parseInterests(input:string,format:ImportFormat,
   return parseBulkRows(input,format,"interests").map((row,index)=>{
     const obj=typeof row==="string"?{name:row}:isObject(row)?row:{};
     const name=text(obj.name??obj.title??obj.artist??obj.band,180,"Row "+(index+1)+" name",true);
-    const kind=String(obj.kind??obj.type??obj.category??defaults.kind).trim().toLowerCase();
-    const status=String(obj.status??obj.relationship??defaults.status).trim().toLowerCase();
+    const rawKind=String(obj.kind??obj.type??obj.category??defaults.kind).trim().toLowerCase();
+    const rawStatus=String(obj.status??obj.relationship??defaults.status).trim().toLowerCase();
+    const kind=({bands:"band",artists:"band",artist:"band",music:"band",albums:"album",
+      "tv show":"show","tv series":"show",series:"show",movies:"movie",films:"movie",
+      games:"game",books:"book"} as Record<string,string>)[rawKind]??rawKind;
+    const status=({loved:"like",love:"like",liked:"like",hated:"dislike",
+      watched:"experienced",played:"experienced",listened:"experienced",
+      listened_to:"experienced",read:"experienced",finished:"experienced",
+      "want to watch":"interested","want to play":"interested",
+      "want to read":"interested"} as Record<string,string>)[rawStatus]??rawStatus;
     if(!INTEREST_KINDS.includes(kind as InterestKind))throw Error("Row "+(index+1)+" has invalid kind");
     if(!INTEREST_STATUSES.includes(status as InterestStatus))throw Error("Row "+(index+1)+" has invalid relationship");
     const rawRating=obj.rating??obj.score;
