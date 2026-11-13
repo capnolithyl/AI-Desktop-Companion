@@ -1,5 +1,16 @@
 /** Local-only Iki outfit library. Retains imported files, even when they are not selected. */
-export type SavedIkiOutfit = { id: string; name: string; file: Blob; savedAt: number };
+import { shippedOutfits, shippedOutfitById } from "./bundled-iki-outfits";
+export type SavedIkiOutfit = {
+  id: string;
+  name: string;
+  /** Local uploads have a Blob. Bundled rigs are lazy-loaded from their URL. */
+  file: Blob | null;
+  bundledUrl?: string;
+  savedAt: number;
+};
+function shippedLibrary(): SavedIkiOutfit[] {
+  return shippedOutfits.map(outfit => ({ ...outfit, file: null, savedAt: 0 }));
+}
 export type IkiWardrobe = { outfits: SavedIkiOutfit[]; active: SavedIkiOutfit | null };
 export type AvatarDisplay = "animated" | "portrait";
 
@@ -102,12 +113,14 @@ export async function loadIkiWardrobe(): Promise<IkiWardrobe> {
           tx.objectStore("assets").put(migrated.id, ACTIVE_KEY);
           tx.objectStore("assets").delete(LEGACY_RIG_KEY);
           await done;
-          return { outfits: [migrated], active: migrated };
+          return { outfits: [...shippedLibrary(), migrated], active: migrated };
         }
       }
     }
 
-    const outfits = [...existing].sort((a, b) => a.name.localeCompare(b.name));
+    // Bundled catalog entries need no IndexedDB copy and ship with the installer.
+    // Local imports (including old copies of shipped costumes) stay untouched.
+    const outfits = [...shippedLibrary(), ...existing].sort((a, b) => a.name.localeCompare(b.name));
     return {
       outfits,
       active: outfits.find(item => item.id === activeId) ?? null
@@ -135,7 +148,7 @@ export async function saveIkiOutfit(file: File): Promise<SavedIkiOutfit> {
 export async function selectIkiOutfit(id: string | null): Promise<void> {
   const db = await openAssets();
   try {
-    if (id !== null) {
+    if (id !== null && !shippedOutfitById(id)) {
       const value = await readRequest(db.transaction(OUTFITS_STORE, "readonly")
         .objectStore(OUTFITS_STORE).get(id) as IDBRequest<unknown>);
       if (!validOutfit(value)) throw new Error("This outfit is no longer saved.");
@@ -149,6 +162,7 @@ export async function selectIkiOutfit(id: string | null): Promise<void> {
 }
 
 export async function removeIkiOutfit(id: string): Promise<void> {
+  if (shippedOutfitById(id)) throw new Error("Included outfits are part of Mikan's installation and cannot be removed here.");
   const db = await openAssets();
   try {
     const selected = await readRequest(db.transaction("assets", "readonly")

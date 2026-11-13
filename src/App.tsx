@@ -1501,7 +1501,7 @@ export default function App() {
 
   const forgetSelectedIkiOutfit = async (id: string) => {
     const selected = ikiOutfits.find(outfit => outfit.id === id);
-    if (!selected) return;
+    if (!selected || selected.bundledUrl) return;
     if (!window.confirm(`Remove "${selected.name}" from Mikan's saved outfits? The original .iki file will not be deleted.`)) return;
     setIkiBusy(true);
     setIkiError(null);
@@ -2786,7 +2786,9 @@ export default function App() {
     <div className="portrait-space" title="Drag Mikan to move the window" onMouseDown={dragPortrait}
       onContextMenu={event => { event.preventDefault(); setPortraitMenuAt({ x: event.clientX, y: event.clientY }); }}>
       {avatarDisplay === "animated" && ikiReady ? (
-        <IkiAvatar customRig={wardrobePreviewVisible ? previewRig?.file ?? null : ikiRig?.file ?? null} speaking={voiceState === "playing"}
+        <IkiAvatar customRig={wardrobePreviewVisible ? previewRig?.file ?? null : ikiRig?.file ?? null}
+          rigUrl={wardrobePreviewVisible ? previewRig?.bundledUrl ?? null : ikiRig?.bundledUrl ?? null}
+          speaking={voiceState === "playing"}
           reaction={avatarReaction}
           rigLabel={wardrobePreviewVisible ? previewRig?.name ?? "Mikan v3 (bundled)" : ikiRig?.name ?? "Mikan v3 (bundled)"}
           debugVisible={showAvatarDebug || (screen === "settings" && settingsTab === "appearance")}
@@ -3914,7 +3916,7 @@ export default function App() {
           <small className="iki-wardrobe-path" title={ikiOutfitFolder || "Uses project outfits folder when available"}>
             Folder: {ikiOutfitFolder || "Project outfits folder (or last-used location)"}
           </small>
-          {previewChoice.id && <button type="button" className="inline-action" disabled={ikiBusy}
+          {previewChoice.id && !previewRig?.bundledUrl && <button type="button" className="inline-action" disabled={ikiBusy}
             onClick={() => void forgetSelectedIkiOutfit(previewChoice.id!)}>Remove previewed outfit from list</button>}
           {ikiError && <p className="field-error" role="alert">{ikiError}</p>}
           <div className="settings-section-title">Live avatar movement</div>

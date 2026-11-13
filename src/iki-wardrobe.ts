@@ -48,7 +48,17 @@ export function outfitDefaults(name: string): OutfitMetadata {
 }
 
 export function outfitMetadata(config: WardrobeConfig, outfit: WardrobeChoice): OutfitMetadata {
-  return config.outfits[wardrobeKey(outfit.id)] ?? outfitDefaults(outfit.name);
+  const saved = config.outfits[wardrobeKey(outfit.id)];
+  if (saved) return saved;
+  // Shipped outfits have stable IDs even if the user renames a display label.
+  const shipped = outfit.id?.startsWith("bundled:")
+    ? wardrobeManifest.outfits.find(entry => entry.id === outfit.id!.slice("bundled:".length))
+    : null;
+  return shipped ? {
+    season: shipped.season as OutfitSeason,
+    holiday: shipped.holiday as OutfitHoliday,
+    favorite: shipped.favorite
+  } : outfitDefaults(outfit.name);
 }
 
 export function localWardrobeDay(date: Date): string {

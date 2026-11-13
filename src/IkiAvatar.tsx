@@ -17,6 +17,7 @@ import { avatarViewport } from "./avatar-viewport";
  */
 export function IkiAvatar({
   customRig,
+  rigUrl,
   speaking,
   reaction,
   rigLabel,
@@ -28,6 +29,7 @@ export function IkiAvatar({
   onError
 }: {
   customRig: Blob | null;
+  rigUrl?: string | null;
   speaking: boolean;
   reaction: AvatarReaction | null;
   rigLabel: string;
@@ -96,8 +98,8 @@ export function IkiAvatar({
         const raw: unknown = customRig
           ? JSON.parse(await customRig.text())
           : await (async () => {
-              const response = await fetch(bundledRigUrl);
-              if (!response.ok) throw new Error("The bundled Mikan v3 rig could not be loaded.");
+              const response = await fetch(rigUrl || bundledRigUrl);
+              if (!response.ok) throw new Error("Mikan's outfit rig could not be loaded.");
               return response.json() as Promise<unknown>;
             })();
         if (cancelled) return;
@@ -300,7 +302,7 @@ export function IkiAvatar({
       if (playerRef.current === player) playerRef.current = null;
       player?.destroy();
     };
-  }, [customRig]);
+  }, [customRig, rigUrl]);
 
   // Move only the viewport while preserving the loaded model and active physics.
   useEffect(() => {
