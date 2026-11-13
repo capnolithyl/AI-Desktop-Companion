@@ -101,7 +101,7 @@ pub(crate) fn initialize_database(connection: &Connection) -> Result<(), String>
          CREATE TABLE IF NOT EXISTS interest_items (
            id INTEGER PRIMARY KEY AUTOINCREMENT,
            name TEXT NOT NULL COLLATE NOCASE,
-           kind TEXT NOT NULL CHECK(kind IN ('band','album','anime','show','movie','game','book','other')),
+           kind TEXT NOT NULL CHECK(kind IN ('band','album','song','anime','show','movie','game','book','other')),
            status TEXT NOT NULL CHECK(status IN
              ('favorite','like','dislike','interested','experienced','unknown')),
            rating REAL CHECK(rating IS NULL OR rating BETWEEN 0 AND 10),
@@ -252,6 +252,81 @@ pub(crate) fn initialize_database(connection: &Connection) -> Result<(), String>
              SELECT id,fact,category,tags_json FROM user_memories", []
         ).map_err(|e| format!("Cannot index saved facts: {e}"))?;
     }
+    migrate_interest_song_kind(connection)?;
+    Ok(())
+}
+
+/// SQLite cannot ALTER an existing CHECK constraint, so older interest
+/// catalogs must be rebuilt once. Preserve all IDs, metadata and review FKs.
+/// Trigger/index recreation keeps the existing FTS5 rowids usable unchanged.
+fn migrate_interest_song_kind(db:&Connection)->Result<(),String>{
+    let schema:String=db.query_row(
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name='interest_items'",
+        [],|r|r.get(0)
+    ).map_err(|e|e.to_string())?;
+    if schema.contains("'song'"){return Ok(());}
+    let old_sequence:Option<i64>=db.query_row(
+        "SELECT seq FROM sqlite_sequence WHERE name='interest_items'",[],
+        |r|r.get(0)
+    ).optional().map_err(|e|e.to_string())?;
+    let migrated=db.execute_batch(
+        "PRAGMA foreign_keys=OFF;
+         BEGIN IMMEDIATE;
+         DROP TRIGGER IF EXISTS interest_search_insert;
+         DROP TRIGGER IF EXISTS interest_search_delete;
+         DROP TRIGGER IF EXISTS interest_search_update;
+         CREATE TABLE interest_items_song_migration (
+           id INTEGER PRIMARY KEY AUTOINCREMENT,
+           name TEXT NOT NULL COLLATE NOCASE,
+           kind TEXT NOT NULL CHECK(kind IN
+             ('band','album','song','anime','show','movie','game','book','other')),
+           status TEXT NOT NULL CHECK(status IN
+             ('favorite','like','dislike','interested','experienced','unknown')),
+           rating REAL CHECK(rating IS NULL OR rating BETWEEN 0 AND 10),
+           notes TEXT NOT NULL DEFAULT '',
+           tags_json TEXT NOT NULL DEFAULT '[]',
+           source TEXT NOT NULL DEFAULT 'manual',
+           source_message_id TEXT REFERENCES messages(id) ON DELETE SET NULL,
+           source_quote TEXT NOT NULL DEFAULT '',
+           created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+           updated_at INTEGER NOT NULL DEFAULT (unixepoch()),
+           UNIQUE(kind,name)
+         );
+         INSERT INTO interest_items_song_migration
+           (id,name,kind,status,rating,notes,tags_json,source,
+            source_message_id,source_quote,created_at,updated_at)
+           SELECT id,name,kind,status,rating,notes,tags_json,source,
+                  source_message_id,source_quote,created_at,updated_at
+           FROM interest_items;
+         DROP TABLE interest_items;
+         ALTER TABLE interest_items_song_migration RENAME TO interest_items;
+         CREATE INDEX idx_interest_kind_status ON interest_items(kind,status);
+         CREATE TRIGGER interest_search_insert AFTER INSERT ON interest_items BEGIN
+           INSERT INTO interest_search(rowid,name,kind,status,notes,tags)
+             VALUES(new.id,new.name,new.kind,new.status,new.notes,new.tags_json);
+         END;
+         CREATE TRIGGER interest_search_delete AFTER DELETE ON interest_items BEGIN
+           DELETE FROM interest_search WHERE rowid=old.id;
+         END;
+         CREATE TRIGGER interest_search_update AFTER UPDATE ON interest_items BEGIN
+           DELETE FROM interest_search WHERE rowid=old.id;
+           INSERT INTO interest_search(rowid,name,kind,status,notes,tags)
+             VALUES(new.id,new.name,new.kind,new.status,new.notes,new.tags_json);
+         END;
+         COMMIT;
+         PRAGMA foreign_keys=ON;"
+    );
+    if let Err(error)=migrated {
+        let _=db.execute_batch("ROLLBACK; PRAGMA foreign_keys=ON;");
+        return Err(format!("Could not upgrade interest song category: {error}"));
+    }
+    if let Some(seq)=old_sequence {
+        db.execute("UPDATE sqlite_sequence SET seq=MAX(seq,?1) WHERE name='interest_items'",
+            params![seq]).map_err(|e|e.to_string())?;
+    }
+    let broken:Option<String>=db.query_row("PRAGMA foreign_key_check",[],|r|r.get(0))
+        .optional().map_err(|e|e.to_string())?;
+    if let Some(table)=broken{return Err(format!("Interest migration left invalid foreign keys in {table}"));}
     Ok(())
 }
 
@@ -1167,6 +1242,62 @@ mod tests {
         assert!(!valid_character_category("instructions"));
     }
 
+    #[test]
+    fn old_interest_schema_upgrades_in_place_without_losing_references_or_fts() {
+        let db=Connection::open_in_memory().unwrap();
+        db.execute_batch(
+            "PRAGMA foreign_keys=ON;
+             CREATE TABLE interest_items (
+               id INTEGER PRIMARY KEY AUTOINCREMENT,
+               name TEXT NOT NULL COLLATE NOCASE,
+               kind TEXT NOT NULL CHECK(kind IN
+                 ('band','album','anime','show','movie','game','book','other')),
+               status TEXT NOT NULL CHECK(status IN
+                 ('favorite','like','dislike','interested','experienced','unknown')),
+               rating REAL CHECK(rating IS NULL OR rating BETWEEN 0 AND 10),
+               notes TEXT NOT NULL DEFAULT '',
+               tags_json TEXT NOT NULL DEFAULT '[]',
+               source TEXT NOT NULL DEFAULT 'manual',
+               source_message_id TEXT,
+               source_quote TEXT NOT NULL DEFAULT '',
+               created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+               updated_at INTEGER NOT NULL DEFAULT (unixepoch()),
+               UNIQUE(kind,name)
+             );
+             INSERT INTO interest_items(id,name,kind,status,rating,notes,tags_json,source)
+               VALUES(248,'The War Within','album','favorite',9.0,'Important','[\"metal\"]','import');"
+        ).unwrap();
+        initialize_database(&db).unwrap();
+        db.execute(
+            "INSERT INTO memory_fact_reviews(existing_interest_id,proposed_fact,evidence,source_message_id)
+             VALUES(248,'updated album','test',NULL)",[]
+        ).err(); // source_message_id is non-null: validate the FK with real messages below.
+        db.execute("INSERT INTO conversations(id,title,created_at,updated_at) VALUES('c','test',0,0)",[]).unwrap();
+        db.execute("INSERT INTO messages(id,conversation_id,role,content,created_at)
+             VALUES('u','c','user','test',0)",[]).unwrap();
+        db.execute("INSERT INTO memory_fact_reviews(existing_interest_id,proposed_fact,evidence,source_message_id)
+             VALUES(248,'updated album','test','u')",[]).unwrap();
+        initialize_database(&db).unwrap();
+        let saved:(i64,String,String,String)=db.query_row(
+            "SELECT id,kind,notes,tags_json FROM interest_items WHERE name='The War Within'",
+            [],|r|Ok((r.get(0)?,r.get(1)?,r.get(2)?,r.get(3)?))
+        ).unwrap();
+        assert_eq!(saved,(248,"album".into(),"Important".into(),r#"["metal"]"#.into()));
+        let refs:i64=db.query_row(
+            "SELECT count(*) FROM memory_fact_reviews WHERE existing_interest_id=248",[],
+            |r|r.get(0)
+        ).unwrap();
+        assert_eq!(refs,1);
+        db.execute("INSERT INTO interest_items(name,kind,status) VALUES
+              ('Thoughts Without Words','song','favorite')",[]).unwrap();
+        let found:i64=db.query_row(
+            "SELECT COUNT(*) FROM interest_search WHERE interest_search MATCH 'thoughts'",[],
+            |r|r.get(0)
+        ).unwrap();
+        assert_eq!(found,1);
+        let checks:i64=db.query_row("SELECT COUNT(*) FROM pragma_foreign_key_check",[],|r|r.get(0)).unwrap();
+        assert_eq!(checks,0);
+    }
     #[test]
     fn archive_fts_searches_only_user_messages_and_tracks_changes() {
         let db=Connection::open_in_memory().unwrap();
