@@ -1,0 +1,25 @@
+{
+  "source_sha256": "839b80586bab6f7b44c08d9424cd0ffaca0822c223604f6101dab75af25a0481",
+  "variant_sha256": "b673920d9e6267e4b461f58728a5567f83b8afc2db2e7f5b2c31a3600573bff7",
+  "body_png_sha256": "5ba13230811fe56b4426380c8581d937dd117250cd0982fb0812f19d02885f37",
+  "changed_json_paths": [
+    "/name",
+    "/textures/1/source"
+  ],
+  "all_other_data_identical": true,
+  "source_unchanged": true,
+  "body_alpha_identical": true,
+  "texture_size": [
+    899,
+    864
+  ],
+  "canvas_rectangle": [
+    164,
+    416,
+    1063,
+    1280
+  ],
+  "parts": 16,
+  "textures": 6,
+  "self_contained": true
+}

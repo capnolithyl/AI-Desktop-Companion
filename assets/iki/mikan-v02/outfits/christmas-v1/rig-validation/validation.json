@@ -1,0 +1,189 @@
+{
+  "structure": {
+    "source_sha256": "839b80586bab6f7b44c08d9424cd0ffaca0822c223604f6101dab75af25a0481",
+    "variant_sha256": "cc5b66a8e60139dbbba8f1f65ee0fdd1f672da2d5e124046aabdbefc517de90b",
+    "body_png_sha256": "0b0e486376d8ca0ce6b90d88dc6aef0bbaf61579da7974d60e6c022f9277d967",
+    "changed_json_paths": [
+      "/name",
+      "/textures/1/source"
+    ],
+    "all_other_data_identical": true,
+    "source_unchanged": true,
+    "body_alpha_identical": true,
+    "texture_size": [
+      899,
+      864
+    ],
+    "canvas_rectangle": [
+      164,
+      416,
+      1063,
+      1280
+    ],
+    "parts": 16,
+    "textures": 6,
+    "self_contained": true
+  },
+  "render": {
+    "engine": "Installed @ikijs/mcp real WebGL Iki engine, headless Chrome",
+    "poses_per_version": 21,
+    "fold_checked_poses": 642,
+    "failed_textures": [],
+    "fold_offenders": [],
+    "physics_offenders": [],
+    "fold_reports_identical": true,
+    "physics_reports_identical": true,
+    "matched_pixels": {
+      "rest": {
+        "alpha_identical": true,
+        "upper_face_region_identical": true
+      },
+      "head-tilt-left": {
+        "alpha_identical": true,
+        "upper_face_region_identical": true
+      },
+      "head-tilt-right": {
+        "alpha_identical": true,
+        "upper_face_region_identical": true
+      },
+      "body-tilt-left": {
+        "alpha_identical": true,
+        "upper_face_region_identical": true
+      },
+      "body-tilt-right": {
+        "alpha_identical": true,
+        "upper_face_region_identical": true
+      },
+      "combined-tilt-left": {
+        "alpha_identical": true,
+        "upper_face_region_identical": true
+      },
+      "combined-tilt-right": {
+        "alpha_identical": true,
+        "upper_face_region_identical": true
+      },
+      "opposed-left": {
+        "alpha_identical": true,
+        "upper_face_region_identical": true
+      },
+      "opposed-right": {
+        "alpha_identical": true,
+        "upper_face_region_identical": true
+      },
+      "stress-left": {
+        "alpha_identical": true,
+        "upper_face_region_identical": true
+      },
+      "stress-right": {
+        "alpha_identical": true,
+        "upper_face_region_identical": true
+      },
+      "blink": {
+        "alpha_identical": true,
+        "upper_face_region_identical": true
+      },
+      "mouth-open": {
+        "alpha_identical": true,
+        "upper_face_region_identical": true
+      },
+      "tail-left": {
+        "alpha_identical": true,
+        "upper_face_region_identical": true
+      },
+      "tail-right": {
+        "alpha_identical": true,
+        "upper_face_region_identical": true
+      },
+      "head-turn-left": {
+        "alpha_identical": true,
+        "upper_face_region_identical": true
+      },
+      "head-turn-right": {
+        "alpha_identical": true,
+        "upper_face_region_identical": true
+      },
+      "mouth-half": {
+        "alpha_identical": true,
+        "upper_face_region_identical": true
+      },
+      "breath-full": {
+        "alpha_identical": true,
+        "upper_face_region_identical": true
+      },
+      "smile": {
+        "alpha_identical": true,
+        "upper_face_region_identical": true
+      },
+      "surprised": {
+        "alpha_identical": true,
+        "upper_face_region_identical": true
+      }
+    }
+  },
+  "motion": {
+    "frames_per_version": 144,
+    "seconds": 12,
+    "physics_hz": 60,
+    "capture_fps": 12,
+    "parameter_traces_identical": true,
+    "failed_textures": {
+      "original": [],
+      "christmas": []
+    }
+  },
+  "desktop": {
+    "canvas_css_pixels": [
+      514,
+      472
+    ],
+    "view": {
+      "x": 0,
+      "y": 110,
+      "width": 1150,
+      "height": 1050
+    },
+    "basis": "Default 520x740 window minus CSS portrait insets; actual user resize/DPI may differ."
+  },
+  "visual_assessment": {
+    "overall": "Suitable for user review / standalone testing; no blocking regression observed.",
+    "acceptable": [
+      "Main sweater pattern deformation at desktop scale",
+      "Neckline, skin and shorts registration",
+      "Blink, mouth and tail behavior match v3"
+    ],
+    "needs_improvement": [
+      {
+        "location_canvas_px": [
+          [
+            450,
+            860,
+            515,
+            1050
+          ],
+          [
+            785,
+            860,
+            850,
+            1050
+          ]
+        ],
+        "issue": "Jagged inner garment edges and stretched/repeated cream/green pattern fragments beside the underarm openings; visible in enlarged renders, subtle at default desktop size.",
+        "origin": "Christmas artwork alignment/reconstruction, riding unchanged v3 geometry"
+      }
+    ],
+    "pre_existing": [
+      "Background/hair visible through underarm openings when head/hair move away; matched alpha masks remain identical",
+      "Hair stretching at extreme combined angles",
+      "Half-open mouth is a two-image crossfade, not a continuously articulated mouth"
+    ],
+    "blocking": [],
+    "review_method": "Inspected matched pose sheets, enlarged underarms and facial tests, desktop-framed renders and nine sampled timed frames per version; not live application acceptance."
+  },
+  "capture_notes": [
+    "Initial sandbox browser evaluations timed out; successful captures ran outside sandbox.",
+    "Motion capture completed all 288 frames and saved its report; temporary Chrome profile cleanup then reported an EBUSY lock. Outputs were checked independently.",
+    "Static smile/surprised tests apply declared expression parameter values; expression fade timing is not separately exercised.",
+    "Timed sequence drives breath and ambient input deterministically, advances actual IkiMotion springs at 60 Hz. It is not a manual tail animation or the full desktop app controller."
+  ],
+  "animated_webp_frames": 144
+}

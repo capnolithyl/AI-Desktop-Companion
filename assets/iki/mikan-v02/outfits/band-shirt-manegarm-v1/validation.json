@@ -1,0 +1,29 @@
+{
+  "baseline": "black-shirt-v1/mikan-black-shirt-v1.iki",
+  "baseline_sha256": "960d8aed77433fbcb9ea9a92ad03a77845cbe65dad11c2dfb6c200ef13b02e7c",
+  "variant_sha256": "71f761369917bc4774f8c44bea2406243609126bf128ec632d95868a67aa815f",
+  "source_sha256": "49918818db3319e6abd34c7254587fab7ef9d74c6c48f19d617d70cf9dbd7ea6",
+  "body_sha256": "f42359b4b2ba17db60ea4b5a2bdee971a6302532bad753319b63d57ac56270a6",
+  "changed_json_paths": [
+    "/name",
+    "/textures/1/source"
+  ],
+  "all_other_rig_data_identical": true,
+  "body_alpha_identical": true,
+  "pixels_outside_print_identical": true,
+  "source_logo_rectangle": [
+    360,
+    850,
+    750,
+    1080
+  ],
+  "uniform_logo_scale": 0.86,
+  "placement": [
+    485,
+    812
+  ],
+  "maximum_curvature_pixels": 3,
+  "changed_body_pixels": 11697,
+  "protected_files_checked": 1389,
+  "protected_files_unchanged": true
+}

@@ -1,0 +1,190 @@
+{
+  "structure": {
+    "source_sha256": "839b80586bab6f7b44c08d9424cd0ffaca0822c223604f6101dab75af25a0481",
+    "variant_sha256": "b673920d9e6267e4b461f58728a5567f83b8afc2db2e7f5b2c31a3600573bff7",
+    "body_png_sha256": "5ba13230811fe56b4426380c8581d937dd117250cd0982fb0812f19d02885f37",
+    "changed_json_paths": [
+      "/name",
+      "/textures/1/source"
+    ],
+    "all_other_data_identical": true,
+    "source_unchanged": true,
+    "body_alpha_identical": true,
+    "texture_size": [
+      899,
+      864
+    ],
+    "canvas_rectangle": [
+      164,
+      416,
+      1063,
+      1280
+    ],
+    "parts": 16,
+    "textures": 6,
+    "self_contained": true
+  },
+  "render": {
+    "engine": "Installed @ikijs/mcp real WebGL Iki engine, headless Chrome",
+    "poses_per_version": 25,
+    "fold_checked_poses": 646,
+    "failed_textures": [],
+    "fold_offenders": [],
+    "physics_offenders": [],
+    "fold_reports_identical": true,
+    "physics_reports_identical": true,
+    "matched_pixels": {
+      "rest": {
+        "alpha_identical": true,
+        "upper_face_region_identical": true
+      },
+      "head-tilt-left": {
+        "alpha_identical": true,
+        "upper_face_region_identical": true
+      },
+      "head-tilt-right": {
+        "alpha_identical": true,
+        "upper_face_region_identical": true
+      },
+      "body-tilt-left": {
+        "alpha_identical": true,
+        "upper_face_region_identical": true
+      },
+      "body-tilt-right": {
+        "alpha_identical": true,
+        "upper_face_region_identical": true
+      },
+      "combined-tilt-left": {
+        "alpha_identical": true,
+        "upper_face_region_identical": true
+      },
+      "combined-tilt-right": {
+        "alpha_identical": true,
+        "upper_face_region_identical": true
+      },
+      "opposed-left": {
+        "alpha_identical": true,
+        "upper_face_region_identical": true
+      },
+      "opposed-right": {
+        "alpha_identical": true,
+        "upper_face_region_identical": true
+      },
+      "stress-left": {
+        "alpha_identical": true,
+        "upper_face_region_identical": true
+      },
+      "stress-right": {
+        "alpha_identical": true,
+        "upper_face_region_identical": true
+      },
+      "blink": {
+        "alpha_identical": true,
+        "upper_face_region_identical": true
+      },
+      "mouth-open": {
+        "alpha_identical": true,
+        "upper_face_region_identical": true
+      },
+      "tail-left": {
+        "alpha_identical": true,
+        "upper_face_region_identical": true
+      },
+      "tail-right": {
+        "alpha_identical": true,
+        "upper_face_region_identical": true
+      },
+      "head-turn-left": {
+        "alpha_identical": true,
+        "upper_face_region_identical": true
+      },
+      "head-turn-right": {
+        "alpha_identical": true,
+        "upper_face_region_identical": true
+      },
+      "mouth-half": {
+        "alpha_identical": true,
+        "upper_face_region_identical": true
+      },
+      "breath-full": {
+        "alpha_identical": true,
+        "upper_face_region_identical": true
+      },
+      "smile": {
+        "alpha_identical": true,
+        "upper_face_region_identical": true
+      },
+      "surprised": {
+        "alpha_identical": true,
+        "upper_face_region_identical": true
+      },
+      "gaze-left": {
+        "alpha_identical": true,
+        "upper_face_region_identical": true
+      },
+      "gaze-right": {
+        "alpha_identical": true,
+        "upper_face_region_identical": true
+      },
+      "gaze-up": {
+        "alpha_identical": true,
+        "upper_face_region_identical": true
+      },
+      "gaze-down": {
+        "alpha_identical": true,
+        "upper_face_region_identical": true
+      }
+    }
+  },
+  "motion": {
+    "frames_per_version": 144,
+    "seconds": 12,
+    "physics_hz": 60,
+    "capture_fps": 12,
+    "parameter_traces_identical": true,
+    "failed_textures": {
+      "original": [],
+      "gothic-blouse": []
+    }
+  },
+  "desktop": {
+    "canvas_css_pixels": [
+      514,
+      472
+    ],
+    "view": {
+      "x": 0,
+      "y": 110,
+      "width": 1150,
+      "height": 1050
+    },
+    "basis": "Default 520x740 window minus CSS portrait insets; actual user resize/DPI may differ."
+  },
+  "final_verification": {
+    "protected_files_checked": 909,
+    "changed_protected_files": [],
+    "source_artwork_hashes_verified": true,
+    "delivered_model_hash_verified": true,
+    "embedded_body_matches_crop": true,
+    "full_canvas_alpha_identical": true,
+    "pixels_outside_clothing_identical": true,
+    "only_name_and_body_texture_changed": true,
+    "animated_preview_frames": 144,
+    "model_bytes": 5547370,
+    "live_application_picker_tested": false
+  },
+  "visual_assessment": {
+    "basis": "Inspected neutral, pose, garment, facial, gaze, desktop-size sheets and sampled physics frames.",
+    "blocking": [],
+    "acceptable": [
+      "Mild softened cloth extension at inner underarms and cuffs, chiefly visible enlarged.",
+      "Ruffles compressed above existing shorts; cuff frills and ribbon ends contained by original silhouette.",
+      "Lace backed with dark cloth to preserve alpha; decorative elements use existing body deformation."
+    ],
+    "pre_existing": [
+      "Underarm cutout edges and hair showing through.",
+      "Extreme facial and mouth crossfade limitations of v3."
+    ],
+    "manual_next_step": "Select the delivered model through the existing custom outfit picker and assess live desktop appearance."
+  }
+}
