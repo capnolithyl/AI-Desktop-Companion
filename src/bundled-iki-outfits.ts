@@ -16,6 +16,13 @@ export type ShippedIkiOutfit = {
   bundledUrl: string;
 };
 
+/** The manifest defines even the default rig's filename and display name. */
+const defaultEntry = manifest.outfits.find(entry => "default" in entry && entry.default === true);
+if (!defaultEntry) throw new Error("wardrobe.json must declare the default outfit.");
+export const defaultRigUrl = assets[prefix + defaultEntry.file];
+if (!defaultRigUrl) throw new Error("Default outfit asset is missing: " + defaultEntry.file);
+export const defaultOutfitName = defaultEntry.name;
+
 /** The default rig continues to use its established null selection. */
 export const shippedOutfits: ShippedIkiOutfit[] = manifest.outfits
   .filter(entry => !("default" in entry && entry.default === true))
