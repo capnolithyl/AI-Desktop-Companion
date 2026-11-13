@@ -138,7 +138,7 @@ pub fn memory_delete_interest(app: AppHandle, id: i64) -> Result<(),String> {
 /// This applies to imported and manual entries too; provenance protects from
 /// model guesses, not from the owner changing their mind.
 fn evidence_supports_status(name:&str,status:&str,evidence:&str)->bool{
-    let lower=format!(" {} ",evidence.to_lowercase().replace(['\\n','\\r'], " "));
+    let lower=format!(" {} ",evidence.to_lowercase().split_whitespace().collect::<Vec<_>>().join(" "));
     if !lower.contains(&name.to_lowercase()) { return false; }
     let any=|words:&[&str]| words.iter().any(|word|lower.contains(word));
     match status {
@@ -178,7 +178,7 @@ pub(crate) fn insert_from_conversation(
            source_message_id=excluded.source_message_id,updated_at=unixepoch()
          WHERE interest_items.status<>excluded.status
            AND ?9=1
-           AND (interest_items.status<>'favorite' OR excluded.status='favorite' OR ?10=1)",
+           AND (interest_items.status<>'favorite' OR excluded.status='favorite' OR excluded.status='dislike' OR ?10=1)",
         params![item.name,item.kind,item.status,item.rating,item.notes,tags,
             source_id,evidence,source_supported,allow_demotion]
     ).map_err(|e|e.to_string())?;
