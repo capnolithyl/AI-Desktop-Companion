@@ -192,7 +192,9 @@ fn resolve(db:&mut Connection,id:i64,action:&str)->Result<(),String> {
         if old_snapshot.as_deref()!=Some(present.as_str()) {
             return Err("Existing memory changed since this review. Dismiss and review the latest fact.".into());
         }
-        replace_confirmed_fact(&tx,existing_id,&new_fact,&evidence,&source)?;
+        if !replace_confirmed_fact(&tx,existing_id,&new_fact,&evidence,&source)? {
+            return Err("Correction is identical or the replacement already exists. Review current facts before resolving.".into());
+        }
         }
     } else if action=="keep_both" {
         let changed=tx.execute("INSERT OR IGNORE INTO user_memories(fact) VALUES(?1)",
