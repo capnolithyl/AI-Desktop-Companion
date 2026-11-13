@@ -18,6 +18,20 @@
     .heading { flex:1; min-width:0; } .heading strong { font-size:19px; }
     .heading small { display:block; margin-top:2px; color:#c8b6c2; font-size:12px; }
     .secondary { background:#4a3748; border:1px solid #795869; border-radius:10px; padding:9px; }
+    .chat-switcher { display:flex; gap:8px; padding:10px 14px; align-items:center; border-bottom:1px solid #65526066; }
+    .chat-switcher label { font-size:12px; color:#ebd3df; white-space:nowrap; }
+    #conversationSelect { min-width:0; flex:1; border-radius:10px; padding:10px 8px; background:#332638; border:1px solid #76556d; color:#f8e8f0; }
+    #newChat { background:#c18171; color:#20141a; font-weight:700; padding:11px; white-space:nowrap; border-radius:10px; }
+    .avatar-panel { position:relative; min-height:120px; height:clamp(160px,29dvh,290px); flex-shrink:0; overflow:hidden;
+      border-bottom:1px solid #65526066; background:radial-gradient(ellipse at 50% 65%,#56404c 0%,#251d28 70%); }
+    .avatar-panel.expanded { height:min(60dvh,540px); }
+    #avatarCanvas { width:100%; height:100%; display:block; touch-action:pan-y; }
+    .avatar-caption { position:absolute; bottom:10px; left:14px; background:#1a1119b8; border:1px solid #64485c9e; padding:6px 10px; border-radius:10px; font-size:12px; pointer-events:none; max-width:72%; }
+    .avatar-caption strong { display:block; font-size:13px; color:#ffbea0; }
+    .avatar-toolbar { position:absolute; top:10px; right:12px; }
+    .avatar-toolbar button { padding:8px 10px; border-radius:9px; background:#342835c9; border:1px solid #775969; font-size:12px; }
+    @media (max-height:580px) { .avatar-panel { height:130px; } .avatar-panel.expanded { height:60dvh; } }
+
     #messages { flex:1; overflow:auto; padding:18px 14px 30px; display:flex; flex-direction:column; gap:14px; }
     .welcome { text-align:center; color:#dbc4ce; margin:auto; max-width:28rem; line-height:1.6; }
     .bubble { width:fit-content; max-width:92%; padding:13px 15px; border-radius:17px; white-space:pre-wrap; overflow-wrap:anywhere; line-height:1.48; }
@@ -48,7 +62,7 @@
 <div id="gate">
   <div class="panel">
     <h1>Mikan 🐾</h1>
-    <p>Your desktop companion, wherever you are. Cloudflare Access protects the address; the additional private key unlocks her chat relay.</p>
+    <p>Your desktop companion, wherever you are. Your private Tailscale connection reaches the desktop, and this additional access key unlocks her chat relay.</p>
     <form id="unlock">
       <label for="key">Remote access key</label>
       <input id="key" type="password" spellcheck="false" autocomplete="off" minlength="32" required>
@@ -65,6 +79,18 @@
     <button id="report" class="secondary" type="button" title="Report an issue">Report</button>
     <button id="lock" class="secondary" type="button" title="Lock this browser">Lock</button>
   </header>
+  <div class="chat-switcher">
+    <label for="conversationSelect">Chats</label>
+    <select id="conversationSelect" aria-label="Choose conversation" disabled>
+      <option value="">New conversation</option>
+    </select>
+    <button id="newChat" type="button" disabled>+ New</button>
+  </div>
+  <section id="avatarPanel" class="avatar-panel" aria-label="Mikan's animated portrait">
+    <canvas id="avatarCanvas" role="img" aria-label="Animated Iki avatar of Mikan"></canvas>
+    <div class="avatar-toolbar"><button id="enlargeAvatar" type="button" aria-pressed="false">Enlarge</button></div>
+    <div class="avatar-caption"><strong id="outfitLabel">Mikan</strong><span id="avatarStatus">Waiting for her outfit…</span></div>
+  </section>
   <main id="messages" aria-live="polite">
     <p class="welcome">This is the same Mikan running in your desktop app. Her active conversation will appear here.</p>
   </main>
@@ -73,7 +99,7 @@
       <textarea id="message" rows="1" placeholder="Talk to Mikan…" maxlength="4000" aria-label="Message Mikan"></textarea>
       <button class="send" id="send" type="submit" title="Send" disabled>↑</button>
     </form>
-    <div class="meta"><span id="conversation">Desktop conversation</span><span>Remote chat · Text only</span></div>
+    <div class="meta"><span id="conversation">Desktop conversation</span><span>Private via Tailscale · Text chat</span></div>
   </div>
 </div>
 <div id="reportPanel">
@@ -85,6 +111,7 @@
     <div class="actions"><button id="cancelReport" class="secondary" type="button">Cancel</button><button id="saveReport" class="wide" type="button">Save report</button></div>
   </div>
 </div>
+<script src="/avatar-engine.js"></script>
 <script>
 (function () {
   "use strict";
@@ -100,10 +127,28 @@
   var error = document.getElementById("error");
   var reportPanel = document.getElementById("reportPanel");
   var idSignature = "";
+  var chatListSignature = "";
+  var avatarController = null;
+  var avatarIdentity = "";
+  var avatarLoading = false;
+  var avatarRetryAt = 0;
+  var avatarReactionSerial = 0;
+  var avatarPanel = document.getElementById("avatarPanel");
+  var avatarStatus = document.getElementById("avatarStatus");
+  var outfitLabel = document.getElementById("outfitLabel");
+  var canvas = document.getElementById("avatarCanvas");
+  var conversationSelect = document.getElementById("conversationSelect");
+  var newChat = document.getElementById("newChat");
+  function stopAvatar() {
+    if (avatarController) avatarController.destroy();
+    avatarController = null;
+    avatarIdentity = "";
+    avatarReactionSerial = 0;
+  }
   function showUnlocked(yes) {
     gate.style.display = yes ? "none" : "flex";
     app.style.display = yes ? "flex" : "none";
-    if (!yes) { status.textContent = "Locked"; current = null; }
+    if (!yes) { status.textContent = "Locked"; current = null; stopAvatar(); }
   }
   async function api(path, options) {
     var response = await fetch(path, Object.assign({}, options || {}, {
@@ -119,9 +164,76 @@
     }
     return payload;
   }
+  async function syncAvatar(data) {
+    if (!data.connected || !data.avatar) {
+      avatarStatus.textContent = "Desktop avatar offline";
+      return;
+    }
+    var avatar = data.avatar;
+    outfitLabel.textContent = avatar.name || "Mikan";
+    var identity = String(avatar.id) + ":" + String(avatar.revision);
+    if (avatarController && identity === avatarIdentity) {
+      avatarController.setOffset(avatar.verticalOffset || 0);
+      avatarController.setSpeaking(!!avatar.speaking);
+      if (avatar.reactionSerial && avatar.reactionSerial !== avatarReactionSerial) {
+        avatarReactionSerial = avatar.reactionSerial;
+        if (avatar.reaction) avatarController.react(avatar.reaction);
+      }
+      avatarStatus.textContent = "Animated · " + (avatar.speaking ? "Speaking" : "Idle");
+      return;
+    }
+    if (avatarLoading || Date.now() < avatarRetryAt) return;
+    avatarLoading = true;
+    avatarStatus.textContent = "Loading selected Iki outfit…";
+    stopAvatar();
+    try {
+      if (!window.MikanRemoteAvatar) throw new Error("Avatar renderer missing");
+      var raw = await api("/api/avatar/model");
+      // A login change or outfit switch can happen while the rig downloads.
+      if (!key || !current || !current.avatar ||
+          String(current.avatar.id) + ":" + String(current.avatar.revision) !== identity) return;
+      var controller = window.MikanRemoteAvatar.createRemoteAvatar(canvas, raw, avatar.verticalOffset || 0);
+      avatarController = controller;
+      await controller.ready;
+      avatarIdentity = identity;
+      avatarController.setSpeaking(!!avatar.speaking);
+      avatarReactionSerial = avatar.reactionSerial || 0;
+      avatarStatus.textContent = "Animated · Idle";
+    } catch (e) {
+      stopAvatar();
+      avatarStatus.textContent = "Avatar unavailable: " + e.message;
+      avatarRetryAt = Date.now() + 5000;
+    } finally {
+      avatarLoading = false;
+    }
+  }
+  function renderChats(data) {
+    var chats = Array.isArray(data.conversations) ? data.conversations : [];
+    var signature = chats.map(function (c) { return c.id + ":" + c.title; }).join("|");
+    if (signature !== chatListSignature) {
+      var fragment = document.createDocumentFragment();
+      var fresh = document.createElement("option");
+      fresh.value = ""; fresh.textContent = "New conversation"; fragment.append(fresh);
+      chats.forEach(function (chat) {
+        var option = document.createElement("option");
+        option.value = chat.id; option.textContent = chat.title || "Untitled chat";
+        fragment.append(option);
+      });
+      conversationSelect.replaceChildren(fragment);
+      chatListSignature = signature;
+    }
+    conversationSelect.value = data.conversationId || "";
+    var enabled = !!data.connected && !data.busy && !data.queued && !inFlight;
+    conversationSelect.disabled = !enabled;
+    newChat.disabled = !enabled;
+    var active = chats.find(function (chat) { return chat.id === data.conversationId; });
+    document.getElementById("conversation").textContent = active
+      ? active.title : data.conversationId ? "Shared conversation" : "New conversation";
+  }
   function render(data) {
     var entries = Array.isArray(data.messages) ? data.messages : [];
-    var signature = entries.map(function (m) { return m.id + ":" + m.content.length + ":" + m.content.slice(-25); }).join("|");
+    var signature = String(data.conversationId) + "|" +
+      entries.map(function (m) { return m.id + ":" + m.content.length + ":" + m.content.slice(-25); }).join("|");
     if (signature !== idSignature) {
       var atBottom = messages.scrollHeight - messages.scrollTop - messages.clientHeight < 160;
       var fragment = document.createDocumentFragment();
@@ -147,8 +259,9 @@
       idSignature = signature;
     }
     status.textContent = !data.connected ? "Desktop offline" : (data.busy || data.queued ? "Thinking…" : "Online · " + (data.model || "local model"));
-    document.getElementById("conversation").textContent = data.conversationId ? "Shared conversation · " + data.conversationId.slice(0,8) : "New conversation";
     current = data;
+    renderChats(data);
+    void syncAvatar(data);
     send.disabled = !data.connected || data.busy || data.queued || inFlight || !message.value.trim();
   }
   async function refresh() {
@@ -179,6 +292,35 @@
       key = "";
       error.textContent = e.message;
     }
+  });
+  async function changeConversation(action, id) {
+    if (inFlight || !current || !current.connected || current.busy || current.queued) return;
+    inFlight = true;
+    conversationSelect.disabled = true;
+    newChat.disabled = true;
+    send.disabled = true;
+    try {
+      await api("/api/conversation", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: action, conversationId: id || null })
+      });
+      await refresh();
+    } catch (e) {
+      status.textContent = e.message;
+      await refresh();
+    } finally { inFlight = false; }
+  }
+  newChat.addEventListener("click", function () { void changeConversation("new"); });
+  conversationSelect.addEventListener("change", function () {
+    var chosen = conversationSelect.value;
+    if (chosen === (current && current.conversationId || "")) return;
+    void changeConversation(chosen ? "open" : "new", chosen);
+  });
+  document.getElementById("enlargeAvatar").addEventListener("click", function () {
+    var expanded = avatarPanel.classList.toggle("expanded");
+    this.textContent = expanded ? "Shrink" : "Enlarge";
+    this.setAttribute("aria-pressed", expanded ? "true" : "false");
   });
   document.getElementById("lock").addEventListener("click", function () {
     sessionStorage.removeItem("mikan-remote-key"); key = ""; showUnlocked(false);

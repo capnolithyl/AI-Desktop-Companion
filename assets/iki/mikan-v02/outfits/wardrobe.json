@@ -41,7 +41,9 @@
       "season": "autumn",
       "holiday": "none",
       "favorite": false
-    },
+    }
+  ],
+  "plannedOutfits": [
     {
       "id": "gothic-striped-v1-mikan-gothic-striped-v1",
       "name": "Gothic Striped",

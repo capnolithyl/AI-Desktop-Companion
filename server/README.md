@@ -9,16 +9,24 @@ pipeline and mirrors the currently active desktop conversation.
 ## What works
 
 - Text chat from a modern web browser, including partial responses as the
-  desktop receives them. Phone and PC share **one active conversation**.
+  desktop receives them. Phone and PC share the desktop's SQLite chat archive.
+- Create new chats and switch between saved conversations from the browser.
+  Selecting a chat also selects it on the desktop; both surfaces always use
+  the same active conversation.
+- The browser renders Mikan's actual selected Iki outfit using the same engine
+  and animation data: idle breathing/blinks, expressions, and pointer gaze.
+  The active rig is loaded on demand; custom imported outfits are passed
+  to the relay in RAM, not copied to a new database.
 - Local model, personalities, facts, history, and search remain on the PC.
 - "Report" button stores a note and recent excerpts in
   %USERPROFILE%\.mikan\remote-issues.jsonl for reviewing the next day.
 - An extra randomly generated remote key protects chat API requests,
   in addition to required Cloudflare Access.
 
-**Not yet:** switching or creating conversations in the browser, voice,
-file attachments, browser screen capture, changing models or settings,
-remote native Tauri commands, or automatic startup of the Node relay.
+**Not yet:** voice playback on the phone, file attachments, browser screen
+capture, changing models/settings, remote native Tauri commands, or automatic
+startup of the Node relay. Iki rendering needs browser WebGL and may take
+a moment to load its ~5–6 MB selected outfit on first use.
 
 The desktop must be running (hidden in tray is fine). This first version
 starts a separate small Node.js relay which will later be integrated.
@@ -27,9 +35,12 @@ starts a separate small Node.js relay which will later be integrated.
 
 On Windows, with Node.js 22+ and an installed **Mikan v0.8.5 or newer**:
 
-1. In the checkout of the GitHub repository run:
+1. In the updated checkout of the GitHub repository (with dependencies installed)
+   run:
 
         npm run server
+
+   This also builds the small browser Iki renderer locally using Vite.
 
 2. Leave that PowerShell window open. In another terminal run:
 
@@ -44,7 +55,26 @@ If the browser says Desktop offline, the desktop app may be an older
 build. Install the new Windows build and restart it. The desktop retries
 the relay connection automatically.
 
-## Cloudflare Access: CREATE THIS FIRST
+## Tailscale Serve (recommended for personal access)
+
+This does not require Cloudflare, a custom subdomain, port forwarding or
+changing Hostinger DNS. Install and sign into Tailscale on both Windows and
+your phone, then run in PowerShell:
+
+    & "C:\\Program Files\\Tailscale\\tailscale.exe" serve --bg http://127.0.0.1:3847
+
+Use your private tailnet hostname in the phone's browser. The relay's
+`publicHost` allowlist must match that hostname **without** `https://`.
+The personal default is `marcus-vostro.tailc46461.ts.net`.
+Keep the local access key too; the web UI stores it only for the browser
+tab/session.
+
+Remote chat selection and avatar rendering require **both** the updated
+desktop build and the updated `npm run server` process. A changed Node
+server alone cannot make an older installed desktop expose chat actions or
+its current outfit. Restart both after updating.
+
+## Cloudflare Access (optional public-hostname alternative): CREATE THIS FIRST
 
 In Cloudflare dashboard → Zero Trust → Access controls → Applications:
 
@@ -124,6 +154,8 @@ traffic once remote access is enabled.
   full hostname **before exposing remote chat**.
 - Chat rejected: desktop busy or another message queued.
 - No voice: browser TTS streaming is not part of this version.
+- Avatar not visible: update both desktop and server, verify WebGL is supported
+  in the phone browser, and check `npm run server` built the avatar runtime.
 
 Official instructions:
 - https://developers.cloudflare.com/tunnel/get-started/

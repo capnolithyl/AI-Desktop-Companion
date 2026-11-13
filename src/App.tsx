@@ -83,6 +83,7 @@ import {
 import { reactionFromReply, type AvatarReaction, type AvatarReactionKind } from "./avatar-reactions";
 import { extractReplyEmojis, MIN_EMOJI_BUBBLE_SECONDS, MAX_EMOJI_BUBBLE_SECONDS } from "./emoji-reactions";
 import { avatarDebugText, type AvatarDebugSnapshot } from "./avatar-debug";
+import { defaultOutfitName } from "./bundled-iki-outfits";
 import { version as DESKTOP_VERSION } from "../package.json";
 import {
   loadAvatarDisplay, saveAvatarDisplay,
@@ -2688,6 +2689,15 @@ export default function App() {
   // desktop turns. If the relay isn't running, retry slowly and stay local.
   const remoteSendRef = useRef<(text: string) => Promise<void>>(async () => {});
   remoteSendRef.current = text => send(undefined, text);
+  const remoteNewRef = useRef<() => void>(() => {});
+  remoteNewRef.current = clearChat;
+  const remoteOpenRef = useRef<(id: string) => Promise<void>>(async () => {});
+  remoteOpenRef.current = openConversation;
+  // Custom outfits live in desktop IndexedDB. Only the selected file is
+  // temporarily copied into the loopback relay's RAM for authenticated browsers.
+  const remoteRigRef = useRef<{id: string; revision: number; file: Blob} | null>(null);
+  remoteRigRef.current = ikiRig?.file
+    ? { id: ikiRig.id, revision: ikiRig.savedAt, file: ikiRig.file } : null;
   const remoteBusyRef = useRef(false);
   remoteBusyRef.current = busy || !memoryReady || attachmentBusy ||
     !!pendingAttachment || !!pendingScreenshot || !!input.trim();
@@ -2696,6 +2706,17 @@ export default function App() {
     conversationId: activeConversationId,
     model: settings.model,
     busy,
+    conversations: conversations.map(({ id, title, updatedAt }) => ({ id, title, updatedAt })),
+    avatar: {
+      id: ikiRig?.id ?? "default",
+      name: ikiRig?.name ?? defaultOutfitName,
+      custom: !!ikiRig?.file,
+      revision: ikiRig?.savedAt ?? 0,
+      verticalOffset: settings.appearance.avatarVerticalOffset,
+      reaction: avatarReaction?.kind ?? null,
+      reactionSerial: avatarReaction?.serial ?? 0,
+      speaking: voiceState === "playing"
+    },
     messages: messages.map(({ id, role, content, createdAt }) => ({
       id, role, content, createdAt
     }))
@@ -2704,6 +2725,7 @@ export default function App() {
     let disposed = false;
     let timer: ReturnType<typeof setTimeout>;
     let lastSnapshot = "";
+    let lastRigSignature = "";
     let dispatching = false;
     const origin = "http://127.0.0.1:3848";
     const agentHeaders = { "X-Mikan-Agent": "desktop" };
@@ -2720,25 +2742,58 @@ export default function App() {
           if (!response.ok) throw new Error("Relay is unavailable");
           lastSnapshot = body;
         }
+        const activeRig = remoteRigRef.current;
+        if (activeRig) {
+          const signature = activeRig.id + ":" + activeRig.revision;
+          if (signature !== lastRigSignature) {
+            const rigText = await activeRig.file.text();
+            const uploaded = await fetch(origin + "/agent/avatar-rig", {
+              method: "POST",
+              headers: { ...agentHeaders, "Content-Type": "application/json" },
+              body: JSON.stringify({ id: activeRig.id, rig: rigText })
+            });
+            if (!uploaded.ok) throw new Error("Remote outfit upload failed");
+            lastRigSignature = signature;
+          }
+        }
         const response = await fetch(origin + "/agent/next", { headers: agentHeaders });
         if (!response.ok) throw new Error("Relay is unavailable");
-        const data = await response.json() as { job?: { id: string; text: string } | null };
+        const data = await response.json() as {
+          job?: { id: string; kind?: "send" | "new_chat" | "open_chat";
+            text?: string; conversationId?: string | null } | null
+        };
         if (data.job && !dispatching && !remoteBusyRef.current) {
           dispatching = true;
-          const ack = await fetch(origin + "/agent/ack", {
+          const job = data.job;
+          const ack = async () => fetch(origin + "/agent/ack", {
             method: "POST",
             headers: { ...agentHeaders, "Content-Type": "application/json" },
-            body: JSON.stringify({ id: data.job.id })
+            body: JSON.stringify({ id: job.id })
           });
-          if (ack.ok) {
-            void remoteSendRef.current(data.job.text).finally(() => { dispatching = false; });
+          if (!job.kind || job.kind === "send") {
+            const accepted = await ack();
+            if (accepted.ok && typeof job.text === "string") {
+              void remoteSendRef.current(job.text).finally(() => { dispatching = false; });
+            } else dispatching = false;
           } else {
-            dispatching = false;
+            try {
+              if (job.kind === "new_chat") remoteNewRef.current();
+              else if (job.kind === "open_chat" && job.conversationId)
+                await remoteOpenRef.current(job.conversationId);
+            } catch (error) {
+              console.warn("Remote conversation action failed:", error);
+            } finally {
+              await ack();
+              // Force the post-switch state to be forwarded on the next tick.
+              lastSnapshot = "";
+              dispatching = false;
+            }
           }
         }
       } catch {
         retryMs = 12000;
         lastSnapshot = "";
+        lastRigSignature = "";
       }
       if (!disposed) timer = setTimeout(() => void tick(), retryMs);
     };
