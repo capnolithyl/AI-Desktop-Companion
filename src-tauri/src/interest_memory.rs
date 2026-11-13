@@ -233,6 +233,47 @@ mod tests {
         assert!(checked(invalid).is_err());
     }
     #[test]
+    fn separate_sqlite_collection_tracks_fts_and_protects_curated_entries() {
+        let db=Connection::open_in_memory().unwrap();
+        memory::initialize_database(&db).unwrap();
+        db.execute(
+            "INSERT INTO conversations(id,title,created_at,updated_at) VALUES('c','test',0,0)",[]
+        ).unwrap();
+        db.execute(
+            "INSERT INTO messages(id,conversation_id,role,content,created_at)
+             VALUES('u','c','user','I love Higurashi',0)",[]
+        ).unwrap();
+        let mut preference=IncomingInterest {
+            name:"Higurashi".into(),kind:"anime".into(),status:"like".into(),
+            rating:None,notes:String::new(),tags:vec![]
+        };
+        assert!(insert_from_conversation(&db,preference.clone(),"u","I love Higurashi").unwrap());
+        assert!(!insert_from_conversation(&db,preference.clone(),"u","I love Higurashi").unwrap());
+        let hits:i64=db.query_row(
+            "SELECT count(*) FROM interest_search WHERE interest_search MATCH 'higurashi'",
+            [],|r|r.get(0)
+        ).unwrap();
+        assert_eq!(hits,1);
+        preference.status="dislike".into();
+        assert!(insert_from_conversation(&db,preference,"u","I dislike Higurashi").unwrap());
+        let saved:String=db.query_row(
+            "SELECT status FROM interest_items WHERE name='Higurashi'",[],|r|r.get(0)
+        ).unwrap();
+        assert_eq!(saved,"dislike");
+        db.execute(
+            "INSERT INTO interest_items(name,kind,status,source) VALUES('Bathory','band','favorite','import')",[]
+        ).unwrap();
+        let curated=IncomingInterest {
+            name:"bathory".into(),kind:"band".into(),status:"dislike".into(),
+            rating:None,notes:String::new(),tags:vec![]
+        };
+        assert!(!insert_from_conversation(&db,curated,"u","I dislike Bathory").unwrap());
+        let preserved:String=db.query_row(
+            "SELECT status FROM interest_items WHERE name='Bathory'",[],|r|r.get(0)
+        ).unwrap();
+        assert_eq!(preserved,"favorite");
+    }
+    #[test]
     fn kind_detection_does_not_treat_generic_chat_as_collection_search() {
         assert!(category_for_query("hello there").is_empty());
         assert_eq!(category_for_query("recommend anime"),vec!["anime"]);
