@@ -932,8 +932,8 @@ export default function App() {
         await selectIkiOutfit(chosen.id);
         if (disposed) return;
         setIkiRig(ikiOutfits.find(outfit => outfit.id === chosen.id) ?? null);
-        setAvatarDisplay("animated");
-        saveAvatarDisplay("animated");
+        // Respect an intentional Static portrait selection. The chosen outfit
+        // will appear next time the user switches back to animated mode.
         const updated = { ...config, lastDay: day, lastId: wardrobeKey(chosen.id) };
         saveWardrobeConfig(updated);
         setWardrobeConfig(updated);
