@@ -18,6 +18,9 @@ import {
 import { homedir } from "node:os";
 import { join, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import {
+  createLocalReport, safeReportDiagnostics, publicIssuePreview, publishGitHubIssue
+} from "./reporting.mjs";
 
 export const PUBLIC_PORT = 3847;
 export const AGENT_PORT = 3848;
@@ -122,6 +125,7 @@ export function createBridge({
   key,
   reportsPath = REPORTS_PATH,
   publicHost = "marcus-vostro.tailc46461.ts.net",
+  issuePublisher = publishGitHubIssue,
 } = {}) {
   if (typeof key !== "string" || key.length < 32)
     throw new Error("A 32+ character remote key is required");
@@ -129,12 +133,15 @@ export function createBridge({
     conversationId: null, model: "", busy: false,
     messages: [], conversations: [], avatar: null,
     provider: "local", models: [], openrouterModel: "", geminiModel: "",
-    modelStatus: null, controlsBlocked: true
+    modelStatus: null, controlsBlocked: true,
+    reportDiagnostics: null
   };
   let customRig = null;
   let customRigId = null;
   let agentSeen = 0;
   let pending = null;
+  let issuePreview = null;
+  let lastIssueAttempt = 0;
   const isAuthorized = (request) => {
     const auth = request.headers.authorization || "";
     return auth.startsWith("Bearer ") && sameSecret(auth.slice(7), key);
@@ -265,26 +272,72 @@ export function createBridge({
         }
         pending = { id: randomBytes(12).toString("hex"), kind: "send", text: message };
         json(response, 202, { id: pending.id });
-      } else if (request.method === "POST" && url.pathname === "/api/report") {
+      } else if (request.method === "POST" && url.pathname === "/api/report/preview") {
         const body = await readJson(request, 4096);
         const note = typeof body.note === "string" ? body.note.trim() : "";
         if (!note || note.length > 1500)
           return fail(response, 400, "Enter a note up to 1500 characters");
-        mkdirSync(dirname(reportsPath), { recursive: true });
-        appendFileSync(
-          reportsPath,
-          JSON.stringify({
-            at: new Date().toISOString(),
-            note,
-            conversationId: desktop.conversationId,
-            messages: desktop.messages.slice(-8).map((m) => ({
-              role: m.role,
-              content: m.content.slice(0, 1800),
-            })),
-          }) + "\n",
-          { encoding: "utf8", mode: 0o600 },
-        );
-        json(response, 201, { saved: true });
+        const report = createLocalReport(desktop, note, request.headers["user-agent"]);
+        const issue = publicIssuePreview(report);
+        issuePreview = {
+          id: randomBytes(16).toString("hex"),
+          at: Date.now(), note,
+          title: issue.title, body: issue.body
+        };
+        json(response, 200, {
+          previewId: issuePreview.id,
+          title: issue.title,
+          body: issue.body
+        });
+      } else if (request.method === "POST" && url.pathname === "/api/report") {
+        const body = await readJson(request, 4096);
+        const note = typeof body.note === "string" ? body.note.trim() : "";
+        const destination = body.destination ?? "local";
+        if (!note || note.length > 1500)
+          return fail(response, 400, "Enter a note up to 1500 characters");
+        if (!["local", "github", "both"].includes(destination))
+          return fail(response, 400, "Invalid report destination");
+        const includeGitHub = destination !== "local";
+        const includeLocal = destination !== "github";
+        if (includeGitHub && (
+          !issuePreview || issuePreview.id !== body.previewId ||
+          issuePreview.note !== note ||
+          Date.now() - issuePreview.at >= 10 * 60 * 1000
+        )) return fail(response, 409, "Review the GitHub issue preview before publishing");
+        // Explicitly reviewed, one-time submission; never publish as a side
+        // effect of a normal local report or automatic chat synchronization.
+        const toPublish = includeGitHub ? issuePreview : null;
+        if (includeGitHub) {
+          if (Date.now() - lastIssueAttempt < 15000)
+            return fail(response, 429, "Please avoid submitting duplicate issues");
+          issuePreview = null;
+          lastIssueAttempt = Date.now();
+        }
+        let githubUrl = null;
+        let githubError = null;
+        if (toPublish) {
+          try {
+            githubUrl = await issuePublisher({ title: toPublish.title, body: toPublish.body });
+          } catch (error) {
+            githubError = error instanceof Error ? error.message : "GitHub CLI failed";
+          }
+        }
+        if (includeLocal) {
+          const report = createLocalReport(desktop, note, request.headers["user-agent"]);
+          if (includeGitHub) report.github = {
+            attempted: true, url: githubUrl, error: githubError
+          };
+          mkdirSync(dirname(reportsPath), { recursive: true });
+          appendFileSync(reportsPath, JSON.stringify(report) + "\n",
+            { encoding: "utf8", mode: 0o600 });
+        }
+        if (githubError && !includeLocal)
+          return fail(response, 502, githubError);
+        json(response, includeLocal ? 201 : 200, {
+          saved: includeLocal,
+          githubUrl,
+          githubError
+        });
       } else {
         fail(response, 404, "Not found");
       }
@@ -347,6 +400,7 @@ export function createBridge({
           messages: safeMessages(body.messages),
           conversations: safeConversations(body.conversations),
           avatar: safeAvatar(body.avatar),
+          reportDiagnostics: safeReportDiagnostics(body.reportDiagnostics),
         };
         json(response, 200, { ok: true });
       } else if (request.method === "POST" && url.pathname === "/agent/avatar-rig") {
