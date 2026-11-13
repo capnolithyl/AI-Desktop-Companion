@@ -2693,6 +2693,11 @@ export default function App() {
   remoteNewRef.current = clearChat;
   const remoteOpenRef = useRef<(id: string) => Promise<void>>(async () => {});
   remoteOpenRef.current = openConversation;
+  const remoteModelRef = useRef<(choice: string) => void>(() => {});
+  // Reuse the SAME validation, provider settings and persistence as the dock.
+  remoteModelRef.current = switchDockModel;
+  const remoteRefreshModelsRef = useRef<() => Promise<void>>(async () => {});
+  remoteRefreshModelsRef.current = () => refreshModels(settings.endpoint);
   // Custom outfits live in desktop IndexedDB. Only the selected file is
   // temporarily copied into the loopback relay's RAM for authenticated browsers.
   const remoteRigRef = useRef<{id: string; revision: number; file: Blob} | null>(null);
@@ -2702,9 +2707,19 @@ export default function App() {
   remoteBusyRef.current = busy || !memoryReady || attachmentBusy ||
     !!pendingAttachment || !!pendingScreenshot || !!input.trim();
   const remoteSnapshotRef = useRef<object>({});
+  const remoteModelReply = [...messages].reverse().find(m =>
+    m.role === "assistant" && !m.failed && !!m.diagnostics?.model
+  );
+  const remoteModelStatus = modelSwitcherStatus(settings, remoteModelReply?.diagnostics, busy, activity);
   remoteSnapshotRef.current = {
     conversationId: activeConversationId,
     model: settings.model,
+    provider: settings.provider,
+    openrouterModel: settings.openrouterModel,
+    geminiModel: settings.geminiModel,
+    models: availableModels,
+    modelStatus: remoteModelStatus,
+    controlsBlocked: remoteBusyRef.current,
     busy,
     conversations: conversations.map(({ id, title, updatedAt }) => ({ id, title, updatedAt })),
     avatar: {
@@ -2759,8 +2774,8 @@ export default function App() {
         const response = await fetch(origin + "/agent/next", { headers: agentHeaders });
         if (!response.ok) throw new Error("Relay is unavailable");
         const data = await response.json() as {
-          job?: { id: string; kind?: "send" | "new_chat" | "open_chat";
-            text?: string; conversationId?: string | null } | null
+          job?: { id: string; kind?: "send" | "new_chat" | "open_chat" | "switch_model" | "refresh_models";
+            text?: string; conversationId?: string | null; modelChoice?: string } | null
         };
         if (data.job && !dispatching && !remoteBusyRef.current) {
           dispatching = true;
@@ -2780,6 +2795,10 @@ export default function App() {
               if (job.kind === "new_chat") remoteNewRef.current();
               else if (job.kind === "open_chat" && job.conversationId)
                 await remoteOpenRef.current(job.conversationId);
+              else if (job.kind === "switch_model" && job.modelChoice)
+                remoteModelRef.current(job.modelChoice);
+              else if (job.kind === "refresh_models")
+                await remoteRefreshModelsRef.current();
             } catch (error) {
               console.warn("Remote conversation action failed:", error);
             } finally {

@@ -57,6 +57,10 @@ test("browser relay requires a private key and delegates to the desktop, not a s
   const history = [{id:"one",role:"user",content:"Hello from the desktop",createdAt:100}];
   assert.equal((await request(agent + "/agent/state", "POST", desktopHeaders, {
     conversationId:"same-desktop-conversation",model:"qwen3.5:9b",busy:false,messages:history,
+    provider:"local", models:["qwen3.5:9b","gpt-oss:20b"],
+    openrouterModel:"openrouter/free", geminiModel:"gemini-3.8-flash",
+    modelStatus:{label:"● Local · qwen3.5:9b",title:"Ollama qwen3.5:9b"},
+    controlsBlocked:false,
     conversations:[
       {id:"same-desktop-conversation",title:"Our first chat",updatedAt:200},
       {id:"older-chat",title:"Old conversation",updatedAt:100}
@@ -69,6 +73,9 @@ test("browser relay requires a private key and delegates to the desktop, not a s
   assert.deepEqual(state.messages, history);
   assert.equal(state.conversations[1].title, "Old conversation");
   assert.equal(state.avatar.id, "default");
+  assert.deepEqual(state.models, ["qwen3.5:9b","gpt-oss:20b"]);
+  assert.equal(state.provider, "local");
+  assert.match(state.modelStatus.label, /qwen3.5:9b/);
   assert.equal((await request(base + "/api/avatar/model")).status, 401);
   const bundled = await request(base + "/api/avatar/model", "GET", authorized);
   assert.equal(bundled.status, 200);
@@ -108,6 +115,44 @@ test("browser relay requires a private key and delegates to the desktop, not a s
   const newJob = (await (await request(agent + "/agent/next", "GET", desktopHeaders)).json()).job;
   assert.equal(newJob.kind, "new_chat");
   assert.equal((await request(agent + "/agent/ack", "POST", desktopHeaders, {id:newJob.id})).status,200);
+
+  // Remote model selection uses the installed list from desktop, never arbitrary
+  // model IDs, URLs or new credentials supplied by the phone.
+  assert.equal((await request(base + "/api/model","POST",{"Content-Type":"application/json"},
+    {action:"switch",choice:"local:gpt-oss:20b"})).status,401);
+  assert.equal((await request(base + "/api/model","POST",jsonHeaders,
+    {action:"switch",choice:"local:not-installed"})).status,400);
+  assert.equal((await request(base + "/api/model","POST",jsonHeaders,
+    {action:"switch",choice:"local:http://somehost"})).status,400);
+  assert.equal((await request(base + "/api/model","POST",jsonHeaders,
+    {action:"switch",choice:"__status__"})).status,400);
+  assert.equal((await request(base + "/api/model","POST",jsonHeaders,
+    {action:"switch",choice:"local:gpt-oss:20b"})).status,202);
+  assert.equal((await request(base + "/api/model","POST",jsonHeaders,
+    {action:"refresh"})).status,409);
+  const modelJob = (await (await request(agent + "/agent/next","GET",desktopHeaders)).json()).job;
+  assert.equal(modelJob.kind,"switch_model");
+  assert.equal(modelJob.modelChoice,"local:gpt-oss:20b");
+  assert.equal((await request(agent + "/agent/ack","POST",desktopHeaders,{id:modelJob.id})).status,200);
+  for (const choice of ["auto","openrouter","gemini"]) {
+    assert.equal((await request(base + "/api/model","POST",jsonHeaders,
+      {action:"switch",choice})).status,202);
+    const job = (await (await request(agent + "/agent/next","GET",desktopHeaders)).json()).job;
+    assert.equal(job.kind,"switch_model");
+    assert.equal(job.modelChoice,choice);
+    assert.equal((await request(agent + "/agent/ack","POST",desktopHeaders,{id:job.id})).status,200);
+  }
+  assert.equal((await request(base + "/api/model","POST",jsonHeaders,
+    {action:"refresh"})).status,202);
+  const refreshJob = (await (await request(agent + "/agent/next","GET",desktopHeaders)).json()).job;
+  assert.equal(refreshJob.kind,"refresh_models");
+  assert.equal((await request(agent + "/agent/ack","POST",desktopHeaders,{id:refreshJob.id})).status,200);
+  assert.equal((await request(agent + "/agent/state","POST",desktopHeaders,{
+    conversationId:"same-desktop-conversation",model:"qwen3.5:9b",
+    provider:"auto", models:["qwen3.5:9b"],controlsBlocked:true,busy:false
+  })).status,200);
+  assert.equal((await request(base + "/api/model","POST",jsonHeaders,
+    {action:"switch",choice:"auto"})).status,409);
   // The browser only receives the active custom rig, never a path supplied by its request.
   assert.equal((await request(agent + "/agent/state", "POST", desktopHeaders, {
     conversationId:"older-chat",model:"qwen3.5:9b",busy:false,messages:[],

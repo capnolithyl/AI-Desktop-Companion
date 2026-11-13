@@ -16,7 +16,7 @@
     header { display:flex; align-items:center; gap:12px; border-bottom:1px solid #65526066; padding:12px 18px; }
     .avatar { width:45px; height:45px; display:grid; place-items:center; font-size:26px; background:#593b45; border:1px solid #ab7883; border-radius:18px; }
     .heading { flex:1; min-width:0; } .heading strong { font-size:19px; }
-    .heading small { display:block; margin-top:2px; color:#c8b6c2; font-size:12px; }
+.heading small { display:block; margin-top:2px; color:#c8b6c2; font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
     .secondary { background:#4a3748; border:1px solid #795869; border-radius:10px; padding:9px; }
     .chat-switcher { display:flex; gap:8px; padding:10px 14px; align-items:center; border-bottom:1px solid #65526066; }
     .chat-switcher label { font-size:12px; color:#ebd3df; white-space:nowrap; }
@@ -43,6 +43,10 @@
     textarea { resize:none; min-height:46px; max-height:135px; flex:1; border-radius:14px; border:1px solid #76556d; color:#fff3f9; background:#30232f; outline:0; padding:12px; }
     textarea:focus, input:focus { border-color:#ffad7e; }
     .send { background:#ffad7e; color:#271923; border-radius:12px; font-size:21px; min-width:46px; height:46px; font-weight:700; }
+    .model-picker { display:flex; align-items:center; gap:8px; padding:10px 2px 3px; }
+    .model-picker label { color:#e5ccd8; font-size:12px; white-space:nowrap; }
+    #modelSelect { flex:1; min-width:0; padding:9px; border-radius:10px; border:1px solid #76556d; background:#30232f; color:#fff3f9; }
+    #refreshModels { border-radius:10px; background:#4a3748; border:1px solid #795869; padding:9px 12px; font-size:14px; }
     .meta { display:flex; gap:8px; justify-content:space-between; color:#b9a8b4; font-size:11px; padding:6px 3px 0; }
     #gate { display:flex; flex:1; align-items:center; justify-content:center; padding:20px; }
     #gate .panel { padding:25px; max-width:380px; width:100%; background:#302430; border:1px solid #684d60; border-radius:20px; }
@@ -99,6 +103,13 @@
       <textarea id="message" rows="1" placeholder="Talk to Mikan…" maxlength="4000" aria-label="Message Mikan"></textarea>
       <button class="send" id="send" type="submit" title="Send" disabled>↑</button>
     </form>
+    <div class="model-picker">
+      <label for="modelSelect">Model</label>
+      <select id="modelSelect" aria-label="Active inference provider and model" disabled>
+        <option value="__status__">Loading desktop models…</option>
+      </select>
+      <button id="refreshModels" type="button" title="Refresh installed Ollama models" aria-label="Refresh installed models" disabled>↻</button>
+    </div>
     <div class="meta"><span id="conversation">Desktop conversation</span><span>Private via Tailscale · Text chat</span></div>
   </div>
 </div>
@@ -128,6 +139,9 @@
   var reportPanel = document.getElementById("reportPanel");
   var idSignature = "";
   var chatListSignature = "";
+  var modelListSignature = "";
+  var modelSelect = document.getElementById("modelSelect");
+  var refreshModelsButton = document.getElementById("refreshModels");
   var avatarController = null;
   var avatarIdentity = "";
   var avatarLoading = false;
@@ -230,6 +244,50 @@
     document.getElementById("conversation").textContent = active
       ? active.title : data.conversationId ? "Shared conversation" : "New conversation";
   }
+  function renderModels(data) {
+    var models = Array.isArray(data.models) ? data.models : [];
+    var provider = data.provider || "local";
+    var selected = provider === "local" ? "local:" + (data.model || "") : provider;
+    var known = provider !== "local" || models.includes(data.model);
+    var signature = models.join("|") + ":" + (known ? "" : selected);
+    if (signature !== modelListSignature) {
+      var options = document.createDocumentFragment();
+      if (!known) {
+        var unavailable = document.createElement("option");
+        unavailable.value = selected;
+        unavailable.textContent = "● Local · " + (data.model || "not installed");
+        options.append(unavailable);
+      }
+      var cloud = document.createElement("optgroup");
+      cloud.label = "Cloud and automatic routing";
+      [
+        ["auto", "☁ Auto · OpenRouter free → Ollama"],
+        ["openrouter", "☁ OpenRouter · free only"],
+        ["gemini", "☁ Gemini · cloud only"]
+      ].forEach(function (entry) {
+        var option = document.createElement("option");
+        option.value = entry[0]; option.textContent = entry[1];
+        cloud.append(option);
+      });
+      options.append(cloud);
+      var local = document.createElement("optgroup");
+      local.label = "Local Ollama models";
+      models.forEach(function (name) {
+        var option = document.createElement("option");
+        option.value = "local:" + name;
+        option.textContent = "● Local · " + name;
+        local.append(option);
+      });
+      options.append(local);
+      modelSelect.replaceChildren(options);
+      modelListSignature = signature;
+    }
+    modelSelect.value = selected;
+    modelSelect.title = (data.modelStatus && data.modelStatus.title) || "";
+    var enabled = !!data.connected && !data.busy && !data.controlsBlocked && !data.queued && !inFlight;
+    modelSelect.disabled = !enabled;
+    refreshModelsButton.disabled = !enabled;
+  }
   function render(data) {
     var entries = Array.isArray(data.messages) ? data.messages : [];
     var signature = String(data.conversationId) + "|" +
@@ -258,9 +316,12 @@
       if (atBottom || !idSignature) messages.scrollTop = messages.scrollHeight;
       idSignature = signature;
     }
-    status.textContent = !data.connected ? "Desktop offline" : (data.busy || data.queued ? "Thinking…" : "Online · " + (data.model || "local model"));
+    var routedModel = data.modelStatus && data.modelStatus.label ? data.modelStatus.label : (data.model || "local model");
+    status.textContent = !data.connected ? "Desktop offline" : (data.busy || data.queued ? "Thinking…" : "Online · " + routedModel);
+    status.title = data.modelStatus && data.modelStatus.title || "";
     current = data;
     renderChats(data);
+    renderModels(data);
     void syncAvatar(data);
     send.disabled = !data.connected || data.busy || data.queued || inFlight || !message.value.trim();
   }
@@ -311,6 +372,33 @@
       await refresh();
     } finally { inFlight = false; }
   }
+  async function changeModel(action, choice) {
+    if (inFlight || !current || !current.connected || current.busy || current.controlsBlocked || current.queued) return;
+    inFlight = true;
+    modelSelect.disabled = true;
+    refreshModelsButton.disabled = true;
+    send.disabled = true;
+    try {
+      await api("/api/model", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: action, choice: choice || null })
+      });
+      await refresh();
+    } catch (e) {
+      status.textContent = e.message;
+      if (current) renderModels(current);
+    } finally {
+      inFlight = false;
+    }
+  }
+  modelSelect.addEventListener("change", function () {
+    var selected = modelSelect.value;
+    var active = current && (current.provider === "local" ? "local:" + current.model : current.provider);
+    if (selected === active) return;
+    void changeModel("switch", selected);
+  });
+  refreshModelsButton.addEventListener("click", function () { void changeModel("refresh"); });
   newChat.addEventListener("click", function () { void changeConversation("new"); });
   conversationSelect.addEventListener("change", function () {
     var chosen = conversationSelect.value;

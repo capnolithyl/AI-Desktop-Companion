@@ -101,6 +101,10 @@ const agentOrigins = new Set([
   "http://127.0.0.1:1420",
   "http://localhost:1420",
 ]);
+const CLOUD_PROVIDERS = ["auto", "openrouter", "gemini"];
+const safeModels = (models) => Array.isArray(models)
+  ? [...new Set(models.filter(name => typeof name === "string" && name.length > 0 && name.length <= 120))].slice(0, 100)
+  : [];
 const safeMessages = (messages) =>
   Array.isArray(messages)
     ? messages
@@ -123,7 +127,9 @@ export function createBridge({
     throw new Error("A 32+ character remote key is required");
   let desktop = {
     conversationId: null, model: "", busy: false,
-    messages: [], conversations: [], avatar: null
+    messages: [], conversations: [], avatar: null,
+    provider: "local", models: [], openrouterModel: "", geminiModel: "",
+    modelStatus: null, controlsBlocked: true
   };
   let customRig = null;
   let customRigId = null;
@@ -219,6 +225,27 @@ export function createBridge({
           conversationId: body.action === "open" ? body.conversationId : null
         };
         json(response, 202, { id: pending.id });
+      } else if (request.method === "POST" && url.pathname === "/api/model") {
+        if (pending || desktop.busy || desktop.controlsBlocked || Date.now() - agentSeen >= 8000)
+          return fail(response, 409, "Mikan is offline, busy, or using desktop controls");
+        const body = await readJson(request, 1024);
+        if (body.action !== "switch" && body.action !== "refresh")
+          return fail(response, 400, "Unsupported model action");
+        if (body.action === "switch") {
+          const choice = body.choice;
+          if (typeof choice !== "string" || choice.length > 140)
+            return fail(response, 400, "Invalid model selection");
+          const permitted = CLOUD_PROVIDERS.includes(choice) ||
+            (choice.startsWith("local:") && desktop.models.includes(choice.slice(6)));
+          if (!permitted)
+            return fail(response, 400, "Model is not available on Mikan's desktop");
+        }
+        pending = {
+          id: randomBytes(12).toString("hex"),
+          kind: body.action === "switch" ? "switch_model" : "refresh_models",
+          modelChoice: body.action === "switch" ? body.choice : null
+        };
+        json(response, 202, { id: pending.id });
       } else if (request.method === "POST" && url.pathname === "/api/send") {
         if (pending || desktop.busy || Date.now() - agentSeen >= 8000) {
           return fail(
@@ -306,6 +333,16 @@ export function createBridge({
               ? body.conversationId.slice(0, 100)
               : null,
           model: String(body.model || "").slice(0, 120),
+          provider: ["local", ...CLOUD_PROVIDERS].includes(body.provider) ? body.provider : "local",
+          openrouterModel: String(body.openrouterModel || "").slice(0, 120),
+          geminiModel: String(body.geminiModel || "").slice(0, 120),
+          models: safeModels(body.models),
+          modelStatus: body.modelStatus && typeof body.modelStatus === "object"
+            ? {
+                label: String(body.modelStatus.label || "").slice(0, 200),
+                title: String(body.modelStatus.title || "").slice(0, 300)
+              } : null,
+          controlsBlocked: body.controlsBlocked !== false,
           busy: body.busy === true,
           messages: safeMessages(body.messages),
           conversations: safeConversations(body.conversations),

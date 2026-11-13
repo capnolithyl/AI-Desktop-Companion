@@ -13,6 +13,11 @@ pipeline and mirrors the currently active desktop conversation.
 - Create new chats and switch between saved conversations from the browser.
   Selecting a chat also selects it on the desktop; both surfaces always use
   the same active conversation.
+- Choose the same inference modes as the desktop dock: an installed Ollama model,
+  OpenRouter free, Gemini or Auto (OpenRouter then local fallback). The phone
+  can refresh the installed Ollama list, and the header reports the routed
+  provider/model. Changes apply to the desktop too and persist in its settings.
+  Cloud credentials never leave Windows.
 - The browser renders Mikan's actual selected Iki outfit using the same engine
   and animation data: idle breathing/blinks, expressions, and pointer gaze.
   The active rig is loaded on demand; custom imported outfits are passed
@@ -24,8 +29,8 @@ pipeline and mirrors the currently active desktop conversation.
   in addition to required Cloudflare Access.
 
 **Not yet:** voice playback on the phone, file attachments, browser screen
-capture, changing models/settings, remote native Tauri commands, or automatic
-startup of the Node relay. Iki rendering needs browser WebGL and may take
+capture, changing advanced settings, remote native Tauri commands, or
+automatic startup of the Node relay. Iki rendering needs browser WebGL and may take
 a moment to load its ~5–6 MB selected outfit on first use.
 
 The desktop must be running (hidden in tray is fine). This first version
@@ -69,8 +74,9 @@ The personal default is `marcus-vostro.tailc46461.ts.net`.
 Keep the local access key too; the web UI stores it only for the browser
 tab/session.
 
-Remote chat selection and avatar rendering require **both** the updated
-desktop build and the updated `npm run server` process. A changed Node
+Remote chat selection, remote model switching and avatar rendering require
+**both** the updated desktop build (v0.9.7 or newer for the model picker)
+and the updated `npm run server` process. A changed Node
 server alone cannot make an older installed desktop expose chat actions or
 its current outfit. Restart both after updating.
 
