@@ -24,13 +24,18 @@ test("JSON exports can carry collections in a named property",()=>{
   assert.equal(rows[1].rating,null);
 });
 
+test("watched and played imports mean experienced, never liked",()=>{
+  const rows=parseInterests("name,kind,status\\nHigurashi,anime,watched\\nSolasta,game,played","csv");
+  assert.deepEqual(rows.map(r=>r.status),["experienced","experienced"]);
+});
+
 test("kind and case identify duplicates, not name alone",()=>{
   assert.equal(interestKey({name:" HIGURASHI ",kind:"anime"}),interestKey({name:"higurashi",kind:"anime"}));
   assert.notEqual(interestKey({name:"Higurashi",kind:"show"}),interestKey({name:"Higurashi",kind:"anime"}));
 });
 
 test("malformed relationship and too-large ratings are rejected",()=>{
-  assert.throws(()=>parseInterests("name,status\nSomething,watched","csv"),/invalid relationship/);
+  assert.throws(()=>parseInterests("name,status\nSomething,conflicted","csv"),/invalid relationship/);
   assert.throws(()=>parseInterests('[{"name":"X","rating":11}]',"json"),/rating/);
 
 });
