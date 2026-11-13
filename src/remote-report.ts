@@ -31,6 +31,15 @@ export function remoteDiagnosticMessages(messages: readonly DiagnosticMessage[])
         firstTokenMs: finite(d.firstTokenMs),
         firstAudioMs: finite(d.firstAudioMs),
         fallbackUsed: !!d.fallbackReason,
+        // These human-readable errors are useful locally but NEVER appear
+        // in a GitHub issue, since they may contain document names or URLs.
+        privateDetails: {
+          fallbackReason: d.fallbackReason?.slice(0, 400) ?? null,
+          toolReason: d.toolPlan?.reason.slice(0, 400) ?? null,
+          memoryServiceReason: d.memory?.semanticReason?.slice(0, 400) ?? null,
+          notionReadFailure: d.notion?.readFailure?.slice(0, 400) ?? null,
+          researchNote: d.research?.note.slice(0, 400) ?? null
+        },
         stats: d.stats ? {
           promptTokens: finite(d.stats.promptTokens),
           outputTokens: finite(d.stats.outputTokens),
