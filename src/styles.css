@@ -689,6 +689,27 @@ button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px
 .memory-body { overflow-y: auto; flex: 1; min-height: 0; padding: 14px 16px 22px; }
 .memory-explainer { margin: 0 0 13px; color: #d5bfcc; font-size: 12px; line-height: 1.55; }
 .memory-add { display: flex; flex-direction: column; gap: 9px; margin-bottom: 16px; }
+.collection-add > input,
+.collection-add > label > input,
+.collection-add > label > textarea,
+.collection-add .memory-import-row-controls input,
+.collection-add .memory-import-row-controls select,
+.character-edit > input,
+.character-edit > label > input,
+.character-edit > label > textarea,
+.character-edit .memory-import-row-controls input,
+.character-edit .memory-import-row-controls select {
+  border: 1px solid #68515e; border-radius: 9px; padding: 8px 10px;
+  background: #40333f; color: #fff2ea; width: 100%; min-width: 0;
+  font: inherit; font-size: 12px;
+}
+.collection-add > label, .character-edit > label {
+  display: flex; flex-direction: column; gap: 5px; font-size: 11px; color: #e1c4d3;
+}
+.collection-add .memory-import-row-controls,
+.character-edit .memory-import-row-controls { margin-left: 0; }
+.memory-import-fact span { overflow-wrap: anywhere; min-width: 0; }
+
 .memory-add textarea, .memory-item textarea {
   resize: vertical; width: 100%; min-height: 70px; border-radius: 9px;
   padding: 9px 11px; border: 1px solid #68515e; color: #fff2ea;
