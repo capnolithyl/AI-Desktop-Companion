@@ -59,9 +59,14 @@ export type MemoryFactHistory = {
   id: number; memoryId: number; previousFact: string; replacementFact: string;
   changedAt: number;
 };
+export type MemoryOutcome = {
+  userSaved: number; characterSaved: number; interestsSaved: number;
+  reviewQueued: number; processedAt: number;
+};
 export type MemoryJobStatus = {
   processed: number; userSaved: number; characterSaved: number; interestsSaved: number;
-  queued: number; failed: number;
+  reviewQueued: number; queued: number; failed: number;
+  lastOutcome: MemoryOutcome | null;
 };
 export type AutomaticMemoryRequest = {
   endpoint: string;

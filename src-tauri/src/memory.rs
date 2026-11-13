@@ -223,6 +223,23 @@ pub(crate) fn initialize_database(connection: &Connection) -> Result<(), String>
     }
     connection.execute_batch("CREATE INDEX IF NOT EXISTS idx_user_category ON user_memories(category);")
         .map_err(|e| e.to_string())?;
+    // Allow corrections to target older interest records without migrating or deleting them.
+    let mut s=connection.prepare("PRAGMA table_info(memory_fact_reviews)").map_err(|e|e.to_string())?;
+    let names=s.query_map([],|r|r.get::<_,String>(1)).map_err(|e|e.to_string())?
+        .collect::<Result<Vec<_>,_>>().map_err(|e|e.to_string())?;
+    drop(s);
+    if !names.iter().any(|n|n=="existing_interest_id") {
+        connection.execute("ALTER TABLE memory_fact_reviews ADD COLUMN existing_interest_id INTEGER REFERENCES interest_items(id) ON DELETE SET NULL",[]).map_err(|e|e.to_string())?;
+    }
+    let mut s=connection.prepare("PRAGMA table_info(automatic_memory_runs)").map_err(|e|e.to_string())?;
+    let names=s.query_map([],|r|r.get::<_,String>(1)).map_err(|e|e.to_string())?
+        .collect::<Result<Vec<_>,_>>().map_err(|e|e.to_string())?;
+    drop(s);
+    for column in ["user_saved","character_saved","interests_saved","review_queued","outcome_known"] {
+        if !names.iter().any(|n|n==column) {
+            connection.execute(&format!("ALTER TABLE automatic_memory_runs ADD COLUMN {column} INTEGER NOT NULL DEFAULT 0"),[]).map_err(|e|e.to_string())?;
+        }
+    }
     if !had_search {
         connection.execute(
             "INSERT INTO message_search(rowid,content)

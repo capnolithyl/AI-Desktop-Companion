@@ -60,6 +60,19 @@ export function MemoryReviews({onChanged}: {onChanged: () => Promise<void>}) {
           setNotice("Retried "+count+" job(s); "+result.queued+" still queued.");
         })}><RefreshCcw size={13}/> Retry failed jobs</button>}
     </p>}
+    {jobs?.lastOutcome && <p className="memory-explainer">
+      Last extraction: {new Date(jobs.lastOutcome.processedAt * 1000).toLocaleString()} · {
+        (jobs.lastOutcome.userSaved + jobs.lastOutcome.characterSaved +
+         jobs.lastOutcome.interestsSaved + jobs.lastOutcome.reviewQueued) === 0
+          ? "Completed, but no memories or corrections were accepted."
+          : [
+              jobs.lastOutcome.userSaved ? jobs.lastOutcome.userSaved + " user facts" : "",
+              jobs.lastOutcome.characterSaved ? jobs.lastOutcome.characterSaved + " Mikan details" : "",
+              jobs.lastOutcome.interestsSaved ? jobs.lastOutcome.interestsSaved + " interests" : "",
+              jobs.lastOutcome.reviewQueued ? jobs.lastOutcome.reviewQueued + " correction suggestions" : ""
+            ].filter(Boolean).join(", ")
+      }
+    </p>}
     {reviews.map(review=><article className="memory-item" key={review.id}>
       <small>Suggested from your words: “{review.evidence}”</small>
       {review.existingFact&&<p><strong>Currently saved:</strong> {review.existingFact}</p>}

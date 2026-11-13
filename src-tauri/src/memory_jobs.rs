@@ -30,6 +30,16 @@ pub struct MemoryJobRequest {
     context_window: Option<u32>,
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MemoryOutcome {
+    user_saved: usize,
+    character_saved: usize,
+    interests_saved: usize,
+    review_queued: usize,
+    processed_at: i64,
+}
+
 #[derive(Default, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MemoryJobStatus {
@@ -37,8 +47,10 @@ pub struct MemoryJobStatus {
     user_saved: usize,
     character_saved: usize,
     interests_saved: usize,
+    review_queued: usize,
     queued: i64,
     failed: i64,
+    last_outcome: Option<MemoryOutcome>,
 }
 
 struct Job {
@@ -96,7 +108,15 @@ fn status(db: &Connection) -> Result<MemoryJobStatus,String> {
     let failed=db.query_row("SELECT COUNT(*) FROM automatic_memory_jobs
         WHERE status='failed'",[],|r|r.get(0))
         .map_err(|e|e.to_string())?;
-    Ok(MemoryJobStatus{queued,failed,..Default::default()})
+    let last_outcome=db.query_row(
+        "SELECT user_saved,character_saved,interests_saved,review_queued,processed_at
+         FROM automatic_memory_runs WHERE outcome_known=1
+         ORDER BY processed_at DESC,rowid DESC LIMIT 1",[],|r|Ok(MemoryOutcome {
+             user_saved:r.get(0)?,character_saved:r.get(1)?,interests_saved:r.get(2)?,
+             review_queued:r.get(3)?,processed_at:r.get(4)?
+         })
+    ).optional().map_err(|e|e.to_string())?;
+    Ok(MemoryJobStatus{queued,failed,last_outcome,..Default::default()})
 }
 
 #[tauri::command]
@@ -180,6 +200,7 @@ pub async fn memory_process_pending_jobs(app: AppHandle) -> Result<MemoryJobStat
                 totals.user_saved+=saved.user_saved;
                 totals.character_saved+=saved.character_saved;
                 totals.interests_saved+=saved.interests_saved;
+                totals.review_queued+=saved.review_queued;
             },
             Err(err) => {
                 // Keep the original message references for owner-controlled retry.

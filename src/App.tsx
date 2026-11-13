@@ -1180,6 +1180,9 @@ export default function App() {
       .catch(() => {})
       .then(async () => {
         const result = await memoryApi.processPendingJobs();
+        if (result.reviewQueued) {
+          confirmMemorySaved(`${result.reviewQueued} suggested memory ${result.reviewQueued === 1 ? "correction" : "corrections"} ready for review`);
+        }
         if (result.userSaved || result.characterSaved || result.interestsSaved) {
           // The backend reports only committed SQLite rows. Never show a
           // "remembered" confirmation when extraction skipped or saved nothing.
@@ -1212,6 +1215,7 @@ export default function App() {
         const result = await memoryApi.processPendingJobs();
         if (cancelled) return;
         if (result.userSaved) void refreshFacts();
+        if (result.interestsSaved) void refreshInterests();
         if (result.characterSaved) void refreshCharacter();
         setAutomaticMemoryError(result.failed
           ? `${result.failed} automatic memory job(s) need manual retry in Memory settings.`

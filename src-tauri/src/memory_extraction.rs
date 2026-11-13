@@ -560,6 +560,22 @@ mod tests {
     use super::*;
 
     #[test]
+    fn personal_preferences_are_not_catch_all_collection_items() {
+        let proposed=ProposedInterest {
+            kind:"other".into(),name:"Schnitzel".into(),status:"favorite".into(),
+            evidence:"My favorite food is schnitzel".into()
+        };
+        assert!(clean_interest_candidate(&proposed,"My favorite food is schnitzel").is_none());
+        assert!(clean_user_candidate(
+            "The user likes schnitzel","My favorite food is schnitzel",
+            "My favorite food is schnitzel").is_some());
+        // Correction wording is domain-independent, including a trailing "now".
+        assert!(explicit_revision("Actually, I prefer another option now"));
+        assert!(explicit_revision("I prefer something else now"));
+        assert!(!explicit_revision("I like new recipes"));
+    }
+
+    #[test]
     fn corrections_are_reviewed_instead_of_overwriting_existing_facts() {
         assert!(explicit_revision("I no longer like metal"));
         assert!(explicit_revision("I used to prefer vanilla"));

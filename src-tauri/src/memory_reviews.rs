@@ -174,6 +174,48 @@ mod tests {
         (db,id)
     }
     #[test]
+    fn reviewed_interest_replacement_moves_legacy_preference_to_user_fact() {
+        let (mut db,_)=fixture();
+        db.execute(
+            "INSERT INTO interest_items(name,kind,status,source)
+             VALUES('Schnitzel','other','favorite','conversation')",[]
+        ).unwrap();
+        let id=db.last_insert_rowid();
+        let tx=db.transaction().unwrap();
+        assert!(stage_interest_review(&tx,id,"The user prefers another food",
+            "I prefer another food now",USER).unwrap());
+        tx.commit().unwrap();
+        let review_id=list_reviews(&db).unwrap()[0].id;
+        assert_eq!(list_reviews(&db).unwrap()[0].existing_interest_id,Some(id));
+        resolve(&mut db,review_id,"replace").unwrap();
+        let n:i64=db.query_row("SELECT COUNT(*) FROM interest_items WHERE id=?1",
+            params![id],|r|r.get(0)).unwrap();
+        assert_eq!(n,0);
+        let fact:String=db.query_row(
+            "SELECT fact FROM user_memories WHERE fact='The user prefers another food'",
+            [],|r|r.get(0)).unwrap();
+        assert_eq!(fact,"The user prefers another food");
+        let old:String=db.query_row("SELECT previous_fact FROM memory_fact_history
+            WHERE previous_fact LIKE 'Interest (%'",[],|r|r.get(0)).unwrap();
+        assert!(old.contains("Schnitzel"));
+    }
+    #[test]
+    fn dismissed_interest_correction_keeps_original_entry() {
+        let (mut db,_)=fixture();
+        db.execute("INSERT INTO interest_items(name,kind,status,source)
+          VALUES('Example','other','favorite','conversation')",[]).unwrap();
+        let id=db.last_insert_rowid();
+        let tx=db.transaction().unwrap();
+        stage_interest_review(&tx,id,"The user prefers something else",
+          "Actually I prefer something else",USER).unwrap();
+        tx.commit().unwrap();
+        resolve(&mut db,list_reviews(&db).unwrap()[0].id,"dismiss").unwrap();
+        let name:String=db.query_row("SELECT name FROM interest_items WHERE id=?1",
+            params![id],|r|r.get(0)).unwrap();
+        assert_eq!(name,"Example");
+    }
+
+    #[test]
     fn reviewed_replacement_preserves_id_and_fact_history() {
         let (mut db,old_id)=fixture();
         let tx=db.transaction().unwrap();
