@@ -340,6 +340,25 @@ mod tests {
     }
 
     #[test]
+    fn last_extraction_lists_exact_saved_items_and_source_quotes() {
+        let db=fixture();
+        db.execute(
+            "INSERT INTO interest_items(name,kind,status,source,source_message_id,source_quote)
+             VALUES('Gristle Licker','song','favorite','conversation',?1,?2)",
+            params![USER,"One of my favorite songs is Gristle Licker"]
+        ).unwrap();
+        db.execute(
+            "INSERT INTO automatic_memory_runs(assistant_message_id,outcome_known,interests_saved)
+             VALUES(?1,1,1)",params![ASSIST]
+        ).unwrap();
+        let outcome=status(&db).unwrap().last_outcome.unwrap();
+        assert_eq!(outcome.interests_saved,1);
+        assert_eq!(outcome.entries.len(),1);
+        assert_eq!(outcome.entries[0].kind,"Interest");
+        assert!(outcome.entries[0].description.contains("Gristle Licker"));
+        assert!(outcome.entries[0].evidence.contains("favorite songs"));
+    }
+    #[test]
     fn successfully_processed_turns_cannot_be_queued_again() {
         let db=fixture();
         db.execute("INSERT INTO automatic_memory_runs(assistant_message_id) VALUES(?1)",
