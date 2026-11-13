@@ -49,6 +49,13 @@ export function safeReportDiagnostics(value) {
           firstTokenMs: positive(d.firstTokenMs),
           firstAudioMs: positive(d.firstAudioMs),
           fallbackUsed: d.fallbackUsed === true,
+          privateDetails: d.privateDetails ? {
+            fallbackReason: summary(d.privateDetails.fallbackReason, 400),
+            toolReason: summary(d.privateDetails.toolReason, 400),
+            memoryServiceReason: summary(d.privateDetails.memoryServiceReason, 400),
+            notionReadFailure: summary(d.privateDetails.notionReadFailure, 400),
+            researchNote: summary(d.privateDetails.researchNote, 400)
+          } : null,
           stats: d.stats ? {
             promptTokens: positive(d.stats.promptTokens),
             outputTokens: positive(d.stats.outputTokens),
