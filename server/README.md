@@ -1,4 +1,4 @@
-# Mikan Remote (experimental v0.8.5)
+# Mikan Remote (experimental)
 
 This is a **browser relay for the same running Windows Mikan**, not another AI.
 The existing Tauri desktop UI handles local Ollama, persona instructions,
@@ -23,10 +23,10 @@ pipeline and mirrors the currently active desktop conversation.
   The active rig is loaded on demand; custom imported outfits are passed
   to the relay in RAM, not copied to a new database.
 - Local model, personalities, facts, history, and search remain on the PC.
-- "Report" button stores a note and recent excerpts in
+- Settings → Report an issue stores a note and recent excerpts in
   %USERPROFILE%\.mikan\remote-issues.jsonl for reviewing the next day.
 - An extra randomly generated remote key protects chat API requests,
-  in addition to required Cloudflare Access.
+  alongside private Tailscale access (or Cloudflare Access for public deployment).
 
 **Not yet:** voice playback on the phone, file attachments, browser screen
 capture, changing advanced settings, remote native Tauri commands, or
@@ -35,6 +35,28 @@ a moment to load its ~5–6 MB selected outfit on first use.
 
 The desktop must be running (hidden in tray is fine). This first version
 starts a separate small Node.js relay which will later be integrated.
+
+## Mobile browser settings
+
+The remote home screen keeps the portrait and chat visible. Open the hamburger
+menu in the header for a full-screen settings panel on a phone (a side drawer
+on larger screens). It contains:
+
+- Chat picker and **New** chat button (same desktop history).
+- Model/provider picker and installed-model refresh (desktop v0.9.7+).
+- **Enlarge/Shrink portrait**, **Show model name under Mikan** and
+  **Show outfit & animation labels** toggles.
+- Issue reporting and **Lock this browser**.
+
+The two label toggles are independent, default to visible, and save only
+non-sensitive display preferences in the browser's localStorage. They do
+not change Mikan's personality, memories, desktop avatar, or model setting.
+The access key remains in sessionStorage and is cleared when locked.
+Use the close button, backdrop, or Escape key to exit settings.
+
+The hamburger menu is a browser-relay-only update: once the desktop is
+already at v0.9.7 or newer, a git pull and Node relay restart are sufficient.
+It does not require reinstalling Mikan or changing Tailscale configuration.
 
 ## Local test first
 
