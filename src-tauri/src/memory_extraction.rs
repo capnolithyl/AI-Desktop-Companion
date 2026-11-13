@@ -337,6 +337,8 @@ fn persist(
     capture_character: bool,
     related_fact_ids: &[i64],
     related_interest_ids: &[i64],
+    previous_fact_id: Option<i64>,
+    previous_interest_id: Option<i64>,
 ) -> Result<MemoryProcessingResult, String> {
     let tx = db.transaction().map_err(|e| e.to_string())?;
     // The assistant reply must still exist. Avoid resurrecting memories after
@@ -358,13 +360,20 @@ fn persist(
             let Some(fact) = clean_user_candidate(&candidate.fact, &candidate.evidence, user_text) else { continue; };
             if candidate.relation == "duplicate" { continue; }
             if candidate.relation == "revision" || explicit_revision(&candidate.evidence) {
+                // The immediately preceding owner turn is a trusted link
+                // between a correction and its source. This handles older
+                // "other" interests without inventing product-specific rules.
+                let model_fact_id=candidate.related_memory_id
+                    .filter(|id|related_fact_ids.contains(id));
                 let interest_id=candidate.related_interest_id
-                    .filter(|id|related_interest_ids.contains(id));
+                    .filter(|id|related_interest_ids.contains(id))
+                    .or_else(|| if model_fact_id.is_none(){previous_interest_id}else{None});
                 let evidence=normalize(&candidate.evidence);
                 let queued=if let Some(id)=interest_id {
                     memory_reviews::stage_interest_review(&tx,id,&fact,&evidence,user_message_id)?
                 } else {
-                    let related_id=related_revision_target(&tx,related_fact_ids,&candidate,&fact)?;
+                    let related_id=model_fact_id.or(previous_fact_id)
+                        .or(related_revision_target(&tx,related_fact_ids,&candidate,&fact)?);
                     memory_reviews::stage_review(&tx,related_id,&fact,&evidence,user_message_id)?
                 };
                 if queued {result.review_queued+=1;}
@@ -449,7 +458,7 @@ pub async fn memory_process_turn(
     let url = format!("{}/api/chat", local_origin(&endpoint)?);
     // Complete all rusqlite work in a lexical scope. Connection and its
     // borrowing closure must not enter the Send future across HTTP awaits.
-    let (user, assistant, prior_assistant, prior_user, capture_user, capture_character, existing_user, existing_interests, existing_canon) = {
+    let (user, assistant, prior_assistant, prior_user, prior_fact_id, prior_interest_id, capture_user, capture_character, existing_user, existing_interests, existing_canon) = {
         let db = memory::open_db(&app)?;
         let read = |id: &str, role: &str| -> Result<String, String> {
         db.query_row(
@@ -466,12 +475,34 @@ pub async fn memory_process_turn(
          ORDER BY rowid DESC LIMIT 1",
         params![conversation_id,user_message_id], |row| row.get(0)
     ).optional().map_err(|e| e.to_string())?.unwrap_or_default();
-    let prior_user:String=db.query_row(
-        "SELECT content FROM messages WHERE conversation_id=?1 AND role='user'
+    let previous:Option<(String,String)>=db.query_row(
+        "SELECT id,content FROM messages WHERE conversation_id=?1 AND role='user'
          AND rowid < (SELECT rowid FROM messages WHERE id=?2 AND conversation_id=?1)
          ORDER BY rowid DESC LIMIT 1",
-        params![conversation_id,user_message_id],|row|row.get(0)
-    ).optional().map_err(|e|e.to_string())?.unwrap_or_default();
+        params![conversation_id,user_message_id],|row|Ok((row.get(0)?,row.get(1)?))
+    ).optional().map_err(|e|e.to_string())?;
+    let (prior_user_id,prior_user)=match previous {
+        Some((id,content))=>(Some(id),content),None=>(None,String::new())
+    };
+    // Only one prior record per source can be an unambiguous fallback target.
+    // Multiple candidates must be resolved by the model or human reviewer.
+    let prior_interest_id=if let Some(ref id)=prior_user_id {
+        let mut stmt=db.prepare(
+            "SELECT id FROM interest_items WHERE source_message_id=?1 ORDER BY id DESC LIMIT 2"
+        ).map_err(|e|e.to_string())?;
+        let ids=stmt.query_map(params![id],|row|row.get::<_,i64>(0))
+            .map_err(|e|e.to_string())?.collect::<Result<Vec<_>,_>>().map_err(|e|e.to_string())?;
+        if ids.len()==1 {Some(ids[0])} else {None}
+    } else {None};
+    let prior_fact_id=if let Some(ref id)=prior_user_id {
+        let mut stmt=db.prepare(
+            "SELECT memory_id FROM automatic_memory_sources
+             WHERE memory_kind='user' AND source_message_id=?1 LIMIT 2"
+        ).map_err(|e|e.to_string())?;
+        let ids=stmt.query_map(params![id],|row|row.get::<_,i64>(0))
+            .map_err(|e|e.to_string())?.collect::<Result<Vec<_>,_>>().map_err(|e|e.to_string())?;
+        if ids.len()==1 {Some(ids[0])} else {None}
+    } else {None};
     let capture_user = capture_user &&
         (user_fact_candidate(&user) || contextual_user_candidate(&prior_assistant, &user));
     let capture_character = capture_character && character_question(&user);
@@ -527,7 +558,7 @@ pub async fn memory_process_turn(
             .collect::<Result<_,_>>().map_err(|e| e.to_string())?;
         facts
     } else { Vec::new() };
-        (user, assistant, prior_assistant, prior_user, capture_user, capture_character, existing_user, existing_interests, existing_canon)
+        (user, assistant, prior_assistant, prior_user, prior_fact_id, prior_interest_id, capture_user, capture_character, existing_user, existing_interests, existing_canon)
     };
 
     let system = "You are a conservative LOCAL MEMORY EXTRACTOR for an AI companion.
@@ -593,7 +624,8 @@ If the text doesn't contain a supported durable memory, return all arrays empty.
     // If the conversation was deleted while Ollama was working, the FK on
     // automatic_memory_runs rejects the write and no memories are inserted.
     persist(&mut db, proposed, &user, &assistant, &user_message_id, &assistant_message_id,
-        capture_user, capture_character, &related_fact_ids, &related_interest_ids)
+        capture_user, capture_character, &related_fact_ids, &related_interest_ids,
+        prior_fact_id, prior_interest_id)
 }
 
 #[cfg(test)]
@@ -718,7 +750,10 @@ mod tests {
                captured_at INTEGER DEFAULT (unixepoch()),evidence TEXT,
                PRIMARY KEY(memory_kind,memory_id));
              CREATE TABLE automatic_memory_runs(assistant_message_id TEXT PRIMARY KEY
-               REFERENCES messages(id) ON DELETE CASCADE, processed_at INTEGER DEFAULT (unixepoch()));"
+               REFERENCES messages(id) ON DELETE CASCADE, processed_at INTEGER DEFAULT (unixepoch()),
+               user_saved INTEGER NOT NULL DEFAULT 0,character_saved INTEGER NOT NULL DEFAULT 0,
+               interests_saved INTEGER NOT NULL DEFAULT 0,review_queued INTEGER NOT NULL DEFAULT 0,
+               outcome_known INTEGER NOT NULL DEFAULT 0);"
         ).unwrap();
         db.execute("INSERT INTO conversations(id) VALUES('c')", []).unwrap();
         db.execute("INSERT INTO messages(id,conversation_id,role,content) VALUES ('u','c','user','I love black metal')", []).unwrap();
@@ -737,10 +772,10 @@ mod tests {
             interest_items: vec![]
         };
         let saved = persist(&mut db, proposed, "I love black metal",
-            "My favorite color is orange", "u", "a", true, true, &[], &[]).unwrap();
+            "My favorite color is orange", "u", "a", true, true, &[], &[], None, None).unwrap();
         assert_eq!(saved.user_saved, 1);
         assert_eq!(saved.character_saved, 0);
-        let second = persist(&mut db, Extracted::default(), "", "", "u", "a", true, true, &[], &[]).unwrap();
+        let second = persist(&mut db, Extracted::default(), "", "", "u", "a", true, true, &[], &[], None, None).unwrap();
         assert!(second.skipped);
         let color: String = db.query_row("SELECT value FROM character_facts",[],|row|row.get(0)).unwrap();
         assert_eq!(color,"Blue");
