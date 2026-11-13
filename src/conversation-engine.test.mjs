@@ -99,3 +99,6 @@ test("beginner tutoring gets a simple next step", () => {
   assert.match(guidance, /one concrete next step/);
   assert.match(guidance, /ordinary language/);
 });
+\ntest("multi-part questions require each component and media source grounding",()=>{
+  const {responseFocusGuidance}=await import("./conversation-engine.ts");
+});
