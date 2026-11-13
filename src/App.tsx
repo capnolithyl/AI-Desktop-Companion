@@ -83,6 +83,7 @@ import {
 import { reactionFromReply, type AvatarReaction, type AvatarReactionKind } from "./avatar-reactions";
 import { extractReplyEmojis, MIN_EMOJI_BUBBLE_SECONDS, MAX_EMOJI_BUBBLE_SECONDS } from "./emoji-reactions";
 import { avatarDebugText, type AvatarDebugSnapshot } from "./avatar-debug";
+import { defaultOutfitName } from "./bundled-iki-outfits";
 import { version as DESKTOP_VERSION } from "../package.json";
 import {
   loadAvatarDisplay, saveAvatarDisplay,
