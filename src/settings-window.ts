@@ -1,5 +1,5 @@
 import { LogicalSize, PhysicalPosition } from "@tauri-apps/api/dpi";
-import { getCurrentWindow } from "@tauri-apps/api/window";
+import { currentMonitor, getCurrentWindow } from "@tauri-apps/api/window";
 
 /** A single transparent window: normal chat keeps its original 520px footprint. */
 export const CHAT_WIDTH = 520;
@@ -23,7 +23,7 @@ async function applyWindowMode(expanded: boolean): Promise<void> {
   const current = getCurrentWindow();
   if (expanded) {
     if (origin) return;
-    const [pos, monitor] = await Promise.all([current.outerPosition(), current.currentMonitor()]);
+    const [pos, monitor] = await Promise.all([current.outerPosition(), currentMonitor()]);
     const scale = monitor?.scaleFactor ?? 1;
     const screenWidth = monitor?.size.width ?? Math.round(SETTINGS_WIDTH * scale);
     const width = Math.max(CHAT_WIDTH, Math.min(SETTINGS_WIDTH, Math.floor(screenWidth / scale) - 24));
