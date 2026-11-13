@@ -1,5 +1,5 @@
-//! Owner-reviewed memory corrections. Automatic extraction never overwrites
-//! an existing curated fact or activates a proposed replacement on its own.
+//! Memory corrections with provenance: unambiguous owner revisions may update
+//! facts directly, while ambiguous changes remain reviewable.
 use crate::memory;
 use rusqlite::{params, Connection, OptionalExtension, Transaction};
 use serde::Serialize;
@@ -50,6 +50,49 @@ pub(crate) fn stage_review(
             proposed_fact,evidence,source_message_id]
     ).map_err(|e|e.to_string())?;
     Ok(changed>0)
+}
+
+/// Apply an unambiguous, source-quoted owner correction directly to any
+/// existing fact, including imports. Preserve its ID, labels, pin status and
+/// provenance history instead of creating a contradictory duplicate.
+pub(crate) fn replace_confirmed_fact(
+    tx:&Transaction<'_>,id:i64,new_fact:&str,evidence:&str,source_message_id:&str
+)->Result<bool,String>{
+    let old:Option<String>=tx.query_row(
+        "SELECT fact FROM user_memories WHERE id=?1",params![id],|r|r.get(0)
+    ).optional().map_err(|e|e.to_string())?;
+    let Some(old)=old else{return Ok(false)};
+    if old.eq_ignore_ascii_case(new_fact){return Ok(false);}
+    let duplicate:Option<i64>=tx.query_row(
+        "SELECT id FROM user_memories WHERE fact=?1 COLLATE NOCASE AND id<>?2",
+        params![new_fact,id],|r|r.get(0)
+    ).optional().map_err(|e|e.to_string())?;
+    if duplicate.is_some(){return Ok(false);}
+    let previous_source:Option<(Option<String>,String)>=tx.query_row(
+        "SELECT source_message_id,evidence FROM automatic_memory_sources
+         WHERE memory_kind='user' AND memory_id=?1",
+        params![id],|r|Ok((r.get(0)?,r.get(1)?))
+    ).optional().map_err(|e|e.to_string())?;
+    tx.execute("INSERT INTO memory_fact_history
+        (memory_id,previous_fact,replacement_fact,previous_source_message_id,
+         previous_evidence,change_source_message_id,change_evidence)
+        VALUES(?1,?2,?3,?4,?5,?6,?7)",
+        params![id,old,new_fact,
+            previous_source.as_ref().and_then(|(message,_)|message.as_deref()),
+            previous_source.as_ref().map(|(_,quote)|quote.as_str()),
+            source_message_id,evidence]
+    ).map_err(|e|e.to_string())?;
+    tx.execute("UPDATE user_memories SET fact=?1,updated_at=unixepoch() WHERE id=?2",
+        params![new_fact,id]).map_err(|e|e.to_string())?;
+    tx.execute(
+        "INSERT INTO automatic_memory_sources(memory_kind,memory_id,source_message_id,evidence)
+         VALUES('user',?1,?2,?3)
+         ON CONFLICT(memory_kind,memory_id) DO UPDATE SET
+           source_message_id=excluded.source_message_id,
+           evidence=excluded.evidence,captured_at=unixepoch()",
+        params![id,source_message_id,evidence]
+    ).map_err(|e|e.to_string())?;
+    Ok(true)
 }
 
 /// A correction may reference an interest, including legacy catch-all entries.
@@ -149,29 +192,7 @@ fn resolve(db:&mut Connection,id:i64,action:&str)->Result<(),String> {
         if old_snapshot.as_deref()!=Some(present.as_str()) {
             return Err("Existing memory changed since this review. Dismiss and review the latest fact.".into());
         }
-        let previous_source:Option<(Option<String>,String)>=tx.query_row(
-            "SELECT source_message_id,evidence FROM automatic_memory_sources
-             WHERE memory_kind='user' AND memory_id=?1",
-            params![existing_id],|r|Ok((r.get(0)?,r.get(1)?))
-        ).optional().map_err(|e|e.to_string())?;
-        tx.execute("INSERT INTO memory_fact_history
-            (memory_id,previous_fact,replacement_fact,previous_source_message_id,
-             previous_evidence,change_source_message_id,change_evidence)
-            VALUES(?1,?2,?3,?4,?5,?6,?7)",
-            params![existing_id,present,new_fact,
-                previous_source.as_ref().and_then(|(id,_)|id.as_deref()),
-                previous_source.as_ref().map(|(_,text)|text.as_str()),source,evidence]
-        ).map_err(|e|e.to_string())?;
-        tx.execute("UPDATE user_memories SET fact=?1,updated_at=unixepoch() WHERE id=?2",
-            params![new_fact,existing_id]).map_err(|e|format!("Cannot replace memory: {e}"))?;
-        tx.execute(
-            "INSERT INTO automatic_memory_sources(memory_kind,memory_id,source_message_id,evidence)
-             VALUES('user',?1,?2,?3)
-             ON CONFLICT(memory_kind,memory_id) DO UPDATE SET
-               source_message_id=excluded.source_message_id,
-               evidence=excluded.evidence,captured_at=unixepoch()",
-            params![existing_id,source,evidence]
-        ).map_err(|e|e.to_string())?;
+        replace_confirmed_fact(&tx,existing_id,&new_fact,&evidence,&source)?;
         }
     } else if action=="keep_both" {
         let changed=tx.execute("INSERT OR IGNORE INTO user_memories(fact) VALUES(?1)",
