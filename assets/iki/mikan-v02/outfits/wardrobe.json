@@ -9,6 +9,38 @@
       "season": "all",
       "holiday": "none",
       "favorite": false
+    },
+    {
+      "id": "band-shirt-manegarm-v1-mikan-band-shirt-manegarm-v1",
+      "name": "Band Shirt Manegarm",
+      "file": "band-shirt-manegarm-v1/mikan-band-shirt-manegarm-v1.iki",
+      "season": "all",
+      "holiday": "none",
+      "favorite": false
+    },
+    {
+      "id": "black-shirt-v1-mikan-black-shirt-v1",
+      "name": "Black Shirt",
+      "file": "black-shirt-v1/mikan-black-shirt-v1.iki",
+      "season": "all",
+      "holiday": "none",
+      "favorite": false
+    },
+    {
+      "id": "christmas-v1-mikan-christmas-v1",
+      "name": "Christmas",
+      "file": "christmas-v1/mikan-christmas-v1.iki",
+      "season": "winter",
+      "holiday": "christmas",
+      "favorite": false
+    },
+    {
+      "id": "gothic-blouse-v1-mikan-gothic-blouse-v1",
+      "name": "Gothic Blouse",
+      "file": "gothic-blouse-v1/mikan-gothic-blouse-v1.iki",
+      "season": "autumn",
+      "holiday": "none",
+      "favorite": false
     }
   ]
 }
