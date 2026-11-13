@@ -11,7 +11,11 @@ test("browser relay requires a private key and delegates to the desktop, not a s
   const directory = mkdtempSync(join(tmpdir(), "mikan-remote-"));
   const reportsPath = join(directory, "issues.jsonl");
   const key = "this-is-a-test-only-key-with-at-least-32-characters";
-  const bridge = createBridge({ key, reportsPath });
+  const published = [];
+  const bridge = createBridge({ key, reportsPath, issuePublisher: async issue => {
+    published.push(issue);
+    return "https://github.com/capnolithyl/AI-Desktop-Companion/issues/999";
+  }});
   const onListen = (server) => new Promise((resolve) =>
     server.listen(0, "127.0.0.1", () => resolve(server.address().port)));
   const publicPort = await onListen(bridge.publicServer);
@@ -184,8 +188,71 @@ test("browser relay requires a private key and delegates to the desktop, not a s
   assert.deepEqual(await (await request(base + "/api/avatar/model","GET",authorized)).json(),JSON.parse(demoRig));
   assert.equal((await request(agent + "/agent/avatar-rig","POST",desktopHeaders,{id:"file:other.iki",rig:demoRig})).status,400);
 
-  assert.equal((await request(base + "/api/report", "POST", jsonHeaders, {note:"She forgot something"})).status, 201);
+  const privateExcerpt = "PRIVATE CHAT: Don't post my diary";
+  const privateFact = "PRIVATE MEMORY FACT: my secret identity";
+  assert.equal((await request(agent + "/agent/state", "POST", desktopHeaders, {
+    conversationId:"older-chat",model:"qwen3.5:9b",provider:"auto",busy:false,
+    messages:[
+      {id:"u",role:"user",createdAt:100,content:privateExcerpt},
+      {id:"a",role:"assistant",createdAt:101,content:"I couldn't access a file."}
+    ],
+    reportDiagnostics:{
+      desktopVersion:"0.9.8",contextWindow:16384,
+      avatar:{status:"ready",fps:59.9,speaking:false,error:"C:\\private\\user\\file.txt"},
+      messages:[{id:"a",role:"assistant",failed:true,diagnostics:{
+        model:"qwen3.5:9b",provider:"auto",elapsedMs:1200,firstTokenMs:330,
+        memory:{storedFacts:11,semanticService:"ready",semanticCandidates:3,
+          strongSemanticMatches:2,selectedFacts:1,facts:[{fact:privateFact}]},
+        toolPlan:{method:"web-search",freshSources:2,publicWebAllowed:true,
+          query:"PRIVATE SEARCH QUERY"},
+        notion:{cachedPages:1,readSucceeded:false,fullReadAttempted:true,
+          page:"PRIVATE MANUSCRIPT TITLE"},
+        stats:{promptTokens:300,outputTokens:55}
+      }}]
+    }
+  })).status,200);
+  // Local-only reports preserve excerpts and diagnostics; nothing is published.
+  assert.equal((await request(base + "/api/report", "POST", jsonHeaders,
+    {note:"She forgot something"})).status, 201);
   const report = JSON.parse(readFileSync(reportsPath,"utf8").trim());
   assert.equal(report.note, "She forgot something");
   assert.equal(report.conversationId, "older-chat");
+  assert.equal(report.messages[0].content, privateExcerpt);
+  assert.equal(report.diagnostics.desktopVersion, "0.9.8");
+  assert.equal(report.diagnostics.messages[0].diagnostics.memory.strongSemanticMatches, 2);
+  assert.equal(report.diagnostics.messages[0].diagnostics.toolPlan.method, "web-search");
+  assert.equal(report.diagnostics.messages[0].diagnostics.notion.readSucceeded, false);
+  assert.equal(report.diagnostics.messages[0].diagnostics.memory.facts, undefined);
+  assert.equal(published.length, 0);
+  assert.equal((await request(base + "/api/report/preview","POST",
+    {"Content-Type":"application/json"}, {note:"Bug"})).status,401);
+  const preview = await (await request(base + "/api/report/preview","POST",jsonHeaders,
+    {note:"Mikan ignored research results"})).json();
+  assert.match(preview.title,/\[Remote\] Mikan issue report/);
+  assert.match(preview.body,/memoryMatches=2/);
+  assert.match(preview.body,/webSources=2/);
+  assert.doesNotMatch(preview.body,/PRIVATE CHAT|PRIVATE MEMORY|PRIVATE SEARCH|PRIVATE MANUSCRIPT|private\\user/i);
+  assert.doesNotMatch(preview.body,/conversationId|C:\\/i);
+  assert.equal((await request(base + "/api/report","POST",jsonHeaders,
+    {note:"Mikan ignored research results",destination:"both",previewId:"wrong"})).status,409);
+  assert.equal((await request(base + "/api/report","POST",jsonHeaders,
+    {note:"Mikan ignored research results",destination:"github"})).status,409);
+  const uploaded = await request(base + "/api/report","POST",jsonHeaders,
+    {note:"Mikan ignored research results",destination:"both",previewId:preview.previewId});
+  assert.equal(uploaded.status,201);
+  const result = await uploaded.json();
+  assert.equal(result.saved,true);
+  assert.match(result.githubUrl,/\/issues\/999$/);
+  assert.equal(published.length,1);
+  assert.equal(published[0].title,preview.title);
+  assert.equal(published[0].body,preview.body);
+  const localReports = readFileSync(reportsPath,"utf8").trim().split("\n").map(JSON.parse);
+  assert.equal(localReports.length,2);
+  assert.equal(localReports[1].github.url,result.githubUrl);
+  assert.equal((await request(base + "/api/report","POST",jsonHeaders,
+    {note:"Mikan ignored research results",destination:"both",previewId:preview.previewId})).status,409);
+  // Invalid destinations must never spawn GitHub or append files.
+  assert.equal((await request(base + "/api/report","POST",jsonHeaders,
+    {note:"irrelevant",destination:"delete_repo"})).status,400);
+  assert.equal(published.length,1);
 });
