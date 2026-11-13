@@ -14,6 +14,8 @@ export type VoiceSettings = {
   engine: "qwen" | "pocket";
   endpoint: string;
   autoSpeak: boolean;
+  /** Persisted mute applies to all synthesized voice output. */
+  muted: boolean;
   progressiveSpeak: boolean;
   prompt: string;
   speed: number;
@@ -24,6 +26,7 @@ export const DEFAULT_VOICE: VoiceSettings = {
   engine: "qwen",
   endpoint: "http://127.0.0.1:8765",
   autoSpeak: false,
+  muted: false,
   progressiveSpeak: true,
   prompt: "A warm, expressive young adult anime-inspired woman's voice. Medium to slightly high pitch, gentle natural American English, softly playful and lightly teasing. Clear and relaxed, not shrill, squeaky, childlike or constantly overexcited.",
   speed: 1,
@@ -35,6 +38,7 @@ function readVoice(value: unknown): VoiceSettings {
     engine: data.engine === "pocket" ? "pocket" : "qwen",
     endpoint: typeof data.endpoint === "string" ? data.endpoint : DEFAULT_VOICE.endpoint,
     autoSpeak: data.autoSpeak === true,
+    muted: data.muted === true,
     progressiveSpeak: data.progressiveSpeak !== false,
     prompt: typeof data.prompt === "string" && data.prompt.trim() ? data.prompt : DEFAULT_VOICE.prompt,
     speed: typeof data.speed === "number" && Number.isFinite(data.speed)

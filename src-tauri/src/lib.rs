@@ -11,6 +11,7 @@ mod research_intent;
 mod source_enrichment;
 mod evidence_pack;
 mod memory;
+mod interest_memory;
 mod memory_extraction;
 mod memory_jobs;
 mod memory_reviews;
@@ -808,6 +809,12 @@ pub fn run() {
             memory::memory_update_fact,
             memory::memory_delete_fact,
             memory::memory_list_character_facts,
+            memory::memory_import_character_facts,
+            interest_memory::memory_list_interests,
+            interest_memory::memory_import_interests,
+            interest_memory::memory_update_interest,
+            interest_memory::memory_delete_interest,
+            interest_memory::memory_search_interests,
             memory::memory_add_character_fact,
             memory::memory_update_character_fact,
             memory::memory_delete_character_fact,

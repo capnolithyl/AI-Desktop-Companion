@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { ArrowLeft, Check, MessageCircle, Plus, RotateCw, Star, Trash2, X } from "lucide-react";
-import type { CharacterCategory, CharacterFact, MemoryConversation, UserFact } from "./memory-client";
+import type { CharacterCategory, CharacterFact, InterestItem, MemoryConversation, UserFact } from "./memory-client";
+import type { IncomingCanon, IncomingInterest } from "./interest-import";
+import { InterestCollectionTab } from "./InterestCollectionTab";
 import {MemoryImporter} from "./MemoryImporter";
 import {MEMORY_CATEGORIES,parseTags,type ImportMemory,type MemoryCategory} from "./memory-import";
 import { CharacterCanonTab } from "./CharacterCanonTab";
@@ -8,11 +10,17 @@ import { MemoryReviews } from "./MemoryReviews";
 import type { SessionSummary } from "./memory-budget";
 
 type Props = {
-  initialTab?: "chats" | "facts" | "character";
+  embedded?: boolean;
+  initialTab?: "chats" | "facts" | "character" | "collections";
   conversations: MemoryConversation[];
   sessionSummaries: SessionSummary[];
   facts: UserFact[];
   characterFacts: CharacterFact[];
+  interests: InterestItem[];
+  onImportInterests: (items:IncomingInterest[])=>Promise<{inserted:number;duplicates:number}>;
+  onEditInterest: (id:number,item:IncomingInterest)=>Promise<void>;
+  onDeleteInterest: (id:number)=>Promise<void>;
+  onImportCharacter: (items:IncomingCanon[])=>Promise<{inserted:number;duplicates:number}>;
   autoRememberUser: boolean;
   autoRememberMikan: boolean;
   automaticError: string | null;
@@ -47,14 +55,15 @@ function shortDate(seconds: number): string {
 
 /** Separate fact and conversation controls; no automatic memory extraction in phase one. */
 export function MemoryPanel({
-  initialTab = "facts", conversations, sessionSummaries, facts, characterFacts,
+  embedded = false, initialTab = "facts", conversations, sessionSummaries, facts, characterFacts,
+  interests,onImportInterests,onEditInterest,onDeleteInterest,onImportCharacter,
   autoRememberUser, autoRememberMikan, automaticError, onAutoRememberUserChange, onAutoRememberMikanChange,
   currentId, busy, error, onClose, onNew,
   onOpen, onDeleteChat, onDeleteSessionSummary, onAddFact, onEditFact, onDeleteFact, onPinFact,
   onUpdateFactMetadata, onImportFacts, onExportFacts, onReplaceFacts, onRefresh,
   onAddCharacter, onEditCharacter, onDeleteCharacter
 }: Props) {
-  const [tab, setTab] = useState<"chats" | "facts" | "character">(initialTab);
+  const [tab, setTab] = useState<"chats" | "facts" | "character" | "collections">(initialTab);
   const [newFact, setNewFact] = useState("");
   const [editId, setEditId] = useState<number | null>(null);
   const [editValue, setEditValue] = useState("");
@@ -80,7 +89,8 @@ export function MemoryPanel({
   const filteredFacts=facts.filter(f=>(filterCategory==="all"||f.category===filterCategory) &&
     (!filterText.trim() || [f.fact,f.category??"other",...(f.tags??[])].join(" ").toLowerCase().includes(filterText.trim().toLowerCase())));
 
-  return <section className="drawer" role="dialog" aria-label="Mikan memory">
+  return <section className={embedded ? "drawer settings-inner-panel" : "drawer"}
+    role={embedded ? "region" : "dialog"} aria-label="Mikan memory">
     <header className="drawer-header">
       <button type="button" className="back-button" title="Back to companion" onClick={onClose}><ArrowLeft size={19}/></button>
       <div className="drawer-title"><strong>Memory</strong><span>Private SQLite storage on this PC</span></div>
@@ -90,6 +100,9 @@ export function MemoryPanel({
     <nav className="memory-tabs" aria-label="Memory categories">
       <button type="button" className={tab === "facts" ? "active" : ""} onClick={() => setTab("facts")}>
         About you ({facts.length})
+      </button>
+      <button type="button" className={tab === "collections" ? "active" : ""} onClick={() => setTab("collections")}>
+        Interests ({interests.length})
       </button>
       <button type="button" className={tab === "character" ? "active" : ""} onClick={() => setTab("character")}>
         About Mikan ({characterFacts.length})
@@ -190,6 +203,9 @@ export function MemoryPanel({
         {filteredFacts.length>visibleLimit && <button type="button" className="secondary-action" onClick={()=>setVisibleLimit(n=>n+100)}>
           Show 100 more ({filteredFacts.length-visibleLimit} remaining)
         </button>}
+      </> : tab === "collections" ? <>
+        <InterestCollectionTab items={interests} onImport={onImportInterests}
+          onEdit={onEditInterest} onDelete={onDeleteInterest}/>
       </> : tab === "character" ? <>
         <label className="memory-auto-toggle">
           <input type="checkbox" checked={autoRememberMikan}
@@ -199,7 +215,7 @@ export function MemoryPanel({
           </span>
         </label>
         <CharacterCanonTab facts={characterFacts} onAdd={onAddCharacter}
-          onEdit={onEditCharacter} onDelete={onDeleteCharacter}/>
+          onEdit={onEditCharacter} onDelete={onDeleteCharacter} onImport={onImportCharacter}/>
       </> : <>
         <div className="memory-chat-top">
           <p className="memory-explainer">Conversations persist across restarts. Open one to continue where you left off.</p>
@@ -238,6 +254,6 @@ export function MemoryPanel({
         </article>)}
       </>}
     </div>
-    <footer className="drawer-footer">Your facts, Mikan's character canon and session notes are stored separately. Webpage knowledge remains independent.</footer>
+    <footer className="drawer-footer">Your facts, interest collections, Mikan's canon and session notes are stored separately. Webpage knowledge remains independent.</footer>
   </section>;
 }

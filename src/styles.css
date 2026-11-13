@@ -76,6 +76,39 @@ button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px
   backdrop-filter: blur(22px);
   padding: 15px 15px 11px;
 }
+/* A quiet confirmation above the chat dock, driven by successful SQLite writes. */
+.desktop-memory-toast {
+  position: absolute;
+  z-index: 6;
+  left: 50%;
+  top: -42px;
+  width: max-content;
+  max-width: calc(100% - 24px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 9px 14px;
+  border: 1px solid #668575;
+  border-radius: 999px;
+  background: #302936;
+  color: #e1f4e6;
+  box-shadow: 0 5px 15px #0005;
+  font-size: 12px;
+  line-height: 1.35;
+  text-align: center;
+  pointer-events: none;
+  transform: translateX(-50%);
+  animation: desktop-memory-appear .18s ease-out;
+}
+.desktop-memory-toast svg { flex: 0 0 auto; color: #98d4ad; }
+@keyframes desktop-memory-appear {
+  from { opacity: 0; transform: translate(-50%, 7px); }
+  to { opacity: 1; transform: translate(-50%, 0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .desktop-memory-toast { animation: none; }
+}
 .reply-panel { padding: 1px 1px 13px; border-bottom: 1px solid rgba(255,205,190,.15); }
 .reply-header {
   display: flex; justify-content: space-between; align-items: center; color: #ffc2a0;
@@ -199,6 +232,39 @@ button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px
   .drag-handle { padding: 9px 12px; }
   .dock-footer > span:last-child { display: none; }
 }
+
+
+/* Avatar quick actions stay outside the portrait crop, above the chat UI. */
+.portrait-context-menu {
+  position: fixed; z-index: 30; width: 246px;
+  max-height: min(76vh, 520px); overflow-y: auto; overflow-x: hidden;
+  padding: 7px; border-radius: 14px;
+  border: 1px solid rgb(var(--accent-rgb, 255 173 126) / .36);
+  background: linear-gradient(155deg, rgba(58, 42, 55, .98), rgba(31, 25, 35, .99));
+  color: #fce9e2; box-shadow: 0 12px 34px #100c18a8;
+  backdrop-filter: blur(20px); user-select: none;
+}
+.portrait-menu-heading {
+  padding: 8px 10px 10px; color: var(--accent, #ffad7e);
+  font-size: 10px; font-weight: 800; letter-spacing: .13em;
+}
+.portrait-menu-heading span { color: #b9a5b3; font-weight: 500; margin-left: 6px; }
+.portrait-menu-action {
+  width: 100%; min-height: 34px; display: flex; align-items: center; gap: 9px;
+  text-align: left; border: 0; border-radius: 8px; background: transparent;
+  color: inherit; padding: 7px 9px; font-size: 12px;
+}
+.portrait-menu-action:hover:not(:disabled),
+.portrait-menu-action:focus-visible { background: rgb(var(--accent-rgb, 255 173 126) / .17); color: #fff; }
+.portrait-menu-action:disabled { opacity: .45; cursor: not-allowed; }
+.portrait-menu-action.selected { color: #ffc6a8; }
+.portrait-menu-icon { flex: 0 0 17px; display: flex; align-items: center; color: var(--accent, #ffad7e); }
+.portrait-menu-label { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.portrait-menu-check, .portrait-menu-chevron { flex: 0 0 auto; color: var(--accent, #ffad7e); }
+.portrait-menu-chevron { transition: transform .15s ease; }
+.portrait-menu-chevron.expanded { transform: rotate(90deg); }
+.portrait-menu-submenu { margin: 2px 0 5px; border-left: 1px solid #916b7766; }
+.portrait-menu-separator { height: 1px; margin: 6px 7px; background: #c69c9b26; }
 
 /* v0.3: native window has no shadow; portrait itself becomes the drag target. */
 .companion {
@@ -623,6 +689,27 @@ button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px
 .memory-body { overflow-y: auto; flex: 1; min-height: 0; padding: 14px 16px 22px; }
 .memory-explainer { margin: 0 0 13px; color: #d5bfcc; font-size: 12px; line-height: 1.55; }
 .memory-add { display: flex; flex-direction: column; gap: 9px; margin-bottom: 16px; }
+.collection-add > input,
+.collection-add > label > input,
+.collection-add > label > textarea,
+.collection-add .memory-import-row-controls input,
+.collection-add .memory-import-row-controls select,
+.character-edit > input,
+.character-edit > label > input,
+.character-edit > label > textarea,
+.character-edit .memory-import-row-controls input,
+.character-edit .memory-import-row-controls select {
+  border: 1px solid #68515e; border-radius: 9px; padding: 8px 10px;
+  background: #40333f; color: #fff2ea; width: 100%; min-width: 0;
+  font: inherit; font-size: 12px;
+}
+.collection-add > label, .character-edit > label {
+  display: flex; flex-direction: column; gap: 5px; font-size: 11px; color: #e1c4d3;
+}
+.collection-add .memory-import-row-controls,
+.character-edit .memory-import-row-controls { margin-left: 0; }
+.memory-import-fact span { overflow-wrap: anywhere; min-width: 0; }
+
 .memory-add textarea, .memory-item textarea {
   resize: vertical; width: 100%; min-height: 70px; border-radius: 9px;
   padding: 9px 11px; border: 1px solid #68515e; color: #fff2ea;
@@ -957,4 +1044,215 @@ button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px
   display: block; margin: 0 0 12px;
   font-size: 10px; line-height: 1.4; color: #cab3c2;
   overflow-wrap: anywhere;
+}
+
+/* Animated wardrobe carousel. The existing portrait is the live preview. */
+.wardrobe-browser {
+  border: 1px solid #684b5c;
+  background: #302631;
+  border-radius: 12px;
+  padding: 13px;
+  margin: 0 0 18px;
+  display: grid;
+  gap: 11px;
+}
+.wardrobe-preview-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: #ffe1d1;
+  font-size: 13px;
+}
+.wardrobe-preview-heading strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.wardrobe-preview-heading span {
+  white-space: nowrap;
+  font-size: 11px;
+  color: #c6afbd;
+}
+.wardrobe-hint {
+  display: block;
+  color: #cab3c2;
+  font-size: 11px;
+  line-height: 1.5;
+}
+.wardrobe-navigation {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+.wardrobe-navigation input[type="range"] {
+  min-width: 0;
+  width: 100%;
+  flex: 1;
+  accent-color: var(--accent, #ffad7e);
+  cursor: pointer;
+}
+.wardrobe-navigation button, .wardrobe-preview-actions button, .wardrobe-favorite {
+  background: #4a3645;
+  color: #ffe0d0;
+  border: 1px solid #795c6b;
+  border-radius: 9px;
+  padding: 7px 10px;
+  font-size: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  cursor: pointer;
+}
+.wardrobe-navigation button { flex: 0 0 34px; height: 34px; padding: 0; }
+.wardrobe-navigation button:hover:not(:disabled),
+.wardrobe-preview-actions button:hover:not(:disabled),
+.wardrobe-favorite:hover:not(:disabled) {
+  background: #705064;
+}
+.wardrobe-preview-actions {
+  display: flex;
+  gap: 7px;
+  flex-wrap: wrap;
+}
+.wardrobe-preview-actions .wardrobe-wear {
+  background: #865747;
+  border-color: #bd856e;
+}
+.wardrobe-navigation button:disabled, .wardrobe-preview-actions button:disabled,
+.wardrobe-favorite:disabled { cursor: not-allowed; opacity: .54; }
+.wardrobe-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: end;
+}
+.wardrobe-meta > label {
+  min-width: 130px;
+  flex: 1 1 130px;
+  display: grid;
+  gap: 5px;
+  color: #e6cedb;
+  font-size: 11px;
+}
+.wardrobe-meta select {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid #795c6b;
+  border-radius: 9px;
+  padding: 8px;
+  background: #40343f;
+  color: #ffefe9;
+  font-size: 12px;
+}
+.wardrobe-favorite.active { color: #ffb0b9; border-color: #ad6b80; }
+
+/* A single Iki renderer inside Appearance: Settings otherwise covers the portrait. */
+.wardrobe-live-preview {
+  position: relative;
+  height: clamp(190px, 34vh, 260px);
+  min-height: 190px;
+  display: flex;
+  justify-content: center;
+  align-items: stretch;
+  overflow: hidden;
+  border-radius: 11px;
+  border: 1px solid #725467;
+  background: radial-gradient(ellipse at center 70%, #594152 0%, #342735 65%, #27212d 100%);
+  color: #c9b5c3;
+  font-size: 12px;
+}
+.wardrobe-live-preview .iki-avatar-canvas {
+  cursor: default;
+  pointer-events: none;
+  max-height: 100%;
+  filter: drop-shadow(0 6px 10px #130b166b);
+}
+
+/* Settings workspace: keep Mikan visible on the left while opening a real panel beside her.
+   Existing transparent chat window stays 520px wide whenever Settings is closed. */
+.companion.settings-mode .portrait-space {
+  left: 3px; right: auto; width: 514px;
+}
+.companion.settings-mode .floating-controls {
+  right: auto; width: 500px;
+}
+.companion.settings-mode .dock {
+  left: 10px; right: auto; width: 500px;
+}
+.companion.settings-mode > .drawer {
+  left: 520px; right: 8px; top: 8px; bottom: 8px;
+  border-color: rgb(var(--accent-rgb, 255 173 126) / .25);
+  background: linear-gradient(155deg, #312631 0%, #231d28 75%);
+  box-shadow: -12px 14px 45px #160e183b;
+}
+.companion.settings-mode .panel-scrim { display: none; }
+.companion.settings-mode .drawer-header {
+  min-height: 66px;
+  background: linear-gradient(90deg, rgb(var(--accent-rgb,255 173 126) / .10), transparent);
+}
+.settings-layout {
+  display: flex; flex: 1; overflow: hidden; min-height: 0;
+}
+.settings-layout .settings-tabs {
+  display: flex; flex-direction: column; align-items: stretch;
+  width: 168px; min-width: 168px;
+  gap: 15px; padding: 16px 10px;
+  border-bottom: 0; border-right: 1px solid #574452;
+  overflow-y: auto; background: rgba(23,19,29,.44);
+}
+.settings-nav-group { display: flex; flex-direction: column; gap: 4px; }
+.settings-nav-heading {
+  padding: 0 9px 5px;
+  color: #ad93a8; font-size: 9px; font-weight: 800;
+  text-transform: uppercase; letter-spacing: .11em;
+}
+.settings-layout .settings-tab {
+  display: flex; align-items: center; gap: 9px; text-align: left;
+  width: 100%; padding: 10px 9px;
+  color: #d9c4cf; background: transparent;
+  border: 1px solid transparent; border-radius: 9px;
+  font-size: 11px; font-weight: 600;
+  transition: background .12s ease, color .12s ease;
+}
+.settings-layout .settings-tab svg { flex: none; opacity: .84; }
+.settings-layout .settings-tab span { min-width: 0; }
+.settings-layout .settings-tab:hover {
+  background: #473444; color: #ffece2;
+}
+.settings-layout .settings-tab.active {
+  color: #ffe6d5; background: rgb(var(--accent-rgb,255 173 126) / .16);
+  border-color: rgb(var(--accent-rgb,255 173 126) / .32);
+}
+.settings-layout > .settings-body {
+  flex: 1; min-width: 0;
+  padding: 22px 19px 25px;
+}
+.settings-layout > .settings-body.settings-embedded {
+  padding: 0;
+  display: flex;
+  overflow: hidden;
+}
+.settings-layout .settings-inner-panel {
+  position: relative; inset: auto; flex: 1;
+  border: none; border-radius: 0; box-shadow: none;
+  background: transparent; min-height: 0; min-width: 0;
+}
+.settings-inner-panel .drawer-header { min-height: 60px; }
+.settings-inner-panel .drawer-title strong { font-size: 14px; }
+.settings-inner-panel .memory-body { min-height: 0; }
+.settings-layout .settings-section-title { color: #ffdbc6; }
+.settings-layout .settings-section-title:not(:first-child) { margin-top: 23px; }
+.settings-layout .setting-field { margin-bottom: 17px; }
+.settings-layout .settings-footer { border-top-color: #66505c; }
+.wardrobe-preview-note {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 10px; border-radius: 8px;
+  background: rgba(255,194,160,.08); color: #ead2c8; font-size: 11px;
+}
+.wardrobe-preview-note svg { color: var(--accent,#ffad7e); }
+@media (max-width: 980px) {
+  .settings-layout .settings-tabs { min-width: 136px; width: 136px; padding: 12px 6px; }
+  .settings-layout .settings-tab { padding: 9px 6px; gap: 6px; font-size: 10px; }
+  .settings-layout > .settings-body { padding: 16px 11px; }
 }
