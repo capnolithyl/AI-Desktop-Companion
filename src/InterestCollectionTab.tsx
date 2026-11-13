@@ -22,7 +22,7 @@ export function InterestCollectionTab({items,onImport,onEdit,onDelete}:Props){
   const [format,setFormat]=useState<ImportFormat>("text");
   const [content,setContent]=useState("");
   const [kind,setKind]=useState<InterestKind>("band");
-  const [status,setStatus]=useState<InterestStatus>("favorite");
+  const [status,setStatus]=useState<InterestStatus>("unknown");
   const [rows,setRows]=useState<IncomingInterest[]>([]);
   const [excluded,setExcluded]=useState<Set<number>>(()=>new Set());
   const [editing,setEditing]=useState<number|null>(null);
