@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { ArrowLeft, Check, MessageCircle, Plus, RotateCw, Star, Trash2, X } from "lucide-react";
-import type { CharacterCategory, CharacterFact, MemoryConversation, UserFact } from "./memory-client";
+import type { CharacterCategory, CharacterFact, InterestItem, MemoryConversation, UserFact } from "./memory-client";
+import type { IncomingCanon, IncomingInterest } from "./interest-import";
+import { InterestCollectionTab } from "./InterestCollectionTab";
 import {MemoryImporter} from "./MemoryImporter";
 import {MEMORY_CATEGORIES,parseTags,type ImportMemory,type MemoryCategory} from "./memory-import";
 import { CharacterCanonTab } from "./CharacterCanonTab";
@@ -8,11 +10,16 @@ import type { SessionSummary } from "./memory-budget";
 
 type Props = {
   embedded?: boolean;
-  initialTab?: "chats" | "facts" | "character";
+  initialTab?: "chats" | "facts" | "character" | "collections";
   conversations: MemoryConversation[];
   sessionSummaries: SessionSummary[];
   facts: UserFact[];
   characterFacts: CharacterFact[];
+  interests: InterestItem[];
+  onImportInterests: (items:IncomingInterest[])=>Promise<{inserted:number;duplicates:number}>;
+  onEditInterest: (id:number,item:IncomingInterest)=>Promise<void>;
+  onDeleteInterest: (id:number)=>Promise<void>;
+  onImportCharacter: (items:IncomingCanon[])=>Promise<{inserted:number;duplicates:number}>;
   autoRememberUser: boolean;
   autoRememberMikan: boolean;
   automaticError: string | null;
@@ -48,13 +55,14 @@ function shortDate(seconds: number): string {
 /** Separate fact and conversation controls; no automatic memory extraction in phase one. */
 export function MemoryPanel({
   embedded = false, initialTab = "facts", conversations, sessionSummaries, facts, characterFacts,
+  interests,onImportInterests,onEditInterest,onDeleteInterest,onImportCharacter,
   autoRememberUser, autoRememberMikan, automaticError, onAutoRememberUserChange, onAutoRememberMikanChange,
   currentId, busy, error, onClose, onNew,
   onOpen, onDeleteChat, onDeleteSessionSummary, onAddFact, onEditFact, onDeleteFact, onPinFact,
   onUpdateFactMetadata, onImportFacts, onExportFacts, onReplaceFacts, onRefresh,
   onAddCharacter, onEditCharacter, onDeleteCharacter
 }: Props) {
-  const [tab, setTab] = useState<"chats" | "facts" | "character">(initialTab);
+  const [tab, setTab] = useState<"chats" | "facts" | "character" | "collections">(initialTab);
   const [newFact, setNewFact] = useState("");
   const [editId, setEditId] = useState<number | null>(null);
   const [editValue, setEditValue] = useState("");
@@ -91,6 +99,9 @@ export function MemoryPanel({
     <nav className="memory-tabs" aria-label="Memory categories">
       <button type="button" className={tab === "facts" ? "active" : ""} onClick={() => setTab("facts")}>
         About you ({facts.length})
+      </button>
+      <button type="button" className={tab === "collections" ? "active" : ""} onClick={() => setTab("collections")}>
+        Interests ({interests.length})
       </button>
       <button type="button" className={tab === "character" ? "active" : ""} onClick={() => setTab("character")}>
         About Mikan ({characterFacts.length})
@@ -190,6 +201,9 @@ export function MemoryPanel({
         {filteredFacts.length>visibleLimit && <button type="button" className="secondary-action" onClick={()=>setVisibleLimit(n=>n+100)}>
           Show 100 more ({filteredFacts.length-visibleLimit} remaining)
         </button>}
+      </> : tab === "collections" ? <>
+        <InterestCollectionTab items={interests} onImport={onImportInterests}
+          onEdit={onEditInterest} onDelete={onDeleteInterest}/>
       </> : tab === "character" ? <>
         <label className="memory-auto-toggle">
           <input type="checkbox" checked={autoRememberMikan}
@@ -199,7 +213,7 @@ export function MemoryPanel({
           </span>
         </label>
         <CharacterCanonTab facts={characterFacts} onAdd={onAddCharacter}
-          onEdit={onEditCharacter} onDelete={onDeleteCharacter}/>
+          onEdit={onEditCharacter} onDelete={onDeleteCharacter} onImport={onImportCharacter}/>
       </> : <>
         <div className="memory-chat-top">
           <p className="memory-explainer">Conversations persist across restarts. Open one to continue where you left off.</p>
@@ -238,6 +252,6 @@ export function MemoryPanel({
         </article>)}
       </>}
     </div>
-    <footer className="drawer-footer">Your facts, Mikan's character canon and session notes are stored separately. Webpage knowledge remains independent.</footer>
+    <footer className="drawer-footer">Your facts, interest collections, Mikan's canon and session notes are stored separately. Webpage knowledge remains independent.</footer>
   </section>;
 }
