@@ -23,8 +23,9 @@ pipeline and mirrors the currently active desktop conversation.
   The active rig is loaded on demand; custom imported outfits are passed
   to the relay in RAM, not copied to a new database.
 - Local model, personalities, facts, history, and search remain on the PC.
-- Settings → Report an issue stores a note and recent excerpts in
-  %USERPROFILE%\.mikan\remote-issues.jsonl for reviewing the next day.
+- Settings → Report an issue can save detailed private diagnostics locally,
+  publish an explicitly reviewed GitHub issue, or do both. The Windows
+  report file is `%USERPROFILE%\\.mikan\\remote-issues.jsonl`.
 - An extra randomly generated remote key protects chat API requests,
   alongside private Tailscale access (or Cloudflare Access for public deployment).
 
@@ -57,6 +58,51 @@ Use the close button, backdrop, or Escape key to exit settings.
 The hamburger menu is a browser-relay-only update: once the desktop is
 already at v0.9.7 or newer, a git pull and Node relay restart are sufficient.
 It does not require reinstalling Mikan or changing Tailscale configuration.
+
+## Report diagnostics and optional GitHub issues
+
+In **Settings → Report an issue**, describe the problem and choose one of
+three destinations:
+
+- **Save on my PC (private)** is the default. It appends a JSON object to
+  `%USERPROFILE%\\.mikan\\remote-issues.jsonl` containing the note, time,
+  current conversation ID, last 8 short chat excerpts, browser information,
+  selected inference provider, desktop version, recent model latency and
+  token metrics, memory retrieval counts, research/tool outcomes, notion
+  read status, failure reasons, and avatar render diagnostics. The file does
+  not leave the computer automatically.
+- **Create GitHub issue only** publishes to
+  `capnolithyl/AI-Desktop-Companion`, but **only after you select
+  Review GitHub issue and see its exact title and body**. The public body
+  includes your own note and non-sensitive model/performance statistics.
+  It excludes chat transcripts, conversation IDs, memories, private URLs,
+  search queries, manuscript titles, local paths, and private error strings.
+  Assume issues are public; inspect your note for secrets before confirming.
+- **Save on PC + create GitHub issue** does both. A GitHub failure does not
+  discard the local report, and the UI tells you if the issue failed.
+
+The relay never holds a GitHub token or sends credentials to the phone.
+For one-click issue creation, install and sign into **GitHub CLI** once on
+the same Windows account that runs `npm run server`:
+
+    winget install --id GitHub.cli -e
+    gh auth login
+    gh auth status
+
+Select `GitHub.com` and browser authentication when prompted. The GitHub
+account must be authorized to create issues on this repository. The relay
+calls `gh issue create --repo capnolithyl/AI-Desktop-Companion`, with
+reviewed text on stdin, without shell execution, and returns the issue URL.
+If `gh` is not installed or authenticated, GitHub publishing fails with a
+setup message. Local-only reports work without GitHub CLI. There is a
+15-second GitHub publish rate limit to avoid accidental duplicate issues.
+
+Report previews are short-lived, one-time and tied to their original note.
+Editing the note or switching the destination requires reviewing again.
+The GitHub issue receives the exact text shown in the preview, not a later
+or newly generated conversation snapshot. The feature requires desktop
+v0.9.8 or newer for full diagnostic details; older versions still produce
+basic local reports.
 
 ## Local test first
 
