@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { Script } from "node:vm";
 import { createBridge } from "../server/index.mjs";
 
 test("browser relay requires a private key and delegates to the desktop, not a second model", async (t) => {
@@ -28,7 +29,12 @@ test("browser relay requires a private key and delegates to the desktop, not a s
 
   const home = await request(base + "/");
   assert.equal(home.status, 200);
-  assert.match(await home.text(), /Remote Companion/);
+  const html = await home.text();
+  assert.match(html, /Remote Companion/);
+  // Catch syntax errors in the lightweight inline browser UI before packaging.
+  const inlineScript = html.match(/<script>([\s\S]*?)<\/script>/);
+  assert.ok(inlineScript, "Browser UI script exists");
+  assert.doesNotThrow(() => new Script(inlineScript[1]));
   const engine = await request(base + "/avatar-engine.js");
   assert.equal(engine.status, 200);
   assert.match(await engine.text(), /MikanRemoteAvatar/);
