@@ -141,10 +141,15 @@ saving. You can edit or remove records in the Interests tab afterward.
 
 When auto-remember is enabled, the existing local Ollama extractor may capture
 explicitly grounded media tastes into the collection. It needs exact supporting
-text in the current owner's message, and it does not overwrite manually imported
-entries. An already auto-extracted item may change relationship when a later
-explicit statement contradicts it. Extraction is opportunistic; the memory panel
-and chat continue working if Ollama is temporarily unavailable.
+text in the current owner's message. Newer explicit favorites can promote an
+existing manually imported `like`, `interested`, `experienced` or `unknown`
+entry to `favorite` when its kind and name match exactly, preserving the
+original row ID, rating, notes, tags and source. Other changes to imported
+curated entries remain protected. An already auto-extracted item may change
+relationship when a later explicit statement contradicts it. Extraction is
+opportunistic; the memory panel and chat continue working if Ollama is
+temporarily unavailable. The Memory panel's **Last extraction** outcome
+distinguishes accepted changes from model passes that saved nothing.
 
 ### Bulk Mikan canon import (desktop)
 

@@ -134,7 +134,7 @@ export const CAPABILITIES: readonly Capability[] = [
   },
   {
     id:"interest-collections",label:"Searchable interests and media collections",category:"Memory",
-    description:"Separate SQLite FTS5 catalog of the owner's bands, albums, anime, movies, TV, games and books. Bulk JSON/CSV/text import supports favorites, likes, dislikes, experienced or interested statuses plus optional ratings, notes and tags. Matching entries are recalled in a bounded chat context. Local automatic extraction adds only grounded, explicitly stated tastes, and never overwrites owner-curated imports. This is desktop memory, not synced to Pocket.",
+    description:"Separate SQLite FTS5 catalog of the owner's bands, albums, anime, movies, TV, games and books. Bulk JSON/CSV/text import supports favorites, likes, dislikes, experienced or interested statuses plus optional ratings, notes and tags. Matching entries are recalled in a bounded chat context. Local automatic extraction adds only grounded, explicitly stated tastes. A newer explicit favorite statement can promote the same imported item from like/interested/experienced/unknown to favorite while preserving its record, rating, tags and notes; conflicting or weaker statements do not change curated imports. This is desktop memory, not synced to Pocket.",
     stage:"experimental",runtime:"none",keywords:["interests","collection","anime","bands","movies","shows","favorite","watched","ratings","media","import"],
     sources:["src-tauri/src/interest_memory.rs","src/InterestCollectionTab.tsx","src/interest-import.ts","src/memory-client.ts"],docs:["MEMORY.md"],
     commands:["memory_list_interests","memory_search_interests","memory_import_interests","memory_update_interest","memory_delete_interest"]
