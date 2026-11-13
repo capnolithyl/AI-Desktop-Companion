@@ -1,17 +1,21 @@
 import { DEFAULT_PERSONALITY, readPersonality, type Personality } from "./personality";
+import type { ReasoningMode } from "./reasoning-mode";
 import { captureInterval, restoreRegion, type RegionChoice } from "./capture-region";
 import { DEFAULT_SOURCE_PREFERENCES, readSourcePreferences, type SourcePreference } from "./preferred-sources";
 import { DEFAULT_VOICE_VOLUME, readVoiceVolume } from "./speech";
 import { DEFAULT_EMOJI_BUBBLE_SECONDS, readEmojiBubbleSeconds } from "./emoji-reactions";
+import { DEFAULT_AVATAR_VERTICAL_OFFSET, readAvatarVerticalOffset } from "./avatar-viewport";
 
 export type ChatRole = "user" | "assistant";
 export type Message = { id: string; role: ChatRole; content: string };
-export type Settings = { voice: VoiceSettings; endpoint: string; model: string; provider: "local" | "auto" | "gemini" | "openrouter"; geminiModel: string; openrouterModel: string; systemPrompt: string; appearance: Appearance; personality: Personality; searxngEndpoint: string; autoSearch: boolean; structuredResearch: boolean; autoManageSearch: boolean; sourcePreferences: SourcePreference[]; cacheHours: number; contextWindow: number | null; autoRememberUser: boolean; autoRememberMikan: boolean; visionCaptureIntervalSeconds:number; visionRegion:RegionChoice|null };
+export type Settings = { voice: VoiceSettings; endpoint: string; model: string; provider: "local" | "auto" | "gemini" | "openrouter"; geminiModel: string; openrouterModel: string; systemPrompt: string; appearance: Appearance; personality: Personality; searxngEndpoint: string; autoSearch: boolean; structuredResearch: boolean; autoManageSearch: boolean; sourcePreferences: SourcePreference[]; cacheHours: number; contextWindow: number | null; reasoningMode: ReasoningMode; autoRememberUser: boolean; autoRememberMikan: boolean; visionCaptureIntervalSeconds:number; visionRegion:RegionChoice|null };
 
 export type VoiceSettings = {
   engine: "qwen" | "pocket";
   endpoint: string;
   autoSpeak: boolean;
+  /** Persisted mute applies to all synthesized voice output. */
+  muted: boolean;
   progressiveSpeak: boolean;
   prompt: string;
   speed: number;
@@ -22,6 +26,7 @@ export const DEFAULT_VOICE: VoiceSettings = {
   engine: "qwen",
   endpoint: "http://127.0.0.1:8765",
   autoSpeak: false,
+  muted: false,
   progressiveSpeak: true,
   prompt: "A warm, expressive young adult anime-inspired woman's voice. Medium to slightly high pitch, gentle natural American English, softly playful and lightly teasing. Clear and relaxed, not shrill, squeaky, childlike or constantly overexcited.",
   speed: 1,
@@ -33,6 +38,7 @@ function readVoice(value: unknown): VoiceSettings {
     engine: data.engine === "pocket" ? "pocket" : "qwen",
     endpoint: typeof data.endpoint === "string" ? data.endpoint : DEFAULT_VOICE.endpoint,
     autoSpeak: data.autoSpeak === true,
+    muted: data.muted === true,
     progressiveSpeak: data.progressiveSpeak !== false,
     prompt: typeof data.prompt === "string" && data.prompt.trim() ? data.prompt : DEFAULT_VOICE.prompt,
     speed: typeof data.speed === "number" && Number.isFinite(data.speed)
@@ -48,6 +54,7 @@ export type Appearance = {
   fontFamily: "Segoe UI" | "Arial" | "Verdana" | "Georgia";
   fontSize: number;
   emojiBubbleSeconds: number;
+  avatarVerticalOffset: number;
 };
 export const DEFAULT_APPEARANCE: Appearance = {
   accent: "#ffad7e",
@@ -55,7 +62,8 @@ export const DEFAULT_APPEARANCE: Appearance = {
   opacity: 0.94,
   fontFamily: "Segoe UI",
   fontSize: 13,
-  emojiBubbleSeconds: DEFAULT_EMOJI_BUBBLE_SECONDS
+  emojiBubbleSeconds: DEFAULT_EMOJI_BUBBLE_SECONDS,
+  avatarVerticalOffset: DEFAULT_AVATAR_VERTICAL_OFFSET
 };
 function safeHex(value: unknown, fallback: string): string {
   return typeof value === "string" && /^#[0-9a-fA-F]{6}$/.test(value) ? value : fallback;
@@ -69,7 +77,8 @@ function readAppearance(value: unknown): Appearance {
     opacity: typeof v.opacity === "number" && Number.isFinite(v.opacity) ? Math.max(0.65, Math.min(1, v.opacity)) : DEFAULT_APPEARANCE.opacity,
     fontFamily: fonts.includes(String(v.fontFamily)) ? v.fontFamily as Appearance["fontFamily"] : DEFAULT_APPEARANCE.fontFamily,
     fontSize: typeof v.fontSize === "number" && Number.isFinite(v.fontSize) ? Math.max(11, Math.min(20, Math.round(v.fontSize))) : DEFAULT_APPEARANCE.fontSize,
-    emojiBubbleSeconds: readEmojiBubbleSeconds(v.emojiBubbleSeconds)
+    emojiBubbleSeconds: readEmojiBubbleSeconds(v.emojiBubbleSeconds),
+    avatarVerticalOffset: readAvatarVerticalOffset(v.avatarVerticalOffset)
   };
 }
 
@@ -85,7 +94,8 @@ export const DEFAULT_SETTINGS: Settings = {
   structuredResearch: true,
   autoManageSearch: false,
   cacheHours: 24,
-  contextWindow: null,
+  contextWindow: 16384,
+  reasoningMode: "auto",
   autoRememberUser: true,
   autoRememberMikan: true,
   visionCaptureIntervalSeconds:15,
@@ -116,8 +126,13 @@ export function loadSettings(): Settings {
       structuredResearch: data.structuredResearch !== false,
       autoManageSearch: typeof data.autoManageSearch === "boolean" ? data.autoManageSearch : data.autoSearch === true,
       cacheHours: typeof data.cacheHours === "number" && Number.isFinite(data.cacheHours) ? Math.max(1, Math.min(720, data.cacheHours)) : DEFAULT_SETTINGS.cacheHours,
-      contextWindow: [4096, 8192, 16384, 32768].includes(Number(data.contextWindow)) && data.contextWindow != null
-        ? Number(data.contextWindow) : null,
+      // A deliberate "Ollama default" (null) must survive a restart.
+      contextWindow: data.contextWindow === null && Object.prototype.hasOwnProperty.call(data,"contextWindow")
+        ? null
+        : [4096, 8192, 16384, 32768].includes(Number(data.contextWindow)) && data.contextWindow != null
+          ? Number(data.contextWindow) : DEFAULT_SETTINGS.contextWindow,
+      reasoningMode: data.reasoningMode === "fast" || data.reasoningMode === "deep"
+        ? data.reasoningMode : DEFAULT_SETTINGS.reasoningMode,
       autoRememberUser: data.autoRememberUser !== false,
       autoRememberMikan: data.autoRememberMikan !== false,
       visionCaptureIntervalSeconds:captureInterval(data.visionCaptureIntervalSeconds),
@@ -140,10 +155,15 @@ export function saveSettings(settings: Settings): void {
 
 function openDatabase(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
-    const request = indexedDB.open("mikan-local-media", 1);
+    // Shared with the animated wardrobe. Both callers must use DB v2:
+    // opening the older version after a wardrobe upgrade throws VersionError.
+    const request = indexedDB.open("mikan-local-media", 2);
     request.onupgradeneeded = () => {
       if (!request.result.objectStoreNames.contains("assets")) {
         request.result.createObjectStore("assets");
+      }
+      if (!request.result.objectStoreNames.contains("iki-outfits")) {
+        request.result.createObjectStore("iki-outfits", { keyPath: "id" });
       }
     };
     request.onsuccess = () => resolve(request.result);

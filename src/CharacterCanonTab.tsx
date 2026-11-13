@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { CharacterBulkImporter } from "./CharacterBulkImporter";
+import type { IncomingCanon } from "./interest-import";
 import { Check, Plus, Trash2, X } from "lucide-react";
 import {
   CHARACTER_CATEGORIES, type CharacterCategory, type CharacterFact
@@ -6,6 +8,7 @@ import {
 
 type Props = {
   facts: CharacterFact[];
+  onImport?: (items:IncomingCanon[])=>Promise<{inserted:number;duplicates:number}>;
   onAdd: (category: CharacterCategory, label: string, value: string) => Promise<void>;
   onEdit: (id: number, category: CharacterCategory, label: string, value: string) => Promise<void>;
   onDelete: (id: number) => Promise<void>;
@@ -25,7 +28,7 @@ function characterDate(seconds: number): string {
 }
 
 /** Mikan's explicit self-identity editor, kept separate from user memories. */
-export function CharacterCanonTab({ facts, onAdd, onEdit, onDelete }: Props) {
+export function CharacterCanonTab({ facts, onImport, onAdd, onEdit, onDelete }: Props) {
   const [category, setCategory] = useState<CharacterCategory>("favorites");
   const [label, setLabel] = useState("");
   const [value, setValue] = useState("");
@@ -35,6 +38,9 @@ export function CharacterCanonTab({ facts, onAdd, onEdit, onDelete }: Props) {
   const [editValue, setEditValue] = useState("");
   const [confirmDelete, setConfirmDelete] = useState<number | null>(null);
   const [working, setWorking] = useState(false);
+  const [search, setSearch] = useState("");
+  const filtered = facts.filter(item =>
+    [item.label,item.value,item.category].join(" ").toLowerCase().includes(search.toLowerCase()));
   const [error, setError] = useState<string | null>(null);
 
   async function run(operation: () => Promise<void>) {
@@ -53,6 +59,7 @@ export function CharacterCanonTab({ facts, onAdd, onEdit, onDelete }: Props) {
       when enabled, and you can always add or correct details here.
     </p>
     {error && <div className="memory-error" role="alert">{error}</div>}
+    {onImport && <CharacterBulkImporter facts={facts} onImport={onImport}/>}
     <form className="memory-add character-form" onSubmit={event => {
       event.preventDefault();
       if (!label.trim() || !value.trim()) return;
@@ -78,7 +85,12 @@ export function CharacterCanonTab({ facts, onAdd, onEdit, onDelete }: Props) {
       Nothing established yet. Ask Mikan about her favorites, or set Favorite color = Orange here.
       Established details will persist after restarting.
     </p>}
-    {facts.map(fact => <article className="memory-item character-item" key={fact.id}>
+    <div className="memory-filter">
+      <input aria-label="Search Mikan details" placeholder="Search Mikan's traits and favorites"
+        value={search} onChange={event => setSearch(event.target.value)}/>
+      <small>{filtered.length} of {facts.length} details</small>
+    </div>
+    {filtered.slice(0,150).map(fact => <article className="memory-item character-item" key={fact.id}>
       {editId === fact.id ? <>
         <div className="character-form character-edit">
           <CategorySelect value={editCategory} onChange={setEditCategory}/>
@@ -124,5 +136,6 @@ export function CharacterCanonTab({ facts, onAdd, onEdit, onDelete }: Props) {
         </div>
       </>}
     </article>)}
+    {filtered.length>150 && <p className="memory-explainer">Showing 150 matches. Search above for more.</p>}
   </>;
 }

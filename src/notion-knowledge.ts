@@ -20,6 +20,8 @@ export type NotionRetrievalPlan = {
   selectedPage: NotionCachedPage | null;
   fullRead: boolean;
   sceneLookup: boolean;
+  /** Explicit owner request to refresh this conversation's chapter reading. */
+  reread: boolean;
 };
 
 // Generic writing intent, not a fixed set of book and character names.
@@ -145,6 +147,28 @@ export function asksToReadFullNotionPage(text:string, selectedPage:NotionCachedP
   return document && (direct || synopsis || coverageQuestion || critique);
 }
 
+/** "Read it again", "re-cache the chapter" and similar natural requests
+ * must rebuild the chapter session, not reuse notes from a bad earlier turn.
+ * This is a LOCAL reread of Notion-synced data, not an online Notion sync.
+ */
+export function asksToRereadNotionPage(text:string, selectedPage:NotionCachedPage|null=null):boolean {
+  if(!selectedPage)return false;
+  return /\b(?:re[\s-]?read|re[\s-]?cache|re[\s-]?load|reload)\b/i.test(text)
+    || /\b(?:read|review|summari[sz]e|analy[sz]e)\b.{0,95}\bagain\b/i.test(text)
+    || /\b(?:read|review|summari[sz]e)\b.{0,95}\b(?:from scratch|from the (?:beginning|start)|this time)\b/i.test(text)
+    || /\b(?:start over|try (?:to )?read\b.{0,65}\b(?:again|this time))\b/i.test(text)
+    || /\brefresh\b.{0,45}\b(?:chapter|scenes?|manuscript|notion|cached (?:page|document))\b/i.test(text);
+}
+
+/** A bare request to re-open the chapter is a read operation, not a prompt
+ * for an unpredictable chat model to decide what Notion capabilities exist.
+ * Requests to *also* critique, explain or summarize still use the model.
+ */
+export function asksOnlyToRereadNotionPage(text:string, selectedPage:NotionCachedPage|null=null):boolean {
+  if(!asksToRereadNotionPage(text,selectedPage))return false;
+  return !/\b(?:summari[sz]e|summary|synopsis|recap|review|critique|analy[sz]e|feedback|opinion|impressions?|thoughts|explain|compare|contrast|breakdown|discuss|evaluate|what happens?|what happened|tell me (?:what|how|why)|give me (?:your|a|the) (?:thoughts|opinion|summary|critique)|how (?:is|does|do|did|well))\b/i.test(text);
+}
+
 /** Listing the scenes linked to a chapter is a metadata lookup, not a
  * request to run the full local prose summarizer. A subsequent "read these"
  * still uses the regular complete-chapter path.
@@ -227,9 +251,10 @@ export function planNotionRetrieval(
   const relevant=bookIntent || !!page || possibleName;
   const overview=bookIntent && !page ? overviewForConversation(text+" "+priorTopic,pages) : null;
   const query=(text+" "+priorTopic+" "+(page?.title||overview?.title||"")).trim().slice(0,600);
-  const fullRead=!!page && asksToReadFullNotionPage(text,page);
+  const reread=!!page && asksToRereadNotionPage(text,page);
+  const fullRead=!!page && (reread || asksToReadFullNotionPage(text,page));
   const sceneLookup=!!page && !fullRead && asksToListNotionScenes(text,page);
-  return {relevant,query,selectedPage:page,fullRead,sceneLookup};
+  return {relevant,query,selectedPage:page,fullRead,sceneLookup,reread};
 }
 
 /** Return a deterministic response instead of giving the model a chance
@@ -241,12 +266,21 @@ export function unavailableChapterResponse(
   readContext:string,
   cachedCount:number
 ):string|null {
-  if(!asksToReadFullNotionPage(query,matchedPage) || (chapterNumber(query)===null && !matchedPage))return null;
+  if(!(asksToReadFullNotionPage(query,matchedPage) ||
+       asksToRereadNotionPage(query,matchedPage)) ||
+       (chapterNumber(query)===null && !matchedPage))return null;
   if(matchedPage && readContext.length>0 && !readContext.startsWith("NOTION FULL READING FAILED:"))
     return null;
   if(!cachedCount)return "I can't read that chapter yet because my Notion library is empty. Sync the book in Settings → Notion first, and I'll give you feedback based on the actual text instead of guessing.";
   if(matchedPage && /Linked scenes are missing|linked scene has no cached manuscript text/.test(readContext))
     return "I found "+matchedPage.title+", but some of its linked scene manuscripts are missing from my Notion cache. Share the Scenes database with Mikan and press Sync now in Settings → Notion, then I can read the whole chapter without guessing.";
+  if(matchedPage && /The local model could not produce reliable section notes/.test(readContext)) {
+    const section=/for (?:reading|consolidation) section (\d+\/\d+)/.exec(readContext);
+    return "I found "+matchedPage.title+" and its linked scenes, but my local model couldn't finish processing "+
+      (section?"section "+section[1]:"one section")+" into reading notes. "+
+      "This is a chapter-note processing problem, not a Notion sync problem. "+
+      "I haven't completed a trustworthy summary, so I won't invent one.";
+  }
   if(matchedPage && /Only chapter planning notes were cached/.test(readContext))
     return "I found "+matchedPage.title+" in Notion, but my offline cache contains its planning notes without the actual linked scene manuscripts. Open Settings → Notion and press Sync now. Make sure the Scenes database is shared with Mikan, too. Then I'll read the chapter itself rather than guessing.";
   if(matchedPage)return "I found the chapter in Notion, but couldn't finish reading it. I'd rather not pretend I've read scenes I haven't. Please check the Notion sync or try the chapter again.";

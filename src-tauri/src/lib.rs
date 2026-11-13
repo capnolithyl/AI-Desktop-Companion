@@ -6,10 +6,12 @@ mod agent_tools;
 mod gemini;
 mod cloud_web_tools;
 mod openrouter;
+mod openrouter_stream;
 mod research_intent;
 mod source_enrichment;
 mod evidence_pack;
 mod memory;
+mod interest_memory;
 mod memory_extraction;
 mod advanced_memory;
 mod session_memory;
@@ -17,6 +19,8 @@ mod voice;
 mod screen_vision;
 mod vision_region;
 mod file_attachments;
+mod iki_outfits;
+mod avatar_motion;
 mod notion;
 use futures_util::{future::{AbortHandle, Abortable}, StreamExt};
 use std::{collections::HashMap, sync::Mutex};
@@ -64,6 +68,8 @@ struct ChatRequest {
     research_query: Option<String>,
     #[serde(default)]
     research_recent: bool,
+    #[serde(default)]
+    thinking_requested: bool,
     #[serde(default)]
     searxng_endpoint: String,
     #[serde(default = "default_cache_hours")]
@@ -201,6 +207,7 @@ async fn condense_local_context(
     context_window: Option<u32>,
     max_output_tokens: Option<u32>,
     timeout_ms: Option<u64>,
+    plain_text: Option<bool>,
 ) -> Result<String, String> {
     if model.trim().is_empty() || model.len() > 120 || prompt.len() > 14500 {
         return Err("Invalid context request".into());
@@ -211,7 +218,7 @@ async fn condense_local_context(
     if let Some(ctx) = valid_context_window(context_window) {
         options["num_ctx"] = json!(ctx);
     }
-    let payload = json!({
+    let mut payload = json!({
         "model": model,
         "stream": false,
         "think": false,
@@ -219,6 +226,12 @@ async fn condense_local_context(
         "options": options,
         "messages": [{"role":"user","content":prompt}]
     });
+    // Chapter-note recovery can request ordinary bullets. Do not force the
+    // local 9B model into Ollama JSON grammar on its plain-text retry.
+    // All existing callers keep the default JSON output constraint.
+    if plain_text.unwrap_or(false) {
+        payload.as_object_mut().expect("JSON object").remove("format");
+    }
     let response = client()?
         .post(url)
         .json(&payload)
@@ -332,8 +345,10 @@ async fn chat_stream_impl(
         if fallback_reason.is_none() {
             match openrouter::key() {
                 Ok(Some(key)) => {
+                    let emitted = std::sync::atomic::AtomicBool::new(false);
                     let result = match tokio::time::timeout(
-                        Duration::from_secs(45), openrouter::chat(&app, &request, &key)
+                        Duration::from_secs(45),
+                        openrouter::chat(&app, &request, &key, &emitted)
                     ).await {
                         Ok(result) => result,
                         Err(_) => {
@@ -343,6 +358,11 @@ async fn chat_stream_impl(
                     };
                     match result {
                         Ok(completion) => return Ok(completion),
+                        // Never switch to local Qwen after we have already
+                        // streamed part of an OpenRouter answer. Otherwise
+                        // its text/speech would be joined to a second model.
+                        Err(reason) if emitted.load(std::sync::atomic::Ordering::Relaxed) =>
+                            return Err(format!("OpenRouter stream interrupted after output began: {reason}")),
                         Err(reason) if provider=="openrouter" => return Err(reason),
                         Err(reason) => fallback_reason=Some(reason)
                     }
@@ -618,7 +638,8 @@ async fn chat_stream_impl(
         "model": request.model,
         "messages": messages,
         "stream": true,
-        "think": false
+        "think": request.thinking_requested,
+        "keep_alive": "10m"
     });
     let mut options = json!({});
     if let Some(num_ctx) = selected_context {
@@ -716,6 +737,7 @@ fn hide_companion(window: tauri::WebviewWindow) {
 pub fn run() {
     tauri::Builder::default()
         .manage(ChatCancellation::default())
+        .manage(avatar_motion::AvatarWindowMotion::default())
         .manage(screen_vision::LiveVisionState::default())
         .manage(vision_region::RegionPickerState::default())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
@@ -755,6 +777,9 @@ pub fn run() {
             vision_region::vision_region_complete,
             vision_region::vision_region_cancel,
             file_attachments::extract_document,
+            iki_outfits::pick_iki_outfit,
+            iki_outfits::pick_iki_outfit_folder,
+            avatar_motion::avatar_motion_sample,
             notion::notion_status,
             notion::notion_connect,
             notion::notion_disconnect,
@@ -770,6 +795,7 @@ pub fn run() {
             memory::memory_create_conversation,
             memory::memory_list_messages,
             memory::memory_search_archive,
+            memory::memory_search_fact_ids,
             memory::memory_save_message,
             memory::memory_delete_conversation,
             memory::memory_list_facts,
@@ -781,6 +807,12 @@ pub fn run() {
             memory::memory_update_fact,
             memory::memory_delete_fact,
             memory::memory_list_character_facts,
+            memory::memory_import_character_facts,
+            interest_memory::memory_list_interests,
+            interest_memory::memory_import_interests,
+            interest_memory::memory_update_interest,
+            interest_memory::memory_delete_interest,
+            interest_memory::memory_search_interests,
             memory::memory_add_character_fact,
             memory::memory_update_character_fact,
             memory::memory_delete_character_fact,
@@ -836,6 +868,9 @@ pub fn run() {
         })
         .on_window_event(|window, event| {
             if window.label()=="main" {
+                if let tauri::WindowEvent::Moved(position) = event {
+                    window.app_handle().state::<avatar_motion::AvatarWindowMotion>().moved(*position);
+                }
                 if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                     api.prevent_close();
                     let _=window.hide();

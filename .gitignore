@@ -19,3 +19,7 @@ venv/
 __pycache__/
 .pytest_cache/
 *.py[cod]
+
+# Local model evaluation reports and generated PSD helper environments
+eval-report*.json
+assets/iki/.tools/

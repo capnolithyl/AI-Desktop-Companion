@@ -15,11 +15,15 @@ pub(crate) fn open_db(app: &AppHandle) -> Result<Connection, String> {
     Ok(connection)
 }
 
-fn initialize_database(connection: &Connection) -> Result<(), String> {
+pub(crate) fn initialize_database(connection: &Connection) -> Result<(), String> {
     // Populate the index once when upgrading an existing SQLite archive.
     // Opening the app repeatedly must never rebuild the index.
     let had_search: bool = connection.query_row(
         "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='message_search')",
+        [], |row| row.get(0)
+    ).map_err(|e| e.to_string())?;
+    let had_fact_search: bool = connection.query_row(
+        "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='user_memory_search')",
         [], |row| row.get(0)
     ).map_err(|e| e.to_string())?;
     connection.execute_batch(
@@ -57,6 +61,22 @@ fn initialize_database(connection: &Connection) -> Result<(), String> {
            created_at INTEGER NOT NULL DEFAULT (unixepoch()),
            updated_at INTEGER NOT NULL DEFAULT (unixepoch())
          );
+         -- Local lexical recall stays available while the optional embedding index syncs.
+         CREATE VIRTUAL TABLE IF NOT EXISTS user_memory_search USING fts5(
+           fact, category, tags, tokenize='unicode61 remove_diacritics 2'
+         );
+         CREATE TRIGGER IF NOT EXISTS user_memory_search_insert AFTER INSERT ON user_memories BEGIN
+           INSERT INTO user_memory_search(rowid,fact,category,tags)
+             VALUES(new.id,new.fact,new.category,new.tags_json);
+         END;
+         CREATE TRIGGER IF NOT EXISTS user_memory_search_delete AFTER DELETE ON user_memories BEGIN
+           DELETE FROM user_memory_search WHERE rowid=old.id;
+         END;
+         CREATE TRIGGER IF NOT EXISTS user_memory_search_update AFTER UPDATE ON user_memories BEGIN
+           DELETE FROM user_memory_search WHERE rowid=old.id;
+           INSERT INTO user_memory_search(rowid,fact,category,tags)
+             VALUES(new.id,new.fact,new.category,new.tags_json);
+         END;
          CREATE TABLE IF NOT EXISTS user_memory_usage (
            memory_id INTEGER PRIMARY KEY REFERENCES user_memories(id) ON DELETE CASCADE,
            importance INTEGER NOT NULL DEFAULT 50 CHECK (importance BETWEEN 0 AND 100),
@@ -77,6 +97,39 @@ fn initialize_database(connection: &Connection) -> Result<(), String> {
          );
          CREATE INDEX IF NOT EXISTS idx_character_facts_persona
            ON character_facts(persona_id,category,updated_at);
+         -- Owner-curated media and interest records, independent of core facts.
+         CREATE TABLE IF NOT EXISTS interest_items (
+           id INTEGER PRIMARY KEY AUTOINCREMENT,
+           name TEXT NOT NULL COLLATE NOCASE,
+           kind TEXT NOT NULL CHECK(kind IN ('band','album','anime','show','movie','game','book','other')),
+           status TEXT NOT NULL CHECK(status IN
+             ('favorite','like','dislike','interested','experienced','unknown')),
+           rating REAL CHECK(rating IS NULL OR rating BETWEEN 0 AND 10),
+           notes TEXT NOT NULL DEFAULT '',
+           tags_json TEXT NOT NULL DEFAULT '[]',
+           source TEXT NOT NULL DEFAULT 'manual',
+           source_message_id TEXT REFERENCES messages(id) ON DELETE SET NULL,
+           source_quote TEXT NOT NULL DEFAULT '',
+           created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+           updated_at INTEGER NOT NULL DEFAULT (unixepoch()),
+           UNIQUE(kind,name)
+         );
+         CREATE INDEX IF NOT EXISTS idx_interest_kind_status ON interest_items(kind,status);
+         CREATE VIRTUAL TABLE IF NOT EXISTS interest_search USING fts5(
+           name,kind,status,notes,tags,tokenize='unicode61 remove_diacritics 2'
+         );
+         CREATE TRIGGER IF NOT EXISTS interest_search_insert AFTER INSERT ON interest_items BEGIN
+           INSERT INTO interest_search(rowid,name,kind,status,notes,tags)
+             VALUES(new.id,new.name,new.kind,new.status,new.notes,new.tags_json);
+         END;
+         CREATE TRIGGER IF NOT EXISTS interest_search_delete AFTER DELETE ON interest_items BEGIN
+           DELETE FROM interest_search WHERE rowid=old.id;
+         END;
+         CREATE TRIGGER IF NOT EXISTS interest_search_update AFTER UPDATE ON interest_items BEGIN
+           DELETE FROM interest_search WHERE rowid=old.id;
+           INSERT INTO interest_search(rowid,name,kind,status,notes,tags)
+             VALUES(new.id,new.name,new.kind,new.status,new.notes,new.tags_json);
+         END;
          CREATE TABLE IF NOT EXISTS automatic_memory_sources (
            memory_kind TEXT NOT NULL CHECK(memory_kind IN ('user','character')),
            memory_id INTEGER NOT NULL,
@@ -127,6 +180,12 @@ fn initialize_database(connection: &Connection) -> Result<(), String> {
             "INSERT INTO message_search(rowid,content)
              SELECT rowid,content FROM messages WHERE role='user'", []
         ).map_err(|e| format!("Cannot index existing conversations: {e}"))?;
+    }
+    if !had_fact_search {
+        connection.execute(
+            "INSERT INTO user_memory_search(rowid,fact,category,tags)
+             SELECT id,fact,category,tags_json FROM user_memories", []
+        ).map_err(|e| format!("Cannot index saved facts: {e}"))?;
     }
     Ok(())
 }
@@ -424,6 +483,25 @@ fn find_archive_messages(
     rows.collect::<Result<Vec<_>,_>>().map_err(|e| e.to_string())
 }
 
+// BM25-ranked lexical memory candidates, separate from conversation history.
+pub(crate) fn find_fact_ids(db: &Connection, query: &str) -> Result<Vec<i64>, String> {
+    if query.chars().count() > 800 { return Ok(vec![]); }
+    let terms = message_search_terms(query);
+    if terms.is_empty() { return Ok(vec![]); }
+    let mut statement = db.prepare(
+        "SELECT rowid FROM user_memory_search WHERE user_memory_search MATCH ?1
+         ORDER BY bm25(user_memory_search) LIMIT 32"
+    ).map_err(|e| e.to_string())?;
+    let matches = statement.query_map(params![terms], |row| row.get(0))
+        .map_err(|e| e.to_string())?;
+    matches.collect::<Result<Vec<i64>, _>>().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn memory_search_fact_ids(app: AppHandle, query: String) -> Result<Vec<i64>, String> {
+    find_fact_ids(&open_db(&app)?, &query)
+}
+
 #[tauri::command]
 pub fn memory_search_archive(
     app: AppHandle, query: String, exclude_conversation: String
@@ -693,7 +771,7 @@ pub fn memory_list_character_facts(app: AppHandle, persona_id: String) -> Result
     let mut statement = db.prepare(
         "SELECT id,persona_id,category,label,value,created_at,updated_at
          FROM character_facts WHERE persona_id=?1
-         ORDER BY category ASC, label COLLATE NOCASE ASC LIMIT 500"
+         ORDER BY category ASC, label COLLATE NOCASE ASC LIMIT 2000"
     ).map_err(|e| e.to_string())?;
     let rows = statement.query_map(params![persona_id], read_character_fact).map_err(|e| e.to_string())?;
     rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())
@@ -724,6 +802,54 @@ pub fn memory_add_character_fact(
          FROM character_facts WHERE persona_id=?1 AND normalized_label=?2",
         params![persona_id, normalized], read_character_fact
     ).map_err(|e| e.to_string())
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all="camelCase")]
+pub struct IncomingCharacterFact {
+    category: String,
+    label: String,
+    value: String,
+}
+#[derive(Serialize)]
+#[serde(rename_all="camelCase")]
+pub struct ImportCharacterResult { inserted: usize, duplicates: usize }
+
+/// Import canon in one transaction, preserving all existing manually edited
+/// or automatically established traits. Duplicate labels are skipped.
+#[tauri::command]
+pub fn memory_import_character_facts(
+    app: AppHandle, persona_id: String, items: Vec<IncomingCharacterFact>
+) -> Result<ImportCharacterResult,String> {
+    if !valid_persona_id(&persona_id) { return Err("Invalid persona ID".into()); }
+    if items.is_empty() || items.len()>2000 { return Err("Import 1–2000 character details".into()); }
+    let validated = items.into_iter().map(|item| {
+        if !valid_character_category(&item.category) {
+            return Err("Invalid character category".to_string());
+        }
+        let label=clean_character_label(&item.label)?;
+        let value=clean_character_value(&item.value)?;
+        let normalized=label.to_lowercase();
+        Ok((item.category,label,normalized,value))
+    }).collect::<Result<Vec<_>,String>>()?;
+    let mut db=open_db(&app)?;
+    let tx=db.transaction().map_err(|e|e.to_string())?;
+    let existing:i64=tx.query_row(
+        "SELECT COUNT(*) FROM character_facts WHERE persona_id=?1",
+        params![persona_id],|row|row.get(0)
+    ).map_err(|e|e.to_string())?;
+    let (mut inserted,mut duplicates)=(0usize,0usize);
+    for (category,label,normalized,value) in validated {
+        let changed=tx.execute(
+            "INSERT OR IGNORE INTO character_facts(persona_id,category,label,normalized_label,value)
+             VALUES(?1,?2,?3,?4,?5)",
+            params![persona_id,category,label,normalized,value]
+        ).map_err(|e|e.to_string())?;
+        if changed>0 {inserted+=1;} else {duplicates+=1;}
+        if existing+inserted as i64>2000 {return Err("Maximum 2000 character details".into());}
+    }
+    tx.commit().map_err(|e|e.to_string())?;
+    Ok(ImportCharacterResult { inserted,duplicates })
 }
 
 #[tauri::command]
@@ -757,6 +883,34 @@ pub fn memory_delete_character_fact(app: AppHandle, id: i64, persona_id: String)
 #[cfg(test)]
 mod tests {
     use super::*;
+
+
+    #[test]
+    fn fact_search_backfills_and_tracks_updates() {
+        let db = Connection::open_in_memory().unwrap();
+        // Simulate the owner upgrading a database with existing facts.
+        db.execute_batch(
+            "CREATE TABLE user_memories (
+               id INTEGER PRIMARY KEY AUTOINCREMENT,
+               fact TEXT NOT NULL COLLATE NOCASE UNIQUE,
+               category TEXT NOT NULL DEFAULT 'other',
+               tags_json TEXT NOT NULL DEFAULT '[]',
+               created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+               updated_at INTEGER NOT NULL DEFAULT (unixepoch())
+             );
+             INSERT INTO user_memories(fact) VALUES ('The user enjoys industrial metal');"
+        ).unwrap();
+        initialize_database(&db).unwrap();
+        let ids = find_fact_ids(&db,"industrial metal").unwrap();
+        assert_eq!(ids.len(),1);
+        db.execute("UPDATE user_memories SET fact='The user enjoys synthwave' WHERE id=?1",
+            params![ids[0]]).unwrap();
+        assert!(find_fact_ids(&db,"industrial metal").unwrap().is_empty());
+        assert_eq!(find_fact_ids(&db,"synthwave").unwrap(),ids);
+        db.execute("DELETE FROM user_memories WHERE id=?1",params![ids[0]]).unwrap();
+        assert!(find_fact_ids(&db,"synthwave").unwrap().is_empty());
+        initialize_database(&db).unwrap();
+    }
 
     #[test]
     fn referenced_and_pinned_facts_are_persistent_and_cascade_on_delete() {

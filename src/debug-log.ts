@@ -23,7 +23,7 @@ export type MemoryRecallAudit = {
   semanticReason?: string;
   semanticCandidates: number;
   strongSemanticMatches: number;
-  selectionMethod?: "ai-reranked" | "fallback" | "small-talk" | "empty";
+  selectionMethod?: "ai-reranked" | "hybrid-rrf" | "fallback" | "small-talk" | "empty";
   selectionCandidates?: number;
   selectionTimeMs?: number;
   selectionNote?: string;
@@ -56,6 +56,16 @@ export type NotionRetrievalAudit = {
   readSucceeded: boolean;
   linkedScenesRead?: number;
   linkedSceneCharacters?: number;
+  sourceMode?: "original-prose" | "per-scene-notes";
+  approvedProseCharacters?: number;
+  /** Scene titles and counts only: never export unpublished manuscript text. */
+  sceneTitles?: string[];
+  groundingBlocked?: boolean;
+  unsupportedQuotes?: number;
+  unsupportedDetails?: number;
+  rereadRequested?: boolean;
+  modelPolicy?: string;
+  falseAccessDenialBlocked?: boolean;
   readFailure?: string;
 };
 
@@ -68,7 +78,11 @@ export type PreparationTaskAudit = {
 export type Diagnostics = {
   elapsedMs: number;
   firstTokenMs: number | null;
+  /** Milliseconds from send to first audible WAV playback, if measured. */
+  firstAudioMs?: number;
   model: string;
+  /** Provider configured for the turn, not necessarily the backend that replied. */
+  provider?: "local" | "auto" | "openrouter" | "gemini";
   fallbackReason?: string | null;
   stats: OllamaStats | null;
   research?: ResearchAudit;
@@ -126,6 +140,7 @@ function performanceLines(diagnostics: Diagnostics): string[] {
     "Performance:",
     "  Wall time: " + duration(diagnostics.elapsedMs),
     "  First token: " + duration(diagnostics.firstTokenMs),
+    ...(diagnostics.firstAudioMs == null ? [] : ["  First spoken audio: " + duration(diagnostics.firstAudioMs)]),
     "  Output: " + (s?.outputTokens == null ? "n/a" : s.outputTokens + " tokens"),
     "  Speed: " + speed,
     "  Prompt: " + (s?.promptTokens == null ? "n/a" : s.promptTokens + " tokens"),
@@ -133,7 +148,7 @@ function performanceLines(diagnostics: Diagnostics): string[] {
     "  Load time: " + fromNanoseconds(s?.loadDurationNs),
     "  Prompt eval: " + fromNanoseconds(s?.promptEvalDurationNs),
     "  Model: " + diagnostics.model,
-    ...(diagnostics.fallbackReason ? ["  Gemini fallback: " + diagnostics.fallbackReason] : []),
+    ...(diagnostics.fallbackReason ? ["  Cloud fallback: " + diagnostics.fallbackReason] : []),
     ...(diagnostics.research ? [
       "  Research evidence: " + diagnostics.research.status,
       "  Accepted source-anchored facts: " + diagnostics.research.accepted,
@@ -168,6 +183,23 @@ function performanceLines(diagnostics: Diagnostics): string[] {
       "  Complete chapter read succeeded: " + (diagnostics.notion.readSucceeded ? "yes" : "no"),
       "  Linked scene pages read: " + (diagnostics.notion.linkedScenesRead ?? 0),
       "  Linked scene characters cached: " + (diagnostics.notion.linkedSceneCharacters ?? 0),
+      ...(diagnostics.notion.rereadRequested !== undefined ? [
+        "  Explicit reread requested: " + (diagnostics.notion.rereadRequested ? "yes" : "no")
+      ] : []),
+      ...(diagnostics.notion.sourceMode ? [
+        "  Manuscript source mode: " + diagnostics.notion.sourceMode,
+        "  Approved prose characters: " + (diagnostics.notion.approvedProseCharacters ?? 0),
+        "  Approved scenes: " + (diagnostics.notion.sceneTitles?.join(" | ") ?? "n/a"),
+        "  Manuscript grounding blocked reply: " + (diagnostics.notion.groundingBlocked ? "yes" : "no"),
+        "  Unsupported dialogue excerpts: " + (diagnostics.notion.unsupportedQuotes ?? 0),
+        "  Suspect concrete details: " + (diagnostics.notion.unsupportedDetails ?? 0),
+        ...(diagnostics.notion.modelPolicy ? [
+          "  Document-analysis model policy: " + diagnostics.notion.modelPolicy
+        ] : []),
+        ...(diagnostics.notion.falseAccessDenialBlocked !== undefined ? [
+          "  False Notion-access denial blocked: " + (diagnostics.notion.falseAccessDenialBlocked ? "yes" : "no")
+        ] : [])
+      ] : []),
       ...(diagnostics.notion.readFailure ? ["  Reading failure: " + diagnostics.notion.readFailure] : [])
     ] : []),
     ...(diagnostics.parallelTasks?.length ? [
@@ -199,7 +231,7 @@ function performanceLines(diagnostics: Diagnostics): string[] {
           "  [" + (index + 1) + "] ID " + fact.id + " | " + fact.category +
             " | " + (fact.pinned ? "pinned" : "not pinned") +
             " | " + (fact.semantic ? "semantic match" : fact.pinned ? "pinned core" :
-              memory.selectionMethod === "ai-reranked" ? "AI-selected" : "keyword/category/tag match") +
+              memory.selectionMethod === "ai-reranked" ? "AI-selected" : memory.selectionMethod === "hybrid-rrf" ? "FTS5 + semantic fusion" : "keyword/category/tag match") +
             (fact.tags.length ? " | tags: " + fact.tags.join(", ") : ""),
           "    " + fact.fact
         ])

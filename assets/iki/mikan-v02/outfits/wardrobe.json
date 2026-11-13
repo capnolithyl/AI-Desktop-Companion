@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "outfits": [
+    {
+      "id": "bundled",
+      "name": "Original · Mikan v3",
+      "file": "default/mikan-auto-rig-v3.iki",
+      "default": true,
+      "season": "all",
+      "holiday": "none",
+      "favorite": false
+    }
+  ]
+}

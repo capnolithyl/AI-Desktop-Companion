@@ -4,7 +4,7 @@
  * The CI checker detects unmapped Tauri commands, missing files and stale versions.
  * Add a feature here when adding capability, and update the matching source/docs.
  */
-export const CAPABILITY_RELEASE = "0.8.35";
+export const CAPABILITY_RELEASE = "0.8.42";
 
 export type CapabilityStage = "implemented" | "experimental" | "planned";
 export type RuntimeDependency = "none" | "ollama" | "search" | "mem0" | "voice" | "vision" | "pocket";
@@ -54,7 +54,7 @@ export const CAPABILITIES: readonly Capability[] = [
   },
   {
     id:"openrouter-cloud",label:"OpenRouter free cloud models and automatic Qwen fallback (experimental)",category:"AI",
-    description:"Optional OpenRouter free-only API provider uses the openrouter/free router or explicit :free model IDs, including image and read-only SearXNG/webpage function calls. Auto mode tries OpenRouter then falls back to Ollama Qwen when the key is missing or OpenRouter hits 429/quota, stalls or fails. OpenRouter's 50 requests/day free allowance (20/min) counts every API round trip including model tool calls and failed requests; a model's behavior and vision support vary by route. API key is in Windows Credential Manager and must be provided in AI & Models. Paid models are rejected. Gemini remains separately selectable. The connection test allows sufficient output tokens for reasoning models and displays safe provider diagnostic metadata when no visible reply is returned. Memory/Notion auxiliary processing and TTS still run locally.",
+    description:"Optional OpenRouter free-only API provider uses the openrouter/free router or explicit :free model IDs, including image and read-only SearXNG/webpage function calls. Auto mode tries OpenRouter then falls back to Ollama Qwen when the key is missing or OpenRouter hits 429/quota, stalls or fails. OpenRouter's 50 requests/day free allowance (20/min) counts every API round trip including model tool calls and failed requests; a model's behavior and vision support vary by route. API key is in Windows Credential Manager and must be provided in AI & Models. Paid models are rejected. Gemini remains separately selectable. The connection test allows sufficient output tokens for reasoning models and displays safe provider diagnostic metadata when no visible reply is returned. The compact chat dock selector shows which cloud provider and actual OpenRouter model produced the last reply, or indicates when local Qwen answered after fallback. It also lets the owner switch between cloud modes and installed local Ollama models without opening Settings. OpenRouter text now streams into Mikan's existing sentence-by-sentence local Pocket/Qwen TTS feed when no web or source verification can change the answer. Obvious small talk skips optional cloud web tools for faster speech; factual questions retain tools. Read-only tool arguments and research drafts are never spoken before completion and evidence checks. Debug metrics include first token and first spoken audio latency. Memory/Notion auxiliary processing and TTS still run locally.",
     stage:"experimental",runtime:"none",keywords:["openrouter","free","free tier","cloud","fallback","rate limit","quota","llm","inference","function calling","vision","api"],
     sources:["src-tauri/src/openrouter.rs","src-tauri/src/cloud_web_tools.rs","src/App.tsx","src/storage.ts"],docs:["README.md"],
     commands:["openrouter_key_status","openrouter_save_key","openrouter_remove_key","openrouter_test_connection"]
@@ -95,16 +95,16 @@ export const CAPABILITIES: readonly Capability[] = [
   },
   {
     id:"personal-facts",label:"Personal facts and automatic extraction",category:"Memory",
-    description:"Owner-editable SQLite user facts with previewed local JSON/CSV/TXT/Markdown bulk imports, category and tag editing, filters, exact-text deduplication, automatic evidence-grounded extraction, deletion and pinned core memories. Export all user facts to JSON in Downloads, or atomically replace the user-fact set after a typed confirmation and automatic JSON backup; replacements leave chat history, character canon, and Notion untouched. Similar but differently worded facts are not automatically merged. For relevant chat, a bounded local Ollama JSON pass selects memories by meaning, with whole-word and semantic fallbacks.",
+    description:"Owner-editable SQLite user facts with previewed local JSON/CSV/TXT/Markdown bulk imports, category and tag editing, filters, exact-text deduplication, automatic evidence-grounded extraction, deletion and pinned core memories. Export all user facts to JSON in Downloads, or atomically replace the user-fact set after a typed confirmation and automatic JSON backup; replacements leave chat history, character canon, and Notion untouched. Similar but differently worded facts are not automatically merged. For relevant chat, deterministic SQLite FTS5 and optional semantic matches select memories without a separate LLM reranking call. The optional vector index may be unavailable during sync.",
     stage:"implemented",runtime:"none",keywords:["remember","fact","profile","memory","pin","forget","personal","bulk","import","category","tags","csv","json"],
     sources:["src-tauri/src/memory.rs","src-tauri/src/memory_extraction.rs","src/memory-client.ts","src/memory-retrieval.ts","src/MemoryImporter.tsx","src/memory-import.ts"],docs:["MEMORY.md"],
-    commands:["memory_list_facts","memory_add_fact","memory_update_fact","memory_update_fact_metadata","memory_import_facts","memory_export_facts","memory_replace_facts","memory_delete_fact","memory_mark_recalled","memory_pin_fact","memory_process_turn"],
-    screens:["memory"],
+    commands:["memory_list_facts","memory_search_fact_ids","memory_add_fact","memory_update_fact","memory_update_fact_metadata","memory_import_facts","memory_export_facts","memory_replace_facts","memory_delete_fact","memory_mark_recalled","memory_pin_fact","memory_process_turn"],
+    // Memory now lives inside Settings → Memory & chats, not a separate desktop screen.
     slashCommands:["memories","remember","forget"]
   },
   {
     id:"conversation-history",label:"Persistent chat history",category:"Memory",
-    description:"SQLite conversation archive and searchable chat UI with owner-controlled conversation deletion; conversation content is not the same as durable personal facts.",
+    description:"Settings → Memory & chats provides an SQLite conversation archive and owner-controlled conversation deletion, alongside the chat history log. Conversation content is not the same as durable personal facts.",
     stage:"implemented",runtime:"none",keywords:["history","chat","archive","conversation","log","messages"],
     sources:["src-tauri/src/memory.rs","src/memory-client.ts","src/MemoryPanel.tsx"],docs:["MEMORY.md"],
     commands:["memory_list_conversations","memory_create_conversation","memory_list_messages","memory_save_message","memory_delete_conversation"],
@@ -133,20 +133,27 @@ export const CAPABILITIES: readonly Capability[] = [
     commands:["memory_semantic_recall","memory_semantic_status"]
   },
   {
+    id:"interest-collections",label:"Searchable interests and media collections",category:"Memory",
+    description:"Separate SQLite FTS5 catalog of the owner's bands, albums, anime, movies, TV, games and books. Bulk JSON/CSV/text import supports favorites, likes, dislikes, experienced or interested statuses plus optional ratings, notes and tags. Matching entries are recalled in a bounded chat context. Local automatic extraction adds only grounded, explicitly stated tastes, and never overwrites owner-curated imports. This is desktop memory, not synced to Pocket.",
+    stage:"experimental",runtime:"none",keywords:["interests","collection","anime","bands","movies","shows","favorite","watched","ratings","media","import"],
+    sources:["src-tauri/src/interest_memory.rs","src/InterestCollectionTab.tsx","src/interest-import.ts","src/memory-client.ts"],docs:["MEMORY.md"],
+    commands:["memory_list_interests","memory_search_interests","memory_import_interests","memory_update_interest","memory_delete_interest"]
+  },
+  {
     id:"character-canon",label:"Mikan's character canon",category:"Personality",
-    description:"Editable character preferences and lore kept distinct from information about the user.",
-    stage:"implemented",runtime:"none",keywords:["persona","canon","personality","character","favorite","fictional"],
-    sources:["src-tauri/src/memory.rs","src/CharacterCanonTab.tsx"],docs:["MEMORY.md"],
-    commands:["memory_list_character_facts","memory_add_character_fact","memory_update_character_fact","memory_delete_character_fact"],
+    description:"Editable character preferences and lore kept distinct from information about the user. Desktop also supports bulk JSON/CSV/text import of Mikan's favorites and traits without overwriting matching labels; Pocket retains its existing editor.",
+    stage:"implemented",runtime:"none",keywords:["persona","canon","personality","character","favorite","fictional","bulk import"],
+    sources:["src-tauri/src/memory.rs","src/CharacterCanonTab.tsx","src/CharacterBulkImporter.tsx"],docs:["MEMORY.md"],
+    commands:["memory_list_character_facts","memory_import_character_facts","memory_add_character_fact","memory_update_character_fact","memory_delete_character_fact"],
     slashCommands:["canon","canon-set","canon-forget"]
   },
   {
     id:"personality-settings",label:"Personalities and presets",category:"Personality",
-    description:"Personality sliders, presets and a customizable prompt change Mikan's speaking style; presets do not change model capabilities.",
+    description:"Settings → Personality contains presets and adjustable speaking-style traits, separate from AI model options. Presets do not change model capabilities; the custom system prompt remains under AI & models.",
     stage:"implemented",runtime:"none",keywords:["personality","persona","mood","affection","flirty","preset","settings"],
     sources:["src/personality.ts","src/PersonalityControls.tsx","src/App.tsx"],docs:["README.md"],
     commands:[],
-    screens:["settings","personality"],
+    screens:["settings"],
     slashCommands:["personality","preset","randomize","playfulness","flirtiness","affection","sass","energy","settings","appearance","accent","panel","opacity","font","fontsize"]
   },
   {
@@ -159,9 +166,9 @@ export const CAPABILITIES: readonly Capability[] = [
   },
   {
     id:"animated-2d-avatar",label:"Animated 2D Iki character with reactions",category:"Avatar",
-    description:"The Windows desktop includes an animated, local Iki Mikan v3 rig with blinking, hair physics, idle breathing, a separate tail, simple speech-linked mouth movement, and short expressions/gestures when replies begin with recognizable cues. Select a custom .iki file or restore the bundled one. Appearance settings offer optional live animation diagnostics and manual reaction test buttons. It is a 2D rig, not 3D; not every reply triggers a reaction and mouth movement uses a lightweight animation rather than true phoneme analysis.",
-    stage:"implemented",runtime:"none",keywords:["iki","animated","animation","avatar","catgirl","breathing","blink","expression","reaction","tail","rig","lip","gesture","debug"],
-    sources:["src/IkiAvatar.tsx","src/avatar-reactions.ts","src/avatar-debug.ts","src/iki-avatar-storage.ts","src/App.tsx"],docs:[],commands:[]
+    description:"The Windows desktop includes an animated, local Iki Mikan v3 rig with blinking, hair physics, idle breathing, a separate tail, simple speech-linked mouth movement, and short expressions/gestures when replies begin with recognizable cues. Settings → Character includes a saved local wardrobe of imported .iki files, a live outfit carousel that previews clothing directly on Mikan beside the settings panel, the bundled default rig, and a native file picker that remembers the costume directory. Removing an outfit from the list does not delete the original file. The existing custom rig is migrated into the wardrobe. Live animation diagnostics and manual reaction test buttons are available. Cursor movement subtly guides her eyes and head, and moving the desktop overlay gently excites the existing hair/tail physics with settling momentum. Both effects can be toggled under Appearance and are sampled locally without screen capture. It is a 2D rig, not 3D; not every reply triggers a reaction and mouth movement uses a lightweight animation rather than true phoneme analysis.",
+    stage:"implemented",runtime:"none",keywords:["iki","animated","animation","avatar","catgirl","breathing","blink","expression","reaction","tail","rig","lip","gesture","debug","outfit","costume","wardrobe","folder","cursor","gaze","head tracking","hair physics","drag"],
+    sources:["src/IkiAvatar.tsx","src/avatar-presence.ts","src/avatar-reactions.ts","src/avatar-debug.ts","src/iki-avatar-storage.ts","src/App.tsx","src-tauri/src/iki_outfits.rs","src-tauri/src/avatar_motion.rs"],docs:[],commands:["pick_iki_outfit","pick_iki_outfit_folder","avatar_motion_sample"]
   },
   {
     id:"voice",label:"Local voice synthesis and cloning",category:"Voice",
@@ -172,11 +179,11 @@ export const CAPABILITIES: readonly Capability[] = [
   },
   {
     id:"self-knowledge",label:"Self-knowledge of features, docs and source",category:"AI",
-    description:"Versioned self-description with live service checks and read-only, on-demand search of source files and documentation bundled into this exact installed build. No automatic self-modification.",
+    description:"Settings → Capabilities contains versioned self-description, live service checks and read-only on-demand search of source files and documentation bundled into this exact installed build. No automatic self-modification.",
     stage:"implemented",runtime:"none",keywords:["yourself","capabilities","features","documentation","source","code","implementation","self","help"],
     sources:["src/self-knowledge.ts","src/self-knowledge-library.ts","scripts/check-self-knowledge.mjs"],docs:["self_knowledge/README.md"],
     commands:[],
-    screens:["capabilities"],
+    // The inspector is under Settings → Capabilities.
     slashCommands:["capabilities"]
   },
   {

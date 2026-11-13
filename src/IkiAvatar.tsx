@@ -1,9 +1,15 @@
 import { useEffect, useRef } from "react";
+import { invoke } from "@tauri-apps/api/core";
+import {
+  motionTarget, advancePresence, INITIAL_PRESENCE,
+  type AvatarPresencePreferences, type AvatarMotionSample
+} from "./avatar-presence";
 import { IkiMotion, IkiPlayer } from "@ikijs/engine";
 import { parseIkiModel, StandardParameter } from "@ikijs/format";
-import bundledRigUrl from "../assets/iki/mikan-v02/iki-ready/mikan-auto-rig-v3.iki?url";
+import bundledRigUrl from "../assets/iki/mikan-v02/outfits/default/mikan-auto-rig-v3.iki?url";
 import type { AvatarReaction } from "./avatar-reactions";
 import type { AvatarDebugSnapshot } from "./avatar-debug";
+import { avatarViewport } from "./avatar-viewport";
 
 /**
  * Animated 2D Mikan. Framing is handled by the renderer, not by cropping
@@ -15,6 +21,9 @@ export function IkiAvatar({
   reaction,
   rigLabel,
   debugVisible,
+  presencePreferences,
+  dragging,
+  verticalOffset,
   onDebug,
   onError
 }: {
@@ -23,19 +32,29 @@ export function IkiAvatar({
   reaction: AvatarReaction | null;
   rigLabel: string;
   debugVisible: boolean;
+  presencePreferences: AvatarPresencePreferences;
+  dragging: boolean;
+  verticalOffset: number;
   onDebug: (snapshot: AvatarDebugSnapshot) => void;
   onError: (message: string) => void;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const playerRef = useRef<IkiPlayer | null>(null);
+  const verticalOffsetRef = useRef(verticalOffset);
   const speakingRef = useRef(speaking);
   const errorRef = useRef(onError);
   const reactionRef = useRef(reaction);
   const debugRef = useRef(onDebug);
   const debugVisibleRef = useRef(debugVisible);
+  const presencePreferencesRef = useRef(presencePreferences);
+  const draggingRef = useRef(dragging);
   speakingRef.current = speaking;
   reactionRef.current = reaction;
   debugRef.current = onDebug;
   debugVisibleRef.current = debugVisible;
+  presencePreferencesRef.current = presencePreferences;
+  draggingRef.current = dragging;
+  verticalOffsetRef.current = verticalOffset;
   errorRef.current = onError;
 
   useEffect(() => {
@@ -46,6 +65,9 @@ export function IkiAvatar({
     let frame = 0;
     let player: IkiPlayer | null = null;
     let observer: ResizeObserver | null = null;
+    let sampleTimer: ReturnType<typeof setInterval> | null = null;
+    let latestSample: AvatarMotionSample | null = null;
+    let samplePending = false;
     // Snapshot at mount start: events arriving while the model is loading
     // should still play once the renderer becomes ready.
     let seenReaction = reactionRef.current?.serial ?? 0;
@@ -90,16 +112,67 @@ export function IkiAvatar({
         // A portrait crop matching Mikan's reference: ears and tail remain
         // visible while most of the shorts / lower half are outside the view.
         // Model canvas is 1280 x 1280, with model-space Y increasing upward.
-        currentPlayer.setView({ x: 0, y: 110, width: 1150, height: 1050 });
+        currentPlayer.setView(avatarViewport(verticalOffsetRef.current));
+        playerRef.current = currentPlayer;
         currentPlayer.start();
 
-        // IkiMotion advances blinking, idle movement, and spring physics.
-        // Our app supplies the speech signal after idle updates.
+        // Iki writes idle/blinks/expression values through this sink, then
+        // reads those same parameters for hair/tail spring physics. Applying
+        // tiny cursor and drag offsets HERE (not after motion.update) lets
+        // the existing rig physics respond naturally with a delayed sway.
+        let presence = { ...INITIAL_PRESENCE };
+        const ranges = new Map(model.parameters.map(p => [p.id, p]));
+        const boundedWrite = (name: string, value: number) => {
+          const eye = presence.weight;
+          switch (name) {
+            case StandardParameter.EyeballX:
+              value += (presence.eyeX - value) * eye;
+              break;
+            case StandardParameter.EyeballY:
+              value += (presence.eyeY - value) * eye;
+              break;
+            case StandardParameter.AngleX:
+              value += presence.headX * eye + presence.dragX * 1.15;
+              break;
+            case StandardParameter.AngleY:
+              value += presence.headY * eye + presence.dragY * 0.8;
+              break;
+            case StandardParameter.AngleZ:
+              value += presence.dragX * 1.65;
+              break;
+            case StandardParameter.AmbientSway:
+              value += presence.dragX * 0.48;
+              break;
+          }
+          const range = ranges.get(name);
+          if (range) value = Math.min(range.max, Math.max(range.min, value));
+          currentPlayer.setParameter(name, value);
+        };
         const motion = new IkiMotion(
           model,
           (name) => currentPlayer.getParameter(name),
-          (name, value) => currentPlayer.setParameter(name, value)
+          boundedWrite
         );
+        // Sample cursor + OS window drag velocity at 15 Hz, independently of
+        // render FPS. Never poll when the webview is backgrounded, and only
+        // while the 2D rig is actually mounted.
+        const pollMotion = async () => {
+          if (cancelled || samplePending || document.hidden) return;
+          if (!presencePreferencesRef.current.followCursor
+              && !presencePreferencesRef.current.dragSway) return;
+          samplePending = true;
+          try {
+            const result = await invoke<AvatarMotionSample>("avatar_motion_sample");
+            if (!cancelled) latestSample = result;
+          } catch {
+            // Optional effect; the rig keeps its normal Iki idle on failure.
+            if (!cancelled) latestSample = null;
+          } finally {
+            samplePending = false;
+          }
+        };
+        void pollMotion();
+        sampleTimer = setInterval(() => { void pollMotion(); }, 65);
         // Reactions are events rather than permanent state. Matching the
         // imported rig's declared names keeps seasonal costume rigs compatible.
         const expressionNames = new Map(
@@ -131,12 +204,20 @@ export function IkiAvatar({
           motions: motionNames, lastReaction, activeExpression, activeMotion,
           speaking: speakingRef.current, mouthOpen,
           breath: parameter("ParamBreath"), eyeL: parameter("ParamEyeLOpen"),
-          eyeR: parameter("ParamEyeROpen")
+          eyeR: parameter("ParamEyeROpen"),
+          gazeX: presence.eyeX * presence.weight,
+          gazeY: presence.eyeY * presence.weight,
+          dragMomentum: presence.dragX
         });
         publishDebug();
         const tick = (now: number) => {
           if (cancelled) return;
           if (!document.hidden) {
+            presence = advancePresence(
+              presence,
+              motionTarget(latestSample, presencePreferencesRef.current, draggingRef.current),
+              previous ? now - previous : 16
+            );
             const nextReaction = reactionRef.current;
             if (nextReaction && nextReaction.serial !== seenReaction) {
               seenReaction = nextReaction.serial;
@@ -214,10 +295,17 @@ export function IkiAvatar({
     return () => {
       cancelled = true;
       cancelAnimationFrame(frame);
+      if (sampleTimer) clearInterval(sampleTimer);
       observer?.disconnect();
+      if (playerRef.current === player) playerRef.current = null;
       player?.destroy();
     };
   }, [customRig]);
+
+  // Move only the viewport while preserving the loaded model and active physics.
+  useEffect(() => {
+    playerRef.current?.setView(avatarViewport(verticalOffset));
+  }, [verticalOffset]);
 
   return <canvas
     ref={canvasRef}

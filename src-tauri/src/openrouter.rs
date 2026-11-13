@@ -1,9 +1,11 @@
 //! Free-only OpenRouter inference with optional public web tools and vision.
 //! Credentials are kept in Windows Credential Manager; never in JS/localStorage.
-use crate::{cloud_web_tools, gemini, research_intent, source_priority, web_search,
+use crate::{cloud_web_tools, gemini, openrouter_stream::{CompletionAssembler, SseDecoder}, research_intent, source_priority, web_search,
     ChatChunk, ChatCompletion, ChatMessage, ChatRequest, ChatStats};
 use serde_json::{json, Value};
-use std::sync::{atomic::{AtomicU64, Ordering}, Mutex};
+use std::sync::{atomic::{AtomicBool, AtomicU64, Ordering}, Mutex};
+use futures_util::StreamExt;
+use std::time::Instant;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tauri::{AppHandle, Emitter};
 
@@ -201,7 +203,118 @@ async fn request_completion(
     }
     Ok(body)
 }
-pub(crate) async fn chat(app:&AppHandle,request:&ChatRequest,key:&str)
+/// Native SSE chat stream. Tool decisions/arguments remain buffered and never
+/// enter the speech queue; only tool-free, nonresearch replies emit early text.
+async fn stream_completion(
+    client:&reqwest::Client,key:&str,model:&str,messages:&[Value],
+    offer_tools:bool, seconds:u64, max_tokens:u32,
+    app:&AppHandle, request_id:&str, may_reveal:bool, emitted:&AtomicBool
+) -> Result<Value,String> {
+    let mut payload=json!({
+        "model":model,
+        "messages":messages,
+        "max_tokens":max_tokens,
+        "stream":true,
+        "stream_options":{"include_usage":true}
+    });
+    if offer_tools {
+        payload["tools"]=functions();
+        payload["tool_choice"]=json!("auto");
+    }
+    let response=client.post("https://openrouter.ai/api/v1/chat/completions")
+        .header("Authorization",format!("Bearer {key}"))
+        .header("HTTP-Referer","https://github.com/capnolithyl/AI-Desktop-Companion")
+        .header("X-Title","Mikan Desktop Companion")
+        .timeout(Duration::from_secs(seconds))
+        .json(&payload).send().await
+        .map_err(|error|{
+            let description=if error.is_timeout() {
+                format!("OpenRouter stream timed out after {seconds} seconds")
+            } else if error.is_connect() {
+                "OpenRouter streaming connection failed; check network, DNS or VPN".into()
+            } else {
+                format!("OpenRouter stream transport error: {}",error.to_string().replace(key,"[redacted]"))
+            };
+            if error.is_connect()||error.is_timeout(){cool_down(90,&description);}
+            description
+        })?;
+    let status=response.status();
+    if !status.is_success(){
+        let retry_after=response.headers().get("retry-after")
+            .and_then(|v|v.to_str().ok()).and_then(|v|v.parse::<u64>().ok());
+        let body:Value=response.json().await.unwrap_or(Value::Null);
+        let reason=body["error"]["message"].as_str().unwrap_or("Request failed");
+        let error=api_failure(status.as_u16(),reason,key);
+        match status.as_u16() {
+            429 => {
+                let daily=reason.to_ascii_lowercase().contains("daily")||
+                    reason.to_ascii_lowercase().contains("quota");
+                cool_down(retry_after.unwrap_or(if daily{43_200}else{90}).clamp(30,43_200),&error);
+            },
+            401|402|403 => cool_down(600,&error),
+            500..=599 => cool_down(90,&error),
+            _ => {}
+        }
+        return Err(error);
+    }
+    let mut parser=SseDecoder::default();
+    let mut result=CompletionAssembler::default();
+    let mut stream=response.bytes_stream();
+    let mut saw_done=false;
+    let mut pending_text=String::new();
+    let mut last_emit=Instant::now();
+    while let Some(chunk)=stream.next().await {
+        let chunk=chunk.map_err(|error|format!("OpenRouter stream interrupted: {}",
+            error.to_string().replace(key,"[redacted]")))?;
+        for data in parser.push(&chunk)? {
+            if data.trim()=="[DONE]" {saw_done=true;break;}
+            let event:Value=serde_json::from_str(&data).map_err(|_|"Invalid OpenRouter SSE JSON event")?;
+            // A 200-status stream can carry a mid-stream error. Never quietly
+            // treat such an event as a successful, complete answer.
+            let delta=result.consume(&event).map_err(|error|{
+                let clean=error.replace(key,"[redacted]");
+                if clean.contains("429"){cool_down(90,&clean);}
+                clean
+            })?;
+            if may_reveal {
+                if let Some(piece)=delta { pending_text.push_str(&piece); }
+                if !pending_text.is_empty() && (
+                    pending_text.chars().count()>=24 ||
+                    pending_text.chars().last().is_some_and(|ch| matches!(ch,'.'|'!'|'?'|'\n')) ||
+                    last_emit.elapsed()>=Duration::from_millis(80)
+                ) {
+                    emitted.store(true,Ordering::Relaxed);
+                    let _=app.emit("mikan://chat",ChatChunk{
+                        request_id:request_id.to_owned(),
+                        content:std::mem::take(&mut pending_text)
+                    });
+                    last_emit=Instant::now();
+                }
+            }
+        }
+        if saw_done {break;}
+    }
+    if !saw_done {
+        for data in parser.finish()? {
+            if data.trim()=="[DONE]" {saw_done=true;break;}
+            let event:Value=serde_json::from_str(&data).map_err(|_|"Invalid final OpenRouter SSE event")?;
+            let delta=result.consume(&event)?;
+            if may_reveal {
+                if let Some(piece)=delta {pending_text.push_str(&piece);}
+            }
+        }
+    }
+    if !saw_done {return Err("OpenRouter SSE disconnected before the [DONE] event".into());}
+    if may_reveal && !pending_text.is_empty() {
+        emitted.store(true,Ordering::Relaxed);
+        let _=app.emit("mikan://chat",ChatChunk{
+            request_id:request_id.to_owned(),content:pending_text
+        });
+    }
+    result.to_response(model)
+}
+
+pub(crate) async fn chat(app:&AppHandle,request:&ChatRequest,key:&str,emitted:&AtomicBool)
     -> Result<ChatCompletion,String>
 {
     let model=free_model(request.openrouter_model.as_deref())?;
@@ -239,7 +352,12 @@ pub(crate) async fn chat(app:&AppHandle,request:&ChatRequest,key:&str)
         .connect_timeout(Duration::from_secs(8)).build().map_err(|e|e.to_string())?;
     // Each tool round spends another request from the small free daily quota.
     for round in 0..3 {
-        let result=request_completion(&client,key,model,&messages,allow_tools,30,3500).await?;
+        // Never stream drafts with active web tools or source verification.
+        // A plain conversational reply with no tools may be spoken immediately.
+        let live_text = !allow_tools && request.research_route.as_deref()==Some("chat")
+            && request.research_query.is_none();
+        let result=stream_completion(&client,key,model,&messages,allow_tools,30,3500,
+            app,&request.request_id,live_text,emitted).await?;
         let reply=&result["choices"][0]["message"];
         if !reply.is_object() { return Err(missing_reply_reason(&result)); }
         let calls=reply["tool_calls"].as_array().filter(|items|!items.is_empty());
@@ -282,9 +400,14 @@ pub(crate) async fn chat(app:&AppHandle,request:&ChatRequest,key:&str)
         } else {String::new()};
         if content.trim().is_empty() {return Err(missing_reply_reason(&result));}
         let actual=result["model"].as_str().filter(|s|!s.is_empty()).unwrap_or(model);
-        let _=app.emit("mikan://chat",ChatChunk{
-            request_id:request.request_id.clone(),content:content.clone()
-        });
+        // Buffered evidence/tool rounds deliver the entire final answer only
+        // after tool resolution. Plain chats already emitted token deltas.
+        if !live_text {
+            emitted.store(true,Ordering::Relaxed);
+            let _=app.emit("mikan://chat",ChatChunk{
+                request_id:request.request_id.clone(),content:content.clone()
+            });
+        }
         return Ok(ChatCompletion{
             content,stats:Some(ChatStats{
                 prompt_tokens:result["usage"]["prompt_tokens"].as_u64(),
