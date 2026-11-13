@@ -2665,10 +2665,10 @@ export default function App() {
 
   return <main className="companion" style={theme}>
     <div className="portrait-space" title="Drag Mikan to move the window" onMouseDown={dragPortrait}>
-      {avatarDisplay === "animated" && ikiReady ? (
-        <IkiAvatar customRig={wardrobePreviewVisible ? previewRig?.file ?? null : ikiRig?.file ?? null} speaking={voiceState === "playing"}
+      {avatarDisplay === "animated" && ikiReady && !wardrobePreviewVisible ? (
+        <IkiAvatar customRig={ikiRig?.file ?? null} speaking={voiceState === "playing"}
           reaction={avatarReaction}
-          rigLabel={wardrobePreviewVisible ? previewRig?.name ?? "Mikan v3 (bundled)" : ikiRig?.name ?? "Mikan v3 (bundled)"}
+          rigLabel={ikiRig?.name ?? "Mikan v3 (bundled)"}
           debugVisible={showAvatarDebug || (screen === "settings" && settingsTab === "appearance")}
           presencePreferences={avatarPresence}
           dragging={avatarDragging}
@@ -2677,13 +2677,8 @@ export default function App() {
           onDebug={setAvatarDebug}
           onError={message => {
             setIkiError(message);
-            // A failed outfit preview must not disable the working animated rig.
-            if (wardrobePreviewVisible && currentPreviewId !== (ikiRig?.id ?? null)) {
-              setPreviewOutfitId(ikiRig?.id ?? null);
-            } else {
-              setAvatarDisplay("portrait");
-              saveAvatarDisplay("portrait");
-            }
+            setAvatarDisplay("portrait");
+            saveAvatarDisplay("portrait");
           }}/>
       ) : portrait ? (
         <img className="character-portrait" src={portrait} alt="Mikan, your desktop companion" draggable={false}
@@ -3627,6 +3622,21 @@ export default function App() {
               <span>{previewIndex + 1} / {wardrobeChoices.length}</span>
             </div>
             <small className="wardrobe-hint">Browse to preview each outfit on animated Mikan. Nothing changes permanently until you choose Wear.</small>
+            <div className="wardrobe-live-preview" aria-label="Animated preview of selected outfit">
+              {ikiReady ? <IkiAvatar customRig={previewRig?.file ?? null}
+                speaking={voiceState === "playing"}
+                reaction={avatarReaction}
+                rigLabel={previewRig?.name ?? "Mikan v3 (bundled)"}
+                debugVisible={false}
+                presencePreferences={avatarPresence}
+                dragging={false}
+                verticalOffset={draft.appearance.avatarVerticalOffset}
+                onDebug={setAvatarDebug}
+                onError={message => {
+                  setIkiError("Could not preview this outfit: " + message);
+                  setPreviewOutfitId(ikiRig?.id ?? null);
+                }}/> : <span>Loading wardrobe…</span>}
+            </div>
             <div className="wardrobe-navigation">
               <button type="button" aria-label="Previous outfit" title="Previous outfit"
                 disabled={!ikiReady || ikiBusy || wardrobeChoices.length < 2}

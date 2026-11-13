@@ -1059,3 +1059,25 @@ button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px
   font-size: 12px;
 }
 .wardrobe-favorite.active { color: #ffb0b9; border-color: #ad6b80; }
+
+/* A single Iki renderer inside Appearance: Settings otherwise covers the portrait. */
+.wardrobe-live-preview {
+  position: relative;
+  height: clamp(190px, 34vh, 260px);
+  min-height: 190px;
+  display: flex;
+  justify-content: center;
+  align-items: stretch;
+  overflow: hidden;
+  border-radius: 11px;
+  border: 1px solid #725467;
+  background: radial-gradient(ellipse at center 70%, #594152 0%, #342735 65%, #27212d 100%);
+  color: #c9b5c3;
+  font-size: 12px;
+}
+.wardrobe-live-preview .iki-avatar-canvas {
+  cursor: default;
+  pointer-events: none;
+  max-height: 100%;
+  filter: drop-shadow(0 6px 10px #130b166b);
+}
