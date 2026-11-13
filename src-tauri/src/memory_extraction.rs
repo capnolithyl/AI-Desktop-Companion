@@ -654,6 +654,36 @@ mod tests {
     use super::*;
 
     #[test]
+    fn interest_status_update_reports_committed_details_without_duplicate() {
+        let mut db=Connection::open_in_memory().unwrap();
+        memory::initialize_database(&db).unwrap();
+        db.execute("INSERT INTO conversations(id,title,created_at,updated_at)
+            VALUES('c','test',0,0)",[]).unwrap();
+        db.execute("INSERT INTO messages(id,conversation_id,role,content,created_at)
+            VALUES('u','c','user','my favorite band is shadows fall',0)",[]).unwrap();
+        db.execute("INSERT INTO messages(id,conversation_id,role,content,created_at)
+            VALUES('a','c','assistant','Noted.',0)",[]).unwrap();
+        db.execute("INSERT INTO interest_items(name,kind,status,source)
+            VALUES('Shadows Fall','band','like','import')",[]).unwrap();
+        let proposed=Extracted{
+            user_facts:vec![],character_facts:vec![],
+            interest_items:vec![ProposedInterest{
+                kind:"band".into(),name:"Shadows Fall".into(),status:"favorite".into(),
+                evidence:"my favorite band is shadows fall".into()
+            }]
+        };
+        let saved=persist(&mut db,proposed,"my favorite band is shadows fall",
+            "Noted.","u","a",true,false,&[],&[],None,None).unwrap();
+        assert_eq!(saved.interests_saved,1);
+        assert_eq!(saved.interest_changes.len(),1);
+        assert_eq!(saved.interest_changes[0].name,"Shadows Fall");
+        assert_eq!(saved.interest_changes[0].previous_status,"like");
+        assert_eq!(saved.interest_changes[0].status,"favorite");
+        let count:i64=db.query_row("SELECT COUNT(*) FROM interest_items",[],|r|r.get(0)).unwrap();
+        assert_eq!(count,1);
+    }
+
+    #[test]
     fn personal_preferences_are_not_catch_all_collection_items() {
         let proposed=ProposedInterest {
             kind:"other".into(),name:"Schnitzel".into(),status:"favorite".into(),
