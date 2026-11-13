@@ -5,7 +5,7 @@ use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
 use tauri::AppHandle;
 
-const KINDS: &[&str] = &["band","album","anime","show","movie","game","book","other"];
+const KINDS: &[&str] = &["band","album","song","anime","show","movie","game","book","other"];
 const STATUSES: &[&str] = &["favorite","like","dislike","interested","experienced","unknown"];
 
 #[derive(Clone, Deserialize)]
@@ -169,8 +169,12 @@ fn category_for_query(q: &str) -> Vec<&'static str> {
     let words: Vec<&str> = q.split(|c:char| !c.is_alphanumeric()).filter(|s| !s.is_empty()).collect();
     let any=|terms: &[&str]| words.iter().any(|w| terms.contains(w));
     let mut result=Vec::new();
-    if any(&["band","bands","music","artist","artists","song","songs","metal","rock","listen","listening"]) {
-        result.extend(["band","album"]);
+    if any(&["song","songs","track","tracks","single","singles"]) {
+        result.extend(["song","band"]);
+    } else if any(&["band","bands","music","artist","artists","metal","rock","listen","listening"]) {
+        result.extend(["band","album","song"]);
+    } else if any(&["album","albums","record","records","discography"]) {
+        result.extend(["album","band"]);
     }
     if any(&["anime","manga"]) {result.push("anime");}
     if any(&["movie","movies","film","films","cinema"]) {result.push("movie");}
@@ -190,7 +194,9 @@ pub fn memory_search_interests(app: AppHandle, query: String) -> Result<Vec<Inte
         "this","have","with","some","into","your","mine","mikan","tell","does",
         "recommend","recommendation","recommendations","favorite","favorites","favourite",
         "like","likes","liked","dislike","watch","watched","listen","listened",
-        "already","ever","best","good","know","interested","something","anything"];
+        "already","ever","best","good","know","interested","something","anything",
+        "my","song","songs","track","tracks","single","singles","album","albums","band","bands",
+        "maybe","might","think","because","heard","first","them","their","really","definitely"];
     let terms:Vec<String>=q.split(|c:char| !c.is_alphanumeric())
         .filter(|v|v.chars().count()>=3 && !ignored.contains(v) && !kinds.contains(v))
         .take(8).map(|v|format!("{v}*")).collect();
@@ -218,9 +224,22 @@ pub fn memory_search_interests(app: AppHandle, query: String) -> Result<Vec<Inte
             .collect::<Result<Vec<_>,_>>().map_err(|e|e.to_string())?;
         found.extend(hits);
     }
-    // Broad 'recommend anime' queries get curated favorites without loading
-    // thousands of unrelated records. Exact title matches remain first.
-    for kind in kinds {
+    // An explicit named title is a much stronger signal than unrelated
+    // favorites in the same genre. Avoid stuffing other bands/anime into
+    // narrow music conversations just because "favorite" was mentioned.
+    let compact=|text:&str|text.split(|c:char|!c.is_alphanumeric())
+        .filter(|w|!w.is_empty()).collect::<Vec<_>>().join(" ");
+    let clean_query=compact(&q);
+    let exact=|name:&str| {
+        let clean=compact(&name.to_lowercase());
+        clean.len()>=5 && clean_query.contains(&clean)
+    };
+    let explicit_match=found.iter().any(|item|exact(&item.name));
+    if explicit_match {
+        found.retain(|item|exact(&item.name));
+    }
+    // Broad recommendations still include relevant curated favorites.
+    if !explicit_match { for kind in kinds {
         let mut stmt=db.prepare(
             "SELECT id,name,kind,status,rating,notes,tags_json,source,created_at,updated_at
              FROM interest_items WHERE kind=?1
@@ -236,14 +255,24 @@ pub fn memory_search_interests(app: AppHandle, query: String) -> Result<Vec<Inte
             if found.len()>=24 {break;}
         }
         if found.len()>=24 {break;}
-    }
-    found.truncate(24);
+    }}
+    // FTS results and category fallback may contain the same record.
+    let mut seen=std::collections::HashSet::new();
+    found.retain(|item|seen.insert(item.id));
+    found.truncate(if explicit_match {10}else{24});
     Ok(found)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn explicit_song_kind_is_valid() {
+        let item=IncomingInterest{name:"Thoughts Without Words".into(),
+            kind:"song".into(),status:"favorite".into(),
+            rating:None,notes:String::new(),tags:vec![]};
+        assert_eq!(checked(item).unwrap().kind,"song");
+    }
     #[test]
     fn normalization_rejects_invalid_rating_and_status() {
         let input=IncomingInterest {name:" Higurashi ".into(),kind:"anime".into(),
@@ -368,6 +397,8 @@ mod tests {
     fn kind_detection_does_not_treat_generic_chat_as_collection_search() {
         assert!(category_for_query("hello there").is_empty());
         assert_eq!(category_for_query("recommend anime"),vec!["anime"]);
-        assert_eq!(category_for_query("favorite metal bands"),vec!["band","album"]);
+        assert_eq!(category_for_query("favorite metal bands"),vec!["band","album","song"]);
+        assert_eq!(category_for_query("my favorite song"),vec!["song","band"]);
+        assert_eq!(category_for_query("favorite albums"),vec!["album","band"]);
     }
 }

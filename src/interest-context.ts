@@ -16,10 +16,13 @@ export function buildInterestContext(
   if (!items.length) return {text:"",included:[],suppressedForCharacter:false};
   const included:InterestPromptLine[]=[];
   let length=0;
+  const seen=new Set<number>();
   for (const item of items) {
+    if (seen.has(item.id)) continue;
     const line=`- [${item.kind}, ${item.status}${item.rating===null?"":", "+item.rating+"/10"}] ${item.name}${item.notes?": "+item.notes:""}${item.tags.length?" (#"+item.tags.join(", #")+")":""}`;
     if (length+line.length>2300 || included.length>=18) break;
     included.push({id:item.id,promptLine:line});
+    seen.add(item.id);
     length+=line.length;
   }
   if (!included.length) return {text:"",included,suppressedForCharacter:false};

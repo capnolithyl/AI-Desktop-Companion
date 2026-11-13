@@ -32,3 +32,10 @@ test("an oversized entry does not appear as a prompt match",()=>{
   assert.equal(result.text,"");
   assert.deepEqual(result.included,[]);
 });
+
+test("duplicate backend records produce one context line and one audit entry",()=>{
+  const saved=item(23,"Shadows Fall");
+  const result=buildInterestContext([saved,saved,item(50,"Thoughts Without Words","song")]);
+  assert.deepEqual(result.included.map(i=>i.id),[23,50]);
+  assert.match(result.text,/\[song, favorite\] Thoughts Without Words/);
+});
