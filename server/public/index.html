@@ -78,8 +78,21 @@
     #error { color:#ffb5bd; min-height:1.5em; font-size:13px; }
     #app { display:none; flex:1; min-height:0; }
     #reportPanel { position:fixed; inset:0; z-index:110; background:#100d12cc; display:none; align-items:center; justify-content:center; padding:18px; }
-    #reportPanel .panel { background:#302430; border:1px solid #795869; border-radius:18px; padding:24px; width:min(100%,430px); }
-    #reportPanel textarea { width:100%; min-height:120px; margin:12px 0; }
+    #reportPanel .panel { background:#302430; border:1px solid #795869; border-radius:18px; padding:20px; width:min(100%,480px);
+      max-height:calc(100dvh - 28px); overflow-y:auto; overscroll-behavior:contain; }
+    #reportPanel textarea { width:100%; min-height:104px; margin:10px 0; padding:10px; color:#fff3f9;
+      background:#211a25; border:1px solid #76556d; border-radius:10px; }
+    #reportPanel select, #issueTitle { width:100%; padding:10px; margin:8px 0; border:1px solid #76556d;
+      border-radius:10px; background:#211a25; color:#fff3f9; }
+    #issueTitle { font-size:12px; overflow-wrap:anywhere; }
+    #issueBody { font:12px/1.5 ui-monospace,Consolas,monospace; height:190px; white-space:pre-wrap; }
+    #issueReview { border-top:1px solid #65526066; padding-top:10px; }
+    .report-hint { color:#d3c0cc; font-size:12px; line-height:1.5; }
+    .report-warning { color:#ffceb7; }
+    .report-actions { display:flex; flex-wrap:wrap; gap:8px; }
+    .report-actions button { flex:1 1 110px; min-height:43px; }
+    #reportStatus { font-size:13px; line-height:1.6; color:#ffd9c6; }
+    #reportStatus a { color:#ffbc9b; text-decoration:underline; }
     .actions { display:flex; gap:8px; } .actions button { flex:1; }
     [hidden] { display:none !important; }
   </style>
@@ -170,13 +183,32 @@
     <p id="settingsError" class="settings-error" role="alert"></p>
   </aside>
 </div>
-<div id="reportPanel">
+<div id="reportPanel" role="dialog" aria-modal="true" aria-labelledby="reportTitle">
   <div class="panel">
-    <h2>Report an issue</h2>
-    <p>Save a note and a short excerpt of the current conversation on your PC to review tomorrow.</p>
+    <h2 id="reportTitle">Report an issue</h2>
+    <p class="report-hint">Capture recent conversation excerpts locally, along with inference timing, tool and memory statistics, errors, and avatar diagnostics.</p>
+    <label class="settings-label" for="reportNote">What went wrong?</label>
     <textarea id="reportNote" maxlength="1500" placeholder="What did Mikan get wrong?"></textarea>
-    <div id="reportStatus" role="status"></div>
-    <div class="actions"><button id="cancelReport" class="secondary" type="button">Cancel</button><button id="saveReport" class="wide" type="button">Save report</button></div>
+    <label class="settings-label" for="reportDestination">Where should this report go?</label>
+    <select id="reportDestination">
+      <option value="local">Save on my PC (private)</option>
+      <option value="both">Save on PC + create GitHub issue</option>
+      <option value="github">Create GitHub issue only</option>
+    </select>
+    <p class="report-hint report-warning">GitHub issues may be public. Before publishing, you'll review exactly what is shared. Conversation text, memory facts and private searches are excluded automatically.</p>
+    <div id="issueReview" hidden>
+      <label class="settings-label" for="issueTitle">GitHub issue title (preview)</label>
+      <input id="issueTitle" type="text" readonly>
+      <label class="settings-label" for="issueBody">GitHub issue body (preview)</label>
+      <textarea id="issueBody" readonly aria-label="Exact GitHub issue content"></textarea>
+      <p class="report-hint">Publishing uses GitHub CLI on your Windows PC, logged in via <code>gh auth login</code>. No GitHub token is sent to your phone.</p>
+    </div>
+    <div id="reportStatus" role="status" aria-live="polite"></div>
+    <div class="report-actions">
+      <button id="cancelReport" class="secondary" type="button">Cancel</button>
+      <button id="previewIssue" class="secondary" type="button" hidden>Review GitHub issue</button>
+      <button id="saveReport" class="wide" type="button">Save locally</button>
+    </div>
   </div>
 </div>
 <script src="/avatar-engine.js"></script>
@@ -194,6 +226,14 @@
   var send = document.getElementById("send");
   var error = document.getElementById("error");
   var reportPanel = document.getElementById("reportPanel");
+  var reportNote = document.getElementById("reportNote");
+  var reportDestination = document.getElementById("reportDestination");
+  var reportStatus = document.getElementById("reportStatus");
+  var issueReview = document.getElementById("issueReview");
+  var previewIssueButton = document.getElementById("previewIssue");
+  var saveReportButton = document.getElementById("saveReport");
+  var reportPreviewId = null;
+  var reportSubmitting = false;
   var idSignature = "";
   var chatListSignature = "";
   var modelListSignature = "";
@@ -582,22 +622,93 @@
     } catch (e) { status.textContent = e.message; }
     finally { inFlight = false; send.disabled = !message.value.trim(); }
   });
+  function updateReportButtons() {
+    var github = reportDestination.value !== "local";
+    previewIssueButton.hidden = !github;
+    saveReportButton.textContent = reportDestination.value === "local" ? "Save locally"
+      : reportDestination.value === "both" ? "Save & create issue" : "Create GitHub issue";
+    saveReportButton.disabled = reportSubmitting || !reportNote.value.trim() || (github && !reportPreviewId);
+    previewIssueButton.disabled = reportSubmitting || !reportNote.value.trim();
+  }
+  function resetIssueReview() {
+    reportPreviewId = null;
+    issueReview.hidden = true;
+    reportStatus.replaceChildren();
+    updateReportButtons();
+  }
+  reportNote.addEventListener("input", resetIssueReview);
+  reportDestination.addEventListener("change", resetIssueReview);
   document.getElementById("report").addEventListener("click", function () {
     closeSettings(false);
+    reportStatus.replaceChildren();
+    updateReportButtons();
     reportPanel.style.display = "flex";
-    document.getElementById("reportNote").focus();
+    reportNote.focus();
   });
-  document.getElementById("cancelReport").addEventListener("click", function () { reportPanel.style.display = "none"; });
-  document.getElementById("saveReport").addEventListener("click", async function () {
-    var note = document.getElementById("reportNote").value.trim();
-    if (!note) return;
+  document.getElementById("cancelReport").addEventListener("click", function () {
+    reportPanel.style.display = "none";
+  });
+  previewIssueButton.addEventListener("click", async function () {
+    if (reportSubmitting || reportDestination.value === "local" || !reportNote.value.trim()) return;
+    reportSubmitting = true;
+    updateReportButtons();
+    reportStatus.textContent = "Preparing a GitHub issue preview…";
     try {
-      await api("/api/report", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({note:note}) });
-      document.getElementById("reportStatus").textContent = "Saved on your PC.";
-      document.getElementById("reportNote").value = "";
-      setTimeout(function(){reportPanel.style.display = "none"; document.getElementById("reportStatus").textContent = "";}, 900);
-    } catch (e) { document.getElementById("reportStatus").textContent = e.message; }
+      var preview = await api("/api/report/preview", {
+        method:"POST", headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({note:reportNote.value.trim()})
+      });
+      reportPreviewId = preview.previewId;
+      document.getElementById("issueTitle").value = preview.title;
+      document.getElementById("issueBody").value = preview.body;
+      issueReview.hidden = false;
+      reportStatus.textContent = "Review the exact text above before publishing to GitHub.";
+      previewIssueButton.textContent = "Refresh preview";
+    } catch (e) { reportStatus.textContent = e.message; }
+    finally { reportSubmitting = false; updateReportButtons(); }
   });
+  saveReportButton.addEventListener("click", async function () {
+    var note = reportNote.value.trim();
+    var destination = reportDestination.value;
+    if (!note || reportSubmitting || (destination !== "local" && !reportPreviewId)) return;
+    reportSubmitting = true;
+    updateReportButtons();
+    reportStatus.textContent = destination === "local" ? "Saving locally…" : "Publishing reviewed report…";
+    try {
+      var result = await api("/api/report", {
+        method:"POST", headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({note:note,destination:destination,previewId:reportPreviewId})
+      });
+      reportStatus.replaceChildren();
+      if (result.saved) reportStatus.append(document.createTextNode("Saved detailed diagnostics on your PC. "));
+      if (result.githubUrl &&
+          /^https:\/\/github\.com\/capnolithyl\/AI-Desktop-Companion\/issues\/\d+$/.test(result.githubUrl)) {
+        var link = document.createElement("a");
+        link.href = result.githubUrl;
+        link.target = "_blank";
+        link.rel = "noopener noreferrer";
+        link.textContent = "View created GitHub issue";
+        reportStatus.append(link);
+      } else if (result.githubError) {
+        reportStatus.append(document.createTextNode("GitHub issue not created: " + result.githubError));
+      }
+      reportPreviewId = null;
+      if (result.saved && destination === "local") {
+        reportNote.value = "";
+        setTimeout(function () {
+          if (reportPanel.style.display === "flex") reportPanel.style.display = "none";
+        }, 1100);
+      } else if (result.githubUrl) {
+        reportNote.value = "";
+        issueReview.hidden = true;
+        document.getElementById("cancelReport").textContent = "Close";
+      }
+    } catch (e) {
+      reportPreviewId = null;
+      reportStatus.textContent = e.message + " Review the issue again before retrying.";
+    } finally { reportSubmitting = false; updateReportButtons(); }
+  });
+  updateReportButtons();
   if (key) {
     showUnlocked(true);
     refresh();

@@ -37,6 +37,7 @@ import { planDesktopWebExecution } from "./turn-execution-policy";
 import { isModelStatusQuestion, modelStatusAnswer } from "./model-status";
 import { modelSwitcherStatus, modelSwitcherChoice } from "./model-switcher";
 import { formatDebugLog, type Diagnostics, type MemoryRecallAudit, type OllamaStats, type ResearchAudit } from "./debug-log";
+import { remoteDiagnosticMessages, remoteAvatarDiagnostics } from "./remote-report";
 import { strongSemanticIds } from "./memory-ranking";
 import { shouldUseLocalThinking } from "./reasoning-mode";
 import { selectDeterministicMemoryIds } from "./memory-retrieval";
@@ -2721,6 +2722,12 @@ export default function App() {
     modelStatus: remoteModelStatus,
     controlsBlocked: remoteBusyRef.current,
     busy,
+    reportDiagnostics: {
+      desktopVersion: DESKTOP_VERSION,
+      contextWindow: settings.contextWindow,
+      avatar: remoteAvatarDiagnostics(avatarDebug),
+      messages: remoteDiagnosticMessages(messages)
+    },
     conversations: conversations.map(({ id, title, updatedAt }) => ({ id, title, updatedAt })),
     avatar: {
       id: ikiRig?.id ?? "default",

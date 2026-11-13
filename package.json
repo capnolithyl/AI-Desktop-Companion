@@ -1,14 +1,14 @@
 {
   "name": "mikan-desktop-companion",
   "private": true,
-  "version": "0.9.7",
+  "version": "0.9.8",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "npm run wardrobe:check && tsc --noEmit && vite build",
     "eval:local": "node scripts/eval-local.mjs",
     "test:debug": "node --experimental-strip-types --test src/model-switcher.test.mjs tests/debug-log.test.mjs tests/speech.test.mjs tests/emoji-reactions.test.mjs tests/avatar-reactions.test.mjs tests/avatar-debug.test.mjs tests/avatar-presence.test.mjs src/portrait-context-menu.test.mjs src/avatar-viewport.test.mjs src/iki-wardrobe.test.mjs tests/wardrobe-manifest.test.mjs src/settings-window.test.mjs",
-    "test:server": "npm run build:remote && node --test tests/remote-bridge.test.mjs",
+    "test:server": "npm run build:remote && node --experimental-strip-types --test tests/remote-bridge.test.mjs src/remote-report.test.mjs",
     "server": "npm run build:remote && node server/index.mjs",
     "server:key": "node server/index.mjs --key",
     "icons": "tauri icon assets/mikan-icon.svg",
