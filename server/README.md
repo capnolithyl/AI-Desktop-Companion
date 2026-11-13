@@ -156,6 +156,11 @@ traffic once remote access is enabled.
 - No voice: browser TTS streaming is not part of this version.
 - Avatar not visible: update both desktop and server, verify WebGL is supported
   in the phone browser, and check `npm run server` built the avatar runtime.
+  For "Avatar texture loading failed", ensure your checkout includes the
+  remote CSP fix allowing `connect-src 'self' data:`: Iki decodes embedded PNG
+  textures via `fetch(data:...)`. Restart the Node relay after pulling.
+  If textures still fail, check the browser WebGL limits or console errors;
+  the problem may be a GPU texture-size or decode limit instead.
 
 Official instructions:
 - https://developers.cloudflare.com/tunnel/get-started/
