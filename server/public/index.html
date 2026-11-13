@@ -9,7 +9,7 @@
     :root { color-scheme: dark; font-family: "Segoe UI", system-ui, sans-serif; background:#17131b; color:#f9eaf1; }
     * { box-sizing:border-box; }
     body { margin:0; height:100dvh; }
-    button, input, textarea { font:inherit; }
+    button, input, textarea, select { font:inherit; }
     button { cursor:pointer; border:0; color:inherit; }
     button:disabled { opacity:.45; cursor:not-allowed; }
     .shell { height:100dvh; max-width:820px; margin:auto; display:flex; flex-direction:column; background:linear-gradient(180deg,#30232e 0%,#1d1821 45%); }
@@ -18,18 +18,16 @@
     .heading { flex:1; min-width:0; } .heading strong { font-size:19px; }
 .heading small { display:block; margin-top:2px; color:#c8b6c2; font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
     .secondary { background:#4a3748; border:1px solid #795869; border-radius:10px; padding:9px; }
-    .chat-switcher { display:flex; gap:8px; padding:10px 14px; align-items:center; border-bottom:1px solid #65526066; }
-    .chat-switcher label { font-size:12px; color:#ebd3df; white-space:nowrap; }
-    #conversationSelect { min-width:0; flex:1; border-radius:10px; padding:10px 8px; background:#332638; border:1px solid #76556d; color:#f8e8f0; }
-    #newChat { background:#c18171; color:#20141a; font-weight:700; padding:11px; white-space:nowrap; border-radius:10px; }
+    .menu-button { width:44px; height:44px; flex-shrink:0; border:1px solid #795869; border-radius:12px;
+      background:#4a3748; color:#ffe6d9; font-size:24px; line-height:1; }
+    .menu-button:hover, .menu-button:focus-visible, .secondary:focus-visible { border-color:#ffad7e; outline:2px solid #ffad7e55; }
     .avatar-panel { position:relative; min-height:120px; height:clamp(160px,29dvh,290px); flex-shrink:0; overflow:hidden;
       border-bottom:1px solid #65526066; background:radial-gradient(ellipse at 50% 65%,#56404c 0%,#251d28 70%); }
     .avatar-panel.expanded { height:min(60dvh,540px); }
     #avatarCanvas { width:100%; height:100%; display:block; touch-action:pan-y; }
     .avatar-caption { position:absolute; bottom:10px; left:14px; background:#1a1119b8; border:1px solid #64485c9e; padding:6px 10px; border-radius:10px; font-size:12px; pointer-events:none; max-width:72%; }
     .avatar-caption strong { display:block; font-size:13px; color:#ffbea0; }
-    .avatar-toolbar { position:absolute; top:10px; right:12px; }
-    .avatar-toolbar button { padding:8px 10px; border-radius:9px; background:#342835c9; border:1px solid #775969; font-size:12px; }
+ 
     @media (max-height:580px) { .avatar-panel { height:130px; } .avatar-panel.expanded { height:60dvh; } }
 
     #messages { flex:1; overflow:auto; padding:18px 14px 30px; display:flex; flex-direction:column; gap:14px; }
@@ -43,11 +41,35 @@
     textarea { resize:none; min-height:46px; max-height:135px; flex:1; border-radius:14px; border:1px solid #76556d; color:#fff3f9; background:#30232f; outline:0; padding:12px; }
     textarea:focus, input:focus { border-color:#ffad7e; }
     .send { background:#ffad7e; color:#271923; border-radius:12px; font-size:21px; min-width:46px; height:46px; font-weight:700; }
-    .model-picker { display:flex; align-items:center; gap:8px; padding:10px 2px 3px; }
-    .model-picker label { color:#e5ccd8; font-size:12px; white-space:nowrap; }
-    #modelSelect { flex:1; min-width:0; padding:9px; border-radius:10px; border:1px solid #76556d; background:#30232f; color:#fff3f9; }
-    #refreshModels { border-radius:10px; background:#4a3748; border:1px solid #795869; padding:9px 12px; font-size:14px; }
-    .meta { display:flex; gap:8px; justify-content:space-between; color:#b9a8b4; font-size:11px; padding:6px 3px 0; }
+    .meta { display:flex; gap:8px; justify-content:flex-end; color:#b9a8b4; font-size:11px; padding:6px 3px 0; }
+    body.settings-open { overflow:hidden; }
+    .settings-overlay { position:fixed; inset:0; z-index:100; display:flex; justify-content:flex-end; }
+    .settings-backdrop { position:absolute; inset:0; background:#100d12bd; }
+    .settings-drawer { position:relative; width:min(100%,430px); height:100%; overflow-y:auto; overscroll-behavior:contain;
+      background:#261e2a; border-left:1px solid #775969; box-shadow:-12px 0 35px #120d16a3;
+      padding:0 20px calc(24px + env(safe-area-inset-bottom)); }
+    .settings-top { position:sticky; top:0; z-index:1; display:flex; align-items:center; justify-content:space-between;
+      background:#261e2a; padding:20px 0 12px; border-bottom:1px solid #655260; }
+    .settings-top h2 { font-size:20px; margin:0; }
+    .settings-close { width:44px; height:44px; border-radius:12px; background:#4a3748; font-size:25px; }
+    .settings-intro, .settings-hint { font-size:12px; line-height:1.5; color:#c6b3c1; }
+    .settings-intro { margin:12px 0 0; }
+    .settings-group { padding:17px 0; border-bottom:1px solid #65526066; }
+    .settings-group h3 { margin:0 0 13px; color:#ffba98; font-size:14px; }
+    .settings-label { display:block; margin-bottom:7px; color:#e5ccd8; font-size:13px; }
+    .settings-row { display:flex; align-items:center; gap:8px; }
+    .settings-row select { flex:1; min-width:0; padding:11px; border-radius:10px;
+      border:1px solid #76556d; background:#30232f; color:#fff3f9; }
+    .settings-row button, .settings-action { min-height:43px; padding:9px 12px;
+      border:1px solid #795869; border-radius:10px; background:#4a3748; }
+    #newChat { background:#c18171; color:#20141a; font-weight:700; white-space:nowrap; }
+    .settings-action { width:100%; text-align:left; margin:4px 0; }
+    .settings-action.danger { color:#ffc5c5; border-color:#885362; }
+    .toggle-row { display:flex; gap:12px; align-items:center; justify-content:space-between; padding:11px 0;
+      font-size:13px; cursor:pointer; }
+    .toggle-row input { width:20px; height:20px; accent-color:#ffad7e; flex-shrink:0; }
+    .settings-error { min-height:1.3em; color:#ffb5bd; font-size:12px; }
+    @media (min-width:650px) { .settings-drawer { border-radius:18px 0 0 18px; } }
     #gate { display:flex; flex:1; align-items:center; justify-content:center; padding:20px; }
     #gate .panel { padding:25px; max-width:380px; width:100%; background:#302430; border:1px solid #684d60; border-radius:20px; }
     .panel h1 { margin:0 0 6px; } .panel p { line-height:1.5; color:#c9bbc6; }
@@ -55,7 +77,7 @@
     .wide { width:100%; padding:12px; background:#ffad7e; border-radius:10px; color:#281824; font-weight:700; }
     #error { color:#ffb5bd; min-height:1.5em; font-size:13px; }
     #app { display:none; flex:1; min-height:0; }
-    #reportPanel { position:fixed; inset:0; background:#100d12cc; display:none; align-items:center; justify-content:center; padding:18px; }
+    #reportPanel { position:fixed; inset:0; z-index:110; background:#100d12cc; display:none; align-items:center; justify-content:center; padding:18px; }
     #reportPanel .panel { background:#302430; border:1px solid #795869; border-radius:18px; padding:24px; width:min(100%,430px); }
     #reportPanel textarea { width:100%; min-height:120px; margin:12px 0; }
     .actions { display:flex; gap:8px; } .actions button { flex:1; }
@@ -80,20 +102,11 @@
   <header>
     <div class="avatar" aria-hidden="true">🐈</div>
     <div class="heading"><strong>Mikan</strong><small id="status">Connecting…</small></div>
-    <button id="report" class="secondary" type="button" title="Report an issue">Report</button>
-    <button id="lock" class="secondary" type="button" title="Lock this browser">Lock</button>
+    <button id="menuToggle" class="menu-button" type="button" aria-label="Open settings" aria-controls="settingsSheet" aria-expanded="false" title="Settings">☰</button>
   </header>
-  <div class="chat-switcher">
-    <label for="conversationSelect">Chats</label>
-    <select id="conversationSelect" aria-label="Choose conversation" disabled>
-      <option value="">New conversation</option>
-    </select>
-    <button id="newChat" type="button" disabled>+ New</button>
-  </div>
   <section id="avatarPanel" class="avatar-panel" aria-label="Mikan's animated portrait">
     <canvas id="avatarCanvas" role="img" aria-label="Animated Iki avatar of Mikan"></canvas>
-    <div class="avatar-toolbar"><button id="enlargeAvatar" type="button" aria-pressed="false">Enlarge</button></div>
-    <div class="avatar-caption"><strong id="outfitLabel">Mikan</strong><span id="avatarStatus">Waiting for her outfit…</span></div>
+    <div id="avatarCaption" class="avatar-caption"><strong id="outfitLabel">Mikan</strong><span id="avatarStatus">Waiting for her outfit…</span></div>
   </section>
   <main id="messages" aria-live="polite">
     <p class="welcome">This is the same Mikan running in your desktop app. Her active conversation will appear here.</p>
@@ -103,15 +116,59 @@
       <textarea id="message" rows="1" placeholder="Talk to Mikan…" maxlength="4000" aria-label="Message Mikan"></textarea>
       <button class="send" id="send" type="submit" title="Send" disabled>↑</button>
     </form>
-    <div class="model-picker">
-      <label for="modelSelect">Model</label>
-      <select id="modelSelect" aria-label="Active inference provider and model" disabled>
-        <option value="__status__">Loading desktop models…</option>
-      </select>
-      <button id="refreshModels" type="button" title="Refresh installed Ollama models" aria-label="Refresh installed models" disabled>↻</button>
-    </div>
-    <div class="meta"><span id="conversation">Desktop conversation</span><span>Private via Tailscale · Text chat</span></div>
+    <div class="meta"><span>Private via Tailscale · Text chat</span></div>
   </div>
+</div>
+<div id="settingsSheet" class="settings-overlay" hidden>
+  <div id="settingsBackdrop" class="settings-backdrop" aria-hidden="true"></div>
+  <aside id="settingsDrawer" class="settings-drawer" role="dialog" aria-modal="true" aria-labelledby="settingsTitle" tabindex="-1">
+    <div class="settings-top">
+      <h2 id="settingsTitle">Settings</h2>
+      <button id="closeSettings" class="settings-close" type="button" aria-label="Close settings">×</button>
+    </div>
+    <p class="settings-intro">These chat and model controls are shared with Mikan on your PC.</p>
+    <section class="settings-group" aria-labelledby="chatSectionTitle">
+      <h3 id="chatSectionTitle">Conversations</h3>
+      <label class="settings-label" for="conversationSelect">Active chat</label>
+      <div class="settings-row">
+        <select id="conversationSelect" aria-label="Choose conversation" disabled>
+          <option value="">New conversation</option>
+        </select>
+        <button id="newChat" type="button" disabled>+ New</button>
+      </div>
+      <p class="settings-hint" id="conversation">Desktop conversation</p>
+    </section>
+    <section class="settings-group" aria-labelledby="modelSectionTitle">
+      <h3 id="modelSectionTitle">AI &amp; Models</h3>
+      <label class="settings-label" for="modelSelect">Active model / provider</label>
+      <div class="settings-row">
+        <select id="modelSelect" aria-label="Active inference provider and model" disabled>
+          <option value="__status__">Loading desktop models…</option>
+        </select>
+        <button id="refreshModels" type="button" title="Refresh installed Ollama models" aria-label="Refresh installed models" disabled>↻</button>
+      </div>
+      <p class="settings-hint">Model changes apply to the desktop too. Cloud credentials stay on your PC.</p>
+    </section>
+    <section class="settings-group" aria-labelledby="appearanceSectionTitle">
+      <h3 id="appearanceSectionTitle">Appearance</h3>
+      <button id="enlargeAvatar" class="settings-action" type="button" aria-pressed="false">Enlarge portrait</button>
+      <label class="toggle-row" for="showModelName">
+        <span>Show model name under Mikan</span>
+        <input id="showModelName" type="checkbox" checked>
+      </label>
+      <label class="toggle-row" for="showAvatarLabel">
+        <span>Show outfit &amp; animation labels</span>
+        <input id="showAvatarLabel" type="checkbox" checked>
+      </label>
+      <p class="settings-hint">These display preferences stay in this browser, not Mikan's memories.</p>
+    </section>
+    <section class="settings-group" aria-labelledby="privacySectionTitle">
+      <h3 id="privacySectionTitle">Privacy &amp; Feedback</h3>
+      <button id="report" class="settings-action" type="button">Report an issue</button>
+      <button id="lock" class="settings-action danger" type="button">Lock this browser</button>
+    </section>
+    <p id="settingsError" class="settings-error" role="alert"></p>
+  </aside>
 </div>
 <div id="reportPanel">
   <div class="panel">
@@ -153,6 +210,64 @@
   var canvas = document.getElementById("avatarCanvas");
   var conversationSelect = document.getElementById("conversationSelect");
   var newChat = document.getElementById("newChat");
+  var settingsSheet = document.getElementById("settingsSheet");
+  var settingsDrawer = document.getElementById("settingsDrawer");
+  var menuToggle = document.getElementById("menuToggle");
+  var closeSettingsButton = document.getElementById("closeSettings");
+  var settingsError = document.getElementById("settingsError");
+  var avatarCaption = document.getElementById("avatarCaption");
+  var showModelName = document.getElementById("showModelName");
+  var showAvatarLabel = document.getElementById("showAvatarLabel");
+  // Only non-sensitive presentation preferences are stored persistently.
+  // The private remote access key remains in sessionStorage, as before.
+  var displaySettings = (function () {
+    try {
+      var saved = JSON.parse(localStorage.getItem("mikan-remote-display") || "{}");
+      return {
+        modelName: saved && saved.modelName !== false,
+        avatarLabels: saved && saved.avatarLabels !== false
+      };
+    } catch (e) { return {modelName:true, avatarLabels:true}; }
+  })();
+  function updateStatus(data) {
+    var routedModel = data.modelStatus && data.modelStatus.label
+      ? data.modelStatus.label : (data.model || "local model");
+    status.textContent = !data.connected ? "Desktop offline"
+      : (data.busy || data.queued ? "Thinking…"
+        : displaySettings.modelName ? "Online · " + routedModel : "Online");
+    status.title = displaySettings.modelName
+      ? (data.modelStatus && data.modelStatus.title || "") : "";
+  }
+  function applyDisplaySettings() {
+    showModelName.checked = displaySettings.modelName;
+    showAvatarLabel.checked = displaySettings.avatarLabels;
+    avatarCaption.hidden = !displaySettings.avatarLabels;
+    if (current) updateStatus(current);
+  }
+  function saveDisplaySettings() {
+    displaySettings.modelName = showModelName.checked;
+    displaySettings.avatarLabels = showAvatarLabel.checked;
+    try { localStorage.setItem("mikan-remote-display", JSON.stringify(displaySettings)); }
+    catch (e) { /* Private browser storage may be unavailable. */ }
+    applyDisplaySettings();
+  }
+  function closeSettings(restoreFocus) {
+    if (settingsSheet.hidden) return;
+    settingsSheet.hidden = true;
+    document.body.classList.remove("settings-open");
+    app.inert = false;
+    menuToggle.setAttribute("aria-expanded", "false");
+    if (restoreFocus !== false && app.style.display !== "none") menuToggle.focus();
+  }
+  function openSettings() {
+    if (!key || !settingsSheet.hidden) return;
+    settingsError.textContent = "";
+    settingsSheet.hidden = false;
+    document.body.classList.add("settings-open");
+    menuToggle.setAttribute("aria-expanded", "true");
+    app.inert = true;
+    closeSettingsButton.focus();
+  }
   function stopAvatar() {
     if (avatarController) avatarController.destroy();
     avatarController = null;
@@ -162,7 +277,7 @@
   function showUnlocked(yes) {
     gate.style.display = yes ? "none" : "flex";
     app.style.display = yes ? "flex" : "none";
-    if (!yes) { status.textContent = "Locked"; current = null; stopAvatar(); }
+    if (!yes) { closeSettings(false); status.textContent = "Locked"; current = null; stopAvatar(); }
   }
   async function api(path, options) {
     var response = await fetch(path, Object.assign({}, options || {}, {
@@ -316,10 +431,8 @@
       if (atBottom || !idSignature) messages.scrollTop = messages.scrollHeight;
       idSignature = signature;
     }
-    var routedModel = data.modelStatus && data.modelStatus.label ? data.modelStatus.label : (data.model || "local model");
-    status.textContent = !data.connected ? "Desktop offline" : (data.busy || data.queued ? "Thinking…" : "Online · " + routedModel);
-    status.title = data.modelStatus && data.modelStatus.title || "";
     current = data;
+    updateStatus(data);
     renderChats(data);
     renderModels(data);
     void syncAvatar(data);
@@ -367,8 +480,9 @@
         body: JSON.stringify({ action: action, conversationId: id || null })
       });
       await refresh();
+      closeSettings();
     } catch (e) {
-      status.textContent = e.message;
+      settingsError.textContent = e.message;
       await refresh();
     } finally { inFlight = false; }
   }
@@ -385,8 +499,9 @@
         body: JSON.stringify({ action: action, choice: choice || null })
       });
       await refresh();
+      if (action === "switch") closeSettings();
     } catch (e) {
-      status.textContent = e.message;
+      settingsError.textContent = e.message;
       if (current) renderModels(current);
     } finally {
       inFlight = false;
@@ -405,13 +520,46 @@
     if (chosen === (current && current.conversationId || "")) return;
     void changeConversation(chosen ? "open" : "new", chosen);
   });
+  menuToggle.addEventListener("click", openSettings);
+  closeSettingsButton.addEventListener("click", function () { closeSettings(); });
+  document.getElementById("settingsBackdrop").addEventListener("click", function () { closeSettings(); });
+  document.addEventListener("keydown", function (event) {
+    if (event.key === "Escape") {
+      if (reportPanel.style.display === "flex") {
+        reportPanel.style.display = "none";
+      } else if (!settingsSheet.hidden) {
+        closeSettings();
+      }
+      return;
+    }
+    if (event.key !== "Tab" || settingsSheet.hidden) return;
+    var focusable = Array.from(settingsDrawer.querySelectorAll("button, select, input"))
+      .filter(function (el) { return !el.disabled && !el.hidden && el.offsetParent !== null; });
+    if (!focusable.length) { event.preventDefault(); settingsDrawer.focus(); return; }
+    var first = focusable[0];
+    var last = focusable[focusable.length - 1];
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault(); last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault(); first.focus();
+    }
+  });
+  showModelName.addEventListener("change", saveDisplaySettings);
+  showAvatarLabel.addEventListener("change", saveDisplaySettings);
+  applyDisplaySettings();
   document.getElementById("enlargeAvatar").addEventListener("click", function () {
     var expanded = avatarPanel.classList.toggle("expanded");
-    this.textContent = expanded ? "Shrink" : "Enlarge";
+    this.textContent = expanded ? "Shrink portrait" : "Enlarge portrait";
     this.setAttribute("aria-pressed", expanded ? "true" : "false");
+    closeSettings();
   });
   document.getElementById("lock").addEventListener("click", function () {
-    sessionStorage.removeItem("mikan-remote-key"); key = ""; showUnlocked(false);
+    closeSettings(false);
+    sessionStorage.removeItem("mikan-remote-key");
+    key = "";
+    document.getElementById("key").value = "";
+    showUnlocked(false);
+    document.getElementById("key").focus();
   });
   message.addEventListener("input", function () {
     send.disabled = !current || !current.connected || current.busy || current.queued || inFlight || !message.value.trim();
@@ -434,7 +582,11 @@
     } catch (e) { status.textContent = e.message; }
     finally { inFlight = false; send.disabled = !message.value.trim(); }
   });
-  document.getElementById("report").addEventListener("click", function () { reportPanel.style.display = "flex"; });
+  document.getElementById("report").addEventListener("click", function () {
+    closeSettings(false);
+    reportPanel.style.display = "flex";
+    document.getElementById("reportNote").focus();
+  });
   document.getElementById("cancelReport").addEventListener("click", function () { reportPanel.style.display = "none"; });
   document.getElementById("saveReport").addEventListener("click", async function () {
     var note = document.getElementById("reportNote").value.trim();

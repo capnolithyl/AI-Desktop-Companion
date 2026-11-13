@@ -40,6 +40,25 @@ test("browser relay requires a private key and delegates to the desktop, not a s
   assert.equal(connectDirective.includes("*"), false);
   const html = await home.text();
   assert.match(html, /Remote Companion/);
+  // Keep the phone's chat surface uncluttered: controls live inside the
+  // accessible hamburger settings drawer, not the header or composer.
+  const mainView = html.split('<div id="app" class="shell">')[1]
+    ?.split('<div id="settingsSheet" class="settings-overlay" hidden>')[0];
+  const settingsView = html.split('<div id="settingsSheet" class="settings-overlay" hidden>')[1]
+    ?.split('<div id="reportPanel">')[0];
+  assert.ok(mainView && settingsView, "Remote app and settings drawer exist");
+  assert.match(mainView, /id="menuToggle"[^>]+aria-controls="settingsSheet"/);
+  assert.match(settingsView, /role="dialog" aria-modal="true"/);
+  for (const control of ["conversationSelect", "newChat", "modelSelect",
+    "refreshModels", "enlargeAvatar", "lock", "report", "showModelName",
+    "showAvatarLabel"]) {
+    assert.match(settingsView, new RegExp('id="' + control + '"'), control + " belongs in settings");
+    assert.doesNotMatch(mainView, new RegExp('id="' + control + '"'), control + " is hidden from chat");
+  }
+  assert.match(mainView, /id="avatarCanvas"/);
+  assert.match(mainView, /id="message"/);
+  assert.match(html, /mikan-remote-display/);
+  assert.match(html, /sessionStorage\.removeItem\("mikan-remote-key"\)/);
   // Catch syntax errors in the lightweight inline browser UI before packaging.
   const inlineScript = html.match(/<script>([\s\S]*?)<\/script>/);
   assert.ok(inlineScript, "Browser UI script exists");
