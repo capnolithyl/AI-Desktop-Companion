@@ -249,6 +249,30 @@ mod tests {
         (db,id)
     }
     #[test]
+    fn explicit_revision_updates_imported_fact_and_keeps_metadata_and_history() {
+        let (mut db,id)=fixture();
+        db.execute(
+            "UPDATE user_memories SET category='preferences',tags_json='[\"music\"]' WHERE id=?1",
+            params![id]
+        ).unwrap();
+        let tx=db.transaction().unwrap();
+        assert!(replace_confirmed_fact(&tx,id,"The user dislikes metal",
+            "I no longer like metal",USER).unwrap());
+        tx.commit().unwrap();
+        let entry:(String,String,String)=db.query_row(
+            "SELECT fact,category,tags_json FROM user_memories WHERE id=?1",
+            params![id],|r|Ok((r.get(0)?,r.get(1)?,r.get(2)?))
+        ).unwrap();
+        assert_eq!(entry.0,"The user dislikes metal");
+        assert_eq!(entry.1,"preferences");
+        assert_eq!(entry.2,r#"["music"]"#);
+        let historical:String=db.query_row(
+            "SELECT previous_fact FROM memory_fact_history WHERE memory_id=?1",
+            params![id],|r|r.get(0)
+        ).unwrap();
+        assert_eq!(historical,"The user likes metal");
+    }
+    #[test]
     fn reviewed_interest_replacement_moves_legacy_preference_to_user_fact() {
         let (mut db,_)=fixture();
         db.execute(
