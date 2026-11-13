@@ -134,12 +134,19 @@ pub fn memory_delete_interest(app: AppHandle, id: i64) -> Result<(),String> {
     Ok(())
 }
 
-/// Automatic extraction never overwrites user-curated or imported entries.
-/// Only a model-verified, exact-evidence preference may create a new entry.
+/// A direct, explicit owner preference may promote a curated media entry from
+/// like/unknown/experienced/interested to favorite. All other curated statuses
+/// remain protected; no duplicate and no changes to notes, rating, tags or ID.
+fn explicit_favorite(text:&str)->bool {
+    text.split(|c:char|!c.is_alphabetic()).any(|word|
+        word.eq_ignore_ascii_case("favorite") || word.eq_ignore_ascii_case("favourite"))
+}
 pub(crate) fn insert_from_conversation(
-    db: &Connection, item: IncomingInterest, source_id: &str, evidence: &str
-) -> Result<bool,String> {
+    db:&Connection, item:IncomingInterest, source_id:&str,
+    evidence:&str, user_message:&str
+)->Result<bool,String>{
     let item=checked(item)?;
+    let owner_favorite=item.status=="favorite" && explicit_favorite(user_message);
     let tags=serde_json::to_string(&item.tags).map_err(|e|e.to_string())?;
     let changed=db.execute(
         "INSERT INTO interest_items
@@ -148,9 +155,12 @@ pub(crate) fn insert_from_conversation(
          ON CONFLICT(kind,name) DO UPDATE SET
            status=excluded.status,source_quote=excluded.source_quote,
            source_message_id=excluded.source_message_id,updated_at=unixepoch()
-         WHERE interest_items.source='conversation'
-           AND interest_items.status<>excluded.status",
-        params![item.name,item.kind,item.status,item.rating,item.notes,tags,source_id,evidence]
+         WHERE interest_items.status<>excluded.status
+           AND (interest_items.source='conversation'
+             OR (?9=1 AND excluded.status='favorite'
+                 AND interest_items.status IN ('like','interested','experienced','unknown')))",
+        params![item.name,item.kind,item.status,item.rating,item.notes,tags,
+            source_id,evidence,owner_favorite]
     ).map_err(|e|e.to_string())?;
     Ok(changed>0)
 }
@@ -259,15 +269,15 @@ mod tests {
             name:"Higurashi".into(),kind:"anime".into(),status:"like".into(),
             rating:None,notes:String::new(),tags:vec![]
         };
-        assert!(insert_from_conversation(&db,preference.clone(),"u","I love Higurashi").unwrap());
-        assert!(!insert_from_conversation(&db,preference.clone(),"u","I love Higurashi").unwrap());
+        assert!(insert_from_conversation(&db,preference.clone(),"u","I love Higurashi","I love Higurashi").unwrap());
+        assert!(!insert_from_conversation(&db,preference.clone(),"u","I love Higurashi","I love Higurashi").unwrap());
         let hits:i64=db.query_row(
             "SELECT count(*) FROM interest_search WHERE interest_search MATCH 'higurashi'",
             [],|r|r.get(0)
         ).unwrap();
         assert_eq!(hits,1);
         preference.status="dislike".into();
-        assert!(insert_from_conversation(&db,preference,"u","I dislike Higurashi").unwrap());
+        assert!(insert_from_conversation(&db,preference,"u","I dislike Higurashi","I dislike Higurashi").unwrap());
         let saved:String=db.query_row(
             "SELECT status FROM interest_items WHERE name='Higurashi'",[],|r|r.get(0)
         ).unwrap();
@@ -279,12 +289,70 @@ mod tests {
             name:"bathory".into(),kind:"band".into(),status:"dislike".into(),
             rating:None,notes:String::new(),tags:vec![]
         };
-        assert!(!insert_from_conversation(&db,curated,"u","I dislike Bathory").unwrap());
+        assert!(!insert_from_conversation(&db,curated,"u","I dislike Bathory","I dislike Bathory").unwrap());
         let preserved:String=db.query_row(
             "SELECT status FROM interest_items WHERE name='Bathory'",[],|r|r.get(0)
         ).unwrap();
         assert_eq!(preserved,"favorite");
     }
+    #[test]
+    fn newer_explicit_favorite_upgrades_import_without_losing_curated_data() {
+        let db=Connection::open_in_memory().unwrap();
+        memory::initialize_database(&db).unwrap();
+        db.execute(
+            r#"INSERT INTO interest_items(name,kind,status,rating,notes,tags_json,source)
+               VALUES('Shadows Fall','band','like',8.5,'Existing note','["metal"]','import')"#,
+            []
+        ).unwrap();
+        let old_id:i64=db.query_row("SELECT id FROM interest_items",[],|r|r.get(0)).unwrap();
+        let fav=IncomingInterest{
+            name:"shadows fall".into(),kind:"band".into(),status:"favorite".into(),
+            rating:None,notes:String::new(),tags:vec![]
+        };
+        assert!(insert_from_conversation(&db,fav.clone(),"message-1",
+            "shadows fall","my favorite band is shadows fall").unwrap());
+        assert!(!insert_from_conversation(&db,fav,"message-1",
+            "shadows fall","my favorite band is shadows fall").unwrap());
+        let result:(i64,String,String,String,String,f64)=db.query_row(
+            "SELECT id,status,source,notes,tags_json,rating FROM interest_items",[],
+            |r|Ok((r.get(0)?,r.get(1)?,r.get(2)?,r.get(3)?,r.get(4)?,r.get(5)?))
+        ).unwrap();
+        assert_eq!(result.0,old_id);
+        assert_eq!(result.1,"favorite");
+        assert_eq!(result.2,"import");
+        assert_eq!(result.3,"Existing note");
+        assert_eq!(result.4,r#"["metal"]"#);
+        assert_eq!(result.5,8.5);
+        let count:i64=db.query_row("SELECT COUNT(*) FROM interest_items",[],|r|r.get(0)).unwrap();
+        assert_eq!(count,1);
+    }
+
+    #[test]
+    fn curator_protection_blocks_vague_or_conflicting_statuses() {
+        let db=Connection::open_in_memory().unwrap();
+        memory::initialize_database(&db).unwrap();
+        db.execute(
+            "INSERT INTO interest_items(name,kind,status,source)
+             VALUES('Sakura Trick','anime','like','manual')",[]
+        ).unwrap();
+        let fav=IncomingInterest{
+            name:"Sakura Trick".into(),kind:"anime".into(),status:"favorite".into(),
+            rating:None,notes:String::new(),tags:vec![]
+        };
+        assert!(!insert_from_conversation(&db,fav.clone(),"message-2",
+            "Sakura Trick","I like Sakura Trick").unwrap());
+        assert!(insert_from_conversation(&db,fav.clone(),"message-3",
+            "Sakura Trick","Sakura Trick is my favourite anime").unwrap());
+        let weaker=IncomingInterest{status:"like".into(),..fav.clone()};
+        assert!(!insert_from_conversation(&db,weaker,"message-4",
+            "Sakura Trick","I like Sakura Trick").unwrap());
+        let contrary=IncomingInterest{status:"dislike".into(),..fav};
+        assert!(!insert_from_conversation(&db,contrary,"message-5",
+            "Sakura Trick","I dislike Sakura Trick").unwrap());
+        let status:String=db.query_row("SELECT status FROM interest_items",[],|r|r.get(0)).unwrap();
+        assert_eq!(status,"favorite");
+    }
+
     #[test]
     fn kind_detection_does_not_treat_generic_chat_as_collection_search() {
         assert!(category_for_query("hello there").is_empty());
