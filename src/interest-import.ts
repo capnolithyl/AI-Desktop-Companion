@@ -1,6 +1,6 @@
 /** Bulk-import grammar shared by owner collections and Mikan's character canon.
  * Parsing and validation are local. Nothing gets persisted before review. */
-export const INTEREST_KINDS = ["band","album","anime","show","movie","game","book","other"] as const;
+export const INTEREST_KINDS = ["band","album","song","anime","show","movie","game","book","other"] as const;
 export const INTEREST_STATUSES = ["favorite","like","dislike","interested","experienced","unknown"] as const;
 export const CANON_CATEGORIES = ["favorites","likes","dislikes","hobbies","traits","other"] as const;
 export type InterestKind = typeof INTEREST_KINDS[number];
@@ -92,7 +92,7 @@ export function parseInterests(input:string,format:ImportFormat,
     const name=text(obj.name??obj.title??obj.artist??obj.band,180,"Row "+(index+1)+" name",true);
     const rawKind=String(obj.kind??obj.type??obj.category??defaults.kind).trim().toLowerCase();
     const rawStatus=String(obj.status??obj.relationship??defaults.status).trim().toLowerCase();
-    const kind=({bands:"band",artists:"band",artist:"band",music:"band",albums:"album",
+    const kind=({bands:"band",artists:"band",artist:"band",music:"band",albums:"album",songs:"song",tracks:"song",track:"song",singles:"song",single:"song",
       "tv show":"show","tv series":"show",series:"show",movies:"movie",films:"movie",
       games:"game",books:"book"} as Record<string,string>)[rawKind]??rawKind;
     const status=({loved:"like",love:"like",liked:"like",hated:"dislike",

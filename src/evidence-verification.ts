@@ -119,13 +119,29 @@ export function groundedResearchFallback(
   question: string, sources: readonly EvidenceSource[]
 ): string {
   const requested=significant(question);
+  // Contiguous title words distinguish similarly named entities, e.g.
+  // "The War Within" from the unrelated "War Within". A shared generic
+  // word like "album" alone must never decide the chosen source.
+  const questionWords=normalize(question).split(" ").filter(Boolean);
+  const phraseMatch=(title:string):number=>{
+    const full=" "+normalize(title)+" ";
+    let longest=0;
+    for(let length=2;length<=5;length++) {
+      for(let i=0;i+length<=questionWords.length;i++) {
+        const slice=questionWords.slice(i,i+length);
+        if(slice.every(word=>stop.has(word)))continue;
+        if(full.includes(" "+slice.join(" ")+" "))longest=Math.max(longest,length);
+      }
+    }
+    return longest;
+  };
   const headlines=sources.map((source,i)=>{
     const title=source.title.replace(/[\r\n\t*<>\\[\\]`]/g," ").replace(/\s+/g," ").trim().slice(0,165);
     const titleWords=new Set(significant(title));
     const textWords=new Set(significant(source.content.slice(0,650)));
     const titleHits=requested.filter(w=>titleWords.has(w)).length;
     const contentHits=requested.filter(w=>textWords.has(w)).length;
-    return {index:i+1,title,score:titleHits*5+Math.min(contentHits,3),
+    return {index:i+1,title,score:titleHits*5+Math.min(contentHits,3)+phraseMatch(title)*4,
       titleHits,valid:/^https?:\/\//.test(source.url) && title.length>=10};
   }).filter(item=>item.valid && item.titleHits>0)
     .sort((a,b)=>b.score-a.score||a.index-b.index);

@@ -4,7 +4,7 @@
  * The CI checker detects unmapped Tauri commands, missing files and stale versions.
  * Add a feature here when adding capability, and update the matching source/docs.
  */
-export const CAPABILITY_RELEASE = "0.8.42";
+export const CAPABILITY_RELEASE = "0.9.5";
 
 export type CapabilityStage = "implemented" | "experimental" | "planned";
 export type RuntimeDependency = "none" | "ollama" | "search" | "mem0" | "voice" | "vision" | "pocket";
@@ -95,10 +95,10 @@ export const CAPABILITIES: readonly Capability[] = [
   },
   {
     id:"personal-facts",label:"Personal facts and automatic extraction",category:"Memory",
-    description:"Owner-editable SQLite user facts with previewed local JSON/CSV/TXT/Markdown bulk imports, category and tag editing, filters, exact-text deduplication, automatic evidence-grounded extraction, deletion and pinned core memories. Export all user facts to JSON in Downloads, or atomically replace the user-fact set after a typed confirmation and automatic JSON backup; replacements leave chat history, character canon, and Notion untouched. Similar but differently worded facts are not automatically merged. For relevant chat, deterministic SQLite FTS5 and optional semantic matches select memories without a separate LLM reranking call. The optional vector index may be unavailable during sync.",
+    description:"Owner-editable SQLite user facts with previewed local JSON/CSV/TXT/Markdown bulk imports, category and tag editing, filters, exact-text deduplication, automatic evidence-grounded extraction, deletion and pinned core memories. Export all user facts to JSON in Downloads, or atomically replace the user-fact set after a typed confirmation and automatic JSON backup; replacements leave chat history, character canon, and Notion untouched. Similar but differently worded facts are not silently merged. Completed chat turns enter a durable local SQLite extraction queue with restart recovery and bounded retries. Corrections are staged for owner approval, with Replace/Keep both/Dismiss controls and revision history rather than silent overwrites. Relevant chat uses deterministic SQLite FTS5 and optional semantic retrieval without a separate LLM reranking call. The optional vector index may be unavailable during sync.",
     stage:"implemented",runtime:"none",keywords:["remember","fact","profile","memory","pin","forget","personal","bulk","import","category","tags","csv","json"],
-    sources:["src-tauri/src/memory.rs","src-tauri/src/memory_extraction.rs","src/memory-client.ts","src/memory-retrieval.ts","src/MemoryImporter.tsx","src/memory-import.ts"],docs:["MEMORY.md"],
-    commands:["memory_list_facts","memory_search_fact_ids","memory_add_fact","memory_update_fact","memory_update_fact_metadata","memory_import_facts","memory_export_facts","memory_replace_facts","memory_delete_fact","memory_mark_recalled","memory_pin_fact","memory_process_turn"],
+    sources:["src-tauri/src/memory.rs","src-tauri/src/memory_extraction.rs","src-tauri/src/memory_jobs.rs","src-tauri/src/memory_reviews.rs","src/memory-client.ts","src/MemoryReviews.tsx","src/memory-retrieval.ts","src/MemoryImporter.tsx","src/memory-import.ts"],docs:["MEMORY.md"],
+    commands:["memory_list_facts","memory_search_fact_ids","memory_add_fact","memory_update_fact","memory_update_fact_metadata","memory_import_facts","memory_export_facts","memory_replace_facts","memory_delete_fact","memory_mark_recalled","memory_pin_fact","memory_process_turn","memory_enqueue_turn","memory_process_pending_jobs","memory_jobs_status","memory_retry_failed_jobs","memory_list_reviews","memory_resolve_review","memory_list_fact_history"],
     // Memory now lives inside Settings → Memory & chats, not a separate desktop screen.
     slashCommands:["memories","remember","forget"]
   },
@@ -134,7 +134,7 @@ export const CAPABILITIES: readonly Capability[] = [
   },
   {
     id:"interest-collections",label:"Searchable interests and media collections",category:"Memory",
-    description:"Separate SQLite FTS5 catalog of the owner's bands, albums, anime, movies, TV, games and books. Bulk JSON/CSV/text import supports favorites, likes, dislikes, experienced or interested statuses plus optional ratings, notes and tags. Matching entries are recalled in a bounded chat context. Local automatic extraction adds only grounded, explicitly stated tastes, and never overwrites owner-curated imports. This is desktop memory, not synced to Pocket.",
+    description:"Separate SQLite FTS5 catalog of the owner's bands, albums, songs, anime, movies, TV, games and books. Bulk JSON/CSV/text import supports favorites, likes, dislikes, experienced or interested statuses plus optional ratings, notes and tags. Matching entries are recalled in a bounded chat context. Local automatic extraction adds only grounded, explicitly stated tastes. A newer explicit favorite statement can promote the same imported item from like/interested/experienced/unknown to favorite while preserving its record, rating, tags and notes; conflicting or weaker statements do not change curated imports. This is desktop memory, not synced to Pocket.",
     stage:"experimental",runtime:"none",keywords:["interests","collection","anime","bands","movies","shows","favorite","watched","ratings","media","import"],
     sources:["src-tauri/src/interest_memory.rs","src/InterestCollectionTab.tsx","src/interest-import.ts","src/memory-client.ts"],docs:["MEMORY.md"],
     commands:["memory_list_interests","memory_search_interests","memory_import_interests","memory_update_interest","memory_delete_interest"]
@@ -149,9 +149,9 @@ export const CAPABILITIES: readonly Capability[] = [
   },
   {
     id:"personality-settings",label:"Personalities and presets",category:"Personality",
-    description:"Settings → Personality contains presets and adjustable speaking-style traits, separate from AI model options. Presets do not change model capabilities; the custom system prompt remains under AI & models.",
-    stage:"implemented",runtime:"none",keywords:["personality","persona","mood","affection","flirty","preset","settings"],
-    sources:["src/personality.ts","src/PersonalityControls.tsx","src/App.tsx"],docs:["README.md"],
+    description:"Settings → Personality contains presets and adjustable speaking-style traits, separate from AI model options. Under Settings → AI, owner-controlled communication preferences customize address style, preferred endearments, reply length, follow-up questions and optional communication instructions. These apply to every desktop chat system prompt, separately from selectively recalled memory facts. Presets do not change model capabilities; the custom system prompt remains under AI.",
+    stage:"implemented",runtime:"none",keywords:["personality","persona","mood","affection","flirty","preset","settings","communication","nickname","endearment","address style","reply length"],
+    sources:["src/personality.ts","src/PersonalityControls.tsx","src/communication-preferences.ts","src/App.tsx"],docs:["README.md"],
     commands:[],
     screens:["settings"],
     slashCommands:["personality","preset","randomize","playfulness","flirtiness","affection","sass","energy","settings","appearance","accent","panel","opacity","font","fontsize"]
@@ -166,9 +166,9 @@ export const CAPABILITIES: readonly Capability[] = [
   },
   {
     id:"animated-2d-avatar",label:"Animated 2D Iki character with reactions",category:"Avatar",
-    description:"The Windows desktop includes an animated, local Iki Mikan v3 rig with blinking, hair physics, idle breathing, a separate tail, simple speech-linked mouth movement, and short expressions/gestures when replies begin with recognizable cues. Settings → Character lists all finished .iki outfits from the checked-in wardrobe.json automatically (five currently shipped) plus locally imported costumes preserved in IndexedDB. The live outfit carousel previews clothing directly on Mikan beside the settings panel. Large bundled rigs are loaded only when selected. The native file picker remembers the costume directory; imported outfits can be removed from the list without deleting the original file, while shipped outfits are permanent to the installer. Season, holiday and favorite defaults come from the manifest, with per-device overrides. A tracked Git pre-commit hook automatically registers staged .iki files after npm install; installer builds refuse unregistered or missing costumes. The existing custom rig is migrated into the wardrobe. Live animation diagnostics and manual reaction test buttons are available. Cursor movement subtly guides her eyes and head, and moving the desktop overlay gently excites the existing hair/tail physics with settling momentum. Both effects can be toggled under Appearance and are sampled locally without screen capture. It is a 2D rig, not 3D; not every reply triggers a reaction and mouth movement uses a lightweight animation rather than true phoneme analysis.",
+    description:"The Windows desktop includes an animated, local Iki Mikan v3 rig with blinking, hair physics, idle breathing, a separate tail, simple speech-linked mouth movement, and short expressions/gestures when replies begin with recognizable cues. Settings → Character includes a saved local wardrobe of imported .iki files, a live outfit carousel that previews clothing directly on Mikan beside the settings panel, the bundled default rig, and a native file picker that remembers the costume directory. Removing an outfit from the list does not delete the original file. The existing custom rig is migrated into the wardrobe. Live animation diagnostics and manual reaction test buttons are available. Cursor movement subtly guides her eyes and head, and moving the desktop overlay gently excites the existing hair/tail physics with settling momentum. Both effects can be toggled under Appearance and are sampled locally without screen capture. It is a 2D rig, not 3D; not every reply triggers a reaction and mouth movement uses a lightweight animation rather than true phoneme analysis.",
     stage:"implemented",runtime:"none",keywords:["iki","animated","animation","avatar","catgirl","breathing","blink","expression","reaction","tail","rig","lip","gesture","debug","outfit","costume","wardrobe","folder","cursor","gaze","head tracking","hair physics","drag"],
-    sources:["src/IkiAvatar.tsx","src/avatar-presence.ts","src/avatar-reactions.ts","src/avatar-debug.ts","src/iki-avatar-storage.ts","src/bundled-iki-outfits.ts","assets/iki/mikan-v02/outfits/wardrobe.json","scripts/wardrobe-manifest.mjs","src/App.tsx","src-tauri/src/iki_outfits.rs","src-tauri/src/avatar_motion.rs"],docs:[],commands:["pick_iki_outfit","pick_iki_outfit_folder","avatar_motion_sample"]
+    sources:["src/IkiAvatar.tsx","src/avatar-presence.ts","src/avatar-reactions.ts","src/avatar-debug.ts","src/iki-avatar-storage.ts","src/App.tsx","src-tauri/src/iki_outfits.rs","src-tauri/src/avatar_motion.rs"],docs:[],commands:["pick_iki_outfit","pick_iki_outfit_folder","avatar_motion_sample"]
   },
   {
     id:"voice",label:"Local voice synthesis and cloning",category:"Voice",

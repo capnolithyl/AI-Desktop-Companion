@@ -37,6 +37,13 @@ export type MemoryRecallAudit = {
     pinned: boolean;
     semantic: boolean;
   }[];
+  /** Separate SQLite interest lookup. Returned is NOT synonymous with injected. */
+  interests?: {
+    returned: {id:number;name:string;kind:string;status:string}[];
+    included: {id:number;promptLine:string}[];
+    suppressedForCharacter: boolean;
+    searchError?: string;
+  };
 };
 
 export type ToolPlanningAudit = {
@@ -236,6 +243,25 @@ function performanceLines(diagnostics: Diagnostics): string[] {
           "    " + fact.fact
         ])
         : ["  No user facts were included in this model prompt."])
+    ] : []),
+    ...(memory?.interests ? [
+      "Structured interest recall (SQLite collection, separate from personal facts):",
+      "  Lookup: " + (memory.interests.searchError ? "failed ("+memory.interests.searchError+")" : "completed"),
+      "  Collection candidates returned: " + memory.interests.returned.length,
+      "  Interest items included in prompt: " + memory.interests.included.length,
+      ...(memory.interests.suppressedForCharacter ? [
+        "  Owner interests suppressed because the question concerns Mikan's own preferences."
+      ] : []),
+      ...(memory.interests.returned.length
+        ? memory.interests.returned.map((item,index)=>
+          "  ["+(index+1)+"] ID "+item.id+" | "+item.kind+" | "+item.status+" | "+
+          (memory.interests!.included.some(injected=>injected.id===item.id)?"in prompt":"not in prompt")+
+          " | "+item.name)
+        : ["  No matching structured interests were returned."]),
+      ...(memory.interests.included.length ? [
+        "  Exact interest lines actually supplied to the model:",
+        ...memory.interests.included.map(item=>"    #"+item.id+" "+item.promptLine)
+      ] : ["  No structured interest lines were supplied to the model."])
     ] : [])
   ];
 }
@@ -259,7 +285,7 @@ export function formatDebugLog(messages: readonly DebugLogMessage[], options: De
     "Context window: " + (options.contextWindow == null ? "Ollama default" : options.contextWindow + " tokens"),
     "Message count: " + messages.length,
     ...(options.avatarAnimation ? ["Avatar animation (snapshot at export):", options.avatarAnimation] : []),
-    "Note: Contains conversation text, source excerpts and selected personal-memory facts. Review before sharing.",
+    "Note: Contains conversation text, source excerpts, selected personal-memory facts and structured interest matches. Review before sharing.",
     ""
   ];
 

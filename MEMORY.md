@@ -1,5 +1,13 @@
 # Mikan memory foundation (first layer)
 
+## v0.9.0: persistent extraction queue and owner-reviewed corrections
+
+- When Mikan finishes a reply, she first saves the conversation to SQLite, then journals automatic memory extraction using the original user and assistant message IDs. The queue survives a restart without duplicating the private text. While idle, Mikan processes a few jobs at a time, with a maximum of three attempts each and a short backoff if local Ollama is unavailable. Failed jobs remain visible under **Memory → About you**, where the owner can retry them.
+- Candidate memories still require an exact source quote, avoid sensitive information and reject session-only/project-only activity. If the user explicitly corrects a personal fact, Mikan stores a **proposal**, not an active memory. Memory → About you → Suggested memory corrections displays the proposed and previously saved text with its source quote. The owner may **Replace old fact** (with confirmation and old-value history), **Keep both**, or **Dismiss suggestion**.
+- Replacing a fact preserves its SQLite ID, category/tags/pinned importance, and a dated revision record with provenance. The previous statement remains accessible in approved correction history, but only the current fact is retrieved as active memory. Deleting a conversation cascades into unfinished extraction jobs and unreviewed proposals; it does not silently delete separately saved facts. No changes are made to existing user facts during schema upgrade.
+- All automatic processing runs locally. A separate LLM is not required for recall; SQLite FTS5 plus optional semantic retrieval selects current facts before the main answer. The extraction model only sees bounded existing facts and the saved source messages, not the complete archive.
+
+
 ## v0.8.22: hybrid local relevance selection
 
 Saved SQLite facts remain authoritative. For meaningful user turns, Mikan sends a bounded, local-only list of stored user facts to the configured Ollama model and asks for relevant numeric IDs as JSON. Collections up to 60 eligible facts can be judged together. Larger collections use a shortlist drawn from Mem0/Qdrant nearest neighbors (without requiring the previous fixed similarity cutoff), full-word lexical and metadata relevance, pinned facts and recency. The model cannot author new facts through this route; IDs are checked against the shortlist. Pinned memories retain core slots, and selected IDs are subjected to the existing context-size budget before being sent to the answer model. Local errors, invalid JSON and an approximately 20-second timeout (to accommodate cold model loading) fall back to full-word lexical/tag matching and strong semantic matches. Trivial greetings skip the AI relevance pass entirely. This adds a separate, bounded local inference request for relevant turns and can increase first-token latency.
@@ -60,7 +68,7 @@ Saved memories are *reference facts*, not extra instructions or model training. 
 
 ## Next memory layers
 
-1. **In development:** Optional automatic extraction and exact-duplicate protection, with conservative sensitive-data filtering. Owner-visible editing/deletion remains available; review queue and stronger semantic deduplication are future enhancements.
+1. **Shipped:** Optional automatic extraction and exact-duplicate protection, with conservative sensitive-data filtering, a durable queue and owner-reviewable corrections. Semantic near-duplicate clustering and temporal supersession across unrelated facts remain future enhancements.
 2. SQLite full-text search for recall across archived conversations, relevance and source/date tracking.
 3. **Shipped v0.7.0:** Editable persona-specific character canon, separate from user memory and knowledge documents. **In development:** First automatic capture of Mikan's own explicitly stated preferences after the user asks about them.
 4. Memory retention, export/backup and more granular privacy controls.
@@ -116,9 +124,9 @@ The new **Settings → Memory & chats → Interests** tab uses a separate local 
 with a maximum of 5,000 saved items. Core autobiographical facts, session notes,
 Mikan's character canon, and imported webpage knowledge remain separate.
 
-Every item has a name and kind (`band`, `album`, `anime`, `show`, `movie`,
+Every item has a name and kind (`band`, `album`, `song`, `anime`, `show`, `movie`,
 `game`, `book` or `other`) and a relationship: `favorite`, `like`, `dislike`,
-`interested`, `experienced` or `unknown`. An experience never implies approval.
+`interested`, `experienced` or `unknown`. Songs are separate from albums: an interest in one does not prove which record contains it. An experience never implies approval.
 Optional ratings use a 0–10 scale. Notes and tags are stored with the entry.
 Only a small set of relevant matches is supplied to chat; bulk lists are never
 placed wholesale in the model's context.
@@ -132,11 +140,16 @@ An import preview shows duplicate counts and a first-page sample. Confirm before
 saving. You can edit or remove records in the Interests tab afterward.
 
 When auto-remember is enabled, the existing local Ollama extractor may capture
-explicitly grounded media tastes into the collection. It needs exact supporting
-text in the current owner's message, and it does not overwrite manually imported
-entries. An already auto-extracted item may change relationship when a later
-explicit statement contradicts it. Extraction is opportunistic; the memory panel
-and chat continue working if Ollama is temporarily unavailable.
+explicitly grounded media tastes into the collection, including songs/tracks. It needs exact supporting
+text in the current owner's message. Newer explicit favorites can promote an
+existing manually imported `like`, `interested`, `experienced` or `unknown`
+entry to `favorite` when its kind and name match exactly, preserving the
+original row ID, rating, notes, tags and source. Other changes to imported
+curated entries remain protected. An already auto-extracted item may change
+relationship when a later explicit statement contradicts it. Extraction is
+opportunistic; the memory panel and chat continue working if Ollama is
+temporarily unavailable. The Memory panel's **Last extraction** outcome
+distinguishes accepted changes from model passes that saved nothing.
 
 ### Bulk Mikan canon import (desktop)
 

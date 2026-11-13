@@ -17,7 +17,8 @@ const generic = new Set([
   "any","was","were","are","been","being","did","does","do","is","its",
   "just","got","get","say","said","let","lets","thinking","think",
   "something","things","kind","kinds","again","still","then","also",
-  "called"
+  "called","favorite","favourite","favorites","favourites","album","albums",
+  "song","songs","track","tracks","date"
 ]);
 
 /** Match whole normalized words, not substrings like any in Germany. */

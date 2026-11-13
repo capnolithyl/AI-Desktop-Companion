@@ -13,6 +13,8 @@ mod evidence_pack;
 mod memory;
 mod interest_memory;
 mod memory_extraction;
+mod memory_jobs;
+mod memory_reviews;
 mod advanced_memory;
 mod session_memory;
 mod voice;
@@ -817,6 +819,13 @@ pub fn run() {
             memory::memory_update_character_fact,
             memory::memory_delete_character_fact,
             memory_extraction::memory_process_turn,
+            memory_jobs::memory_enqueue_turn,
+            memory_jobs::memory_process_pending_jobs,
+            memory_jobs::memory_jobs_status,
+            memory_jobs::memory_retry_failed_jobs,
+            memory_reviews::memory_list_reviews,
+            memory_reviews::memory_resolve_review,
+            memory_reviews::memory_list_fact_history,
             memory::memory_mark_recalled,
             memory::memory_pin_fact,
             session_memory::memory_session_candidate,
