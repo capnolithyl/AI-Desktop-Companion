@@ -119,7 +119,8 @@ test("FTS5 matches are combined with semantic neighbors",()=>{
   assert.ok(result.ids.includes(14));
   assert.ok(result.ids.includes(15));
 });
-\ntest("generic favorite references cannot recall unrelated favorite anime",()=>{
+
+test("generic favorite references cannot recall unrelated favorite anime",()=>{
   const examples=[
     {id:200,fact:"Sakura Trick is one of the user's favorite anime.",category:"interests",tags:["anime"],updatedAt:1},
     {id:201,fact:"The user loves Shadows Fall.",category:"interests",tags:["shadows-fall","metal"],updatedAt:2}
