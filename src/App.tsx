@@ -253,6 +253,7 @@ export default function App() {
   const [memoryReady, setMemoryReady] = useState(false);
   const [memoryError, setMemoryError] = useState<string | null>(null);
   const [automaticMemoryError, setAutomaticMemoryError] = useState<string | null>(null);
+  const [memoryToast, setMemoryToast] = useState<{ key: number; message: string } | null>(null);
   const [memoryInitialTab, setMemoryInitialTab] = useState<"facts" | "chats" | "character">("facts");
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
@@ -401,6 +402,17 @@ export default function App() {
   // Full-chapter reading notes belong to this conversation, never global memory.
   const notionChapterRef = useRef<NotionChapterSession | null>(null);
   const automaticMemoryQueue = useRef<Promise<void>>(Promise.resolve());
+  const memoryToastId = useRef(0);
+  const confirmMemorySaved = (message: string) => {
+    setMemoryToast({ key: ++memoryToastId.current, message });
+  };
+  useEffect(() => {
+    if (!memoryToast) return;
+    const timer = window.setTimeout(() => {
+      setMemoryToast(current => current?.key === memoryToast.key ? null : current);
+    }, 3300);
+    return () => window.clearTimeout(timer);
+  }, [memoryToast]);
   const sessionMemoryQueue = useRef<Promise<void>>(Promise.resolve());
   const stopRequested = useRef(false);
   // Screenshots exist only in UI state until the owner sends one turn; never saved to SQLite.
@@ -1097,11 +1109,13 @@ export default function App() {
   };
   const addCharacter = async (category: CharacterCategory, label: string, value: string) => {
     await memoryApi.addCharacterFact(category, label, value);
+    confirmMemorySaved("Mikan detail saved");
     await refreshCharacter();
     setMemoryError(null);
   };
   const editCharacter = async (id: number, category: CharacterCategory, label: string, value: string) => {
     await memoryApi.updateCharacterFact(id, category, label, value);
+    confirmMemorySaved("Mikan detail updated");
     await refreshCharacter();
   };
   const deleteCharacter = async (id: number) => {
@@ -1127,6 +1141,13 @@ export default function App() {
       .then(async () => {
         const result = await memoryApi.processTurn(request);
         if (result.userSaved || result.characterSaved) {
+          // The backend reports only committed SQLite rows. Never show a
+          // "remembered" confirmation when extraction skipped or saved nothing.
+          const saved = [
+            result.userSaved ? `${result.userSaved} ${result.userSaved === 1 ? "fact" : "facts"} about you` : "",
+            result.characterSaved ? `${result.characterSaved} ${result.characterSaved === 1 ? "detail" : "details"} about Mikan` : ""
+          ].filter(Boolean).join(" · ");
+          confirmMemorySaved(`Remembered ${saved}`);
           await Promise.all([
             result.userSaved ? refreshFacts() : Promise.resolve(),
             result.characterSaved ? refreshCharacter() : Promise.resolve()
@@ -1175,6 +1196,7 @@ export default function App() {
   };
   const addUserFact = async (fact: string) => {
     await memoryApi.addFact(fact);
+    confirmMemorySaved("Memory saved");
     await refreshFacts();
     // Sync the owner-controlled mirror after a manual edit. The conversation
     // stays usable if the optional Mem0 process is offline.
@@ -1203,6 +1225,7 @@ export default function App() {
   };
   const editUserFact = async (id: number, fact: string) => {
     await memoryApi.updateFact(id, fact);
+    confirmMemorySaved("Memory updated");
     await refreshFacts();
     void invoke("memory_semantic_recall", {query:""}).catch(() => {});
   };
@@ -2781,6 +2804,11 @@ export default function App() {
       onClose={() => setPortraitMenuAt(null)}/>}
 
     <section className="dock" aria-label="Chat with Mikan">
+      {memoryToast && <div key={memoryToast.key} className="desktop-memory-toast"
+        role="status" aria-live="polite" aria-atomic="true">
+        <Check size={15} aria-hidden="true"/>
+        <span>{memoryToast.message}</span>
+      </div>}
       <div className="reply-panel" aria-live="polite">
         <div className="reply-header">
           <div className="reply-title"><span className="cat-dot" /> <strong>MIKAN</strong>
