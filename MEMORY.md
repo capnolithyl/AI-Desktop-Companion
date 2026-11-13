@@ -107,3 +107,51 @@ On the automatic-extraction branch, Mikan's explicit stable preferences may be s
 7. Confirm saving a duplicate and replaying an already-processed message do not produce duplicate entries. A full app restart must preserve earlier memories.
 
 JSON/CSV imports also accept common category aliases such as personal → profile, relationships → family, career → work and hobbies → interests; the preview shows normalized labels.
+
+
+### Structured interests and media collections (desktop)
+
+The new **Settings → Memory & chats → Interests** tab uses a separate local SQLite
+`interest_items` table with FTS5 search. Import up to 3,000 rows at a time,
+with a maximum of 5,000 saved items. Core autobiographical facts, session notes,
+Mikan's character canon, and imported webpage knowledge remain separate.
+
+Every item has a name and kind (`band`, `album`, `anime`, `show`, `movie`,
+`game`, `book` or `other`) and a relationship: `favorite`, `like`, `dislike`,
+`interested`, `experienced` or `unknown`. An experience never implies approval.
+Optional ratings use a 0–10 scale. Notes and tags are stored with the entry.
+Only a small set of relevant matches is supplied to chat; bulk lists are never
+placed wholesale in the model's context.
+
+For bulk import, paste one title per line and choose the default kind and
+relationship, or select a CSV/JSON file. CSV needs a `name` or `title` heading,
+and may include `kind,status,rating,notes,tags`; JSON accepts an array of those
+objects or `{"interests": [...]}`. Imports preserve existing rows with matching
+kind + case-insensitive name, including their owner-edited ratings/notes.
+An import preview shows duplicate counts and a first-page sample. Confirm before
+saving. You can edit or remove records in the Interests tab afterward.
+
+When auto-remember is enabled, the existing local Ollama extractor may capture
+explicitly grounded media tastes into the collection. It needs exact supporting
+text in the current owner's message, and it does not overwrite manually imported
+entries. An already auto-extracted item may change relationship when a later
+explicit statement contradicts it. Extraction is opportunistic; the memory panel
+and chat continue working if Ollama is temporarily unavailable.
+
+### Bulk Mikan canon import (desktop)
+
+Open **Settings → Memory & chats → About Mikan → Bulk import**. Accepts JSON arrays
+of `{"category":"favorites","label":"Favorite color","value":"Orange"}`,
+CSV with `category,label,value`, or plain-text lines `Favorite color: Orange`.
+The editor accepts the existing categories (favorites, likes, dislikes, hobbies,
+traits, other). It skips duplicate labels, leaves existing canon untouched, and
+commits the batch atomically. These are Mikan's fictional traits, **not** the
+owner's preferences. Pocket Mikan has its own separate phone storage; desktop
+collection import does not sync it automatically.
+
+Smoke test: import two anime as `experienced`, one as `favorite` and a band as
+`dislike`. Ask Mikan which titles you've watched and which bands you dislike.
+Verify that watched is not mislabeled as liked, that the records survive restart,
+and that importing the same file again reports duplicates. Then import Mikan's
+favorite color and personality trait, ask her about herself, and verify that a
+second import doesn't overwrite the original answers.
