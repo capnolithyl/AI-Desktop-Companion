@@ -26,7 +26,7 @@ import {
   findPreset, personalityGuidance, randomPersonality, type Personality
 } from "./personality";
 import { PersonalityPresets, PersonalitySliders } from "./PersonalityControls";
-import { communicationGuidance } from "./communication-preferences";
+import { communicationGuidance, respectAddressPreference } from "./communication-preferences";
 import { characterContinuityContext } from "./character-canon-routing";
 import { automaticMemoryNotice } from "./memory-outcome";
 import { PERSONAL_DETAIL_GROUNDING_GUIDANCE } from "./personal-grounding";
@@ -2603,7 +2603,9 @@ export default function App() {
         : stripUnsupportedCitations(rawText);
       // The final stored text, rendered answer and streamed speech must agree.
       // Keep explicit roleplay unfiltered and do not mutate older saved chats.
-      let finalText = allowRoleplay ? verifiedText : stripNarratedActions(verifiedText);
+      let finalText = allowRoleplay ? verifiedText : respectAddressPreference(
+        stripNarratedActions(verifiedText), settings.communication.addressMode
+      );
       if(groundedChapterTurn && chapterEvidence) {
         const reviewCheck=auditNotionReview(finalText,chapterEvidence);
         const accessDenial=deniesLoadedNotionAccess(finalText);

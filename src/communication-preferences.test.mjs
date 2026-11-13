@@ -33,3 +33,13 @@ test("reviewed corrections can replace earlier interest records",async()=>{
   assert.match(client,/existingInterestId:\s*number\s*\|\s*null/);
   assert.match(panel,/review\.existingInterestId\s*!=\s*null/);
 });
+
+test("standalone first-name salutation is removed in no-name modes, not genuine content",async()=>{
+  const {respectAddressPreference}=await import("./communication-preferences.ts");
+  assert.equal(respectAddressPreference("Oh, Marcus!\n\nThe Art of Balance is great.","endearments"),
+    "The Art of Balance is great.");
+  assert.equal(respectAddressPreference("Oh, Marcus!\n\nHi there.","first-name"),
+    "Oh, Marcus!\n\nHi there.");
+  assert.equal(respectAddressPreference("Oh, The War Within is good.","endearments"),
+    "Oh, The War Within is good.");
+});

@@ -45,3 +45,19 @@ export function communicationGuidance(value: CommunicationPreferences): string {
     address, length, followups,
     p.customGuidance ? "Additional instructions entered by the owner: " + p.customGuidance : ""].filter(Boolean).join("\n");
 }
+
+
+/** Final safeguard for the common standalone "Oh, Firstname!" greeting.
+ * It honors the owner's configured address mode without hardcoding a name.
+ * Keep the rest of Mikan's message intact for saved chat and spoken audio.
+ */
+export function respectAddressPreference(
+  reply:string, mode:CommunicationPreferences["addressMode"]
+):string {
+  if(mode==="first-name")return reply;
+  const greeting=/^(?:Oh|Hey|Hi|Hello),?\s+[\p{Lu}][\p{L}\p{M}'-]{1,32}[!,.](?:\r?\n){1,3}/u;
+  const match=reply.match(greeting);
+  if(!match)return reply;
+  const remainder=reply.slice(match[0].length).trimStart();
+  return remainder || reply;
+}
