@@ -6,7 +6,7 @@ import {
 } from "./avatar-presence";
 import { IkiMotion, IkiPlayer } from "@ikijs/engine";
 import { parseIkiModel, StandardParameter } from "@ikijs/format";
-import bundledRigUrl from "../assets/iki/mikan-v02/iki-ready/mikan-auto-rig-v3.iki?url";
+import bundledRigUrl from "../assets/iki/mikan-v02/outfits/default/mikan-auto-rig-v3.iki?url";
 import type { AvatarReaction } from "./avatar-reactions";
 import type { AvatarDebugSnapshot } from "./avatar-debug";
 import { avatarViewport } from "./avatar-viewport";

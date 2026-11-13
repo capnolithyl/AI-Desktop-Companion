@@ -1,4 +1,5 @@
 /** Locally configured wardrobe metadata and lightweight daily outfit scheduling. */
+import wardrobeManifest from "../assets/iki/mikan-v02/outfits/wardrobe.json" with { type: "json" };
 export type OutfitSeason = "all" | "spring" | "summer" | "autumn" | "winter";
 export type OutfitHoliday = "none" | "halloween" | "christmas" | "easter";
 export type OutfitMetadata = { season: OutfitSeason; holiday: OutfitHoliday; favorite: boolean };
@@ -24,8 +25,19 @@ export function wardrobeKey(id: string | null): string {
   return id ?? BUNDLED_OUTFIT_ID;
 }
 
+/** Resolve checked-in metadata for bundled and imported files, falling back gracefully for local-only outfits. */
 export function outfitDefaults(name: string): OutfitMetadata {
   const lower = name.toLowerCase();
+  const registered = wardrobeManifest.outfits.find(entry =>
+    entry.name.toLowerCase() === lower ||
+    entry.file.split("/").at(-1)?.toLowerCase() === lower ||
+    ("default" in entry && entry.default === true && lower.includes("(bundled)"))
+  );
+  if (registered) return {
+    season: registered.season as OutfitSeason,
+    holiday: registered.holiday as OutfitHoliday,
+    favorite: registered.favorite === true
+  };
   if (/christmas|xmas|santa|yule/.test(lower)) return { season: "winter", holiday: "christmas", favorite: false };
   if (/halloween|witch|vampire|zombie/.test(lower)) return { season: "autumn", holiday: "halloween", favorite: false };
   if (/easter|bunny/.test(lower)) return { season: "spring", holiday: "easter", favorite: false };

@@ -2,7 +2,7 @@
 
 **Purpose:** preserve the successful November 2026 path from a single front-view Mikan illustration to the animated 2D Iki v3 rig. This is the reference for rebuilding the character or making future outfits. The repository files and their READMEs are authoritative for exact script behavior and validation results.
 
-**Accepted baseline:** `iki-ready/mikan-auto-rig-v3.iki`, not the older experiments or v1/v2. V3 is an editable, reusable reference, and the desktop app uses this rig by default.
+**Accepted baseline:** `iki-ready/mikan-auto-rig-v3.iki`, not the older experiments or v1/v2. V3 remains the immutable/rebuild reference. The desktop app now loads the same rig from `outfits/default/mikan-auto-rig-v3.iki` so the shipped default lives alongside other costume files. Both paths have identical contents; keep the source rig for existing build and extraction scripts.
 
 ## 0. Choose and protect the reference
 
@@ -87,6 +87,7 @@ See `iki-ready/rig-v3/README.md`, `rig-v3/generation-prompt.txt`, `rig-v3/build_
 - **Crop the viewer, not the source rig:** keep entire artwork, show the head/ears/tail and sweater to about mid-torso; hiding the lower body in the viewport does not remove the vertices or textures.
 - Advance `IkiMotion` each frame (idle, blink, physics). Talk animation follows the app's TTS `playing` signal with a lightweight mouth-open envelope; it is not yet phoneme- or waveform-driven.
 - Settings → Appearance supports importing replacement `.iki` files stored on this PC, restoring bundled v3 and falling back to a static portrait.
+- The shipped default now lives in `outfits/default/mikan-auto-rig-v3.iki`, and `outfits/wardrobe.json` is the checked-in catalogue for actual `.iki` files beneath `outfits/`. Run `npm run wardrobe:sync` when adding completed local costumes, then `npm run wardrobe:check`. CI/builds check for BOTH unregistered `.iki` files and manifest paths that do not exist. Registered metadata sets initial season/holiday/favorite preferences; desktop user overrides remain local. See `outfits/README.md`.
 - Later upgrades added deterministic short reactions and `Animation diagnostics` to inspect actual expression/motion events and breath/mouth/FPS. Mikan 2D v3 is the **accepted stable character**, even though extreme-angle hair can deform slightly and her eyelashes look softer than in the reference.
 - Relevant implementation: `src/IkiAvatar.tsx`, `src/avatar-reactions.ts`, `src/avatar-debug.ts`, `src/iki-avatar-storage.ts`. Original integration: GitHub PR #63; reactions #64; diagnostics #65.
 
