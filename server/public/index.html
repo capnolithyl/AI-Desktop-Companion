@@ -210,6 +210,64 @@
   var canvas = document.getElementById("avatarCanvas");
   var conversationSelect = document.getElementById("conversationSelect");
   var newChat = document.getElementById("newChat");
+  var settingsSheet = document.getElementById("settingsSheet");
+  var settingsDrawer = document.getElementById("settingsDrawer");
+  var menuToggle = document.getElementById("menuToggle");
+  var closeSettingsButton = document.getElementById("closeSettings");
+  var settingsError = document.getElementById("settingsError");
+  var avatarCaption = document.getElementById("avatarCaption");
+  var showModelName = document.getElementById("showModelName");
+  var showAvatarLabel = document.getElementById("showAvatarLabel");
+  // Only non-sensitive presentation preferences are stored persistently.
+  // The private remote access key remains in sessionStorage, as before.
+  var displaySettings = (function () {
+    try {
+      var saved = JSON.parse(localStorage.getItem("mikan-remote-display") || "{}");
+      return {
+        modelName: saved && saved.modelName !== false,
+        avatarLabels: saved && saved.avatarLabels !== false
+      };
+    } catch (e) { return {modelName:true, avatarLabels:true}; }
+  })();
+  function updateStatus(data) {
+    var routedModel = data.modelStatus && data.modelStatus.label
+      ? data.modelStatus.label : (data.model || "local model");
+    status.textContent = !data.connected ? "Desktop offline"
+      : (data.busy || data.queued ? "Thinking…"
+        : displaySettings.modelName ? "Online · " + routedModel : "Online");
+    status.title = displaySettings.modelName
+      ? (data.modelStatus && data.modelStatus.title || "") : "";
+  }
+  function applyDisplaySettings() {
+    showModelName.checked = displaySettings.modelName;
+    showAvatarLabel.checked = displaySettings.avatarLabels;
+    avatarCaption.hidden = !displaySettings.avatarLabels;
+    if (current) updateStatus(current);
+  }
+  function saveDisplaySettings() {
+    displaySettings.modelName = showModelName.checked;
+    displaySettings.avatarLabels = showAvatarLabel.checked;
+    try { localStorage.setItem("mikan-remote-display", JSON.stringify(displaySettings)); }
+    catch (e) { /* Private browser storage may be unavailable. */ }
+    applyDisplaySettings();
+  }
+  function closeSettings(restoreFocus) {
+    if (settingsSheet.hidden) return;
+    settingsSheet.hidden = true;
+    document.body.classList.remove("settings-open");
+    app.inert = false;
+    menuToggle.setAttribute("aria-expanded", "false");
+    if (restoreFocus !== false && app.style.display !== "none") menuToggle.focus();
+  }
+  function openSettings() {
+    if (!key || !settingsSheet.hidden) return;
+    settingsError.textContent = "";
+    settingsSheet.hidden = false;
+    document.body.classList.add("settings-open");
+    menuToggle.setAttribute("aria-expanded", "true");
+    app.inert = true;
+    closeSettingsButton.focus();
+  }
   function stopAvatar() {
     if (avatarController) avatarController.destroy();
     avatarController = null;
@@ -219,7 +277,7 @@
   function showUnlocked(yes) {
     gate.style.display = yes ? "none" : "flex";
     app.style.display = yes ? "flex" : "none";
-    if (!yes) { status.textContent = "Locked"; current = null; stopAvatar(); }
+    if (!yes) { closeSettings(false); status.textContent = "Locked"; current = null; stopAvatar(); }
   }
   async function api(path, options) {
     var response = await fetch(path, Object.assign({}, options || {}, {
@@ -373,10 +431,8 @@
       if (atBottom || !idSignature) messages.scrollTop = messages.scrollHeight;
       idSignature = signature;
     }
-    var routedModel = data.modelStatus && data.modelStatus.label ? data.modelStatus.label : (data.model || "local model");
-    status.textContent = !data.connected ? "Desktop offline" : (data.busy || data.queued ? "Thinking…" : "Online · " + routedModel);
-    status.title = data.modelStatus && data.modelStatus.title || "";
     current = data;
+    updateStatus(data);
     renderChats(data);
     renderModels(data);
     void syncAvatar(data);
@@ -424,8 +480,9 @@
         body: JSON.stringify({ action: action, conversationId: id || null })
       });
       await refresh();
+      closeSettings();
     } catch (e) {
-      status.textContent = e.message;
+      settingsError.textContent = e.message;
       await refresh();
     } finally { inFlight = false; }
   }
@@ -442,8 +499,9 @@
         body: JSON.stringify({ action: action, choice: choice || null })
       });
       await refresh();
+      if (action === "switch") closeSettings();
     } catch (e) {
-      status.textContent = e.message;
+      settingsError.textContent = e.message;
       if (current) renderModels(current);
     } finally {
       inFlight = false;
@@ -462,13 +520,46 @@
     if (chosen === (current && current.conversationId || "")) return;
     void changeConversation(chosen ? "open" : "new", chosen);
   });
+  menuToggle.addEventListener("click", openSettings);
+  closeSettingsButton.addEventListener("click", function () { closeSettings(); });
+  document.getElementById("settingsBackdrop").addEventListener("click", function () { closeSettings(); });
+  document.addEventListener("keydown", function (event) {
+    if (event.key === "Escape") {
+      if (reportPanel.style.display === "flex") {
+        reportPanel.style.display = "none";
+      } else if (!settingsSheet.hidden) {
+        closeSettings();
+      }
+      return;
+    }
+    if (event.key !== "Tab" || settingsSheet.hidden) return;
+    var focusable = Array.from(settingsDrawer.querySelectorAll("button, select, input"))
+      .filter(function (el) { return !el.disabled && !el.hidden && el.offsetParent !== null; });
+    if (!focusable.length) { event.preventDefault(); settingsDrawer.focus(); return; }
+    var first = focusable[0];
+    var last = focusable[focusable.length - 1];
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault(); last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault(); first.focus();
+    }
+  });
+  showModelName.addEventListener("change", saveDisplaySettings);
+  showAvatarLabel.addEventListener("change", saveDisplaySettings);
+  applyDisplaySettings();
   document.getElementById("enlargeAvatar").addEventListener("click", function () {
     var expanded = avatarPanel.classList.toggle("expanded");
-    this.textContent = expanded ? "Shrink" : "Enlarge";
+    this.textContent = expanded ? "Shrink portrait" : "Enlarge portrait";
     this.setAttribute("aria-pressed", expanded ? "true" : "false");
+    closeSettings();
   });
   document.getElementById("lock").addEventListener("click", function () {
-    sessionStorage.removeItem("mikan-remote-key"); key = ""; showUnlocked(false);
+    closeSettings(false);
+    sessionStorage.removeItem("mikan-remote-key");
+    key = "";
+    document.getElementById("key").value = "";
+    showUnlocked(false);
+    document.getElementById("key").focus();
   });
   message.addEventListener("input", function () {
     send.disabled = !current || !current.connected || current.busy || current.queued || inFlight || !message.value.trim();
@@ -491,7 +582,11 @@
     } catch (e) { status.textContent = e.message; }
     finally { inFlight = false; send.disabled = !message.value.trim(); }
   });
-  document.getElementById("report").addEventListener("click", function () { reportPanel.style.display = "flex"; });
+  document.getElementById("report").addEventListener("click", function () {
+    closeSettings(false);
+    reportPanel.style.display = "flex";
+    document.getElementById("reportNote").focus();
+  });
   document.getElementById("cancelReport").addEventListener("click", function () { reportPanel.style.display = "none"; });
   document.getElementById("saveReport").addEventListener("click", async function () {
     var note = document.getElementById("reportNote").value.trim();
