@@ -87,8 +87,8 @@ pub fn memory_list_interests(app: AppHandle) -> Result<Vec<InterestItem>, String
     let db = memory::open_db(&app)?;
     let mut stmt = db.prepare(&format!("{SELECT} ORDER BY kind,name COLLATE NOCASE LIMIT 5000"))
         .map_err(|e| e.to_string())?;
-    stmt.query_map([],read).map_err(|e| e.to_string())?
-        .collect::<Result<Vec<_>,_>>().map_err(|e| e.to_string())
+    let rows=stmt.query_map([],read).map_err(|e| e.to_string())?;
+    rows.collect::<Result<Vec<_>,_>>().map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -142,9 +142,14 @@ pub(crate) fn insert_from_conversation(
     let item=checked(item)?;
     let tags=serde_json::to_string(&item.tags).map_err(|e|e.to_string())?;
     let changed=db.execute(
-        "INSERT OR IGNORE INTO interest_items
+        "INSERT INTO interest_items
          (name,kind,status,rating,notes,tags_json,source,source_message_id,source_quote)
-         VALUES (?1,?2,?3,?4,?5,?6,'conversation',?7,?8)",
+         VALUES (?1,?2,?3,?4,?5,?6,'conversation',?7,?8)
+         ON CONFLICT(kind,name) DO UPDATE SET
+           status=excluded.status,source_quote=excluded.source_quote,
+           source_message_id=excluded.source_message_id,updated_at=unixepoch()
+         WHERE interest_items.source='conversation'
+           AND interest_items.status<>excluded.status",
         params![item.name,item.kind,item.status,item.rating,item.notes,tags,source_id,evidence]
     ).map_err(|e|e.to_string())?;
     Ok(changed>0)
