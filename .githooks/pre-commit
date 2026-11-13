@@ -1,0 +1,4 @@
+#!/bin/sh
+# Git executes this from the repository root, including Git for Windows.
+set -e
+node scripts/wardrobe-precommit.mjs

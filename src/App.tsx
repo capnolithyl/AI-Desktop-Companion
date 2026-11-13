@@ -78,6 +78,7 @@ import {
 import { reactionFromReply, type AvatarReaction, type AvatarReactionKind } from "./avatar-reactions";
 import { extractReplyEmojis, MIN_EMOJI_BUBBLE_SECONDS, MAX_EMOJI_BUBBLE_SECONDS } from "./emoji-reactions";
 import { avatarDebugText, type AvatarDebugSnapshot } from "./avatar-debug";
+import { defaultOutfitName } from "./bundled-iki-outfits";
 import { version as DESKTOP_VERSION } from "../package.json";
 import {
   loadAvatarDisplay, saveAvatarDisplay,
@@ -963,7 +964,7 @@ export default function App() {
       const day = localWardrobeDay(now);
       if (disposed || applying || ikiBusy || !config.auto || config.pinned || config.lastDay === day) return;
       const choices: WardrobeChoice[] = [
-        { id: null, name: "Original Mikan v3 (bundled)" },
+        { id: null, name: `${defaultOutfitName} (bundled)` },
         ...ikiOutfits.map(outfit => ({ id: outfit.id, name: outfit.name }))
       ];
       const chosen = pickDailyOutfit(choices, config, now);
@@ -1501,7 +1502,7 @@ export default function App() {
 
   const forgetSelectedIkiOutfit = async (id: string) => {
     const selected = ikiOutfits.find(outfit => outfit.id === id);
-    if (!selected) return;
+    if (!selected || selected.bundledUrl) return;
     if (!window.confirm(`Remove "${selected.name}" from Mikan's saved outfits? The original .iki file will not be deleted.`)) return;
     setIkiBusy(true);
     setIkiError(null);
@@ -2741,7 +2742,7 @@ export default function App() {
   const { visibleText: visibleReplyText, emojis: replyEmojis } = extractReplyEmojis(replyText);
 
   const wardrobeChoices: WardrobeChoice[] = [
-    { id: null, name: "Original · Mikan v3 (bundled)" },
+    { id: null, name: `${defaultOutfitName} (bundled)` },
     ...ikiOutfits.map(outfit => ({ id: outfit.id, name: outfit.name }))
   ];
   const currentPreviewId = previewOutfitId === undefined ? ikiRig?.id ?? null : previewOutfitId;
@@ -2786,9 +2787,11 @@ export default function App() {
     <div className="portrait-space" title="Drag Mikan to move the window" onMouseDown={dragPortrait}
       onContextMenu={event => { event.preventDefault(); setPortraitMenuAt({ x: event.clientX, y: event.clientY }); }}>
       {avatarDisplay === "animated" && ikiReady ? (
-        <IkiAvatar customRig={wardrobePreviewVisible ? previewRig?.file ?? null : ikiRig?.file ?? null} speaking={voiceState === "playing"}
+        <IkiAvatar customRig={wardrobePreviewVisible ? previewRig?.file ?? null : ikiRig?.file ?? null}
+          rigUrl={wardrobePreviewVisible ? previewRig?.bundledUrl ?? null : ikiRig?.bundledUrl ?? null}
+          speaking={voiceState === "playing"}
           reaction={avatarReaction}
-          rigLabel={wardrobePreviewVisible ? previewRig?.name ?? "Mikan v3 (bundled)" : ikiRig?.name ?? "Mikan v3 (bundled)"}
+          rigLabel={wardrobePreviewVisible ? previewRig?.name ?? `${defaultOutfitName} (bundled)` : ikiRig?.name ?? `${defaultOutfitName} (bundled)`}
           debugVisible={showAvatarDebug || (screen === "settings" && settingsTab === "appearance")}
           presencePreferences={avatarPresence}
           dragging={avatarDragging}
@@ -2825,7 +2828,7 @@ export default function App() {
       {showAvatarDebug && <div className="avatar-debug-overlay" aria-label="Live Iki animation diagnostics">
         <strong>IKI DEBUG · v{DESKTOP_VERSION}</strong>
         <span>Renderer: {avatarDisplay === "portrait" ? "portrait" : avatarDebug?.status ?? "initializing"}</span>
-        <span>Rig: {ikiRig?.name ?? "bundled v3"}</span>
+        <span>Rig: {ikiRig?.name ?? defaultOutfitName}</span>
         <span>FPS: {avatarDebug?.fps.toFixed(0) ?? "n/a"}</span>
         <span>Reply cue: {lastReplyCue}</span>
         <span>Triggered: {avatarDebug?.lastReaction
@@ -3914,7 +3917,7 @@ export default function App() {
           <small className="iki-wardrobe-path" title={ikiOutfitFolder || "Uses project outfits folder when available"}>
             Folder: {ikiOutfitFolder || "Project outfits folder (or last-used location)"}
           </small>
-          {previewChoice.id && <button type="button" className="inline-action" disabled={ikiBusy}
+          {previewChoice.id && !previewRig?.bundledUrl && <button type="button" className="inline-action" disabled={ikiBusy}
             onClick={() => void forgetSelectedIkiOutfit(previewChoice.id!)}>Remove previewed outfit from list</button>}
           {ikiError && <p className="field-error" role="alert">{ikiError}</p>}
           <div className="settings-section-title">Live avatar movement</div>
