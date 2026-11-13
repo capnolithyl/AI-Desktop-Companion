@@ -622,22 +622,93 @@
     } catch (e) { status.textContent = e.message; }
     finally { inFlight = false; send.disabled = !message.value.trim(); }
   });
+  function updateReportButtons() {
+    var github = reportDestination.value !== "local";
+    previewIssueButton.hidden = !github;
+    saveReportButton.textContent = reportDestination.value === "local" ? "Save locally"
+      : reportDestination.value === "both" ? "Save & create issue" : "Create GitHub issue";
+    saveReportButton.disabled = reportSubmitting || !reportNote.value.trim() || (github && !reportPreviewId);
+    previewIssueButton.disabled = reportSubmitting || !reportNote.value.trim();
+  }
+  function resetIssueReview() {
+    reportPreviewId = null;
+    issueReview.hidden = true;
+    reportStatus.replaceChildren();
+    updateReportButtons();
+  }
+  reportNote.addEventListener("input", resetIssueReview);
+  reportDestination.addEventListener("change", resetIssueReview);
   document.getElementById("report").addEventListener("click", function () {
     closeSettings(false);
+    reportStatus.replaceChildren();
+    updateReportButtons();
     reportPanel.style.display = "flex";
-    document.getElementById("reportNote").focus();
+    reportNote.focus();
   });
-  document.getElementById("cancelReport").addEventListener("click", function () { reportPanel.style.display = "none"; });
-  document.getElementById("saveReport").addEventListener("click", async function () {
-    var note = document.getElementById("reportNote").value.trim();
-    if (!note) return;
+  document.getElementById("cancelReport").addEventListener("click", function () {
+    reportPanel.style.display = "none";
+  });
+  previewIssueButton.addEventListener("click", async function () {
+    if (reportSubmitting || reportDestination.value === "local" || !reportNote.value.trim()) return;
+    reportSubmitting = true;
+    updateReportButtons();
+    reportStatus.textContent = "Preparing a GitHub issue preview…";
     try {
-      await api("/api/report", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({note:note}) });
-      document.getElementById("reportStatus").textContent = "Saved on your PC.";
-      document.getElementById("reportNote").value = "";
-      setTimeout(function(){reportPanel.style.display = "none"; document.getElementById("reportStatus").textContent = "";}, 900);
-    } catch (e) { document.getElementById("reportStatus").textContent = e.message; }
+      var preview = await api("/api/report/preview", {
+        method:"POST", headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({note:reportNote.value.trim()})
+      });
+      reportPreviewId = preview.previewId;
+      document.getElementById("issueTitle").value = preview.title;
+      document.getElementById("issueBody").value = preview.body;
+      issueReview.hidden = false;
+      reportStatus.textContent = "Review the exact text above before publishing to GitHub.";
+      previewIssueButton.textContent = "Refresh preview";
+    } catch (e) { reportStatus.textContent = e.message; }
+    finally { reportSubmitting = false; updateReportButtons(); }
   });
+  saveReportButton.addEventListener("click", async function () {
+    var note = reportNote.value.trim();
+    var destination = reportDestination.value;
+    if (!note || reportSubmitting || (destination !== "local" && !reportPreviewId)) return;
+    reportSubmitting = true;
+    updateReportButtons();
+    reportStatus.textContent = destination === "local" ? "Saving locally…" : "Publishing reviewed report…";
+    try {
+      var result = await api("/api/report", {
+        method:"POST", headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({note:note,destination:destination,previewId:reportPreviewId})
+      });
+      reportStatus.replaceChildren();
+      if (result.saved) reportStatus.append(document.createTextNode("Saved detailed diagnostics on your PC. "));
+      if (result.githubUrl &&
+          /^https:\/\/github\.com\/capnolithyl\/AI-Desktop-Companion\/issues\/\d+$/.test(result.githubUrl)) {
+        var link = document.createElement("a");
+        link.href = result.githubUrl;
+        link.target = "_blank";
+        link.rel = "noopener noreferrer";
+        link.textContent = "View created GitHub issue";
+        reportStatus.append(link);
+      } else if (result.githubError) {
+        reportStatus.append(document.createTextNode("GitHub issue not created: " + result.githubError));
+      }
+      reportPreviewId = null;
+      if (result.saved && destination === "local") {
+        reportNote.value = "";
+        setTimeout(function () {
+          if (reportPanel.style.display === "flex") reportPanel.style.display = "none";
+        }, 1100);
+      } else if (result.githubUrl) {
+        reportNote.value = "";
+        issueReview.hidden = true;
+        document.getElementById("cancelReport").textContent = "Close";
+      }
+    } catch (e) {
+      reportPreviewId = null;
+      reportStatus.textContent = e.message + " Review the issue again before retrying.";
+    } finally { reportSubmitting = false; updateReportButtons(); }
+  });
+  updateReportButtons();
   if (key) {
     showUnlocked(true);
     refresh();
