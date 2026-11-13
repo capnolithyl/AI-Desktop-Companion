@@ -76,6 +76,39 @@ button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px
   backdrop-filter: blur(22px);
   padding: 15px 15px 11px;
 }
+/* A quiet confirmation above the chat dock, driven by successful SQLite writes. */
+.desktop-memory-toast {
+  position: absolute;
+  z-index: 6;
+  left: 50%;
+  top: -42px;
+  width: max-content;
+  max-width: calc(100% - 24px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 9px 14px;
+  border: 1px solid #668575;
+  border-radius: 999px;
+  background: #302936;
+  color: #e1f4e6;
+  box-shadow: 0 5px 15px #0005;
+  font-size: 12px;
+  line-height: 1.35;
+  text-align: center;
+  pointer-events: none;
+  transform: translateX(-50%);
+  animation: desktop-memory-appear .18s ease-out;
+}
+.desktop-memory-toast svg { flex: 0 0 auto; color: #98d4ad; }
+@keyframes desktop-memory-appear {
+  from { opacity: 0; transform: translate(-50%, 7px); }
+  to { opacity: 1; transform: translate(-50%, 0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .desktop-memory-toast { animation: none; }
+}
 .reply-panel { padding: 1px 1px 13px; border-bottom: 1px solid rgba(255,205,190,.15); }
 .reply-header {
   display: flex; justify-content: space-between; align-items: center; color: #ffc2a0;
