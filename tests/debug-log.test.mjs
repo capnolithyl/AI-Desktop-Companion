@@ -133,3 +133,41 @@ test("reports latency until first audible speech without exposing model reasonin
   assert.match(result,/First token: 450 ms/);
   assert.match(result,/First spoken audio: 1\.20 s/);
 });
+
+test("lists structured interest search hits separately from prompt-injected lines",()=>{
+  const result=formatDebugLog([{
+    id:"answer",role:"assistant",createdAt:0,content:"Noted.",
+    diagnostics:{elapsedMs:200,firstTokenMs:50,model:"qwen3.5:9b",stats:null,
+      memory:{storedFacts:93,semanticService:"ready",semanticCandidates:0,
+        strongSemanticMatches:0,maxFacts:10,facts:[],
+        interests:{
+          returned:[{id:12,name:"Shadows Fall",kind:"band",status:"favorite"},
+                    {id:13,name:"Other artist",kind:"band",status:"like"}],
+          included:[{id:12,promptLine:"- [band, favorite] Shadows Fall"}],
+          suppressedForCharacter:false
+        }
+      }
+    }
+  }],{conversationId:"interest-trace",model:"qwen3.5:9b",contextWindow:16384});
+  assert.match(result,/Collection candidates returned: 2/);
+  assert.match(result,/Interest items included in prompt: 1/);
+  assert.match(result,/ID 12 \| band \| favorite \| in prompt \| Shadows Fall/);
+  assert.match(result,/ID 13 \| band \| like \| not in prompt \| Other artist/);
+  assert.match(result,/Exact interest lines actually supplied to the model:/);
+  assert.match(result,/#12 - \[band, favorite\] Shadows Fall/);
+  assert.doesNotMatch(result,/#13 - \[band/);
+});
+test("interest lookup failures and character suppression are visible",()=>{
+  const result=formatDebugLog([{
+    id:"answer",role:"assistant",createdAt:0,content:"About my favorites.",
+    diagnostics:{elapsedMs:200,firstTokenMs:50,model:"qwen3.5:9b",stats:null,
+      memory:{storedFacts:1,semanticService:"ready",semanticCandidates:0,
+        strongSemanticMatches:0,maxFacts:5,facts:[],
+        interests:{returned:[],included:[],suppressedForCharacter:true,
+          searchError:"SQLite unavailable"}}
+    }
+  }],{conversationId:null,model:"qwen3.5:9b",contextWindow:16384});
+  assert.match(result,/Lookup: failed \(SQLite unavailable\)/);
+  assert.match(result,/Owner interests suppressed/);
+  assert.match(result,/No structured interest lines were supplied/);
+});
