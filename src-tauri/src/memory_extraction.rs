@@ -251,14 +251,14 @@ fn explicit_favorite_of_item(evidence:&str,name:&str)->bool{
         if let Some(prefix)=lower[..at].rfind(marker) {
             let between=&lower[prefix+marker.len()..at];
             if between.len()<=100 &&
-                !between.contains(['.',',',';','!','?']) &&
+                !between.contains(&['.',',',';','!','?'][..]) &&
                 !between.contains(" but ") && !between.contains(" and ")
             {return true;}
         }
         if let Some(after)=lower[at+name.len()..].find(marker) {
             let between=&lower[at+name.len()..at+name.len()+after];
             if between.len()<=85 && between.contains("is my")
-                && !between.contains(['.',',',';','!','?']) {return true;}
+                && !between.contains(&['.',',',';','!','?'][..]) {return true;}
         }
     }
     false

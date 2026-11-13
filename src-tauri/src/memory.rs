@@ -324,6 +324,22 @@ fn migrate_interest_song_kind(db:&Connection)->Result<(),String>{
         db.execute("UPDATE sqlite_sequence SET seq=MAX(seq,?1) WHERE name='interest_items'",
             params![seq]).map_err(|e|e.to_string())?;
     }
+    // Some earlier extractors filed explicit tracks as albums because "song"
+    // was not a supported kind. Repair only automatically captured entries
+    // whose own source quotation unambiguously says song/track (never imports).
+    // Keep their IDs, notes, source, status and existing review references.
+    db.execute(
+        "UPDATE interest_items SET kind='song',updated_at=unixepoch()
+         WHERE kind='album' AND source='conversation'
+           AND instr(lower(source_quote),lower(name))>0
+           AND (instr(' '||lower(source_quote)||' ',' song ')>0
+             OR instr(' '||lower(source_quote)||' ',' track ')>0)
+           AND instr(' '||lower(source_quote)||' ',' album ')=0
+           AND NOT EXISTS (
+             SELECT 1 FROM interest_items existing
+             WHERE existing.kind='song' AND existing.name=interest_items.name
+           )",[]
+    ).map_err(|e|format!("Could not recover explicitly labeled songs: {e}"))?;
     let broken:Option<String>=db.query_row("PRAGMA foreign_key_check",[],|r|r.get(0))
         .optional().map_err(|e|e.to_string())?;
     if let Some(table)=broken{return Err(format!("Interest migration left invalid foreign keys in {table}"));}
@@ -1265,7 +1281,10 @@ mod tests {
                UNIQUE(kind,name)
              );
              INSERT INTO interest_items(id,name,kind,status,rating,notes,tags_json,source)
-               VALUES(248,'The War Within','album','favorite',9.0,'Important','[\"metal\"]','import');"
+               VALUES(248,'The War Within','album','favorite',9.0,'Important','[\"metal\"]','import');
+             INSERT INTO interest_items(id,name,kind,status,source,source_quote)
+               VALUES(249,'Thoughts Without Words','album','favorite','conversation',
+                 'my favorite Shadows Fall song is Thoughts Without Words');"
         ).unwrap();
         initialize_database(&db).unwrap();
         db.execute(
@@ -1288,10 +1307,13 @@ mod tests {
             |r|r.get(0)
         ).unwrap();
         assert_eq!(refs,1);
+        let recovered:String=db.query_row(
+            "SELECT kind FROM interest_items WHERE id=249",[],|r|r.get(0)).unwrap();
+        assert_eq!(recovered,"song");
         db.execute("INSERT INTO interest_items(name,kind,status) VALUES
-              ('Thoughts Without Words','song','favorite')",[]).unwrap();
+              ('Another Song','song','favorite')",[]).unwrap();
         let found:i64=db.query_row(
-            "SELECT COUNT(*) FROM interest_search WHERE interest_search MATCH 'thoughts'",[],
+            "SELECT COUNT(*) FROM interest_search WHERE interest_search MATCH 'another'",[],
             |r|r.get(0)
         ).unwrap();
         assert_eq!(found,1);
