@@ -15,7 +15,7 @@ pub(crate) fn open_db(app: &AppHandle) -> Result<Connection, String> {
     Ok(connection)
 }
 
-fn initialize_database(connection: &Connection) -> Result<(), String> {
+pub(crate) fn initialize_database(connection: &Connection) -> Result<(), String> {
     // Populate the index once when upgrading an existing SQLite archive.
     // Opening the app repeatedly must never rebuild the index.
     let had_search: bool = connection.query_row(
