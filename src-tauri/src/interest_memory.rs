@@ -174,7 +174,9 @@ pub fn memory_search_interests(app: AppHandle, query: String) -> Result<Vec<Inte
     if query.chars().count()>2000 {return Err("Search query is too long".into());}
     let q=query.to_lowercase();
     let kinds=category_for_query(&q);
-    let ignored=&["what","when","where","who","which","would","should","could","about","that",
+    let overall_favorites=q.contains("my favorite") || q.contains("my favourite")
+        || q.contains("my top picks");
+    let ignored=&["are","the","what","when","where","who","which","would","should","could","about","that",
         "this","have","with","some","into","your","mine","mikan","tell","does",
         "recommend","recommendation","recommendations","favorite","favorites","favourite",
         "like","likes","liked","dislike","watch","watched","listen","listened",
@@ -182,9 +184,19 @@ pub fn memory_search_interests(app: AppHandle, query: String) -> Result<Vec<Inte
     let terms:Vec<String>=q.split(|c:char| !c.is_alphanumeric())
         .filter(|v|v.chars().count()>=3 && !ignored.contains(v) && !kinds.contains(v))
         .take(8).map(|v|format!("{v}*")).collect();
-    if terms.is_empty() && kinds.is_empty(){return Ok(vec![]);}
+    if terms.is_empty() && kinds.is_empty() && !overall_favorites{return Ok(vec![]);}
     let db=memory::open_db(&app)?;
     let mut found=Vec::new();
+    if overall_favorites && kinds.is_empty() {
+        let mut stmt=db.prepare(
+            "SELECT id,name,kind,status,rating,notes,tags_json,source,created_at,updated_at
+             FROM interest_items WHERE status='favorite'
+             ORDER BY updated_at DESC LIMIT 18"
+        ).map_err(|e|e.to_string())?;
+        let matches=stmt.query_map([],read).map_err(|e|e.to_string())?
+            .collect::<Result<Vec<_>,_>>().map_err(|e|e.to_string())?;
+        found.extend(matches);
+    }
     if !terms.is_empty(){
         let match_query=terms.join(" OR ");
         let mut stmt=db.prepare(
