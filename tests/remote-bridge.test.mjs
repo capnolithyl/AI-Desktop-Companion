@@ -4,6 +4,7 @@ import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Script } from "node:vm";
+import { request as httpRequest } from "node:http";
 import { createBridge } from "../server/index.mjs";
 
 test("browser relay requires a private key and delegates to the desktop, not a second model", async (t) => {
@@ -65,7 +66,18 @@ test("browser relay requires a private key and delegates to the desktop, not a s
   assert.equal(bundled.status, 200);
   assert.match(bundled.headers.get("content-type"), /application\/json/);
   // A different private hostname must not bypass the relay's host allowlist.
-  assert.equal((await request(base + "/api/state","GET", {...authorized,Host:"evil.example"})).status,403);
+  const rejectedHostStatus = await new Promise((resolve, reject) => {
+    const raw = httpRequest({
+      hostname: "127.0.0.1", port: publicPort, path: "/api/state",
+      method: "GET", headers: { ...authorized, host: "evil.example" }
+    }, response => {
+      response.resume();
+      response.on("end", () => resolve(response.statusCode));
+    });
+    raw.on("error", reject);
+    raw.end();
+  });
+  assert.equal(rejectedHostStatus, 403);
 
   const jsonHeaders = {...authorized,"Content-Type":"application/json"};
   assert.equal((await request(base + "/api/send", "POST", jsonHeaders, {text:"/search my files"})).status, 400);
