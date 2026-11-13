@@ -69,6 +69,7 @@ export function MemoryPanel({
   const [editValue, setEditValue] = useState("");
   const [filterCategory,setFilterCategory]=useState<MemoryCategory|"all">("all");
   const [filterText,setFilterText]=useState("");
+  const [factSort,setFactSort]=useState<"newest"|"oldest"|"updated"|"alpha">("newest");
   const [visibleLimit,setVisibleLimit]=useState(100);
   const [organizeId,setOrganizeId]=useState<number|null>(null);
   const [organizeCategory,setOrganizeCategory]=useState<MemoryCategory>("other");
@@ -87,7 +88,11 @@ export function MemoryPanel({
   };
 
   const filteredFacts=facts.filter(f=>(filterCategory==="all"||f.category===filterCategory) &&
-    (!filterText.trim() || [f.fact,f.category??"other",...(f.tags??[])].join(" ").toLowerCase().includes(filterText.trim().toLowerCase())));
+    (!filterText.trim() || [f.fact,f.category??"other",...(f.tags??[])].join(" ").toLowerCase().includes(filterText.trim().toLowerCase())))
+    .sort((a,b)=>factSort==="alpha"?a.fact.localeCompare(b.fact):
+      factSort==="oldest"?(a.createdAt-b.createdAt||a.id-b.id):
+      factSort==="updated"?(b.updatedAt-a.updatedAt||b.id-a.id):
+      (b.createdAt-a.createdAt||b.id-a.id));
 
   return <section className={embedded ? "drawer settings-inner-panel" : "drawer"}
     role={embedded ? "region" : "dialog"} aria-label="Mikan memory">
@@ -146,6 +151,12 @@ export function MemoryPanel({
             onChange={e=>{setFilterCategory(e.target.value as MemoryCategory|"all");setVisibleLimit(100);}}>
             <option value="all">All categories ({facts.length})</option>
             {MEMORY_CATEGORIES.map(cat=><option value={cat.id} key={cat.id}>{cat.label}</option>)}
+          </select>
+          <select value={factSort} aria-label="Sort memories" onChange={e=>setFactSort(e.target.value as typeof factSort)}>
+            <option value="newest">Added newest first</option>
+            <option value="oldest">Added oldest first</option>
+            <option value="updated">Recently updated</option>
+            <option value="alpha">Alphabetical (A–Z)</option>
           </select>
           <small>{filteredFacts.length} matching memories</small>
         </div>}
