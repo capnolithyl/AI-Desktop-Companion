@@ -30,6 +30,14 @@ test("browser relay requires a private key and delegates to the desktop, not a s
 
   const home = await request(base + "/");
   assert.equal(home.status, 200);
+  // Iki uses fetch(data:image/png;base64,...) then createImageBitmap(). The
+  // previous connect-src 'self' blocked embedded atlas decoding on mobile.
+  // Keep connect-src tight: same-origin and data: only, never wildcards.
+  const policy = home.headers.get("content-security-policy") || "";
+  const connectDirective = policy.split(";").map(x => x.trim()).find(x => x.startsWith("connect-src "));
+  assert.equal(connectDirective, "connect-src 'self' data:");
+  assert.match(policy, /img-src 'self' data:/);
+  assert.equal(connectDirective.includes("*"), false);
   const html = await home.text();
   assert.match(html, /Remote Companion/);
   // Catch syntax errors in the lightweight inline browser UI before packaging.

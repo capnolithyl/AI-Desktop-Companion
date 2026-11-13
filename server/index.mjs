@@ -163,8 +163,10 @@ export function createBridge({
       if (request.method === "GET" && url.pathname === "/") {
         response.writeHead(200, {
           "Content-Type": "text/html; charset=utf-8",
+          // Iki decodes embedded atlas PNGs via fetch(data:...). Permit only
+          // same-origin requests and data: payloads, never arbitrary hosts.
           "Content-Security-Policy":
-            "default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; base-uri 'none'; form-action 'self'; frame-ancestors 'none'",
+            "default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self' data:; img-src 'self' data:; base-uri 'none'; form-action 'self'; frame-ancestors 'none'",
         });
         response.end(HTML);
       } else if (request.method === "GET" && url.pathname === "/avatar-engine.js") {
