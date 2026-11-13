@@ -4,7 +4,7 @@
  * The CI checker detects unmapped Tauri commands, missing files and stale versions.
  * Add a feature here when adding capability, and update the matching source/docs.
  */
-export const CAPABILITY_RELEASE = "0.9.0";
+export const CAPABILITY_RELEASE = "0.9.1";
 
 export type CapabilityStage = "implemented" | "experimental" | "planned";
 export type RuntimeDependency = "none" | "ollama" | "search" | "mem0" | "voice" | "vision" | "pocket";
@@ -149,9 +149,9 @@ export const CAPABILITIES: readonly Capability[] = [
   },
   {
     id:"personality-settings",label:"Personalities and presets",category:"Personality",
-    description:"Settings → Personality contains presets and adjustable speaking-style traits, separate from AI model options. Presets do not change model capabilities; the custom system prompt remains under AI & models.",
-    stage:"implemented",runtime:"none",keywords:["personality","persona","mood","affection","flirty","preset","settings"],
-    sources:["src/personality.ts","src/PersonalityControls.tsx","src/App.tsx"],docs:["README.md"],
+    description:"Settings → Personality contains presets and adjustable speaking-style traits, separate from AI model options. Under Settings → AI, owner-controlled communication preferences customize address style, preferred endearments, reply length, follow-up questions and optional communication instructions. These apply to every desktop chat system prompt, separately from selectively recalled memory facts. Presets do not change model capabilities; the custom system prompt remains under AI.",
+    stage:"implemented",runtime:"none",keywords:["personality","persona","mood","affection","flirty","preset","settings","communication","nickname","endearment","address style","reply length"],
+    sources:["src/personality.ts","src/PersonalityControls.tsx","src/communication-preferences.ts","src/App.tsx"],docs:["README.md"],
     commands:[],
     screens:["settings"],
     slashCommands:["personality","preset","randomize","playfulness","flirtiness","affection","sass","energy","settings","appearance","accent","panel","opacity","font","fontsize"]
