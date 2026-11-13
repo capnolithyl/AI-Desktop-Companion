@@ -194,6 +194,14 @@ pub async fn memory_process_pending_jobs(app: AppHandle) -> Result<MemoryJobStat
         let db=memory::open_db(&app)?;
         match outcome {
             Ok(saved) => {
+                // Persist a zero-result outcome too. Early extraction skips
+                // must not disappear behind a "0 waiting, 0 failed" queue.
+                // INSERT OR IGNORE preserves exact counters saved by persist().
+                db.execute(
+                    "INSERT OR IGNORE INTO automatic_memory_runs
+                     (assistant_message_id,outcome_known) VALUES(?1,1)",
+                    params![job.assistant_message_id]
+                ).map_err(|e|e.to_string())?;
                 db.execute("DELETE FROM automatic_memory_jobs WHERE assistant_message_id=?1",
                     params![job.assistant_message_id]).map_err(|e|e.to_string())?;
                 totals.processed+=1;
@@ -264,6 +272,28 @@ mod tests {
             WHERE assistant_message_id=?1",params![ASSIST]).unwrap();
         assert_eq!(claim(&mut db).unwrap().unwrap().attempts,2);
     }
+    #[test]
+    fn skipped_extractions_are_distinguishable_from_outstanding_jobs() {
+        let db=fixture();
+        // The worker inserts this row even when the model finds no durable facts.
+        db.execute(
+            "INSERT INTO automatic_memory_runs(assistant_message_id,outcome_known)
+             VALUES(?1,1)",params![ASSIST]
+        ).unwrap();
+        let outcome=status(&db).unwrap().last_outcome.unwrap();
+        assert_eq!(outcome.user_saved,0);
+        assert_eq!(outcome.interests_saved,0);
+        assert_eq!(outcome.review_queued,0);
+        // Reprocessing cannot erase the result of an earlier successful extraction.
+        db.execute("UPDATE automatic_memory_runs SET user_saved=2 WHERE assistant_message_id=?1",
+            params![ASSIST]).unwrap();
+        db.execute(
+            "INSERT OR IGNORE INTO automatic_memory_runs(assistant_message_id,outcome_known)
+             VALUES(?1,1)",params![ASSIST]
+        ).unwrap();
+        assert_eq!(status(&db).unwrap().last_outcome.unwrap().user_saved,2);
+    }
+
     #[test]
     fn successfully_processed_turns_cannot_be_queued_again() {
         let db=fixture();
