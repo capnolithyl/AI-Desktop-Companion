@@ -49,7 +49,7 @@ export type InterestItem = IncomingInterest & {
   id: number; source: string; createdAt: number; updatedAt: number;
 };
 export type AutomaticMemoryResult = {
-  userSaved: number; characterSaved: number; interestsSaved: number; skipped: boolean;
+  userSaved: number; characterSaved: number; interestsSaved?: number; skipped: boolean;
 };
 export type AutomaticMemoryRequest = {
   endpoint: string;
