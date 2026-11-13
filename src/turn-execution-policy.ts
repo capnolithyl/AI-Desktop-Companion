@@ -26,6 +26,17 @@ export type DesktopWebPolicy = {
   blockedReason: string | null;
 };
 
+/** An owner sharing a taste or personal update is conversation, not an
+ * invitation to research public facts or reveal preferences to web search.
+ * Explicit web requests and genuine questions still follow normal routing.
+ */
+export function ownerDisclosure(question:string):boolean{
+  const text=question.trim();
+  const firstPerson=/^(?:one of my\b|my\b|i(?:['’]m| am|['’]ve| have| just| really| think| feel| believe| love| like| enjoy| prefer| hate| dislike| consider| got| recently)\b|we(?:['’]re| are| have)\b|our\b)/i;
+  const explicitResearch=/\b(?:search(?: the web)?|browse|google|look up|research|verify|fact.check|check online)\b/i;
+  return firstPerson.test(text) && !explicitResearch.test(text) && !text.includes("?");
+}
+
 export function planDesktopWebExecution(input: DesktopWebInput): DesktopWebPolicy {
   const reason =
     !input.autoSearch ? "Automatic web tools disabled in Settings" :
@@ -35,7 +46,9 @@ export function planDesktopWebExecution(input: DesktopWebInput): DesktopWebPolic
     input.roleplay ? "Roleplay conversation; public web blocked" :
     input.attachment || input.screenshot || input.liveFrame
       ? "Attached private material; public web blocked" :
-    input.existingSearch ? "Search panel supplied results already" : null;
+    input.existingSearch ? "Search panel supplied results already" :
+    input.planMode === "chat" && ownerDisclosure(input.question)
+      ? "Owner is sharing a personal preference; no public lookup needed" : null;
   const eligible = reason === null;
   return {
     // Deterministic research already has a route. Skip the auxiliary
