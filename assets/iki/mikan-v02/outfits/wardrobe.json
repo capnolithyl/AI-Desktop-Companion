@@ -41,6 +41,14 @@
       "season": "autumn",
       "holiday": "none",
       "favorite": false
+    },
+    {
+      "id": "gothic-striped-v1-mikan-gothic-striped-v1",
+      "name": "Gothic Striped",
+      "file": "gothic-striped-v1/mikan-gothic-striped-v1.iki",
+      "season": "autumn",
+      "holiday": "none",
+      "favorite": false
     }
   ]
 }
