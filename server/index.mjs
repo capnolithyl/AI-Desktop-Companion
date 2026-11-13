@@ -29,6 +29,32 @@ const HTML = readFileSync(
   "utf8",
 );
 
+const avatarScript = new URL("./.generated/avatar-engine.js", import.meta.url);
+const outfitManifest = JSON.parse(readFileSync(
+  new URL("../assets/iki/mikan-v02/outfits/wardrobe.json", import.meta.url), "utf8"
+));
+const bundledRigFiles = new Map(outfitManifest.outfits.map(entry => [
+  entry.default ? "default" : "bundled:" + entry.id,
+  new URL("../assets/iki/mikan-v02/outfits/" + entry.file, import.meta.url)
+]));
+const safeConversations = (items) => Array.isArray(items) ? items.slice(0, 200)
+  .filter(x => x && typeof x.id === "string" && /^[a-zA-Z0-9_-]{1,100}$/.test(x.id))
+  .map(x => ({ id: x.id, title: String(x.title || "New conversation").slice(0, 120),
+    updatedAt: Number(x.updatedAt) || 0 })) : [];
+const safeAvatar = (avatar) => {
+  if (!avatar || typeof avatar !== "object") return null;
+  return {
+    id: typeof avatar.id === "string" ? avatar.id.slice(0, 180) : "default",
+    name: String(avatar.name || "Mikan").slice(0, 120),
+    custom: avatar.custom === true,
+    revision: Number(avatar.revision) || 0,
+    verticalOffset: Number.isFinite(avatar.verticalOffset) ? avatar.verticalOffset : 0,
+    reaction: typeof avatar.reaction === "string" ? avatar.reaction.slice(0, 24) : null,
+    reactionSerial: Number(avatar.reactionSerial) || 0,
+    speaking: avatar.speaking === true,
+  };
+};
+
 function keyFile() {
   mkdirSync(HOME, { recursive: true, mode: 0o700 });
   if (!existsSync(KEY_PATH)) {
@@ -95,7 +121,12 @@ export function createBridge({
 } = {}) {
   if (typeof key !== "string" || key.length < 32)
     throw new Error("A 32+ character remote key is required");
-  let desktop = { conversationId: null, model: "", busy: false, messages: [] };
+  let desktop = {
+    conversationId: null, model: "", busy: false,
+    messages: [], conversations: [], avatar: null
+  };
+  let customRig = null;
+  let customRigId = null;
   let agentSeen = 0;
   let pending = null;
   const isAuthorized = (request) => {
@@ -136,10 +167,56 @@ export function createBridge({
             "default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; base-uri 'none'; form-action 'self'; frame-ancestors 'none'",
         });
         response.end(HTML);
+      } else if (request.method === "GET" && url.pathname === "/avatar-engine.js") {
+        try {
+          const script = readFileSync(avatarScript);
+          response.writeHead(200, {
+            "Content-Type": "text/javascript; charset=utf-8",
+            "Cache-Control": "no-store",
+            "X-Content-Type-Options": "nosniff"
+          });
+          response.end(script);
+        } catch {
+          fail(response, 503, "Remote avatar runtime is not built. Start with npm run server.");
+        }
       } else if (!isAuthorized(request)) {
         fail(response, 401, "Enter your Mikan remote key");
       } else if (request.method === "GET" && url.pathname === "/api/state") {
         json(response, 200, state());
+      } else if (request.method === "GET" && url.pathname === "/api/avatar/model") {
+        const avatar = desktop.avatar;
+        if (!avatar) return fail(response, 404, "Avatar not available");
+        let bytes;
+        if (avatar.custom) {
+          if (customRigId !== avatar.id || !customRig)
+            return fail(response, 404, "Waiting for desktop outfit");
+          bytes = customRig;
+        } else {
+          const path = bundledRigFiles.get(avatar.id);
+          if (!path) return fail(response, 404, "Unknown bundled outfit");
+          try { bytes = readFileSync(path); }
+          catch { return fail(response, 404, "Bundled outfit file missing"); }
+        }
+        response.writeHead(200, {
+          "Content-Type": "application/json; charset=utf-8",
+          "Cache-Control": "no-store",
+          "X-Content-Type-Options": "nosniff"
+        });
+        response.end(bytes);
+      } else if (request.method === "POST" && url.pathname === "/api/conversation") {
+        if (pending || desktop.busy || Date.now() - agentSeen >= 8000)
+          return fail(response, 409, "Mikan is offline or already busy");
+        const body = await readJson(request, 4096);
+        if (body.action !== "new" && body.action !== "open")
+          return fail(response, 400, "Unsupported conversation action");
+        if (body.action === "open" && !desktop.conversations.some(item => item.id === body.conversationId))
+          return fail(response, 404, "Conversation not found");
+        pending = {
+          id: randomBytes(12).toString("hex"),
+          kind: body.action === "new" ? "new_chat" : "open_chat",
+          conversationId: body.action === "open" ? body.conversationId : null
+        };
+        json(response, 202, { id: pending.id });
       } else if (request.method === "POST" && url.pathname === "/api/send") {
         if (pending || desktop.busy || Date.now() - agentSeen >= 8000) {
           return fail(
@@ -157,7 +234,7 @@ export function createBridge({
             "Send 1–4000 characters of ordinary chat (no slash commands)",
           );
         }
-        pending = { id: randomBytes(12).toString("hex"), text: message };
+        pending = { id: randomBytes(12).toString("hex"), kind: "send", text: message };
         json(response, 202, { id: pending.id });
       } else if (request.method === "POST" && url.pathname === "/api/report") {
         const body = await readJson(request, 4096);
@@ -229,7 +306,20 @@ export function createBridge({
           model: String(body.model || "").slice(0, 120),
           busy: body.busy === true,
           messages: safeMessages(body.messages),
+          conversations: safeConversations(body.conversations),
+          avatar: safeAvatar(body.avatar),
         };
+        json(response, 200, { ok: true });
+      } else if (request.method === "POST" && url.pathname === "/agent/avatar-rig") {
+        const body = await readJson(request, 16_000_000);
+        if (!desktop.avatar?.custom || body.id !== desktop.avatar.id ||
+            typeof body.rig !== "string" || body.rig.length > 12_000_000)
+          return fail(response, 400, "Unexpected desktop outfit");
+        const parsed = JSON.parse(body.rig);
+        if (!parsed || typeof parsed !== "object" || Array.isArray(parsed))
+          return fail(response, 400, "Invalid outfit");
+        customRig = body.rig;
+        customRigId = body.id;
         json(response, 200, { ok: true });
       } else {
         fail(response, 404, "Not found");
