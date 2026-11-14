@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import {
   EVAL_FACTS,EVAL_SCENARIOS,runBrainEvaluation,brainEvalMetrics,
   brainEvalMarkdown,sameMeaning,scoreAnswer,brainMemoryEvidence,
-  brainScenarioNumber,brainScenarioLabel
+  brainScenarioNumber,brainScenarioLabel,brainReplyQualityFlags
 } from "../src/brain-eval.ts";
 
 const byId=id=>EVAL_SCENARIOS.find(s=>s.id===id);
@@ -52,6 +52,15 @@ test("observed web decision matters more than exact research route label",async(
   assert.equal(step.webPass,true);
   assert.equal(step.routePass,true);
   assert.equal(step.pass,true);
+});
+test("review-only heuristics flag rambling answers without inventing a semantic judgment",()=>{
+  const conversational={conversationGoal:"Respond briefly and respect the user's constraints."};
+  const runaway=("Wait, no. Actually, scratch that! Oops, let me try again. ").repeat(20);
+  const flagged=brainReplyQualityFlags(runaway,conversational,770);
+  assert.ok(flagged.some(x=>x.includes("Long reply")));
+  assert.ok(flagged.some(x=>x.includes("self-correction")));
+  assert.deepEqual(brainReplyQualityFlags("That sounds cool!",conversational,8),[]);
+  assert.deepEqual(brainReplyQualityFlags(undefined,conversational,0),[]);
 });
 test("semantic answer assertion isn't exact wording or case-sensitive",()=>{
   assert.equal(sameMeaning("Absolutely! The singer is Nora Vale.","nora vale"),true);
