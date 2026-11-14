@@ -115,7 +115,10 @@ does not alter production routing or memory search.
 
 Similarly, route labels (`chat`, `factual`, `research`) are informational
 when the observed web decision satisfies the user intent. Unknown web
-decisions remain INCOMPLETE rather than turning green. Factual assertions
+decisions remain INCOMPLETE rather than turning green. The dashboard now
+separates **No detected failures** (which can include incomplete observations)
+from **Verified checks** (which exclude turns awaiting human/tool verification).
+Factual assertions
 are checked even if human conversational review is also required.
 
 The browser's **Inspect** action loads the latest finished synthetic run's
