@@ -2271,6 +2271,15 @@ export default function App() {
       );
       // Only ambiguous public chat needs a model-assisted web decision.
       // Explicit research and Notion routing already have deterministic paths.
+      const lastAssistant=messages.at(-1);
+      // Carry only the last assistant turn's validated public task, never its
+      // generated reply or private memory content. The model still decides
+      // whether the new user turn continues or closes that task.
+      const priorPublicQuery=lastAssistant?.role==="assistant" &&
+        !lastAssistant.failed &&
+        lastAssistant.diagnostics?.toolPlan?.method==="ai-web" &&
+        lastAssistant.diagnostics.toolPlan.publicWebAllowed
+          ? lastAssistant.diagnostics.toolPlan.query : undefined;
       const plannerWeb:WebToolDecision = await planPublicWebTools(text,liveFacts,
         prompt => invoke<string>("condense_local_context",{
           endpoint:settings.endpoint,model:settings.model,prompt,
@@ -2278,7 +2287,7 @@ export default function App() {
         }),{
           automaticWebEnabled:canPlanPublicWeb,
           sourcePreferences:settings.sourcePreferences,
-          history:messages
+          history:messages,activePublicQuery:priorPublicQuery
         }
       );
       if(stopRequested.current)throw new Error("Generation stopped");
