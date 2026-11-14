@@ -536,7 +536,7 @@ export function createBridge({
       // Loopback-only supervisor probe. Crucially this does NOT update
       // agentSeen: the desktop must actually poll/send state to be online.
       if (request.method === "GET" && url.pathname === "/agent/health")
-        return json(response, 200, {connected:Date.now()-agentSeen<8000});
+        return json(response, 200, {connected:Date.now()-agentSeen<8000,lastSeen:agentSeen});
       agentSeen = Date.now();
       if (request.method === "GET" && url.pathname === "/agent/next") {
         json(response, 200, { job: pending });
