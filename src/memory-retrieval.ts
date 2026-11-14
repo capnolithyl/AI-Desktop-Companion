@@ -164,9 +164,17 @@ export function selectDeterministicMemoryIds<T extends RankableMemory>(
     "not","another","their","they","them","its","it","rather",
     "asking","really","only","like","more","than","way","again","also"]);
   const terms=new Set(memoryTerms(query).filter(t=>t.length>=3&&!stop.has(t)));
+  // Broad domains are useful for direct user-memory questions ("favorite
+  // song?"), but must not make a different named band/game automatically
+  // relevant merely because both are songs, bands or RPGs.
+  const broadDomain=new Set(["band","song","album","track","game","movie","show",
+    "anime","music","rpg","artist","book"]);
+  const distinctive=[...terms].filter(t=>!broadDomain.has(t));
   const topical=(f:T)=>{
     const words=new Set(memoryTerms([f.fact,...(f.tags??[]),f.category??""].join(" ")));
-    return [...terms].some(t=>words.has(t));
+    const matched=[...terms].filter(t=>words.has(t));
+    return matched.length>0 &&
+      (!distinctive.length || matched.some(t=>!broadDomain.has(t)));
   };
   const lexical=[...new Set(lexicalIds.length
     ? lexicalIds.filter(id=>byId.has(id)&&topical(byId.get(id)!))
