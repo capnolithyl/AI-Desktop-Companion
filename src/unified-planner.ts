@@ -26,7 +26,7 @@ export type WebPlanningTurn = {role:string;content:string};
  * Stop at a private/sensitive turn instead of skipping over the topic change.
  */
 export function publicPlanningHistory(previous:readonly WebPlanningTurn[]):string[] {
-  const unsafe=/[\w.+-]+@[\w.-]+\.[a-z]{2,}|https?:\/\/|\b(?:password|passphrase|api.?key|access.?token|secret|ssn|social security|bank account|medical record|diagnosis|my (?:wife|husband|daughter|son|child|kids|family|address|phone|email|doctor|medication))\b/i;
+  const unsafe=/[\w.+-]+@[\w.-]+\.[a-z]{2,}|https?:\/\/|\b(?:password|passphrase|api.?key|access.?token|secret|ssn|social security|bank account|medical record|diagnosis|my (?:name|birthday|birthdate|age|wife|husband|daughter|son|child|kids|family|address|home|phone|email|doctor|medication)|i (?:live|reside|moved) (?:in|at|to)|i(?:\x27m| am) from|our (?:address|home))\b/i;
   const selected:string[]=[];
   for(const entry of previous.slice(-10).reverse()){
     if(entry.role!=="user")continue;
