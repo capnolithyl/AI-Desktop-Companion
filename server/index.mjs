@@ -282,13 +282,16 @@ export function createBridge({
         if (!updater)return fail(response,409,
           "Start the managed development relay with npm run remote:dev on Windows");
         const body=await readJson(request,250);
-        if (body.action!=="check" && body.action!=="apply")
-          return fail(response,400,"Only check and apply are allowed");
-        if (body.action==="apply" && (
-          pending || desktop.busy || desktop.brainEval?.phase==="running"
-        ))return fail(response,409,"Finish the active chat or Brain Lab run before updating");
+        if (!["check","apply","restart-desktop"].includes(body.action))
+          return fail(response,400,"Only approved development operations are allowed");
+        const desktopOnline=Date.now()-agentSeen<8000;
+        if (["apply","restart-desktop"].includes(body.action) && (
+          pending || (desktopOnline && (desktop.busy || desktop.brainEval?.phase==="running"))
+        ))return fail(response,409,"Finish the active chat or Brain Lab run before restarting");
         try{
-          const result=body.action==="check"?await updater.check():await updater.apply();
+          const result=body.action==="check"?await updater.check()
+            :body.action==="apply"?await updater.apply()
+            :await updater.restartDesktop();
           json(response,202,result);
         }catch(error){
           fail(response,409,String(error?.message||"Supervisor refused the operation").slice(0,250));
@@ -530,6 +533,10 @@ export function createBridge({
       if (request.headers["x-mikan-agent"] !== "desktop")
         return fail(response, 403, "Desktop bridge only");
       const url = new URL(request.url || "/", "http://127.0.0.1");
+      // Loopback-only supervisor probe. Crucially this does NOT update
+      // agentSeen: the desktop must actually poll/send state to be online.
+      if (request.method === "GET" && url.pathname === "/agent/health")
+        return json(response, 200, {connected:Date.now()-agentSeen<8000});
       agentSeen = Date.now();
       if (request.method === "GET" && url.pathname === "/agent/next") {
         json(response, 200, { job: pending });
