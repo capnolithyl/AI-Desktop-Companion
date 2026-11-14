@@ -555,7 +555,10 @@ export async function runBrainEvaluation(options:EvalOptions):Promise<EvalReport
       const messages:EvalTurn[]=[...previous,{role:"user",content:step.user}];
       try {
         if(options.mode==="live" && webPolicy.canPlanPublicWeb && options.planWeb)
-          planned=await options.planWeb(step.user,previous);
+          // Give the planner a stable snapshot. Brain Lab appends the current
+          // exchange to previous after this callback, but observers and
+          // async adapters must not see the history mutate retroactively.
+          planned=await options.planWeb(step.user,previous.map(turn=>({...turn})));
         if(options.mode==="live" && options.infer){
           const response=await options.infer({
             messages,selectedMemories:selected,evidence:step.mockEvidence,
