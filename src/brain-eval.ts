@@ -634,6 +634,10 @@ export function brainEvalMetrics(report:EvalReport){
   return {
     cases:report.cases.length,turns:steps.length,
     passed:steps.filter(s=>s.pass).length,passRate:ratio(steps.filter(s=>s.pass).length,steps.length),
+    // A turn with no detected failure can still have unverified behavior.
+    verifiedPassed:steps.filter(s=>s.pass&&!s.reviewRequired).length,
+    verifiedPassRate:ratio(steps.filter(s=>s.pass&&!s.reviewRequired).length,steps.length),
+    unverifiedTurns:steps.filter(s=>s.reviewRequired).length,
     routes:ratio(steps.filter(s=>s.routeLabelMatch).length,steps.length),
     routeLabelsMismatched:steps.filter(s=>!s.routeLabelMatch).length,
     behavioralRouting:ratio(steps.filter(s=>s.routePass).length,steps.length),
@@ -673,7 +677,9 @@ export function brainEvalMarkdown(report:EvalReport):string {
     "## Dashboard",
     "",
     "| Metric | Value |","|---|---:|",
-    "| Turns passed | "+m.passed+"/"+m.turns+" ("+m.passRate+"%) |",
+    "| Automated checks without detected failure (may be unverified) | "+m.passed+"/"+m.turns+" ("+m.passRate+"%) |",
+    "| Verified within selected test mode | "+m.verifiedPassed+"/"+m.turns+" ("+m.verifiedPassRate+"%) |",
+    "| Turns awaiting verification/review | "+m.unverifiedTurns+" |",
     "| Exact route-label agreement (diagnostic) | "+m.routes+"% |",
     "| Functional routing checks | "+m.behavioralRouting+"% |",
     "| Memory fact coverage | "+m.recall+"% |",
