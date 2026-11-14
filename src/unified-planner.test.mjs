@@ -245,7 +245,9 @@ test("validated previous public task is visible only to local planning and never
     },{automaticWebEnabled:true,sourcePreferences:prefs,history,
       activePublicQuery:"bands similar to Immortal black metal"});
     assert.equal(decision.search,shouldSearch);
-    assert.match(prompt,/PRIOR ACTIVE PUBLIC DISCOVERY/);
+    assert.match(prompt,/PREVIOUS VALIDATED PUBLIC TASK/);
+    assert.match(prompt,/refine: supplies a requirement/);
+    assert.match(prompt,/end: declines, cancels/);
     assert.match(prompt,/bands similar to Immortal black metal/);
     assert.doesNotMatch(prompt,/Made-up artist performed/);
   }
@@ -263,4 +265,50 @@ test("private or malformed previous query cannot be laundered into local task st
     assert.doesNotMatch(prompt,/PRIOR ACTIVE PUBLIC DISCOVERY/);
     if(prior.length>5)assert.ok(!prompt.includes(prior));
   }
+});
+
+test("active public task is a single focused model decision, not generic memory planning",async()=>{
+  const cases=[
+    ["I need more music like this.","Especially the raw, icy guitar tone.",
+      "black metal bands similar to Immortal","refine",true,
+      "raw black metal bands similar to Immortal"],
+    ["I'm looking for a game like Fire Emblem.","No sprawling maps, please.",
+      "tactical role playing games like Fire Emblem","refine",true,
+      "tactical RPG games like Fire Emblem not open world"],
+    ["I wish there were short horror OVAs.","Under six episodes.",
+      "short horror anime OVAs","refine",true,
+      "horror anime OVAs under six episodes"],
+    ["I wish there were similar bands.","Actually, just venting, no suggestions.",
+      "bands similar to Immortal","end",false,""],
+    ["I wanted music suggestions.","Forget the music. What is Python?",
+      "black metal band recommendations","new",true,"python programming language explanation"],
+    ["I wanted albums.","Thanks, that's all for now.",
+      "music albums released in 2026","chat",false,""]
+  ];
+  for(const [previous,current,activeQuery,intent,search,newQuery] of cases){
+    let prompt="";
+    let calls=0;
+    const result=await planPublicWebTools(current,[],async text=>{
+      calls++;prompt=text;
+      return JSON.stringify({intent,web:{search,query:newQuery,reason:"Structured task interpretation"}});
+    },{automaticWebEnabled:true,sourcePreferences:prefs,
+      history:[{role:"user",content:previous}],activePublicQuery:activeQuery});
+    assert.equal(calls,1,current);
+    assert.match(prompt,/CURRENT USER TURN/);
+    assert.match(prompt,/PREVIOUS VALIDATED PUBLIC TASK/);
+    assert.doesNotMatch(prompt,/SAVED USER FACTS|Keep ids to at most/);
+    assert.equal(result.search,search,current);
+    assert.equal(result.intent,intent,current);
+  }
+});
+
+test("focused task decisions still reject private or malformed outbound queries",async()=>{
+  const chosen=await planPublicWebTools("Under six episodes.",facts,
+    async()=>JSON.stringify({intent:"refine",web:{
+      search:true,query:"Alex Example private anime preferences",
+      reason:"Unsafe output from local model"
+    }}),{automaticWebEnabled:true,sourcePreferences:prefs,
+      activePublicQuery:"short horror anime OVAs"});
+  assert.equal(chosen.search,false);
+  assert.match(chosen.reason,/private identity/);
 });
