@@ -302,15 +302,23 @@ test("active public task is a single focused model decision, not generic memory 
   }
 });
 
-test("focused task decisions still reject private or malformed outbound queries",async()=>{
-  const chosen=await planPublicWebTools("Under six episodes.",facts,
+test("focused task decisions still reject private names and private context",async()=>{
+  const decide=(query)=>planPublicWebTools("Under six episodes.",facts,
     async()=>JSON.stringify({intent:"refine",web:{
-      search:true,query:"Alex Example private anime preferences",
-      reason:"Unsafe output from local model"
+      search:true,query,reason:"Unsafe output from local model"
     }}),{automaticWebEnabled:true,sourcePreferences:prefs,
       activePublicQuery:"short horror anime OVAs"});
-  assert.equal(chosen.search,false);
-  assert.match(chosen.reason,/private identity/);
+  // A saved private name must be blocked by the identity check.
+  const named=await decide("Alex Example anime preferences");
+  assert.equal(named.search,false);
+  assert.equal(named.method,"fallback");
+  assert.match(named.reason,/private identity/);
+  // Explicitly private terms can be rejected by the earlier privacy filter.
+  // These are distinct defenses and must not depend on validation order.
+  const privateContext=await decide("private anime preferences");
+  assert.equal(privateContext.search,false);
+  assert.equal(privateContext.method,"fallback");
+  assert.match(privateContext.reason,/personal pronouns or private context/);
 });
 
 test("a contradictory model disposition cannot launch a public tool",()=>{
