@@ -517,10 +517,6 @@ export async function runBrainEvaluation(options:EvalOptions):Promise<EvalReport
         step.expect.answerAny?.length ||
         step.expect.answerExcludes?.length
       );
-      // Casual dialogue cannot be judged by merely producing a nonempty reply.
-      // Mark it for human review with an explicit behavior goal in the export.
-      const reviewRequired=options.mode==="live" &&
-        (!!step.expect.conversationGoal || !hasFactualAnswerCheck);
       const routePass=routeMatches(decision.plan.mode,step.expect.route);
       // A route marked research would fetch public evidence in the real app.
       // The test harness never executes that fetch. Factual Rust tool planning
@@ -534,6 +530,11 @@ export async function runBrainEvaluation(options:EvalOptions):Promise<EvalReport
         step.expect.route==="chat" ? false : null
       );
       const webPass=expectedWeb===null||plannedWeb===null?null:plannedWeb===expectedWeb;
+      // Never present an unobserved search decision as passing a behavioral test.
+      // Fast mode deliberately cannot run the optional model planner.
+      const reviewRequired=(options.mode==="live" &&
+        (!!step.expect.conversationGoal || !hasFactualAnswerCheck)) ||
+        (expectedWeb!==null && webPass===null);
       const memoryPass=missing.length===0 && unexpected.length===0;
       const answerPass=options.mode==="live" && !reviewRequired
         ? !!answer&&!error&&answerFailures.length===0 : null;
@@ -573,6 +574,7 @@ export function brainEvalMetrics(report:EvalReport){
     routes:ratio(steps.filter(s=>s.routePass).length,steps.length),
     recall:ratio(steps.filter(s=>s.memoryPass).length,steps.length),
     webChecks:steps.filter(s=>s.webPass!==null).length,
+    webUnobserved:steps.filter(s=>s.webPass===null && s.expected.web!==undefined).length,
     webAgreement:ratio(steps.filter(s=>s.webPass===true).length,steps.filter(s=>s.webPass!==null).length),
     unnecessaryWeb:steps.filter(s=>s.webPass===false&&s.plannedWeb===true).length,
     missedWeb:steps.filter(s=>s.webPass===false&&s.plannedWeb===false).length,
@@ -607,6 +609,7 @@ export function brainEvalMarkdown(report:EvalReport):string {
     "| Routing agreement | "+m.routes+"% |",
     "| Memory selection agreement | "+m.recall+"% |",
     "| Web decisions measured | "+m.webChecks+" |",
+    "| Unobserved explicit web expectations | "+m.webUnobserved+" |",
     "| Model tokens per second | "+(m.tokensPerSecond??"n/a")+" |",
     "| Web planning agreement | "+m.webAgreement+"% |",
     "| Unnecessary / missed planned searches | "+m.unnecessaryWeb+" / "+m.missedWeb+" |",
