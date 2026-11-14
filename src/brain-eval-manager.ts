@@ -150,10 +150,10 @@ async function execute(
   settings:Settings,request:BrainEvalRequest,
   scenarios:typeof EVAL_SCENARIOS, controller:AbortController
 ){
-  const infer=async({messages,selectedMemories,evidence,researchPlanned}:{
+  const infer=async({messages,selectedMemories,evidence,researchPlanned,researchQuery}:{
     messages:EvalTurn[];
     selectedMemories:ReadonlyArray<{id:number;fact:string}>;
-    evidence?:string;researchPlanned?:boolean;scenarioId:string;stepIndex:number;
+    evidence?:string;researchPlanned?:boolean;researchQuery?:string;scenarioId:string;stepIndex:number;
   }):Promise<EvalInferenceResult>=>{
     if(controller.signal.aborted)throw new Error("Stopped by owner");
     const id="mikan-brain-eval-"+crypto.randomUUID();
@@ -166,34 +166,44 @@ async function execute(
     // Exercise the same answer-focus and grounding rules as normal desktop
     // chat. Previously Brain Lab used a tiny separate system prompt, which
     // made its reply-quality observations less representative of production.
-    // Test memories remain synthetic; no real memories or web results enter.
+    // Test memories remain synthetic; public sources come from the exact
+    // production Rust/SearXNG research flow only when the planner authorizes it.
     const system=[
       settings.systemPrompt.trim(),
       PERSONAL_DETAIL_GROUNDING_GUIDANCE,
       chatRuntimeContext(),
       responseFocusGuidance(messages.slice(0,-1),last),
-      "ISOLATED BRAIN LAB: This run uses synthetic owner memories and no public web/GitHub/Notion tools. Never imply those tools actually ran.",
+      "ISOLATED BRAIN LAB: This run uses synthetic owner memories and must never write real memories, contact GitHub/Notion, or use private integrations. Public SearXNG search IS available when the local planner selected it, and the normal Rust search pipeline supplies actual numbered evidence.",
       "Use the conversation context consistently; do not invent unknown facts about the owner. Resolve ambiguous names from user-established context, never from a guessed interpretation.",
-      researchPlanned
-        ? "The local planner selected public research, but no results were fetched. Don't treat a planned search as supporting evidence. Do not fabricate titles, episode counts, release dates, or precise recommendations. Briefly acknowledge the criteria without repeatedly asking for permission to search."
+      researchPlanned && !researchQuery
+        ? "A public search was planned but not executed in this turn. No web results are available. Do not invent confirmed titles, counts, releases or sourced recommendations."
         : "",
       memory,
       evidence?"Fixture-only, NOT live web evidence: "+evidence:""
     ].filter(Boolean).join("\n\n");
     try{
-      const result=await invoke<{content:string;modelUsed?:string;stats?:{
+      const result=await invoke<{content:string;modelUsed?:string;
+        searchQuery?:string|null; sources?:Array<{
+          title:string;url:string;content:string;engine:string;publishedDate?:string
+        }>;sourcesCarriedOver?:boolean;stats?:{
         promptTokens?:number|null;outputTokens?:number|null;
         evalDurationNs?:number|null;loadDurationNs?:number|null
       }|null}>("chat_stream",{request:{
         requestId:id,endpoint:settings.endpoint,model:settings.model,provider:"local",
         messages:[{role:"system",content:system},...messages.map(m=>({role:m.role,content:m.content}))],
-        autoSearch:false,researchRoute:"chat",thinkingRequested:
+        autoSearch:!!researchQuery,researchRoute:researchQuery?"research":"chat",
+        researchQuery:researchQuery||undefined,
+        sourcePreferences:settings.sourcePreferences,
+        cacheHours:settings.cacheHours,
+        thinkingRequested:
           shouldUseLocalThinking(settings.reasoningMode,last,settings.model),
         searxngEndpoint:settings.searxngEndpoint,contextWindow:settings.contextWindow,
-        structuredResearch:false
+        structuredResearch:!!researchQuery && settings.structuredResearch
       }});
       return {text:result.content.trim(),modelUsed:result.modelUsed??settings.model,
-        stats:result.stats??undefined};
+        stats:result.stats??undefined,
+        webExecution:{query:result.searchQuery??null,
+          results:result.sources??[],sourcesCarriedOver:result.sourcesCarriedOver===true}};
     }finally{if(requestId===id)requestId=null}
   };
   const planWeb=async(question:string,previous:EvalTurn[],
@@ -210,7 +220,7 @@ async function execute(
   };
   const result=await runBrainEvaluation({
     mode:request.mode,model:settings.model,scenarios,repetitions:request.repetitions,
-    signal:controller.signal,...(request.mode==="live"?{infer,planWeb}:{}),
+    signal:controller.signal,...(request.mode==="live"?{infer,planWeb,liveWeb:true}:{}),
     onProgress:(done,total,label)=>setStatus({done,total,label})
   });
   report=result;
