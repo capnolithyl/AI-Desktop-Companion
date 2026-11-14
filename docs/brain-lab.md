@@ -42,6 +42,20 @@ This does not rebuild the installer.
   recent messages and relay-sanitized desktop diagnostics (model, latency,
   memory-selection IDs/scores, research decision, relevant errors).
 
+## Updating test code from the phone
+
+Use the optional Windows development supervisor described in
+[server/README.md](../server/README.md#remote-developer-updates-opt-in).
+Start `npm run remote:dev` once to manage the browser relay; when local
+Tauri compilation works, use `npm run remote:dev -- --desktop` to let
+the supervisor also manage the dev desktop. The phone can then Check GitHub,
+review the pinned-branch update, and explicitly approve Update & restart.
+The supervisor refuses updates while Brain Lab is running.
+
+A Git pull alone never modifies an installed desktop executable. To
+run newer desktop test code before the Rust toolchain works, install a
+Windows CI-generated installer of the selected commit.
+
 ## Overnight browser workflow
 
 1. Leave the desktop app running (tray is fine), keep Ollama and the Node
