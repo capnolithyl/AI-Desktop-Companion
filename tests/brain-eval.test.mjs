@@ -25,7 +25,7 @@ test("semantic answer assertion isn't exact wording or case-sensitive",()=>{
     answerIncludes:["Cobalt Harbor"]
   }),[]);
   assert.equal(scoreAnswer("I don't know", {answerIncludes:["Cobalt Harbor"]}).length,1);
-  assert.equal(scoreAnswer("Yes, Rowan is your child", {answerExcludes:["yes Rowan"]}).length,0);
+  assert.equal(scoreAnswer("Yes, Rowan is your child", {answerExcludes:["yes Rowan"]}).length,1);
 });
 
 test("planning tests use independent context across repeated branching paths",async()=>{
