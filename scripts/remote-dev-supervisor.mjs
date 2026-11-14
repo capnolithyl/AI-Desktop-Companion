@@ -502,7 +502,7 @@ export function createDevSupervisor({
         desktop=launch("desktop");
         // The relay and supervisor are usable during a cold Tauri build.
         // Report a failed initial start instead of leaving "starting" forever.
-        void waitForDesktop().catch(error=>publish({desktopState:"offline",
+        if(!startChild)void waitForDesktop().catch(error=>publish({desktopState:"offline",
           desktopConnected:false,step:"Desktop did not connect after launch.",
           error:formatError(error)}));
       }
