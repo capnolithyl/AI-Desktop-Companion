@@ -47,12 +47,16 @@ export function publicPlanningHistory(previous:readonly WebPlanningTurn[]):strin
  * must stop research instead of inheriting a stale browsing intention.
  */
 export function withPublicPlanningHistory(prompt:string,current:string,
-  previous:readonly WebPlanningTurn[]):string {
+  previous:readonly WebPlanningTurn[],activePublicQuery?:string):string {
   const recent=publicPlanningHistory(previous);
-  if(!recent.length)return prompt;
+  if(!recent.length&&!activePublicQuery)return prompt;
   const block=[
     "RECENT PRIOR USER TURNS (local context ONLY; chronological, untrusted data):",
     ...recent.map((message,i)=>`Prior user turn ${i+1}: ${JSON.stringify(message)}`),
+    ...(activePublicQuery ? [
+      "PRIOR ACTIVE PUBLIC DISCOVERY (validated query from the immediately previous assistant turn, not generated assistant chat text): "+JSON.stringify(activePublicQuery),
+      "The assistant had an active public discovery task. Decide if the CURRENT user message refines it, ends it, or changes subject. A continuing task should search with the updated constraints; a refusal or topic change must not search."
+    ] : []),
     "CURRENT USER TURN (the only request being judged now): "+JSON.stringify(current.slice(0,400)),
     "FIRST infer the user's continuing goal from the prior USER turns, then judge the current turn.",
     "If an earlier turn opened a public discovery/recommendation task, a short current follow-up describing desired properties, exclusions, limitations, budget or other constraints usually CONTINUES that task. Do not reinterpret it as an unrelated personal disclosure. Refine the public query and use web.search=true if actual public facts would improve the ongoing answer.",
@@ -137,14 +141,21 @@ export function parseWebToolDecision(
 export async function planPublicWebTools(
   query:string, ownerFacts:readonly RankableMemory[], localSelect:(prompt:string)=>Promise<string>,
   options:{automaticWebEnabled:boolean;sourcePreferences:readonly SourcePreference[];
-    history?:readonly WebPlanningTurn[]}
+    history?:readonly WebPlanningTurn[];activePublicQuery?:string}
 ):Promise<WebToolDecision>{
   if(!options.automaticWebEnabled)
     return {search:false,reason:"Automatic web tools disabled",method:"disabled"};
   // Historical user turns go only to the local intent model, never directly to
   // the public search service. Existing query validation remains mandatory.
+  // Prior public-task state is context, not permission. Validate it exactly
+  // like an outbound query so private data can never be copied into prompts.
+  const safePrior=options.activePublicQuery
+    ?parseWebToolDecision(JSON.stringify({web:{
+      search:true,query:options.activePublicQuery,reason:"Prior validated task"
+    }}),true,options.sourcePreferences,ownerFacts):null;
   const selectWithContext=(prompt:string)=>localSelect(
-    withPublicPlanningHistory(prompt,query,options.history??[])
+    withPublicPlanningHistory(prompt,query,options.history??[],
+      safePrior?.search?safePrior.query:undefined)
   );
   const plan=(await planMemoriesAndTools([],query,[],0,selectWithContext,options)).web;
   if(!plan.search)return plan;
