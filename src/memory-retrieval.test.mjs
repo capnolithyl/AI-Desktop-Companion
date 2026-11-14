@@ -128,3 +128,19 @@ test("generic favorite references cannot recall unrelated favorite anime",()=>{
   const selected=selectDeterministicMemoryIds(examples,"My favorite band is Shadows Fall",[],[],10);
   assert.deepEqual(selected.ids,[201]);
 });
+
+test("domain words retain favorite-song and album facts without an embedding model",()=>{
+  const samples=[
+    {id:1,fact:"The user's favorite band is Cobalt Harbor.",updatedAt:9,tags:["favorite band"]},
+    {id:2,fact:"The user's favorite song is Winterglass by Cobalt Harbor.",updatedAt:9,tags:["favorite song"],importance:80},
+    {id:3,fact:"The user's favorite album is Glass Atlas.",updatedAt:9,tags:["favorite album"],importance:70},
+    {id:4,fact:"The user's favorite color is moss green.",updatedAt:9,tags:["favorite color"],importance:85},
+    {id:5,fact:"The user likes strategy games.",updatedAt:9,tags:["games"]}
+  ];
+  const song=selectDeterministicMemoryIds(samples,"What's my favorite song?",[],[],8);
+  const album=selectDeterministicMemoryIds(samples,"What's my favorite album?",[],[],8);
+  assert.ok(song.ids.includes(2),"song facts should not be lost to generic stopwords");
+  assert.ok(album.ids.includes(3),"album facts should not be lost to generic stopwords");
+  assert.ok(!song.ids.includes(4),"a color preference is not a song preference");
+  assert.ok(!album.ids.includes(5),"game preferences should not pollute album queries");
+});
