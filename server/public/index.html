@@ -177,6 +177,7 @@
     </section>
     <section class="settings-group" aria-labelledby="privacySectionTitle">
       <h3 id="privacySectionTitle">Privacy &amp; Feedback</h3>
+      <button id="copyDebugLog" class="settings-action" type="button">Copy conversation debug log</button>
       <button id="report" class="settings-action" type="button">Report an issue</button>
       <button id="lock" class="settings-action danger" type="button">Lock this browser</button>
     </section>
@@ -638,6 +639,34 @@
   }
   reportNote.addEventListener("input", resetIssueReview);
   reportDestination.addEventListener("change", resetIssueReview);
+  // Unlike the public GitHub issue preview, this stays entirely on the user's
+  // authenticated browser and includes recent chat text + relay-sanitized diagnostics.
+  document.getElementById("copyDebugLog").addEventListener("click", async function () {
+    if (!current) { settingsError.textContent = "Desktop diagnostics aren't connected yet."; return; }
+    var log = [
+      "MIKAN REMOTE DEBUG LOG",
+      "Exported: " + new Date().toISOString(),
+      "Conversation: " + (current.conversationId || "none"),
+      "Provider/model: " + (current.provider || "unknown") + " / " + (current.model || "unknown"),
+      "Desktop connected: " + !!current.connected,
+      "Note: Includes recent private chat messages. Review before sharing.",
+      "",
+      ...((current.messages || []).slice(-20).map(function (item) {
+        return "[" + new Date(item.createdAt || Date.now()).toISOString() + "] " +
+          (item.role || "?") + ": " + (item.content || "");
+      })),
+      "",
+      "SANITIZED DIAGNOSTICS (last 8 turns):",
+      JSON.stringify(current.reportDiagnostics || {warning:"No desktop diagnostics available"},null,2)
+    ].join("\n");
+    try {
+      await navigator.clipboard.writeText(log);
+      settingsError.textContent = "Copied conversation and desktop diagnostic summaries.";
+    } catch (e) {
+      settingsError.textContent = "Clipboard unavailable in this browser: " + e.message;
+    }
+  });
+
   document.getElementById("report").addEventListener("click", function () {
     closeSettings(false);
     reportStatus.replaceChildren();
