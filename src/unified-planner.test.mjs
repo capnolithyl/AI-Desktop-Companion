@@ -312,3 +312,14 @@ test("focused task decisions still reject private or malformed outbound queries"
   assert.equal(chosen.search,false);
   assert.match(chosen.reason,/private identity/);
 });
+
+test("a contradictory model disposition cannot launch a public tool",()=>{
+  for(const intent of ["end","chat"]){
+    const parsed=parseWebToolDecision(JSON.stringify({intent,web:{
+      search:true,query:"raw black metal bands",reason:"Conflicting model output"
+    }}),true,prefs,[]);
+    assert.equal(parsed.search,false);
+    assert.equal(parsed.method,"fallback");
+    assert.match(parsed.reason,/Contradictory/);
+  }
+});
