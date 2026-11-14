@@ -2,7 +2,7 @@ import { useMemo, useState, useSyncExternalStore } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { Activity, BrainCircuit, Download, Play, Square, RotateCw, CheckCircle2, XCircle } from "lucide-react";
 import type { Settings } from "./storage";
-import { EVAL_SCENARIOS, brainEvalMetrics, brainEvalMarkdown, type EvalMode } from "./brain-eval";
+import { EVAL_SCENARIOS, brainEvalMetrics, brainEvalMarkdown, brainScenarioLabel, type EvalMode } from "./brain-eval";
 import {
   subscribeBrainEval, getBrainEvalStatus, getBrainEvalReport, brainEvalHistory,
   clearBrainEvalHistory, startBrainEvaluation, stopBrainEvaluation,
@@ -145,7 +145,7 @@ export function BrainEvalPanel({settings}:{settings:Settings}){
           <label title={s.note??s.group}>
             <input type="checkbox" checked={selectedIds.has(s.id)} disabled={busy}
               onChange={e=>toggle(s.id,e.target.checked)} />
-            <span><strong>{s.label}</strong><small>{s.group} · {s.steps.length} turns
+            <span><strong>{brainScenarioLabel(s.id,s.label)}</strong><small>{s.group} · {s.steps.length} turns
               {view.record?(" · Last: "+new Date(view.record.at).toLocaleString()+
                 " · "+view.record.repetitions+"×"):""}</small></span>
           </label>
@@ -188,9 +188,11 @@ export function BrainEvalPanel({settings}:{settings:Settings}){
       <div className="brain-eval-metrics">
         {([
           ["Automated checks",metrics.passRate+"%",metrics.passed+"/"+metrics.turns+" turns"],
-          ["Routing agreement",metrics.routes+"%","deterministic only"],
+          ["Exact route labels",metrics.routes+"%","diagnostic; labels alone don't fail a test"],
+          ["Functional routing",metrics.behavioralRouting+"%","search-intent behavior"],
           ["Web decisions",metrics.webAgreement+"%",metrics.webChecks+" observed · "+metrics.unnecessaryWeb+" extra · "+metrics.missedWeb+" missed"],
-          ["Memory selection",metrics.recall+"%","without semantic index"],
+          ["Memory fact coverage",metrics.recall+"%",metrics.memoryRecordMisses+" exact row misses · "+
+            metrics.memoryDistractors+" extra records"],
           ["Factual answers",metrics.answers===null?"Not run":metrics.answers+"%",metrics.answerChecks+" graded turns"],
           ["Conversation reviews",String(metrics.reviewTurns),"semantic review pending"],
           ["Model speed",metrics.tokensPerSecond===null?"Not measured":metrics.tokensPerSecond+" tok/s","generation only"],
@@ -229,7 +231,7 @@ export function BrainEvalPanel({settings}:{settings:Settings}){
           <summary className="brain-eval-summary">
             {!test.pass?<XCircle size={16}/>:test.steps.some(step=>step.reviewRequired)
               ?<Activity size={16}/>:<CheckCircle2 size={16}/>}
-            <strong>{test.label}</strong>
+            <strong>{brainScenarioLabel(test.id,test.label)}</strong>
             <span>{test.pass&&test.steps.some(step=>step.reviewRequired)?"REVIEW · ":""}
               Run {test.repeat} · {test.steps.filter(s=>s.pass).length}/{test.steps.length} · {formatMs(test.elapsedMs)}</span>
           </summary>
@@ -241,13 +243,19 @@ export function BrainEvalPanel({settings}:{settings:Settings}){
             {step.expected.conversationGoal&&<small className="brain-eval-goal">
               Review goal: {step.expected.conversationGoal}
             </small>}
-            <small>Route {step.actualRoute} (expected {step.expected.route??"any"});
+            <small>Route {step.actualRoute} (expected label {step.expected.route??"any"};
+              exact {step.routeLabelMatch?"matched":"different, informational"});
               predicted web {step.plannedWeb===null?"unobserved":String(step.plannedWeb)};
               expected {step.expected.web??(step.expected.route==="research"?true:step.expected.route==="chat"?false:"unspecified")};
               planner {step.webPlannerDecision?.search?"requested":step.webPlannerDecision?"skipped":"not run"}</small>
             <small>Memory IDs selected: {step.selectedMemoryIds.join(", ")||"none"};
-              missing: {step.missingMemoryIds.join(", ")||"none"};
-              unexpected: {step.unexpectedMemoryIds.join(", ")||"none"}</small>
+              uncovered facts: {step.missingMemoryIds.join(", ")||"none"};
+              raw missing IDs: {step.missingMemoryRecordIds?.join(", ")||"none"};
+              unrelated records: {step.distractorMemoryIds?.join(", ")||"none"};
+              explicitly excluded: {step.unexpectedMemoryIds.join(", ")||"none"}</small>
+            {!!step.memoryEvidence?.length &&<small>Evidence: {step.memoryEvidence
+              .map(e=>"#"+e.expectedId+" supplied by "+(e.supportingIds.join(", ")||"nothing"))
+              .join("; ")}</small>}
             {step.answer&&<p className="brain-eval-answer">{step.answer}</p>}
             {step.inferenceStats&&<small>Model: {step.modelUsed??"local"} · output {step.inferenceStats.outputTokens??"?"} tokens ·
               generation {(step.inferenceStats.evalDurationNs??0)>0?
@@ -266,7 +274,9 @@ export function BrainEvalPanel({settings}:{settings:Settings}){
       Web scores measure intended/planned behavior, never a real network call. Unobserved decisions are excluded from web percentages.
       Natural conversation is not marked as semantically correct just for producing text:
       those turns show REVIEW with a concrete behavioral goal in their traces and exported report.
-      Factual answer checks are transparent phrase/concept heuristics, not a perfect semantic judge.
+      Exact route labels and memory IDs are diagnostic. The checks now prioritize whether the
+      expected fact is supported by retrieved evidence and whether the intended web behavior was observed.
+      Factual answer checks still use transparent phrase heuristics, not a perfect semantic judge.
       Repeating a scenario measures output variability; exports include every input, decision and response.
       Each scenario retains a version/model/mode-specific outcome; different builds or changed fixtures appear stale until rerun.
       REVIEW cases require a person to approve or fail them, not just a plausible answer.
