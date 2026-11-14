@@ -7,6 +7,7 @@
  * 3848 is for the Tauri WebView bridge and must NEVER be tunneled.
  */
 import { createServer } from "node:http";
+import { execFileSync } from "node:child_process";
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import {
   readFileSync,
@@ -28,10 +29,28 @@ export const AGENT_PORT = 3848;
 const HOME = join(homedir(), ".mikan");
 const KEY_PATH = join(HOME, "remote-access.key");
 const REPORTS_PATH = join(HOME, "remote-issues.jsonl");
+// Show the running browser relay's version and commit (not the installed
+// desktop .exe version). Resolve this once at startup, so a managed restart
+// visibly confirms the updated source is serving the phone interface.
+const packageVersion = JSON.parse(readFileSync(
+  new URL("../package.json", import.meta.url), "utf8"
+)).version;
+const RELAY_VERSION = /^\d+\.\d+\.\d+(?:[-+][\w.-]+)?$/.test(packageVersion)
+  ? packageVersion : "unknown";
+let relayCommit = "local";
+try {
+  const revision = execFileSync("git", ["rev-parse", "--short=8", "HEAD"], {
+    cwd: fileURLToPath(new URL("..", import.meta.url)),
+    windowsHide: true, timeout: 2000,
+    encoding: "utf8", stdio: ["ignore", "pipe", "ignore"]
+  }).trim();
+  if (/^[0-9a-f]{7,12}$/.test(revision)) relayCommit = revision;
+} catch { /* Git isn't required to launch the relay. */ }
 const HTML = readFileSync(
   new URL("./public/index.html", import.meta.url),
   "utf8",
-);
+).replaceAll("__MIKAN_REMOTE_VERSION__", RELAY_VERSION)
+ .replaceAll("__MIKAN_REMOTE_COMMIT__", relayCommit);
 
 const avatarScript = new URL("./.generated/avatar-engine.js", import.meta.url);
 const outfitManifest = JSON.parse(readFileSync(
