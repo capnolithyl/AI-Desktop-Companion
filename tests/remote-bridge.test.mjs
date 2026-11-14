@@ -188,10 +188,10 @@ test("browser relay requires a private key and delegates to the desktop, not a s
   // Browser receives only whitelisted test statuses, not a writable report.
   const reviewState=evalState("complete");
   reviewState.brainEvalCatalog=[
-    {id:"branch-a",label:"Favorite band branch",group:"Branching context",turns:3,
+    {id:"branch-a",number:1,label:"Favorite band branch",group:"Branching context",turns:3,
       states:{routing:{status:"passed",at:"2026-11-14T22:00:00Z"},
         live:{status:"review",previous:"review",at:"2026-11-14T22:00:00Z"}}},
-    {id:"discovery-bands-wish",label:"Implicit recommendations",group:"Conversational discovery",turns:2,
+    {id:"discovery-bands-wish",number:54,label:"Implicit recommendations",group:"Conversational discovery",turns:2,
       states:{live:{status:"stale",previous:"passed",at:"2026-11-12T22:00:00Z"}}}
   ];
   assert.equal((await request(agent + "/agent/state","POST",desktopHeaders,reviewState)).status,200);
