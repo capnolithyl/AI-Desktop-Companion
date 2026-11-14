@@ -1,0 +1,36 @@
+/* Isolated brain-evaluation Settings workspace. Uses Mikan's existing tokens. */
+.brain-eval-panel{display:flex;flex-direction:column;gap:14px;min-width:0;padding-bottom:16px}
+.brain-eval-panel .settings-note{line-height:1.55}
+.brain-eval-toolbar{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.brain-eval-toolbar label{display:flex;flex-direction:column;gap:6px;min-width:0;font-size:12px;color:#dfcbd4}
+.brain-eval-toolbar select{min-width:0;width:100%;border:1px solid #785969;background:#271f2b;color:#fff0f4;border-radius:9px;padding:9px}
+.brain-eval-actions{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.brain-eval-actions button{display:flex;gap:6px;align-items:center}
+.brain-eval-subtitle,.brain-eval-message{font-size:12px;line-height:1.45;overflow-wrap:anywhere;color:#cbbbc7}
+.brain-eval-message{padding:8px 10px;background:#382e3a;border-radius:8px}
+.brain-eval-progress{display:grid;gap:7px;font-size:12px}
+.brain-eval-progress progress{width:100%;accent-color:#f5b18f}
+.brain-eval-metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px}
+.brain-eval-metric{padding:10px;border:1px solid #654d60;border-radius:10px;background:#2a222d;display:flex;gap:4px;flex-direction:column}
+.brain-eval-metric>span{font-size:11px;color:#cbbbc7}
+.brain-eval-metric>strong{font-size:21px;line-height:1.2;color:#fff0e7;font-variant-numeric:tabular-nums}
+.brain-eval-metric>small{font-size:10px;color:#bba7b5}
+.brain-eval-groups{display:grid;gap:8px}
+.brain-eval-group{display:grid;grid-template-columns:minmax(90px,1fr) minmax(60px,2fr) 52px;gap:9px;align-items:center;font-size:12px}
+.brain-eval-group strong{text-align:right;font-variant-numeric:tabular-nums}
+.brain-eval-bar{height:7px;background:#433540;border-radius:50px;overflow:hidden}
+.brain-eval-bar span{display:block;height:100%;background:#d39b7b;border-radius:50px}
+.brain-eval-traces{display:grid;gap:6px}
+.brain-eval-traces details.service-panel{margin:0;display:block;min-width:0}
+.brain-eval-summary{display:flex;gap:8px;align-items:center;cursor:pointer}
+.brain-eval-summary strong{flex:1;font-size:12px}
+.brain-eval-summary span{font-size:11px;color:#c5b2bf;font-variant-numeric:tabular-nums}
+.brain-eval-step{border-top:1px solid #594656;padding:9px 0;display:grid;gap:5px;font-size:12px}
+.brain-eval-step>div:first-child{display:flex;align-items:flex-start;justify-content:space-between;gap:8px}
+.brain-eval-step>div:first-child strong{font-size:12px}
+.brain-eval-step small{font-size:11px;color:#cbbac6;display:block;overflow-wrap:anywhere}
+.brain-eval-ok{color:#9cdbb1}.brain-eval-bad{color:#ffbaa9}
+.brain-eval-answer{padding:7px;background:#201921;border-radius:7px;white-space:pre-wrap;overflow-wrap:anywhere;margin:2px 0}
+.brain-eval-history{padding:6px 0;display:flex;gap:10px;justify-content:space-between;font-size:11px}
+.brain-eval-history strong{font-variant-numeric:tabular-nums}
+@media(max-width:550px){.brain-eval-toolbar{grid-template-columns:1fr}.brain-eval-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}}
