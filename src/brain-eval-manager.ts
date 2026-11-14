@@ -7,6 +7,44 @@ import { invoke } from "@tauri-apps/api/core";
 import type { Settings } from "./storage";
 import { shouldUseLocalThinking } from "./reasoning-mode";
 import { planPublicWebTools } from "./unified-planner";
+import { version as APP_VERSION } from "../package.json";
+import {
+  gradeReportCases,mergeCaseRecords,parseCaseRecords,statusForScenario,
+  type BrainCaseRecord,type BrainCaseEnvironment
+} from "./brain-eval-status";
+declare const __MIKAN_EVAL_BUILD__: string;
+// Keep a fallback for test environments without Vite's generated build identity.
+export const BRAIN_EVAL_BUILD=typeof __MIKAN_EVAL_BUILD__==="string"
+  ? __MIKAN_EVAL_BUILD__:APP_VERSION;
+const CASE_KEY="mikan/brain-eval-case-status/v1";
+let cachedCaseRecords:BrainCaseRecord[]|null=null;
+export function getBrainEvalCaseRecords():ReadonlyArray<BrainCaseRecord>{
+  if(cachedCaseRecords===null){
+    try{cachedCaseRecords=parseCaseRecords(JSON.parse(localStorage.getItem(CASE_KEY)??"[]"))}
+    catch{cachedCaseRecords=[]}
+  }
+  return cachedCaseRecords;
+}
+function saveCaseRecords(records:BrainCaseRecord[]){
+  cachedCaseRecords=records;
+  try{localStorage.setItem(CASE_KEY,JSON.stringify(records))}catch{/* retained in this session */}
+  notify();
+}
+export function brainEvalEnvironment(mode:EvalMode,model:string):BrainCaseEnvironment{
+  return {mode,model,build:BRAIN_EVAL_BUILD};
+}
+export function reviewBrainEvalScenario(id:string,mode:EvalMode,model:string,decision:"passed"|"failed"){
+  if(status.phase==="running")throw new Error("Cannot review while a test run is active");
+  const scenario=catalog.get(id);
+  if(!scenario)throw new Error("Unknown scenario");
+  const records=getBrainEvalCaseRecords();
+  const item=statusForScenario(scenario,records,brainEvalEnvironment(mode,model));
+  if(item.status==="stale")throw new Error("Rerun this scenario for the current build before reviewing it");
+  if(!item.record || item.record.grade!=="review")
+    throw new Error("Only pending conversational reviews can be marked by hand");
+  const next={...item.record,reviewed:decision};
+  saveCaseRecords(mergeCaseRecords(records,[next]));
+}
 import {
   EVAL_SCENARIOS, runBrainEvaluation, brainEvalMetrics, brainEvalMarkdown,
   type EvalMode, type EvalReport, type EvalTurn, type EvalInferenceResult
@@ -161,6 +199,8 @@ async function execute(
     onProgress:(done,total,label)=>setStatus({done,total,label})
   });
   report=result;
+  saveCaseRecords(mergeCaseRecords(getBrainEvalCaseRecords(),
+    gradeReportCases(result,scenarios,BRAIN_EVAL_BUILD)));
   const metrics=brainEvalMetrics(result);
   const summary:BrainEvalSummary={
     id:result.runId,at:result.finishedAt,model:result.model,mode:result.mode,
