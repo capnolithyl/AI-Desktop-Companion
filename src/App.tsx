@@ -2752,10 +2752,10 @@ export default function App() {
     busy,
     brainEval: brainEvalStatus,
     brainEvalBuild: BRAIN_EVAL_BUILD,
-    brainEvalCatalog: EVAL_SCENARIOS.map(s=>{
+    brainEvalCatalog: EVAL_SCENARIOS.map((s,index)=>{
       const routing=statusForScenario(s,brainCaseRecords,routingEnv);
       const live=statusForScenario(s,brainCaseRecords,liveEnv);
-      return {id:s.id,label:s.label,group:s.group,turns:s.steps.length,
+      return {id:s.id,number:index+1,label:s.label,group:s.group,turns:s.steps.length,
         states:{
           routing:{status:routing.status,previous:routing.previous,at:routing.record?.at??null},
           live:{status:live.status,previous:live.previous,at:live.record?.at??null}
