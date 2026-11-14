@@ -21,6 +21,22 @@ const ROOT=resolve(dirname(fileURLToPath(import.meta.url)),"..");
 const exec=promisify(execFile);
 const allowedPhases=new Set(["idle","checking","ready","up-to-date","updating","restarting","updated","error"]);
 const terminalPhases=new Set(["ready","up-to-date","updated","error"]);
+/** Probe the relay on loopback without recording a fake desktop heartbeat. */
+export async function loopbackDesktopReady(){
+  try{
+    const response=await fetch("http://127.0.0.1:3848/agent/health",{
+      headers:{"X-Mikan-Agent":"desktop"},signal:AbortSignal.timeout(1200),
+      cache:"no-store"
+    });
+    return response.ok && (await response.json()).connected===true;
+  }catch{return false}
+}
+function diagnosticTail(value){
+  return String(value||"").replace(/\u001b\[[0-9;]*[A-Za-z]/g,"")
+    .replace(/(Bearer\s+)[^\s]+/gi,"$1[redacted]")
+    .replace(/(\b(?:password|secret|token|api[_-]?key)\s*[=:]\s*)[^\s]+/gi,"$1[redacted]")
+    .slice(-1200);
+}
 /** Extract the actual failing TAP test from npm's captured stdout.
  * execFile's error.message only says "Command failed: node ... npm-cli.js",
  * which concealed the useful failure from remote phone users. */
@@ -95,6 +111,10 @@ export function safeSupervisorState(state){
     checkedAt:state.checkedAt||null,
     step:state.step||"",
     error:state.error||null,
+    desktopState:state.desktopState||"not-managed",
+    desktopConnected:state.desktopConnected===true,
+    desktopExit:state.desktopExit||null,
+    desktopLog:state.desktopConnected?null:diagnosticTail(state.desktopLog),
     desktopNote:state.mode==="desktop-and-relay"
       ?"The supervisor manages npm run desktop and the relay."
       :"Only the browser relay is managed. An installed desktop .exe is not updated."
@@ -114,12 +134,16 @@ export function createDevSupervisor({
     return command(process.execPath,[process.env.npm_execpath,...args],{cwd,timeout:210000});
   },
   startChild=null,stopChild=null,
-  relayReady=null
+  relayReady=null,
+  desktopReady=loopbackDesktopReady,
+  desktopReadyAttempts=180,desktopRetryMs=1000
 }={}){
   if(token.length<32)throw new Error("A private supervisor token is required");
   const mode=manageDesktop?"desktop-and-relay":"relay-only";
   let state={phase:"idle",mode,current:null,remote:null,commits:null,
-    checkedAt:null,step:"No check performed yet",error:null};
+    checkedAt:null,step:"No check performed yet",error:null,
+    desktopState:manageDesktop?"not-started":"not-managed",desktopConnected:false,
+    desktopExit:null,desktopLog:null};
   let running=false;
   let relay=null,desktop=null;
   let expectedHead=null,expectedRemote=null;
@@ -156,15 +180,36 @@ export function createDevSupervisor({
   }
 
   function launch(name){
+    if(name==="desktop")publish({desktopState:"starting",desktopConnected:false,
+      desktopExit:null,desktopLog:null});
     if(startChild)return startChild(name);
     if(!process.env.npm_execpath)throw new Error("Start through npm run remote:dev");
     const child=spawn(process.execPath,[process.env.npm_execpath,"run",name],{
       cwd,env:{...process.env,MIKAN_DEV_SUPERVISOR_TOKEN:token},
-      windowsHide:true,stdio:"inherit"
+      windowsHide:true,stdio:name==="desktop"?["ignore","pipe","pipe"]:"inherit"
     });
-    child.on("error",error=>{publish({step:"Managed "+name+" could not start: "+formatError(error)})});
+    if(name==="desktop"){
+      // Retain only a short, scrubbed diagnostic tail. Do not expose terminal
+      // history, arbitrary commands or complete process logs to the phone.
+      const collect=(chunk,output)=>{
+        output.write(chunk);
+        publish({desktopLog:diagnosticTail((state.desktopLog||"")+chunk.toString("utf8"))});
+      };
+      child.stdout?.on("data",chunk=>collect(chunk,process.stdout));
+      child.stderr?.on("data",chunk=>collect(chunk,process.stderr));
+    }
+    child.on("error",error=>{
+      const message="Managed "+name+" could not start: "+formatError(error);
+      if(name==="desktop")publish({desktopState:"exited",desktopConnected:false,
+        desktopExit:"spawn error",desktopLog:diagnosticTail(message)});
+      publish({step:message});
+    });
     child.on("exit",(code,signal)=>{
-      if(!stopping)publish({step:"Managed "+name+" stopped ("+(signal||code)+"). Restart remote:dev if needed."});
+      if(!stopping){
+        const exit=String(signal??code??"unknown");
+        if(name==="desktop")publish({desktopState:"exited",desktopConnected:false,desktopExit:exit});
+        publish({step:"Managed "+name+" stopped ("+exit+"). Use Restart desktop from your phone if needed."});
+      }
     });
     return child;
   }
