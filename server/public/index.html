@@ -565,14 +565,6 @@
             " | Uncovered memory facts: "+(step.missingMemoryIds||[]).join(", ")+
             " | Factual check: "+(step.answerPass===null?"not automatically graded":step.answerPass?"pass":"FAIL");
           section.append(facts);
-          if(step.qualityAssessment){
-            var audit=document.createElement("small");
-            audit.textContent="Local AI reply critique: "+
-              (step.qualityAssessment.status==="concern"?"possible problems found":
-              step.qualityAssessment.status==="unavailable"?"unavailable":
-              "no issues identified (NOT fact-verified)");
-            section.append(audit);
-          }
           if(step.qualityFlags?.length){
             var flags=document.createElement("small");
             flags.textContent="Review warnings: "+step.qualityFlags.join("; ");
@@ -655,9 +647,7 @@
       if (run.results) lines.push("No detected failures: " + run.results.passRate +
         "% (may include unverified) · Verified: " + (run.results.verifiedPassRate??"n/a")+
         "% · Memory fact coverage: " + run.results.recall + "% · Web: " + run.results.webAgreement +
-        "% · Pending reviews: " + run.results.reviewTurns +
-        " · AI reply triage: " + (run.results.aiQualityConcernTurns??"n/a")+
-        " flagged / " + (run.results.aiQualityReviewed??"n/a") + " scored (advisory)");
+        "% · Pending reviews: " + run.results.reviewTurns);
       if (run.savedFolder) lines.push("Detailed JSON + Markdown auto-saved on desktop.");
     } else lines.push("Ready for a manually started test run.");
     if (data.reportAvailable) lines.push("Latest downloadable report: "+data.reportRunId);
