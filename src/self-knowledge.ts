@@ -183,7 +183,7 @@ export const CAPABILITIES: readonly Capability[] = [
     stage:"experimental",runtime:"none",
     keywords:["brain","evaluation","test","regression","debug","diagnostics","benchmark","routing","memory","dashboard","manual","brain lab"],
     sources:["src/brain-eval.ts","src/BrainEvalPanel.tsx","src/App.tsx","src-tauri/src/lib.rs","server/public/index.html"],
-    docs:[],commands:["brain_eval_export"]
+    docs:["docs/brain-lab.md"],commands:["brain_eval_export"]
   },
   {
     id:"self-knowledge",label:"Self-knowledge of features, docs and source",category:"AI",
