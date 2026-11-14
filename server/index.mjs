@@ -130,7 +130,16 @@ const safeEvalCatalog = entries => Array.isArray(entries)
       id: item.id,
       label: String(item.label || "").slice(0, 110),
       group: String(item.group || "").slice(0, 80),
-      turns: Number.isSafeInteger(item.turns) ? Math.min(12, Math.max(1, item.turns)) : 1
+      turns: Number.isSafeInteger(item.turns) ? Math.min(12, Math.max(1, item.turns)) : 1,
+      states: Object.fromEntries(["routing","live"].map(mode => {
+        const entry=item.states?.[mode];
+        const allowed=["passed","failed","review","stale","incomplete","untested"];
+        return [mode,{
+          status: allowed.includes(entry?.status) ? entry.status : "untested",
+          previous: allowed.includes(entry?.previous) ? entry.previous : null,
+          at: typeof entry?.at==="string" ? entry.at.slice(0,40) : null
+        }];
+      }))
     }))
   : [];
 const safeEvalStatus = value => {
@@ -289,6 +298,23 @@ export function createBridge({
             Date.now() - agentSeen >= 8000)
             return fail(response, 409, "No active Brain Lab run to stop");
           pending = {id:randomBytes(12).toString("hex"),kind:"stop_brain_eval"};
+          json(response, 202, {id:pending.id});
+        } else if (body.action === "review") {
+          if (pending || desktop.brainEval?.phase === "running" || Date.now() - agentSeen >= 8000)
+            return fail(response, 409, "Brain Lab is running or desktop is offline");
+          const id=body.scenarioId;
+          const mode=body.mode;
+          const decision=body.decision;
+          const known=desktop.brainEvalCatalog.find(item=>item.id===id);
+          if (!known || !["live","routing"].includes(mode) ||
+              !["passed","failed"].includes(decision))
+            return fail(response, 400, "Unknown test or review decision");
+          if (known.states?.[mode]?.status!=="review")
+            return fail(response, 409, "The test must have a current pending review");
+          pending={
+            id:randomBytes(12).toString("hex"),kind:"review_brain_eval",
+            evalScenarioId:id,evalMode:mode,evalDecision:decision
+          };
           json(response, 202, {id:pending.id});
         } else fail(response, 400, "Unsupported Brain Lab action");
       } else if (request.method === "GET" && url.pathname === "/api/brain-eval/result") {
