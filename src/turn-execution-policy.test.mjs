@@ -48,3 +48,28 @@ test("new personal preferences remain local chat rather than automatic research"
   const lookup=planDesktopWebExecution({...defaults,question:"Search the web for Cattle Decapitation reviews"});
   assert.equal(lookup.canPlanPublicWeb,true);
 });
+
+test("implicit discovery needs reach the model planner across domains, not automatic web",()=>{
+  for(const question of [
+    "I wish there were more bands like Immortal.",
+    "I really want more books like The Hollow Places.",
+    "I'm running out of short horror anime to watch.",
+    "I'm craving another tactical RPG like Fire Emblem.",
+    "I need more software alternatives for offline folder comparison.",
+    "I'd love to find a lesser-known artist with that style."
+  ]){
+    const verdict=planDesktopWebExecution({...defaults,question,provider:"local"});
+    assert.equal(verdict.canPlanPublicWeb,true,question);
+    assert.equal(verdict.blockedReason,null,question);
+  }
+  // Eligibility is not authorization to search: the planner may still decline.
+  for(const question of [
+    "I really love Immortal's guitar sound.",
+    "I think The Hollow Places was a great read.",
+    "My favorite album is The Art of Balance.",
+    "I have a craving for chicken soup."
+  ]){
+    const verdict=planDesktopWebExecution({...defaults,question,provider:"local"});
+    assert.equal(verdict.canPlanPublicWeb,false,question);
+  }
+});
