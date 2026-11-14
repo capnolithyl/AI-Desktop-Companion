@@ -59,9 +59,12 @@ test("no stored memories still lets planner decide whether public verification h
  assert.equal(result.memory.mode,"empty");
  assert.equal(result.web.search,true);
 });
-test("greetings skip expensive planning, corrupted replies use private fallback",async()=>{
+test("even greetings use local semantic planning, with safe fallback for bad output",async()=>{
+ let calls=0;
  const hi=await planMemoriesAndTools(facts,"Hello!",[],10,
-   async()=>{throw Error("never needed")},{automaticWebEnabled:true,sourcePreferences:prefs});
+   async()=>{calls++;return JSON.stringify({ids:[],web:{search:false,reason:"Ordinary greeting"}})},
+   {automaticWebEnabled:true,sourcePreferences:prefs});
+ assert.equal(calls,1);
  assert.equal(hi.web.search,false);
  assert.equal(hi.memory.mode,"small-talk");
  const bad=await planMemoriesAndTools(facts,"Any project ideas?",[],10,
@@ -128,7 +131,7 @@ test("local web planner sees bounded earlier user turns, never generated assista
   assert.match(inspected,/CURRENT USER TURN.*Nothing too polished/);
   assert.doesNotMatch(inspected,/InventedBand X|InventedBand Y/);
   assert.match(inspected,/only request being judged now/);
-  assert.match(inspected,/declines recommendations/);
+  assert.match(inspected,/declines recommendations or research/);
   assert.ok(inspected.trim().endsWith("JSON:"));
 });
 
@@ -187,6 +190,37 @@ test("current opt-out or independent topic can override prior discovery without 
       return JSON.stringify({ids:[],web:{search:false,reason:"Owner isn't asking for research"}});
     },{automaticWebEnabled:true,sourcePreferences:prefs,history});
     assert.equal(result.search,false,current);
-    assert.match(captured,/current turn changes subject or declines/);
+    assert.match(captured,/current turn changes subject, closes the discovery task/);
+  }
+});
+
+test("no keyword or hardcoded phrase gate can veto a semantic local web choice",async()=>{
+  const observations=[
+    {before:"I want to find something with the same guitar atmosphere.",
+      now:"Especially that raw feeling, rather than the polished sound.",
+      query:"raw black metal recommendations",search:true},
+    {before:"I need some focused strategy RPGs.",
+      now:"Not another open world, please.",
+      query:"focused tactical strategy games",search:true},
+    {before:"I wish I had more time to read horror novels.",
+      now:"Work keeps getting in the way.",
+      search:false},
+    {before:"I love this style of music.",
+      now:"Just enjoying it, not asking you to look anything up.",
+      search:false}
+  ];
+  for(const row of observations){
+    let prompts=0;
+    const result=await planPublicWebTools(row.now,[],async prompt=>{
+      prompts++;
+      assert.ok(prompt.includes(row.before),"Planner needs genuine prior context");
+      assert.ok(prompt.includes(row.now),"Current turn must stay authoritative");
+      return JSON.stringify({ids:[],web:{
+        search:row.search,query:row.query??"",reason:"Model's semantic intent judgment"
+      }});
+    },{automaticWebEnabled:true,sourcePreferences:prefs,
+      history:[{role:"user",content:row.before}]});
+    assert.equal(prompts,1);
+    assert.equal(result.search,row.search,row.now);
   }
 });
