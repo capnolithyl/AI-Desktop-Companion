@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type CSSProperties, type MouseEvent as ReactMouseEvent } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { openUrl } from "@tauri-apps/plugin-opener";
@@ -51,6 +51,11 @@ import {
 } from "./memory-client";
 import { MemoryPanel } from "./MemoryPanel";
 import { BrainEvalPanel } from "./BrainEvalPanel";
+import {
+  subscribeBrainEval, getBrainEvalStatus, getBrainEvalReport,
+  startBrainEvaluation, stopBrainEvaluation, type BrainEvalRequest
+} from "./brain-eval-manager";
+import { brainEvalMarkdown } from "./brain-eval";
 import type { IncomingCanon, IncomingInterest } from "./interest-import";
 import type {ImportMemory,MemoryCategory} from "./memory-import";
 import { NotionPanel } from "./NotionPanel";
@@ -235,6 +240,7 @@ function ReplyMetrics({ diagnostics }: { diagnostics?: Diagnostics }) {
 }
 
 export default function App() {
+  const brainEvalStatus = useSyncExternalStore(subscribeBrainEval, getBrainEvalStatus, getBrainEvalStatus);
   const [screen, setScreen] = useState<Screen>("compact");
   const [settings, setSettings] = useState<Settings>(loadSettings);
   const [draft, setDraft] = useState<Settings>(settings);
@@ -1882,6 +1888,10 @@ export default function App() {
   };
 
   const send = async (withSearch?: { query: string; results: WebResult[]; page?: PageDocument }, remoteText?: string) => {
+    if(getBrainEvalStatus().phase==="running"){
+      setFeedback("Brain Lab is running. Stop the evaluation before starting another chat.");
+      return;
+    }
     const attachment = withSearch || remoteText !== undefined ? null : pendingAttachment;
     const screenshot = withSearch || remoteText !== undefined || attachment ? null : pendingScreenshot;
     const text = remoteText !== undefined ? remoteText : withSearch ? withSearch.query
@@ -2702,12 +2712,20 @@ export default function App() {
   remoteRefreshModelsRef.current = () => refreshModels(settings.endpoint);
   // Custom outfits live in desktop IndexedDB. Only the selected file is
   // temporarily copied into the loopback relay's RAM for authenticated browsers.
+  const remoteStartBrainRef = useRef<(request:BrainEvalRequest)=>void>(()=>{});
+  remoteStartBrainRef.current = request => {
+    if (busy) throw new Error("Cannot start an evaluation while a chat reply is running");
+    startBrainEvaluation(settings,request);
+  };
+  const remoteStopBrainRef = useRef<()=>void>(()=>{});
+  remoteStopBrainRef.current = () => { stopBrainEvaluation(); };
   const remoteRigRef = useRef<{id: string; revision: number; file: Blob} | null>(null);
   remoteRigRef.current = ikiRig?.file
     ? { id: ikiRig.id, revision: ikiRig.savedAt, file: ikiRig.file } : null;
   const remoteBusyRef = useRef(false);
-  remoteBusyRef.current = busy || !memoryReady || attachmentBusy ||
-    !!pendingAttachment || !!pendingScreenshot || !!input.trim();
+  remoteBusyRef.current = busy || brainEvalStatus.phase === "running" ||
+    !memoryReady || attachmentBusy || !!pendingAttachment ||
+    !!pendingScreenshot || !!input.trim();
   const remoteSnapshotRef = useRef<object>({});
   const remoteModelReply = [...messages].reverse().find(m =>
     m.role === "assistant" && !m.failed && !!m.diagnostics?.model
@@ -2723,6 +2741,7 @@ export default function App() {
     modelStatus: remoteModelStatus,
     controlsBlocked: remoteBusyRef.current,
     busy,
+    brainEval: brainEvalStatus,
     reportDiagnostics: {
       desktopVersion: DESKTOP_VERSION,
       contextWindow: settings.contextWindow,
@@ -2763,6 +2782,19 @@ export default function App() {
             body
           });
           if (!response.ok) throw new Error("Relay is unavailable");
+          const relayReply = await response.json() as { reportId?: string|null };
+          const latestEval = getBrainEvalReport();
+          if (latestEval && latestEval.runId !== relayReply.reportId) {
+            const reportUpload = await fetch(origin + "/agent/brain-eval/report", {
+              method: "POST",
+              headers: {...agentHeaders,"Content-Type":"application/json"},
+              body: JSON.stringify({
+                report: latestEval,
+                markdown: brainEvalMarkdown(latestEval)
+              })
+            });
+            if (!reportUpload.ok) console.warn("Brain Lab report not yet available through browser");
+          }
           lastSnapshot = body;
         }
         const activeRig = remoteRigRef.current;
@@ -2782,10 +2814,12 @@ export default function App() {
         const response = await fetch(origin + "/agent/next", { headers: agentHeaders });
         if (!response.ok) throw new Error("Relay is unavailable");
         const data = await response.json() as {
-          job?: { id: string; kind?: "send" | "new_chat" | "open_chat" | "switch_model" | "refresh_models";
-            text?: string; conversationId?: string | null; modelChoice?: string } | null
+          job?: { id: string; kind?: "send" | "new_chat" | "open_chat" | "switch_model" | "refresh_models" | "start_brain_eval" | "stop_brain_eval";
+            text?: string; conversationId?: string | null; modelChoice?: string;
+            evalOptions?: BrainEvalRequest } | null
         };
-        if (data.job && !dispatching && !remoteBusyRef.current) {
+        if (data.job && !dispatching &&
+          (!remoteBusyRef.current || data.job.kind === "stop_brain_eval")) {
           dispatching = true;
           const job = data.job;
           const ack = async () => fetch(origin + "/agent/ack", {
@@ -2807,6 +2841,10 @@ export default function App() {
                 remoteModelRef.current(job.modelChoice);
               else if (job.kind === "refresh_models")
                 await remoteRefreshModelsRef.current();
+              else if (job.kind === "start_brain_eval" && job.evalOptions)
+                remoteStartBrainRef.current(job.evalOptions);
+              else if (job.kind === "stop_brain_eval")
+                remoteStopBrainRef.current();
             } catch (error) {
               console.warn("Remote conversation action failed:", error);
             } finally {
