@@ -29,6 +29,15 @@ test("per-scenario grade never treats unreviewed dialogue as passed",()=>{
   assert.equal(caseGrade([single(true,false)],1,2),"incomplete");
   assert.equal(caseGrade([{...single(),steps:[]}],1,1),"incomplete");
 });
+test("missing web-planner evidence cannot be approved into a false green pass",()=>{
+  const unobserved={...single(true,true),
+    steps:[{...step(true,true),webPass:null,expected:{web:true,route:"any"}}]};
+  assert.equal(caseGrade([unobserved],1,1),"incomplete");
+  const observed={...single(true,true),
+    steps:[{...step(true,true),webPass:true,expected:{web:true,route:"any"}}]};
+  assert.equal(caseGrade([observed],1,1),"review");
+});
+
 test("all repetitions must pass or the scenario remains failed",()=>{
   assert.equal(caseGrade([single(),{...single(false),repeat:2}],1,2),"failed");
   assert.equal(caseGrade([single(),{...single(true,true),repeat:2}],1,2),"review");
