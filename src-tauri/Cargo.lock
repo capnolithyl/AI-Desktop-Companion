@@ -2854,7 +2854,7 @@ dependencies = [
 
 [[package]]
 name = "mikan-companion"
-version = "0.9.9"
+version = "0.9.10"
 dependencies = [
  "base64 0.22.1",
  "calamine",
