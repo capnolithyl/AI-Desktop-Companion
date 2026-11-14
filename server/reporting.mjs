@@ -68,6 +68,15 @@ export function safeReportDiagnostics(value) {
             semanticCandidates: positive(d.memory.semanticCandidates),
             strongSemanticMatches: positive(d.memory.strongSemanticMatches),
             selectedFacts: positive(d.memory.selectedFacts),
+            selectionCandidates: positive(d.memory.selectionCandidates),
+            selectionTimeMs: positive(d.memory.selectionTimeMs),
+            selectedIds: Array.isArray(d.memory.selectedIds)
+              ? d.memory.selectedIds.slice(0, 12)
+                .filter(id => Number.isSafeInteger(id) && id > 0) : [],
+            semanticScores: Array.isArray(d.memory.semanticScores)
+              ? d.memory.semanticScores.slice(0, 12)
+                .filter(hit => Number.isSafeInteger(hit?.id) && hit.id > 0)
+                .map(hit => ({id:hit.id,score:positive(hit.score)})) : [],
             interestsReturned: positive(d.memory.interestsReturned),
             interestsIncluded: positive(d.memory.interestsIncluded),
             selectionMethod: allowed(d.memory.selectionMethod,
