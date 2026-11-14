@@ -12,7 +12,14 @@ test("browser relay requires a private key and delegates to the desktop, not a s
   const reportsPath = join(directory, "issues.jsonl");
   const key = "this-is-a-test-only-key-with-at-least-32-characters";
   const published = [];
-  const bridge = createBridge({ key, reportsPath, issuePublisher: async issue => {
+  let checkCalls=0,applyCalls=0;
+  const updater={
+    status:async()=>({available:true,phase:"ready",branch:"feature/p0-brain-evaluation-harness",
+      current:"abc123456789",remote:"def123456789",commits:2,mode:"relay-only"}),
+    check:async()=>{checkCalls++;return {accepted:true}},
+    apply:async()=>{applyCalls++;return {accepted:true}}
+  };
+  const bridge = createBridge({ key, reportsPath, updater, issuePublisher: async issue => {
     published.push(issue);
     return "https://github.com/capnolithyl/AI-Desktop-Companion/issues/999";
   }});
@@ -75,6 +82,20 @@ test("browser relay requires a private key and delegates to the desktop, not a s
   assert.equal((await request(base + "/api/state")).status, 401);
   assert.equal((await request(base + "/api/state", "GET", {Authorization:"Bearer wrong"})).status, 401);
   assert.equal((await request(base + "/api/state", "GET", authorized)).status, 200);
+  assert.equal((await request(base + "/api/dev-update","GET")).status,401);
+  assert.equal((await request(base + "/api/dev-update","GET",authorized)).status,200);
+  assert.equal((await (await request(base + "/api/dev-update","GET",authorized)).json()).commits,2);
+  assert.equal((await request(base + "/api/dev-update","POST",{"Content-Type":"application/json"},
+    {action:"apply"})).status,401);
+  assert.equal((await request(base + "/api/dev-update","POST",
+    {...authorized,"Content-Type":"application/json"},{action:"arbitrary-shell"})).status,400);
+  assert.equal((await request(base + "/api/dev-update","POST",
+    {...authorized,"Content-Type":"application/json"},{action:"check",branch:"main"})).status,202);
+  assert.equal(checkCalls,1);
+  assert.equal((await request(base + "/api/dev-update","POST",
+    {...authorized,"Content-Type":"application/json"},{action:"apply"})).status,202);
+  assert.equal(applyCalls,1);
+
   assert.equal((await request(base + "/api/send", "POST", {...authorized,"Content-Type":"application/json"}, {text:"hi"})).status, 409);
 
   assert.equal((await request(agent + "/agent/next", "GET", {"X-Mikan-Agent":"desktop", Origin:"https://evil.example"})).status, 403);
@@ -156,6 +177,10 @@ test("browser relay requires a private key and delegates to the desktop, not a s
   assert.equal((await request(agent + "/agent/state","POST",desktopHeaders,evalState("running",true))).status,200);
   const runningEval=await (await request(base + "/api/state","GET",authorized)).json();
   assert.equal(runningEval.brainEval.phase,"running");
+  assert.equal((await request(base + "/api/dev-update","POST",jsonHeaders,
+    {action:"apply"})).status,409);
+  assert.equal(applyCalls,1);
+
   assert.equal(runningEval.brainEval.done,1);
   assert.equal((await request(base + "/api/send","POST",jsonHeaders,{text:"interrupt the GPU"})).status,409);
   assert.equal((await request(base + "/api/brain-eval","POST",jsonHeaders,
