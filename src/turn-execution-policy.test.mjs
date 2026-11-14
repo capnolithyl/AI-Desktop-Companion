@@ -102,3 +102,18 @@ test("user opt-outs, sensitive history, and higher-priority privacy permissions 
     assert.ok(policy.blockedReason,option);
   }
 });
+
+test("explicit opt-out prevents both local and cloud web planning despite prior discovery",()=>{
+  const previous=[{role:"user",content:"I wish there were more bands like Immortal."}];
+  for(const question of ["Not asking for recommendations, by the way. Just venting.",
+    "I don't want suggestions.", "No research please. Just sharing.",
+    "I'm just venting about the music scene."]){
+    const decision=planDesktopWebExecution({...defaults,question,previous});
+    assert.equal(decision.canPlanPublicWeb,false,question);
+    assert.equal(decision.cloudMaySearch,false,question);
+    assert.match(decision.blockedReason,/declined public/);
+  }
+  const different=planDesktopWebExecution({...defaults,previous,
+    question:"No recommendations, but search for the current Immortal tour dates instead."});
+  assert.equal(different.canPlanPublicWeb,true);
+});
