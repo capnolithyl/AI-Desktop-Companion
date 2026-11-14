@@ -193,7 +193,8 @@ async function execute(
         contextWindow:settings.contextWindow,maxOutputTokens:250,timeoutMs:22000
       }),{automaticWebEnabled:true,sourcePreferences:settings.sourcePreferences,
         history:previous,activePublicQuery:context?.activePublicQuery});
-    return {search:decision.search,query:decision.query,reason:decision.reason};
+    return {search:decision.search,query:decision.query,reason:decision.reason,
+      intent:decision.intent};
   };
   const result=await runBrainEvaluation({
     mode:request.mode,model:settings.model,scenarios,repetitions:request.repetitions,
