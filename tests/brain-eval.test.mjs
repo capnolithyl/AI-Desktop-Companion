@@ -342,8 +342,9 @@ test("isolated Live reply adapter is told that planned public research was not e
   const scenarios=[byId("discovery-anime"),byId("discovery-bands-just-gushing")];
   const report=await runBrainEvaluation({
     scenarios,mode:"live",model:"fixture",repetitions:1,
-    planWeb:async()=>({search:true,query:"short horror anime OVAs",
-      reason:"Synthetic public discovery plan"}),
+    planWeb:async(question)=>question.includes("horror anime")||question.includes("six episodes")
+      ?{search:true,query:"short horror anime OVAs",reason:"Synthetic discovery plan"}
+      :{search:false,reason:"Casual conversation"},
     infer:async({messages,researchPlanned})=>{
       seen.push({question:messages.at(-1).content,researchPlanned});
       return "I would verify current public options before giving exact details.";
@@ -353,7 +354,7 @@ test("isolated Live reply adapter is told that planned public research was not e
   assert.equal(discovered.researchPlanned,true);
   const casual=seen.find(x=>x.question==="I love Immortal's sound so much.");
   // Model planning is deliberately a mock; this verifies the boolean is
-  // passed through, not that Qwen correctly declined an unwanted search.
-  assert.equal(casual.researchPlanned,true);
+  // passed through, not that Qwen made a correct semantic judgment.
+  assert.equal(casual.researchPlanned,false);
   assert.equal(report.cases[0].steps.length,2);
 });
