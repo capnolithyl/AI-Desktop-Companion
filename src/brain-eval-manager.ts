@@ -147,10 +147,10 @@ async function execute(
   settings:Settings,request:BrainEvalRequest,
   scenarios:typeof EVAL_SCENARIOS, controller:AbortController
 ){
-  const infer=async({messages,selectedMemories,evidence}:{
+  const infer=async({messages,selectedMemories,evidence,researchPlanned}:{
     messages:EvalTurn[];
     selectedMemories:ReadonlyArray<{id:number;fact:string}>;
-    evidence?:string;scenarioId:string;stepIndex:number;
+    evidence?:string;researchPlanned?:boolean;scenarioId:string;stepIndex:number;
   }):Promise<EvalInferenceResult>=>{
     if(controller.signal.aborted)throw new Error("Stopped by owner");
     const id="mikan-brain-eval-"+crypto.randomUUID();
@@ -164,7 +164,11 @@ async function execute(
       "You are Mikan, a playful but accurate desktop AI companion, in an ISOLATED LOCAL TEST.",
       "Use the conversation context consistently; do not invent unknown facts about the owner.",
       "No public web/GitHub/Notion tools are available in this test. Never claim they were called.",
-      "Respond briefly and naturally. Resolve pronouns using relevant prior user turns.",
+      "If a named thing is ambiguous, do not confidently invent an identity or its history.",
+      "Respond briefly and naturally, usually fewer than 100 words. Resolve pronouns using relevant prior user turns. Avoid looping through discarded candidates or repeatedly self-correcting.",
+      researchPlanned
+        ? "The LOCAL PLANNER selected public research, but this isolated test has NOT fetched any web results. This is NOT evidence. Do not invent or assert verified titles, availability, release dates, or episode counts. Briefly acknowledge the user's criteria while awaiting actual sources."
+        : "",
       memory,
       evidence?"Fixture-only, NOT live web evidence: "+evidence:""
     ].filter(Boolean).join("\n\n");
