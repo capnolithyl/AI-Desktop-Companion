@@ -3435,7 +3435,7 @@ export default function App() {
               })
           }))}><RotateCw size={14}/> Reset</button>}
       </header>
-      <div className="settings-layout">
+      <div className={settingsTab === "brain" ? "settings-layout brain-lab-layout" : "settings-layout"}>
         <nav className="settings-tabs" aria-label="Settings categories">
           {([
             { group: "MIKAN", items: [
@@ -3459,6 +3459,7 @@ export default function App() {
             {group.items.map(([tab, label, Icon]) =>
               <button type="button" key={tab} className={settingsTab === tab ? "settings-tab active" : "settings-tab"}
                 aria-current={settingsTab === tab ? "page" : undefined}
+                aria-label={label} title={label}
                 onClick={() => {
                   setSettingsTab(tab);
                   setPreviewOutfitId(tab === "appearance" ? ikiRig?.id ?? null : undefined);
@@ -3473,7 +3474,9 @@ export default function App() {
             )}
           </div>)}
         </nav>
-        <div key={settingsTab} className={settingsTab === "memory" || settingsTab === "capabilities" || settingsTab === "brain" ? "settings-body settings-embedded" : "settings-body"}>
+        <div key={settingsTab} className={settingsTab === "brain" ? "settings-body settings-brain"
+          : settingsTab === "memory" || settingsTab === "capabilities" ? "settings-body settings-embedded"
+          : "settings-body"}>
         {settingsTab === "brain" && <BrainEvalPanel settings={settings} />}
         {settingsTab === "memory" && <MemoryPanel embedded key={memoryInitialTab} initialTab={memoryInitialTab}
           conversations={conversations} sessionSummaries={sessionSummaries} facts={userFacts}

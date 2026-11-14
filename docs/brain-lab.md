@@ -99,6 +99,23 @@ by the desktop. Completed runs also save detailed JSON/Markdown diagnostics.
 A code change made without updating Git HEAD or the app version may not
 invalidate the build fingerprint automatically. When in doubt, rerun tests.
 
+## Desktop workspace layout
+
+Brain Lab uses the normal scrollable Settings content viewport, not the
+embedded Memory/Capabilities layout (which intentionally clips overflow).
+The full test catalog scrolls with the page and no longer has a separate
+310px list scrollbar. The Run/Stop/Export bar stays accessible while scrolling.
+
+When Brain Lab is open, Settings navigation switches to compact icon buttons
+with accessible labels/tooltips, giving the tests more space. The long
+diagnostic introduction and score interpretation are collapsed by default
+but still available on demand. You can search by a scenario's stable number
+(e.g. `#65`), ID, label or group as well as filtering by category/status.
+The selection count is always visible and searching does not deselect tests.
+
+A status of STALE means the previous result was generated using another
+build or fixture. It does not mean the test newly failed.
+
 ## Numbered scenarios, evidence-based grading and phone reviews
 
 Each test displays a stable **#01** to **#73** catalog number in desktop and
