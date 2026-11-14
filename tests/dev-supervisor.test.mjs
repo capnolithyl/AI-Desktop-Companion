@@ -1,14 +1,38 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createDevSupervisor, isExpectedOrigin, formatSupervisorError, UPDATE_BRANCH } from "../scripts/remote-dev-supervisor.mjs";
+import { createDevSupervisor, isExpectedOrigin, formatSupervisorError,
+  needsDependencyInstall, UPDATE_BRANCH } from "../scripts/remote-dev-supervisor.mjs";
 import { createDevSupervisorClient } from "../server/dev-supervisor-client.mjs";
 
 const SHA_A="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 const SHA_B="bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
 const token="local-test-secret-with-more-than-thirty-two-characters";
-function fixture({dirty=false,diverged=false,failBuild=false}={}){
+function fixture({dirty=false,diverged=false,failBuild=false,failInstall=false,
+  packageChange="none",manageDesktop=false}={}){
   let head=SHA_A,remote=SHA_B;
-  const seen=[],started=[];
+  const seen=[],started=[],stopped=[];
+  const oldManifest={name:"mikan-desktop-companion",version:"0.9.8",
+    dependencies:{"existing-package":"^1.0.0"}};
+  const newManifest={...oldManifest,version:"0.9.9"};
+  if(packageChange==="dependencies")
+    newManifest.dependencies={...oldManifest.dependencies,"new-package":"^2.0.0"};
+  const oldLock={name:"mikan-desktop-companion",version:"0.9.8",lockfileVersion:3,
+    packages:{"":{name:"mikan-desktop-companion",version:"0.9.8",
+      dependencies:{...oldManifest.dependencies}},
+      "node_modules/existing-package":{version:"1.0.0"}}};
+  const newLock=structuredClone(oldLock);
+  newLock.version="0.9.9";
+  newLock.packages[""].version="0.9.9";
+  if(packageChange==="dependencies"){
+    newLock.packages[""].dependencies={...newManifest.dependencies};
+    newLock.packages["node_modules/new-package"]={version:"2.0.0"};
+  }
+  const blobs={
+    [SHA_A+":package.json"]:JSON.stringify(oldManifest),
+    [SHA_B+":package.json"]:JSON.stringify(newManifest),
+    [SHA_A+":package-lock.json"]:JSON.stringify(oldLock),
+    [SHA_B+":package-lock.json"]:JSON.stringify(newLock)
+  };
   const git=async(...args)=>{
     seen.push("git "+args.join(" "));
     const op=args.join(" ");
@@ -24,7 +48,13 @@ function fixture({dirty=false,diverged=false,failBuild=false}={}){
       if(diverged)throw new Error("not a fast-forward");
       return "";
     }
-    if(op.startsWith("diff --name-only "))return "";
+    if(op.startsWith("diff --name-only "))return packageChange==="none"
+      ?"":"package.json\npackage-lock.json";
+    if(op.startsWith("show ")){
+      const key=op.slice("show ".length);
+      if(!(key in blobs))throw new Error("Unexpected show target "+key);
+      return blobs[key];
+    }
     if(op==="merge --ff-only "+remote){head=remote;return ""}
     if(op==="reset --keep "+SHA_A){head=SHA_A;return ""}
     throw new Error("Unexpected git command: "+op);
@@ -33,15 +63,84 @@ function fixture({dirty=false,diverged=false,failBuild=false}={}){
     const op=args.join(" ");
     seen.push("npm "+op);
     if(failBuild && op==="run test:brain")throw new Error("synthetic test failed");
+    if(failInstall && op.startsWith("ci "))throw new Error("dependency install failed");
   };
   const supervisor=createDevSupervisor({
-    cwd:"/repo",token,git,npm,port:0,
-    startChild:(name)=>{started.push(name);return {pid:7,exitCode:null}},
-    stopChild:async()=>{},
+    cwd:"/repo",token,git,npm,port:0,manageDesktop,
+    startChild:(name)=>{started.push(name);return {pid:7,exitCode:null,name}},
+    stopChild:async(child)=>{stopped.push(child.name)},
     relayReady:async()=>{}
   });
-  return {supervisor,seen,started,getHead:()=>head};
+  return {supervisor,seen,started,stopped,getHead:()=>head};
 }
+test("only dependency-graph edits require npm ci, not version-only metadata",()=>{
+  const manifest=v=>JSON.stringify({name:"mikan-desktop-companion",version:v,
+    dependencies:{"lightningcss":"^1.0.0"},scripts:{build:"vite build"}});
+  const lock=v=>JSON.stringify({name:"mikan-desktop-companion",version:v,
+    lockfileVersion:3,packages:{
+      "":{name:"mikan-desktop-companion",version:v,
+        dependencies:{"lightningcss":"^1.0.0"}},
+      "node_modules/lightningcss":{version:"1.0.0"}
+    }});
+  assert.equal(needsDependencyInstall(manifest("0.9.8"),manifest("0.9.9"),
+    lock("0.9.8"),lock("0.9.9")),false,
+    "a version-only bump must not reinstall locked Lightning CSS native modules");
+  const next=JSON.parse(manifest("0.9.9"));
+  next.dependencies["new-package"]="^2.0.0";
+  assert.equal(needsDependencyInstall(manifest("0.9.8"),JSON.stringify(next),
+    lock("0.9.8"),lock("0.9.9")),true);
+  const changedLock=JSON.parse(lock("0.9.9"));
+  changedLock.packages["node_modules/lightningcss"].version="1.1.0";
+  assert.equal(needsDependencyInstall(manifest("0.9.8"),manifest("0.9.9"),
+    lock("0.9.8"),JSON.stringify(changedLock)),true);
+  assert.equal(needsDependencyInstall("{bad json",manifest("0.9.9"),
+    lock("0.9.8"),lock("0.9.9")),true);
+});
+test("updating version only runs validation but leaves native node_modules untouched",async()=>{
+  const {supervisor,seen,started}=fixture({packageChange:"version"});
+  await supervisor.inspect();
+  await supervisor.apply();
+  assert.equal(supervisor.getState().phase,"updated");
+  assert.ok(seen.some(x=>x.startsWith("git show ")));
+  assert.ok(seen.includes("npm run test:brain"));
+  assert.ok(seen.includes("npm run test:server"));
+  assert.ok(!seen.some(x=>x.startsWith("npm ci ")),
+    "npm ci is prohibited for version-only updates");
+  assert.deepEqual(started,["server"]);
+});
+test("a real dependency upgrade stops managed dev processes BEFORE npm ci",async()=>{
+  const {supervisor,seen,started,stopped}=fixture({
+    packageChange:"dependencies",manageDesktop:true
+  });
+  await supervisor.start();
+  try{
+    assert.deepEqual(started,["server","desktop"]);
+    await supervisor.inspect();
+    await supervisor.apply();
+    assert.equal(supervisor.getState().phase,"updated");
+    assert.deepEqual(stopped,["desktop","server"]);
+    const ciIndex=seen.findIndex(x=>x.startsWith("npm ci "));
+    assert.ok(ciIndex>=0);
+    assert.deepEqual(started,["server","desktop","server","desktop"]);
+  }finally{await supervisor.close()}
+});
+test("a failed dependency install restores Git and attempts to restore node_modules",async()=>{
+  const {supervisor,seen,started,getHead}=fixture({
+    packageChange:"dependencies",failInstall:true
+  });
+  await supervisor.start();
+  try{
+    await supervisor.inspect();
+    await supervisor.apply();
+    assert.equal(supervisor.getState().phase,"error");
+    assert.equal(getHead(),SHA_A);
+    assert.equal(seen.filter(x=>x.startsWith("npm ci ")).length,2);
+    assert.match(supervisor.getState().step,/node_modules requires repair/);
+    assert.deepEqual(started,["server"],
+      "must not relaunch a broken relay when restored dependencies failed");
+  }finally{await supervisor.close()}
+});
+
 test("remote origin is pinned; no arbitrary repository or URL can be passed",()=>{
   assert.equal(isExpectedOrigin("https://github.com/capnolithyl/AI-Desktop-Companion.git"),true);
   assert.equal(isExpectedOrigin("git@github.com:capnolithyl/AI-Desktop-Companion.git"),true);
