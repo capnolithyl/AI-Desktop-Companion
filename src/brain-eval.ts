@@ -38,7 +38,7 @@ export type EvalStepResult = {
   deterministicWebAllowed: boolean;
   plannedWeb: boolean | null;
   webPass: boolean | null;
-  webPlannerDecision?: {search:boolean;query?:string;reason:string};
+  webPlannerDecision?: {search:boolean;query?:string;reason:string;intent?:string};
   /** Previous validated public query available to this turn's planner (never assistant prose). */
   activePublicQuery?: string;
   selectedMemoryIds: number[];
@@ -91,7 +91,7 @@ export type EvalInference = (args:{
   stepIndex:number;
 })=>Promise<EvalInferenceResult>;
 export type EvalPlanner = (input:string,previous:EvalTurn[],
-  context?:{activePublicQuery?:string})=>Promise<{search:boolean;query?:string;reason:string}>;
+  context?:{activePublicQuery?:string})=>Promise<{search:boolean;query?:string;reason:string;intent?:string}>;
 export type EvalOptions = {
   mode:EvalMode;
   repetitions:number;
@@ -553,7 +553,7 @@ export async function runBrainEvaluation(options:EvalOptions):Promise<EvalReport
       const distractors=(step.expect.memory?.length??0)>0
         ? memory.ids.filter(id=>!supportingIds.has(id)):[];
       const unexpected=(step.expect.excludeMemory??[]).filter(id=>memory.ids.includes(id));
-      let planned:{search:boolean;query?:string;reason:string}|undefined;
+      let planned:{search:boolean;query?:string;reason:string;intent?:string}|undefined;
       const priorPublicQuery=activePublicQuery;
       let answer:string|undefined;
       let inferenceStats:EvalStepResult["inferenceStats"]|undefined;
@@ -736,6 +736,8 @@ export function brainEvalMarkdown(report:EvalReport):string {
       if(s.error)lines.push("- Error: "+s.error);
       if(s.answerFailures.length)lines.push("- Checks: "+s.answerFailures.join("; "));
       if(s.activePublicQuery)lines.push("- Prior active public task: "+s.activePublicQuery);
+      if(s.webPlannerDecision?.intent)
+        lines.push("- Local task classification: "+s.webPlannerDecision.intent);
       if(s.qualityFlags?.length)lines.push("- Human review warnings: "+s.qualityFlags.join("; "));
       lines.push("");
     }
