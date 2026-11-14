@@ -2277,7 +2277,8 @@ export default function App() {
           contextWindow:settings.contextWindow,maxOutputTokens:250,timeoutMs:20000
         }),{
           automaticWebEnabled:canPlanPublicWeb,
-          sourcePreferences:settings.sourcePreferences
+          sourcePreferences:settings.sourcePreferences,
+          history:messages
         }
       );
       if(stopRequested.current)throw new Error("Generation stopped");
