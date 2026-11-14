@@ -184,14 +184,15 @@ async function execute(
         stats:result.stats??undefined};
     }finally{if(requestId===id)requestId=null}
   };
-  const planWeb=async(question:string,previous:EvalTurn[])=>{
+  const planWeb=async(question:string,previous:EvalTurn[],
+    context?:{activePublicQuery?:string})=>{
     if(controller.signal.aborted)throw new Error("Stopped by owner");
     const decision=await planPublicWebTools(question,[],async prompt=>
       invoke<string>("condense_local_context",{
         endpoint:settings.endpoint,model:settings.model,prompt,
         contextWindow:settings.contextWindow,maxOutputTokens:250,timeoutMs:22000
       }),{automaticWebEnabled:true,sourcePreferences:settings.sourcePreferences,
-        history:previous});
+        history:previous,activePublicQuery:context?.activePublicQuery});
     return {search:decision.search,query:decision.query,reason:decision.reason};
   };
   const result=await runBrainEvaluation({
