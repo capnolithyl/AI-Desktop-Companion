@@ -2259,7 +2259,7 @@ export default function App() {
       // Public tool permissions are decided once, separately from fact recall.
       // The native backend still enforces its own no-web privacy boundary.
       const webPolicy = planDesktopWebExecution({
-        question:text, autoSearch:settings.autoSearch, provider:settings.provider,
+        question:text, previous:messages, autoSearch:settings.autoSearch, provider:settings.provider,
         planMode:researchPlan.mode, notion:useNotion,
         capabilityQuestion:turn.capabilityQuestion, personalTurn,
         existingSearch:!!withSearch, attachment:!!attachment,
