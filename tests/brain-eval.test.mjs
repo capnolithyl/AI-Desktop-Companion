@@ -153,7 +153,7 @@ test("live Brain Lab passes conversation history to web planning for independent
   const result=await runBrainEvaluation({
     scenarios:selected,mode:"live",model:"fixture-model",repetitions:1,
     planWeb:async(question,previous)=>{
-      calls.push({question,previous});
+      calls.push({question,previous:previous.map(turn=>({...turn}))});
       return {search:true,query:"public topics refined by latest constraints",
         reason:"The earlier public discovery request is still active"};
     },
@@ -175,7 +175,9 @@ test("a casual book discussion can turn into discovery and carry a third-turn co
   const report=await runBrainEvaluation({
     scenarios:[byId("discovery-book")],mode:"live",model:"fixture-model",repetitions:1,
     planWeb:async(question,previous)=>{
-      requested.push({question,previous});
+      // The runner appends later turns to the same array. Capture the
+      // planner's input *at invocation time*, not its eventual final state.
+      requested.push({question,previous:previous.map(turn=>({...turn}))});
       return {search:!question.startsWith("I finished"),reason:"Refined public book discovery"};
     },
     infer:async()=>"I'll look for shorter liminal-horror options."
@@ -197,7 +199,7 @@ test("web-planning context is isolated per scenario and explicit research opt-ou
   const report=await runBrainEvaluation({
     scenarios:chosen,mode:"live",model:"fixture-model",repetitions:1,
     planWeb:async(question,previous)=>{
-      calls.push({question,previous});
+      calls.push({question,previous:previous.map(turn=>({...turn}))});
       const optOut=/not asking for recommendations|just venting/i.test(question);
       const discovery=/more bands that sounded like Immortal/i.test(question);
       return {search:discovery&&!optOut,reason:"Use current turn preference"};
