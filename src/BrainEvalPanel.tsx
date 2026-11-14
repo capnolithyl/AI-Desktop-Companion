@@ -5,8 +5,12 @@ import type { Settings } from "./storage";
 import { EVAL_SCENARIOS, brainEvalMetrics, brainEvalMarkdown, type EvalMode } from "./brain-eval";
 import {
   subscribeBrainEval, getBrainEvalStatus, getBrainEvalReport, brainEvalHistory,
-  clearBrainEvalHistory, startBrainEvaluation, stopBrainEvaluation
+  clearBrainEvalHistory, startBrainEvaluation, stopBrainEvaluation,
+  getBrainEvalCaseRecords, brainEvalEnvironment, reviewBrainEvalScenario
 } from "./brain-eval-manager";
+import {
+  statusForScenario,summarizeCaseStatuses,type BrainCaseStatus
+} from "./brain-eval-status";
 import "./brain-eval.css";
 
 function formatMs(value:number):string{return value>=1000?(value/1000).toFixed(1)+"s":value+"ms"}
@@ -16,7 +20,10 @@ const totalFixtureTurns=EVAL_SCENARIOS.reduce((n,s)=>n+s.steps.length,0);
 export function BrainEvalPanel({settings}:{settings:Settings}){
   const [mode,setMode]=useState<EvalMode>("routing");
   const [category,setCategory]=useState("All categories");
-  const [scenarioId,setScenarioId]=useState("all");
+  const [statusFilter,setStatusFilter]=useState<"all"|BrainCaseStatus>("all");
+  const [selectedIds,setSelectedIds]=useState<ReadonlySet<string>>(
+    ()=>new Set(EVAL_SCENARIOS.map(s=>s.id))
+  );
   const [repeats,setRepeats]=useState(1);
   const [message,setMessage]=useState("");
   const runtime=useSyncExternalStore(subscribeBrainEval,getBrainEvalStatus,getBrainEvalStatus);
@@ -24,10 +31,33 @@ export function BrainEvalPanel({settings}:{settings:Settings}){
   const history=brainEvalHistory();
   const busy=runtime.phase==="running";
   const progress={done:runtime.done,total:runtime.total,label:runtime.label};
-  const selected=useMemo(()=>{
-    const candidates=category==="All categories"?EVAL_SCENARIOS:EVAL_SCENARIOS.filter(s=>s.group===category);
-    return scenarioId==="all"?candidates:candidates.filter(s=>s.id===scenarioId);
-  },[category,scenarioId]);
+  const records=getBrainEvalCaseRecords();
+  const environment=brainEvalEnvironment(mode,settings.model);
+  const statuses=useMemo(()=>
+    new Map(EVAL_SCENARIOS.map(s=>[s.id,statusForScenario(s,records,environment)])),
+    [records,mode,settings.model]
+  );
+  const totals=summarizeCaseStatuses(EVAL_SCENARIOS,records,environment);
+  const visible=EVAL_SCENARIOS.filter(s=>
+    (category==="All categories"||s.group===category)&&
+    (statusFilter==="all"||statuses.get(s.id)?.status===statusFilter)
+  );
+  const selected=EVAL_SCENARIOS.filter(s=>selectedIds.has(s.id));
+  const toggle=(id:string,checked:boolean)=>setSelectedIds(previous=>{
+    const next=new Set(previous);
+    if(checked)next.add(id);else next.delete(id);
+    return next;
+  });
+  const selectOnly=(ids:ReadonlyArray<string>)=>setSelectedIds(new Set(ids));
+  const unresolved=new Set<BrainCaseStatus>(["failed","review","incomplete","untested","stale"]);
+  const selectUnresolved=()=>selectOnly(EVAL_SCENARIOS
+    .filter(s=>unresolved.has(statuses.get(s.id)!.status)).map(s=>s.id));
+  const selectRegression=()=>{
+    const passed=EVAL_SCENARIOS.filter(s=>statuses.get(s.id)?.status==="passed");
+    // A stable sample across groups, even as the scenario catalog grows.
+    const sample=passed.filter((s,i)=>i%7===0);
+    selectOnly(sample.map(s=>s.id));
+  };
   const metrics=report?brainEvalMetrics(report):null;
   const previousRun=history.find(h=>h.id!==report?.runId)??null;
 
@@ -73,16 +103,21 @@ export function BrainEvalPanel({settings}:{settings:Settings}){
         </select>
       </label>
       <label>Category
-        <select value={category} disabled={busy} onChange={e=>{setCategory(e.target.value);setScenarioId("all")}}>
+        <select value={category} disabled={busy} onChange={e=>setCategory(e.target.value)}>
           <option>All categories</option>
           {groups.map(group=><option key={group}>{group}</option>)}
         </select>
       </label>
-      <label>Scenario
-        <select value={scenarioId} disabled={busy} onChange={e=>setScenarioId(e.target.value)}>
-          <option value="all">All selected scenarios</option>
-          {(category==="All categories"?EVAL_SCENARIOS:EVAL_SCENARIOS.filter(s=>s.group===category))
-            .map(s=><option key={s.id} value={s.id}>{s.label}</option>)}
+      <label>Show status
+        <select value={statusFilter} disabled={busy}
+          onChange={e=>setStatusFilter(e.target.value as typeof statusFilter)}>
+          <option value="all">All statuses</option>
+          <option value="failed">Failed</option>
+          <option value="review">Needs review</option>
+          <option value="stale">Stale / newer build</option>
+          <option value="untested">Never tested</option>
+          <option value="incomplete">Incomplete</option>
+          <option value="passed">Passed</option>
         </select>
       </label>
       <label>Repeat each scenario
@@ -90,6 +125,42 @@ export function BrainEvalPanel({settings}:{settings:Settings}){
           {[1,2,3,5].map(n=><option key={n} value={n}>{n}×</option>)}
         </select>
       </label>
+    </div>
+    <div className="brain-eval-status-summary">
+      {(["passed","failed","review","stale","untested","incomplete"] as const).map(status=>
+        <span className={"brain-eval-status "+status} key={status}>{status}: {totals[status]}</span>
+      )}
+    </div>
+    <div className="brain-eval-select-actions">
+      <button type="button" disabled={busy} onClick={()=>selectOnly(visible.map(s=>s.id))}>Select visible ({visible.length})</button>
+      <button type="button" disabled={busy} onClick={selectUnresolved}>Select unresolved</button>
+      <button type="button" disabled={busy} onClick={selectRegression}>Passed regression sample</button>
+      <button type="button" disabled={busy} onClick={()=>selectOnly([])}>Clear selection</button>
+    </div>
+    <div className="brain-eval-catalog" role="group" aria-label="Select Brain Lab scenarios">
+      {visible.length===0&&<p className="brain-eval-subtitle">No scenarios match this filter.</p>}
+      {visible.map(s=>{
+        const view=statuses.get(s.id)!;
+        return <div className="brain-eval-test-row" key={s.id}>
+          <label title={s.note??s.group}>
+            <input type="checkbox" checked={selectedIds.has(s.id)} disabled={busy}
+              onChange={e=>toggle(s.id,e.target.checked)} />
+            <span><strong>{s.label}</strong><small>{s.group} · {s.steps.length} turns
+              {view.record?(" · Last: "+new Date(view.record.at).toLocaleString()+
+                " · "+view.record.repetitions+"×"):""}</small></span>
+          </label>
+          <span className={"brain-eval-status "+view.status}>{view.status}
+            {view.status==="stale"&&view.previous?" ("+view.previous+")":""}</span>
+          {view.status==="review"&&<div className="brain-eval-review-actions">
+            <button type="button" disabled={busy}
+              onClick={()=>{try{reviewBrainEvalScenario(s.id,mode,settings.model,"passed")}
+                catch(error){setMessage(String(error))}}}>Approve</button>
+            <button type="button" disabled={busy}
+              onClick={()=>{try{reviewBrainEvalScenario(s.id,mode,settings.model,"failed")}
+                catch(error){setMessage(String(error))}}}>Fail</button>
+          </div>}
+        </div>;
+      })}
     </div>
     <div className="brain-eval-actions">
       <button type="button" className="save-button" disabled={busy||selected.length===0} onClick={()=>void run()}>
@@ -197,6 +268,9 @@ export function BrainEvalPanel({settings}:{settings:Settings}){
       those turns show REVIEW with a concrete behavioral goal in their traces and exported report.
       Factual answer checks are transparent phrase/concept heuristics, not a perfect semantic judge.
       Repeating a scenario measures output variability; exports include every input, decision and response.
+      Each scenario retains a version/model/mode-specific outcome; different builds or changed fixtures appear stale until rerun.
+      REVIEW cases require a person to approve or fail them, not just a plausible answer.
+      Selecting a subset does not erase unselected scenarios' previous results.
       Reports are automatically saved on the PC when a run finishes. Browser-triggered runs survive closing the browser tab.
       Saved history contains summary metrics only.
     </div>
