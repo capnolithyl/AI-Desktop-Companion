@@ -95,17 +95,20 @@ export function BrainEvalPanel({settings}:{settings:Settings}){
   return <div className="brain-eval-panel">
     <div className="settings-section-title"><BrainCircuit size={17}/> Brain lab · P0 reliability</div>
     <details className="brain-eval-explainer">
-      <summary>What Brain Lab tests <span>Isolated synthetic scenarios · no real tool calls</span></summary>
+      <summary>What Brain Lab tests <span>Isolated memories · Live uses real SearXNG</span></summary>
       <p>Brain Lab tests Mikan's routing and local model using synthetic facts.
-        Fast mode doesn't call Ollama; Live mode calls the configured local model.
-        Neither mode performs real web searches or writes to saved memories.
-        This is a diagnostic harness, not a full end-to-end production test.</p>
+        Fast mode stays offline. Live mode calls the configured local model and
+        runs approved public searches through the same Rust/SearXNG path as desktop chat.
+        Real search snippets are returned to the model and recorded with their URLs.
+        Neither mode writes to saved memories or private connected apps.
+        Live web tests need SearXNG running and can take longer.
+        Conversation quality still needs human review.</p>
     </details>
     <div className="brain-eval-toolbar">
       <label>Test mode
         <select value={mode} disabled={busy} onChange={e=>setMode(e.target.value as EvalMode)}>
           <option value="routing">Fast · production routing and lexical recall</option>
-          <option value="live">Live · routing + local model conversation</option>
+          <option value="live">Live · local model + actual public SearXNG</option>
         </select>
       </label>
       <label>Category
@@ -211,6 +214,8 @@ export function BrainEvalPanel({settings}:{settings:Settings}){
           ["Exact route labels",metrics.routes+"%","diagnostic; labels alone don't fail a test"],
           ["Functional routing",metrics.behavioralRouting+"%","search-intent behavior"],
           ["Web decisions",metrics.webAgreement+"%",metrics.webChecks+" observed · "+metrics.unnecessaryWeb+" extra · "+metrics.missedWeb+" missed"],
+          ["Real web searches",String(metrics.liveSearches),metrics.liveSearchesWithSources+
+            " with sources · "+metrics.liveSources+" returned snippets"],
           ["Memory fact coverage",metrics.recall+"%",metrics.memoryRecordMisses+" exact row misses · "+
             metrics.memoryDistractors+" extra records"],
           ["Factual answers",metrics.answers===null?"Not run":metrics.answers+"%",metrics.answerChecks+" graded turns"],
@@ -268,6 +273,13 @@ export function BrainEvalPanel({settings}:{settings:Settings}){
               predicted web {step.plannedWeb===null?"unobserved":String(step.plannedWeb)};
               expected {step.expected.web??(step.expected.route==="research"?true:step.expected.route==="chat"?false:"unspecified")};
               planner {step.webPlannerDecision?.search?"requested":step.webPlannerDecision?"skipped":"not run"}</small>
+            {step.webExecution?.query&&<small>
+              SearXNG executed: {step.webExecution.query} ·
+              {step.webExecution.results.length} source previews
+            </small>}
+            {step.webExecution?.results.map((src,i)=><small key={src.url}>
+              Source [{i+1}]: {src.title} · {src.url}
+            </small> )}
             <small>Memory IDs selected: {step.selectedMemoryIds.join(", ")||"none"};
               uncovered facts: {step.missingMemoryIds.join(", ")||"none"};
               raw missing IDs: {step.missingMemoryRecordIds?.join(", ")||"none"};
@@ -292,7 +304,8 @@ export function BrainEvalPanel({settings}:{settings:Settings}){
     <details className="brain-eval-explainer">
       <summary>How to interpret the scores <span>Read before approving tests</span></summary>
       <p><strong>Fast:</strong> deterministic routing and lexical memory selection, no LLM.
-        <strong> Live:</strong> local Ollama plus simulated web planning, without real external searches or memory writes.</p>
+        <strong> Live:</strong> local Ollama plus real public SearXNG searches when allowed,
+        with actual evidence returned to the reply model. Neither mode writes real memories.</p>
       <p>Unobserved decisions are not verified. Natural conversations require human review, and
         factual checks are phrase/concept heuristics rather than a semantic judge.
         Exact route labels and memory-row IDs are diagnostic, not proof of a bad response.</p>
