@@ -50,6 +50,32 @@ routing. This first pass does **not** remove the separate legacy heuristics
 in initial research routing and deterministic memory recall. Those remain
 areas for follow-up investigation.
 
+**0.9.16 shared reply grounding and faster remote test selection:** The
+Nov 14 23:03 UTC Live run (`eval-1794697430880-rzoxl`) covered 8
+scenarios and 21 turns, all mechanically passing routing/memory checks.
+Manual review found genuine model confusions (Immortal interpreted as a game;
+questionable metal, horror, book and RPG recommendations), while the 0.9.14
+same-model critic was already removed in 0.9.15.
+
+The Live harness had been generating replies with a short bespoke system
+prompt unlike the desktop conversation engine. It now shares the actual
+desktop `responseFocusGuidance`, owner-detail grounding rules, conversational
+clock and owner-configured system prompt while keeping **only synthetic
+test memory** and a clear `no public web result was fetched` boundary.
+The shared production guidance asks for context-grounded referent resolution
+rather than guessing a band/game/book from a verb, keeps an ongoing
+discovery request's constraints, and avoids unsourced niche recommendation
+claims when a search was planned but not actually run. This adds no
+artist-specific, topic-specific or venting regexes, and does not imply
+that real search integrations are tested in isolated Brain Lab.
+
+The phone browser Brain Lab now has an optional input to select a precise
+comma/space-separated set of scenario numbers (for example
+`57,59,60,62,65,66`) in one operation. Unknown IDs are rejected without
+clearing the existing selection. The ordinary filters and checkbox list
+remain available. Regression tests cover shared guidance and browser
+script syntax. Version synchronized to **0.9.16**.
+
 **0.9.12 focused active-task reasoning:** Live run of 0.9.11
 (`eval-1794692172668-ah5rl`, Nov 14 21:36 UTC, Qwen3.5:9b)
 mechanically passed 5/6 scenarios and 14/15 turns. #59 now correctly continues
