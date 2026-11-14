@@ -50,6 +50,24 @@ routing. This first pass does **not** remove the separate legacy heuristics
 in initial research routing and deterministic memory recall. Those remain
 areas for follow-up investigation.
 
+**0.9.11 active research state:** A validated public search query from the
+immediately previous assistant turn now accompanies recent short user turns
+when the local web planner judges the next message. This is explicit task
+state, not a regex guess about phrases. If the model says no search or the
+conversation changes to another task, the active query is cleared. The
+synthetic Live runner follows the same state lifecycle and exports the prior
+active query for debugging. No previous assistant prose is used as evidence.
+In production only the previous assistant's validated `ai-web` tool audit
+may establish this context. The model still decides if a new turn refines,
+cancels or replaces the goal; prior state NEVER automatically authorizes web.
+
+**0.9.11 memory precision:** Generic negations/pronouns cannot match unrelated
+synthetic memories, and broad domain words like "band" or "RPG" are not
+enough to recall a different named artist or game. Direct "favorite band?"
+questions still work without entity overlap. The catalog now explicitly
+excludes observed unrelated memory IDs in key discovery cases, so the next
+rerun tests memory precision rather than granting an automatic green score.
+
 **To verify:** In the browser or desktop Brain Lab, run **Live · 1×** on
 **#57 (band discovery)**, **#58 (chat, no search)**,
 **#65 (short horror anime)** and **#66 (tactical RPGs)**. Include
