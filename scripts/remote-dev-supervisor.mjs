@@ -21,10 +21,23 @@ const ROOT=resolve(dirname(fileURLToPath(import.meta.url)),"..");
 const exec=promisify(execFile);
 const allowedPhases=new Set(["idle","checking","ready","up-to-date","updating","restarting","updated","error"]);
 const terminalPhases=new Set(["ready","up-to-date","updated","error"]);
-const formatError=error=>{
-  const message=String(error?.stderr||error?.message||error).trim();
-  return message.slice(-600);
-};
+/** Extract the actual failing TAP test from npm's captured stdout.
+ * execFile's error.message only says "Command failed: node ... npm-cli.js",
+ * which concealed the useful failure from remote phone users. */
+export function formatSupervisorError(error){
+  const stdout=String(error?.stdout||"");
+  const stderr=String(error?.stderr||"");
+  const combined=(stdout+"\n"+stderr).trim();
+  const failures=[...combined.matchAll(/(?:^|\n)not ok\s+\d+[^\n]*/g)];
+  if(failures.length){
+    const at=failures[0].index??0;
+    return combined.slice(at,at+1600).trim();
+  }
+  const excerpt=combined.trim();
+  if(excerpt)return excerpt.slice(-1400);
+  return String(error?.message||error).trim().slice(-1400);
+}
+const formatError=formatSupervisorError;
 function sleep(ms){return new Promise(ok=>setTimeout(ok,ms))}
 async function command(exe,args,{cwd=ROOT,timeout=120000}={}){
   try{
