@@ -3,7 +3,7 @@
  */
 export function brainEvalFileStem(report) {
   const started = typeof report?.startedAt === "string" ? report.startedAt : "";
-  const validDate = /^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}/.test(started);
+  const validDate = /^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}/.test(started);
   const stamp = validDate
     ? started.slice(0,10)+"_"+started.slice(11,19).replaceAll(":","")+"Z"
     : "unknown-date";
