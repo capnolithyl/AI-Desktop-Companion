@@ -82,6 +82,13 @@
     .brain-lab-controls .full {grid-column:1/-1;}
     .brain-lab-actions {display:flex;flex-wrap:wrap;gap:8px;margin-top:9px;}
     .brain-lab-actions button {flex:1;min-width:100px;text-align:center;}
+    .brain-lab-number-select{display:grid;gap:6px;margin:12px 0;padding:10px;border-radius:10px;background:#211a25;border:1px solid #624a60;}
+    .brain-lab-number-select label{font-size:12px;font-weight:700;color:#f4d5c8;}
+    .brain-lab-number-select small{font-size:11px;color:#d8c3d1;line-height:1.5;}
+    .brain-lab-number-row{display:flex;gap:6px;min-width:0;}
+    .brain-lab-number-row input{flex:1;min-width:0;border-radius:8px;padding:10px;background:#30232f;color:#fff3f9;border:1px solid #76556d;font:inherit;}
+    .brain-lab-number-row button{flex:0 0 auto;border-radius:8px;padding:10px 12px;color:#ffe6d9;background:#4a3748;border:1px solid #795869;min-height:42px;font-weight:600;}
+    .brain-lab-number-row button:disabled{opacity:.6;}
     .brain-lab-quick{display:flex;flex-wrap:wrap;gap:5px;margin:8px 0;}
     .brain-lab-quick button{background:#4a3748;color:#ffe6d9;border:1px solid #795869;
       padding:6px 8px;border-radius:7px;font-size:11px;}
@@ -265,6 +272,16 @@
         </label>
       </div>
       <p id="brainLabCounts" class="settings-hint"></p>
+      <div class="brain-lab-number-select">
+        <label for="brainLabNumbers">Select scenario numbers (comma-separated)</label>
+        <div class="brain-lab-number-row">
+          <input id="brainLabNumbers" type="text" inputmode="text" autocomplete="off"
+            placeholder="57, 59, 60, 62, 65, 66"
+            aria-describedby="brainLabNumberFeedback">
+          <button id="brainLabApplyNumbers" type="button">Select these</button>
+        </div>
+        <small id="brainLabNumberFeedback" role="status" aria-live="polite">Tip: enter exact scenario numbers to replace the current selection.</small>
+      </div>
       <div class="brain-lab-quick">
         <button id="brainLabSelectVisible" type="button">Select visible</button>
         <button id="brainLabSelectUnresolved" type="button">Select unresolved</button>
@@ -379,6 +396,9 @@
   var devLastCheckedAt = 0;
   var devRequesting = false;
   var devReloadAfterUpdate = false;
+  var brainLabNumbers = document.getElementById("brainLabNumbers");
+  var brainLabApplyNumbers = document.getElementById("brainLabApplyNumbers");
+  var brainLabNumberFeedback = document.getElementById("brainLabNumberFeedback");
   var brainLabMode = document.getElementById("brainLabMode");
   var brainLabRepeats = document.getElementById("brainLabRepeats");
   var brainLabCategory = document.getElementById("brainLabCategory");
@@ -623,6 +643,8 @@
     brainLabStop.disabled = !data.connected || !running || brainLabSubmitting;
     brainLabMode.disabled = running || brainLabSubmitting;
     brainLabRepeats.disabled = running || brainLabSubmitting;
+    brainLabNumbers.disabled = running || brainLabSubmitting;
+    brainLabApplyNumbers.disabled = running || brainLabSubmitting;
     brainLabCategory.disabled = running || brainLabSubmitting;
     brainLabStatusFilter.disabled = running || brainLabSubmitting;
     for (var control of [brainLabSelectVisible,brainLabSelectUnresolved,brainLabSelectRegression,brainLabSelectClear])
@@ -654,6 +676,28 @@
     if (run.error) lines.push("Note: "+run.error);
     brainLabStatus.textContent = lines.join("\n");
   }
+  function applyBrainLabNumbers(){
+    if(brainLabSubmitting || current?.brainEval?.phase==="running")return;
+    var raw=brainLabNumbers.value.trim();
+    if(!raw){brainLabNumberFeedback.textContent="Enter one or more scenario numbers, such as 57, 59, 60.";return;}
+    var chunks=raw.split(/[,\\s]+/).filter(Boolean);
+    if(chunks.some(function(part){return !/^[0-9]{1,3}$/.test(part);})){
+      brainLabNumberFeedback.textContent="Use scenario numbers separated by commas or spaces.";return;
+    }
+    var requested=[...new Set(chunks.map(Number))];
+    var byNumber=new Map(brainLabCatalog.map(function(item){return [item.number,item.id];}));
+    var unknown=requested.filter(function(number){return !byNumber.has(number);});
+    if(unknown.length){
+      brainLabNumberFeedback.textContent="Unknown scenario number(s): "+unknown.join(", ")+". Selection unchanged.";return;
+    }
+    selectBrainLab(requested.map(function(number){return byNumber.get(number);}));
+    brainLabNumberFeedback.textContent="Selected "+requested.length+" scenario(s): "+
+      requested.map(function(number){return "#"+number;}).join(", ")+".";
+  }
+  brainLabApplyNumbers.addEventListener("click",applyBrainLabNumbers);
+  brainLabNumbers.addEventListener("keydown",function(event){
+    if(event.key==="Enter"){event.preventDefault();applyBrainLabNumbers();}
+  });
   brainLabCategory.addEventListener("change",function(){if(current)renderBrainLab(current);});
   brainLabStatusFilter.addEventListener("change",function(){if(current)renderBrainLab(current);});
   brainLabMode.addEventListener("change",function(){if(current)renderBrainLab(current);});
