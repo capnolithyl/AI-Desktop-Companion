@@ -190,6 +190,7 @@ export function BrainEvalPanel({settings}:{settings:Settings}){
         {([
           ["Passing turns",metrics.passRate+"%",metrics.passed+"/"+metrics.turns],
           ["Routing agreement",metrics.routes+"%","deterministic only"],
+          ["Web decisions",metrics.webAgreement+"%",metrics.webChecks+" observed · "+metrics.unnecessaryWeb+" extra · "+metrics.missedWeb+" missed"],
           ["Memory selection",metrics.recall+"%","without semantic index"],
           ["Answer checks",metrics.answers===null?"Not run":metrics.answers+"%",report.mode==="live"?"local model":"planning-only"],
           ["Elapsed",formatMs(metrics.elapsedMs),metrics.cases+" scenario runs"]
@@ -225,7 +226,8 @@ export function BrainEvalPanel({settings}:{settings:Settings}){
           {test.steps.map((step,i)=><div className="brain-eval-step" key={i}>
             <div><strong>{i+1}. {step.user}</strong> <span className={step.pass?"brain-eval-ok":"brain-eval-bad"}>{step.pass?"PASS":"FAIL"}</span></div>
             <small>Route {step.actualRoute} (expected {step.expected.route??"any"});
-              web eligible {String(step.deterministicWebAllowed)};
+              predicted web {step.plannedWeb===null?"unobserved":String(step.plannedWeb)};
+              expected {step.expected.web??(step.expected.route==="research"?true:step.expected.route==="chat"?false:"unspecified")};
               planner {step.webPlannerDecision?.search?"requested":step.webPlannerDecision?"skipped":"not run"}</small>
             <small>Memory IDs selected: {step.selectedMemoryIds.join(", ")||"none"};
               missing: {step.missingMemoryIds.join(", ")||"none"};
@@ -242,6 +244,7 @@ export function BrainEvalPanel({settings}:{settings:Settings}){
       on synthetic fixtures. It does not call Ollama, Qdrant or the actual search service.
       Live mode additionally invokes your configured <em>local</em> Ollama model (and optional public-web planner),
       but feeds only mocked facts and never performs external searches or memory writes.
+      Web scores measure intended/planned behavior, never a real network call. Unobserved decisions are excluded from web percentages.
       Answer checks are transparent phrase/concept heuristics, not a perfect semantic judge.
       Repeating a scenario measures output variability; exports include every input, decision and response.
       Saved history contains summary metrics only.
