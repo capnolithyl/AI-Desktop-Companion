@@ -62,6 +62,40 @@ The Windows PC must stay awake and the desktop process must remain alive.
 This release does **not** resume half-finished runs after Windows restart.
 A browser disconnect doesn't interrupt the run; a lost desktop process does.
 
+## Focused reruns and per-scenario statuses
+
+Desktop and browser Brain Lab display a checkbox and last saved outcome for
+**each** scenario. Running a subset updates only its results, not the others.
+
+- **PASSED:** all repetitions and checks passed; subjective dialogue must
+  also have an explicit human approval before turning green.
+- **FAILED:** any repetition/check failed, or a human marked a reviewed
+  conversational reply as wrong.
+- **REVIEW:** automatic checks didn't fail, but conversational quality or an
+  optional web-planning decision requires human inspection. Read the trace
+  and choose **Approve** or **Fail**.
+- **INCOMPLETE:** a scenario was interrupted or didn't finish all repetitions.
+- **UNTESTED:** never run on the selected model + Fast/Live mode.
+- **STALE:** completed with an earlier app build or older test definition.
+  The previous result is visible but isn't counted as fresh.
+
+Statuses are scoped to scenario ID, mode, local model, app version + Git commit
+(where available), and the test's own definition fingerprint. A model
+switch doesn't inherit another model's passing grade.
+
+Use category and status filters, per-test checkboxes, and quick actions:
+**Select visible**, **Select unresolved**, **Passed regression sample**, and
+**Clear selection**. The stable regression sample selects roughly one seventh
+of previously passed scenarios. Full suite runs remain available for occasional
+regression checks.
+
+Statuses persist in desktop localStorage, and the browser gets an authenticated
+read-only copy of each outcome. Human approvals from the browser are validated
+by the desktop. Completed runs also save detailed JSON/Markdown diagnostics.
+
+A code change made without updating Git HEAD or the app version may not
+invalidate the build fingerprint automatically. When in doubt, rerun tests.
+
 ## A/B/C/D experiments
 
 The first four scenarios all begin with:
