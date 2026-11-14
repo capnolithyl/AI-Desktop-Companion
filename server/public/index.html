@@ -69,6 +69,8 @@
       font-size:13px; cursor:pointer; }
     .toggle-row input { width:20px; height:20px; accent-color:#ffad7e; flex-shrink:0; }
     .settings-error { min-height:1.3em; color:#ffb5bd; font-size:12px; }
+    #devUpdateStatus {white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.6;
+      background:#2d2431;border:1px solid #75576a;border-radius:9px;padding:10px;margin:10px 0;}
     .brain-lab-controls { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin:10px 0; }
     .brain-lab-controls label {display:flex;flex-direction:column;gap:6px;min-width:0;font-size:12px;}
     .brain-lab-controls select {min-width:0;width:100%;border:1px solid #76556d;
@@ -271,6 +273,18 @@
         <button id="brainLabMarkdown" class="settings-action" type="button" disabled>Download Markdown</button>
       </div>
     </section>
+    <section class="settings-group" aria-labelledby="devUpdatesTitle">
+      <h3 id="devUpdatesTitle">Developer updates</h3>
+      <p class="settings-hint">Update the approved Git branch from your phone. Requires the local Windows supervisor, not just npm run server.</p>
+      <div id="devUpdateStatus" class="settings-hint" role="status" aria-live="polite">
+        Checking for supervised development mode…
+      </div>
+      <div class="brain-lab-actions">
+        <button id="devUpdateCheck" class="settings-action" type="button" disabled>Check GitHub</button>
+        <button id="devUpdateApply" class="settings-action" type="button" disabled>Update &amp; restart</button>
+      </div>
+      <p class="settings-hint">No shell commands or branch selectors are exposed here. Installed Mikan executables are not replaced by a Git pull.</p>
+    </section>
     <section class="settings-group" aria-labelledby="privacySectionTitle">
       <h3 id="privacySectionTitle">Privacy &amp; Feedback</h3>
       <button id="copyDebugLog" class="settings-action" type="button">Copy conversation debug log</button>
@@ -352,6 +366,13 @@
   var menuToggle = document.getElementById("menuToggle");
   var closeSettingsButton = document.getElementById("closeSettings");
   var settingsError = document.getElementById("settingsError");
+  var devUpdateStatus = document.getElementById("devUpdateStatus");
+  var devUpdateCheck = document.getElementById("devUpdateCheck");
+  var devUpdateApply = document.getElementById("devUpdateApply");
+  var devLast = null;
+  var devLastCheckedAt = 0;
+  var devRequesting = false;
+  var devReloadAfterUpdate = false;
   var brainLabMode = document.getElementById("brainLabMode");
   var brainLabRepeats = document.getElementById("brainLabRepeats");
   var brainLabCategory = document.getElementById("brainLabCategory");
@@ -726,6 +747,7 @@
   function openSettings() {
     if (!key || !settingsSheet.hidden) return;
     settingsError.textContent = "";
+    void refreshDevUpdates();
     settingsSheet.hidden = false;
     document.body.classList.add("settings-open");
     menuToggle.setAttribute("aria-expanded", "true");
@@ -743,6 +765,77 @@
     app.style.display = yes ? "flex" : "none";
     if (!yes) { closeSettings(false); status.textContent = "Locked"; current = null; stopAvatar(); }
   }
+  async function refreshDevUpdates() {
+    if (!key || devRequesting || settingsSheet.hidden) return;
+    devLastCheckedAt = Date.now();
+    try {
+      devLast = await api("/api/dev-update");
+      var state = devLast;
+      if (!state.available) {
+        devUpdateStatus.textContent =
+          "Not enabled on this server. "+(state.reason||"Start with npm run remote:dev on the PC.");
+        devUpdateCheck.disabled = true;
+        devUpdateApply.disabled = true;
+        return;
+      }
+      var busy = ["checking","updating","restarting"].includes(state.phase);
+      var runningTests = current?.brainEval?.phase === "running";
+      devUpdateCheck.disabled = devRequesting || busy;
+      devUpdateApply.disabled = devRequesting || busy || runningTests || state.phase !== "ready";
+      var lines = [
+        "Branch: "+state.branch,
+        "Mode: "+(state.mode==="desktop-and-relay"?"Managed dev desktop + browser relay":"Browser relay only"),
+        "Local: "+(state.current||"unknown")+" · GitHub: "+(state.remote||"not checked"),
+        "Status: "+state.phase+" · "+(state.step||""),
+      ];
+      if(state.error)lines.push("Problem: "+state.error);
+      if(state.desktopNote)lines.push(state.desktopNote);
+      devUpdateStatus.textContent=lines.join("\n");
+      if(devReloadAfterUpdate && state.phase==="updated") {
+        devReloadAfterUpdate=false;
+        location.reload();
+      }
+    } catch(error) {
+      devUpdateStatus.textContent="Development supervisor could not be reached: "+error.message;
+      devUpdateCheck.disabled=true;
+      devUpdateApply.disabled=true;
+    }
+  }
+  async function devUpdateAction(action) {
+    if (devRequesting) return;
+    if (action==="apply") {
+      if (current?.brainEval?.phase === "running") {
+        devUpdateStatus.textContent="Stop Brain Lab before applying an update.";
+        return;
+      }
+      if (!devLast?.available || devLast.phase!=="ready") return;
+      var question="Update the pinned "+devLast.branch+" branch by "+
+        devLast.commits+" commit(s), run local tests, then restart "+
+        (devLast.mode==="desktop-and-relay"?"Mikan development desktop and browser relay":"the browser relay only")+
+        "? Your phone may disconnect briefly.";
+      if(!window.confirm(question))return;
+    }
+    devRequesting=true;
+    devUpdateCheck.disabled=true;
+    devUpdateApply.disabled=true;
+    try{
+      await api("/api/dev-update",{
+        method:"POST",headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({action:action})
+      });
+      if(action==="apply")devReloadAfterUpdate=true;
+      devUpdateStatus.textContent=action==="check"
+        ?"Checking the pinned GitHub branch…"
+        :"Updating. Keep this Windows PC awake; the browser will reconnect.";
+    }catch(error){devUpdateStatus.textContent="Update request failed: "+error.message}
+    finally{
+      devRequesting=false;
+      devLastCheckedAt=0;
+      void refreshDevUpdates();
+    }
+  }
+  devUpdateCheck.addEventListener("click",()=>{void devUpdateAction("check")});
+  devUpdateApply.addEventListener("click",()=>{void devUpdateAction("apply")});
   async function api(path, options) {
     var response = await fetch(path, Object.assign({}, options || {}, {
       cache:"no-store",
@@ -909,6 +1002,8 @@
     try {
       var data = await api("/api/state");
       render(data);
+      if(!settingsSheet.hidden && Date.now()-devLastCheckedAt>4000)
+        void refreshDevUpdates();
     } catch (e) {
       if (e.status === 401) {
         key = ""; sessionStorage.removeItem("mikan-remote-key"); showUnlocked(false);
