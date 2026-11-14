@@ -13,12 +13,14 @@ test("browser relay requires a private key and delegates to the desktop, not a s
   const reportsPath = join(directory, "issues.jsonl");
   const key = "this-is-a-test-only-key-with-at-least-32-characters";
   const published = [];
-  let checkCalls=0,applyCalls=0;
+  let checkCalls=0,applyCalls=0,restartCalls=0;
   const updater={
     status:async()=>({available:true,phase:"ready",branch:"feature/p0-brain-evaluation-harness",
-      current:"abc123456789",remote:"def123456789",commits:2,mode:"relay-only"}),
+      current:"abc123456789",remote:"def123456789",commits:2,
+      mode:"desktop-and-relay",desktopState:"offline",desktopConnected:false}),
     check:async()=>{checkCalls++;return {accepted:true}},
-    apply:async()=>{applyCalls++;return {accepted:true}}
+    apply:async()=>{applyCalls++;return {accepted:true}},
+    restartDesktop:async()=>{restartCalls++;return {accepted:true}}
   };
   const bridge = createBridge({ key, reportsPath, updater, issuePublisher: async issue => {
     published.push(issue);
@@ -72,6 +74,8 @@ test("browser relay requires a private key and delegates to the desktop, not a s
     "Server replaces both version/revision placeholders at runtime");
   assert.match(mainView, /class="remote-build"[^>]*aria-label="Browser relay version/);
   assert.match(settingsView, /role="dialog" aria-modal="true"/);
+  assert.match(settingsView,/id="devRestartDesktop"/);
+  assert.match(html,/devUpdateAction\("restart-desktop"\)/);
   for (const control of ["conversationSelect", "newChat", "modelSelect",
     "refreshModels", "enlargeAvatar", "lock", "report", "showModelName",
     "showAvatarLabel","brainLabMode","brainLabStatusFilter","brainLabRows",
@@ -107,10 +111,22 @@ test("browser relay requires a private key and delegates to the desktop, not a s
   assert.equal((await request(base + "/api/dev-update","POST",
     {...authorized,"Content-Type":"application/json"},{action:"apply"})).status,202);
   assert.equal(applyCalls,1);
+  assert.equal((await request(base + "/api/dev-update","POST",
+    {...authorized,"Content-Type":"application/json"},{action:"restart-desktop"})).status,202);
+  assert.equal(restartCalls,1);
+  assert.equal((await request(base + "/api/dev-update","POST",
+    {"Content-Type":"application/json"},{action:"restart-desktop"})).status,401);
 
   assert.equal((await request(base + "/api/send", "POST", {...authorized,"Content-Type":"application/json"}, {text:"hi"})).status, 409);
 
   assert.equal((await request(agent + "/agent/next", "GET", {"X-Mikan-Agent":"desktop", Origin:"https://evil.example"})).status, 403);
+  // A supervisor probe must NOT make a missing desktop appear connected.
+  assert.equal((await request(agent + "/agent/health","GET")).status,403);
+  const offlineProbe=await request(agent + "/agent/health","GET",{"X-Mikan-Agent":"desktop"});
+  assert.equal(offlineProbe.status,200);
+  assert.equal((await offlineProbe.json()).connected,false);
+  const probeAgain=await request(agent + "/agent/health","GET",{"X-Mikan-Agent":"desktop"});
+  assert.equal((await probeAgain.json()).connected,false);
   assert.equal((await request(agent + "/agent/next", "GET", {"X-Mikan-Agent":"desktop"})).status, 200);
   const history = [{id:"one",role:"user",content:"Hello from the desktop",createdAt:100}];
   assert.equal((await request(agent + "/agent/state", "POST", desktopHeaders, {
