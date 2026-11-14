@@ -211,7 +211,7 @@ export const EVAL_SCENARIOS:ReadonlyArray<EvalScenario>=[
 
 export function sameMeaning(haystack:string,needle:string):boolean {
   const normalize=(text:string)=>text.toLocaleLowerCase().normalize("NFKC")
-    .replace(/[^\\p{L}\\p{N}]+/gu," ").trim().replace(/\\s+/g," ");
+    .replace(/[^\p{L}\p{N}]+/gu," ").trim().replace(/\s+/g," ");
   return normalize(haystack).includes(normalize(needle));
 }
 export function scoreAnswer(answer:string, expected:EvalExpectation):string[] {
@@ -252,7 +252,7 @@ export async function runBrainEvaluation(options:EvalOptions):Promise<EvalReport
       const webPolicy=planDesktopWebExecution({
         question:step.user,autoSearch:true,provider:"local",planMode:decision.plan.mode,
         notion:false,personalTurn:false,capabilityQuestion:decision.capabilityQuestion,
-        existingSearch:false,attachment:false,screenshot:false,liveFrame:false,roleplay:scenario.group==="Roleplay"
+        existingSearch:false,attachment:false,screenshot:false,liveFrame:false,roleplay:scenario.id==="search-in-roleplay"
       });
       const lexicalIds=rankMemories([...EVAL_FACTS],step.user).slice(0,30).map(f=>f.id);
       // No fabricated vector scores. The fixture tests the actual lexical/fusion fallback
@@ -346,7 +346,7 @@ export function brainEvalMarkdown(report:EvalReport):string {
           "; missed "+(s.missingMemoryIds.join(", ")||"none")+
           "; unexpected "+(s.unexpectedMemoryIds.join(", ")||"none"),
         "- Time: "+s.elapsedMs+" ms");
-      if(s.answer!==undefined)lines.push("- Response: "+s.answer.replace(/\\s+/g," ").slice(0,800));
+      if(s.answer!==undefined)lines.push("- Response: "+s.answer.replace(/\s+/g," ").slice(0,800));
       if(s.error)lines.push("- Error: "+s.error);
       if(s.answerFailures.length)lines.push("- Checks: "+s.answerFailures.join("; "));
       lines.push("");
