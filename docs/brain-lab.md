@@ -27,11 +27,28 @@ still decides whether a public search improves the answer; the existing
 query validator still rejects personal pronouns, private names, contact
 details and URLs before anything is sent to a public service.
 
-`ownerDisclosure` now allows *eligible* short preference refinements of
-recent discovery requests to reach that local planner. This never overrides
-Notion, personal memory, roleplay, attachment, screenshot or explicit
-automatic-web-disabled restrictions. No topic-specific band/anime/game
-switches were added.
+**Nov 14 semantic routing refactor:** `src/turn-execution-policy.ts` no
+longer classifies phrases as "personal disclosure", "discovery need",
+"just venting", or "small talk" with regexes to block planning. Any ordinary
+chat turn may now reach the local semantic web planner, including greetings,
+offhand remarks, implicit recommendations, and follow-up constraints. The model
+must decide whether to search, while the current message and ongoing task
+remain explicit in its prompt. This intentionally adds a local planning call
+for some short conversational turns; benchmark latency before optimizing.
+
+**Hard safety boundaries remain code-owned:** web disabled in Settings,
+selected private Notion/personal-memory/capability routes, roleplay, approved
+attachments/screenshots/live frames, and already-provided search evidence.
+Cloud providers do not get optional arbitrary-chat web tools before the
+locally validated public search decision; direct research routes remain
+available. The final search query must still pass privacy and syntax
+validation before any outbound request. These are permission and data-safety
+checks, not attempts to recognize English-language intent.
+
+No specific band/anime/game phrase or venting regex was added to production
+routing. This first pass does **not** remove the separate legacy heuristics
+in initial research routing and deterministic memory recall. Those remain
+areas for follow-up investigation.
 
 **To verify:** In the browser or desktop Brain Lab, run **Live · 1×** on
 **#57 (band discovery)**, **#58 (chat, no search)**,
@@ -196,10 +213,11 @@ Older run details can still be opened from saved Windows JSON/Markdown files.
 - Song, track and album remain useful searchable *domains* in lexical
   retrieval; previously they were removed as stopwords, leaving some direct
   favorite-song questions with no useful matching terms.
-- First-person statements expressing an *unmet discovery need* may reach
-  the existing local web planner across topics (music, books, games, anime,
-  software). Merely enjoying an artist or a book still stays local.
-  Allowing a planning decision does **not** execute a web search.
+- Initial experiments allowed only regex-recognized *unmet discovery needs*
+  to reach the local planner. That intermediary gate has since been removed:
+  the local model now determines whether a conversational turn requests
+  discovery or is simply a personal observation. Eligibility to plan is
+  not authorization to execute a public search.
 
 These checks are synthetic and do not verify production Qdrant, Notion,
 GitHub, or live SearXNG execution end to end.
@@ -260,6 +278,14 @@ npm run test:brain
 
 These verify the catalog shape, independent branches, summary report, cancellation,
 and the scoring helpers. They do **not** contact Ollama or build an installer.
+
+**Readable report filenames:** Auto-saved Windows JSON/Markdown and remote
+download files now share a metadata-derived name, for example
+`mikan-brain_2026-11-14_203931Z_live_qwen3.5-9b_s05_r1_of3xx.json`
+and the matching `.md`. This is UTC start time, mode, model, selected
+scenario count, repetitions and a short unique run suffix. Conversation
+content, owner details and file paths never appear in these names.
+Reports keep the original `runId` in JSON for exact correlation.
 
 ## Adding regression cases
 
