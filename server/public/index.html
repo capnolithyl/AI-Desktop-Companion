@@ -428,7 +428,7 @@
       });
       var text = document.createElement("span");
       var title = document.createElement("strong");
-      title.textContent = item.label;
+      title.textContent = (item.number ? "#"+String(item.number).padStart(2,"0")+" · " : "")+item.label;
       var details = document.createElement("small");
       var state = brainLabStatusFor(item);
       details.textContent = item.group + " · " + item.turns + " turns" +
@@ -530,7 +530,7 @@
     else if (phase === "complete" || phase === "stopped" || phase === "failed") {
       lines.push(phase.toUpperCase() + (run.finishedAt?" · "+run.finishedAt:""));
       if (run.results) lines.push("Automated checks: " + run.results.passRate +
-        "% · Memory: " + run.results.recall + "% · Web: " + run.results.webAgreement +
+        "% · Memory fact coverage: " + run.results.recall + "% · Web: " + run.results.webAgreement +
         "% · Human reviews: " + run.results.reviewTurns);
       if (run.savedFolder) lines.push("Detailed JSON + Markdown auto-saved on desktop.");
     } else lines.push("Ready for a manually started test run.");
