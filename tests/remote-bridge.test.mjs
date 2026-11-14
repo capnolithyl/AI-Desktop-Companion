@@ -59,6 +59,17 @@ test("browser relay requires a private key and delegates to the desktop, not a s
     ?.split('<div id="reportPanel" role="dialog"')[0];
   assert.ok(mainView && settingsView, "Remote app and settings drawer exist");
   assert.match(mainView, /id="menuToggle"[^>]+aria-controls="settingsSheet"/);
+  // The phone must show the *serving relay's* version next to the hamburger,
+  // not a fixed label that would conceal an outdated server after an update.
+  const expectedVersion = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")).version;
+  assert.ok(mainView.includes('id="remoteBuild"'), "Relay version badge exists in the header");
+  assert.ok(mainView.indexOf('id="remoteBuild"') < mainView.indexOf('id="menuToggle"'),
+    "Version is immediately before the hamburger menu");
+  assert.ok(mainView.includes("<span>v" + expectedVersion + "</span>"),
+    "Version comes from package.json, not an old hardcoded number");
+  assert.doesNotMatch(mainView, /__MIKAN_REMOTE_(?:VERSION|COMMIT)__/,
+    "Server replaces both version/revision placeholders at runtime");
+  assert.match(mainView, /class="remote-build"[^>]*aria-label="Browser relay version/);
   assert.match(settingsView, /role="dialog" aria-modal="true"/);
   for (const control of ["conversationSelect", "newChat", "modelSelect",
     "refreshModels", "enlargeAvatar", "lock", "report", "showModelName",
