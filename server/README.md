@@ -66,6 +66,15 @@ The hamburger menu is a browser-relay-only update: once the desktop is
 already at v0.9.7 or newer, a git pull and Node relay restart are sufficient.
 It does not require reinstalling Mikan or changing Tailscale configuration.
 
+## Locating and reviewing numbered scenarios
+
+Every test displays a global catalog number (#01–#73) regardless of active
+filters. The underlying scenario ID stays the same so status history survives.
+For the latest completed run, choose **Inspect** beside a failed or review
+scenario to see user turns, Mikan's actual responses, conversation review
+goals, planned web decisions, and missing fact evidence on your phone.
+Historical runs remain in the saved Windows JSON/Markdown report files.
+
 ## Selective tests and historical statuses
 
 Each Brain Lab scenario has a checkbox and one of these states:
