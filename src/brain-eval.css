@@ -1,0 +1,196 @@
+/* Isolated brain-evaluation Settings workspace. Uses Mikan's existing tokens. */
+.brain-eval-panel{display:flex;flex-direction:column;gap:14px;min-width:0;padding-bottom:16px}
+.brain-eval-panel .settings-note{line-height:1.55}
+.brain-eval-toolbar{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.brain-eval-toolbar label{display:flex;flex-direction:column;gap:6px;min-width:0;font-size:12px;color:#dfcbd4}
+.brain-eval-toolbar select{min-width:0;width:100%;border:1px solid #785969;background:#271f2b;color:#fff0f4;border-radius:9px;padding:9px}
+.brain-eval-actions{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.brain-eval-actions button{display:flex;gap:6px;align-items:center}
+.brain-eval-subtitle,.brain-eval-message{font-size:12px;line-height:1.45;overflow-wrap:anywhere;color:#cbbbc7}
+.brain-eval-message{padding:8px 10px;background:#382e3a;border-radius:8px}
+.brain-eval-progress{display:grid;gap:7px;font-size:12px}
+.brain-eval-progress progress{width:100%;accent-color:#f5b18f}
+.brain-eval-metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px}
+.brain-eval-metric{padding:10px;border:1px solid #654d60;border-radius:10px;background:#2a222d;display:flex;gap:4px;flex-direction:column}
+.brain-eval-metric>span{font-size:11px;color:#cbbbc7}
+.brain-eval-metric>strong{font-size:21px;line-height:1.2;color:#fff0e7;font-variant-numeric:tabular-nums}
+.brain-eval-metric>small{font-size:10px;color:#bba7b5}
+.brain-eval-groups{display:grid;gap:8px}
+.brain-eval-group{display:grid;grid-template-columns:minmax(90px,1fr) minmax(60px,2fr) 52px;gap:9px;align-items:center;font-size:12px}
+.brain-eval-group strong{text-align:right;font-variant-numeric:tabular-nums}
+.brain-eval-bar{height:7px;background:#433540;border-radius:50px;overflow:hidden}
+.brain-eval-bar span{display:block;height:100%;background:#d39b7b;border-radius:50px}
+.brain-eval-traces{display:grid;gap:6px}
+.brain-eval-traces details.service-panel{margin:0;display:block;min-width:0}
+.brain-eval-summary{display:flex;gap:8px;align-items:center;cursor:pointer}
+.brain-eval-summary strong{flex:1;font-size:12px}
+.brain-eval-summary span{font-size:11px;color:#c5b2bf;font-variant-numeric:tabular-nums}
+.brain-eval-step{border-top:1px solid #594656;padding:9px 0;display:grid;gap:5px;font-size:12px}
+.brain-eval-step>div:first-child{display:flex;align-items:flex-start;justify-content:space-between;gap:8px}
+.brain-eval-step>div:first-child strong{font-size:12px}
+.brain-eval-step small{font-size:11px;color:#cbbac6;display:block;overflow-wrap:anywhere}
+.brain-eval-ok{color:#9cdbb1}.brain-eval-bad{color:#ffbaa9}
+.brain-eval-answer{padding:7px;background:#201921;border-radius:7px;white-space:pre-wrap;overflow-wrap:anywhere;margin:2px 0}
+.brain-eval-history{padding:6px 0;display:flex;gap:10px;justify-content:space-between;font-size:11px}
+.brain-eval-history strong{font-variant-numeric:tabular-nums}
+@media(max-width:550px){.brain-eval-toolbar{grid-template-columns:1fr}.brain-eval-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+/* Semantic dialogue checks remain explicitly ungraded until a person reviews them. */
+.brain-eval-review{color:#eed1a0}
+.brain-eval-step small.brain-eval-goal{color:#f5cfb4;font-weight:600;line-height:1.5}
+
+/* Per-scenario selective reruns and retained status. */
+.brain-eval-status-summary,.brain-eval-select-actions{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.brain-eval-select-actions button,.brain-eval-review-actions button{padding:6px 9px;border:1px solid #795869;background:#453444;color:#ffe8e9;border-radius:7px;font-size:11px}
+.brain-eval-select-actions button:disabled,.brain-eval-review-actions button:disabled{opacity:.45}
+.brain-eval-catalog{display:grid;grid-template-columns:minmax(0,1fr);align-content:start;gap:5px;padding:6px;border:1px solid #654d60;border-radius:10px;background:#221c27;min-width:0}
+.brain-eval-test-row{display:flex;align-items:center;flex-wrap:wrap;gap:7px;padding:7px 9px;border-radius:7px;background:#352937}
+.brain-eval-test-row>label{display:flex;align-items:center;gap:8px;flex:1 1 160px;min-width:0;cursor:pointer}
+.brain-eval-test-row input[type="checkbox"]{accent-color:#f5b18f;flex-shrink:0;width:16px;height:16px}
+.brain-eval-test-row label span{min-width:0;overflow-wrap:anywhere;font-size:12px}
+.brain-eval-test-row label strong{display:block;font-weight:600}
+.brain-eval-test-row label small{display:block;color:#cdbac8;font-size:10px;margin-top:2px}
+.brain-eval-status{font-size:10px;font-weight:700;border-radius:6px;padding:4px 7px;text-transform:uppercase;letter-spacing:.25px;background:#49394a;color:#ded1de;white-space:nowrap}
+.brain-eval-status.passed{background:#284b3d;color:#b1edd0}
+.brain-eval-status.failed{background:#613840;color:#ffd0ca}
+.brain-eval-status.review{background:#574428;color:#ffdaa1}
+.brain-eval-status.stale{background:#3d4062;color:#cad5ff}
+.brain-eval-status.incomplete{background:#563c53;color:#f6c6ea}
+.brain-eval-status.untested{background:#403d44;color:#d0c9d0}
+.brain-eval-review-actions{display:flex;gap:5px}
+@media(max-width:550px){.brain-eval-test-row{align-items:flex-start}.brain-eval-review-actions{width:100%}}
+
+/* A single vertical scrolling surface is owned by .settings-brain in
+   styles.css. Nested scrollbars had made the list almost inaccessible. */
+.brain-eval-panel{
+  gap:12px;
+  min-width:0;
+  width:100%;
+  padding-bottom:28px;
+}
+.brain-eval-panel .settings-note{display:block}
+.brain-eval-explainer{
+  border:1px solid #634c5d;
+  border-radius:10px;
+  background:#352b39;
+  color:#d5c4ce;
+  font-size:12px;
+  line-height:1.55;
+  padding:10px 12px;
+}
+.brain-eval-explainer summary{
+  display:flex;
+  flex-wrap:wrap;
+  gap:5px 9px;
+  justify-content:space-between;
+  cursor:pointer;
+  font-weight:700;
+  color:#ffdecb;
+  line-height:1.5;
+}
+.brain-eval-explainer summary::before{
+  content:"▸";
+  color:#ffbd91;
+  flex:0 0 auto;
+}
+.brain-eval-explainer[open] summary::before{content:"▾"}
+.brain-eval-explainer summary span{
+  font-size:11px;
+  font-weight:400;
+  color:#c9b3c1;
+}
+.brain-eval-explainer p{margin:9px 0 0;line-height:1.6}
+.brain-eval-explainer strong{color:#ffe0c8}
+.brain-eval-find{grid-column:1/-1}
+.brain-eval-find input{
+  min-width:0;
+  width:100%;
+  border:1px solid #785969;
+  background:#271f2b;
+  color:#fff0f4;
+  border-radius:9px;
+  padding:10px 11px;
+  font:inherit;
+  font-size:12px;
+}
+.brain-eval-find input::placeholder{color:#bea9b8}
+.brain-eval-find input:focus-visible,
+.brain-eval-toolbar select:focus-visible,
+.brain-eval-catalog input:focus-visible,
+.brain-eval-panel button:focus-visible{
+  outline:2px solid #ffc99f;
+  outline-offset:2px;
+}
+.brain-eval-muted-note{
+  margin:0;
+  font-size:11px;
+  line-height:1.5;
+  color:#beacb9;
+}
+.brain-eval-catalog-header{
+  display:flex;
+  gap:10px;
+  flex-wrap:wrap;
+  align-items:baseline;
+  justify-content:space-between;
+  font-size:12px;
+  color:#ffe0cb;
+}
+.brain-eval-catalog-header span{color:#d1bbc9;font-size:11px}
+.brain-eval-actionbar{
+  position:sticky;
+  top:0;
+  z-index:3;
+  background:#2b2230;
+  border:1px solid #695065;
+  box-shadow:0 5px 15px #130d1899;
+  border-radius:11px;
+  padding:9px;
+  margin:0 -2px;
+}
+.brain-eval-actionbar .save-button{
+  justify-content:center;
+  flex:1 1 auto;
+  min-width:190px;
+  text-align:center;
+}
+.brain-eval-test-row{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) auto;
+  column-gap:10px;
+  row-gap:7px;
+  padding:10px;
+  align-items:center;
+}
+.brain-eval-test-row>label{
+  display:flex;
+  flex:initial;
+  min-width:0;
+  align-items:flex-start;
+}
+.brain-eval-test-row label strong{
+  font-size:12px;
+  line-height:1.4;
+  color:#ffe8dc;
+}
+.brain-eval-test-row label small{
+  margin-top:3px;
+  font-size:11px;
+  line-height:1.4;
+}
+.brain-eval-test-row>.brain-eval-status{
+  justify-self:end;
+  align-self:start;
+}
+.brain-eval-review-actions{
+  grid-column:1/-1;
+  justify-self:end;
+}
+.brain-eval-traces,.brain-eval-metrics{min-width:0}
+.brain-eval-step>div:first-child{flex-wrap:wrap}
+.brain-eval-summary{flex-wrap:wrap;min-width:0}
+.brain-eval-summary strong{min-width:140px}
+@media(max-width:760px){
+  .brain-eval-toolbar{grid-template-columns:1fr}
+  .brain-eval-actionbar .save-button{width:100%}
+}

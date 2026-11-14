@@ -21,6 +21,7 @@ import { fileURLToPath } from "node:url";
 import {
   createLocalReport, safeReportDiagnostics, publicIssuePreview, publishGitHubIssue
 } from "./reporting.mjs";
+import { createDevSupervisorClient } from "./dev-supervisor-client.mjs";
 
 export const PUBLIC_PORT = 3847;
 export const AGENT_PORT = 3848;
@@ -121,11 +122,60 @@ const safeMessages = (messages) =>
         }))
     : [];
 
+// Only expose small, well-typed evaluation metadata to the authenticated browser.
+// The full synthetic report is never bundled into regular /api/state polling.
+const safeEvalCatalog = entries => Array.isArray(entries)
+  ? entries.slice(0, 180).filter(item =>
+      item && typeof item.id === "string" && /^[a-z0-9-]{1,90}$/.test(item.id))
+    .map(item => ({
+      id: item.id,
+      label: String(item.label || "").slice(0, 110),
+      number: Number.isSafeInteger(item.number) && item.number>=1 && item.number<=180 ? item.number : null,
+      group: String(item.group || "").slice(0, 80),
+      turns: Number.isSafeInteger(item.turns) ? Math.min(12, Math.max(1, item.turns)) : 1,
+      states: Object.fromEntries(["routing","live"].map(mode => {
+        const entry=item.states?.[mode];
+        const allowed=["passed","failed","review","stale","incomplete","untested"];
+        return [mode,{
+          status: allowed.includes(entry?.status) ? entry.status : "untested",
+          previous: allowed.includes(entry?.previous) ? entry.previous : null,
+          at: typeof entry?.at==="string" ? entry.at.slice(0,40) : null
+        }];
+      }))
+    }))
+  : [];
+const safeEvalStatus = value => {
+  if (!value || typeof value !== "object") return null;
+  const phases = ["idle","running","complete","stopped","failed"];
+  const finite = n => typeof n === "number" && Number.isFinite(n) ? n : null;
+  const results = value.results && typeof value.results === "object" ?
+    Object.fromEntries([
+      "cases","turns","passed","passRate","verifiedPassed","verifiedPassRate","unverifiedTurns","routes","recall","webChecks",
+      "webUnobserved","webAgreement","unnecessaryWeb","missedWeb",
+      "tokensPerSecond","answers","answerChecks","reviewTurns","elapsedMs"
+    ].map(name => [name,finite(value.results[name])])) : null;
+  return {
+    phase: phases.includes(value.phase) ? value.phase : "idle",
+    runId: typeof value.runId === "string" ? value.runId.slice(0, 100) : null,
+    mode: ["routing","live"].includes(value.mode) ? value.mode : null,
+    model: typeof value.model === "string" ? value.model.slice(0, 120) : null,
+    startedAt: typeof value.startedAt === "string" ? value.startedAt.slice(0, 35) : null,
+    finishedAt: typeof value.finishedAt === "string" ? value.finishedAt.slice(0, 35) : null,
+    done: Math.max(0,finite(value.done)??0),
+    total: Math.max(0,finite(value.total)??0),
+    label: String(value.label||"").slice(0, 160),
+    error: typeof value.error === "string" ? value.error.slice(0, 300) : null,
+    savedFolder: value.savedFolder ? "Saved on desktop" : null,
+    results
+  };
+};
+
 export function createBridge({
   key,
   reportsPath = REPORTS_PATH,
   publicHost = "marcus-vostro.tailc46461.ts.net",
   issuePublisher = publishGitHubIssue,
+  updater = createDevSupervisorClient(),
 } = {}) {
   if (typeof key !== "string" || key.length < 32)
     throw new Error("A 32+ character remote key is required");
@@ -134,7 +184,8 @@ export function createBridge({
     messages: [], conversations: [], avatar: null,
     provider: "local", models: [], openrouterModel: "", geminiModel: "",
     modelStatus: null, controlsBlocked: true,
-    reportDiagnostics: null
+    reportDiagnostics: null,
+    brainEval: null,brainEvalCatalog: []
   };
   let customRig = null;
   let customRigId = null;
@@ -142,6 +193,7 @@ export function createBridge({
   let pending = null;
   let issuePreview = null;
   let lastIssueAttempt = 0;
+  let latestEvalReport = null;
   const isAuthorized = (request) => {
     const auth = request.headers.authorization || "";
     return auth.startsWith("Bearer ") && sameSecret(auth.slice(7), key);
@@ -150,6 +202,8 @@ export function createBridge({
     ...desktop,
     connected: Date.now() - agentSeen < 8000,
     queued: !!pending,
+    reportAvailable: !!latestEvalReport,
+    reportRunId: latestEvalReport?.runId ?? null
   });
 
   const publicServer = createServer(async (request, response) => {
@@ -198,6 +252,27 @@ export function createBridge({
         fail(response, 401, "Enter your Mikan remote key");
       } else if (request.method === "GET" && url.pathname === "/api/state") {
         json(response, 200, state());
+      } else if (request.method === "GET" && url.pathname === "/api/dev-update") {
+        if (!updater)
+          return json(response,200,{available:false,
+            reason:"Updater is not running. On Windows, stop npm run server and start npm run remote:dev."});
+        try {json(response,200,await updater.status())}
+        catch {json(response,200,{available:false,reason:"Local development supervisor is offline."})}
+      } else if (request.method === "POST" && url.pathname === "/api/dev-update") {
+        if (!updater)return fail(response,409,
+          "Start the managed development relay with npm run remote:dev on Windows");
+        const body=await readJson(request,250);
+        if (body.action!=="check" && body.action!=="apply")
+          return fail(response,400,"Only check and apply are allowed");
+        if (body.action==="apply" && (
+          pending || desktop.busy || desktop.brainEval?.phase==="running"
+        ))return fail(response,409,"Finish the active chat or Brain Lab run before updating");
+        try{
+          const result=body.action==="check"?await updater.check():await updater.apply();
+          json(response,202,result);
+        }catch(error){
+          fail(response,409,String(error?.message||"Supervisor refused the operation").slice(0,250));
+        }
       } else if (request.method === "GET" && url.pathname === "/api/avatar/model") {
         const avatar = desktop.avatar;
         if (!avatar) return fail(response, 404, "Avatar not available");
@@ -218,6 +293,71 @@ export function createBridge({
           "X-Content-Type-Options": "nosniff"
         });
         response.end(bytes);
+      } else if (request.method === "POST" && url.pathname === "/api/brain-eval") {
+        const body = await readJson(request, 12_000);
+        if (body.action === "start") {
+          if (pending || desktop.busy || desktop.controlsBlocked ||
+            desktop.brainEval?.phase === "running" ||
+            Date.now() - agentSeen >= 8000)
+            return fail(response, 409, "Desktop is offline, busy, or already testing");
+          const mode = body.mode;
+          const repetitions = body.repetitions;
+          const ids = body.scenarioIds;
+          const allowedIds = new Set(desktop.brainEvalCatalog.map(item => item.id));
+          if (!["routing","live"].includes(mode) || ![1,2,3,5].includes(repetitions) ||
+            !Array.isArray(ids) || !ids.length || ids.length > allowedIds.size ||
+            ids.length !== new Set(ids).size || ids.some(id => !allowedIds.has(id)))
+            return fail(response, 400, "Choose a valid test mode, repetition count and scenario selection");
+          pending = {
+            id: randomBytes(12).toString("hex"),kind:"start_brain_eval",
+            evalOptions:{mode,repetitions,scenarioIds:ids}
+          };
+          json(response, 202, {id:pending.id,selected:ids.length});
+        } else if (body.action === "stop") {
+          if (pending?.kind === "start_brain_eval") {
+            pending = null;
+            return json(response, 200, {canceledQueued:true});
+          }
+          if (pending || desktop.brainEval?.phase !== "running" ||
+            Date.now() - agentSeen >= 8000)
+            return fail(response, 409, "No active Brain Lab run to stop");
+          pending = {id:randomBytes(12).toString("hex"),kind:"stop_brain_eval"};
+          json(response, 202, {id:pending.id});
+        } else if (body.action === "review") {
+          if (pending || desktop.brainEval?.phase === "running" || Date.now() - agentSeen >= 8000)
+            return fail(response, 409, "Brain Lab is running or desktop is offline");
+          const id=body.scenarioId;
+          const mode=body.mode;
+          const decision=body.decision;
+          const known=desktop.brainEvalCatalog.find(item=>item.id===id);
+          if (!known || !["live","routing"].includes(mode) ||
+              !["passed","failed"].includes(decision))
+            return fail(response, 400, "Unknown test or review decision");
+          if (known.states?.[mode]?.status!=="review")
+            return fail(response, 409, "The test must have a current pending review");
+          pending={
+            id:randomBytes(12).toString("hex"),kind:"review_brain_eval",
+            evalScenarioId:id,evalMode:mode,evalDecision:decision
+          };
+          json(response, 202, {id:pending.id});
+        } else fail(response, 400, "Unsupported Brain Lab action");
+      } else if (request.method === "GET" && url.pathname === "/api/brain-eval/result") {
+        if (!latestEvalReport) return fail(response, 404, "No completed test report available");
+        const format = url.searchParams.get("format");
+        if (!["json","markdown"].includes(format))
+          return fail(response, 400, "Choose json or markdown");
+        const data = format === "json"
+          ? JSON.stringify(latestEvalReport.report,null,2)
+          : latestEvalReport.markdown;
+        response.writeHead(200, {
+          "Content-Type": format === "json"
+            ? "application/json; charset=utf-8" : "text/markdown; charset=utf-8",
+          "Content-Disposition": 'attachment; filename="mikan-brain-eval-'+
+            latestEvalReport.runId+'.'+(format==="json"?"json":"md")+'"',
+          "Cache-Control":"no-store",
+          "X-Content-Type-Options":"nosniff"
+        });
+        response.end(data);
       } else if (request.method === "POST" && url.pathname === "/api/conversation") {
         if (pending || desktop.busy || Date.now() - agentSeen >= 8000)
           return fail(response, 409, "Mikan is offline or already busy");
@@ -254,7 +394,8 @@ export function createBridge({
         };
         json(response, 202, { id: pending.id });
       } else if (request.method === "POST" && url.pathname === "/api/send") {
-        if (pending || desktop.busy || Date.now() - agentSeen >= 8000) {
+        if (pending || desktop.busy || desktop.brainEval?.phase === "running" ||
+          Date.now() - agentSeen >= 8000) {
           return fail(
             response,
             409,
@@ -401,8 +542,22 @@ export function createBridge({
           conversations: safeConversations(body.conversations),
           avatar: safeAvatar(body.avatar),
           reportDiagnostics: safeReportDiagnostics(body.reportDiagnostics),
+          brainEval: safeEvalStatus(body.brainEval),
+          brainEvalCatalog: safeEvalCatalog(body.brainEvalCatalog)
         };
-        json(response, 200, { ok: true });
+        json(response, 200, {ok:true,reportId:latestEvalReport?.runId??null});
+      } else if (request.method === "POST" && url.pathname === "/agent/brain-eval/report") {
+        const body = await readJson(request, 8_000_000);
+        const source = body.report;
+        const markdown = body.markdown;
+        if (!source || source.version !== 1 || source.environment !== "isolated-synthetic" ||
+          source.liveWebEnabled !== false || source.writesToRealMemories !== false ||
+          typeof source.runId !== "string" || !/^eval-[a-zA-Z0-9-]{4,90}$/.test(source.runId) ||
+          !Array.isArray(source.cases) || source.cases.length > 400 ||
+          typeof markdown !== "string" || markdown.length > 2_000_000)
+          return fail(response, 400, "Not a valid synthetic Brain Lab report");
+        latestEvalReport={runId:source.runId,report:source,markdown};
+        json(response, 200, {ok:true,reportId:source.runId});
       } else if (request.method === "POST" && url.pathname === "/agent/avatar-rig") {
         const body = await readJson(request, 16_000_000);
         if (!desktop.avatar?.custom || body.id !== desktop.avatar.id ||

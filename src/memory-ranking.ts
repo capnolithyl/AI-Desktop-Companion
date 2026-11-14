@@ -17,8 +17,9 @@ const generic = new Set([
   "any","was","were","are","been","being","did","does","do","is","its",
   "just","got","get","say","said","let","lets","thinking","think",
   "something","things","kind","kinds","again","still","then","also",
-  "called","favorite","favourite","favorites","favourites","album","albums",
-  "song","songs","track","tracks","date"
+  // Artist/song/album/track are meaningful *domains*. Stopping them made
+  // "What's my favorite song?" entirely termless in lexical fallback.
+  "called","favorite","favourite","favorites","favourites","date"
 ]);
 
 /** Match whole normalized words, not substrings like any in Germany. */

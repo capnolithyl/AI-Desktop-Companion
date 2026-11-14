@@ -69,6 +69,45 @@
       font-size:13px; cursor:pointer; }
     .toggle-row input { width:20px; height:20px; accent-color:#ffad7e; flex-shrink:0; }
     .settings-error { min-height:1.3em; color:#ffb5bd; font-size:12px; }
+    #devUpdateStatus {white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.6;
+      background:#2d2431;border:1px solid #75576a;border-radius:9px;padding:10px;margin:10px 0;}
+    .brain-lab-controls { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin:10px 0; }
+    .brain-lab-controls label {display:flex;flex-direction:column;gap:6px;min-width:0;font-size:12px;}
+    .brain-lab-controls select {min-width:0;width:100%;border:1px solid #76556d;
+      background:#30232f;color:#fff3f9;padding:10px;border-radius:9px;}
+    .brain-lab-controls .full {grid-column:1/-1;}
+    .brain-lab-actions {display:flex;flex-wrap:wrap;gap:8px;margin-top:9px;}
+    .brain-lab-actions button {flex:1;min-width:100px;text-align:center;}
+    .brain-lab-quick{display:flex;flex-wrap:wrap;gap:5px;margin:8px 0;}
+    .brain-lab-quick button{background:#4a3748;color:#ffe6d9;border:1px solid #795869;
+      padding:6px 8px;border-radius:7px;font-size:11px;}
+    #brainLabPreview{margin-top:10px;padding:12px;border:1px solid #795869;
+      border-radius:10px;background:#241b29;font-size:12px;white-space:normal;overflow-wrap:anywhere;}
+    #brainLabPreview[hidden]{display:none;}
+    .brain-lab-turn{padding:9px 0;border-top:1px solid #61465b;display:grid;gap:5px;}
+    .brain-lab-turn pre{font:inherit;white-space:pre-wrap;overflow-wrap:anywhere;max-height:240px;
+      overflow-y:auto;border-radius:7px;background:#17141c;padding:9px;margin:0;}
+    .brain-lab-turn small{color:#e3c6b4;line-height:1.5;}
+    #brainLabRows{max-height:320px;overflow-y:auto;border:1px solid #795869;border-radius:10px;
+      padding:6px;background:#211a25;display:grid;gap:5px;}
+    .brain-lab-row{display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding:8px;
+      border-radius:8px;background:#362a3a;font-size:12px;}
+    .brain-lab-row label{flex:1 1 155px;display:flex;align-items:center;gap:8px;cursor:pointer;min-width:0;}
+    .brain-lab-row label input{width:17px;height:17px;accent-color:#ffad7e;flex-shrink:0;}
+    .brain-lab-row label span{overflow-wrap:anywhere;min-width:0;}
+    .brain-lab-row label small{display:block;font-size:10px;color:#c7afbf;margin-top:2px;}
+    .brain-lab-row .status{font-weight:700;font-size:10px;padding:4px 6px;border-radius:6px;
+      background:#514250;text-transform:uppercase;}
+    .brain-lab-row .status.passed{color:#adedd2;background:#285443}
+    .brain-lab-row .status.failed{color:#ffc3c0;background:#5a333d}
+    .brain-lab-row .status.stale{color:#cad6fc;background:#384363}
+    .brain-lab-row .status.review{color:#ffdda4;background:#59492e}
+    .brain-lab-row .review-buttons{display:flex;width:100%;gap:5px;justify-content:flex-end}
+    .brain-lab-row .review-buttons button{background:#4a3748;border:1px solid #795869;
+      border-radius:6px;padding:5px 9px;font-size:11px}
+    #brainLabProgress {display:block;width:100%;margin:10px 0;accent-color:#ffad7e;}
+    #brainLabStatus {white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px;line-height:1.55;color:#dfcbd7;}
+    @media(max-width:390px){.brain-lab-controls{grid-template-columns:1fr;}.brain-lab-controls .full{grid-column:1;}}
     @media (min-width:650px) { .settings-drawer { border-radius:18px 0 0 18px; } }
     #gate { display:flex; flex:1; align-items:center; justify-content:center; padding:20px; }
     #gate .panel { padding:25px; max-width:380px; width:100%; background:#302430; border:1px solid #684d60; border-radius:20px; }
@@ -175,8 +214,80 @@
       </label>
       <p class="settings-hint">These display preferences stay in this browser, not Mikan's memories.</p>
     </section>
+    <section class="settings-group" aria-labelledby="brainLabSectionTitle">
+      <h3 id="brainLabSectionTitle">Brain Lab · Overnight tests</h3>
+      <p class="settings-hint">Runs on your desktop, not your phone. You can close this page while Mikan tests. Keep your Windows PC, desktop Mikan, relay, and Ollama running.</p>
+      <div class="brain-lab-controls">
+        <label>Test mode
+          <select id="brainLabMode">
+            <option value="live">Live · local model</option>
+            <option value="routing">Fast · routing only</option>
+          </select>
+        </label>
+        <label>Repeat
+          <select id="brainLabRepeats">
+            <option value="1">1 ×</option>
+            <option value="2">2 ×</option>
+            <option value="3">3 ×</option>
+            <option value="5">5 ×</option>
+          </select>
+        </label>
+        <label class="full">Category
+          <select id="brainLabCategory"><option value="all">All categories</option></select>
+        </label>
+        <label class="full">Show status
+          <select id="brainLabStatusFilter">
+            <option value="all">All statuses</option>
+            <option value="failed">Failed</option>
+            <option value="review">Needs review</option>
+            <option value="stale">Stale / needs retesting</option>
+            <option value="untested">Never run</option>
+            <option value="incomplete">Incomplete</option>
+            <option value="passed">Passed</option>
+          </select>
+        </label>
+      </div>
+      <p id="brainLabCounts" class="settings-hint"></p>
+      <div class="brain-lab-quick">
+        <button id="brainLabSelectVisible" type="button">Select visible</button>
+        <button id="brainLabSelectUnresolved" type="button">Select unresolved</button>
+        <button id="brainLabSelectRegression" type="button">Passed sample</button>
+        <button id="brainLabSelectClear" type="button">Clear</button>
+      </div>
+      <div id="brainLabRows" role="group" aria-label="Choose individual scenarios"></div>
+      <section id="brainLabPreview" hidden aria-label="Brain Lab response review">
+        <div class="brain-lab-quick">
+          <strong id="brainLabPreviewTitle">Scenario trace</strong>
+          <button type="button" id="brainLabPreviewClose">Close trace</button>
+        </div>
+        <div id="brainLabPreviewTurns"></div>
+      </section>
+      <div class="brain-lab-actions">
+        <button id="brainLabStart" class="settings-action" type="button" disabled>Start test run</button>
+        <button id="brainLabStop" class="settings-action danger" type="button" disabled>Stop</button>
+      </div>
+      <progress id="brainLabProgress" value="0" max="1"></progress>
+      <div id="brainLabStatus" role="status" aria-live="polite">Waiting for desktop…</div>
+      <div class="brain-lab-actions">
+        <button id="brainLabJson" class="settings-action" type="button" disabled>Download JSON</button>
+        <button id="brainLabMarkdown" class="settings-action" type="button" disabled>Download Markdown</button>
+      </div>
+    </section>
+    <section class="settings-group" aria-labelledby="devUpdatesTitle">
+      <h3 id="devUpdatesTitle">Developer updates</h3>
+      <p class="settings-hint">Update the approved Git branch from your phone. Requires the local Windows supervisor, not just npm run server.</p>
+      <div id="devUpdateStatus" class="settings-hint" role="status" aria-live="polite">
+        Checking for supervised development mode…
+      </div>
+      <div class="brain-lab-actions">
+        <button id="devUpdateCheck" class="settings-action" type="button" disabled>Check GitHub</button>
+        <button id="devUpdateApply" class="settings-action" type="button" disabled>Update &amp; restart</button>
+      </div>
+      <p class="settings-hint">No shell commands or branch selectors are exposed here. Installed Mikan executables are not replaced by a Git pull.</p>
+    </section>
     <section class="settings-group" aria-labelledby="privacySectionTitle">
       <h3 id="privacySectionTitle">Privacy &amp; Feedback</h3>
+      <button id="copyDebugLog" class="settings-action" type="button">Copy conversation debug log</button>
       <button id="report" class="settings-action" type="button">Report an issue</button>
       <button id="lock" class="settings-action danger" type="button">Lock this browser</button>
     </section>
@@ -255,6 +366,43 @@
   var menuToggle = document.getElementById("menuToggle");
   var closeSettingsButton = document.getElementById("closeSettings");
   var settingsError = document.getElementById("settingsError");
+  var devUpdateStatus = document.getElementById("devUpdateStatus");
+  var devUpdateCheck = document.getElementById("devUpdateCheck");
+  var devUpdateApply = document.getElementById("devUpdateApply");
+  var devLast = null;
+  var devLastCheckedAt = 0;
+  var devRequesting = false;
+  var devReloadAfterUpdate = false;
+  var brainLabMode = document.getElementById("brainLabMode");
+  var brainLabRepeats = document.getElementById("brainLabRepeats");
+  var brainLabCategory = document.getElementById("brainLabCategory");
+  var brainLabStatusFilter = document.getElementById("brainLabStatusFilter");
+  var brainLabRows = document.getElementById("brainLabRows");
+  var brainLabPreview = document.getElementById("brainLabPreview");
+  var brainLabPreviewTitle = document.getElementById("brainLabPreviewTitle");
+  var brainLabPreviewTurns = document.getElementById("brainLabPreviewTurns");
+  document.getElementById("brainLabPreviewClose").addEventListener("click",function(){
+    brainLabPreview.hidden=true;
+    brainLabPreviewTurns.replaceChildren();
+  });
+  var brainLabCounts = document.getElementById("brainLabCounts");
+  var brainLabSelectVisible = document.getElementById("brainLabSelectVisible");
+  var brainLabSelectUnresolved = document.getElementById("brainLabSelectUnresolved");
+  var brainLabSelectRegression = document.getElementById("brainLabSelectRegression");
+  var brainLabSelectClear = document.getElementById("brainLabSelectClear");
+  var brainLabStart = document.getElementById("brainLabStart");
+  var brainLabStop = document.getElementById("brainLabStop");
+  var brainLabStatus = document.getElementById("brainLabStatus");
+  var brainLabProgress = document.getElementById("brainLabProgress");
+  var brainLabJson = document.getElementById("brainLabJson");
+  var brainLabMarkdown = document.getElementById("brainLabMarkdown");
+  var brainLabCatalogSignature = "";
+  var brainLabCatalog = [];
+  var brainLabSelectedIds = null;
+  var brainLabRowsSignature = "";
+  var brainLabSubmitting = false;
+  var brainLabLastDownloadedReport = null;
+  var brainLabLastDownloadedId = null;
   var avatarCaption = document.getElementById("avatarCaption");
   var showModelName = document.getElementById("showModelName");
   var showAvatarLabel = document.getElementById("showAvatarLabel");
@@ -273,11 +421,308 @@
     var routedModel = data.modelStatus && data.modelStatus.label
       ? data.modelStatus.label : (data.model || "local model");
     status.textContent = !data.connected ? "Desktop offline"
-      : (data.busy || data.queued ? "Thinking…"
-        : displaySettings.modelName ? "Online · " + routedModel : "Online");
+      : data.brainEval && data.brainEval.phase === "running"
+        ? "Brain Lab " + data.brainEval.done + "/" + data.brainEval.total
+        : (data.busy || data.queued ? "Thinking…"
+          : displaySettings.modelName ? "Online · " + routedModel : "Online");
     status.title = displaySettings.modelName
       ? (data.modelStatus && data.modelStatus.title || "") : "";
   }
+  function brainLabChosenIds() {
+    return brainLabCatalog.filter(function (item) {
+      return brainLabSelectedIds && brainLabSelectedIds.has(item.id);
+    }).map(function (item) { return item.id; });
+  }
+  function brainLabStatusFor(item) {
+    var entry = item.states && item.states[brainLabMode.value];
+    return entry || {status:"untested",previous:null,at:null};
+  }
+  function brainLabVisible() {
+    return brainLabCatalog.filter(function (item) {
+      return (brainLabCategory.value === "all" || item.group === brainLabCategory.value) &&
+        (brainLabStatusFilter.value === "all" ||
+          brainLabStatusFor(item).status === brainLabStatusFilter.value);
+    });
+  }
+  function selectBrainLab(ids) {
+    brainLabSelectedIds = new Set(ids);
+    brainLabRowsSignature = "";
+    if (current) renderBrainLab(current);
+  }
+  function renderBrainLabRows(running) {
+    var visible = brainLabVisible();
+    var signature = JSON.stringify(visible.map(function (item) {
+      return [item.id,brainLabStatusFor(item),brainLabSelectedIds?.has(item.id)];
+    })) + running;
+    if (signature === brainLabRowsSignature) return;
+    brainLabRowsSignature = signature;
+    brainLabRows.replaceChildren();
+    visible.forEach(function (item) {
+      var row = document.createElement("div");
+      row.className = "brain-lab-row";
+      var label = document.createElement("label");
+      var box = document.createElement("input");
+      box.type = "checkbox";
+      box.disabled = running;
+      box.checked = !!brainLabSelectedIds?.has(item.id);
+      box.addEventListener("change", function () {
+        if (box.checked) brainLabSelectedIds.add(item.id);
+        else brainLabSelectedIds.delete(item.id);
+        if (current) renderBrainLab(current);
+      });
+      var text = document.createElement("span");
+      var title = document.createElement("strong");
+      title.textContent = (item.number ? "#"+String(item.number).padStart(2,"0")+" · " : "")+item.label;
+      var details = document.createElement("small");
+      var state = brainLabStatusFor(item);
+      details.textContent = item.group + " · " + item.turns + " turns" +
+        (state.at ? " · " + new Date(state.at).toLocaleDateString() : "");
+      text.append(title,details);
+      label.append(box,text);
+      var badge = document.createElement("span");
+      badge.className = "status " + state.status;
+      badge.textContent = state.status === "stale" && state.previous
+        ? "stale (" + state.previous + ")" : state.status;
+      row.append(label,badge);
+      if ((state.status === "review" || state.status === "failed" ||
+          state.status === "incomplete") && current?.reportAvailable) {
+        var inspect = document.createElement("button");
+        inspect.type="button";
+        inspect.textContent="Inspect";
+        inspect.addEventListener("click",function(){
+          void inspectBrainLab(item.id,item.number,item.label);
+        });
+        row.append(inspect);
+      }
+      if (state.status === "review" && !running) {
+        var buttons = document.createElement("div");
+        buttons.className = "review-buttons";
+        [["Approve","passed"],["Fail","failed"]].forEach(function (choice) {
+          var button = document.createElement("button");
+          button.type = "button";
+          button.textContent = choice[0];
+          button.addEventListener("click",function () {
+            void sendBrainLabReview(item.id,choice[1]);
+          });
+          buttons.append(button);
+        });
+        row.append(buttons);
+      }
+      brainLabRows.append(row);
+    });
+    if (!visible.length) {
+      var empty = document.createElement("p");
+      empty.className = "settings-hint";
+      empty.textContent = "No scenarios match these filters.";
+      brainLabRows.append(empty);
+    }
+  }
+  async function inspectBrainLab(id,number,label){
+    brainLabPreview.hidden=false;
+    brainLabPreviewTitle.textContent=(number ? "#"+String(number).padStart(2,"0")+" · ":"")+label;
+    brainLabPreviewTurns.replaceChildren();
+    function line(value,cls){
+      var el=document.createElement(cls||"p");
+      el.textContent=value;
+      brainLabPreviewTurns.append(el);
+      return el;
+    }
+    try{
+      var reportId=current?.reportRunId;
+      if (!reportId) throw new Error("No completed report available yet");
+      if (brainLabLastDownloadedId!==reportId){
+        brainLabLastDownloadedReport=await api("/api/brain-eval/result?format=json");
+        brainLabLastDownloadedId=reportId;
+      }
+      var matching=(brainLabLastDownloadedReport?.cases||[]).filter(function(c){return c.id===id;});
+      if (!matching.length){
+        line("This scenario isn't included in the latest relay report. Download its earlier JSON/Markdown report from your PC to review it.");
+        return;
+      }
+      for(var run of matching){
+        line("Repeat "+run.repeat+" · "+(run.pass?"Automated checks OK":"Automated checks failed"),"h4");
+        for(var i=0;i<run.steps.length;i++){
+          var step=run.steps[i];
+          var section=document.createElement("section");
+          section.className="brain-lab-turn";
+          var user=document.createElement("strong");
+          user.textContent=(i+1)+". User: "+String(step.user||"");
+          section.append(user);
+          if(step.expected?.conversationGoal){
+            var goal=document.createElement("small");
+            goal.textContent="Review for: "+step.expected.conversationGoal;
+            section.append(goal);
+          }
+          var facts=document.createElement("small");
+          facts.textContent="Route: "+String(step.actualRoute)+
+            " | Planned public web: "+(step.plannedWeb===null?"unobserved":String(step.plannedWeb))+
+            " | Uncovered memory facts: "+(step.missingMemoryIds||[]).join(", ")+
+            " | Factual check: "+(step.answerPass===null?"not automatically graded":step.answerPass?"pass":"FAIL");
+          section.append(facts);
+          if(step.qualityFlags?.length){
+            var flags=document.createElement("small");
+            flags.textContent="Review warnings: "+step.qualityFlags.join("; ");
+            section.append(flags);
+          }
+          var answer=document.createElement("pre");
+          answer.textContent="Mikan: "+String(step.answer??"(No model answer in Fast mode)");
+          section.append(answer);
+          brainLabPreviewTurns.append(section);
+        }
+      }
+    }catch(error){line("Could not load trace: "+String(error))}
+  }
+  async function sendBrainLabReview(id,decision) {
+    if (brainLabSubmitting) return;
+    brainLabSubmitting = true;
+    try {
+      await api("/api/brain-eval",{
+        method:"POST",headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({action:"review",scenarioId:id,mode:brainLabMode.value,decision:decision})
+      });
+      brainLabStatus.textContent = "Review submitted. Waiting for desktop confirmation…";
+      await refresh();
+    } catch(error) { brainLabStatus.textContent = error.message; }
+    finally { brainLabSubmitting = false; if(current)renderBrainLab(current); }
+  }
+  function renderBrainLab(data) {
+    var catalog = Array.isArray(data.brainEvalCatalog) ? data.brainEvalCatalog : [];
+    var signature = JSON.stringify(catalog);
+    if (signature !== brainLabCatalogSignature) {
+      brainLabCatalogSignature = signature;
+      brainLabCatalog = catalog;
+      if (brainLabSelectedIds === null)
+        brainLabSelectedIds = new Set(catalog.map(function (item) { return item.id; }));
+      // Remove scenario IDs that no longer exist from the current suite.
+      var allowed = new Set(catalog.map(function (item) { return item.id; }));
+      brainLabSelectedIds = new Set([...brainLabSelectedIds].filter(function (id) {return allowed.has(id);}));
+      var category = brainLabCategory.value;
+      brainLabCategory.replaceChildren(new Option("All categories","all"));
+      var groupNames = [...new Set(catalog.map(function (item) { return item.group; }))].sort();
+      groupNames.forEach(function (group) { brainLabCategory.append(new Option(group,group)); });
+      brainLabCategory.value = groupNames.includes(category) ? category : "all";
+    }
+    var run = data.brainEval || {};
+    var phase = run.phase || "idle";
+    var running = phase === "running";
+    var available = !!data.connected && !data.busy && !data.queued &&
+      !data.controlsBlocked && !running && !brainLabSubmitting;
+    var chosen = brainLabChosenIds();
+    var chosenTurns = brainLabCatalog.filter(function (item) {
+      return brainLabSelectedIds?.has(item.id);
+    }).reduce(function (sum,item) { return sum + item.turns; },0);
+    brainLabStart.disabled = !available || chosen.length===0;
+    brainLabStart.textContent = "Start " + chosen.length + " selected scenarios (" +
+      (chosenTurns * Number(brainLabRepeats.value)) + " turns)";
+    brainLabStop.disabled = !data.connected || !running || brainLabSubmitting;
+    brainLabMode.disabled = running || brainLabSubmitting;
+    brainLabRepeats.disabled = running || brainLabSubmitting;
+    brainLabCategory.disabled = running || brainLabSubmitting;
+    brainLabStatusFilter.disabled = running || brainLabSubmitting;
+    for (var control of [brainLabSelectVisible,brainLabSelectUnresolved,brainLabSelectRegression,brainLabSelectClear])
+      control.disabled = running || brainLabSubmitting;
+    brainLabJson.disabled = !data.reportAvailable || brainLabSubmitting;
+    brainLabMarkdown.disabled = !data.reportAvailable || brainLabSubmitting;
+    brainLabProgress.max = Math.max(1,run.total||1);
+    brainLabProgress.value = Math.min(brainLabProgress.max,run.done||0);
+    var counts = {passed:0,failed:0,review:0,stale:0,untested:0,incomplete:0};
+    for (var item of brainLabCatalog) counts[brainLabStatusFor(item).status]++;
+    brainLabCounts.textContent = "Passed " + counts.passed + " · Failed " + counts.failed +
+      " · Review " + counts.review + " · Stale " + counts.stale +
+      " · Untested " + counts.untested + " · Incomplete " + counts.incomplete;
+    renderBrainLabRows(running);
+    var lines = [];
+    if (!data.connected) lines.push("Desktop offline. Start Mikan and the relay.");
+    else if (running) lines.push("Running on desktop · " + run.done + "/" +
+      run.total + " turns\n" + (run.label||"") +
+      "\nStarted: " + (run.startedAt||"unknown"));
+    else if (phase === "complete" || phase === "stopped" || phase === "failed") {
+      lines.push(phase.toUpperCase() + (run.finishedAt?" · "+run.finishedAt:""));
+      if (run.results) lines.push("No detected failures: " + run.results.passRate +
+        "% (may include unverified) · Verified: " + (run.results.verifiedPassRate??"n/a")+
+        "% · Memory fact coverage: " + run.results.recall + "% · Web: " + run.results.webAgreement +
+        "% · Pending reviews: " + run.results.reviewTurns);
+      if (run.savedFolder) lines.push("Detailed JSON + Markdown auto-saved on desktop.");
+    } else lines.push("Ready for a manually started test run.");
+    if (data.reportAvailable) lines.push("Latest downloadable report: "+data.reportRunId);
+    if (run.error) lines.push("Note: "+run.error);
+    brainLabStatus.textContent = lines.join("\n");
+  }
+  brainLabCategory.addEventListener("change",function(){if(current)renderBrainLab(current);});
+  brainLabStatusFilter.addEventListener("change",function(){if(current)renderBrainLab(current);});
+  brainLabMode.addEventListener("change",function(){if(current)renderBrainLab(current);});
+  brainLabRepeats.addEventListener("change",function(){if(current)renderBrainLab(current);});
+  brainLabSelectVisible.addEventListener("click",function(){
+    selectBrainLab(brainLabVisible().map(function (item) {return item.id;}));
+  });
+  brainLabSelectUnresolved.addEventListener("click",function(){
+    var unresolved = new Set(["failed","review","incomplete","untested","stale"]);
+    selectBrainLab(brainLabCatalog.filter(function (item) {
+      return unresolved.has(brainLabStatusFor(item).status);
+    }).map(function (item) {return item.id;}));
+  });
+  brainLabSelectRegression.addEventListener("click",function(){
+    var passed = brainLabCatalog.filter(function (item) {
+      return brainLabStatusFor(item).status === "passed";
+    });
+    selectBrainLab(passed.filter(function (_,i) {return i%7===0;}).map(function (item) {return item.id;}));
+  });
+  brainLabSelectClear.addEventListener("click",function(){selectBrainLab([]);});
+  brainLabStart.addEventListener("click", async function () {
+    if (!current || brainLabSubmitting) return;
+    brainLabSubmitting = true;
+    brainLabStart.disabled = true;
+    try {
+      await api("/api/brain-eval", {
+        method:"POST",headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({
+          action:"start",mode:brainLabMode.value,
+          repetitions:Number(brainLabRepeats.value),scenarioIds:brainLabChosenIds()
+        })
+      });
+      brainLabStatus.textContent = "Start requested. Mikan is accepting the desktop job…";
+      await refresh();
+    } catch(error) { brainLabStatus.textContent = error.message; }
+    finally { brainLabSubmitting = false; if(current) renderBrainLab(current); }
+  });
+  brainLabStop.addEventListener("click", async function () {
+    if (brainLabSubmitting) return;
+    brainLabSubmitting = true;
+    try {
+      await api("/api/brain-eval", {
+        method:"POST",headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({action:"stop"})
+      });
+      brainLabStatus.textContent = "Stop requested. Finishing the current operation…";
+      await refresh();
+    } catch(error) { brainLabStatus.textContent = error.message; }
+    finally { brainLabSubmitting = false; if(current) renderBrainLab(current); }
+  });
+  async function downloadBrainLab(format) {
+    if (!key) return;
+    try {
+      var response = await fetch("/api/brain-eval/result?format="+encodeURIComponent(format),{
+        headers:{Authorization:"Bearer "+key},cache:"no-store"
+      });
+      if (!response.ok) {
+        var body = await response.json();
+        throw new Error(body.error || "Report unavailable");
+      }
+      var blob = await response.blob();
+      var url = URL.createObjectURL(blob);
+      var anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = "mikan-brain-eval-"+(current?.reportRunId||"latest")+
+        (format==="json"?".json":".md");
+      document.body.append(anchor);
+      anchor.click();
+      anchor.remove();
+      setTimeout(function () { URL.revokeObjectURL(url); },1500);
+    } catch(error) { brainLabStatus.textContent = error.message; }
+  }
+  brainLabJson.addEventListener("click",function(){void downloadBrainLab("json");});
+  brainLabMarkdown.addEventListener("click",function(){void downloadBrainLab("markdown");});
+
   function applyDisplaySettings() {
     showModelName.checked = displaySettings.modelName;
     showAvatarLabel.checked = displaySettings.avatarLabels;
@@ -302,6 +747,7 @@
   function openSettings() {
     if (!key || !settingsSheet.hidden) return;
     settingsError.textContent = "";
+    void refreshDevUpdates();
     settingsSheet.hidden = false;
     document.body.classList.add("settings-open");
     menuToggle.setAttribute("aria-expanded", "true");
@@ -319,6 +765,77 @@
     app.style.display = yes ? "flex" : "none";
     if (!yes) { closeSettings(false); status.textContent = "Locked"; current = null; stopAvatar(); }
   }
+  async function refreshDevUpdates() {
+    if (!key || devRequesting || settingsSheet.hidden) return;
+    devLastCheckedAt = Date.now();
+    try {
+      devLast = await api("/api/dev-update");
+      var state = devLast;
+      if (!state.available) {
+        devUpdateStatus.textContent =
+          "Not enabled on this server. "+(state.reason||"Start with npm run remote:dev on the PC.");
+        devUpdateCheck.disabled = true;
+        devUpdateApply.disabled = true;
+        return;
+      }
+      var busy = ["checking","updating","restarting"].includes(state.phase);
+      var runningTests = current?.brainEval?.phase === "running";
+      devUpdateCheck.disabled = devRequesting || busy;
+      devUpdateApply.disabled = devRequesting || busy || runningTests || state.phase !== "ready";
+      var lines = [
+        "Branch: "+state.branch,
+        "Mode: "+(state.mode==="desktop-and-relay"?"Managed dev desktop + browser relay":"Browser relay only"),
+        "Local: "+(state.current||"unknown")+" · GitHub: "+(state.remote||"not checked"),
+        "Status: "+state.phase+" · "+(state.step||""),
+      ];
+      if(state.error)lines.push("Problem: "+state.error);
+      if(state.desktopNote)lines.push(state.desktopNote);
+      devUpdateStatus.textContent=lines.join("\n");
+      if(devReloadAfterUpdate && state.phase==="updated") {
+        devReloadAfterUpdate=false;
+        location.reload();
+      }
+    } catch(error) {
+      devUpdateStatus.textContent="Development supervisor could not be reached: "+error.message;
+      devUpdateCheck.disabled=true;
+      devUpdateApply.disabled=true;
+    }
+  }
+  async function devUpdateAction(action) {
+    if (devRequesting) return;
+    if (action==="apply") {
+      if (current?.brainEval?.phase === "running") {
+        devUpdateStatus.textContent="Stop Brain Lab before applying an update.";
+        return;
+      }
+      if (!devLast?.available || devLast.phase!=="ready") return;
+      var question="Update the pinned "+devLast.branch+" branch by "+
+        devLast.commits+" commit(s), run local tests, then restart "+
+        (devLast.mode==="desktop-and-relay"?"Mikan development desktop and browser relay":"the browser relay only")+
+        "? Your phone may disconnect briefly.";
+      if(!window.confirm(question))return;
+    }
+    devRequesting=true;
+    devUpdateCheck.disabled=true;
+    devUpdateApply.disabled=true;
+    try{
+      await api("/api/dev-update",{
+        method:"POST",headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({action:action})
+      });
+      if(action==="apply")devReloadAfterUpdate=true;
+      devUpdateStatus.textContent=action==="check"
+        ?"Checking the pinned GitHub branch…"
+        :"Updating. Keep this Windows PC awake; the browser will reconnect.";
+    }catch(error){devUpdateStatus.textContent="Update request failed: "+error.message}
+    finally{
+      devRequesting=false;
+      devLastCheckedAt=0;
+      void refreshDevUpdates();
+    }
+  }
+  devUpdateCheck.addEventListener("click",()=>{void devUpdateAction("check")});
+  devUpdateApply.addEventListener("click",()=>{void devUpdateAction("apply")});
   async function api(path, options) {
     var response = await fetch(path, Object.assign({}, options || {}, {
       cache:"no-store",
@@ -475,14 +992,18 @@
     updateStatus(data);
     renderChats(data);
     renderModels(data);
+    renderBrainLab(data);
     void syncAvatar(data);
-    send.disabled = !data.connected || data.busy || data.queued || inFlight || !message.value.trim();
+    send.disabled = !data.connected || data.busy || data.queued ||
+      data.brainEval?.phase==="running" || inFlight || !message.value.trim();
   }
   async function refresh() {
     if (!key) return;
     try {
       var data = await api("/api/state");
       render(data);
+      if(!settingsSheet.hidden && Date.now()-devLastCheckedAt>4000)
+        void refreshDevUpdates();
     } catch (e) {
       if (e.status === 401) {
         key = ""; sessionStorage.removeItem("mikan-remote-key"); showUnlocked(false);
@@ -602,7 +1123,8 @@
     document.getElementById("key").focus();
   });
   message.addEventListener("input", function () {
-    send.disabled = !current || !current.connected || current.busy || current.queued || inFlight || !message.value.trim();
+    send.disabled = !current || !current.connected || current.busy || current.queued ||
+      current.brainEval?.phase==="running" || inFlight || !message.value.trim();
   });
   message.addEventListener("keydown", function (event) {
     if (event.key === "Enter" && !event.shiftKey && !event.isComposing) {
@@ -638,6 +1160,34 @@
   }
   reportNote.addEventListener("input", resetIssueReview);
   reportDestination.addEventListener("change", resetIssueReview);
+  // Unlike the public GitHub issue preview, this stays entirely on the user's
+  // authenticated browser and includes recent chat text + relay-sanitized diagnostics.
+  document.getElementById("copyDebugLog").addEventListener("click", async function () {
+    if (!current) { settingsError.textContent = "Desktop diagnostics aren't connected yet."; return; }
+    var log = [
+      "MIKAN REMOTE DEBUG LOG",
+      "Exported: " + new Date().toISOString(),
+      "Conversation: " + (current.conversationId || "none"),
+      "Provider/model: " + (current.provider || "unknown") + " / " + (current.model || "unknown"),
+      "Desktop connected: " + !!current.connected,
+      "Note: Includes recent private chat messages. Review before sharing.",
+      "",
+      ...((current.messages || []).slice(-20).map(function (item) {
+        return "[" + new Date(item.createdAt || Date.now()).toISOString() + "] " +
+          (item.role || "?") + ": " + (item.content || "");
+      })),
+      "",
+      "SANITIZED DIAGNOSTICS (last 8 turns):",
+      JSON.stringify(current.reportDiagnostics || {warning:"No desktop diagnostics available"},null,2)
+    ].join("\n");
+    try {
+      await navigator.clipboard.writeText(log);
+      settingsError.textContent = "Copied conversation and desktop diagnostic summaries.";
+    } catch (e) {
+      settingsError.textContent = "Clipboard unavailable in this browser: " + e.message;
+    }
+  });
+
   document.getElementById("report").addEventListener("click", function () {
     closeSettings(false);
     reportStatus.replaceChildren();

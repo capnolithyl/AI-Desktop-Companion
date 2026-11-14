@@ -1256,3 +1256,33 @@ button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px
   .settings-layout .settings-tab { padding: 9px 6px; gap: 6px; font-size: 10px; }
   .settings-layout > .settings-body { padding: 16px 11px; }
 }
+
+/* Brain Lab uses one real, keyboard/wheel-scrollable page rather than the
+   memory/capabilities embedded-pane layout that clips its long catalog. */
+.settings-layout > .settings-body.settings-brain {
+  overflow-y: auto;
+  overflow-x: hidden;
+  min-height: 0;
+  min-width: 0;
+  overscroll-behavior-y: contain;
+  scrollbar-gutter: stable;
+}
+
+/* Brain Lab is a workspace, not a regular 2-field settings page.
+   Collapse the permanent Settings navigation to accessible icon buttons,
+   reclaiming ~110px for the results and checklists beside Mikan. */
+.settings-layout.brain-lab-layout .settings-tabs {
+  width: 56px;
+  min-width: 56px;
+  gap: 12px;
+  padding: 12px 5px;
+}
+.settings-layout.brain-lab-layout .settings-nav-group { gap: 3px; }
+.settings-layout.brain-lab-layout .settings-nav-heading { display: none; }
+.settings-layout.brain-lab-layout .settings-tab {
+  justify-content: center;
+  padding: 10px 5px;
+  min-height: 38px;
+}
+.settings-layout.brain-lab-layout .settings-tab span { display: none; }
+.settings-layout.brain-lab-layout .settings-tab svg { width: 17px; height: 17px; }

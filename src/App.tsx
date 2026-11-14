@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type CSSProperties, type MouseEvent as ReactMouseEvent } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { openUrl } from "@tauri-apps/plugin-opener";
@@ -50,6 +50,15 @@ import {
   type CharacterCategory, type CharacterFact, type InterestItem
 } from "./memory-client";
 import { MemoryPanel } from "./MemoryPanel";
+import { BrainEvalPanel } from "./BrainEvalPanel";
+import {
+  subscribeBrainEval, getBrainEvalStatus, getBrainEvalReport,
+  startBrainEvaluation, stopBrainEvaluation, reviewBrainEvalScenario,
+  getBrainEvalCaseRecords, brainEvalEnvironment, BRAIN_EVAL_BUILD,
+  type BrainEvalRequest
+} from "./brain-eval-manager";
+import { brainEvalMarkdown, EVAL_SCENARIOS } from "./brain-eval";
+import { statusForScenario } from "./brain-eval-status";
 import type { IncomingCanon, IncomingInterest } from "./interest-import";
 import type {ImportMemory,MemoryCategory} from "./memory-import";
 import { NotionPanel } from "./NotionPanel";
@@ -99,7 +108,7 @@ import {
 } from "./iki-wardrobe";
 
 type Screen = "compact" | "log" | "settings" | "search" | "page" | "help";
-type SettingsTab = "ai" | "internet" | "notion" | "voice" | "appearance" | "interface" | "personality" | "memory" | "capabilities";
+type SettingsTab = "ai" | "internet" | "notion" | "voice" | "appearance" | "interface" | "personality" | "memory" | "capabilities" | "brain";
 type VoiceHealth = { ready: boolean; modelLoaded: boolean; device: string | null };
 type VoiceReference = { configured: boolean; transcript: string | null; durationSeconds: number | null; fileName: string | null };
 type SearchService = { state: string; message: string };
@@ -234,6 +243,7 @@ function ReplyMetrics({ diagnostics }: { diagnostics?: Diagnostics }) {
 }
 
 export default function App() {
+  const brainEvalStatus = useSyncExternalStore(subscribeBrainEval, getBrainEvalStatus, getBrainEvalStatus);
   const [screen, setScreen] = useState<Screen>("compact");
   const [settings, setSettings] = useState<Settings>(loadSettings);
   const [draft, setDraft] = useState<Settings>(settings);
@@ -1881,6 +1891,10 @@ export default function App() {
   };
 
   const send = async (withSearch?: { query: string; results: WebResult[]; page?: PageDocument }, remoteText?: string) => {
+    if(getBrainEvalStatus().phase==="running"){
+      setFeedback("Brain Lab is running. Stop the evaluation before starting another chat.");
+      return;
+    }
     const attachment = withSearch || remoteText !== undefined ? null : pendingAttachment;
     const screenshot = withSearch || remoteText !== undefined || attachment ? null : pendingScreenshot;
     const text = remoteText !== undefined ? remoteText : withSearch ? withSearch.query
@@ -2701,17 +2715,31 @@ export default function App() {
   remoteRefreshModelsRef.current = () => refreshModels(settings.endpoint);
   // Custom outfits live in desktop IndexedDB. Only the selected file is
   // temporarily copied into the loopback relay's RAM for authenticated browsers.
+  const remoteStartBrainRef = useRef<(request:BrainEvalRequest)=>void>(()=>{});
+  remoteStartBrainRef.current = request => {
+    if (busy) throw new Error("Cannot start an evaluation while a chat reply is running");
+    startBrainEvaluation(settings,request);
+  };
+  const remoteStopBrainRef = useRef<()=>void>(()=>{});
+  remoteStopBrainRef.current = () => { stopBrainEvaluation(); };
+  const remoteReviewBrainRef = useRef<(id:string,mode:"routing"|"live",decision:"passed"|"failed")=>void>(()=>{});
+  remoteReviewBrainRef.current = (id,mode,decision) =>
+    reviewBrainEvalScenario(id,mode,settings.model,decision);
   const remoteRigRef = useRef<{id: string; revision: number; file: Blob} | null>(null);
   remoteRigRef.current = ikiRig?.file
     ? { id: ikiRig.id, revision: ikiRig.savedAt, file: ikiRig.file } : null;
   const remoteBusyRef = useRef(false);
-  remoteBusyRef.current = busy || !memoryReady || attachmentBusy ||
-    !!pendingAttachment || !!pendingScreenshot || !!input.trim();
+  remoteBusyRef.current = busy || brainEvalStatus.phase === "running" ||
+    !memoryReady || attachmentBusy || !!pendingAttachment ||
+    !!pendingScreenshot || !!input.trim();
   const remoteSnapshotRef = useRef<object>({});
   const remoteModelReply = [...messages].reverse().find(m =>
     m.role === "assistant" && !m.failed && !!m.diagnostics?.model
   );
   const remoteModelStatus = modelSwitcherStatus(settings, remoteModelReply?.diagnostics, busy, activity);
+  const brainCaseRecords=getBrainEvalCaseRecords();
+  const routingEnv=brainEvalEnvironment("routing",settings.model);
+  const liveEnv=brainEvalEnvironment("live",settings.model);
   remoteSnapshotRef.current = {
     conversationId: activeConversationId,
     model: settings.model,
@@ -2722,6 +2750,18 @@ export default function App() {
     modelStatus: remoteModelStatus,
     controlsBlocked: remoteBusyRef.current,
     busy,
+    brainEval: brainEvalStatus,
+    brainEvalBuild: BRAIN_EVAL_BUILD,
+    brainEvalCatalog: EVAL_SCENARIOS.map((s,index)=>{
+      const routing=statusForScenario(s,brainCaseRecords,routingEnv);
+      const live=statusForScenario(s,brainCaseRecords,liveEnv);
+      return {id:s.id,number:index+1,label:s.label,group:s.group,turns:s.steps.length,
+        states:{
+          routing:{status:routing.status,previous:routing.previous,at:routing.record?.at??null},
+          live:{status:live.status,previous:live.previous,at:live.record?.at??null}
+        }
+      };
+    }),
     reportDiagnostics: {
       desktopVersion: DESKTOP_VERSION,
       contextWindow: settings.contextWindow,
@@ -2762,6 +2802,19 @@ export default function App() {
             body
           });
           if (!response.ok) throw new Error("Relay is unavailable");
+          const relayReply = await response.json() as { reportId?: string|null };
+          const latestEval = getBrainEvalReport();
+          if (latestEval && latestEval.runId !== relayReply.reportId) {
+            const reportUpload = await fetch(origin + "/agent/brain-eval/report", {
+              method: "POST",
+              headers: {...agentHeaders,"Content-Type":"application/json"},
+              body: JSON.stringify({
+                report: latestEval,
+                markdown: brainEvalMarkdown(latestEval)
+              })
+            });
+            if (!reportUpload.ok) console.warn("Brain Lab report not yet available through browser");
+          }
           lastSnapshot = body;
         }
         const activeRig = remoteRigRef.current;
@@ -2781,10 +2834,12 @@ export default function App() {
         const response = await fetch(origin + "/agent/next", { headers: agentHeaders });
         if (!response.ok) throw new Error("Relay is unavailable");
         const data = await response.json() as {
-          job?: { id: string; kind?: "send" | "new_chat" | "open_chat" | "switch_model" | "refresh_models";
-            text?: string; conversationId?: string | null; modelChoice?: string } | null
+          job?: { id: string; kind?: "send" | "new_chat" | "open_chat" | "switch_model" | "refresh_models" | "start_brain_eval" | "stop_brain_eval" | "review_brain_eval";
+            text?: string; conversationId?: string | null; modelChoice?: string;
+            evalOptions?: BrainEvalRequest;evalScenarioId?:string;evalMode?:"live"|"routing";evalDecision?:"passed"|"failed" } | null
         };
-        if (data.job && !dispatching && !remoteBusyRef.current) {
+        if (data.job && !dispatching &&
+          (!remoteBusyRef.current || data.job.kind === "stop_brain_eval")) {
           dispatching = true;
           const job = data.job;
           const ack = async () => fetch(origin + "/agent/ack", {
@@ -2806,6 +2861,13 @@ export default function App() {
                 remoteModelRef.current(job.modelChoice);
               else if (job.kind === "refresh_models")
                 await remoteRefreshModelsRef.current();
+              else if (job.kind === "start_brain_eval" && job.evalOptions)
+                remoteStartBrainRef.current(job.evalOptions);
+              else if (job.kind === "stop_brain_eval")
+                remoteStopBrainRef.current();
+              else if (job.kind === "review_brain_eval" &&
+                job.evalScenarioId && job.evalMode && job.evalDecision)
+                remoteReviewBrainRef.current(job.evalScenarioId,job.evalMode,job.evalDecision);
             } catch (error) {
               console.warn("Remote conversation action failed:", error);
             } finally {
@@ -3373,7 +3435,7 @@ export default function App() {
               })
           }))}><RotateCw size={14}/> Reset</button>}
       </header>
-      <div className="settings-layout">
+      <div className={settingsTab === "brain" ? "settings-layout brain-lab-layout" : "settings-layout"}>
         <nav className="settings-tabs" aria-label="Settings categories">
           {([
             { group: "MIKAN", items: [
@@ -3385,7 +3447,8 @@ export default function App() {
               ["memory", "Memory & chats", Brain],
               ["ai", "AI & models", Cpu],
               ["internet", "Web & research", Globe2],
-              ["notion", "Notion notes", BookOpen]
+              ["notion", "Notion notes", BookOpen],
+              ["brain", "Brain lab", Brain]
             ] },
             { group: "APPLICATION", items: [
               ["interface", "Look & feel", Palette],
@@ -3396,6 +3459,7 @@ export default function App() {
             {group.items.map(([tab, label, Icon]) =>
               <button type="button" key={tab} className={settingsTab === tab ? "settings-tab active" : "settings-tab"}
                 aria-current={settingsTab === tab ? "page" : undefined}
+                aria-label={label} title={label}
                 onClick={() => {
                   setSettingsTab(tab);
                   setPreviewOutfitId(tab === "appearance" ? ikiRig?.id ?? null : undefined);
@@ -3410,7 +3474,10 @@ export default function App() {
             )}
           </div>)}
         </nav>
-        <div key={settingsTab} className={settingsTab === "memory" || settingsTab === "capabilities" ? "settings-body settings-embedded" : "settings-body"}>
+        <div key={settingsTab} className={settingsTab === "brain" ? "settings-body settings-brain"
+          : settingsTab === "memory" || settingsTab === "capabilities" ? "settings-body settings-embedded"
+          : "settings-body"}>
+        {settingsTab === "brain" && <BrainEvalPanel settings={settings} />}
         {settingsTab === "memory" && <MemoryPanel embedded key={memoryInitialTab} initialTab={memoryInitialTab}
           conversations={conversations} sessionSummaries={sessionSummaries} facts={userFacts}
           characterFacts={characterFacts} interests={interests} currentId={activeConversationId}

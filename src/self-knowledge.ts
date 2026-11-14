@@ -178,6 +178,14 @@ export const CAPABILITIES: readonly Capability[] = [
     commands:["voice_health","voice_synthesize","voice_reference_status","voice_save_reference","voice_delete_reference"]
   },
   {
+    id:"brain-evaluation",label:"Brain Lab manual evaluation runner",category:"AI",
+    description:"Experimental Settings Brain Lab runs synthetic multi-turn routing tests and optional local Ollama conversations. Can start, monitor, cancel and download overnight test reports through the authenticated browser relay while desktop Mikan stays running. Includes stable numbered scenario labels, per-turn response review on phone, repeated trials, a dashboard, version-aware per-test Passed/Failed/Review/Stale statuses, individual scenario checkboxes and focused reruns, local run-history summaries, automatic JSON and Markdown exports, and browser diagnostic copying. Full production SQLite, Qdrant, Notion and live web-service integration is not yet covered by this test harness.",
+    stage:"experimental",runtime:"none",
+    keywords:["brain","evaluation","test","regression","debug","diagnostics","benchmark","routing","memory","dashboard","manual","brain lab"],
+    sources:["src/brain-eval.ts","src/brain-eval-manager.ts","src/BrainEvalPanel.tsx","src/App.tsx","src-tauri/src/lib.rs","server/index.mjs","server/public/index.html"],
+    docs:["docs/brain-lab.md"],commands:["brain_eval_export"]
+  },
+  {
     id:"self-knowledge",label:"Self-knowledge of features, docs and source",category:"AI",
     description:"Settings → Capabilities contains versioned self-description, live service checks and read-only on-demand search of source files and documentation bundled into this exact installed build. No automatic self-modification.",
     stage:"implemented",runtime:"none",keywords:["yourself","capabilities","features","documentation","source","code","implementation","self","help"],

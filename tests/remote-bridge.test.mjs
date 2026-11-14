@@ -55,7 +55,9 @@ test("browser relay requires a private key and delegates to the desktop, not a s
   assert.match(settingsView, /role="dialog" aria-modal="true"/);
   for (const control of ["conversationSelect", "newChat", "modelSelect",
     "refreshModels", "enlargeAvatar", "lock", "report", "showModelName",
-    "showAvatarLabel"]) {
+    "showAvatarLabel","brainLabMode","brainLabStatusFilter","brainLabRows",
+    "brainLabSelectVisible","brainLabSelectUnresolved","brainLabSelectRegression","brainLabSelectClear",
+    "brainLabPreview","brainLabPreviewTitle","brainLabPreviewClose","brainLabPreviewTurns"]) {
     assert.match(settingsView, new RegExp('id="' + control + '"'), control + " belongs in settings");
     assert.doesNotMatch(mainView, new RegExp('id="' + control + '"'), control + " is hidden from chat");
   }
@@ -118,6 +120,110 @@ test("browser relay requires a private key and delegates to the desktop, not a s
   assert.equal(rejectedHostStatus, 403);
 
   const jsonHeaders = {...authorized,"Content-Type":"application/json"};
+
+  // Brain Lab is controlled by the authenticated phone but runs only on desktop.
+  // The relay never executes Ollama or stores the owner's real memory.
+  const remoteCatalog=[
+    {id:"branch-a",number:1,label:"Favorite band branch",group:"Branching context",turns:3},
+    {id:"discovery-bands-wish",number:54,label:"Implicit recommendations",group:"Conversational discovery",turns:2}
+  ];
+  const evalState=(phase,controlsBlocked=false)=>({
+    conversationId:"same-desktop-conversation",model:"qwen3.5:9b",
+    busy:false,controlsBlocked,messages:history,
+    models:["qwen3.5:9b"],provider:"local",brainEvalCatalog:remoteCatalog,
+    brainEval:{phase,done:phase==="running"?1:0,total:6,
+      model:"qwen3.5:9b",startedAt:"2026-11-14T22:00:00.000Z",
+      results:phase==="complete"?{passRate:83.3,recall:95,webAgreement:80,reviewTurns:2}:null}
+  });
+  assert.equal((await request(agent + "/agent/state","POST",desktopHeaders,evalState("idle"))).status,200);
+  assert.equal((await request(base + "/api/brain-eval/result?format=json","GET",authorized)).status,404);
+  assert.equal((await request(base + "/api/brain-eval","POST",{"Content-Type":"application/json"},
+    {action:"start",mode:"live",repetitions:1,scenarioIds:["branch-a"]})).status,401);
+  assert.equal((await request(base + "/api/brain-eval","POST",jsonHeaders,
+    {action:"start",mode:"live",repetitions:7,scenarioIds:["branch-a"]})).status,400);
+  assert.equal((await request(base + "/api/brain-eval","POST",jsonHeaders,
+    {action:"start",mode:"live",repetitions:1,scenarioIds:["unknown-scenario"]})).status,400);
+  assert.equal((await request(base + "/api/brain-eval","POST",jsonHeaders,
+    {action:"start",mode:"live",repetitions:3,scenarioIds:["branch-a","discovery-bands-wish"]})).status,202);
+  assert.equal((await request(base + "/api/brain-eval","POST",jsonHeaders,
+    {action:"start",mode:"live",repetitions:3,scenarioIds:["branch-a"]})).status,409);
+  const evalJob=(await (await request(agent + "/agent/next","GET",desktopHeaders)).json()).job;
+  assert.equal(evalJob.kind,"start_brain_eval");
+  assert.deepEqual(evalJob.evalOptions,{
+    mode:"live",repetitions:3,scenarioIds:["branch-a","discovery-bands-wish"]
+  });
+  assert.equal((await request(agent + "/agent/ack","POST",desktopHeaders,{id:evalJob.id})).status,200);
+  assert.equal((await request(agent + "/agent/state","POST",desktopHeaders,evalState("running",true))).status,200);
+  const runningEval=await (await request(base + "/api/state","GET",authorized)).json();
+  assert.equal(runningEval.brainEval.phase,"running");
+  assert.equal(runningEval.brainEval.done,1);
+  assert.equal((await request(base + "/api/send","POST",jsonHeaders,{text:"interrupt the GPU"})).status,409);
+  assert.equal((await request(base + "/api/brain-eval","POST",jsonHeaders,
+    {action:"start",mode:"routing",repetitions:1,scenarioIds:["branch-a"]})).status,409);
+  assert.equal((await request(base + "/api/brain-eval","POST",jsonHeaders,{action:"stop"})).status,202);
+  const stopEvalJob=(await (await request(agent + "/agent/next","GET",desktopHeaders)).json()).job;
+  assert.equal(stopEvalJob.kind,"stop_brain_eval");
+  assert.equal((await request(agent + "/agent/ack","POST",desktopHeaders,{id:stopEvalJob.id})).status,200);
+  assert.equal((await request(agent + "/agent/brain-eval/report","POST",desktopHeaders,{
+    report:{runId:"eval-bad",version:1,environment:"production",cases:[]},markdown:"# test"
+  })).status,400);
+  const sampleEval={runId:"eval-1234567890-abcde",version:1,environment:"isolated-synthetic",
+    liveWebEnabled:false,writesToRealMemories:false,cases:[]};
+  assert.equal((await request(agent + "/agent/brain-eval/report","POST",desktopHeaders,{
+    report:sampleEval,markdown:"# Synthetic test results"
+  })).status,200);
+  assert.equal((await request(base + "/api/brain-eval/result?format=json")).status,401);
+  assert.equal((await request(base + "/api/brain-eval/result?format=anything","GET",authorized)).status,400);
+  const downloadedEval=await request(base + "/api/brain-eval/result?format=json","GET",authorized);
+  assert.equal(downloadedEval.status,200);
+  assert.match(downloadedEval.headers.get("content-disposition"),/\.json/);
+  assert.equal((await downloadedEval.json()).runId,sampleEval.runId);
+  const downloadedMd=await request(base + "/api/brain-eval/result?format=markdown","GET",authorized);
+  assert.equal(downloadedMd.status,200);
+  assert.equal(await downloadedMd.text(),"# Synthetic test results");
+  const completeReply=await request(agent + "/agent/state","POST",desktopHeaders,evalState("complete"));
+  assert.equal(completeReply.status,200);
+  assert.equal((await completeReply.json()).reportId,sampleEval.runId);
+  assert.equal((await (await request(base + "/api/state","GET",authorized)).json()).reportAvailable,true);
+  // Browser receives only whitelisted test statuses, not a writable report.
+  const reviewState=evalState("complete");
+  reviewState.brainEvalCatalog=[
+    {id:"branch-a",number:1,label:"Favorite band branch",group:"Branching context",turns:3,
+      states:{routing:{status:"passed",at:"2026-11-14T22:00:00Z"},
+        live:{status:"review",previous:"review",at:"2026-11-14T22:00:00Z"}}},
+    {id:"discovery-bands-wish",number:54,label:"Implicit recommendations",group:"Conversational discovery",turns:2,
+      states:{live:{status:"stale",previous:"passed",at:"2026-11-12T22:00:00Z"}}}
+  ];
+  assert.equal((await request(agent + "/agent/state","POST",desktopHeaders,reviewState)).status,200);
+  const remoteCases=(await (await request(base + "/api/state","GET",authorized)).json()).brainEvalCatalog;
+  assert.equal(remoteCases[0].number,1);
+  assert.equal(remoteCases[1].number,54);
+  assert.equal(remoteCases[0].states.routing.status,"passed");
+  assert.equal(remoteCases[0].states.live.status,"review");
+  assert.equal(remoteCases[1].states.live.status,"stale");
+  assert.equal(remoteCases[1].states.live.previous,"passed");
+  assert.equal((await request(base + "/api/brain-eval","POST",jsonHeaders,
+    {action:"review",scenarioId:"discovery-bands-wish",mode:"live",decision:"passed"})).status,409);
+  assert.equal((await request(base + "/api/brain-eval","POST",jsonHeaders,
+    {action:"review",scenarioId:"branch-a",mode:"live",decision:"make_it_green"})).status,400);
+  assert.equal((await request(base + "/api/brain-eval","POST",jsonHeaders,
+    {action:"review",scenarioId:"branch-a",mode:"live",decision:"passed"})).status,202);
+  const reviewJob=(await (await request(agent + "/agent/next","GET",desktopHeaders)).json()).job;
+  assert.equal(reviewJob.kind,"review_brain_eval");
+  assert.equal(reviewJob.evalScenarioId,"branch-a");
+  assert.equal(reviewJob.evalMode,"live");
+  assert.equal(reviewJob.evalDecision,"passed");
+  assert.equal((await request(agent + "/agent/ack","POST",desktopHeaders,{id:reviewJob.id})).status,200);
+  // Resume the rest of the legacy relay tests after a detached run finishes.
+  assert.equal((await request(agent + "/agent/state","POST",desktopHeaders,{
+    conversationId:"same-desktop-conversation",model:"qwen3.5:9b",
+    busy:false,controlsBlocked:false,messages:history,
+    models:["qwen3.5:9b","gpt-oss:20b"],provider:"local",
+    conversations:[{id:"same-desktop-conversation",title:"Our first chat",updatedAt:200},
+      {id:"older-chat",title:"Old conversation",updatedAt:100}],
+    avatar:{id:"default",name:"Original Mikan",custom:false}
+  })).status,200);
+
   assert.equal((await request(base + "/api/send", "POST", jsonHeaders, {text:"/search my files"})).status, 400);
   assert.equal((await request(base + "/api/send", "POST", jsonHeaders, {text:"What do you remember about me?"})).status, 202);
   assert.equal((await request(base + "/api/send", "POST", jsonHeaders, {text:"second turn"})).status, 409);
