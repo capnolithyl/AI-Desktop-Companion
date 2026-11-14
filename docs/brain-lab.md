@@ -14,6 +14,10 @@ Open **Desktop Mikan → Settings → Brain lab**. Choose a category or one scen
   `selectDeterministicMemoryIds`.
 - Multiple follow-ups from exactly the same initial question, with interruptions,
   topic changes, corrections and pronoun resolution.
+- **Natural conversation:** 20 additional multi-turn scenarios for jokes, sarcasm,
+  excitement, venting, bilingual chatting, harmless imaginative roleplay,
+  gentle social engagement, changed emotions, offhand statements, typos and
+  conversational corrections. Most are **not questions**.
 - Optional **Live** mode uses the configured **local Ollama model** through the
   existing native `chat_stream` command. The entire conversation is passed as
   a temporary test session, not saved to chat history.
@@ -51,6 +55,14 @@ Notion, SearXNG, browser transport, or the generative model.
 It still uses synthetic context and blocks all real external actions.
 It is useful for measuring model variability and conversation continuity,
 but **is not an integration test of real GitHub or Notion fetching**.
+
+**Important for casual conversation:** a nonempty reply does **not** establish
+conversational success. Replies without objective factual checks, or with a
+`conversationGoal` rubric, are marked **REVIEW** when running a real model.
+The dashboard keeps them out of the factual answer accuracy denominator and
+exports the explicit behavior goal for a person to judge. Routing and memory
+checks still run automatically. A future optional semantic evaluator can
+assist with reviews, but no opaque model judge is treated as ground truth.
 
 In reports, a web decision means a **plan to search**, never a real network call.
 A `null` decision means the harness could not observe it (for example,
