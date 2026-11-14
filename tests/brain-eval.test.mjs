@@ -99,6 +99,8 @@ test("non-factual live replies require human review, never get free semantic pas
   assert.ok(turns.every(turn=>turn.reviewRequired));
   assert.ok(turns.every(turn=>turn.answerPass===null));
   assert.equal(brainEvalMetrics(result).reviewTurns,turns.length);
+  assert.equal(brainEvalMetrics(result).verifiedPassed,0);
+  assert.equal(brainEvalMetrics(result).unverifiedTurns,turns.length);
   assert.equal(brainEvalMetrics(result).answerChecks,0);
   assert.match(brainEvalMarkdown(result),/Conversation review goal/);
 });
