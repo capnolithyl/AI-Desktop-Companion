@@ -18,6 +18,13 @@ Open **Desktop Mikan → Settings → Brain lab**. Choose a category or one scen
   excitement, venting, bilingual chatting, harmless imaginative roleplay,
   gentle social engagement, changed emotions, offhand statements, typos and
   conversational corrections. Most are **not questions**.
+- **Conversational discovery:** 16 extra multi-turn scenarios for implicit
+  research opportunities ("I wish there were more bands like Immortal"),
+  followed by recommendation refinements, as well as contrast cases that
+  explicitly should **not** search ("I love Immortal", "I wish I had more
+  time to listen to Immortal", and "Just venting, no recommendations").
+  Includes similar books, anime, games, free software, tour dates and used
+  hardware-price curiosity. These test **intent**, not regex phrase matching.
 - Optional **Live** mode uses the configured **local Ollama model** through the
   existing native `chat_stream` command. The entire conversation is passed as
   a temporary test session, not saved to chat history.
@@ -63,6 +70,14 @@ The dashboard keeps them out of the factual answer accuracy denominator and
 exports the explicit behavior goal for a person to judge. Routing and memory
 checks still run automatically. A future optional semantic evaluator can
 assist with reviews, but no opaque model judge is treated as ground truth.
+
+**How to test an implicit search:** select **Conversational discovery** in
+Brain Lab, then use **Live** mode. Fast mode observes only the deterministic
+route; ambiguous prompts commonly require the optional AI web planner, so
+their unobserved web decisions are marked **REVIEW**, not counted as a confirmed
+search success. A failed web check may be due to the pre-planner policy, the
+local model choosing not to search, or an unsafe public query. Inspect the
+reason and selected plan. Actual external research remains disabled.
 
 In reports, a web decision means a **plan to search**, never a real network call.
 A `null` decision means the harness could not observe it (for example,
