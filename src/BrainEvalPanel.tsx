@@ -187,7 +187,8 @@ export function BrainEvalPanel({settings}:{settings:Settings}){
       <div className="settings-section-title"><Activity size={17}/> Results dashboard</div>
       <div className="brain-eval-metrics">
         {([
-          ["Automated checks",metrics.passRate+"%",metrics.passed+"/"+metrics.turns+" turns"],
+          ["No detected failures",metrics.passRate+"%",metrics.passed+"/"+metrics.turns+" turns, includes unverified"],
+          ["Verified checks",metrics.verifiedPassRate+"%",metrics.verifiedPassed+"/"+metrics.turns+" turns"],
           ["Exact route labels",metrics.routes+"%","diagnostic; labels alone don't fail a test"],
           ["Functional routing",metrics.behavioralRouting+"%","search-intent behavior"],
           ["Web decisions",metrics.webAgreement+"%",metrics.webChecks+" observed · "+metrics.unnecessaryWeb+" extra · "+metrics.missedWeb+" missed"],
@@ -275,6 +276,7 @@ export function BrainEvalPanel({settings}:{settings:Settings}){
       Live mode additionally invokes your configured <em>local</em> Ollama model (and optional public-web planner),
       but feeds only mocked facts and never performs external searches or memory writes.
       Web scores measure intended/planned behavior, never a real network call. Unobserved decisions are excluded from web percentages.
+      A turn with no detected failure is not necessarily verified: the Verified Checks metric excludes unobserved decisions and pending human reviews.
       Natural conversation is not marked as semantically correct just for producing text:
       those turns show REVIEW with a concrete behavioral goal in their traces and exported report.
       Exact route labels and memory IDs are diagnostic. The checks now prioritize whether the
