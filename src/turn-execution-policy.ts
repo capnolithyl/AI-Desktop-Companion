@@ -1,4 +1,5 @@
 import { clearlySocialChat } from "./desktop-turn-routing.ts";
+import { publicPlanningHistory, type WebPlanningTurn } from "./unified-planner.ts";
 import type { ResearchPlan } from "./research-routing.ts";
 
 /** The desktop's single explicit outbound-web policy. Retrieval chooses the
@@ -7,6 +8,8 @@ import type { ResearchPlan } from "./research-routing.ts";
  */
 export type DesktopWebInput = {
   question: string;
+  /** Previous turns from this same conversation; only short safe user turns are considered. */
+  previous?: readonly WebPlanningTurn[];
   autoSearch: boolean;
   provider: "local" | "auto" | "gemini" | "openrouter";
   planMode: ResearchPlan["mode"];
@@ -30,6 +33,27 @@ export type DesktopWebPolicy = {
  * invitation to research public facts or reveal preferences to web search.
  * Explicit web requests and genuine questions still follow normal routing.
  */
+/** Only the *intent* to discover public options matters here; topics and
+ * brands are deliberately absent. A local model still makes the web choice.
+ */
+export function expressesDiscoveryNeed(text:string):boolean{
+  return /\b(?:running out of|craving another|looking for|trying to find|hoping to find)\b/i.test(text)
+    || (/\b(?:want|need|wish|would love|could use|hoping for|craving)\b/i.test(text)
+      && /\b(?:more|another|alternatives?|options?|suggestions?|something|anything|find|discover)\b/i.test(text));
+}
+
+export function recentDiscoveryRefinement(question:string,previous:readonly WebPlanningTurn[]=[]):boolean{
+  const turns=publicPlanningHistory(previous);
+  const current=publicPlanningHistory([{role:"user",content:question}]);
+  if(!turns.length || !current.length || question.length>260)return false;
+  const optOut=/\b(?:not asking for|no recommendations|don't (?:search|recommend)|do not (?:search|recommend)|just venting|just sharing|forget (?:the search|recommendations))\b/i;
+  if(optOut.test(question)||optOut.test(turns.at(-1)!))return false;
+  // Permission to ask the local planner is carried by an earlier expressed
+  // public discovery need. No search is executed until the current-turn model
+  // confirms a relevant continuation and produces a privacy-checked query.
+  return turns.some(expressesDiscoveryNeed);
+}
+
 export function ownerDisclosure(question:string):boolean{
   const text=question.trim();
   const firstPerson=/^(?:(?:so\s+)?(?:have i told you|did i tell you|did i mention)\b|one of my\b|my\b|i(?:['’]m| am|['’]ve| have| just| really| think| feel| believe| love| like| enjoy| prefer| hate| dislike| consider| got| recently)\b|we(?:['’]re| are| have)\b|our\b)/i;
@@ -39,10 +63,7 @@ export function ownerDisclosure(question:string):boolean{
   // AI planner decide whether public discovery would be useful, regardless
   // of the subject (music/books/games/software/etc). This only *permits*
   // planning; it never automatically searches or exports private context.
-  const exploratoryNeed= /\b(?:running out of|craving another|looking for|trying to find|hoping to find)\b/i.test(text)
-    || ( /\b(?:want|need|wish|would love|could use|hoping for|craving)\b/i.test(text)
-      && /\b(?:more|another|alternatives?|options?|suggestions?|something|anything|find|discover)\b/i.test(text));
-  return firstPerson.test(text) && !explicitResearch.test(text) && !publicQuestion && !exploratoryNeed;
+  return firstPerson.test(text) && !explicitResearch.test(text) && !publicQuestion && !expressesDiscoveryNeed(text);
 }
 
 export function planDesktopWebExecution(input: DesktopWebInput): DesktopWebPolicy {
@@ -56,6 +77,7 @@ export function planDesktopWebExecution(input: DesktopWebInput): DesktopWebPolic
       ? "Attached private material; public web blocked" :
     input.existingSearch ? "Search panel supplied results already" :
     input.planMode === "chat" && ownerDisclosure(input.question)
+      && !recentDiscoveryRefinement(input.question,input.previous)
       ? "Owner is sharing a personal preference; no public lookup needed" : null;
   const eligible = reason === null;
   return {
