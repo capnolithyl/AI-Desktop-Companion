@@ -21,6 +21,7 @@ import { fileURLToPath } from "node:url";
 import {
   createLocalReport, safeReportDiagnostics, publicIssuePreview, publishGitHubIssue
 } from "./reporting.mjs";
+import { createDevSupervisorClient } from "./dev-supervisor-client.mjs";
 
 export const PUBLIC_PORT = 3847;
 export const AGENT_PORT = 3848;
@@ -174,6 +175,7 @@ export function createBridge({
   reportsPath = REPORTS_PATH,
   publicHost = "marcus-vostro.tailc46461.ts.net",
   issuePublisher = publishGitHubIssue,
+  updater = createDevSupervisorClient(),
 } = {}) {
   if (typeof key !== "string" || key.length < 32)
     throw new Error("A 32+ character remote key is required");
@@ -250,6 +252,27 @@ export function createBridge({
         fail(response, 401, "Enter your Mikan remote key");
       } else if (request.method === "GET" && url.pathname === "/api/state") {
         json(response, 200, state());
+      } else if (request.method === "GET" && url.pathname === "/api/dev-update") {
+        if (!updater)
+          return json(response,200,{available:false,
+            reason:"Updater is not running. On Windows, stop npm run server and start npm run remote:dev."});
+        try {json(response,200,await updater.status())}
+        catch {json(response,200,{available:false,reason:"Local development supervisor is offline."})}
+      } else if (request.method === "POST" && url.pathname === "/api/dev-update") {
+        if (!updater)return fail(response,409,
+          "Start the managed development relay with npm run remote:dev on Windows");
+        const body=await readJson(request,250);
+        if (body.action!=="check" && body.action!=="apply")
+          return fail(response,400,"Only check and apply are allowed");
+        if (body.action==="apply" && (
+          pending || desktop.busy || desktop.brainEval?.phase==="running"
+        ))return fail(response,409,"Finish the active chat or Brain Lab run before updating");
+        try{
+          const result=body.action==="check"?await updater.check():await updater.apply();
+          json(response,202,result);
+        }catch(error){
+          fail(response,409,String(error?.message||"Supervisor refused the operation").slice(0,250));
+        }
       } else if (request.method === "GET" && url.pathname === "/api/avatar/model") {
         const avatar = desktop.avatar;
         if (!avatar) return fail(response, 404, "Avatar not available");
