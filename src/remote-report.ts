@@ -52,6 +52,11 @@ export function remoteDiagnosticMessages(messages: readonly DiagnosticMessage[])
           semanticCandidates: finite(d.memory.semanticCandidates),
           strongSemanticMatches: finite(d.memory.strongSemanticMatches),
           selectionMethod: d.memory.selectionMethod ?? null,
+          selectionCandidates: finite(d.memory.selectionCandidates),
+          selectionTimeMs: finite(d.memory.selectionTimeMs),
+          selectedIds: d.memory.facts.slice(0, 12).map(fact => fact.id),
+          semanticScores: (d.memory.semanticScores ?? []).slice(0, 12)
+            .map(hit => ({ id:hit.id, score:finite(hit.score) })),
           selectedFacts: d.memory.facts.length,
           interestsReturned: d.memory.interests?.returned.length ?? 0,
           interestsIncluded: d.memory.interests?.included.length ?? 0
