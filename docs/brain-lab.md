@@ -50,30 +50,6 @@ routing. This first pass does **not** remove the separate legacy heuristics
 in initial research routing and deterministic memory recall. Those remain
 areas for follow-up investigation.
 
-**0.9.14 answer-quality triage:** The 0.9.13 Live report
-(`eval-1794696794002-eqiv2`, Nov 14, 22:53 UTC, Qwen3.5:9b)
-passed all 6 selected scenario routing checks and 15/15 turns with no
-unrelated synthetic memories. #57/#59/#62/#65/#66 correctly refined active
-public tasks and #60 honored an explicit opt-out. But all 15 turns still
-require human semantic review, and the two old regex-only quality heuristics
-reported *zero* warnings despite examples of referent confusion (Immortal
-called a mobile game), questionable genre/song/album claims, and anime
-recommendations not supported by the isolated test evidence.
-
-Live Brain Lab now runs a second LOCAL model inference, a bounded
-**advisory quality critique**, after each reply. It examines the conversation,
-scenario goal, already-selected synthetic facts, and the fact that public
-research was PLANNED BUT NOT EXECUTED. It returns structured, bounded
-concerns about referents, constraints, grounding, helpfulness or tone, and
-falls back to an explicit `unavailable` state if it cannot be parsed.
-Concerns appear in the desktop and remote review traces, exported JSON and
-Markdown, and a separate dashboard metric. No language-specific regex
-decides intent or grades factual correctness. An AI `no-concern` result is
-NOT a verified answer. The critic may share the main model's blind spots,
-requires an extra local inference per Live turn, and never changes the
-functional routing/memory pass rate or bypasses required human approval.
-Fast (routing-only) evaluations do not call the critic.
-
 **0.9.12 focused active-task reasoning:** Live run of 0.9.11
 (`eval-1794692172668-ah5rl`, Nov 14 21:36 UTC, Qwen3.5:9b)
 mechanically passed 5/6 scenarios and 14/15 turns. #59 now correctly continues
