@@ -56,6 +56,8 @@ export type EvalStepResult = {
   /** True when automated assertions cannot establish conversational quality. */
   reviewRequired: boolean;
   answerFailures: string[];
+  /** Transparent review-only heuristics, not an automatic semantic judgment. */
+  qualityFlags: string[];
   answer?: string;
   inferenceStats?: {promptTokens?:number|null;outputTokens?:number|null;evalDurationNs?:number|null;loadDurationNs?:number|null};
   modelUsed?:string;
@@ -475,6 +477,20 @@ export function sameMeaning(haystack:string,needle:string):boolean {
   const expected=normalize(needle);
   return !!expected && (" "+normalize(haystack)+" ").includes(" "+expected+" ");
 }
+/** Human-review triage only. These flags never claim a factual error or
+ * cause an automatic FAIL; they help find very long, self-correcting answers. */
+export function brainReplyQualityFlags(answer:string|undefined,
+  expected:EvalExpectation,outputTokens?:number|null):string[]{
+  if(!answer)return [];
+  const flags:string[]=[];
+  const tokenEstimate=outputTokens??Math.round(answer.length/4);
+  if(expected.conversationGoal && tokenEstimate>220)
+    flags.push("Long reply for a conversational turn; verify focus and length");
+  const reversals=answer.match(/\b(?:wait|oops|actually|my bad|scratch that|never mind)\b/gi)??[];
+  if(reversals.length>=3)
+    flags.push("Repeated self-correction; verify that suggestions satisfy the constraints");
+  return flags;
+}
 export function scoreAnswer(answer:string, expected:EvalExpectation):string[] {
   const failures:string[]=[];
   for(const phrase of expected.answerIncludes??[])if(!sameMeaning(answer,phrase))
@@ -551,6 +567,7 @@ export async function runBrainEvaluation(options:EvalOptions):Promise<EvalReport
       }catch(err){error=err instanceof Error?err.message:String(err)}
       const answerFailures=answer===undefined
         ? []:scoreAnswer(answer,step.expect);
+      const qualityFlags=brainReplyQualityFlags(answer,step.expect,inferenceStats?.outputTokens);
       const hasFactualAnswerCheck=!!(
         step.expect.answerIncludes?.length ||
         step.expect.answerAny?.length ||
@@ -575,7 +592,7 @@ export async function runBrainEvaluation(options:EvalOptions):Promise<EvalReport
       // Never present an unobserved search decision as passing a behavioral test.
       // Fast mode deliberately cannot run the optional model planner.
       const reviewRequired=(options.mode==="live" &&
-        (!!step.expect.conversationGoal || !hasFactualAnswerCheck)) ||
+        (!!step.expect.conversationGoal || !hasFactualAnswerCheck || qualityFlags.length>0)) ||
         (expectedWeb!==null && webPass===null);
       const memoryPass=missing.length===0 && unexpected.length===0;
       // Human review should not hide a factual assertion failure.
@@ -589,7 +606,7 @@ export async function runBrainEvaluation(options:EvalOptions):Promise<EvalReport
         missingMemoryIds:missing,missingMemoryRecordIds:missingRecordIds,
         memoryEvidence,distractorMemoryIds:distractors,unexpectedMemoryIds:unexpected,
         routeLabelMatch,routePass,memoryPass,answerPass,reviewRequired,
-        answerFailures,answer,inferenceStats,modelUsed,error,
+        answerFailures,qualityFlags,answer,inferenceStats,modelUsed,error,
         elapsedMs:Date.now()-began,
         pass:routePass&&memoryPass&&answerPass!==false&&
           (options.mode!=="live" || !!answer)&&!error
@@ -639,6 +656,7 @@ export function brainEvalMetrics(report:EvalReport){
       ? ratio(steps.filter(s=>s.answerPass===true).length,steps.filter(s=>s.answerPass!==null).length):null,
     answerChecks:steps.filter(s=>s.answerPass!==null).length,
     reviewTurns:steps.filter(s=>s.reviewRequired).length,
+    qualityFlagTurns:steps.filter(s=>s.qualityFlags?.length).length,
     elapsedMs:report.cases.reduce((n,c)=>n+c.elapsedMs,0)
   };
 }
@@ -667,6 +685,7 @@ export function brainEvalMarkdown(report:EvalReport):string {
     "| Unnecessary / missed planned searches | "+m.unnecessaryWeb+" / "+m.missedWeb+" |",
     "| Factual answer checks | "+(m.answers===null?"Not run":m.answers+"% ("+m.answerChecks+" scored)")+" |",
     "| Conversational turns needing review | "+m.reviewTurns+" |",
+    "| Replies with quality warnings | "+m.qualityFlagTurns+" |",
     "| Total elapsed | "+Math.round(m.elapsedMs/1000)+"s |",""
   ];
   for(const c of report.cases){
@@ -694,6 +713,7 @@ export function brainEvalMarkdown(report:EvalReport):string {
       if(s.inferenceStats)lines.push("- Inference: "+JSON.stringify({model:s.modelUsed,stats:s.inferenceStats}));
       if(s.error)lines.push("- Error: "+s.error);
       if(s.answerFailures.length)lines.push("- Checks: "+s.answerFailures.join("; "));
+      if(s.qualityFlags?.length)lines.push("- Human review warnings: "+s.qualityFlags.join("; "));
       lines.push("");
     }
   }
