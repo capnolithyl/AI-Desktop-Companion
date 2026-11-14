@@ -53,9 +53,12 @@ import { MemoryPanel } from "./MemoryPanel";
 import { BrainEvalPanel } from "./BrainEvalPanel";
 import {
   subscribeBrainEval, getBrainEvalStatus, getBrainEvalReport,
-  startBrainEvaluation, stopBrainEvaluation, type BrainEvalRequest
+  startBrainEvaluation, stopBrainEvaluation, reviewBrainEvalScenario,
+  getBrainEvalCaseRecords, brainEvalEnvironment, BRAIN_EVAL_BUILD,
+  type BrainEvalRequest
 } from "./brain-eval-manager";
 import { brainEvalMarkdown, EVAL_SCENARIOS } from "./brain-eval";
+import { statusForScenario } from "./brain-eval-status";
 import type { IncomingCanon, IncomingInterest } from "./interest-import";
 import type {ImportMemory,MemoryCategory} from "./memory-import";
 import { NotionPanel } from "./NotionPanel";
@@ -2719,6 +2722,9 @@ export default function App() {
   };
   const remoteStopBrainRef = useRef<()=>void>(()=>{});
   remoteStopBrainRef.current = () => { stopBrainEvaluation(); };
+  const remoteReviewBrainRef = useRef<(id:string,mode:"routing"|"live",decision:"passed"|"failed")=>void>(()=>{});
+  remoteReviewBrainRef.current = (id,mode,decision) =>
+    reviewBrainEvalScenario(id,mode,settings.model,decision);
   const remoteRigRef = useRef<{id: string; revision: number; file: Blob} | null>(null);
   remoteRigRef.current = ikiRig?.file
     ? { id: ikiRig.id, revision: ikiRig.savedAt, file: ikiRig.file } : null;
@@ -2731,6 +2737,9 @@ export default function App() {
     m.role === "assistant" && !m.failed && !!m.diagnostics?.model
   );
   const remoteModelStatus = modelSwitcherStatus(settings, remoteModelReply?.diagnostics, busy, activity);
+  const brainCaseRecords=getBrainEvalCaseRecords();
+  const routingEnv=brainEvalEnvironment("routing",settings.model);
+  const liveEnv=brainEvalEnvironment("live",settings.model);
   remoteSnapshotRef.current = {
     conversationId: activeConversationId,
     model: settings.model,
@@ -2742,9 +2751,17 @@ export default function App() {
     controlsBlocked: remoteBusyRef.current,
     busy,
     brainEval: brainEvalStatus,
-    brainEvalCatalog: EVAL_SCENARIOS.map(({id,label,group,steps})=>({
-      id,label,group,turns:steps.length
-    })),
+    brainEvalBuild: BRAIN_EVAL_BUILD,
+    brainEvalCatalog: EVAL_SCENARIOS.map(s=>{
+      const routing=statusForScenario(s,brainCaseRecords,routingEnv);
+      const live=statusForScenario(s,brainCaseRecords,liveEnv);
+      return {id:s.id,label:s.label,group:s.group,turns:s.steps.length,
+        states:{
+          routing:{status:routing.status,previous:routing.previous,at:routing.record?.at??null},
+          live:{status:live.status,previous:live.previous,at:live.record?.at??null}
+        }
+      };
+    }),
     reportDiagnostics: {
       desktopVersion: DESKTOP_VERSION,
       contextWindow: settings.contextWindow,
@@ -2817,9 +2834,9 @@ export default function App() {
         const response = await fetch(origin + "/agent/next", { headers: agentHeaders });
         if (!response.ok) throw new Error("Relay is unavailable");
         const data = await response.json() as {
-          job?: { id: string; kind?: "send" | "new_chat" | "open_chat" | "switch_model" | "refresh_models" | "start_brain_eval" | "stop_brain_eval";
+          job?: { id: string; kind?: "send" | "new_chat" | "open_chat" | "switch_model" | "refresh_models" | "start_brain_eval" | "stop_brain_eval" | "review_brain_eval";
             text?: string; conversationId?: string | null; modelChoice?: string;
-            evalOptions?: BrainEvalRequest } | null
+            evalOptions?: BrainEvalRequest;evalScenarioId?:string;evalMode?:"live"|"routing";evalDecision?:"passed"|"failed" } | null
         };
         if (data.job && !dispatching &&
           (!remoteBusyRef.current || data.job.kind === "stop_brain_eval")) {
@@ -2848,6 +2865,9 @@ export default function App() {
                 remoteStartBrainRef.current(job.evalOptions);
               else if (job.kind === "stop_brain_eval")
                 remoteStopBrainRef.current();
+              else if (job.kind === "review_brain_eval" &&
+                job.evalScenarioId && job.evalMode && job.evalDecision)
+                remoteReviewBrainRef.current(job.evalScenarioId,job.evalMode,job.evalDecision);
             } catch (error) {
               console.warn("Remote conversation action failed:", error);
             } finally {
