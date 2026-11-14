@@ -2,8 +2,11 @@
 
 **Status:** Experimental manual diagnostic harness. Not a production conversational reliability certificate.
 
-Open **Desktop Mikan → Settings → Brain lab**. Choose a category or one scenario,
-**Fast** or **Live**, and 1–5 repetitions. Press **Run**. This does not rebuild the installer.
+Open **Desktop Mikan → Settings → Brain lab** or the authenticated remote browser
+**Settings → Brain Lab**. Choose a category or scenario, **Fast** or **Live**,
+and 1–5 repetitions. The runner is owned by the desktop process, not a settings
+component or browser tab; closing a panel does not cancel it.
+This does not rebuild the installer.
 
 ## What it covers
 
@@ -38,6 +41,26 @@ Open **Desktop Mikan → Settings → Brain lab**. Choose a category or one scen
 - The browser remote Settings has **Copy conversation debug log**, which includes
   recent messages and relay-sanitized desktop diagnostics (model, latency,
   memory-selection IDs/scores, research decision, relevant errors).
+
+## Overnight browser workflow
+
+1. Leave the desktop app running (tray is fine), keep Ollama and the Node
+   relay running, and ensure Windows won't sleep overnight.
+2. From your phone/browser open authenticated Mikan → **Settings → Brain Lab**.
+3. Pick Live or Fast, category or individual scenario, and 1–5 repeats.
+   **Start** returns immediately; the desktop processes the selected turns.
+4. Close the tab if desired. Reopen it to view completed/total turns, current
+   scenario, outcome metrics and errors. **Stop** issues an explicit desktop
+   cancellation, even while a live test is running.
+5. The completed or stopped run is auto-saved on Windows under
+   `Documents/Mikan/Brain-Evaluations` (AppData fallback). Browser download
+   buttons provide the latest finished JSON and Markdown report for morning
+   review. The relay keeps a RAM copy and the desktop can re-upload it if the
+   relay restarts.
+
+The Windows PC must stay awake and the desktop process must remain alive.
+This release does **not** resume half-finished runs after Windows restart.
+A browser disconnect doesn't interrupt the run; a lost desktop process does.
 
 ## A/B/C/D experiments
 
