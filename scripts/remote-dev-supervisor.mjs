@@ -184,7 +184,7 @@ export function createDevSupervisor({
     running=true;
     const before=expectedHead,after=expectedRemote;
     publish({phase:"updating",error:null,step:"Rechecking repository state"});
-    let merged=false;
+    let merged=false,restartAttempted=false;
     try{
       await assertCheckout();
       const actual=await repoGit("rev-parse","HEAD");
@@ -206,6 +206,7 @@ export function createDevSupervisor({
       await npmRun("test:brain");
       publish({step:"Building and testing authenticated browser relay"});
       await npmRun("test:server");
+      restartAttempted=true;
       await restartChildren();
       expectedHead=null;expectedRemote=null;
       publish({phase:"updated",current:after.slice(0,12),
@@ -218,7 +219,8 @@ export function createDevSupervisor({
       publish({step:"Update failed; restoring the previous checked-out commit",error:failure});
       if(merged){
         try{
-          await repoGit("reset","--hard",before);
+          // --keep refuses to discard tracked edits made after the clean preflight.
+          await repoGit("reset","--keep",before);
           const dependencyRollback=!!(await repoGit("diff","--name-only",before,after,
             "--","package.json","package-lock.json")).trim();
           if(dependencyRollback){
@@ -227,8 +229,10 @@ export function createDevSupervisor({
           try{await npmRun("build:remote")}catch{}
           // Managed process is still serving the previous in-memory code until
           // reboot, or the rollback's restored assets.
-          if(!relay||relay.exitCode!==null){
-            try{await restartChildren()}catch{}
+          if(restartAttempted || !relay || relay.exitCode!==null){
+            try{await restartChildren()}catch(restartError){
+              publish({step:"Old source restored but relay restart failed: "+formatError(restartError)});
+            }
           }
           publish({phase:"error",current:before.slice(0,12),
             step:"Update failed and Git checkout was rolled back; relay remains available."});
