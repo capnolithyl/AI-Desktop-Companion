@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { Script } from "node:vm";
 import { request as httpRequest } from "node:http";
 import { createBridge } from "../server/index.mjs";
+import { brainEvalFileStem } from "../server/brain-eval-filename.mjs";
 
 test("browser relay requires a private key and delegates to the desktop, not a second model", async (t) => {
   const directory = mkdtempSync(join(tmpdir(), "mikan-remote-"));
@@ -204,6 +205,8 @@ test("browser relay requires a private key and delegates to the desktop, not a s
     report:{runId:"eval-bad",version:1,environment:"production",cases:[]},markdown:"# test"
   })).status,400);
   const sampleEval={runId:"eval-1234567890-abcde",version:1,environment:"isolated-synthetic",
+    startedAt:"2026-11-14T20:39:31.558Z",mode:"live",model:"qwen3.5:9b",
+    scenarios:["a","b"],attempts:1,
     liveWebEnabled:false,writesToRealMemories:false,cases:[]};
   assert.equal((await request(agent + "/agent/brain-eval/report","POST",desktopHeaders,{
     report:sampleEval,markdown:"# Synthetic test results"
@@ -212,7 +215,8 @@ test("browser relay requires a private key and delegates to the desktop, not a s
   assert.equal((await request(base + "/api/brain-eval/result?format=anything","GET",authorized)).status,400);
   const downloadedEval=await request(base + "/api/brain-eval/result?format=json","GET",authorized);
   assert.equal(downloadedEval.status,200);
-  assert.match(downloadedEval.headers.get("content-disposition"),/\.json/);
+  assert.equal(downloadedEval.headers.get("content-disposition"),
+    'attachment; filename="mikan-brain_2026-11-14_203931Z_live_qwen3.5-9b_s02_r1_abcde.json"');
   assert.equal((await downloadedEval.json()).runId,sampleEval.runId);
   const downloadedMd=await request(base + "/api/brain-eval/result?format=markdown","GET",authorized);
   assert.equal(downloadedMd.status,200);
@@ -397,4 +401,18 @@ test("browser relay requires a private key and delegates to the desktop, not a s
   assert.equal((await request(base + "/api/report","POST",jsonHeaders,
     {note:"irrelevant",destination:"delete_repo"})).status,400);
   assert.equal(published.length,1);
+});
+
+test("Brain Lab filenames use report metadata, never private content or unsafe path characters",()=>{
+  assert.equal(brainEvalFileStem({
+    runId:"eval-1794688771558-of3xx",startedAt:"2026-11-14T20:39:31.558Z",
+    model:"qwen3.5:9b",mode:"live",attempts:1,scenarios:[1,2,3,4,5],
+    cases:[{answer:"PRIVATE CHAT"}]
+  }),"mikan-brain_2026-11-14_203931Z_live_qwen3.5-9b_s05_r1_of3xx");
+  const bad=brainEvalFileStem({runId:"eval-12345-abcde",
+    startedAt:"bad/time",model:"../unsafe/name:sushi",mode:"live",
+    attempts:2,scenarios:[1]});
+  assert.ok(!bad.includes("PRIVATE CHAT"));
+  assert.ok(!bad.includes("/"));
+  assert.ok(!bad.includes(String.fromCharCode(92)));
 });
