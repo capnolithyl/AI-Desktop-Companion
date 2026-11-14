@@ -66,7 +66,7 @@ export type EvalStepResult = {
   pass: boolean;
 };
 export type EvalCaseResult = {
-  id:string; label:string; group:string; repeat:number; steps:EvalStepResult[];
+  id:string; number?:number; label:string; group:string; repeat:number; steps:EvalStepResult[];
   pass:boolean; elapsedMs:number;
 };
 export type EvalReport = {
@@ -620,7 +620,8 @@ export async function runBrainEvaluation(options:EvalOptions):Promise<EvalReport
       options.onProgress?.(done,total,brainScenarioLabel(scenario.id,scenario.label)+" • turn "+(stepIndex+1));
     }
     if(steps.length)report.cases.push({
-      id:scenario.id,label:scenario.label,group:scenario.group,repeat,steps,
+      id:scenario.id,number:brainScenarioNumber(scenario.id)??undefined,
+      label:scenario.label,group:scenario.group,repeat,steps,
       elapsedMs:Date.now()-started,pass:steps.length===scenario.steps.length&&steps.every(s=>s.pass)
     });
   }
