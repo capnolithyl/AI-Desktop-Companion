@@ -416,3 +416,19 @@ test("Brain Lab filenames use report metadata, never private content or unsafe p
   assert.ok(!bad.includes("/"));
   assert.ok(!bad.includes(String.fromCharCode(92)));
 });
+
+test("phone Brain Lab accepts exact numeric scenario selection without disabling the existing list",()=>{
+  const html=readFileSync(new URL("../server/public/index.html",import.meta.url),"utf8");
+  assert.match(html,/id="brainLabNumbers"/);
+  assert.match(html,/id="brainLabApplyNumbers"/);
+  assert.match(html,/id="brainLabNumberFeedback"/);
+  assert.match(html,/function applyBrainLabNumbers\(\)/);
+  assert.match(html,/Unknown scenario number\(s\)/);
+  assert.match(html,/selectBrainLab\(requested\.map/);
+  assert.match(html,/brainLabApplyNumbers\.disabled = running/);
+  // This checks that the inline script is parseable. The full browser UI
+  // interactions remain covered by the existing native relay integration test.
+  const inline=html.match(/<script>([\s\S]*?)<\/script>/);
+  assert.ok(inline);
+  assert.doesNotThrow(()=>new Script(inline[1]));
+});
