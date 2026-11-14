@@ -144,3 +144,24 @@ test("domain words retain favorite-song and album facts without an embedding mod
   assert.ok(!song.ids.includes(4),"a color preference is not a song preference");
   assert.ok(!album.ids.includes(5),"game preferences should not pollute album queries");
 });
+
+test("generic pronouns and negation do not retrieve fictional hometowns or unrelated facts",()=>{
+  const now=Date.now()/1000;
+  const synthetic=[
+    {id:116,fact:"The user's hometown was Alderwick; their current town is Brookmere.",
+      category:"profile",tags:["hometown","town"],updatedAt:now},
+    {id:110,fact:"The user's fictional spouse is Rowan, not Theo.",
+      category:"family",tags:["spouse","family"],updatedAt:now},
+    {id:108,fact:"Lantern Desk uses React, not Electron.",
+      category:"projects",tags:["software"],updatedAt:now},
+    {id:114,fact:"Chapter three is not stored in these memories.",
+      category:"projects",tags:["chapter","novel"],updatedAt:now},
+    {id:119,fact:"The user dislikes sprawling open-world strategy games.",
+      category:"preferences",tags:["strategy","open world"],updatedAt:now}
+  ];
+  const ids=synthetic.map(x=>x.id);
+  const selected=query=>selectDeterministicMemoryIds(synthetic,query,[],ids,8).ids;
+  assert.deepEqual(selected("Especially their raw, cold guitar atmosphere."),[]);
+  assert.deepEqual(selected("Not asking for recommendations, just venting."),[]);
+  assert.deepEqual(selected("Not another giant open world, please."),[119]);
+});
