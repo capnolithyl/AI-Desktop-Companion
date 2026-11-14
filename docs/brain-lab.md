@@ -74,7 +74,10 @@ Desktop and browser Brain Lab display a checkbox and last saved outcome for
 - **REVIEW:** automatic checks didn't fail, but conversational quality or an
   optional web-planning decision requires human inspection. Read the trace
   and choose **Approve** or **Fail**.
-- **INCOMPLETE:** a scenario was interrupted or didn't finish all repetitions.
+- **INCOMPLETE:** a scenario was interrupted, didn't finish all repetitions,
+  or an expected web-planning decision was not actually observed (for example
+  an implicit discovery prompt in Fast mode). Missing evidence cannot be
+  manually approved into a passing grade; rerun with an observable planner.
 - **UNTESTED:** never run on the selected model + Fast/Live mode.
 - **STALE:** completed with an earlier app build or older test definition.
   The previous result is visible but isn't counted as fresh.
