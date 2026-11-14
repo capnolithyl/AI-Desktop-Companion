@@ -358,3 +358,71 @@ test("isolated Live reply adapter is told that planned public research was not e
   assert.equal(casual.researchPlanned,false);
   assert.equal(report.cases[0].steps.length,2);
 });
+
+test("Live web passes the current public research query to the real inference adapter and records sources",async()=>{
+  const searched=[];
+  const scenarios=[byId("discovery-bands-wish")];
+  const report=await runBrainEvaluation({
+    scenarios,mode:"live",model:"fixture-model",repetitions:1,liveWeb:true,
+    planWeb:async question=>({
+      search:true,query:question.includes("Especially")
+        ?"bands similar to Immortal with raw cold guitars"
+        :"bands similar to Immortal black metal",
+      reason:"Public discovery"
+    }),
+    infer:async({researchQuery,selectedMemories})=>{
+      searched.push({researchQuery,selectedMemories});
+      return {text:"I found a cited result [1].",
+        webExecution:{query:researchQuery,results:[{
+          title:"Real source result",url:"https://example.org/artist",
+          content:"Public search excerpt",engine:"searxng"
+        }],sourcesCarriedOver:false}};
+    }
+  });
+  assert.equal(report.liveWebEnabled,true);
+  assert.equal(report.environment,"isolated-synthetic+live-public-web");
+  assert.deepEqual(searched.map(x=>x.researchQuery),[
+    "bands similar to Immortal black metal",
+    "bands similar to Immortal with raw cold guitars"]);
+  assert.deepEqual(searched.map(x=>x.selectedMemories),[[],[]]);
+  assert.equal(report.cases[0].steps[0].webExecution.results[0].url,"https://example.org/artist");
+  assert.equal(report.cases[0].steps[1].webExecution.results.length,1);
+  assert.equal(brainEvalMetrics(report).liveSearches,2);
+  assert.equal(brainEvalMetrics(report).liveSearchesWithSources,2);
+  assert.equal(brainEvalMetrics(report).liveSources,2);
+  assert.match(brainEvalMarkdown(report),/PUBLIC WEB ENABLED/);
+  assert.match(brainEvalMarkdown(report),/https:\/\/example\.org\/artist/);
+  assert.equal(report.writesToRealMemories,false);
+});
+
+test("Live web never searches for a user who ended discovery or a private Notion route",async()=>{
+  const called=[];
+  const chosen=[byId("discovery-wish-but-no-recommendations"),
+    byId("notion-without-web")];
+  const report=await runBrainEvaluation({
+    scenarios:chosen,mode:"live",model:"fixture",repetitions:1,liveWeb:true,
+    planWeb:async question=>({
+      search:!question.includes("Not asking")&&!question.includes("Thanks"),
+      query:"bands similar to Immortal black metal",reason:"Mock semantic task choice"
+    }),
+    infer:async({messages,researchQuery})=>{
+      called.push({text:messages.at(-1).content,researchQuery});
+      return {text:"No unsanctioned web request.",
+        webExecution:{query:null,results:[],sourcesCarriedOver:false}};
+    }
+  });
+  assert.equal(called.find(x=>x.text.startsWith("Not asking")).researchQuery,undefined);
+  assert.equal(called.find(x=>x.text.startsWith("Thanks")).researchQuery,undefined);
+  assert.ok(report.cases.find(c=>c.id==="notion-without-web").steps.every(x=>x.blockedReason));
+  assert.equal(report.writesToRealMemories,false);
+});
+
+test("production Brain Lab Live adapter delegates actual search to Rust chat_stream, not a mock result",()=>{
+  const code=readFileSync(new URL("../src/brain-eval-manager.ts",import.meta.url),"utf8");
+  assert.match(code,/autoSearch:!!researchQuery/);
+  assert.match(code,/researchRoute:researchQuery\?"research":"chat"/);
+  assert.match(code,/researchQuery:researchQuery\|\|undefined/);
+  assert.match(code,/searxngEndpoint:settings\.searxngEndpoint/);
+  assert.match(code,/sources:?.*Array/);
+  assert.match(code,/liveWeb:true/);
+});
