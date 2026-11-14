@@ -156,7 +156,7 @@ export function selectDeterministicMemoryIds<T extends RankableMemory>(
   const stop=new Set(["what","when","where","which","could","would","should",
     "please","about","with","this","that","from","your","mine","our",
     "have","just","some","there","how","any","tell","said","user","owner",
-    "favorite","favourite","favorites","favourites","album","albums","song","songs","track","tracks","date",
+    "favorite","favourite","favorites","favourites","date",
     "mikan","remember","does","were","will","can","the","and","for","are"]);
   const terms=new Set(memoryTerms(query).filter(t=>t.length>=3&&!stop.has(t)));
   const topical=(f:T)=>{
