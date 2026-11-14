@@ -170,6 +170,26 @@ test("live Brain Lab passes conversation history to web planning for independent
     assert.equal(followup.previous[0].content,scenario.steps[0].user);
   }
 });
+test("a casual book discussion can turn into discovery and carry a third-turn constraint",async()=>{
+  const requested=[];
+  const report=await runBrainEvaluation({
+    scenarios:[byId("discovery-book")],mode:"live",model:"fixture-model",repetitions:1,
+    planWeb:async(question,previous)=>{
+      requested.push({question,previous});
+      return {search:!question.startsWith("I finished"),reason:"Refined public book discovery"};
+    },
+    infer:async()=>"I'll look for shorter liminal-horror options."
+  });
+  const steps=report.cases[0].steps;
+  assert.deepEqual(steps.map(step=>step.expected.web),[false,true,true]);
+  assert.deepEqual(steps.map(step=>step.webPass),[true,true,true]);
+  const last=requested.find(x=>x.question==="Prefer something short this time.");
+  assert.ok(last);
+  assert.deepEqual(last.previous.filter(x=>x.role==="user").map(x=>x.content),[
+    "I finished The Hollow Places and loved the weird in-between spaces.",
+    "I wish there were more books with that kind of liminal horror."
+  ]);
+});
 test("web-planning context is isolated per scenario and explicit research opt-outs remain local",async()=>{
   const chosen=[byId("discovery-wish-but-no-recommendations"),
     byId("discovery-wish-not-a-search"),byId("discovery-bands-just-gushing")];
