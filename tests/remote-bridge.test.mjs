@@ -55,7 +55,8 @@ test("browser relay requires a private key and delegates to the desktop, not a s
   assert.match(settingsView, /role="dialog" aria-modal="true"/);
   for (const control of ["conversationSelect", "newChat", "modelSelect",
     "refreshModels", "enlargeAvatar", "lock", "report", "showModelName",
-    "showAvatarLabel"]) {
+    "showAvatarLabel","brainLabMode","brainLabStatusFilter","brainLabRows",
+    "brainLabSelectVisible","brainLabSelectUnresolved","brainLabSelectRegression","brainLabSelectClear"]) {
     assert.match(settingsView, new RegExp('id="' + control + '"'), control + " belongs in settings");
     assert.doesNotMatch(mainView, new RegExp('id="' + control + '"'), control + " is hidden from chat");
   }
@@ -183,6 +184,33 @@ test("browser relay requires a private key and delegates to the desktop, not a s
   assert.equal(completeReply.status,200);
   assert.equal((await completeReply.json()).reportId,sampleEval.runId);
   assert.equal((await (await request(base + "/api/state","GET",authorized)).json()).reportAvailable,true);
+  // Browser receives only whitelisted test statuses, not a writable report.
+  const reviewState=evalState("complete");
+  reviewState.brainEvalCatalog=[
+    {id:"branch-a",label:"Favorite band branch",group:"Branching context",turns:3,
+      states:{routing:{status:"passed",at:"2026-11-14T22:00:00Z"},
+        live:{status:"review",previous:"review",at:"2026-11-14T22:00:00Z"}}},
+    {id:"discovery-bands-wish",label:"Implicit recommendations",group:"Conversational discovery",turns:2,
+      states:{live:{status:"stale",previous:"passed",at:"2026-11-12T22:00:00Z"}}}
+  ];
+  assert.equal((await request(agent + "/agent/state","POST",desktopHeaders,reviewState)).status,200);
+  const remoteCases=(await (await request(base + "/api/state","GET",authorized)).json()).brainEvalCatalog;
+  assert.equal(remoteCases[0].states.routing.status,"passed");
+  assert.equal(remoteCases[0].states.live.status,"review");
+  assert.equal(remoteCases[1].states.live.status,"stale");
+  assert.equal(remoteCases[1].states.live.previous,"passed");
+  assert.equal((await request(base + "/api/brain-eval","POST",jsonHeaders,
+    {action:"review",scenarioId:"discovery-bands-wish",mode:"live",decision:"passed"})).status,409);
+  assert.equal((await request(base + "/api/brain-eval","POST",jsonHeaders,
+    {action:"review",scenarioId:"branch-a",mode:"live",decision:"make_it_green"})).status,400);
+  assert.equal((await request(base + "/api/brain-eval","POST",jsonHeaders,
+    {action:"review",scenarioId:"branch-a",mode:"live",decision:"passed"})).status,202);
+  const reviewJob=(await (await request(agent + "/agent/next","GET",desktopHeaders)).json()).job;
+  assert.equal(reviewJob.kind,"review_brain_eval");
+  assert.equal(reviewJob.evalScenarioId,"branch-a");
+  assert.equal(reviewJob.evalMode,"live");
+  assert.equal(reviewJob.evalDecision,"passed");
+  assert.equal((await request(agent + "/agent/ack","POST",desktopHeaders,{id:reviewJob.id})).status,200);
   // Resume the rest of the legacy relay tests after a detached run finishes.
   assert.equal((await request(agent + "/agent/state","POST",desktopHeaders,{
     conversationId:"same-desktop-conversation",model:"qwen3.5:9b",
