@@ -46,6 +46,8 @@ export type EvalStepResult = {
   answerPass: boolean | null;
   answerFailures: string[];
   answer?: string;
+  inferenceStats?: {promptTokens?:number|null;outputTokens?:number|null;evalDurationNs?:number|null;loadDurationNs?:number|null};
+  modelUsed?:string;
   error?: string;
   elapsedMs: number;
   pass: boolean;
@@ -61,13 +63,18 @@ export type EvalReport = {
   environment:"isolated-synthetic"; liveWebEnabled:false; writesToRealMemories:false;
   cases:EvalCaseResult[];
 };
+export type EvalInferenceResult = string | {
+  text:string;
+  stats?: {promptTokens?:number|null;outputTokens?:number|null;evalDurationNs?:number|null;loadDurationNs?:number|null};
+  modelUsed?:string;
+};
 export type EvalInference = (args:{
   messages:EvalTurn[];
   selectedMemories:ReadonlyArray<{id:number;fact:string}>;
   evidence?:string;
   scenarioId:string;
   stepIndex:number;
-})=>Promise<string>;
+})=>Promise<EvalInferenceResult>;
 export type EvalPlanner = (input:string,previous:EvalTurn[])=>Promise<{search:boolean;query?:string;reason:string}>;
 export type EvalOptions = {
   mode:EvalMode;
@@ -271,15 +278,21 @@ export async function runBrainEvaluation(options:EvalOptions):Promise<EvalReport
       const unexpected=(step.expect.excludeMemory??[]).filter(id=>memory.ids.includes(id));
       let planned:{search:boolean;query?:string;reason:string}|undefined;
       let answer:string|undefined;
+      let inferenceStats:EvalStepResult["inferenceStats"]|undefined;
+      let modelUsed:string|undefined;
       let error:string|undefined;
       const messages:EvalTurn[]=[...previous,{role:"user",content:step.user}];
       try {
         if(options.mode==="live" && webPolicy.canPlanPublicWeb && options.planWeb)
           planned=await options.planWeb(step.user,previous);
-        if(options.mode==="live" && options.infer)answer=await options.infer({
-          messages,selectedMemories:selected,evidence:step.mockEvidence,
-          scenarioId:scenario.id,stepIndex
-        });
+        if(options.mode==="live" && options.infer){
+          const response=await options.infer({
+            messages,selectedMemories:selected,evidence:step.mockEvidence,
+            scenarioId:scenario.id,stepIndex
+          });
+          if(typeof response==="string")answer=response;
+          else {answer=response.text;inferenceStats=response.stats;modelUsed=response.modelUsed;}
+        }
       }catch(err){error=err instanceof Error?err.message:String(err)}
       const answerFailures=answer===undefined
         ? []:scoreAnswer(answer,step.expect);
@@ -304,7 +317,7 @@ export async function runBrainEvaluation(options:EvalOptions):Promise<EvalReport
         blockedReason:webPolicy.blockedReason,deterministicWebAllowed:decision.allowAutomaticWeb,
         plannedWeb,webPass,webPlannerDecision:planned,selectedMemoryIds:memory.ids,selectedMemory:selected,
         missingMemoryIds:missing,unexpectedMemoryIds:unexpected,
-        routePass,memoryPass,answerPass,answerFailures,answer,error,
+        routePass,memoryPass,answerPass,answerFailures,answer,inferenceStats,modelUsed,error,
         elapsedMs:Date.now()-began,
         pass:routePass&&memoryPass&&webPass!==false&&(answerPass??true)&&!error
       };
@@ -336,6 +349,14 @@ export function brainEvalMetrics(report:EvalReport){
     webAgreement:ratio(steps.filter(s=>s.webPass===true).length,steps.filter(s=>s.webPass!==null).length),
     unnecessaryWeb:steps.filter(s=>s.webPass===false&&s.plannedWeb===true).length,
     missedWeb:steps.filter(s=>s.webPass===false&&s.plannedWeb===false).length,
+    tokensPerSecond:(()=>{
+      const samples=steps.map(s=>s.inferenceStats)
+        .filter(s=>s && typeof s.outputTokens==="number" &&
+          typeof s.evalDurationNs==="number" && s.evalDurationNs>0);
+      const tokens=samples.reduce((total,s)=>total+(s?.outputTokens??0),0);
+      const ns=samples.reduce((total,s)=>total+(s?.evalDurationNs??0),0);
+      return ns>0?Math.round(tokens*1e10/ns)/10:null;
+    })(),
     answers:report.mode==="live"?ratio(steps.filter(s=>s.answerPass).length,steps.length):null,
     elapsedMs:report.cases.reduce((n,c)=>n+c.elapsedMs,0)
   };
@@ -356,6 +377,7 @@ export function brainEvalMarkdown(report:EvalReport):string {
     "| Routing agreement | "+m.routes+"% |",
     "| Memory selection agreement | "+m.recall+"% |",
     "| Web decisions measured | "+m.webChecks+" |",
+    "| Model tokens per second | "+(m.tokensPerSecond??"n/a")+" |",
     "| Web planning agreement | "+m.webAgreement+"% |",
     "| Unnecessary / missed planned searches | "+m.unnecessaryWeb+" / "+m.missedWeb+" |",
     "| Answer heuristics | "+(m.answers===null?"Not run":m.answers+"%")+" |",
@@ -375,6 +397,7 @@ export function brainEvalMarkdown(report:EvalReport):string {
           "; unexpected "+(s.unexpectedMemoryIds.join(", ")||"none"),
         "- Time: "+s.elapsedMs+" ms");
       if(s.answer!==undefined)lines.push("- Response: "+s.answer.replace(/\s+/g," ").slice(0,800));
+      if(s.inferenceStats)lines.push("- Inference: "+JSON.stringify({model:s.modelUsed,stats:s.inferenceStats}));
       if(s.error)lines.push("- Error: "+s.error);
       if(s.answerFailures.length)lines.push("- Checks: "+s.answerFailures.join("; "));
       lines.push("");
