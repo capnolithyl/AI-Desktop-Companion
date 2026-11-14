@@ -146,6 +146,53 @@ test("live web-planner decisions distinguish desired recommendations from unwant
   assert.equal(unwanted.cases[0].steps[0].webPass,false);
 });
 
+test("live Brain Lab passes conversation history to web planning for independent discovery scenarios",async()=>{
+  const selected=["discovery-bands-wish","discovery-anime","discovery-games",
+    "discovery-tech-tool","discovery-book"].map(byId);
+  const calls=[];
+  const result=await runBrainEvaluation({
+    scenarios:selected,mode:"live",model:"fixture-model",repetitions:1,
+    planWeb:async(question,previous)=>{
+      calls.push({question,previous});
+      return {search:true,query:"public topics refined by latest constraints",
+        reason:"The earlier public discovery request is still active"};
+    },
+    infer:async()=>"I can check current public options against those constraints."
+  });
+  for(const scenario of selected){
+    const steps=result.cases.find(c=>c.id===scenario.id).steps;
+    assert.equal(steps[0].webPass,true,scenario.id+" initial request");
+    assert.equal(steps[1].webPass,true,scenario.id+" follow-up constraint");
+    assert.equal(steps[1].canPlanPublicWeb,true,scenario.id+" policy eligibility");
+    const followup=calls.find(c=>c.question===scenario.steps[1].user);
+    assert.ok(followup,scenario.id+" planner invoked for refinement");
+    assert.equal(followup.previous[0].role,"user");
+    assert.equal(followup.previous[0].content,scenario.steps[0].user);
+  }
+});
+test("web-planning context is isolated per scenario and explicit research opt-outs remain local",async()=>{
+  const chosen=[byId("discovery-wish-but-no-recommendations"),
+    byId("discovery-wish-not-a-search"),byId("discovery-bands-just-gushing")];
+  const calls=[];
+  const report=await runBrainEvaluation({
+    scenarios:chosen,mode:"live",model:"fixture-model",repetitions:1,
+    planWeb:async(question,previous)=>{
+      calls.push({question,previous});
+      const optOut=/not asking for recommendations|just venting/i.test(question);
+      const discovery=/more bands that sounded like Immortal/i.test(question);
+      return {search:discovery&&!optOut,reason:"Use current turn preference"};
+    },
+    infer:async()=>"Let's talk about it."
+  });
+  assert.equal(report.cases.find(c=>c.id==="discovery-wish-but-no-recommendations")
+    .steps[1].webPass,true);
+  assert.equal(report.cases.find(c=>c.id==="discovery-wish-not-a-search")
+    .steps[0].plannedWeb,false);
+  assert.equal(report.cases.find(c=>c.id==="discovery-bands-just-gushing")
+    .steps[0].plannedWeb,false);
+  assert.ok(calls.filter(c=>c.previous.length===0).length>=1,
+    "A new scenario never inherits earlier synthetic user turns");
+});
 test("factual answers are still checked even when web execution is unobserved",async()=>{
   const report=await runBrainEvaluation({
     mode:"live",scenarios:[byId("branch-a")],model:"fake",repetitions:1,
