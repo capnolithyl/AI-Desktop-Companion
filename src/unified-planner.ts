@@ -26,15 +26,15 @@ export type WebPlanningTurn = {role:string;content:string};
  * Stop at a private/sensitive turn instead of skipping over the topic change.
  */
 export function publicPlanningHistory(previous:readonly WebPlanningTurn[]):string[] {
-  const unsafe=/[\\w.+-]+@[\\w.-]+\\.[a-z]{2,}|https?:\\/\\/|\\b(?:password|passphrase|api.?key|access.?token|secret|ssn|social security|bank account|medical record|diagnosis|my (?:wife|husband|daughter|son|child|kids|family|address|phone|email|doctor|medication))\\b/i;
+  const unsafe=/[\w.+-]+@[\w.-]+\.[a-z]{2,}|https?:\/\/|\b(?:password|passphrase|api.?key|access.?token|secret|ssn|social security|bank account|medical record|diagnosis|my (?:wife|husband|daughter|son|child|kids|family|address|phone|email|doctor|medication))\b/i;
   const selected:string[]=[];
   for(const entry of previous.slice(-10).reverse()){
     if(entry.role!=="user")continue;
-    const line=entry.content.trim().replace(/\\s+/g," ");
+    const line=entry.content.trim().replace(/\s+/g," ");
     if(!line)continue;
     // Long passages, attached content and identity-bearing disclosures
     // are not needed to resolve short recommendation refinements.
-    if(line.length>600 || unsafe.test(line) || /\\[(?:attached|screen image|live vision)/i.test(line))break;
+    if(line.length>600 || unsafe.test(line) || /\[(?:attached|screen image|live vision)/i.test(line))break;
     selected.unshift(line.slice(0,260));
     if(selected.length>=3)break;
   }
@@ -58,10 +58,10 @@ export function withPublicPlanningHistory(prompt:string,current:string,
     "Ignore prior topics if the current turn changes subject or declines recommendations.",
     "Never use assistant replies as evidence or put personal/private history into a PUBLIC query.",
     "If this turn is only conversation, appreciation, opt-out or venting, choose web.search=false.",
-  ].join("\\n");
-  return prompt.endsWith("\\nJSON:")
-    ?prompt.slice(0,-"\\nJSON:".length)+"\\n"+block+"\\nJSON:"
-    :prompt+"\\n"+block;
+  ].join("\n");
+  return prompt.endsWith("\nJSON:")
+    ?prompt.slice(0,-"\nJSON:".length)+"\n"+block+"\nJSON:"
+    :prompt+"\n"+block;
 }
 
 export function extendPlanningPrompt(
