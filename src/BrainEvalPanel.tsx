@@ -6,7 +6,7 @@ import { shouldUseLocalThinking } from "./reasoning-mode";
 import { planPublicWebTools } from "./unified-planner";
 import {
   EVAL_SCENARIOS, runBrainEvaluation, brainEvalMetrics, brainEvalMarkdown,
-  type EvalMode, type EvalReport, type EvalTurn
+  type EvalMode, type EvalReport, type EvalTurn, type EvalInferenceResult
 } from "./brain-eval";
 import "./brain-eval.css";
 
@@ -45,7 +45,7 @@ export function BrainEvalPanel({settings}:{settings:Settings}){
     messages:EvalTurn[];
     selectedMemories:ReadonlyArray<{id:number;fact:string}>;
     evidence?:string;scenarioId:string;stepIndex:number;
-  }):Promise<string>=>{
+  }):Promise<EvalInferenceResult>=>{
     if(abortRef.current?.signal.aborted)throw new Error("Stopped by user");
     const requestId="mikan-brain-eval-"+crypto.randomUUID();
     requestRef.current=requestId;
@@ -63,7 +63,9 @@ export function BrainEvalPanel({settings}:{settings:Settings}){
       evidence?"Mock public evidence fixture (NOT live web data): "+evidence:""
     ].filter(Boolean).join("\n\n");
     try {
-      const result=await invoke<{content:string}>("chat_stream",{request:{
+      const result=await invoke<{content:string;modelUsed?:string;stats?:{
+        promptTokens?:number|null;outputTokens?:number|null;evalDurationNs?:number|null;loadDurationNs?:number|null
+      }|null}>("chat_stream",{request:{
         requestId,endpoint:settings.endpoint,model:settings.model,provider:"local",
         messages:[{role:"system",content:system},...messages.map(m=>({role:m.role,content:m.content}))],
         autoSearch:false,researchRoute:"chat",thinkingRequested:
@@ -71,7 +73,8 @@ export function BrainEvalPanel({settings}:{settings:Settings}){
         searxngEndpoint:settings.searxngEndpoint,
         contextWindow:settings.contextWindow,structuredResearch:false
       }});
-      return result.content.trim();
+      return {text:result.content.trim(),modelUsed:result.modelUsed??settings.model,
+        stats:result.stats??undefined};
     }finally{if(requestRef.current===requestId)requestRef.current=null}
   };
 
@@ -193,6 +196,7 @@ export function BrainEvalPanel({settings}:{settings:Settings}){
           ["Web decisions",metrics.webAgreement+"%",metrics.webChecks+" observed · "+metrics.unnecessaryWeb+" extra · "+metrics.missedWeb+" missed"],
           ["Memory selection",metrics.recall+"%","without semantic index"],
           ["Answer checks",metrics.answers===null?"Not run":metrics.answers+"%",report.mode==="live"?"local model":"planning-only"],
+          ["Model speed",metrics.tokensPerSecond===null?"Not measured":metrics.tokensPerSecond+" tok/s","generation only"],
           ["Elapsed",formatMs(metrics.elapsedMs),metrics.cases+" scenario runs"]
         ] as const).map(([label,value,note])=><div key={label} className="brain-eval-metric">
           <span>{label}</span><strong>{value}</strong><small>{note}</small>
@@ -233,6 +237,9 @@ export function BrainEvalPanel({settings}:{settings:Settings}){
               missing: {step.missingMemoryIds.join(", ")||"none"};
               unexpected: {step.unexpectedMemoryIds.join(", ")||"none"}</small>
             {step.answer&&<p className="brain-eval-answer">{step.answer}</p>}
+            {step.inferenceStats&&<small>Model: {step.modelUsed??"local"} · output {step.inferenceStats.outputTokens??"?"} tokens ·
+              generation {(step.inferenceStats.evalDurationNs??0)>0?
+                ((step.inferenceStats.outputTokens??0)*1e9/(step.inferenceStats.evalDurationNs??1)).toFixed(1)+" tok/s":"n/a"}</small>}
             {step.answerFailures.map(reason=><small className="field-error" key={reason}>{reason}</small>)}
             {step.error&&<small className="field-error">{step.error}</small>}
           </div>)}
