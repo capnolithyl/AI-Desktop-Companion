@@ -321,6 +321,32 @@ async fn chat_stream(
 }
 
 #[tauri::command]
+fn brain_eval_export(app: tauri::AppHandle, json_report: String, markdown_report: String) -> Result<String, String> {
+    // User-triggered only. Never accept a path supplied from the renderer.
+    // The existing report schema is synthetic, with no real personal memory contents.
+    if json_report.len() > 4_000_000 || markdown_report.len() > 2_000_000 {
+        return Err("Evaluation report is too large (4 MB JSON / 2 MB Markdown limits)".into());
+    }
+    serde_json::from_str::<Value>(&json_report)
+        .map_err(|_| "Cannot export invalid evaluation JSON".to_string())?;
+    let base = app.path().document_dir()
+        .or_else(|_| app.path().app_data_dir())
+        .map_err(|e| format!("Cannot determine report directory: {e}"))?;
+    let folder = base.join("Mikan").join("Brain-Evaluations");
+    std::fs::create_dir_all(&folder)
+        .map_err(|e| format!("Cannot create report folder: {e}"))?;
+    let millis = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|e| e.to_string())?.as_millis();
+    let stem = format!("mikan-brain-eval-{millis}");
+    std::fs::write(folder.join(format!("{stem}.json")), json_report)
+        .map_err(|e| format!("Cannot write JSON report: {e}"))?;
+    std::fs::write(folder.join(format!("{stem}.md")), markdown_report)
+        .map_err(|e| format!("Cannot write readable report: {e}"))?;
+    Ok(folder.to_string_lossy().to_string())
+}
+
+#[tauri::command]
 fn cancel_chat(app: tauri::AppHandle, request_id: String) -> Result<(), String> {
     let state = app.state::<ChatCancellation>();
     if let Some(handle) = state.0.lock().map_err(|_| "Cancellation state unavailable")?.get(&request_id) {
@@ -762,6 +788,7 @@ pub fn run() {
             chat_stream,
             condense_local_context,
             cancel_chat,
+            brain_eval_export,
             voice::voice_health,
             voice::voice_synthesize,
             voice::voice_reference_status,
