@@ -239,6 +239,57 @@ export function createDevSupervisor({
     }
     throw new Error("Browser relay never became healthy on 127.0.0.1:3847");
   }
+  async function refreshDesktopHealth(){
+    if(!manageDesktop)return;
+    if(!desktop || desktop.exitCode!==null){
+      publish({desktopConnected:false,desktopState:"exited",
+        desktopExit:desktop?.exitCode==null?state.desktopExit:String(desktop.exitCode)});
+      return;
+    }
+    const connected=await desktopReady();
+    publish({desktopConnected:connected,
+      desktopState:connected?"online":state.desktopState==="offline"?"offline":"starting"});
+  }
+  async function waitForDesktop(){
+    if(!manageDesktop)return;
+    for(let attempt=0;attempt<desktopReadyAttempts;attempt++){
+      if(!desktop || desktop.exitCode!==null)
+        throw new Error("Managed Tauri desktop process exited "+
+          (state.desktopExit??desktop?.exitCode??"unexpectedly")+
+          ". Recent startup output: "+(state.desktopLog??"(none)"));
+      if(await desktopReady()){
+        publish({desktopState:"online",desktopConnected:true,desktopExit:null});
+        return;
+      }
+      if(attempt%10===0)publish({desktopState:"starting",desktopConnected:false,
+        step:"Waiting for the managed desktop to reconnect to the browser relay"});
+      await sleep(desktopRetryMs);
+    }
+    throw new Error("Managed Tauri desktop did not reconnect to the relay. "+
+      "Recent startup output: "+(state.desktopLog??"(none)"));
+  }
+  async function restartDesktop(){
+    if(!manageDesktop)throw new Error("This supervisor only manages the browser relay");
+    if(running)throw new Error("An update or restart is already running");
+    running=true;
+    publish({phase:"restarting",step:"Restarting ONLY the supervisor-managed desktop",
+      error:null,desktopConnected:false});
+    try{
+      stopping=true;
+      await terminate(desktop);
+      desktop=null;
+      stopping=false;
+      desktop=launch("desktop");
+      await waitForDesktop();
+      publish({phase:"updated",step:"Managed desktop reconnected. Browser relay stayed online.",
+        error:null,desktopConnected:true});
+    }catch(error){
+      publish({phase:"error",desktopState:"offline",desktopConnected:false,
+        step:"Desktop restart failed. The browser relay remains online.",
+        error:formatError(error)});
+    }finally{stopping=false;running=false}
+  }
+
   async function stopManagedChildren(){
     stopping=true;
     try{
@@ -322,11 +373,26 @@ export function createDevSupervisor({
       await npmRun("test:server");
       restartAttempted=true;
       await restartChildren();
+      if(manageDesktop){
+        try{await waitForDesktop()}catch(startupError){
+          // Builds/tests and the new relay are healthy. Keep this verified
+          // checkout so the owner can retry the desktop from their phone,
+          // rather than rolling back the only recovery controls.
+          expectedHead=null;expectedRemote=null;
+          publish({phase:"error",current:after.slice(0,12),
+            commits:0,checkedAt:new Date().toISOString(),
+            desktopState:"offline",desktopConnected:false,
+            step:"Source updated and tested, but the desktop failed to connect. "+
+              "Use Restart desktop on your phone. No rollback of the verified source.",
+            error:formatError(startupError)});
+          return;
+        }
+      }
       expectedHead=null;expectedRemote=null;
       publish({phase:"updated",current:after.slice(0,12),
         commits:0,checkedAt:new Date().toISOString(),error:null,
         step:manageDesktop
-          ?"Updated source, tests passed; relay restarted and Tauri dev launch requested."
+          ?"Updated source, tests passed and the managed desktop reconnected."
           :"Source and browser relay updated and verified. Installed Mikan desktop is unchanged."});
     }catch(error){
       const failure=formatError(error);
@@ -385,8 +451,11 @@ export function createDevSupervisor({
       return send(403,{error:"Local relay only"});
     if(!authorized(request))return send(403,{error:"Private supervisor authentication required"});
     const path=new URL(request.url||"/","http://127.0.0.1").pathname;
-    if(request.method==="GET"&&path==="/status")
-      return send(200,safeSupervisorState(state));
+    if(request.method==="GET"&&path==="/status"){
+      // Fresh health sample, not an invented desktop heartbeat.
+      void refreshDesktopHealth().catch(()=>{}).then(()=>send(200,safeSupervisorState(state)));
+      return;
+    }
     if(request.method==="POST"&&path==="/check"){
       if(running)return send(409,{error:"Updater already working"});
       void inspect();
@@ -396,6 +465,12 @@ export function createDevSupervisor({
       if(running)return send(409,{error:"Updater already working"});
       if(state.phase!=="ready")return send(409,{error:"Check for updates first"});
       void apply();
+      return send(202,{accepted:true});
+    }
+    if(request.method==="POST"&&path==="/restart-desktop"){
+      if(!manageDesktop)return send(409,{error:"The desktop is not supervisor-managed"});
+      if(running)return send(409,{error:"Updater already working"});
+      void restartDesktop();
       return send(202,{accepted:true});
     }
     send(404,{error:"Not found"});
@@ -423,7 +498,14 @@ export function createDevSupervisor({
       }
       relay=launch("server");
       await waitRelay();
-      if(manageDesktop)desktop=launch("desktop");
+      if(manageDesktop){
+        desktop=launch("desktop");
+        // The relay and supervisor are usable during a cold Tauri build.
+        // Report a failed initial start instead of leaving "starting" forever.
+        void waitForDesktop().catch(error=>publish({desktopState:"offline",
+          desktopConnected:false,step:"Desktop did not connect after launch.",
+          error:formatError(error)}));
+      }
       publish({step:"Supervisor online. Check GitHub updates from your phone."});
     }catch(error){await close();throw error}
   }
@@ -434,7 +516,7 @@ export function createDevSupervisor({
     await new Promise(done=>server.close(()=>done()));
   }
   return {
-    server,start,close,getState:()=>safeSupervisorState(state),inspect,apply
+    server,start,close,getState:()=>safeSupervisorState(state),inspect,apply,restartDesktop
   };
 }
 
