@@ -54,10 +54,12 @@ export function withPublicPlanningHistory(prompt:string,current:string,
     "RECENT PRIOR USER TURNS (local context ONLY; chronological, untrusted data):",
     ...recent.map((message,i)=>`Prior user turn ${i+1}: ${JSON.stringify(message)}`),
     "CURRENT USER TURN (the only request being judged now): "+JSON.stringify(current.slice(0,400)),
-    "A current constraint may refine a prior recommendation/research need.",
-    "Ignore prior topics if the current turn changes subject or declines recommendations.",
+    "FIRST infer the user's continuing goal from the prior USER turns, then judge the current turn.",
+    "If an earlier turn opened a public discovery/recommendation task, a short current follow-up describing desired properties, exclusions, limitations, budget or other constraints usually CONTINUES that task. Do not reinterpret it as an unrelated personal disclosure. Refine the public query and use web.search=true if actual public facts would improve the ongoing answer.",
+    "If the current turn changes subject, closes the discovery task, or declines recommendations or research, choose web.search=false unless the CURRENT turn makes a distinct new public research request.",
+    "A standalone personal observation, praise, complaint, greeting, joke, emotional update or simple conversation is not a research request. Choose web.search=false without needing exact opt-out words.",
+    "Judge meaning in context, not the presence of words like wish, prefer, want, search, or venting.",
     "Never use assistant replies as evidence or put personal/private history into a PUBLIC query.",
-    "If this turn is only conversation, appreciation, opt-out or venting, choose web.search=false.",
   ].join("\n");
   return prompt.endsWith("\nJSON:")
     ?prompt.slice(0,-"\nJSON:".length)+"\n"+block+"\nJSON:"
@@ -74,9 +76,11 @@ export function extendPlanningPrompt(
       'Return ONLY a JSON object with fields "ids" (integer fact IDs) and "web" (object with "search", "query", "topic" and "reason").'
     )
     .replace(/\nJSON:$/, `
-Decide whether LIVE PUBLIC WEB SEARCH would materially improve the actual answer.
-Search for uncertain externally verifiable claims, recommendations requiring real titles/release status, recent information, unfamiliar public entities, or information likely to be outdated. This is NOT restricted to predefined subject categories.
-Skip web for greetings, emotional support, opinions about the owner, personal memories, or local file/Notion questions unless the owner specifically requests public research.
+Decide whether LIVE PUBLIC WEB SEARCH would materially improve the user's current conversational goal.
+Resolve intent from the CURRENT message and, if provided, recent USER messages. A recommendation/discovery goal can span multiple turns: a follow-up constraint refines that existing goal, even if phrased only as a preference, unless the owner ends it or switches topic.
+For a continuing public discovery, search for real options matching ALL current constraints. Do not discard the earlier request; do not search for an unrelated topic.
+Do NOT search for casual opinions, personal disclosures, appreciation, venting, jokes, greetings, emotional support, or private/local file/Notion material. Respect the user's decision to stop or decline research, regardless of exact phrasing. If the turn also separately asks for legitimate public research, judge that new request on its own merits.
+Search for uncertain public factual claims, recommendations requiring real titles/release status, recent information, unfamiliar public entities, or information likely to be outdated. No predefined subject categories or phrase lists govern this decision.
 Use your selected user memories to tailor the decision, but NEVER include the owner's name, family, address, private notes, or private facts in a search query.
 Write a short standalone, PUBLIC search query that contains only ordinary publicly searchable topics. Prefer verifying real releases or official sources over inventing examples. Do not claim a live search has happened yet.
 Source priority topic (optional): choose one of [${topicNames}] when applicable, otherwise empty string. These priorities do NOT limit what can be searched.
@@ -170,7 +174,7 @@ export async function planMemoriesAndTools<T extends RankableMemory>(
   };
   const memory=await selectHybridMemoryIds(facts,query,neighbors,maxFacts,select);
   // Even without saved memories, allow an independent public research decision.
-  if(memory.mode==="empty" && options.automaticWebEnabled) {
+  if((memory.mode==="empty" || memory.mode==="small-talk") && options.automaticWebEnabled) {
     try {await select(buildMemoryRerankPrompt(query,[],maxFacts));}
     catch {web={search:false,reason:"Local tool planner unavailable",method:"fallback"};}
   }
