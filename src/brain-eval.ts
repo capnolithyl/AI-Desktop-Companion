@@ -87,6 +87,8 @@ export type EvalInference = (args:{
   messages:EvalTurn[];
   selectedMemories:ReadonlyArray<{id:number;fact:string}>;
   evidence?:string;
+  /** Planning is observed, but Brain Lab does not execute public web tools. */
+  researchPlanned?:boolean;
   scenarioId:string;
   stepIndex:number;
 })=>Promise<EvalInferenceResult>;
@@ -570,6 +572,7 @@ export async function runBrainEvaluation(options:EvalOptions):Promise<EvalReport
         if(options.mode==="live" && options.infer){
           const response=await options.infer({
             messages,selectedMemories:selected,evidence:step.mockEvidence,
+            researchPlanned:planned?.search===true || decision.plan.mode==="research",
             scenarioId:scenario.id,stepIndex
           });
           if(typeof response==="string")answer=response;
