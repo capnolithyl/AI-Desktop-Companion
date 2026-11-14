@@ -165,3 +165,20 @@ test("generic pronouns and negation do not retrieve fictional hometowns or unrel
   assert.deepEqual(selected("Not asking for recommendations, just venting."),[]);
   assert.deepEqual(selected("Not another giant open world, please."),[119]);
 });
+
+test("a fictional favorite band or game is not topical to a different named artist or RPG",()=>{
+  const examples=[
+    {id:101,fact:"The user's favorite band is Cobalt Harbor (fictional).",
+      category:"preferences",tags:["music","favorite band"],updatedAt:Date.now()/1000},
+    {id:111,fact:"The user's favorite game is Ember Tactics (fictional RPG).",
+      category:"preferences",tags:["games","RPG"],updatedAt:Date.now()/1000},
+    {id:119,fact:"The user dislikes sprawling open-world strategy games.",
+      category:"preferences",tags:["strategy","open world"],updatedAt:Date.now()/1000}
+  ];
+  const allIds=examples.map(f=>f.id);
+  const picked=query=>selectDeterministicMemoryIds(examples,query,[],allIds,8).ids;
+  assert.deepEqual(picked("Man, I wish there were more bands that sound like Immortal."),[]);
+  assert.deepEqual(picked("I'm craving another tactical RPG like Fire Emblem."),[]);
+  assert.deepEqual(picked("Not another giant open world, please."),[119]);
+  assert.deepEqual(picked("What's my favorite band?"),[101]);
+});
