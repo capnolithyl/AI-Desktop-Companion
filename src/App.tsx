@@ -55,7 +55,7 @@ import {
   subscribeBrainEval, getBrainEvalStatus, getBrainEvalReport,
   startBrainEvaluation, stopBrainEvaluation, type BrainEvalRequest
 } from "./brain-eval-manager";
-import { brainEvalMarkdown } from "./brain-eval";
+import { brainEvalMarkdown, EVAL_SCENARIOS } from "./brain-eval";
 import type { IncomingCanon, IncomingInterest } from "./interest-import";
 import type {ImportMemory,MemoryCategory} from "./memory-import";
 import { NotionPanel } from "./NotionPanel";
@@ -2742,6 +2742,9 @@ export default function App() {
     controlsBlocked: remoteBusyRef.current,
     busy,
     brainEval: brainEvalStatus,
+    brainEvalCatalog: EVAL_SCENARIOS.map(({id,label,group,steps})=>({
+      id,label,group,turns:steps.length
+    })),
     reportDiagnostics: {
       desktopVersion: DESKTOP_VERSION,
       contextWindow: settings.contextWindow,
