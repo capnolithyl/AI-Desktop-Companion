@@ -28,7 +28,7 @@ export function getBrainEvalCaseRecords():ReadonlyArray<BrainCaseRecord>{
 function saveCaseRecords(records:BrainCaseRecord[]){
   cachedCaseRecords=records;
   try{localStorage.setItem(CASE_KEY,JSON.stringify(records))}catch{/* retained in this session */}
-  notify();
+  setStatus({});
 }
 export function brainEvalEnvironment(mode:EvalMode,model:string):BrainCaseEnvironment{
   return {mode,model,build:BRAIN_EVAL_BUILD};
