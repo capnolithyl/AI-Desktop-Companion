@@ -38,3 +38,24 @@
 /* Semantic dialogue checks remain explicitly ungraded until a person reviews them. */
 .brain-eval-review{color:#eed1a0}
 .brain-eval-step small.brain-eval-goal{color:#f5cfb4;font-weight:600;line-height:1.5}
+
+/* Per-scenario selective reruns and retained status. */
+.brain-eval-status-summary,.brain-eval-select-actions{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.brain-eval-select-actions button,.brain-eval-review-actions button{padding:6px 9px;border:1px solid #795869;background:#453444;color:#ffe8e9;border-radius:7px;font-size:11px}
+.brain-eval-select-actions button:disabled,.brain-eval-review-actions button:disabled{opacity:.45}
+.brain-eval-catalog{max-height:310px;overflow-y:auto;display:grid;gap:5px;padding:6px;border:1px solid #654d60;border-radius:10px;background:#221c27}
+.brain-eval-test-row{display:flex;align-items:center;flex-wrap:wrap;gap:7px;padding:7px 9px;border-radius:7px;background:#352937}
+.brain-eval-test-row>label{display:flex;align-items:center;gap:8px;flex:1 1 160px;min-width:0;cursor:pointer}
+.brain-eval-test-row input[type="checkbox"]{accent-color:#f5b18f;flex-shrink:0;width:16px;height:16px}
+.brain-eval-test-row label span{min-width:0;overflow-wrap:anywhere;font-size:12px}
+.brain-eval-test-row label strong{display:block;font-weight:600}
+.brain-eval-test-row label small{display:block;color:#cdbac8;font-size:10px;margin-top:2px}
+.brain-eval-status{font-size:10px;font-weight:700;border-radius:6px;padding:4px 7px;text-transform:uppercase;letter-spacing:.25px;background:#49394a;color:#ded1de;white-space:nowrap}
+.brain-eval-status.passed{background:#284b3d;color:#b1edd0}
+.brain-eval-status.failed{background:#613840;color:#ffd0ca}
+.brain-eval-status.review{background:#574428;color:#ffdaa1}
+.brain-eval-status.stale{background:#3d4062;color:#cad5ff}
+.brain-eval-status.incomplete{background:#563c53;color:#f6c6ea}
+.brain-eval-status.untested{background:#403d44;color:#d0c9d0}
+.brain-eval-review-actions{display:flex;gap:5px}
+@media(max-width:550px){.brain-eval-test-row{align-items:flex-start}.brain-eval-review-actions{width:100%}}
