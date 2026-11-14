@@ -87,6 +87,82 @@ makes older results **Stale** rather than silently passing. A subjective
 conversation can only be marked Passed after its response is reviewed.
 Only checked cases run, preserving all other historical results.
 
+## Remote developer updates (opt-in)
+
+This is for one personal Windows PC and one **pinned** GitHub development branch.
+The browser does not get a command prompt, filesystem access, an SSH token or
+arbitrary Git branch selection.
+
+**One-time setup on the PC**, in the branch checkout:
+
+1. `git switch feature/p0-brain-evaluation-harness`
+2. `git pull --ff-only`
+3. `npm install`
+4. Stop the old `npm run server` process with Ctrl+C, since it owns port 3847.
+5. Start the new **managed relay**:
+
+   ```powershell
+   npm run remote:dev
+   ```
+
+   Keep this PowerShell window open. Your *installed* desktop Mikan can stay
+   running separately, but a Git pull cannot update that installed executable.
+
+Once `npm run desktop` works locally with MSVC C++ Build Tools, you can
+instead quit the installed Mikan and launch the **managed dev desktop + relay**:
+
+```powershell
+npm run remote:dev -- --desktop
+```
+
+That process starts **both** `npm run server` and `npm run desktop`. These
+are the only services it is allowed to terminate/restart. You do **not**
+need the MSVC toolchain for the first relay-only setup.
+
+**Phone steps:**
+
+1. Open the existing authenticated Mikan browser URL.
+2. Go to **☰ → Settings → Developer updates**.
+3. Tap **Check GitHub**. The local supervisor checks for a clean working
+   tree, correct checked-out branch and approved GitHub origin; it fetches
+   only `feature/p0-brain-evaluation-harness`.
+4. If newer commits are available, tap **Update & restart**, read the
+   confirmation (number of commits and managed components), then approve.
+5. The supervisor fast-forwards the checkout, updates dependencies only if
+   package metadata changed, runs the frontend build, Brain Lab tests,
+   and remote authentication tests. Only after successful validation does
+   it restart the *managed* relay and optionally the dev desktop.
+6. The phone may disconnect briefly during relay restart. It automatically
+   reconnects and reloads after success. Brain Lab can then run again.
+
+If a test/build fails, the supervisor tries to restore the old checkout
+without discarding tracked edits. Updates are blocked during an active
+desktop chat response or Brain Lab run. All status and errors appear in
+the phone Settings panel. This is **manual** updating, not an unattended
+GitHub watcher.
+
+**Security:** Only browser requests authenticated with the existing Mikan
+remote key can initiate updates. The relay speaks to a separate localhost
+supervisor on port **3849** using an ephemeral, random supervisor token
+that is never sent to the phone. Do NOT expose/tunnel 3848 or 3849. The
+supervisor accepts only fixed check/apply commands and one pinned origin
+and branch. It refuses dirty or diverged repositories. Treat changes to
+the approved repository branch as trusted executable code; review those
+commits before updating and protect the remote browser access key.
+
+**Limits:**
+
+- Relay-only mode can update phone UI/backend without a working Tauri Rust
+  toolchain. A standalone desktop app is **not** restarted or modified.
+- `--desktop` mode requires the Windows C++ linker and local Tauri tools
+  to work. It does not update the installed NSIS executable either.
+- An installed desktop .exe still needs a new **Windows installer from CI**
+  for its own code changes. That is separate from this dev-source updater.
+- This version does not self-update/restart the supervisor's own process.
+  Changes to the supervisor script require one manual restart of
+  `npm run remote:dev` on Windows.
+- Leave the PC awake; no updates are applied if the supervisor is offline.
+
 ## Overnight Brain Lab runs
 
 The browser is **only a remote controller**; desktop Mikan performs the
