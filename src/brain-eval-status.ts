@@ -41,6 +41,15 @@ export function caseGrade(
   if(cases.length!==expectedRepetitions ||
     cases.some(c=>c.steps.length!==expectedTurns))return "incomplete";
   if(cases.some(c=>!c.pass || c.steps.some(s=>!s.pass)))return "failed";
+  // Don't let a human Approve convert *missing tool-plan evidence* into
+  // a passing grade. That requires rerunning with an observable planner.
+  const requiredWebWasUnobserved=cases.some(c=>c.steps.some(s=>
+    s.webPass===null && (
+      s.expected?.web!==undefined ||
+      s.expected?.route==="chat" || s.expected?.route==="research"
+    )
+  ));
+  if(requiredWebWasUnobserved)return "incomplete";
   if(cases.some(c=>c.steps.some(s=>s.reviewRequired)))return "review";
   return "passed";
 }
