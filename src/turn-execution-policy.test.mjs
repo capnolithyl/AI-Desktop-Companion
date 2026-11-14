@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { planDesktopWebExecution } from "./turn-execution-policy.ts";
+import { planDesktopWebExecution, recentDiscoveryRefinement } from "./turn-execution-policy.ts";
 
 const defaults = {
   question:"What's new with NASA Artemis?", autoSearch:true, provider:"auto",
@@ -71,5 +71,34 @@ test("implicit discovery needs reach the model planner across domains, not autom
   ]){
     const verdict=planDesktopWebExecution({...defaults,question,provider:"local"});
     assert.equal(verdict.canPlanPublicWeb,false,question);
+  }
+});
+
+test("follow-up taste refinements may reach the local planner only while public discovery is active",()=>{
+  const earlier=[{role:"user",content:"I wish there were more short horror series to watch."},
+    {role:"assistant",content:"I could find some."}];
+  const continued=planDesktopWebExecution({...defaults,provider:"local",
+    question:"I prefer something under six episodes.",previous:earlier});
+  assert.equal(recentDiscoveryRefinement("I prefer something under six episodes.",earlier),true);
+  assert.equal(continued.canPlanPublicWeb,true);
+  assert.equal(continued.blockedReason,null);
+  const alone=planDesktopWebExecution({...defaults,provider:"local",
+    question:"I prefer something under six episodes."});
+  assert.equal(alone.canPlanPublicWeb,false);
+  const noNeed=planDesktopWebExecution({...defaults,provider:"local",
+    question:"I prefer something under six episodes.",
+    previous:[{role:"user",content:"I like horror anime."}]});
+  assert.equal(noNeed.canPlanPublicWeb,false);
+});
+test("user opt-outs, sensitive history, and higher-priority privacy permissions remain effective",()=>{
+  const discovery=[{role:"user",content:"I need more games with interesting tactics."}];
+  assert.equal(recentDiscoveryRefinement("Not asking for recommendations. Just venting.",discovery),false);
+  assert.equal(recentDiscoveryRefinement("I like raw tactical encounters.",[
+    {role:"user",content:"My son's address is 123 Example Street."}]),false);
+  for(const option of ["notion","personalTurn","capabilityQuestion","attachment","screenshot","roleplay"]){
+    const policy=planDesktopWebExecution({...defaults,[option]:true,
+      previous:discovery,question:"I prefer something short."});
+    assert.equal(policy.canPlanPublicWeb,false,option);
+    assert.ok(policy.blockedReason,option);
   }
 });
