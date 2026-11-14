@@ -8,6 +8,41 @@ and 1–5 repetitions. The runner is owned by the desktop process, not a setting
 component or browser tab; closing a panel does not cancel it.
 This does not rebuild the installer.
 
+## Conversation-aware public research planning
+
+**What changed:** Production Mikan and the isolated Live Brain Lab now pass
+the same recent conversation context to the *local* web-intent model. The
+planner sees at most three short, recent **user** turns from the current
+conversation, in chronological order, plus an explicit current-turn label.
+Assistant replies and older turns are excluded; long passages, attachments,
+and obvious identity, contact, home-location or health disclosures stop the
+history window. This material stays on-device and is never passed directly
+to SearXNG.
+
+The current turn remains authoritative. New subjects, opt-outs (e.g.
+"not asking for recommendations") and simple social commentary should
+result in `web.search=false`. A relevant constraint can refine an active
+discovery request without restarting research from scratch. The model
+still decides whether a public search improves the answer; the existing
+query validator still rejects personal pronouns, private names, contact
+details and URLs before anything is sent to a public service.
+
+`ownerDisclosure` now allows *eligible* short preference refinements of
+recent discovery requests to reach that local planner. This never overrides
+Notion, personal memory, roleplay, attachment, screenshot or explicit
+automatic-web-disabled restrictions. No topic-specific band/anime/game
+switches were added.
+
+**To verify:** In the browser or desktop Brain Lab, run **Live · 1×** on
+**#57 (band discovery)**, **#58 (chat, no search)**,
+**#65 (short horror anime)** and **#66 (tactical RPGs)**. Include
+the negative opt-out and topic-switch cases for additional coverage.
+For #57, #65 and #66, expect the first request *and* the second-turn
+constraint to plan the appropriate public discovery. In #58, normal
+gushing must remain local. Review the actual model replies separately,
+because this harness still doesn't run real SearXNG searches or verify
+recommendation accuracy.
+
 ## What it covers
 
 - A fixed catalog of isolated **synthetic** memories. Names such as Cobalt Harbor,
