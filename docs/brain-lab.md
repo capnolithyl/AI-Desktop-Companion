@@ -50,6 +50,34 @@ routing. This first pass does **not** remove the separate legacy heuristics
 in initial research routing and deterministic memory recall. Those remain
 areas for follow-up investigation.
 
+**0.9.17 remote-managed desktop recovery:** A phone update to 0.9.16
+showed the new browser relay and commit successfully but reported "Desktop offline".
+The Windows supervisor was correctly in `desktop-and-relay` mode and Git
+was up to date, yet `npm run desktop` had failed to establish its agent
+connection after the restart. The old supervisor waited only for relay
+HTTP health, not for the desktop app itself.
+
+In developer updates the phone now shows a **Restart desktop only** action
+when the supervisor owns the dev desktop. It stops and relaunches only the
+supervisor-owned Tauri/npm process and leaves the browser relay running;
+it never launches shell commands from user input or changes an installed
+desktop .exe. The loopback-only desktop-agent health probe does not advance
+the agent heartbeat. A restart requires a *fresh* agent heartbeat since
+that desktop launch, so the old desktop cannot make the new process look
+connected. Short redacted startup output and process-exit status are
+available in developer updates for diagnosing a failed spawn or Rust/Vite
+startup. When a source update builds and passes tests but the new desktop
+fails to connect, the verified source and relay remain in place with an
+error and restart control instead of a false success or source rollback;
+earlier build/dependency/test failures retain their transactional rollback.
+The UI prevents restarting during an active chat or Brain Lab run.
+Remote restart requires the existing Tailscale + browser key + private
+loopback supervisor token. It is not exposed in relay-only mode.
+
+This is a recovery and diagnostics change, not proof that the underlying
+Tauri startup error is fixed. Full Windows build and reconnect verification
+remain necessary. App metadata bumped to **0.9.17**.
+
 **0.9.16 shared reply grounding and faster remote test selection:** The
 Nov 14 23:03 UTC Live run (`eval-1794697430880-rzoxl`) covered 8
 scenarios and 21 turns, all mechanically passing routing/memory checks.
