@@ -68,7 +68,7 @@ export const CAPABILITIES: readonly Capability[] = [
   },
   {
     id:"web-search",label:"On-demand web search",category:"Research",
-    description:"SearXNG search with local AI memory+tool planning, optional owner-editable topic-aware preferred sources (soft ranking boosts, never an allowlist), a Docker service monitor, source citations and experimental evidence verification. Automatic search requires opt-in; cannot search when SearXNG is unavailable.",
+    description:"SearXNG search with local AI memory+tool planning, bounded user-only conversation context for follow-up research constraints, optional owner-editable topic-aware preferred sources (soft ranking boosts, never an allowlist), a Docker service monitor, source citations and experimental evidence verification. Public query privacy checks remain enforced; automatic search requires opt-in and cannot search when SearXNG is unavailable.",
     stage:"implemented",runtime:"search",keywords:["internet","web","search","latest","news","searxng","docker","browse"],
     sources:["src-tauri/src/web_search.rs","src-tauri/src/search_service.rs","src-tauri/src/research_intent.rs","src-tauri/src/source_priority.rs","src/unified-planner.ts","src/preferred-sources.ts","src/desktop-turn-routing.ts"],docs:["tools/searxng/README.md","RESEARCH-EVAL.md"],
     commands:["web_search","search_service"],
