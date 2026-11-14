@@ -8,7 +8,7 @@ const SHA_A="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 const SHA_B="bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
 const token="local-test-secret-with-more-than-thirty-two-characters";
 function fixture({dirty=false,diverged=false,failBuild=false,failInstall=false,
-  packageChange="none",manageDesktop=false}={}){
+  packageChange="none",manageDesktop=false,desktopReadyOutcome=true}={}){
   let head=SHA_A,remote=SHA_B;
   const seen=[],started=[],stopped=[];
   const oldManifest={name:"mikan-desktop-companion",version:"0.9.8",
@@ -69,7 +69,8 @@ function fixture({dirty=false,diverged=false,failBuild=false,failInstall=false,
     cwd:"/repo",token,git,npm,port:0,manageDesktop,
     startChild:(name)=>{started.push(name);return {pid:7,exitCode:null,name}},
     stopChild:async(child)=>{stopped.push(child.name)},
-    relayReady:async()=>{}
+    relayReady:async()=>{},desktopReady:async()=>desktopReadyOutcome,
+    desktopReadyAttempts:3,desktopRetryMs:0
   });
   return {supervisor,seen,started,stopped,getHead:()=>head};
 }
@@ -242,8 +243,9 @@ test("proxy client forwards only fixed method and endpoint with private header",
   assert.equal((await client.status()).phase,"ready");
   await client.check();
   await client.apply();
-  assert.deepEqual(observed.map(x=>x.url.split("/").at(-1)),["status","check","apply"]);
-  assert.deepEqual(observed.map(x=>x.method),["GET","POST","POST"]);
+  await client.restartDesktop();
+  assert.deepEqual(observed.map(x=>x.url.split("/").at(-1)),["status","check","apply","restart-desktop"]);
+  assert.deepEqual(observed.map(x=>x.method),["GET","POST","POST","POST"]);
   assert.ok(observed.every(x=>x.headers["X-Mikan-Supervisor"]===token));
 });
 
@@ -262,4 +264,68 @@ test("updater reports the failing TAP assertion rather than a generic npm comman
   assert.match(message,/not ok 3 - public relay test/);
   assert.match(message,/expected status 200 but received 409/);
   assert.doesNotMatch(message,/Command failed: node.exe/);
+});
+
+test("managed desktop can be restarted without a Git update or relay interruption",async()=>{
+  const {supervisor,started,stopped}=fixture({manageDesktop:true});
+  await supervisor.start();
+  try{
+    assert.deepEqual(started,["server","desktop"]);
+    await supervisor.inspect();
+    assert.equal(supervisor.getState().phase,"ready");
+    await supervisor.restartDesktop();
+    assert.equal(supervisor.getState().phase,"updated");
+    assert.equal(supervisor.getState().desktopConnected,true);
+    assert.equal(supervisor.getState().desktopState,"online");
+    assert.deepEqual(stopped,["desktop"]);
+    assert.deepEqual(started,["server","desktop","desktop"],
+      "Only supervisor-owned desktop may restart; never stop browser relay");
+  }finally{await supervisor.close()}
+});
+
+test("desktop restart that cannot connect reports failure while preserving the relay",async()=>{
+  const {supervisor,started,stopped}=fixture({
+    manageDesktop:true,desktopReadyOutcome:false
+  });
+  await supervisor.start();
+  try{
+    await supervisor.restartDesktop();
+    assert.equal(supervisor.getState().phase,"error");
+    assert.equal(supervisor.getState().desktopConnected,false);
+    assert.match(supervisor.getState().error,/did not reconnect/);
+    assert.deepEqual(stopped,["desktop"]);
+    assert.deepEqual(started,["server","desktop","desktop"]);
+  }finally{await supervisor.close()}
+});
+
+test("source update that passes tests but fails desktop startup keeps phone recovery controls",async()=>{
+  const {supervisor,seen,getHead,started}=fixture({
+    manageDesktop:true,desktopReadyOutcome:false
+  });
+  await supervisor.start();
+  try{
+    await supervisor.inspect();
+    await supervisor.apply();
+    assert.equal(getHead(),SHA_B,
+      "Code passed build/tests; keep installed recovery UI instead of reverting");
+    assert.equal(supervisor.getState().phase,"error");
+    assert.equal(supervisor.getState().desktopConnected,false);
+    assert.match(supervisor.getState().step,/Use Restart desktop on your phone/);
+    assert.ok(seen.includes("npm run test:server"));
+    assert.ok(!seen.some(x=>x.startsWith("git reset --keep")));
+    assert.deepEqual(started,["server","desktop","server","desktop"]);
+  }finally{await supervisor.close()}
+});
+
+test("relay-only supervisor refuses desktop restart without touching processes",async()=>{
+  const {supervisor,started}=fixture();
+  await supervisor.start();
+  try{
+    await assert.rejects(supervisor.restartDesktop(),/only manages the browser relay/);
+    const {server}=supervisor;
+    const response=await fetch("http://127.0.0.1:"+server.address().port+
+      "/restart-desktop",{method:"POST",headers:{"X-Mikan-Supervisor":token}});
+    assert.equal(response.status,409);
+    assert.deepEqual(started,["server"]);
+  }finally{await supervisor.close()}
 });
