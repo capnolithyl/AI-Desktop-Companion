@@ -527,7 +527,7 @@ export async function runBrainEvaluation(options:EvalOptions):Promise<EvalReport
       const began=Date.now();
       const decision=decideDesktopTurn(step.user,previous,{automaticWebEnabled:true});
       const webPolicy=planDesktopWebExecution({
-        question:step.user,autoSearch:true,provider:"local",planMode:decision.plan.mode,
+        question:step.user,previous,autoSearch:true,provider:"local",planMode:decision.plan.mode,
         notion:scenario.id==="notion-without-web",
         personalTurn:isPersonalMemoryQuestion(step.user),capabilityQuestion:decision.capabilityQuestion,
         existingSearch:false,attachment:false,screenshot:false,liveFrame:false,roleplay:scenario.id==="search-in-roleplay"
