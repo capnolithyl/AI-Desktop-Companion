@@ -22,13 +22,15 @@ const exec=promisify(execFile);
 const allowedPhases=new Set(["idle","checking","ready","up-to-date","updating","restarting","updated","error"]);
 const terminalPhases=new Set(["ready","up-to-date","updated","error"]);
 /** Probe the relay on loopback without recording a fake desktop heartbeat. */
-export async function loopbackDesktopReady(){
+export async function loopbackDesktopReady(after=0){
   try{
     const response=await fetch("http://127.0.0.1:3848/agent/health",{
       headers:{"X-Mikan-Agent":"desktop"},signal:AbortSignal.timeout(1200),
       cache:"no-store"
     });
-    return response.ok && (await response.json()).connected===true;
+    if(!response.ok)return false;
+    const health=await response.json();
+    return health.connected===true && Number(health.lastSeen)>after;
   }catch{return false}
 }
 function diagnosticTail(value){
@@ -146,6 +148,7 @@ export function createDevSupervisor({
     desktopExit:null,desktopLog:null};
   let running=false;
   let relay=null,desktop=null;
+  let desktopLaunchedAt=0;
   let expectedHead=null,expectedRemote=null;
   let stopping=false;
   const publish=changes=>{state={...state,...changes};};
@@ -180,8 +183,11 @@ export function createDevSupervisor({
   }
 
   function launch(name){
-    if(name==="desktop")publish({desktopState:"starting",desktopConnected:false,
-      desktopExit:null,desktopLog:null});
+    if(name==="desktop"){
+      desktopLaunchedAt=Date.now();
+      publish({desktopState:"starting",desktopConnected:false,
+        desktopExit:null,desktopLog:null});
+    }
     if(startChild)return startChild(name);
     if(!process.env.npm_execpath)throw new Error("Start through npm run remote:dev");
     const child=spawn(process.execPath,[process.env.npm_execpath,"run",name],{
@@ -246,7 +252,7 @@ export function createDevSupervisor({
         desktopExit:desktop?.exitCode==null?state.desktopExit:String(desktop.exitCode)});
       return;
     }
-    const connected=await desktopReady();
+    const connected=await desktopReady(desktopLaunchedAt);
     publish({desktopConnected:connected,
       desktopState:connected?"online":state.desktopState==="offline"?"offline":"starting"});
   }
@@ -257,7 +263,7 @@ export function createDevSupervisor({
         throw new Error("Managed Tauri desktop process exited "+
           (state.desktopExit??desktop?.exitCode??"unexpectedly")+
           ". Recent startup output: "+(state.desktopLog??"(none)"));
-      if(await desktopReady()){
+      if(await desktopReady(desktopLaunchedAt)){
         publish({desktopState:"online",desktopConnected:true,desktopExit:null});
         return;
       }
