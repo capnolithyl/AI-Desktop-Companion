@@ -66,6 +66,18 @@ The hamburger menu is a browser-relay-only update: once the desktop is
 already at v0.9.7 or newer, a git pull and Node relay restart are sufficient.
 It does not require reinstalling Mikan or changing Tailscale configuration.
 
+## Selective tests and historical statuses
+
+Each Brain Lab scenario has a checkbox and one of these states:
+**Passed, Failed, Review, Stale, Untested, Incomplete**. Filter by category
+and status, choose individual tests, or use **Select visible**,
+**Select unresolved**, **Passed sample**, and **Clear**.
+
+The desktop persists test status per model/mode/build/fixture; a newer build
+makes older results **Stale** rather than silently passing. A subjective
+conversation can only be marked Passed after its response is reviewed.
+Only checked cases run, preserving all other historical results.
+
 ## Overnight Brain Lab runs
 
 The browser is **only a remote controller**; desktop Mikan performs the
