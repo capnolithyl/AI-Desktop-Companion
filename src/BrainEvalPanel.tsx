@@ -194,7 +194,7 @@ export function BrainEvalPanel({settings}:{settings:Settings}){
           ["Memory fact coverage",metrics.recall+"%",metrics.memoryRecordMisses+" exact row misses · "+
             metrics.memoryDistractors+" extra records"],
           ["Factual answers",metrics.answers===null?"Not run":metrics.answers+"%",metrics.answerChecks+" graded turns"],
-          ["Conversation reviews",String(metrics.reviewTurns),"semantic review pending"],
+          ["Conversation reviews",String(metrics.reviewTurns),metrics.qualityFlagTurns+" potential quality warnings"],
           ["Model speed",metrics.tokensPerSecond===null?"Not measured":metrics.tokensPerSecond+" tok/s","generation only"],
           ["Elapsed",formatMs(metrics.elapsedMs),metrics.cases+" scenario runs"]
         ] as const).map(([label,value,note])=><div key={label} className="brain-eval-metric">
@@ -261,6 +261,9 @@ export function BrainEvalPanel({settings}:{settings:Settings}){
               generation {(step.inferenceStats.evalDurationNs??0)>0?
                 ((step.inferenceStats.outputTokens??0)*1e9/(step.inferenceStats.evalDurationNs??1)).toFixed(1)+" tok/s":"n/a"}</small>}
             {step.answerFailures.map(reason=><small className="field-error" key={reason}>{reason}</small>)}
+            {step.qualityFlags?.map(flag=><small className="brain-eval-review" key={flag}>
+              Review warning: {flag}
+            </small>)}
             {step.error&&<small className="field-error">{step.error}</small>}
           </div>)}
         </details>)}
