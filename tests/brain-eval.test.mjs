@@ -25,6 +25,8 @@ test("semantic answer assertion isn't exact wording or case-sensitive",()=>{
     answerIncludes:["Cobalt Harbor"]
   }),[]);
   assert.equal(scoreAnswer("I don't know", {answerIncludes:["Cobalt Harbor"]}).length,1);
+  assert.equal(sameMeaning("I do not know yet.","no"),false);
+  assert.equal(sameMeaning("No, Rowan is your spouse.","no"),true);
   assert.equal(scoreAnswer("Yes, Rowan is your child", {answerExcludes:["yes Rowan"]}).length,1);
 });
 
