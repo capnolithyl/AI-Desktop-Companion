@@ -106,3 +106,13 @@ test("multi-part research questions request every component and avoid discograph
   assert.match(detailed,/MUSIC DISCOGRAPHY/);
   assert.doesNotMatch(responseFocusGuidance([], "I love this album"),/MULTI-PART REQUEST/);
 });
+
+test("shared reply contract resolves ambiguous media names and avoids fake recommendations",()=>{
+  const guidance=responseFocusGuidance([],"I've been playing something all morning.");
+  assert.match(guidance,/ENTITY RESOLUTION/);
+  assert.match(guidance,/Do not infer what it is from ordinary verbs/);
+  assert.match(guidance,/RECOMMENDATION GROUNDEDNESS/);
+  assert.match(guidance,/When the source search was only PLANNED but never executed/);
+  assert.match(guidance,/NATURAL CONTINUITY/);
+  assert.match(guidance,/without searching or trying to sell/);
+});
