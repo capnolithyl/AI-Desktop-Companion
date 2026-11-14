@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createDevSupervisor, isExpectedOrigin, UPDATE_BRANCH } from "../scripts/remote-dev-supervisor.mjs";
+import { createDevSupervisor, isExpectedOrigin, formatSupervisorError, UPDATE_BRANCH } from "../scripts/remote-dev-supervisor.mjs";
 import { createDevSupervisorClient } from "../server/dev-supervisor-client.mjs";
 
 const SHA_A="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
@@ -124,4 +124,21 @@ test("proxy client forwards only fixed method and endpoint with private header",
   assert.deepEqual(observed.map(x=>x.url.split("/").at(-1)),["status","check","apply"]);
   assert.deepEqual(observed.map(x=>x.method),["GET","POST","POST"]);
   assert.ok(observed.every(x=>x.headers["X-Mikan-Supervisor"]===token));
+});
+
+test("updater reports the failing TAP assertion rather than a generic npm command",()=>{
+  const error=new Error("Command failed: node.exe npm-cli.js run test:server");
+  error.stdout=[
+    "> mikan-desktop-companion@0.9.8 test:server",
+    "# Subtest: public relay test",
+    "not ok 3 - public relay test",
+    "  ---",
+    "  error: expected status 200 but received 409",
+    "  ..."
+  ].join("\n");
+  error.stderr="";
+  const message=formatSupervisorError(error);
+  assert.match(message,/not ok 3 - public relay test/);
+  assert.match(message,/expected status 200 but received 409/);
+  assert.doesNotMatch(message,/Command failed: node.exe/);
 });
