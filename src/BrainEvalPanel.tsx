@@ -191,11 +191,12 @@ export function BrainEvalPanel({settings}:{settings:Settings}){
       <div className="settings-section-title"><Activity size={17}/> Results dashboard</div>
       <div className="brain-eval-metrics">
         {([
-          ["Passing turns",metrics.passRate+"%",metrics.passed+"/"+metrics.turns],
+          ["Automated checks",metrics.passRate+"%",metrics.passed+"/"+metrics.turns+" turns"],
           ["Routing agreement",metrics.routes+"%","deterministic only"],
           ["Web decisions",metrics.webAgreement+"%",metrics.webChecks+" observed · "+metrics.unnecessaryWeb+" extra · "+metrics.missedWeb+" missed"],
           ["Memory selection",metrics.recall+"%","without semantic index"],
-          ["Answer checks",metrics.answers===null?"Not run":metrics.answers+"%",report.mode==="live"?"local model":"planning-only"],
+          ["Factual answers",metrics.answers===null?"Not run":metrics.answers+"%",metrics.answerChecks+" graded turns"],
+          ["Conversation reviews",String(metrics.reviewTurns),"semantic review pending"],
           ["Model speed",metrics.tokensPerSecond===null?"Not measured":metrics.tokensPerSecond+" tok/s","generation only"],
           ["Elapsed",formatMs(metrics.elapsedMs),metrics.cases+" scenario runs"]
         ] as const).map(([label,value,note])=><div key={label} className="brain-eval-metric">
@@ -219,16 +220,31 @@ export function BrainEvalPanel({settings}:{settings:Settings}){
           </div>
         })}
       </div>
+      {report.mode==="live" && metrics.reviewTurns>0&&
+        <p className="brain-eval-message">
+          {metrics.reviewTurns} conversational replies require qualitative review.
+          Automated routing and memory checks may pass even when a reply is awkward or irrelevant.
+          Open the scenario traces to compare the model response with each conversation goal.
+        </p>}
       <div className="settings-section-title">Scenario traces</div>
       <div className="brain-eval-traces">
-        {report.cases.map((test,index)=><details className="service-panel" key={test.id+"-"+test.repeat} open={!test.pass&&index<5}>
+        {report.cases.map((test,index)=><details className="service-panel" key={test.id+"-"+test.repeat}
+          open={(!test.pass||test.steps.some(step=>step.reviewRequired))&&index<5}>
           <summary className="brain-eval-summary">
-            {test.pass?<CheckCircle2 size={16}/>:<XCircle size={16}/>}
+            {!test.pass?<XCircle size={16}/>:test.steps.some(step=>step.reviewRequired)
+              ?<Activity size={16}/>:<CheckCircle2 size={16}/>}
             <strong>{test.label}</strong>
-            <span>Run {test.repeat} · {test.steps.filter(s=>s.pass).length}/{test.steps.length} · {formatMs(test.elapsedMs)}</span>
+            <span>{test.pass&&test.steps.some(step=>step.reviewRequired)?"REVIEW · ":""}
+              Run {test.repeat} · {test.steps.filter(s=>s.pass).length}/{test.steps.length} · {formatMs(test.elapsedMs)}</span>
           </summary>
           {test.steps.map((step,i)=><div className="brain-eval-step" key={i}>
-            <div><strong>{i+1}. {step.user}</strong> <span className={step.pass?"brain-eval-ok":"brain-eval-bad"}>{step.pass?"PASS":"FAIL"}</span></div>
+            <div><strong>{i+1}. {step.user}</strong>
+              <span className={!step.pass?"brain-eval-bad":step.reviewRequired?"brain-eval-review":"brain-eval-ok"}>
+                {!step.pass?"FAIL":step.reviewRequired?"REVIEW":"PASS"}
+              </span></div>
+            {step.expected.conversationGoal&&<small className="brain-eval-goal">
+              Review goal: {step.expected.conversationGoal}
+            </small>}
             <small>Route {step.actualRoute} (expected {step.expected.route??"any"});
               predicted web {step.plannedWeb===null?"unobserved":String(step.plannedWeb)};
               expected {step.expected.web??(step.expected.route==="research"?true:step.expected.route==="chat"?false:"unspecified")};
@@ -252,7 +268,9 @@ export function BrainEvalPanel({settings}:{settings:Settings}){
       Live mode additionally invokes your configured <em>local</em> Ollama model (and optional public-web planner),
       but feeds only mocked facts and never performs external searches or memory writes.
       Web scores measure intended/planned behavior, never a real network call. Unobserved decisions are excluded from web percentages.
-      Answer checks are transparent phrase/concept heuristics, not a perfect semantic judge.
+      Natural conversation is not marked as semantically correct just for producing text:
+      those turns show REVIEW with a concrete behavioral goal in their traces and exported report.
+      Factual answer checks are transparent phrase/concept heuristics, not a perfect semantic judge.
       Repeating a scenario measures output variability; exports include every input, decision and response.
       Saved history contains summary metrics only.
     </div>
