@@ -170,6 +170,24 @@ test("live Brain Lab passes conversation history to web planning for independent
     assert.equal(followup.previous[0].content,scenario.steps[0].user);
   }
 });
+test("planner history snapshots never mutate after later turns are appended",async()=>{
+  const observed=[];
+  await runBrainEvaluation({
+    scenarios:[byId("discovery-bands-wish")],
+    mode:"live",model:"fixture-model",repetitions:1,
+    planWeb:async(_question,previous)=>{
+      // Keep the original object, not a copy, to catch retroactive mutation.
+      observed.push(previous);
+      return {search:true,query:"similar raw black metal bands",reason:"Refining discovery"};
+    },
+    infer:async()=>"Let's compare some similar bands."
+  });
+  assert.equal(observed.length,2);
+  assert.deepEqual(observed[0],[],"First call must remain empty after test completion");
+  assert.deepEqual(observed[1].map(turn=>turn.role),["user","assistant"]);
+  assert.equal(observed[1][0].content,
+    "Man, I wish there were more bands that sound like Immortal.");
+});
 test("a casual book discussion can turn into discovery and carry a third-turn constraint",async()=>{
   const requested=[];
   const report=await runBrainEvaluation({
