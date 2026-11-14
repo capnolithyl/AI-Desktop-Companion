@@ -179,10 +179,10 @@ export const CAPABILITIES: readonly Capability[] = [
   },
   {
     id:"brain-evaluation",label:"Brain Lab manual evaluation runner",category:"AI",
-    description:"Experimental Settings Brain Lab can manually run isolated synthetic multi-turn tests for routing, lexical-memory fallback and optionally local Ollama conversations. Includes branching scenarios, repeated trials, a results dashboard, local run-history summaries, a safe JSON plus Markdown report export and read-only browser diagnostic copying. Full production SQLite, Qdrant, Notion and live web-service integration is not yet covered by this test harness.",
+    description:"Experimental Settings Brain Lab runs synthetic multi-turn routing tests and optional local Ollama conversations. Can start, monitor, cancel and download overnight test reports through the authenticated browser relay while desktop Mikan stays running. Includes repeated trials, a results dashboard, local run-history summaries, automatic JSON plus Markdown desktop exports, and browser diagnostic copying. Full production SQLite, Qdrant, Notion and live web-service integration is not yet covered by this test harness.",
     stage:"experimental",runtime:"none",
     keywords:["brain","evaluation","test","regression","debug","diagnostics","benchmark","routing","memory","dashboard","manual","brain lab"],
-    sources:["src/brain-eval.ts","src/BrainEvalPanel.tsx","src/App.tsx","src-tauri/src/lib.rs","server/public/index.html"],
+    sources:["src/brain-eval.ts","src/brain-eval-manager.ts","src/BrainEvalPanel.tsx","src/App.tsx","src-tauri/src/lib.rs","server/index.mjs","server/public/index.html"],
     docs:["docs/brain-lab.md"],commands:["brain_eval_export"]
   },
   {
