@@ -79,6 +79,13 @@
     .brain-lab-quick{display:flex;flex-wrap:wrap;gap:5px;margin:8px 0;}
     .brain-lab-quick button{background:#4a3748;color:#ffe6d9;border:1px solid #795869;
       padding:6px 8px;border-radius:7px;font-size:11px;}
+    #brainLabPreview{margin-top:10px;padding:12px;border:1px solid #795869;
+      border-radius:10px;background:#241b29;font-size:12px;white-space:normal;overflow-wrap:anywhere;}
+    #brainLabPreview[hidden]{display:none;}
+    .brain-lab-turn{padding:9px 0;border-top:1px solid #61465b;display:grid;gap:5px;}
+    .brain-lab-turn pre{font:inherit;white-space:pre-wrap;overflow-wrap:anywhere;max-height:240px;
+      overflow-y:auto;border-radius:7px;background:#17141c;padding:9px;margin:0;}
+    .brain-lab-turn small{color:#e3c6b4;line-height:1.5;}
     #brainLabRows{max-height:320px;overflow-y:auto;border:1px solid #795869;border-radius:10px;
       padding:6px;background:#211a25;display:grid;gap:5px;}
     .brain-lab-row{display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding:8px;
@@ -246,6 +253,13 @@
         <button id="brainLabSelectClear" type="button">Clear</button>
       </div>
       <div id="brainLabRows" role="group" aria-label="Choose individual scenarios"></div>
+      <section id="brainLabPreview" hidden aria-label="Brain Lab response review">
+        <div class="brain-lab-quick">
+          <strong id="brainLabPreviewTitle">Scenario trace</strong>
+          <button type="button" id="brainLabPreviewClose">Close trace</button>
+        </div>
+        <div id="brainLabPreviewTurns"></div>
+      </section>
       <div class="brain-lab-actions">
         <button id="brainLabStart" class="settings-action" type="button" disabled>Start test run</button>
         <button id="brainLabStop" class="settings-action danger" type="button" disabled>Stop</button>
@@ -343,6 +357,13 @@
   var brainLabCategory = document.getElementById("brainLabCategory");
   var brainLabStatusFilter = document.getElementById("brainLabStatusFilter");
   var brainLabRows = document.getElementById("brainLabRows");
+  var brainLabPreview = document.getElementById("brainLabPreview");
+  var brainLabPreviewTitle = document.getElementById("brainLabPreviewTitle");
+  var brainLabPreviewTurns = document.getElementById("brainLabPreviewTurns");
+  document.getElementById("brainLabPreviewClose").addEventListener("click",function(){
+    brainLabPreview.hidden=true;
+    brainLabPreviewTurns.replaceChildren();
+  });
   var brainLabCounts = document.getElementById("brainLabCounts");
   var brainLabSelectVisible = document.getElementById("brainLabSelectVisible");
   var brainLabSelectUnresolved = document.getElementById("brainLabSelectUnresolved");
@@ -359,6 +380,8 @@
   var brainLabSelectedIds = null;
   var brainLabRowsSignature = "";
   var brainLabSubmitting = false;
+  var brainLabLastDownloadedReport = null;
+  var brainLabLastDownloadedId = null;
   var avatarCaption = document.getElementById("avatarCaption");
   var showModelName = document.getElementById("showModelName");
   var showAvatarLabel = document.getElementById("showAvatarLabel");
@@ -440,6 +463,16 @@
       badge.textContent = state.status === "stale" && state.previous
         ? "stale (" + state.previous + ")" : state.status;
       row.append(label,badge);
+      if ((state.status === "review" || state.status === "failed" ||
+          state.status === "incomplete") && current?.reportAvailable) {
+        var inspect = document.createElement("button");
+        inspect.type="button";
+        inspect.textContent="Inspect";
+        inspect.addEventListener("click",function(){
+          void inspectBrainLab(item.id,item.number,item.label);
+        });
+        row.append(inspect);
+      }
       if (state.status === "review" && !running) {
         var buttons = document.createElement("div");
         buttons.className = "review-buttons";
@@ -462,6 +495,56 @@
       empty.textContent = "No scenarios match these filters.";
       brainLabRows.append(empty);
     }
+  }
+  async function inspectBrainLab(id,number,label){
+    brainLabPreview.hidden=false;
+    brainLabPreviewTitle.textContent=(number ? "#"+String(number).padStart(2,"0")+" · ":"")+label;
+    brainLabPreviewTurns.replaceChildren();
+    function line(value,cls){
+      var el=document.createElement(cls||"p");
+      el.textContent=value;
+      brainLabPreviewTurns.append(el);
+      return el;
+    }
+    try{
+      var reportId=current?.reportRunId;
+      if (!reportId) throw new Error("No completed report available yet");
+      if (brainLabLastDownloadedId!==reportId){
+        brainLabLastDownloadedReport=await api("/api/brain-eval/result?format=json");
+        brainLabLastDownloadedId=reportId;
+      }
+      var matching=(brainLabLastDownloadedReport?.cases||[]).filter(function(c){return c.id===id;});
+      if (!matching.length){
+        line("This scenario isn't included in the latest relay report. Download its earlier JSON/Markdown report from your PC to review it.");
+        return;
+      }
+      for(var run of matching){
+        line("Repeat "+run.repeat+" · "+(run.pass?"Automated checks OK":"Automated checks failed"),"h4");
+        for(var i=0;i<run.steps.length;i++){
+          var step=run.steps[i];
+          var section=document.createElement("section");
+          section.className="brain-lab-turn";
+          var user=document.createElement("strong");
+          user.textContent=(i+1)+". User: "+String(step.user||"");
+          section.append(user);
+          if(step.expected?.conversationGoal){
+            var goal=document.createElement("small");
+            goal.textContent="Review for: "+step.expected.conversationGoal;
+            section.append(goal);
+          }
+          var facts=document.createElement("small");
+          facts.textContent="Route: "+String(step.actualRoute)+
+            " | Planned public web: "+(step.plannedWeb===null?"unobserved":String(step.plannedWeb))+
+            " | Uncovered memory facts: "+(step.missingMemoryIds||[]).join(", ")+
+            " | Factual check: "+(step.answerPass===null?"not automatically graded":step.answerPass?"pass":"FAIL");
+          section.append(facts);
+          var answer=document.createElement("pre");
+          answer.textContent="Mikan: "+String(step.answer??"(No model answer in Fast mode)");
+          section.append(answer);
+          brainLabPreviewTurns.append(section);
+        }
+      }
+    }catch(error){line("Could not load trace: "+String(error))}
   }
   async function sendBrainLabReview(id,decision) {
     if (brainLabSubmitting) return;
