@@ -26,7 +26,7 @@ function fixture({dirty=false,diverged=false,failBuild=false}={}){
     }
     if(op.startsWith("diff --name-only "))return "";
     if(op==="merge --ff-only "+remote){head=remote;return ""}
-    if(op==="reset --hard "+SHA_A){head=SHA_A;return ""}
+    if(op==="reset --keep "+SHA_A){head=SHA_A;return ""}
     throw new Error("Unexpected git command: "+op);
   };
   const npm=async(...args)=>{
@@ -72,7 +72,7 @@ test("failed validation resets only the previously clean Git checkout",async()=>
   assert.equal(supervisor.getState().phase,"error");
   assert.match(supervisor.getState().error,/synthetic test failed/);
   assert.equal(getHead(),SHA_A);
-  assert.ok(seen.some(x=>x.startsWith("git reset --hard "+SHA_A)));
+  assert.ok(seen.some(x=>x.startsWith("git reset --keep "+SHA_A)));
   assert.deepEqual(started,[]);
 });
 test("dirty or diverged branches do not execute merge, npm or restart",async()=>{
