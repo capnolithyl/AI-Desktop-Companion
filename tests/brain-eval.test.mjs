@@ -30,6 +30,36 @@ test("semantic answer assertion isn't exact wording or case-sensitive",()=>{
   assert.equal(scoreAnswer("Yes, Rowan is your child", {answerExcludes:["yes Rowan"]}).length,1);
 });
 
+test("casual conversations cover varied non-question dialogue and maintain explicit review goals",()=>{
+  const casual=EVAL_SCENARIOS.filter(s=>s.group==="Natural conversation");
+  assert.ok(casual.length>=18);
+  assert.ok(casual.reduce((total,s)=>total+s.steps.length,0)>=50);
+  assert.ok(casual.some(s=>s.steps.every(step=>!step.user.trim().endsWith("?"))));
+  for(const scenario of casual){
+    assert.ok(scenario.steps.length>=2);
+    for(const step of scenario.steps){
+      assert.equal(step.expect.route,"chat");
+      assert.equal(step.expect.web,false);
+      assert.ok(step.expect.conversationGoal?.length>30);
+      assert.ok(step.expect.stubReply?.length>2);
+    }
+  }
+});
+
+test("non-factual live replies require human review, never get free semantic passes",async()=>{
+  const scenario=EVAL_SCENARIOS.find(s=>s.id==="conversation-venting");
+  const result=await runBrainEvaluation({
+    scenarios:[scenario],mode:"live",model:"fake-model",repetitions:1,
+    infer:async()=> "Here's an irrelevant answer about stock earnings."
+  });
+  const turns=result.cases[0].steps;
+  assert.ok(turns.every(turn=>turn.reviewRequired));
+  assert.ok(turns.every(turn=>turn.answerPass===null));
+  assert.equal(brainEvalMetrics(result).reviewTurns,turns.length);
+  assert.equal(brainEvalMetrics(result).answerChecks,0);
+  assert.match(brainEvalMarkdown(result),/Conversation review goal/);
+});
+
 test("planning tests use independent context across repeated branching paths",async()=>{
   const samples=[byId("branch-a"),byId("branch-b"),byId("branch-c"),byId("branch-d")];
   const report=await runBrainEvaluation({scenarios:samples,repetitions:2,mode:"routing",model:"fixture-only"});
