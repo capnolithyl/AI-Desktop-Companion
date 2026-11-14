@@ -23,6 +23,7 @@ import {
   createLocalReport, safeReportDiagnostics, publicIssuePreview, publishGitHubIssue
 } from "./reporting.mjs";
 import { createDevSupervisorClient } from "./dev-supervisor-client.mjs";
+import { brainEvalFileStem } from "./brain-eval-filename.mjs";
 
 export const PUBLIC_PORT = 3847;
 export const AGENT_PORT = 3848;
@@ -371,8 +372,8 @@ export function createBridge({
         response.writeHead(200, {
           "Content-Type": format === "json"
             ? "application/json; charset=utf-8" : "text/markdown; charset=utf-8",
-          "Content-Disposition": 'attachment; filename="mikan-brain-eval-'+
-            latestEvalReport.runId+'.'+(format==="json"?"json":"md")+'"',
+          "Content-Disposition": 'attachment; filename="'+
+            brainEvalFileStem(latestEvalReport.report)+'.'+(format==="json"?"json":"md")+'"',
           "Cache-Control":"no-store",
           "X-Content-Type-Options":"nosniff"
         });
