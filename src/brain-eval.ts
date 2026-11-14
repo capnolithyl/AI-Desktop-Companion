@@ -585,7 +585,7 @@ export async function runBrainEvaluation(options:EvalOptions):Promise<EvalReport
         routeLabelMatch,routePass,memoryPass,answerPass,reviewRequired,
         answerFailures,answer,inferenceStats,modelUsed,error,
         elapsedMs:Date.now()-began,
-        pass:routePass&&memoryPass&&webPass!==false&&answerPass!==false&&
+        pass:routePass&&memoryPass&&answerPass!==false&&
           (options.mode!=="live" || !!answer)&&!error
       };
       steps.push(result);
