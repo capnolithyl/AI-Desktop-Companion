@@ -336,3 +336,24 @@ test("live planner sees previous approved research task and clears it after a no
   assert.equal(report.cases[0].steps[1].activePublicQuery,"black metal bands with raw guitar atmosphere");
   assert.equal(report.cases[1].steps[2].activePublicQuery,undefined);
 });
+
+test("isolated Live reply adapter is told that planned public research was not executed",async()=>{
+  const seen=[];
+  const scenarios=[byId("discovery-anime"),byId("discovery-bands-just-gushing")];
+  const report=await runBrainEvaluation({
+    scenarios,mode:"live",model:"fixture",repetitions:1,
+    planWeb:async()=>({search:true,query:"short horror anime OVAs",
+      reason:"Synthetic public discovery plan"}),
+    infer:async({messages,researchPlanned})=>{
+      seen.push({question:messages.at(-1).content,researchPlanned});
+      return "I would verify current public options before giving exact details.";
+    }
+  });
+  const discovered=seen.find(x=>x.question==="Ideally something under six episodes.");
+  assert.equal(discovered.researchPlanned,true);
+  const casual=seen.find(x=>x.question==="I love Immortal's sound so much.");
+  // Model planning is deliberately a mock; this verifies the boolean is
+  // passed through, not that Qwen correctly declined an unwanted search.
+  assert.equal(casual.researchPlanned,true);
+  assert.equal(report.cases[0].steps.length,2);
+});
