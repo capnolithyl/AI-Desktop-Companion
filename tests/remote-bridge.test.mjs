@@ -56,7 +56,8 @@ test("browser relay requires a private key and delegates to the desktop, not a s
   for (const control of ["conversationSelect", "newChat", "modelSelect",
     "refreshModels", "enlargeAvatar", "lock", "report", "showModelName",
     "showAvatarLabel","brainLabMode","brainLabStatusFilter","brainLabRows",
-    "brainLabSelectVisible","brainLabSelectUnresolved","brainLabSelectRegression","brainLabSelectClear"]) {
+    "brainLabSelectVisible","brainLabSelectUnresolved","brainLabSelectRegression","brainLabSelectClear",
+    "brainLabPreview","brainLabPreviewTitle","brainLabPreviewClose","brainLabPreviewTurns"]) {
     assert.match(settingsView, new RegExp('id="' + control + '"'), control + " belongs in settings");
     assert.doesNotMatch(mainView, new RegExp('id="' + control + '"'), control + " is hidden from chat");
   }
@@ -123,8 +124,8 @@ test("browser relay requires a private key and delegates to the desktop, not a s
   // Brain Lab is controlled by the authenticated phone but runs only on desktop.
   // The relay never executes Ollama or stores the owner's real memory.
   const remoteCatalog=[
-    {id:"branch-a",label:"Favorite band branch",group:"Branching context",turns:3},
-    {id:"discovery-bands-wish",label:"Implicit recommendations",group:"Conversational discovery",turns:2}
+    {id:"branch-a",number:1,label:"Favorite band branch",group:"Branching context",turns:3},
+    {id:"discovery-bands-wish",number:54,label:"Implicit recommendations",group:"Conversational discovery",turns:2}
   ];
   const evalState=(phase,controlsBlocked=false)=>({
     conversationId:"same-desktop-conversation",model:"qwen3.5:9b",
@@ -195,6 +196,8 @@ test("browser relay requires a private key and delegates to the desktop, not a s
   ];
   assert.equal((await request(agent + "/agent/state","POST",desktopHeaders,reviewState)).status,200);
   const remoteCases=(await (await request(base + "/api/state","GET",authorized)).json()).brainEvalCatalog;
+  assert.equal(remoteCases[0].number,1);
+  assert.equal(remoteCases[1].number,54);
   assert.equal(remoteCases[0].states.routing.status,"passed");
   assert.equal(remoteCases[0].states.live.status,"review");
   assert.equal(remoteCases[1].states.live.status,"stale");
