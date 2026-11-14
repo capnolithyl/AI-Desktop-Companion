@@ -718,8 +718,12 @@
       var url = URL.createObjectURL(blob);
       var anchor = document.createElement("a");
       anchor.href = url;
-      anchor.download = "mikan-brain-eval-"+(current?.reportRunId||"latest")+
-        (format==="json"?".json":".md");
+      // Use the relay's validated metadata-only filename; older relays fall back safely.
+      var fileHeader = response.headers.get("Content-Disposition") || "";
+      var fileMatch = /filename="([^"]+)"/i.exec(fileHeader);
+      anchor.download = fileMatch ? fileMatch[1] :
+        "mikan-brain-eval-"+(current?.reportRunId||"latest")+
+          (format==="json"?".json":".md");
       document.body.append(anchor);
       anchor.click();
       anchor.remove();
