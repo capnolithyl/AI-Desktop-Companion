@@ -236,6 +236,10 @@
         <button id="devUpdateCheck" class="settings-action" type="button" disabled>Check GitHub</button>
         <button id="devUpdateApply" class="settings-action" type="button" disabled>Update &amp; restart</button>
       </div>
+      <div class="brain-lab-actions">
+        <button id="devRestartDesktop" class="settings-action" type="button" disabled hidden>Restart desktop only</button>
+      </div>
+      <p class="settings-hint">Desktop recovery restarts only the supervisor-managed Tauri process, never an installed Mikan executable. The browser relay stays online.</p>
       <p class="settings-hint">No shell commands or branch selectors are exposed here. Installed Mikan executables are not replaced by a Git pull.</p>
     </section>
     <section class="settings-group" aria-labelledby="brainLabSectionTitle">
@@ -392,6 +396,7 @@
   var devUpdateStatus = document.getElementById("devUpdateStatus");
   var devUpdateCheck = document.getElementById("devUpdateCheck");
   var devUpdateApply = document.getElementById("devUpdateApply");
+  var devRestartDesktop = document.getElementById("devRestartDesktop");
   var devLast = null;
   var devLastCheckedAt = 0;
   var devRequesting = false;
@@ -830,22 +835,36 @@
           "Not enabled on this server. "+(state.reason||"Start with npm run remote:dev on the PC.");
         devUpdateCheck.disabled = true;
         devUpdateApply.disabled = true;
+        devRestartDesktop.hidden=true;
+        devRestartDesktop.disabled=true;
         return;
       }
       var busy = ["checking","updating","restarting"].includes(state.phase);
       var runningTests = current?.brainEval?.phase === "running";
       devUpdateCheck.disabled = devRequesting || busy;
       devUpdateApply.disabled = devRequesting || busy || runningTests || state.phase !== "ready";
+      devRestartDesktop.hidden=state.mode!=="desktop-and-relay";
+      devRestartDesktop.disabled=devRequesting || busy || runningTests ||
+        state.mode!=="desktop-and-relay" || (current?.connected && (current.busy || current.queued));
       var lines = [
         "Branch: "+state.branch,
         "Mode: "+(state.mode==="desktop-and-relay"?"Managed dev desktop + browser relay":"Browser relay only"),
         "Local: "+(state.current||"unknown")+" · GitHub: "+(state.remote||"not checked"),
         "Status: "+state.phase+" · "+(state.step||""),
       ];
+      if(state.mode==="desktop-and-relay"){
+        lines.push("Desktop: "+(state.desktopConnected?"connected":
+          state.desktopState||"not yet connected"));
+        if(state.desktopExit)lines.push("Desktop process exit: "+state.desktopExit);
+        if(!state.desktopConnected && state.desktopLog)
+          lines.push("Recent startup output:\n"+state.desktopLog);
+      }
       if(state.error)lines.push("Problem: "+state.error);
       if(state.desktopNote)lines.push(state.desktopNote);
       devUpdateStatus.textContent=lines.join("\n");
-      if(devReloadAfterUpdate && state.phase==="updated") {
+      if(devReloadAfterUpdate &&
+        (state.phase==="updated" || (state.phase==="error" &&
+          state.current && state.current===state.remote))) {
         devReloadAfterUpdate=false;
         location.reload();
       }
@@ -853,6 +872,7 @@
       devUpdateStatus.textContent="Development supervisor could not be reached: "+error.message;
       devUpdateCheck.disabled=true;
       devUpdateApply.disabled=true;
+      devRestartDesktop.disabled=true;
     }
   }
   async function devUpdateAction(action) {
@@ -869,9 +889,15 @@
         "? Your phone may disconnect briefly.";
       if(!window.confirm(question))return;
     }
+    if(action==="restart-desktop"){
+      if(devLast?.mode!=="desktop-and-relay")return;
+      if(current?.brainEval?.phase==="running" || (current?.connected && current?.busy))return;
+      if(!window.confirm("Restart only the supervisor-managed Mikan desktop? The phone relay will stay online."))return;
+    }
     devRequesting=true;
     devUpdateCheck.disabled=true;
     devUpdateApply.disabled=true;
+    devRestartDesktop.disabled=true;
     try{
       await api("/api/dev-update",{
         method:"POST",headers:{"Content-Type":"application/json"},
@@ -880,7 +906,9 @@
       if(action==="apply")devReloadAfterUpdate=true;
       devUpdateStatus.textContent=action==="check"
         ?"Checking the pinned GitHub branch…"
-        :"Updating. Keep this Windows PC awake; the browser will reconnect.";
+        :action==="restart-desktop"
+          ?"Restarting the managed desktop. Browser relay stays online…"
+          :"Updating. Keep this Windows PC awake; the browser will reconnect.";
     }catch(error){devUpdateStatus.textContent="Update request failed: "+error.message}
     finally{
       devRequesting=false;
@@ -890,6 +918,7 @@
   }
   devUpdateCheck.addEventListener("click",()=>{void devUpdateAction("check")});
   devUpdateApply.addEventListener("click",()=>{void devUpdateAction("apply")});
+  devRestartDesktop.addEventListener("click",()=>{void devUpdateAction("restart-desktop")});
   async function api(path, options) {
     var response = await fetch(path, Object.assign({}, options || {}, {
       cache:"no-store",
