@@ -7,6 +7,7 @@ import { decideDesktopTurn } from "./desktop-turn-routing.ts";
 import { planDesktopWebExecution } from "./turn-execution-policy.ts";
 import { selectDeterministicMemoryIds } from "./memory-retrieval.ts";
 import { rankMemories, type RankableMemory } from "./memory-ranking.ts";
+import type { BrainQualityInput, BrainQualityAssessment } from "./brain-quality-audit.ts";
 import { isPersonalMemoryQuestion } from "./personal-memory.ts";
 import type { ResearchTurn } from "./research-routing.ts";
 
@@ -60,6 +61,8 @@ export type EvalStepResult = {
   answerFailures: string[];
   /** Transparent review-only heuristics, not an automatic semantic judgment. */
   qualityFlags: string[];
+  /** Separate, advisory local-model critique. Never counted as verified factual correctness. */
+  qualityAssessment?:BrainQualityAssessment;
   answer?: string;
   inferenceStats?: {promptTokens?:number|null;outputTokens?:number|null;evalDurationNs?:number|null;loadDurationNs?:number|null};
   modelUsed?:string;
@@ -102,6 +105,8 @@ export type EvalOptions = {
   signal?:AbortSignal;
   infer?:EvalInference;
   planWeb?:EvalPlanner;
+  /** Optional second local-model pass for semantic reply triage, not a truth oracle. */
+  reviewReply?:(input:BrainQualityInput)=>Promise<BrainQualityAssessment>;
   onProgress?:(done:number,total:number,current:string)=>void;
 };
 
@@ -581,7 +586,25 @@ export async function runBrainEvaluation(options:EvalOptions):Promise<EvalReport
       }catch(err){error=err instanceof Error?err.message:String(err)}
       const answerFailures=answer===undefined
         ? []:scoreAnswer(answer,step.expect);
+      let qualityAssessment:BrainQualityAssessment|undefined;
+      if(options.mode==="live" && answer && !error && options.reviewReply && !options.signal?.aborted){
+        try{
+          qualityAssessment=await options.reviewReply({
+            scenario:scenario.label,goal:step.expect.conversationGoal??"",
+            turns:messages.map(turn=>({...turn})),answer,
+            researchPlanned:planned?.search===true || decision.plan.mode==="research",
+            selectedMemories:selected,evidence:step.mockEvidence
+          });
+        }catch{
+          // A reviewer outage must not turn otherwise valid routing into a FAIL.
+          qualityAssessment={status:"unavailable",concerns:[]};
+        }
+      }
       const qualityFlags=brainReplyQualityFlags(answer,step.expect,inferenceStats?.outputTokens);
+      if(qualityAssessment?.status==="concern"){
+        for(const issue of qualityAssessment.concerns)
+          qualityFlags.push("AI triage ("+issue.category+"): "+issue.reason);
+      }
       const hasFactualAnswerCheck=!!(
         step.expect.answerIncludes?.length ||
         step.expect.answerAny?.length ||
@@ -622,7 +645,9 @@ export async function runBrainEvaluation(options:EvalOptions):Promise<EvalReport
         missingMemoryIds:missing,missingMemoryRecordIds:missingRecordIds,
         memoryEvidence,distractorMemoryIds:distractors,unexpectedMemoryIds:unexpected,
         routeLabelMatch,routePass,memoryPass,answerPass,reviewRequired,
-        answerFailures,qualityFlags,answer,inferenceStats,modelUsed,error,
+        answerFailures,qualityFlags,
+        ...(qualityAssessment?{qualityAssessment}:{}),
+        answer,inferenceStats,modelUsed,error,
         elapsedMs:Date.now()-began,
         pass:routePass&&memoryPass&&answerPass!==false&&
           (options.mode!=="live" || !!answer)&&!error
@@ -680,6 +705,10 @@ export function brainEvalMetrics(report:EvalReport){
     answerChecks:steps.filter(s=>s.answerPass!==null).length,
     reviewTurns:steps.filter(s=>s.reviewRequired).length,
     qualityFlagTurns:steps.filter(s=>s.qualityFlags?.length).length,
+    aiQualityReviewed:steps.filter(s=>s.qualityAssessment?.status==="no-concern"||
+      s.qualityAssessment?.status==="concern").length,
+    aiQualityConcernTurns:steps.filter(s=>s.qualityAssessment?.status==="concern").length,
+    aiQualityUnavailable:steps.filter(s=>s.qualityAssessment?.status==="unavailable").length,
     elapsedMs:report.cases.reduce((n,c)=>n+c.elapsedMs,0)
   };
 }
@@ -711,6 +740,8 @@ export function brainEvalMarkdown(report:EvalReport):string {
     "| Factual answer checks | "+(m.answers===null?"Not run":m.answers+"% ("+m.answerChecks+" scored)")+" |",
     "| Conversational turns needing review | "+m.reviewTurns+" |",
     "| Replies with quality warnings | "+m.qualityFlagTurns+" |",
+    "| AI quality triage (advisory, not verified facts) | "+m.aiQualityConcernTurns+
+      " concerns / "+m.aiQualityReviewed+" reviewed; "+m.aiQualityUnavailable+" unavailable |",
     "| Total elapsed | "+Math.round(m.elapsedMs/1000)+"s |",""
   ];
   for(const c of report.cases){
@@ -742,6 +773,8 @@ export function brainEvalMarkdown(report:EvalReport):string {
       if(s.webPlannerDecision?.intent)
         lines.push("- Local task classification: "+s.webPlannerDecision.intent);
       if(s.qualityFlags?.length)lines.push("- Human review warnings: "+s.qualityFlags.join("; "));
+      if(s.qualityAssessment)lines.push("- Local AI quality triage (advisory): "+
+        JSON.stringify(s.qualityAssessment));
       lines.push("");
     }
   }
