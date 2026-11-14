@@ -307,3 +307,32 @@ test("desktop Brain Lab has a real scrolling viewport and no nested clipped cata
   assert.match(panel,/brain-eval-find/);
   assert.match(panel,/brain-eval-explainer/);
 });
+
+test("live planner sees previous approved research task and clears it after a no-search turn",async()=>{
+  const observations=[];
+  const scenarios=[byId("discovery-bands-wish"),
+    byId("discovery-wish-but-no-recommendations")];
+  const report=await runBrainEvaluation({
+    scenarios,mode:"live",model:"fixture-model",repetitions:1,
+    planWeb:async(question,_previous,context)=>{
+      observations.push({question,context:{...context}});
+      const optOut=question.startsWith("Not asking")||question.startsWith("Thanks");
+      return optOut
+        ?{search:false,reason:"Explicitly ended the task"}
+        :{search:true,query:"black metal bands with raw guitar atmosphere",
+          reason:"Continuing public discovery"};
+    },
+    infer:async()=>"Synthetic response."
+  });
+  const first=observations.filter(x=>x.question==="Man, I wish there were more bands that sound like Immortal.");
+  assert.equal(first.length,1);
+  assert.equal(first[0].context.activePublicQuery,undefined);
+  const followup=observations.find(x=>x.question==="Especially their raw, cold guitar atmosphere.");
+  assert.equal(followup.context.activePublicQuery,"black metal bands with raw guitar atmosphere");
+  const decline=observations.find(x=>x.question==="Not asking for recommendations, by the way. Just venting.");
+  assert.equal(decline.context.activePublicQuery,"black metal bands with raw guitar atmosphere");
+  const afterDecline=observations.find(x=>x.question==="Thanks, I just really love that style.");
+  assert.equal(afterDecline.context.activePublicQuery,undefined);
+  assert.equal(report.cases[0].steps[1].activePublicQuery,"black metal bands with raw guitar atmosphere");
+  assert.equal(report.cases[1].steps[2].activePublicQuery,undefined);
+});
