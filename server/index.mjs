@@ -129,6 +129,7 @@ const safeEvalCatalog = entries => Array.isArray(entries)
     .map(item => ({
       id: item.id,
       label: String(item.label || "").slice(0, 110),
+      number: Number.isSafeInteger(item.number) && item.number>=1 && item.number<=180 ? item.number : null,
       group: String(item.group || "").slice(0, 80),
       turns: Number.isSafeInteger(item.turns) ? Math.min(12, Math.max(1, item.turns)) : 1,
       states: Object.fromEntries(["routing","live"].map(mode => {
