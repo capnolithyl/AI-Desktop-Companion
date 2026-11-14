@@ -126,7 +126,10 @@ test("browser relay requires a private key and delegates to the desktop, not a s
   assert.equal(offlineProbe.status,200);
   assert.equal((await offlineProbe.json()).connected,false);
   const probeAgain=await request(agent + "/agent/health","GET",{"X-Mikan-Agent":"desktop"});
-  assert.equal((await probeAgain.json()).connected,false);
+  const probeAgainData=await probeAgain.json();
+  assert.equal(probeAgainData.connected,false);
+  assert.equal(probeAgainData.lastSeen,0,
+    "Supervisor checks must not manufacture an agent heartbeat");
   assert.equal((await request(agent + "/agent/next", "GET", {"X-Mikan-Agent":"desktop"})).status, 200);
   const history = [{id:"one",role:"user",content:"Hello from the desktop",createdAt:100}];
   assert.equal((await request(agent + "/agent/state", "POST", desktopHeaders, {
@@ -203,6 +206,10 @@ test("browser relay requires a private key and delegates to the desktop, not a s
   });
   assert.equal((await request(agent + "/agent/ack","POST",desktopHeaders,{id:evalJob.id})).status,200);
   assert.equal((await request(agent + "/agent/state","POST",desktopHeaders,evalState("running",true))).status,200);
+  // The private restart must not interrupt an active Brain Lab run.
+  assert.equal((await request(base + "/api/dev-update","POST",
+    {...authorized,"Content-Type":"application/json"},{action:"restart-desktop"})).status,409);
+  assert.equal(restartCalls,1);
   const runningEval=await (await request(base + "/api/state","GET",authorized)).json();
   assert.equal(runningEval.brainEval.phase,"running");
   assert.equal((await request(base + "/api/dev-update","POST",jsonHeaders,
