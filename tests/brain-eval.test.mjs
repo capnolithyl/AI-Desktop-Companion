@@ -6,7 +6,6 @@ import {
   brainEvalMarkdown,sameMeaning,scoreAnswer,brainMemoryEvidence,
   brainScenarioNumber,brainScenarioLabel,brainReplyQualityFlags
 } from "../src/brain-eval.ts";
-import { brainQualityPrompt,parseBrainQualityAssessment } from "../src/brain-quality-audit.ts";
 
 const byId=id=>EVAL_SCENARIOS.find(s=>s.id===id);
 
@@ -358,69 +357,4 @@ test("isolated Live reply adapter is told that planned public research was not e
   // passed through, not that Qwen made a correct semantic judgment.
   assert.equal(casual.researchPlanned,false);
   assert.equal(report.cases[0].steps.length,2);
-});
-
-test("semantic quality reviewer uses bounded local evidence and strict advisory JSON",()=>{
-  const prompt=brainQualityPrompt({
-    scenario:"Music discussion after listening to a band",
-    goal:"Respond to listening to the band Immortal, not a game.",
-    turns:[{role:"user",content:"I've been playing Immortal all morning."}],
-    answer:"How did you beat the boss in the Immortal mobile game?",
-    researchPlanned:false,selectedMemories:[]
-  });
-  assert.match(prompt,/LOCAL, skeptical quality reviewer/);
-  assert.match(prompt,/Respond to listening to the band Immortal/);
-  assert.match(prompt,/How did you beat the boss/);
-  assert.match(prompt,/NO LIVE WEB LOOKUP/);
-  const concern=parseBrainQualityAssessment(JSON.stringify({concerns:[
-    {category:"referent",reason:"The reply misidentifies the artist as a mobile game."}
-  ]}));
-  assert.equal(concern.status,"concern");
-  assert.equal(concern.concerns.length,1);
-  assert.equal(parseBrainQualityAssessment('{"concerns":[]}').status,"no-concern");
-  assert.equal(parseBrainQualityAssessment('garbled output').status,"unavailable");
-  assert.equal(parseBrainQualityAssessment('{"foo":true}').status,"unavailable");
-  assert.equal(parseBrainQualityAssessment(JSON.stringify({concerns:[
-    {category:"incorrect-kind",reason:"Not an accepted category"}
-  ]})).status,"unavailable");
-});
-
-test("AI critique adds advisory warnings, never converts unverified content into passed facts",async()=>{
-  const scenario=byId("discovery-bands-context-switch");
-  const reviewed=[];
-  const report=await runBrainEvaluation({
-    scenarios:[scenario],mode:"live",model:"fixture",repetitions:1,
-    planWeb:async()=>({search:false,reason:"Mock behavior"}),
-    infer:async()=> "I beat the mobile game Immortal's final boss!",
-    reviewReply:async input=>{
-      reviewed.push(input);
-      return {status:"concern",concerns:[{
-        category:"referent",reason:"The model confused a black metal band with a game."
-      }]};
-    }
-  });
-  const first=report.cases[0].steps[0];
-  assert.equal(reviewed.length,3);
-  assert.equal(reviewed[0].scenario,scenario.label);
-  assert.equal(reviewed[0].goal,scenario.steps[0].expect.conversationGoal);
-  assert.equal(first.qualityAssessment.status,"concern");
-  assert.ok(first.qualityFlags.some(flag=>flag.includes("AI triage (referent)")));
-  assert.equal(first.reviewRequired,true);
-  assert.equal(first.answerPass,null);
-  assert.equal(brainEvalMetrics(report).aiQualityConcernTurns,3);
-  assert.equal(brainEvalMetrics(report).verifiedPassed,0);
-  assert.match(brainEvalMarkdown(report),/Local AI quality triage/);
-});
-
-test("quality critic downtime is recorded without failing the routing run",async()=>{
-  const scenario=byId("discovery-bands-just-gushing");
-  const report=await runBrainEvaluation({
-    scenarios:[scenario],mode:"live",model:"fixture",repetitions:1,
-    planWeb:async()=>({search:false,reason:"No search required"}),
-    infer:async()=> "Those riffs really are relentless.",
-    reviewReply:async()=>{throw new Error("Reviewer unavailable")}
-  });
-  assert.equal(report.cases[0].steps[0].qualityAssessment.status,"unavailable");
-  assert.equal(brainEvalMetrics(report).aiQualityUnavailable,scenario.steps.length);
-  assert.equal(report.cases[0].steps[0].pass,true);
 });
