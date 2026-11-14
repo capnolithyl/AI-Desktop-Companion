@@ -157,7 +157,12 @@ export function selectDeterministicMemoryIds<T extends RankableMemory>(
     "please","about","with","this","that","from","your","mine","our",
     "have","just","some","there","how","any","tell","said","user","owner",
     "favorite","favourite","favorites","favourites","date",
-    "mikan","remember","does","were","will","can","the","and","for","are"]);
+    "mikan","remember","does","were","will","can","the","and","for","are",
+    // Structural words must never retrieve unrelated stored facts just because
+    // their prose contains "not" or "their" (the source of fabricated relatives
+    // and hometowns in Brain Lab #57/#58/#60/#66).
+    "not","another","their","they","them","its","it","rather",
+    "asking","really","only","like","more","than","way","again","also"]);
   const terms=new Set(memoryTerms(query).filter(t=>t.length>=3&&!stop.has(t)));
   const topical=(f:T)=>{
     const words=new Set(memoryTerms([f.fact,...(f.tags??[]),f.category??""].join(" ")));
