@@ -327,7 +327,7 @@ fn brain_eval_export(app: tauri::AppHandle, json_report: String, markdown_report
     if json_report.len() > 4_000_000 || markdown_report.len() > 2_000_000 {
         return Err("Evaluation report is too large (4 MB JSON / 2 MB Markdown limits)".into());
     }
-    serde_json::from_str::<Value>(&json_report)
+    let report: Value = serde_json::from_str(&json_report)
         .map_err(|_| "Cannot export invalid evaluation JSON".to_string())?;
     let base = app.path().document_dir()
         .or_else(|_| app.path().app_data_dir())
@@ -335,10 +335,35 @@ fn brain_eval_export(app: tauri::AppHandle, json_report: String, markdown_report
     let folder = base.join("Mikan").join("Brain-Evaluations");
     std::fs::create_dir_all(&folder)
         .map_err(|e| format!("Cannot create report folder: {e}"))?;
-    let millis = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map_err(|e| e.to_string())?.as_millis();
-    let stem = format!("mikan-brain-eval-{millis}");
+    // Derive the filename entirely from validated report metadata, not from
+    // a renderer-supplied path or user conversation text. JSON + Markdown share
+    // the same sortable UTC timestamp, model, scenario count and run suffix.
+    let started = report.get("startedAt").and_then(Value::as_str).unwrap_or("");
+    let stamp = started.get(..19)
+        .filter(|s| s.as_bytes().get(10) == Some(&b'T')
+            && s.chars().all(|c| c.is_ascii_digit() || c == '-' || c == ':' || c == 'T'))
+        .map(|s| format!("{}_{}Z", &s[..10], s[11..].replace(':', "")))
+        .unwrap_or_else(|| "unknown-date".to_string());
+    let mode = match report.get("mode").and_then(Value::as_str) {
+        Some("live") => "live",
+        Some("routing") => "routing",
+        _ => "unknown",
+    };
+    let model: String = report.get("model").and_then(Value::as_str).unwrap_or("unknown")
+        .chars().take(32).map(|c| {
+            let c = c.to_ascii_lowercase();
+            if c.is_ascii_alphanumeric() || c == '.' || c == '_' || c == '-' { c } else { '-' }
+        }).collect();
+    let model = if model.is_empty() { "unknown" } else { &model };
+    let count = report.get("scenarios").and_then(Value::as_array)
+        .map(|items| items.len().min(999)).unwrap_or(0);
+    let attempts = report.get("attempts").and_then(Value::as_u64)
+        .filter(|n| (1..=5).contains(n)).unwrap_or(1);
+    let suffix: String = report.get("runId").and_then(Value::as_str).unwrap_or("")
+        .split('-').next_back().unwrap_or("")
+        .chars().filter(|c| c.is_ascii_alphanumeric()).take(12).collect();
+    let suffix = if suffix.is_empty() { "unknown" } else { &suffix };
+    let stem = format!("mikan-brain_{stamp}_{mode}_{model}_s{count:02}_r{attempts}_{suffix}");
     std::fs::write(folder.join(format!("{stem}.json")), json_report)
         .map_err(|e| format!("Cannot write JSON report: {e}"))?;
     std::fs::write(folder.join(format!("{stem}.md")), markdown_report)
