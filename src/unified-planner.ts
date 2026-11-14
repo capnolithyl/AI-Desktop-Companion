@@ -140,6 +140,12 @@ export function parseWebToolDecision(
     const reason=typeof web.reason==="string" ? web.reason.trim().slice(0,130) : "";
     const intent=["refine","end","new","chat"].includes(String(parsed.intent))
       ?parsed.intent as WebToolDecision["intent"]:undefined;
+    // Model outputs are untrusted even when they use a valid JSON shape:
+    // an intent it classified as "end" or "chat" cannot grant public search.
+    // This is schema consistency, never a keyword guess about user language.
+    if(web.search===true && (intent==="end" || intent==="chat"))
+      return {search:false,reason:"Contradictory model task decision; no web access",
+        method:"fallback",intent};
     if(web.search!==true)return {search:false,reason:reason||"Local answer sufficient",
       method:"not-needed",...(intent?{intent}:{})};
     if(typeof web.query!=="string")return {...defaultWeb,method:"fallback",reason:"No usable public query"};
