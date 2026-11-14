@@ -55,7 +55,7 @@ export function BrainEvalPanel({settings}:{settings:Settings}){
   const selectRegression=()=>{
     const passed=EVAL_SCENARIOS.filter(s=>statuses.get(s.id)?.status==="passed");
     // A stable sample across groups, even as the scenario catalog grows.
-    const sample=passed.filter((s,i)=>i%7===0);
+    const sample=passed.filter((_,i)=>i%7===0);
     selectOnly(sample.map(s=>s.id));
   };
   const metrics=report?brainEvalMetrics(report):null;
