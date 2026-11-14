@@ -24,6 +24,7 @@ export function createDevSupervisorClient({
   return {
     status:()=>request("GET","/status"),
     check:()=>request("POST","/check"),
-    apply:()=>request("POST","/apply")
+    apply:()=>request("POST","/apply"),
+    restartDesktop:()=>request("POST","/restart-desktop")
   };
 }
