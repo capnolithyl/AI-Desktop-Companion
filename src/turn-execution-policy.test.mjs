@@ -1,119 +1,101 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { planDesktopWebExecution, recentDiscoveryRefinement } from "./turn-execution-policy.ts";
+import { planDesktopWebExecution } from "./turn-execution-policy.ts";
+import { planPublicWebTools } from "./unified-planner.ts";
+import { DEFAULT_SOURCE_PREFERENCES } from "./preferred-sources.ts";
 
 const defaults = {
-  question:"What's new with NASA Artemis?", autoSearch:true, provider:"auto",
-  planMode:"chat", notion:false,personalTurn:false,capabilityQuestion:false,
+  question:"What's new with NASA Artemis?",autoSearch:true,provider:"local",
+  planMode:"chat",notion:false,personalTurn:false,capabilityQuestion:false,
   existingSearch:false,attachment:false,screenshot:false,liveFrame:false,roleplay:false
 };
-test("local model planner only runs for eligible ordinary chats",()=>{
-  const local = planDesktopWebExecution({...defaults,provider:"local"});
+
+test("policy only decides permissions and tool routing, not language intent",()=>{
+  const local=planDesktopWebExecution(defaults);
   assert.equal(local.canPlanPublicWeb,true);
   assert.equal(local.cloudMaySearch,false);
   const explicit=planDesktopWebExecution({...defaults,planMode:"research"});
   assert.equal(explicit.canPlanPublicWeb,false);
-  assert.equal(explicit.cloudMaySearch,true);
+  const cloudChat=planDesktopWebExecution({...defaults,provider:"openrouter"});
+  assert.equal(cloudChat.cloudMaySearch,false,
+    "A cloud model must not receive arbitrary chat web tools before local public planning");
+  assert.equal(cloudChat.canPlanPublicWeb,true);
+  const cloudResearch=planDesktopWebExecution({...defaults,provider:"openrouter",planMode:"research"});
+  assert.equal(cloudResearch.cloudMaySearch,true);
 });
-test("sensitive data and personal questions never activate automatic public tools",()=>{
+
+test("privacy and user-configured capability restrictions remain deterministic",()=>{
   for(const option of ["notion","personalTurn","capabilityQuestion","existingSearch",
-                      "attachment","screenshot","liveFrame","roleplay"]){
+                       "attachment","screenshot","liveFrame","roleplay"]){
     const policy=planDesktopWebExecution({...defaults,[option]:true});
     assert.equal(policy.canPlanPublicWeb,false,option);
     assert.equal(policy.cloudMaySearch,false,option);
     assert.ok(policy.blockedReason,option);
   }
-  assert.equal(planDesktopWebExecution({...defaults,autoSearch:false}).cloudMaySearch,false);
-});
-test("cloud small talk stays tool-free and real public questions still can search",()=>{
-  const hi=planDesktopWebExecution({...defaults,question:"Hello Mikan"});
-  assert.equal(hi.cloudMaySearch,false);
-  assert.equal(hi.canPlanPublicWeb,false); // no extra local planning call for greetings
-  const news=planDesktopWebExecution({...defaults,question:"Search the web for NASA news"});
-  assert.equal(news.cloudMaySearch,true);
-  assert.equal(news.canPlanPublicWeb,true);
+  const off=planDesktopWebExecution({...defaults,autoSearch:false});
+  assert.equal(off.canPlanPublicWeb,false);
+  assert.equal(off.cloudMaySearch,false);
 });
 
-test("new personal preferences remain local chat rather than automatic research",()=>{
-  for(const question of [
-    "One of my favorite Cattle Decapitation songs is Gristle Licker",
-    "I think Terrasite is even better than Death Atlas",
-    "My favorite album is The Art of Balance",
-    "so have i told you about my latest obsession? Cattle Decapitation. the band"
-  ]){
-    const policy=planDesktopWebExecution({...defaults,question});
-    assert.equal(policy.canPlanPublicWeb,false,question);
-    assert.equal(policy.cloudMaySearch,false,question);
-  }
-  const lookup=planDesktopWebExecution({...defaults,question:"Search the web for Cattle Decapitation reviews"});
-  assert.equal(lookup.canPlanPublicWeb,true);
-});
-
-test("implicit discovery needs reach the model planner across domains, not automatic web",()=>{
-  for(const question of [
-    "I wish there were more bands like Immortal.",
-    "I really want more books like The Hollow Places.",
+test("conversation semantics are never classified by a regex permission gate",()=>{
+  const examples=[
+    "Hello Mikan",
+    "I think Terrasite is even better than Death Atlas.",
     "I'm running out of short horror anime to watch.",
-    "I'm craving another tactical RPG like Fire Emblem.",
-    "I need more software alternatives for offline folder comparison.",
-    "I'd love to find a lesser-known artist with that style."
-  ]){
-    const verdict=planDesktopWebExecution({...defaults,question,provider:"local"});
-    assert.equal(verdict.canPlanPublicWeb,true,question);
-    assert.equal(verdict.blockedReason,null,question);
+    "Ideally under six episodes.",
+    "Not another giant open world, please.",
+    "Just venting, no recommendations.",
+    "I don't want suggestions, but search for current tour dates instead.",
+    "I love Immortal's sound so much.",
+    "No thanks, I only wanted to chat.",
+    "That's a bad joke lol"
+  ];
+  for(const question of examples){
+    const policy=planDesktopWebExecution({...defaults,question});
+    assert.equal(policy.canPlanPublicWeb,true,question);
+    assert.equal(policy.blockedReason,null,question);
   }
-  // Eligibility is not authorization to search: the planner may still decline.
+  // A current explicit opt-out still requires the model to decline research;
+  // permitting private planning never authorizes public search by itself.
+});
+
+test("an opt-out and unrelated personal opinion stay local when semantic planner declines",async()=>{
+  const history=[{role:"user",content:"I wish there were more bands like Immortal."}];
   for(const question of [
-    "I really love Immortal's guitar sound.",
-    "I think The Hollow Places was a great read.",
-    "My favorite album is The Art of Balance.",
-    "I have a craving for chicken soup."
+    "Not asking for recommendations, by the way. Just venting.",
+    "I don't want suggestions.",
+    "No thanks, I only wanted to chat.",
+    "My favorite band is Immortal."
   ]){
-    const verdict=planDesktopWebExecution({...defaults,question,provider:"local"});
-    assert.equal(verdict.canPlanPublicWeb,false,question);
+    const policy=planDesktopWebExecution({...defaults,question,previous:history});
+    assert.equal(policy.canPlanPublicWeb,true);
+    let invoked=0;
+    const choice=await planPublicWebTools(question,[],async prompt=>{
+      invoked++;
+      assert.ok(prompt.includes(question));
+      return JSON.stringify({ids:[],web:{search:false,reason:"The user is chatting or opted out"}});
+    },{automaticWebEnabled:policy.canPlanPublicWeb,
+      sourcePreferences:DEFAULT_SOURCE_PREFERENCES,history});
+    assert.equal(choice.search,false,question);
+    assert.equal(invoked,1,question);
   }
 });
 
-test("follow-up taste refinements may reach the local planner only while public discovery is active",()=>{
-  const earlier=[{role:"user",content:"I wish there were more short horror series to watch."},
-    {role:"assistant",content:"I could find some."}];
-  const continued=planDesktopWebExecution({...defaults,provider:"local",
-    question:"I prefer something under six episodes.",previous:earlier});
-  assert.equal(recentDiscoveryRefinement("I prefer something under six episodes.",earlier),true);
-  assert.equal(continued.canPlanPublicWeb,true);
-  assert.equal(continued.blockedReason,null);
-  const alone=planDesktopWebExecution({...defaults,provider:"local",
-    question:"I prefer something under six episodes."});
-  assert.equal(alone.canPlanPublicWeb,false);
-  const noNeed=planDesktopWebExecution({...defaults,provider:"local",
-    question:"I prefer something under six episodes.",
-    previous:[{role:"user",content:"I like horror anime."}]});
-  assert.equal(noNeed.canPlanPublicWeb,false);
-});
-test("user opt-outs, sensitive history, and higher-priority privacy permissions remain effective",()=>{
-  const discovery=[{role:"user",content:"I need more games with interesting tactics."}];
-  assert.equal(recentDiscoveryRefinement("Not asking for recommendations. Just venting.",discovery),false);
-  assert.equal(recentDiscoveryRefinement("I like raw tactical encounters.",[
-    {role:"user",content:"My son's address is 123 Example Street."}]),false);
-  for(const option of ["notion","personalTurn","capabilityQuestion","attachment","screenshot","roleplay"]){
-    const policy=planDesktopWebExecution({...defaults,[option]:true,
-      previous:discovery,question:"I prefer something short."});
-    assert.equal(policy.canPlanPublicWeb,false,option);
-    assert.ok(policy.blockedReason,option);
+test("model may plan a refinement across domains after policy permits it",async()=>{
+  const cases=[
+    ["Man, I wish there were more bands like Immortal.","Especially the cold guitars.","bands similar to Immortal"],
+    ["I'm craving another tactical RPG like Fire Emblem.","Not another giant open world.","tactical games without open worlds"],
+    ["I'm running out of short horror anime.","Under six episodes.","horror anime OVAs under six episodes"]
+  ];
+  for(const [prior,current,query] of cases){
+    const history=[{role:"user",content:prior},{role:"assistant",content:"Some possibilities."}];
+    const policy=planDesktopWebExecution({...defaults,question:current,previous:history});
+    assert.equal(policy.canPlanPublicWeb,true);
+    const selected=await planPublicWebTools(current,[],async prompt=>{
+      assert.ok(prompt.includes(prior));
+      return JSON.stringify({ids:[],web:{search:true,query,reason:"Continues earlier public discovery"}});
+    },{automaticWebEnabled:policy.canPlanPublicWeb,
+      sourcePreferences:DEFAULT_SOURCE_PREFERENCES,history});
+    assert.equal(selected.search,true,current);
   }
-});
-
-test("explicit opt-out prevents both local and cloud web planning despite prior discovery",()=>{
-  const previous=[{role:"user",content:"I wish there were more bands like Immortal."}];
-  for(const question of ["Not asking for recommendations, by the way. Just venting.",
-    "I don't want suggestions.", "No research please. Just sharing.",
-    "I'm just venting about the music scene."]){
-    const decision=planDesktopWebExecution({...defaults,question,previous});
-    assert.equal(decision.canPlanPublicWeb,false,question);
-    assert.equal(decision.cloudMaySearch,false,question);
-    assert.match(decision.blockedReason,/declined public/);
-  }
-  const different=planDesktopWebExecution({...defaults,previous,
-    question:"No recommendations, but search for the current Immortal tour dates instead."});
-  assert.equal(different.canPlanPublicWeb,true);
 });
