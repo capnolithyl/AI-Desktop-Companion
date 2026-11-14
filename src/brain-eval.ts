@@ -7,11 +7,13 @@ import { decideDesktopTurn } from "./desktop-turn-routing.ts";
 import { planDesktopWebExecution } from "./turn-execution-policy.ts";
 import { selectDeterministicMemoryIds } from "./memory-retrieval.ts";
 import { rankMemories, type RankableMemory } from "./memory-ranking.ts";
+import { isPersonalMemoryQuestion } from "./personal-memory.ts";
 import type { ResearchTurn } from "./research-routing.ts";
 
 export type EvalRoute = "chat" | "research" | "factual" | "non-research" | "any";
 export type EvalExpectation = {
   route?: EvalRoute;
+  web?: boolean;
   memory?: number[];
   excludeMemory?: number[];
   answerIncludes?: string[];
@@ -32,6 +34,8 @@ export type EvalStepResult = {
   cloudMaySearch: boolean;
   blockedReason: string | null;
   deterministicWebAllowed: boolean;
+  plannedWeb: boolean | null;
+  webPass: boolean | null;
   webPlannerDecision?: {search:boolean;query?:string;reason:string};
   selectedMemoryIds: number[];
   selectedMemory: {id:number;fact:string}[];
@@ -105,14 +109,15 @@ const scenario=(id:string,label:string,group:string,...steps:EvalStep[]):EvalSce
 const band=e("What's my favorite band?",{route:"chat",memory:[101],answerIncludes:["Cobalt Harbor"],stubReply:"Your favorite band is Cobalt Harbor."});
 const song=e("What's my favorite song?",{route:"chat",memory:[102],answerIncludes:["Winterglass"],stubReply:"Your favorite song is Winterglass by Cobalt Harbor."});
 const color=e("What's my favorite color?",{route:"chat",memory:[105],answerIncludes:["moss green"],stubReply:"Moss green."});
-const singer=e("What's their singer's name again?",{route:"chat",memory:[103],answerIncludes:["Nora Vale"],stubReply:"Nora Vale is their singer."});
+const singer=e("What's the singer's name again?",{route:"chat",memory:[103],answerIncludes:["Nora Vale"],stubReply:"Nora Vale is their singer."});
 const soup=e("I love chicken noodle soup.",{route:"chat",excludeMemory:[103,104],stubReply:"That sounds delicious."});
 export const EVAL_SCENARIOS:ReadonlyArray<EvalScenario>=[
   scenario("branch-a","A · singer after favorite song","Branching context",band,song,singer),
   scenario("branch-b","B · color after favorite song","Branching context",band,song,color),
   scenario("branch-c","C · third album before color","Branching context",band,
     e("What's their third album?",{route:"chat",memory:[104],answerIncludes:["Glass Atlas"],stubReply:"Their third album is Glass Atlas."}),color),
-  scenario("branch-d","D · unrelated soup interruption","Branching context",band,soup,singer),
+  scenario("branch-d","D · unrelated soup interruption","Branching context",band,soup,
+    e("What's their singer again?",{route:"chat",memory:[103],answerIncludes:["Nora Vale"],stubReply:"Nora Vale."})),
   scenario("branch-e","E · topic interruption, then singer","Branching context",band,color,singer),
   scenario("branch-f","F · backwards reference to album","Branching context",band,
     e("What's the singer's name?",{route:"chat",memory:[103],answerIncludes:["Nora Vale"],stubReply:"Nora Vale."}),
@@ -251,7 +256,8 @@ export async function runBrainEvaluation(options:EvalOptions):Promise<EvalReport
       const decision=decideDesktopTurn(step.user,previous,{automaticWebEnabled:true});
       const webPolicy=planDesktopWebExecution({
         question:step.user,autoSearch:true,provider:"local",planMode:decision.plan.mode,
-        notion:false,personalTurn:false,capabilityQuestion:decision.capabilityQuestion,
+        notion:scenario.id==="notion-without-web",
+        personalTurn:isPersonalMemoryQuestion(step.user),capabilityQuestion:decision.capabilityQuestion,
         existingSearch:false,attachment:false,screenshot:false,liveFrame:false,roleplay:scenario.id==="search-in-roleplay"
       });
       const lexicalIds=rankMemories([...EVAL_FACTS],step.user).slice(0,30).map(f=>f.id);
@@ -277,17 +283,29 @@ export async function runBrainEvaluation(options:EvalOptions):Promise<EvalReport
       const answerFailures=answer===undefined
         ? []:scoreAnswer(answer,step.expect);
       const routePass=routeMatches(decision.plan.mode,step.expect.route);
+      // A route marked research would fetch public evidence in the real app.
+      // The test harness never executes that fetch. Factual Rust tool planning
+      // and optional AI planning are unobserved in planning-only mode.
+      const plannedWeb:boolean|null=decision.plan.mode==="research" ? true
+        : decision.plan.mode==="factual" ? null
+        : planned ? planned.search
+        : webPolicy.canPlanPublicWeb ? null : false;
+      const expectedWeb=step.expect.web??(
+        step.expect.route==="research" ? true :
+        step.expect.route==="chat" ? false : null
+      );
+      const webPass=expectedWeb===null||plannedWeb===null?null:plannedWeb===expectedWeb;
       const memoryPass=missing.length===0 && unexpected.length===0;
       const answerPass=options.mode==="live"?!!answer&&!error&&answerFailures.length===0:null;
       const result:EvalStepResult={
         user:step.user,expected:step.expect,actualRoute:decision.plan.mode,
         canPlanPublicWeb:webPolicy.canPlanPublicWeb,cloudMaySearch:webPolicy.cloudMaySearch,
         blockedReason:webPolicy.blockedReason,deterministicWebAllowed:decision.allowAutomaticWeb,
-        webPlannerDecision:planned,selectedMemoryIds:memory.ids,selectedMemory:selected,
+        plannedWeb,webPass,webPlannerDecision:planned,selectedMemoryIds:memory.ids,selectedMemory:selected,
         missingMemoryIds:missing,unexpectedMemoryIds:unexpected,
         routePass,memoryPass,answerPass,answerFailures,answer,error,
         elapsedMs:Date.now()-began,
-        pass:routePass&&memoryPass&&(answerPass??true)&&!error
+        pass:routePass&&memoryPass&&webPass!==false&&(answerPass??true)&&!error
       };
       steps.push(result);
       previous.push({role:"user",content:step.user});
@@ -313,6 +331,10 @@ export function brainEvalMetrics(report:EvalReport){
     passed:steps.filter(s=>s.pass).length,passRate:ratio(steps.filter(s=>s.pass).length,steps.length),
     routes:ratio(steps.filter(s=>s.routePass).length,steps.length),
     recall:ratio(steps.filter(s=>s.memoryPass).length,steps.length),
+    webChecks:steps.filter(s=>s.webPass!==null).length,
+    webAgreement:ratio(steps.filter(s=>s.webPass===true).length,steps.filter(s=>s.webPass!==null).length),
+    unnecessaryWeb:steps.filter(s=>s.webPass===false&&s.plannedWeb===true).length,
+    missedWeb:steps.filter(s=>s.webPass===false&&s.plannedWeb===false).length,
     answers:report.mode==="live"?ratio(steps.filter(s=>s.answerPass).length,steps.length):null,
     elapsedMs:report.cases.reduce((n,c)=>n+c.elapsedMs,0)
   };
@@ -332,6 +354,9 @@ export function brainEvalMarkdown(report:EvalReport):string {
     "| Turns passed | "+m.passed+"/"+m.turns+" ("+m.passRate+"%) |",
     "| Routing agreement | "+m.routes+"% |",
     "| Memory selection agreement | "+m.recall+"% |",
+    "| Web decisions measured | "+m.webChecks+" |",
+    "| Web planning agreement | "+m.webAgreement+"% |",
+    "| Unnecessary / missed planned searches | "+m.unnecessaryWeb+" / "+m.missedWeb+" |",
     "| Answer heuristics | "+(m.answers===null?"Not run":m.answers+"%")+" |",
     "| Total elapsed | "+Math.round(m.elapsedMs/1000)+"s |",""
   ];
@@ -340,7 +365,9 @@ export function brainEvalMarkdown(report:EvalReport):string {
     for(const [i,s] of c.steps.entries()){
       lines.push("### "+(i+1)+". "+s.user,"",
         "- "+(s.pass?"PASS":"FAIL")+"; route "+s.actualRoute+" expected "+(s.expected.route??"any"),
-        "- Web allowed: "+s.deterministicWebAllowed+"; local planner eligible: "+s.canPlanPublicWeb+
+        "- Public web (planned, not executed): "+(s.plannedWeb===null?"unobserved":s.plannedWeb)+
+          "; web check: "+(s.webPass===null?"unobserved":s.webPass?"pass":"FAIL")+
+          "; deterministic web allowed: "+s.deterministicWebAllowed+"; planner eligible: "+s.canPlanPublicWeb+
           (s.webPlannerDecision?" ("+(s.webPlannerDecision.search?"requested":"skipped")+")":""),
         "- Selected memories: "+(s.selectedMemoryIds.join(", ")||"none")+
           "; missed "+(s.missingMemoryIds.join(", ")||"none")+
