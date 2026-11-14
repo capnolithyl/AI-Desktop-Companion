@@ -128,10 +128,13 @@ need the MSVC toolchain for the first relay-only setup.
    only `feature/p0-brain-evaluation-harness`.
 4. If newer commits are available, tap **Update & restart**, read the
    confirmation (number of commits and managed components), then approve.
-5. The supervisor fast-forwards the checkout, updates dependencies only if
-   package metadata changed, runs the frontend build, Brain Lab tests,
-   and remote authentication tests. Only after successful validation does
-   it restart the *managed* relay and optionally the dev desktop.
+5. The supervisor fast-forwards the checkout and checks whether the actual
+   npm **dependency graph** changed. A package version-only change does not
+   reinstall anything in node_modules. Real dependency changes first stop
+   the supervisor-managed desktop and relay, then install dependencies, run
+   the frontend build, Brain Lab tests and remote authentication tests.
+   Only after successful validation does it restart the *managed* relay
+   and optionally the dev desktop.
 6. The phone may disconnect briefly during relay restart. It automatically
    reconnects and reloads after success. Brain Lab can then run again.
 
@@ -158,9 +161,15 @@ commits before updating and protect the remote browser access key.
   to work. It does not update the installed NSIS executable either.
 - An installed desktop .exe still needs a new **Windows installer from CI**
   for its own code changes. That is separate from this dev-source updater.
-- This version does not self-update/restart the supervisor's own process.
-  Changes to the supervisor script require one manual restart of
-  `npm run remote:dev` on Windows.
+- The supervisor does **not** self-update/restart its own process.
+  Changes to `scripts/remote-dev-supervisor.mjs` require one manual restart
+  of `npm run remote:dev` on Windows. This matters for the v0.9.9
+  dependency-lock fix: an *already running old supervisor* still uses its old
+  logic even after GitHub receives the fix. Stop the managed dev supervisor
+  with Ctrl+C, `git pull --ff-only`, and if a failed `npm ci` may have left
+  dependencies incomplete, run `npm ci` while managed processes are stopped,
+  then `npm run remote:dev -- --desktop`. Subsequent version-only bumps can
+  be applied normally from the phone.
 - Leave the PC awake; no updates are applied if the supervisor is offline.
 
 ## Overnight Brain Lab runs
