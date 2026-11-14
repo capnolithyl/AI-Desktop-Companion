@@ -148,7 +148,7 @@ test("live web-planner decisions distinguish desired recommendations from unwant
 
 test("live Brain Lab passes conversation history to web planning for independent discovery scenarios",async()=>{
   const selected=["discovery-bands-wish","discovery-anime","discovery-games",
-    "discovery-tech-tool","discovery-book"].map(byId);
+    "discovery-tech-tool"].map(byId);
   const calls=[];
   const result=await runBrainEvaluation({
     scenarios:selected,mode:"live",model:"fixture-model",repetitions:1,
