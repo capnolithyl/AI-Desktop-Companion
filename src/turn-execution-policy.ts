@@ -35,7 +35,14 @@ export function ownerDisclosure(question:string):boolean{
   const firstPerson=/^(?:(?:so\s+)?(?:have i told you|did i tell you|did i mention)\b|one of my\b|my\b|i(?:['’]m| am|['’]ve| have| just| really| think| feel| believe| love| like| enjoy| prefer| hate| dislike| consider| got| recently)\b|we(?:['’]re| are| have)\b|our\b)/i;
   const explicitResearch=/\b(?:search(?: the web)?|browse|google|look up|research|verify|fact.check|check online)\b/i;
   const publicQuestion=/\b(?:what|when|where|who|why|which|how)\b[^?!]{0,120}\?/i.test(text);
-  return firstPerson.test(text) && !explicitResearch.test(text) && !publicQuestion;
+  // An expressed unmet need is not merely a taste disclosure. Let the local
+  // AI planner decide whether public discovery would be useful, regardless
+  // of the subject (music/books/games/software/etc). This only *permits*
+  // planning; it never automatically searches or exports private context.
+  const exploratoryNeed= /\b(?:running out of|craving another|looking for|trying to find|hoping to find)\b/i.test(text)
+    || ( /\b(?:want|need|wish|would love|could use|hoping for|craving)\b/i.test(text)
+      && /\b(?:more|another|alternatives?|options?|suggestions?|something|anything|find|discover)\b/i.test(text));
+  return firstPerson.test(text) && !explicitResearch.test(text) && !publicQuestion && !exploratoryNeed;
 }
 
 export function planDesktopWebExecution(input: DesktopWebInput): DesktopWebPolicy {
