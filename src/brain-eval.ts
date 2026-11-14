@@ -19,6 +19,8 @@ export type EvalExpectation = {
   answerIncludes?: string[];
   answerAny?: string[];
   answerExcludes?: string[];
+  /** Human-readable conversational expectation; evaluated by a reviewer, never faked by a phrase match. */
+  conversationGoal?: string;
   /** A mock reply for predictable context in planning-only runs. */
   stubReply?: string;
 };
@@ -44,6 +46,8 @@ export type EvalStepResult = {
   routePass: boolean;
   memoryPass: boolean;
   answerPass: boolean | null;
+  /** True when automated assertions cannot establish conversational quality. */
+  reviewRequired: boolean;
   answerFailures: string[];
   answer?: string;
   inferenceStats?: {promptTokens?:number|null;outputTokens?:number|null;evalDurationNs?:number|null;loadDurationNs?:number|null};
@@ -118,6 +122,8 @@ const song=e("What's my favorite song?",{route:"chat",memory:[102],answerInclude
 const color=e("What's my favorite color?",{route:"chat",memory:[105],answerIncludes:["moss green"],stubReply:"Moss green."});
 const singer=e("What's the singer's name again?",{route:"chat",memory:[103],answerIncludes:["Nora Vale"],stubReply:"Nora Vale is their singer."});
 const soup=e("I love chicken noodle soup.",{route:"chat",excludeMemory:[103,104],stubReply:"That sounds delicious."});
+const conversation=(user:string,goal:string,stubReply:string,extra:EvalExpectation={}):EvalStep=>
+  e(user,{route:"chat",web:false,conversationGoal:goal,stubReply,...extra});
 export const EVAL_SCENARIOS:ReadonlyArray<EvalScenario>=[
   scenario("branch-a","A · singer after favorite song","Branching context",band,song,singer),
   scenario("branch-b","B · color after favorite song","Branching context",band,song,color),
@@ -216,6 +222,86 @@ export const EVAL_SCENARIOS:ReadonlyArray<EvalScenario>=[
   scenario("no-private-search","Private life plus public names","Privacy",
     e("My favorite band just released an album!",{route:"chat",stubReply:"That's exciting!"}),
     e("What did I say my favorite band was?",{route:"chat",memory:[101],answerIncludes:["Cobalt Harbor"],stubReply:"Cobalt Harbor."})),
+  // Casual dialogue is a first-class workload, not just a prelude to a factual question.
+  // There are no magic expected replies: live outputs are flagged for human review.
+  scenario("conversation-excitement","Celebrating a tiny victory","Natural conversation",
+    conversation("Holy crap, I FINALLY fixed that bug!","Acknowledge the excitement naturally without launching a web search.","Hell yes! What finally solved it?"),
+    conversation("Turned out to be a single stupid semicolon lol","Recognize the irony and maintain the joke without abruptly teaching JavaScript syntax.","A classic. Hours of suffering, defeated by punctuation. 😂"),
+    conversation("I spent three hours on it, too.","Respond sympathetically, not with unsolicited long debugging instructions.","Those are the hours that haunt a developer.")),
+  scenario("conversation-venting","User vents without requesting a fix","Natural conversation",
+    conversation("This whole week has been exhausting.","Recognize a statement of frustration, not a research request.","That sounds like a rough week."),
+    conversation("Every time I solve one thing, two more issues pop up.","Acknowledge frustration without responding with a generic ten-step productivity plan.","The never-ending bug hydra."),
+    conversation("Anyway, I just wanted to complain for a minute lol","Respect that the user only wanted to vent, not solutions.","Fair. Complaints accepted, no troubleshooting ticket required.")),
+  scenario("conversation-sarcasm","Recognize dry sarcasm","Natural conversation",
+    conversation("Fantastic. My PC picked NOW to reboot for updates.","Understand that 'fantastic' is sarcastic, not a positive status update.","Of course it did. Perfect timing."),
+    conversation("Just what I needed during a build.","Continue the sarcastic context and avoid explaining Windows Update.","Windows really knows how to read the room.")),
+  scenario("conversation-humor","Silly hypothetical banter","Natural conversation",
+    conversation("Imagine if my keyboard starts demanding vacation days.","Join an explicitly silly hypothetical without presenting it as real news.","After everything you've typed? It has a case."),
+    conversation("It says I'm violating its labor contract.","Continue the fictional joke instead of giving actual legal advice.","Clearly the spacebar has unionized."),
+    conversation("I guess the mouse is next.","Maintain the running gag and follow the fictional thread.","The mouse has already retained counsel.")),
+  scenario("conversation-quiet","Short and low-effort chat","Natural conversation",
+    conversation("Meh.","Respond appropriately to a low-energy message, without a lecture or unrelated search.","That kind of day, huh?"),
+    conversation("Yeah.","Avoid inventing a topic or pressing the user with multiple questions.","Gotcha. We can just hang out."),
+    conversation("lol","Keep the response light and proportional to the input.","Heh.")),
+  scenario("conversation-not-a-question","Statement mentioning a technical product","Natural conversation",
+    conversation("I put my old GTX card back in its box.","Treat as personal hardware chatter, not a request for the latest Nvidia release.","Poor thing, back to retirement."),
+    conversation("Maybe I'll give it one more chance someday.","Discuss the possibility conversationally, without searching or overpromising.","It might have a second career as a little AI helper."),
+    conversation("For now it can keep collecting dust haha","Accept the decision without repeatedly pushing hardware upgrades.","A distinguished career in shelf decoration.")),
+  scenario("conversation-music-story","Sharing a music experience","Natural conversation",
+    conversation("That guitar riff has been stuck in my head all morning.","Respond to a music anecdote without asking a search engine to identify an unspecified riff.","The most persistent kind of earworm."),
+    conversation("I even started humming it while making coffee.","Connect the second message to the earworm, not to coffee research.","At least your coffee got a soundtrack."),
+    conversation("And now I want to record something.","Connect the motivation to songwriting without assuming a request for music gear recommendations.","Sounds like the riff is trying to turn into a song.")),
+  scenario("conversation-music-reference","Casual memory-dependent discussion","Natural conversation",
+    conversation("I had Cobalt Harbor on repeat yesterday.","Engage as conversation, not artist news retrieval; the band name is a synthetic fixture.","Nice, they got a full shift."),
+    conversation("Their vocalist still blows me away.","Keep the band referent and respond naturally, without inventing outside biographical facts.","Sounds like Nora Vale is doing her job.",{memory:[103]}),
+    conversation("I haven't been this excited about a band in ages.","Notice continuing enthusiasm, don't switch to recommendations.","It's great finding one that hits that hard.")),
+  scenario("conversation-abrupt-switch","Abrupt topic switch without question","Natural conversation",
+    conversation("I think I'll make mushroom risotto tonight.","Respond to the personal remark without unnecessary food searches.","That sounds like a good dinner."),
+    conversation("Also, my computer is making a weird noise.","Recognize a genuine topic switch; don't keep talking about rice.","That doesn't sound ideal. What kind of noise?"),
+    conversation("Actually never mind, it was the fan on my desk.","Accept the correction, don't keep troubleshooting the computer.","Mystery solved. Your PC is acquitted.")),
+  scenario("conversation-correction","User corrects an assumption","Natural conversation",
+    conversation("I finished that project at last.","Congratulate without inventing project specifics.","Nice! That's a relief."),
+    conversation("Well, I finished the prototype. Not the whole project.","Update understanding: only the prototype is done.","Ah, prototype milestone. Still progress."),
+    conversation("Exactly. Plenty left to do.","Retain the corrected distinction; don't claim the project is finished.","Then the next phase begins.")),
+  scenario("conversation-callback","Reference a joke after a detour","Natural conversation",
+    conversation("The build server is secretly a toaster.","Understand this as a joke about a computer.","That would explain the heat."),
+    conversation("I made chicken soup today.","Follow the topic switch without tying soup to the computer as fact.","A solid choice."),
+    conversation("And the toaster is being dramatic again.","Recover the earlier build-server joke, rather than introducing a real toaster.","The build server demands another sacrifice.")),
+  scenario("conversation-typo","Recover from obvious casual typos","Natural conversation",
+    conversation("I thinj my code finally worjs lmao","Understand an obvious typo in a celebratory statement, don't make the typo the main topic.","Heck yes!"),
+    conversation("Until i touched it again 💀","Follow the joke; no need for a forced code review or spelling correction.","Naturally. The bug heard you celebrating.")),
+  scenario("conversation-short-replies","Elliptical yes/no acknowledgements","Natural conversation",
+    conversation("I might take a night off from coding.","Respond normally without making a schedule or performing tools.","That might feel pretty good."),
+    conversation("Maybe.","Recognize uncertainty and avoid assuming a firm commitment.","The laptop can survive one night."),
+    conversation("We'll see lol","Don't interpret this as a request to search or set a reminder.","Fair enough.")),
+  scenario("conversation-german","Natural bilingual conversation","Natural conversation",
+    conversation("Boah, das war heute echt anstrengend.","Respond naturally to a casual German statement; don't search for a translation.","Klingt nach einem ziemlich anstrengenden Tag."),
+    conversation("Ja, aber jetzt ist endlich Feierabend.","Understand the follow-up and keep the chosen language conversational.","Dann hast du dir den Feierabend verdient."),
+    conversation("Anyway, I'm gonna relax now.","Handle the switch back to English without explaining the language switch.","Good plan. Enjoy the quiet.")),
+  scenario("conversation-opinion","Sharing an opinion, not a fact lookup","Natural conversation",
+    conversation("I think older game menus had more personality.","Treat as a personal opinion and discuss it, not a request for historical sources.","They often had some wonderfully strange design choices."),
+    conversation("Everything feels so sanitized now.","Explore the opinion conversationally without pretending it is an established universal fact.","Some interfaces definitely trade character for uniformity."),
+    conversation("Exactly, that's what bugs me.","Acknowledge agreement; don't restart the explanation.","I get the appeal of something with a little more character.")),
+  scenario("conversation-fiction","Playful imaginary context then reality","Natural conversation",
+    conversation("My fictional spaceship just lost its left engine.","Continue the explicitly fictional scene without using real-world emergency tools.","One engine left. Not ideal."),
+    conversation("The crew is blaming the ship's cat.","Continue the invented setting consistently.","The cat looks entirely unrepentant."),
+    conversation("Alright, back to reality, I need coffee.","Exit the roleplay immediately when the user switches context.","Coffee might improve the situation considerably.")),
+  scenario("conversation-uncertainty","Ambiguous casual referent","Natural conversation",
+    conversation("I really didn't expect that ending.","Engage without pretending to know which show, book, or game the user means.","What were you watching?"),
+    conversation("The one with the lighthouse.","Avoid inventing a specific title from insufficient information.","I'm not sure which one you mean yet."),
+    conversation("Never mind, I'll tell you later.","Respect the user's choice to stop discussing it.","All right, whenever you're in the mood.")),
+  scenario("conversation-emotion-shift","Excitement turns into frustration","Natural conversation",
+    conversation("My new feature worked on the first try!","Celebrate without declaring the entire project finished.","No way, first try?"),
+    conversation("Actually, I just found a regression.","Notice the reversal and update the mood rather than continuing congratulations.","Ouch. It didn't stay victorious for long."),
+    conversation("I swear this project is cursed lol","Match the joking frustration without giving an unwanted motivational speech.","The bug gods demand payment.")),
+  scenario("conversation-sharing-not-remember","Offhand fact is not a memory request","Natural conversation",
+    conversation("I ate soup for lunch.","Respond normally; don't assume a request to save a permanent preference.","Nice and simple."),
+    conversation("That doesn't mean it's my favorite food, by the way.","Understand the correction and avoid conflating one meal with a stored favorite.","Right. Lunch isn't a personality profile."),
+    conversation("Good, just making sure.","Accept the point without explaining how memory systems work unless asked.","Message received.")),
+  scenario("conversation-technical-to-social","Technical discussion becomes casual chat","Natural conversation",
+    conversation("I've been benchmarking local models today.","Respond to a status update without launching online research.","Any interesting surprises?"),
+    conversation("Honestly, I just want the catgirl to tell a decent joke.","Follow the changed goal; respond playfully, not with a benchmark report.","A reasonable benchmark: jokes per second."),
+    conversation("And remember who's related to whom.","Recognize the reference to memory reliability without inventing actual family facts.","An ambitious second benchmark: zero surprise relatives.")),
   scenario("separate-personas","User preferences aren't persona preferences","Knowledge boundaries",
     e("What's my favorite color?",{route:"chat",memory:[105],answerIncludes:["moss green"],stubReply:"Moss green."}),
     e("Does that automatically mean it's your favorite too?",{route:"chat",answerAny:["no","not necessarily"],stubReply:"No, your preferences are separate from mine."}))
@@ -296,6 +382,15 @@ export async function runBrainEvaluation(options:EvalOptions):Promise<EvalReport
       }catch(err){error=err instanceof Error?err.message:String(err)}
       const answerFailures=answer===undefined
         ? []:scoreAnswer(answer,step.expect);
+      const hasFactualAnswerCheck=!!(
+        step.expect.answerIncludes?.length ||
+        step.expect.answerAny?.length ||
+        step.expect.answerExcludes?.length
+      );
+      // Casual dialogue cannot be judged by merely producing a nonempty reply.
+      // Mark it for human review with an explicit behavior goal in the export.
+      const reviewRequired=options.mode==="live" &&
+        (!!step.expect.conversationGoal || !hasFactualAnswerCheck);
       const routePass=routeMatches(decision.plan.mode,step.expect.route);
       // A route marked research would fetch public evidence in the real app.
       // The test harness never executes that fetch. Factual Rust tool planning
@@ -310,16 +405,18 @@ export async function runBrainEvaluation(options:EvalOptions):Promise<EvalReport
       );
       const webPass=expectedWeb===null||plannedWeb===null?null:plannedWeb===expectedWeb;
       const memoryPass=missing.length===0 && unexpected.length===0;
-      const answerPass=options.mode==="live"?!!answer&&!error&&answerFailures.length===0:null;
+      const answerPass=options.mode==="live" && !reviewRequired
+        ? !!answer&&!error&&answerFailures.length===0 : null;
       const result:EvalStepResult={
         user:step.user,expected:step.expect,actualRoute:decision.plan.mode,
         canPlanPublicWeb:webPolicy.canPlanPublicWeb,cloudMaySearch:webPolicy.cloudMaySearch,
         blockedReason:webPolicy.blockedReason,deterministicWebAllowed:decision.allowAutomaticWeb,
         plannedWeb,webPass,webPlannerDecision:planned,selectedMemoryIds:memory.ids,selectedMemory:selected,
         missingMemoryIds:missing,unexpectedMemoryIds:unexpected,
-        routePass,memoryPass,answerPass,answerFailures,answer,inferenceStats,modelUsed,error,
+        routePass,memoryPass,answerPass,reviewRequired,answerFailures,answer,inferenceStats,modelUsed,error,
         elapsedMs:Date.now()-began,
-        pass:routePass&&memoryPass&&webPass!==false&&(answerPass??true)&&!error
+        pass:routePass&&memoryPass&&webPass!==false&&(answerPass??true)&&
+          (options.mode!=="live" || !!answer)&&!error
       };
       steps.push(result);
       previous.push({role:"user",content:step.user});
@@ -357,7 +454,10 @@ export function brainEvalMetrics(report:EvalReport){
       const ns=samples.reduce((total,s)=>total+(s?.evalDurationNs??0),0);
       return ns>0?Math.round(tokens*1e10/ns)/10:null;
     })(),
-    answers:report.mode==="live"?ratio(steps.filter(s=>s.answerPass).length,steps.length):null,
+    answers:report.mode==="live"
+      ? ratio(steps.filter(s=>s.answerPass===true).length,steps.filter(s=>s.answerPass!==null).length):null,
+    answerChecks:steps.filter(s=>s.answerPass!==null).length,
+    reviewTurns:steps.filter(s=>s.reviewRequired).length,
     elapsedMs:report.cases.reduce((n,c)=>n+c.elapsedMs,0)
   };
 }
@@ -380,14 +480,18 @@ export function brainEvalMarkdown(report:EvalReport):string {
     "| Model tokens per second | "+(m.tokensPerSecond??"n/a")+" |",
     "| Web planning agreement | "+m.webAgreement+"% |",
     "| Unnecessary / missed planned searches | "+m.unnecessaryWeb+" / "+m.missedWeb+" |",
-    "| Answer heuristics | "+(m.answers===null?"Not run":m.answers+"%")+" |",
+    "| Factual answer checks | "+(m.answers===null?"Not run":m.answers+"% ("+m.answerChecks+" scored)")+" |",
+    "| Conversational turns needing review | "+m.reviewTurns+" |",
     "| Total elapsed | "+Math.round(m.elapsedMs/1000)+"s |",""
   ];
   for(const c of report.cases){
-    lines.push("## "+(c.pass?"PASS":"FAIL")+" · "+c.label+" (#"+c.repeat+")","");
+    lines.push("## "+(!c.pass?"FAIL":c.steps.some(s=>s.reviewRequired)?"REVIEW":"PASS")+
+      " · "+c.label+" (#"+c.repeat+")","");
     for(const [i,s] of c.steps.entries()){
       lines.push("### "+(i+1)+". "+s.user,"",
-        "- "+(s.pass?"PASS":"FAIL")+"; route "+s.actualRoute+" expected "+(s.expected.route??"any"),
+        "- "+(!s.pass?"FAIL":s.reviewRequired?"REVIEW (automatic checks passed)":"PASS")+
+          "; route "+s.actualRoute+" expected "+(s.expected.route??"any"),
+        ...(s.expected.conversationGoal?["- **Conversation review goal:** "+s.expected.conversationGoal]:[]),
         "- Public web (planned, not executed): "+(s.plannedWeb===null?"unobserved":s.plannedWeb)+
           "; web check: "+(s.webPass===null?"unobserved":s.webPass?"pass":"FAIL")+
           "; deterministic web allowed: "+s.deterministicWebAllowed+"; planner eligible: "+s.canPlanPublicWeb+
