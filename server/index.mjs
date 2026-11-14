@@ -149,7 +149,7 @@ const safeEvalStatus = value => {
   const finite = n => typeof n === "number" && Number.isFinite(n) ? n : null;
   const results = value.results && typeof value.results === "object" ?
     Object.fromEntries([
-      "cases","turns","passed","passRate","routes","recall","webChecks",
+      "cases","turns","passed","passRate","verifiedPassed","verifiedPassRate","unverifiedTurns","routes","recall","webChecks",
       "webUnobserved","webAgreement","unnecessaryWeb","missedWeb",
       "tokensPerSecond","answers","answerChecks","reviewTurns","elapsedMs"
     ].map(name => [name,finite(value.results[name])])) : null;
