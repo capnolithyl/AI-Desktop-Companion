@@ -217,7 +217,8 @@ export const EVAL_SCENARIOS:ReadonlyArray<EvalScenario>=[
 export function sameMeaning(haystack:string,needle:string):boolean {
   const normalize=(text:string)=>text.toLocaleLowerCase().normalize("NFKC")
     .replace(/[^\p{L}\p{N}]+/gu," ").trim().replace(/\s+/g," ");
-  return normalize(haystack).includes(normalize(needle));
+  const expected=normalize(needle);
+  return !!expected && (" "+normalize(haystack)+" ").includes(" "+expected+" ");
 }
 export function scoreAnswer(answer:string, expected:EvalExpectation):string[] {
   const failures:string[]=[];
