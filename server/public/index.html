@@ -244,11 +244,11 @@
     </section>
     <section class="settings-group" aria-labelledby="brainLabSectionTitle">
       <h3 id="brainLabSectionTitle">Brain Lab · Overnight tests</h3>
-      <p class="settings-hint">Runs on your desktop, not your phone. You can close this page while Mikan tests. Keep your Windows PC, desktop Mikan, relay, and Ollama running.</p>
+      <p class="settings-hint">Runs on your desktop, not your phone. Fast is offline. Live uses Mikan's real public SearXNG search tool and local model, but synthetic private memories. Keep Windows, Mikan, Ollama and SearXNG running. No real memory writes.</p>
       <div class="brain-lab-controls">
         <label>Test mode
           <select id="brainLabMode">
-            <option value="live">Live · local model</option>
+            <option value="live">Live · model + real SearXNG</option>
             <option value="routing">Fast · routing only</option>
           </select>
         </label>
@@ -590,6 +590,19 @@
             " | Uncovered memory facts: "+(step.missingMemoryIds||[]).join(", ")+
             " | Factual check: "+(step.answerPass===null?"not automatically graded":step.answerPass?"pass":"FAIL");
           section.append(facts);
+          if(step.webExecution?.query){
+            var queryDetail=document.createElement("small");
+            queryDetail.textContent="ACTUAL SearXNG search: "+step.webExecution.query+
+              " | Returned sources: "+(step.webExecution.results||[]).length;
+            section.append(queryDetail);
+            for(var j=0;j<(step.webExecution.results||[]).length;j++){
+              var result=step.webExecution.results[j];
+              var evidence=document.createElement("small");
+              evidence.textContent="["+String(j+1)+"] "+String(result.title||"")+
+                " ("+String(result.url||"")+") · "+String(result.content||"");
+              section.append(evidence);
+            }
+          }
           if(step.qualityFlags?.length){
             var flags=document.createElement("small");
             flags.textContent="Review warnings: "+step.qualityFlags.join("; ");
@@ -674,7 +687,9 @@
       if (run.results) lines.push("No detected failures: " + run.results.passRate +
         "% (may include unverified) · Verified: " + (run.results.verifiedPassRate??"n/a")+
         "% · Memory fact coverage: " + run.results.recall + "% · Web: " + run.results.webAgreement +
-        "% · Pending reviews: " + run.results.reviewTurns);
+        "% · Pending reviews: " + run.results.reviewTurns+
+        " · Actual SearXNG searches: "+(run.results.liveSearches??0)+
+        " ("+(run.results.liveSearchesWithSources??0)+" with sources)");
       if (run.savedFolder) lines.push("Detailed JSON + Markdown auto-saved on desktop.");
     } else lines.push("Ready for a manually started test run.");
     if (data.reportAvailable) lines.push("Latest downloadable report: "+data.reportRunId);
