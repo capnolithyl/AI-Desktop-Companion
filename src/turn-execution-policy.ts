@@ -66,9 +66,18 @@ export function ownerDisclosure(question:string):boolean{
   return firstPerson.test(text) && !explicitResearch.test(text) && !publicQuestion && !expressesDiscoveryNeed(text);
 }
 
+/** An explicit "no recommendations / just venting" takes precedence over
+ * a prior discovery request. The owner can still explicitly ask for a
+ * different research task in the same turn. */
+export function explicitlyDeclinesResearch(question:string):boolean{
+  const declined=/\b(?:not asking for|not looking for|no need for|don't want|do not want|please don't|please do not|no)\s+(?:any\s+)?(?:recommendations?|suggestions?|search(?:es)?|research|web lookup)\b|\b(?:just venting|just sharing|not looking for advice)\b/i;
+  const differentTask=/\b(?:instead|but)\b.{0,90}\b(?:search|look up|research|find)\b/i;
+  return declined.test(question)&&!differentTask.test(question);
+}
 export function planDesktopWebExecution(input: DesktopWebInput): DesktopWebPolicy {
   const reason =
     !input.autoSearch ? "Automatic web tools disabled in Settings" :
+    explicitlyDeclinesResearch(input.question) ? "Owner declined public recommendations or research" :
     input.notion ? "Owner-shared Notion document routing; public web blocked" :
     input.personalTurn ? "Personal memory question; public web blocked" :
     input.capabilityQuestion ? "Mikan capability question; public web blocked" :
