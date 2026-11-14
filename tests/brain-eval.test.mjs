@@ -60,6 +60,46 @@ test("non-factual live replies require human review, never get free semantic pas
   assert.match(brainEvalMarkdown(result),/Conversation review goal/);
 });
 
+test("implicit conversational research has both discovery and deliberate no-search controls",()=>{
+  const fixtures=EVAL_SCENARIOS.filter(s=>s.group==="Conversational discovery");
+  assert.ok(fixtures.length>=15);
+  assert.ok(fixtures.some(s=>s.steps.some(step=>step.expect.web===true)));
+  assert.ok(fixtures.some(s=>s.steps.every(step=>step.expect.web===false)));
+  assert.ok(fixtures.some(s=>s.steps.some(step=>step.expect.web===true)
+    && s.steps.some(step=>step.expect.web===false)));
+  assert.equal(byId("discovery-bands-wish").steps[0].expect.web,true);
+  assert.equal(byId("discovery-wish-not-a-search").steps[0].expect.web,false);
+  assert.equal(byId("discovery-wish-but-no-recommendations").steps[1].expect.web,false);
+  assert.ok(fixtures.every(s=>s.steps.every(step=>step.expect.conversationGoal)));
+});
+
+test("fast mode cannot claim implicit AI web-planning succeeded without observing it",async()=>{
+  const result=await runBrainEvaluation({
+    scenarios:[byId("discovery-bands-wish")],mode:"routing",model:"fixture-only",repetitions:1
+  });
+  const planned=result.cases[0].steps[0];
+  assert.equal(planned.expected.web,true);
+  assert.equal(planned.webPass,null);
+  assert.equal(planned.reviewRequired,true);
+  assert.ok(brainEvalMetrics(result).webUnobserved>=1);
+  assert.match(brainEvalMarkdown(result),/REVIEW/);
+});
+
+test("live web-planner decisions distinguish desired recommendations from unwanted search",async()=>{
+  const wanted=await runBrainEvaluation({
+    scenarios:[byId("discovery-bands-wish")],mode:"live",model:"fake",repetitions:1,
+    planWeb:async()=>({search:true,query:"bands similar to Immortal black metal",reason:"Real recommendations need discovery"}),
+    infer:async()=>"I can find other bands with that icy sound."
+  });
+  assert.equal(wanted.cases[0].steps[0].webPass,true);
+  const unwanted=await runBrainEvaluation({
+    scenarios:[byId("discovery-wish-not-a-search")],mode:"live",model:"fake",repetitions:1,
+    planWeb:async()=>({search:true,query:"Immortal recommendations",reason:"Bad search"}),
+    infer:async()=>"I know how you feel."
+  });
+  assert.equal(unwanted.cases[0].steps[0].webPass,false);
+});
+
 test("planning tests use independent context across repeated branching paths",async()=>{
   const samples=[byId("branch-a"),byId("branch-b"),byId("branch-c"),byId("branch-d")];
   const report=await runBrainEvaluation({scenarios:samples,repetitions:2,mode:"routing",model:"fixture-only"});
