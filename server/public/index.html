@@ -538,6 +538,11 @@
             " | Uncovered memory facts: "+(step.missingMemoryIds||[]).join(", ")+
             " | Factual check: "+(step.answerPass===null?"not automatically graded":step.answerPass?"pass":"FAIL");
           section.append(facts);
+          if(step.qualityFlags?.length){
+            var flags=document.createElement("small");
+            flags.textContent="Review warnings: "+step.qualityFlags.join("; ");
+            section.append(flags);
+          }
           var answer=document.createElement("pre");
           answer.textContent="Mikan: "+String(step.answer??"(No model answer in Fast mode)");
           section.append(answer);
