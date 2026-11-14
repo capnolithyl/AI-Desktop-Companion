@@ -1,6 +1,6 @@
 /**
  * Isolated P0 evaluation fixtures and scoring. Nothing here writes to SQLite,
- * Qdrant, the remote relay, or real search services. Synthetic facts deliberately
+ * Qdrant or the remote relay. Live-mode public web may use real SearXNG. Synthetic facts deliberately
  * use invented names so the model cannot pass by guessing its training data.
  */
 import { decideDesktopTurn } from "./desktop-turn-routing.ts";
@@ -9,6 +9,7 @@ import { selectDeterministicMemoryIds } from "./memory-retrieval.ts";
 import { rankMemories, type RankableMemory } from "./memory-ranking.ts";
 import { isPersonalMemoryQuestion } from "./personal-memory.ts";
 import type { ResearchTurn } from "./research-routing.ts";
+import type { WebResult } from "./web-search.ts";
 
 export type EvalRoute = "chat" | "research" | "factual" | "non-research" | "any";
 export type EvalExpectation = {
@@ -39,6 +40,8 @@ export type EvalStepResult = {
   plannedWeb: boolean | null;
   webPass: boolean | null;
   webPlannerDecision?: {search:boolean;query?:string;reason:string;intent?:string};
+  /** Observed Rust/SearXNG execution, distinct from an AI decision to search. */
+  webExecution?:{query:string|null;results:WebResult[];sourcesCarriedOver:boolean};
   /** Previous validated public query available to this turn's planner (never assistant prose). */
   activePublicQuery?: string;
   selectedMemoryIds: number[];
@@ -75,20 +78,22 @@ export type EvalReport = {
   version:1; runId:string; startedAt:string; finishedAt:string;
   mode:EvalMode; model:string; attempts:number; scenarios:string[];
   // Recording simulated vs actual conditions prevents misleading scoreboards.
-  environment:"isolated-synthetic"; liveWebEnabled:false; writesToRealMemories:false;
+  environment:"isolated-synthetic"|"isolated-synthetic+live-public-web";
+  liveWebEnabled:boolean; writesToRealMemories:false;
   cases:EvalCaseResult[];
 };
 export type EvalInferenceResult = string | {
   text:string;
   stats?: {promptTokens?:number|null;outputTokens?:number|null;evalDurationNs?:number|null;loadDurationNs?:number|null};
   modelUsed?:string;
+  webExecution?:{query:string|null;results:WebResult[];sourcesCarriedOver:boolean};
 };
 export type EvalInference = (args:{
   messages:EvalTurn[];
   selectedMemories:ReadonlyArray<{id:number;fact:string}>;
   evidence?:string;
-  /** Planning is observed, but Brain Lab does not execute public web tools. */
   researchPlanned?:boolean;
+  researchQuery?:string;
   scenarioId:string;
   stepIndex:number;
 })=>Promise<EvalInferenceResult>;
@@ -102,6 +107,8 @@ export type EvalOptions = {
   signal?:AbortSignal;
   infer?:EvalInference;
   planWeb?:EvalPlanner;
+  /** Live mode only: use actual public SearXNG via production Rust chat_stream. */
+  liveWeb?:boolean;
   onProgress?:(done:number,total:number,current:string)=>void;
 };
 
@@ -516,8 +523,11 @@ export async function runBrainEvaluation(options:EvalOptions):Promise<EvalReport
     version:1,runId:"eval-"+Date.now()+"-"+Math.random().toString(36).slice(2,7),
     startedAt:new Date().toISOString(),finishedAt:"",mode:options.mode,model:options.model,
     attempts:Math.max(1,Math.min(5,Math.trunc(options.repetitions))),
-    scenarios:options.scenarios.map(s=>s.id),environment:"isolated-synthetic",
-    liveWebEnabled:false,writesToRealMemories:false,cases:[]
+    scenarios:options.scenarios.map(s=>s.id),
+    environment:options.mode==="live"&&options.liveWeb
+      ?"isolated-synthetic+live-public-web":"isolated-synthetic",
+    liveWebEnabled:options.mode==="live"&&options.liveWeb===true,
+    writesToRealMemories:false,cases:[]
   };
   const total=report.attempts*options.scenarios.reduce((n,s)=>n+s.steps.length,0);
   let done=0;
@@ -558,6 +568,7 @@ export async function runBrainEvaluation(options:EvalOptions):Promise<EvalReport
       let planned:{search:boolean;query?:string;reason:string;intent?:string}|undefined;
       const priorPublicQuery=activePublicQuery;
       let answer:string|undefined;
+      let webExecution:EvalStepResult["webExecution"]|undefined;
       let inferenceStats:EvalStepResult["inferenceStats"]|undefined;
       let modelUsed:string|undefined;
       let error:string|undefined;
@@ -570,13 +581,22 @@ export async function runBrainEvaluation(options:EvalOptions):Promise<EvalReport
           planned=await options.planWeb(step.user,previous.map(turn=>({...turn})),
             {activePublicQuery});
         if(options.mode==="live" && options.infer){
+          // Never search when the private permission boundary blocks web.
+          // The local planner has already validated its proposed public query.
+          const permission=webPolicy.blockedReason===null;
+          const publicQuery=permission && webPolicy.canPlanPublicWeb && planned?.search===true
+            ?planned.query
+            : permission && decision.plan.mode==="research" && decision.allowAutomaticWeb
+              ?decision.plan.query:undefined;
           const response=await options.infer({
             messages,selectedMemories:selected,evidence:step.mockEvidence,
             researchPlanned:planned?.search===true || decision.plan.mode==="research",
+            researchQuery:options.liveWeb?publicQuery:undefined,
             scenarioId:scenario.id,stepIndex
           });
           if(typeof response==="string")answer=response;
-          else {answer=response.text;inferenceStats=response.stats;modelUsed=response.modelUsed;}
+          else {answer=response.text;inferenceStats=response.stats;modelUsed=response.modelUsed;
+            webExecution=response.webExecution;}
         }
       }catch(err){error=err instanceof Error?err.message:String(err)}
       const answerFailures=answer===undefined
@@ -617,6 +637,7 @@ export async function runBrainEvaluation(options:EvalOptions):Promise<EvalReport
         canPlanPublicWeb:webPolicy.canPlanPublicWeb,cloudMaySearch:webPolicy.cloudMaySearch,
         blockedReason:webPolicy.blockedReason,deterministicWebAllowed:decision.allowAutomaticWeb,
         plannedWeb,webPass,webPlannerDecision:planned,
+        ...(webExecution?{webExecution}:{}),
         ...(priorPublicQuery?{activePublicQuery:priorPublicQuery}:{}),
         selectedMemoryIds:memory.ids,selectedMemory:selected,
         missingMemoryIds:missing,missingMemoryRecordIds:missingRecordIds,
@@ -665,6 +686,9 @@ export function brainEvalMetrics(report:EvalReport){
     webChecks:steps.filter(s=>s.webPass!==null).length,
     webUnobserved:steps.filter(s=>s.webPass===null && s.expected.web!==undefined).length,
     webAgreement:ratio(steps.filter(s=>s.webPass===true).length,steps.filter(s=>s.webPass!==null).length),
+    liveSearches:steps.filter(s=>!!s.webExecution?.query).length,
+    liveSearchesWithSources:steps.filter(s=>(s.webExecution?.results.length??0)>0).length,
+    liveSources:steps.reduce((n,s)=>n+(s.webExecution?.results.length??0),0),
     unnecessaryWeb:steps.filter(s=>s.webPass===false&&s.plannedWeb===true).length,
     missedWeb:steps.filter(s=>s.webPass===false&&s.plannedWeb===false).length,
     tokensPerSecond:(()=>{
@@ -690,7 +714,8 @@ export function brainEvalMarkdown(report:EvalReport):string {
     "",
     "Run: "+report.runId+" • "+report.finishedAt,
     "Mode: "+report.mode+" • Model: "+report.model+" • Attempts: "+report.attempts,
-    "Synthetic/isolated facts; no production memory writes or live external searches.",
+    "Synthetic/isolated private facts; no production memory writes. "+
+      (report.liveWebEnabled?"PUBLIC WEB ENABLED: live local SearXNG searches.":"No live external searches."),
     "",
     "## Dashboard",
     "",
@@ -707,6 +732,8 @@ export function brainEvalMarkdown(report:EvalReport):string {
     "| Unobserved explicit web expectations | "+m.webUnobserved+" |",
     "| Model tokens per second | "+(m.tokensPerSecond??"n/a")+" |",
     "| Web planning agreement | "+m.webAgreement+"% |",
+    "| Actual public SearXNG searches | "+m.liveSearches+
+      " attempts; "+m.liveSearchesWithSources+" with results; "+m.liveSources+" source previews |",
     "| Unnecessary / missed planned searches | "+m.unnecessaryWeb+" / "+m.missedWeb+" |",
     "| Factual answer checks | "+(m.answers===null?"Not run":m.answers+"% ("+m.answerChecks+" scored)")+" |",
     "| Conversational turns needing review | "+m.reviewTurns+" |",
@@ -723,7 +750,7 @@ export function brainEvalMarkdown(report:EvalReport):string {
           "; exact match "+(s.routeLabelMatch?"yes":"no, diagnostic only")+
           "; functional behavior "+(s.routePass?"OK":"FAIL")+")",
         ...(s.expected.conversationGoal?["- **Conversation review goal:** "+s.expected.conversationGoal]:[]),
-        "- Public web (planned, not executed): "+(s.plannedWeb===null?"unobserved":s.plannedWeb)+
+        "- Public web planned: "+(s.plannedWeb===null?"unobserved":s.plannedWeb)+
           "; web check: "+(s.webPass===null?"unobserved":s.webPass?"pass":"FAIL")+
           "; deterministic web allowed: "+s.deterministicWebAllowed+"; planner eligible: "+s.canPlanPublicWeb+
           (s.webPlannerDecision?" ("+(s.webPlannerDecision.search?"requested":"skipped")+")":""),
@@ -738,6 +765,13 @@ export function brainEvalMarkdown(report:EvalReport):string {
       if(s.inferenceStats)lines.push("- Inference: "+JSON.stringify({model:s.modelUsed,stats:s.inferenceStats}));
       if(s.error)lines.push("- Error: "+s.error);
       if(s.answerFailures.length)lines.push("- Checks: "+s.answerFailures.join("; "));
+      if(s.webExecution){
+        lines.push("- Executed SearXNG query: "+(s.webExecution.query??"not executed"),
+          "- Actual source previews: "+s.webExecution.results.length);
+        for(const [n,src] of s.webExecution.results.entries())
+          lines.push("  - ["+(n+1)+"] "+src.title+" | "+src.url+
+            " | "+src.content.slice(0,400).replace(/\s+/g," "));
+      }
       if(s.activePublicQuery)lines.push("- Prior active public task: "+s.activePublicQuery);
       if(s.webPlannerDecision?.intent)
         lines.push("- Local task classification: "+s.webPlannerDecision.intent);
