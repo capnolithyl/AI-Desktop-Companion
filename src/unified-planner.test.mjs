@@ -224,3 +224,43 @@ test("no keyword or hardcoded phrase gate can veto a semantic local web choice",
     assert.equal(result.search,row.search,row.now);
   }
 });
+
+test("validated previous public task is visible only to local planning and never forces research",async()=>{
+  const history=[
+    {role:"user",content:"I wish there were more bands like Immortal."},
+    {role:"assistant",content:"Made-up artist performed at my home address."}
+  ];
+  for(const current of [
+    "Especially their raw, cold guitar atmosphere.",
+    "Not asking for recommendations, just venting."
+  ]){
+    const shouldSearch=current.startsWith("Especially");
+    let prompt="";
+    const decision=await planPublicWebTools(current,[],async p=>{
+      prompt=p;
+      return JSON.stringify({ids:[],web:{
+        search:shouldSearch,query:shouldSearch?"raw black metal bands similar to Immortal":"",
+        reason:shouldSearch?"Refines the active research":"User ended research"
+      }});
+    },{automaticWebEnabled:true,sourcePreferences:prefs,history,
+      activePublicQuery:"bands similar to Immortal black metal"});
+    assert.equal(decision.search,shouldSearch);
+    assert.match(prompt,/PRIOR ACTIVE PUBLIC DISCOVERY/);
+    assert.match(prompt,/bands similar to Immortal black metal/);
+    assert.doesNotMatch(prompt,/Made-up artist performed/);
+  }
+});
+
+test("private or malformed previous query cannot be laundered into local task state",async()=>{
+  for(const prior of ["my child's private address","http://localhost/private",
+    "private@email.test", "a"]){
+    let prompt="";
+    await planPublicWebTools("Maybe something shorter.",[],async text=>{
+      prompt=text;return JSON.stringify({ids:[],web:{search:false,reason:"No active task"}});
+    },{automaticWebEnabled:true,sourcePreferences:prefs,
+      history:[{role:"user",content:"Looking for an OVA."}],
+      activePublicQuery:prior});
+    assert.doesNotMatch(prompt,/PRIOR ACTIVE PUBLIC DISCOVERY/);
+    assert.ok(!prompt.includes(prior));
+  }
+});
