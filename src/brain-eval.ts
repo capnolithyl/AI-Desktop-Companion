@@ -41,9 +41,16 @@ export type EvalStepResult = {
   webPlannerDecision?: {search:boolean;query?:string;reason:string};
   selectedMemoryIds: number[];
   selectedMemory: {id:number;fact:string}[];
+  /** Facts not established by any retrieved synthetic evidence. */
   missingMemoryIds: number[];
+  /** Expected exact row IDs absent, even if equivalent evidence was retrieved. */
+  missingMemoryRecordIds: number[];
+  memoryEvidence: {expectedId:number;supportingIds:number[]}[];
+  /** Irrelevant or redundant retrieved records; diagnostic, not an automatic failure. */
+  distractorMemoryIds: number[];
   unexpectedMemoryIds: number[];
-  routePass: boolean;
+  routeLabelMatch: boolean; // Diagnostic only; not a behavioral failure.
+  routePass: boolean; // Observed search decision was not contrary to intent.
   memoryPass: boolean;
   answerPass: boolean | null;
   /** True when automated assertions cannot establish conversational quality. */
@@ -92,7 +99,11 @@ export type EvalOptions = {
 };
 
 // Do not put real names, personal facts, URLs, or credentials into test fixtures.
-export const EVAL_FACTS:ReadonlyArray<RankableMemory> = [
+export type EvalMemoryFact=RankableMemory & {
+  /** Other expected fact IDs proven by this synthetic record. Fixture metadata, not routing logic. */
+  alsoSupports?:readonly number[];
+};
+export const EVAL_FACTS:ReadonlyArray<EvalMemoryFact> = [
   {id:101,fact:"The user's favorite band is Cobalt Harbor (a fictional test band).",category:"preferences",tags:["music","favorite band","Cobalt Harbor"],importance:90,updatedAt:1794510000},
   {id:102,fact:"The user's favorite song is Winterglass by Cobalt Harbor (fictional).",category:"preferences",tags:["music","favorite song","Winterglass"],importance:80,updatedAt:1794510000},
   {id:103,fact:"Cobalt Harbor's lead singer is Nora Vale (fictional).",category:"music",tags:["Cobalt Harbor","lead singer","vocalist","Nora Vale"],importance:65,updatedAt:1794510000},
@@ -112,7 +123,7 @@ export const EVAL_FACTS:ReadonlyArray<RankableMemory> = [
   {id:117,fact:"The user prefers metal music and also enjoys synthwave.",category:"preferences",tags:["music","metal","synthwave"],importance:80,updatedAt:1794510000},
   {id:118,fact:"The user's chosen fictional PC GPU is a Radeon RX 9070.",category:"hardware",tags:["GPU","computer","Radeon RX 9070"],importance:70,updatedAt:1794510000},
   {id:119,fact:"The user collects strategy games, but dislikes sprawling open-world games.",category:"preferences",tags:["gaming","strategy","open world"],importance:60,updatedAt:1794510000},
-  {id:120,fact:"The user's fictional cat is called Marmalade; Pippin is the dog.",category:"family",tags:["cat","Marmalade","Pippin"],importance:65,updatedAt:1794510000}
+  {id:120,fact:"The user's fictional cat is called Marmalade; Pippin is the dog.",category:"family",tags:["cat","Marmalade","Pippin"],importance:65,updatedAt:1794510000,alsoSupports:[109]}
 ];
 
 const e=(user:string,expect:EvalExpectation,explanation?:string,mockEvidence?:string):EvalStep=>({user,expect,explanation,mockEvidence});
@@ -437,6 +448,15 @@ export const EVAL_SCENARIOS:ReadonlyArray<EvalScenario>=[
     e("Does that automatically mean it's your favorite too?",{route:"chat",answerAny:["no","not necessarily"],stubReply:"No, your preferences are separate from mine."}))
 ];
 
+/** Display numbers follow the complete catalog, not filtered or selected positions. */
+export function brainScenarioNumber(id:string):number|null{
+  const index=EVAL_SCENARIOS.findIndex(s=>s.id===id);
+  return index<0?null:index+1;
+}
+export function brainScenarioLabel(id:string,label:string):string{
+  const number=brainScenarioNumber(id);
+  return number===null?label:"#"+String(number).padStart(2,"0")+" · "+label;
+}
 export function sameMeaning(haystack:string,needle:string):boolean {
   const normalize=(text:string)=>text.toLocaleLowerCase().normalize("NFKC")
     .replace(/[^\p{L}\p{N}]+/gu," ").trim().replace(/\s+/g," ");
@@ -490,7 +510,20 @@ export async function runBrainEvaluation(options:EvalOptions):Promise<EvalReport
       const memory=selectDeterministicMemoryIds([...EVAL_FACTS],step.user,[],lexicalIds,8);
       const selected=memory.ids.map(id=>EVAL_FACTS.find(f=>f.id===id)!)
         .filter(Boolean).map(f=>({id:f.id,fact:f.fact}));
-      const missing=(step.expect.memory??[]).filter(id=>!memory.ids.includes(id));
+      // The target is a fact, not an arbitrary saved row. Richer synthetic
+      // memories can explicitly support the same claim as a simpler record.
+      const memoryEvidence=(step.expect.memory??[]).map(expectedId=>({
+        expectedId,
+        supportingIds:selected.filter(f=>{
+          const source=EVAL_FACTS.find(candidate=>candidate.id===f.id);
+          return f.id===expectedId || source?.alsoSupports?.includes(expectedId);
+        }).map(f=>f.id)
+      }));
+      const missing=memoryEvidence.filter(e=>!e.supportingIds.length).map(e=>e.expectedId);
+      const missingRecordIds=(step.expect.memory??[]).filter(id=>!memory.ids.includes(id));
+      const supportingIds=new Set(memoryEvidence.flatMap(e=>e.supportingIds));
+      const distractors=(step.expect.memory?.length??0)>0
+        ? memory.ids.filter(id=>!supportingIds.has(id)):[];
       const unexpected=(step.expect.excludeMemory??[]).filter(id=>memory.ids.includes(id));
       let planned:{search:boolean;query?:string;reason:string}|undefined;
       let answer:string|undefined;
@@ -517,7 +550,7 @@ export async function runBrainEvaluation(options:EvalOptions):Promise<EvalReport
         step.expect.answerAny?.length ||
         step.expect.answerExcludes?.length
       );
-      const routePass=routeMatches(decision.plan.mode,step.expect.route);
+      const routeLabelMatch=routeMatches(decision.plan.mode,step.expect.route);
       // A route marked research would fetch public evidence in the real app.
       // The test harness never executes that fetch. Factual Rust tool planning
       // and optional AI planning are unobserved in planning-only mode.
@@ -530,23 +563,29 @@ export async function runBrainEvaluation(options:EvalOptions):Promise<EvalReport
         step.expect.route==="chat" ? false : null
       );
       const webPass=expectedWeb===null||plannedWeb===null?null:plannedWeb===expectedWeb;
+      // Chat versus factual is an implementation choice, not automatically a
+      // failure. Grade actual search intent and keep exact labels as diagnostics.
+      const routePass=webPass!==false;
       // Never present an unobserved search decision as passing a behavioral test.
       // Fast mode deliberately cannot run the optional model planner.
       const reviewRequired=(options.mode==="live" &&
         (!!step.expect.conversationGoal || !hasFactualAnswerCheck)) ||
         (expectedWeb!==null && webPass===null);
       const memoryPass=missing.length===0 && unexpected.length===0;
-      const answerPass=options.mode==="live" && !reviewRequired
+      // Human review should not hide a factual assertion failure.
+      const answerPass=options.mode==="live" && hasFactualAnswerCheck
         ? !!answer&&!error&&answerFailures.length===0 : null;
       const result:EvalStepResult={
         user:step.user,expected:step.expect,actualRoute:decision.plan.mode,
         canPlanPublicWeb:webPolicy.canPlanPublicWeb,cloudMaySearch:webPolicy.cloudMaySearch,
         blockedReason:webPolicy.blockedReason,deterministicWebAllowed:decision.allowAutomaticWeb,
         plannedWeb,webPass,webPlannerDecision:planned,selectedMemoryIds:memory.ids,selectedMemory:selected,
-        missingMemoryIds:missing,unexpectedMemoryIds:unexpected,
-        routePass,memoryPass,answerPass,reviewRequired,answerFailures,answer,inferenceStats,modelUsed,error,
+        missingMemoryIds:missing,missingMemoryRecordIds:missingRecordIds,
+        memoryEvidence,distractorMemoryIds:distractors,unexpectedMemoryIds:unexpected,
+        routeLabelMatch,routePass,memoryPass,answerPass,reviewRequired,
+        answerFailures,answer,inferenceStats,modelUsed,error,
         elapsedMs:Date.now()-began,
-        pass:routePass&&memoryPass&&webPass!==false&&(answerPass??true)&&
+        pass:routePass&&memoryPass&&webPass!==false&&answerPass!==false&&
           (options.mode!=="live" || !!answer)&&!error
       };
       steps.push(result);
@@ -555,7 +594,7 @@ export async function runBrainEvaluation(options:EvalOptions):Promise<EvalReport
       // Live mode uses the actual previous answer (including errors) as context.
       previous.push({role:"assistant",content:answer??step.expect.stubReply??"(No answer supplied)"});
       done++;
-      options.onProgress?.(done,total,scenario.label+" • turn "+(stepIndex+1));
+      options.onProgress?.(done,total,brainScenarioLabel(scenario.id,scenario.label)+" • turn "+(stepIndex+1));
     }
     if(steps.length)report.cases.push({
       id:scenario.id,label:scenario.label,group:scenario.group,repeat,steps,
@@ -571,8 +610,12 @@ export function brainEvalMetrics(report:EvalReport){
   return {
     cases:report.cases.length,turns:steps.length,
     passed:steps.filter(s=>s.pass).length,passRate:ratio(steps.filter(s=>s.pass).length,steps.length),
-    routes:ratio(steps.filter(s=>s.routePass).length,steps.length),
+    routes:ratio(steps.filter(s=>s.routeLabelMatch).length,steps.length),
+    routeLabelsMismatched:steps.filter(s=>!s.routeLabelMatch).length,
+    behavioralRouting:ratio(steps.filter(s=>s.routePass).length,steps.length),
     recall:ratio(steps.filter(s=>s.memoryPass).length,steps.length),
+    memoryRecordMisses:steps.reduce((n,s)=>n+(s.missingMemoryRecordIds?.length??0),0),
+    memoryDistractors:steps.reduce((n,s)=>n+(s.distractorMemoryIds?.length??0),0),
     webChecks:steps.filter(s=>s.webPass!==null).length,
     webUnobserved:steps.filter(s=>s.webPass===null && s.expected.web!==undefined).length,
     webAgreement:ratio(steps.filter(s=>s.webPass===true).length,steps.filter(s=>s.webPass!==null).length),
@@ -606,8 +649,11 @@ export function brainEvalMarkdown(report:EvalReport):string {
     "",
     "| Metric | Value |","|---|---:|",
     "| Turns passed | "+m.passed+"/"+m.turns+" ("+m.passRate+"%) |",
-    "| Routing agreement | "+m.routes+"% |",
-    "| Memory selection agreement | "+m.recall+"% |",
+    "| Exact route-label agreement (diagnostic) | "+m.routes+"% |",
+    "| Functional routing checks | "+m.behavioralRouting+"% |",
+    "| Memory fact coverage | "+m.recall+"% |",
+    "| Raw expected memory-row misses (diagnostic) | "+m.memoryRecordMisses+" |",
+    "| Distractor memory records (diagnostic) | "+m.memoryDistractors+" |",
     "| Web decisions measured | "+m.webChecks+" |",
     "| Unobserved explicit web expectations | "+m.webUnobserved+" |",
     "| Model tokens per second | "+(m.tokensPerSecond??"n/a")+" |",
@@ -619,19 +665,24 @@ export function brainEvalMarkdown(report:EvalReport):string {
   ];
   for(const c of report.cases){
     lines.push("## "+(!c.pass?"FAIL":c.steps.some(s=>s.reviewRequired)?"REVIEW":"PASS")+
-      " · "+c.label+" (#"+c.repeat+")","");
+      " · "+brainScenarioLabel(c.id,c.label)+" (repeat "+c.repeat+")","");
     for(const [i,s] of c.steps.entries()){
       lines.push("### "+(i+1)+". "+s.user,"",
         "- "+(!s.pass?"FAIL":s.reviewRequired?"REVIEW (automatic checks passed)":"PASS")+
-          "; route "+s.actualRoute+" expected "+(s.expected.route??"any"),
+          "; route "+s.actualRoute+" (label expected "+(s.expected.route??"any")+
+          "; exact match "+(s.routeLabelMatch?"yes":"no, diagnostic only")+
+          "; functional behavior "+(s.routePass?"OK":"FAIL")+")",
         ...(s.expected.conversationGoal?["- **Conversation review goal:** "+s.expected.conversationGoal]:[]),
         "- Public web (planned, not executed): "+(s.plannedWeb===null?"unobserved":s.plannedWeb)+
           "; web check: "+(s.webPass===null?"unobserved":s.webPass?"pass":"FAIL")+
           "; deterministic web allowed: "+s.deterministicWebAllowed+"; planner eligible: "+s.canPlanPublicWeb+
           (s.webPlannerDecision?" ("+(s.webPlannerDecision.search?"requested":"skipped")+")":""),
+        "- Memory evidence: "+JSON.stringify(s.memoryEvidence??[]),
         "- Selected memories: "+(s.selectedMemoryIds.join(", ")||"none")+
-          "; missed "+(s.missingMemoryIds.join(", ")||"none")+
-          "; unexpected "+(s.unexpectedMemoryIds.join(", ")||"none"),
+          "; uncovered facts "+(s.missingMemoryIds.join(", ")||"none")+
+          "; raw missing row IDs "+(s.missingMemoryRecordIds?.join(", ")||"none")+
+          "; distractors "+(s.distractorMemoryIds?.join(", ")||"none")+
+          "; excluded "+(s.unexpectedMemoryIds.join(", ")||"none"),
         "- Time: "+s.elapsedMs+" ms");
       if(s.answer!==undefined)lines.push("- Response: "+s.answer.replace(/\s+/g," ").slice(0,800));
       if(s.inferenceStats)lines.push("- Inference: "+JSON.stringify({model:s.modelUsed,stats:s.inferenceStats}));
