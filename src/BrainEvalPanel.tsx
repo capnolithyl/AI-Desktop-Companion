@@ -6,7 +6,7 @@ import { shouldUseLocalThinking } from "./reasoning-mode";
 import { planPublicWebTools } from "./unified-planner";
 import {
   EVAL_SCENARIOS, runBrainEvaluation, brainEvalMetrics, brainEvalMarkdown,
-  type EvalMode, type EvalReport, type EvalScenario, type EvalTurn
+  type EvalMode, type EvalReport, type EvalTurn
 } from "./brain-eval";
 import "./brain-eval.css";
 
