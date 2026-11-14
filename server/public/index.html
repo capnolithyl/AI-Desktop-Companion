@@ -748,8 +748,8 @@
   function openSettings() {
     if (!key || !settingsSheet.hidden) return;
     settingsError.textContent = "";
-    void refreshDevUpdates();
     settingsSheet.hidden = false;
+    void refreshDevUpdates();
     document.body.classList.add("settings-open");
     menuToggle.setAttribute("aria-expanded", "true");
     app.inert = true;
