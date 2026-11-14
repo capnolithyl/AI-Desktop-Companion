@@ -99,6 +99,42 @@ by the desktop. Completed runs also save detailed JSON/Markdown diagnostics.
 A code change made without updating Git HEAD or the app version may not
 invalidate the build fingerprint automatically. When in doubt, rerun tests.
 
+## Numbered scenarios, evidence-based grading and phone reviews
+
+Each test displays a stable **#01** to **#73** catalog number in desktop and
+browser lists, progress, traces and Markdown exports. Filters and selective
+runs do not change the numbering. Historical status keys remain the same
+scenario IDs; a future reordering only changes display numbers.
+
+Expected memories are **facts**, not exact required database rows. A
+synthetic record can explicitly prove another fact: for instance, a
+cat-and-dog record containing Pippin's name satisfies the dog-name fact
+without needing the separate dog-only row. Raw ID misses and unrelated
+retrieved records remain visible as diagnostics. Fixture entailment metadata
+does not alter production routing or memory search.
+
+Similarly, route labels (`chat`, `factual`, `research`) are informational
+when the observed web decision satisfies the user intent. Unknown web
+decisions remain INCOMPLETE rather than turning green. Factual assertions
+are checked even if human conversational review is also required.
+
+The browser's **Inspect** action loads the latest finished synthetic run's
+turn-by-turn replies and expected review goals directly on the phone.
+Older run details can still be opened from saved Windows JSON/Markdown files.
+
+### First general production fixes from the Live baseline
+
+- Song, track and album remain useful searchable *domains* in lexical
+  retrieval; previously they were removed as stopwords, leaving some direct
+  favorite-song questions with no useful matching terms.
+- First-person statements expressing an *unmet discovery need* may reach
+  the existing local web planner across topics (music, books, games, anime,
+  software). Merely enjoying an artist or a book still stays local.
+  Allowing a planning decision does **not** execute a web search.
+
+These checks are synthetic and do not verify production Qdrant, Notion,
+GitHub, or live SearXNG execution end to end.
+
 ## A/B/C/D experiments
 
 The first four scenarios all begin with:
