@@ -457,6 +457,18 @@ export function brainScenarioLabel(id:string,label:string):string{
   const number=brainScenarioNumber(id);
   return number===null?label:"#"+String(number).padStart(2,"0")+" · "+label;
 }
+/** Claim-based synthetic evidence grading. A more detailed record can support
+ * a simpler fact, but the reverse is not automatically true. */
+export function brainMemoryEvidence(expectedIds:readonly number[],selectedIds:readonly number[]){
+  const selected=selectedIds.map(id=>EVAL_FACTS.find(f=>f.id===id)).filter(
+    (f):f is EvalMemoryFact=>!!f
+  );
+  return expectedIds.map(expectedId=>({
+    expectedId,
+    supportingIds:selected.filter(f=>f.id===expectedId||f.alsoSupports?.includes(expectedId))
+      .map(f=>f.id)
+  }));
+}
 export function sameMeaning(haystack:string,needle:string):boolean {
   const normalize=(text:string)=>text.toLocaleLowerCase().normalize("NFKC")
     .replace(/[^\p{L}\p{N}]+/gu," ").trim().replace(/\s+/g," ");
@@ -512,13 +524,7 @@ export async function runBrainEvaluation(options:EvalOptions):Promise<EvalReport
         .filter(Boolean).map(f=>({id:f.id,fact:f.fact}));
       // The target is a fact, not an arbitrary saved row. Richer synthetic
       // memories can explicitly support the same claim as a simpler record.
-      const memoryEvidence=(step.expect.memory??[]).map(expectedId=>({
-        expectedId,
-        supportingIds:selected.filter(f=>{
-          const source=EVAL_FACTS.find(candidate=>candidate.id===f.id);
-          return f.id===expectedId || source?.alsoSupports?.includes(expectedId);
-        }).map(f=>f.id)
-      }));
+      const memoryEvidence=brainMemoryEvidence(step.expect.memory??[],memory.ids);
       const missing=memoryEvidence.filter(e=>!e.supportingIds.length).map(e=>e.expectedId);
       const missingRecordIds=(step.expect.memory??[]).filter(id=>!memory.ids.includes(id));
       const supportingIds=new Set(memoryEvidence.flatMap(e=>e.supportingIds));
