@@ -50,6 +50,30 @@ routing. This first pass does **not** remove the separate legacy heuristics
 in initial research routing and deterministic memory recall. Those remain
 areas for follow-up investigation.
 
+**0.9.12 focused active-task reasoning:** Live run of 0.9.11
+(`eval-1794692172668-ah5rl`, Nov 14 21:36 UTC, Qwen3.5:9b)
+mechanically passed 5/6 scenarios and 14/15 turns. #59 now correctly continues
+a public discovery, but #57 still decides no web after explicitly identifying
+an active music-discovery query. The model was confusing "not a new question"
+with "not a refinement of the existing task". Active validated tasks now use
+a shorter **local model** prompt asking for a structured semantic disposition:
+`refine`, `end`, `new` or `chat`, plus the normal validated web plan.
+No regex or phrase-based classification was introduced. The model may still
+decline to search; a contradictory `end/chat + search=true` output fails
+closed. Reports expose the model's disposition for inspection.
+
+**The Live harness does not have public search results.** In the previous
+run #65 produced 1,136 tokens of self-corrections and inaccurate episode
+counts while the web planner correctly requested research. This is a
+conversational-quality failure requiring human review, *not* evidence
+the public search returned incorrect data. The isolated reply adapter now
+receives whether research was planned and explicitly tells Qwen that planning
+did NOT fetch sources; it should avoid unsupported factual recommendation
+lists and episode counts, stay concise, and ask when a named entity is
+ambiguous. This changes the simulation's evidence discipline, not the
+production search-result execution. Full recommendation quality with real
+sources still requires a separate integrated test.
+
 **0.9.11 active research state:** A validated public search query from the
 immediately previous assistant turn now accompanies recent short user turns
 when the local web planner judges the next message. This is explicit task
