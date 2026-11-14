@@ -35,7 +35,7 @@ function fixture({dirty=false,diverged=false,failBuild=false}={}){
     if(failBuild && op==="run test:brain")throw new Error("synthetic test failed");
   };
   const supervisor=createDevSupervisor({
-    cwd:"/repo",token,git,npm,
+    cwd:"/repo",token,git,npm,port:0,
     startChild:(name)=>{started.push(name);return {pid:7,exitCode:null}},
     stopChild:async()=>{},
     relayReady:async()=>{}
@@ -65,15 +65,37 @@ test("the approved fast-forward passes checks and restarts only managed relay by
   assert.ok(seen.includes("npm run test:server"));
   assert.ok(!seen.some(s=>/npm run desktop/.test(s)));
 });
-test("failed validation resets only the previously clean Git checkout",async()=>{
+test("failed validation rolls back without restarting the already running relay",async()=>{
   const {supervisor,seen,getHead,started}=fixture({failBuild:true});
+  // Real phone-triggered updates always run in a supervisor that has already
+  // started its relay. The old fixture never started it, accidentally
+  // exercising the legitimate "recover a missing relay" fallback instead.
+  await supervisor.start();
+  try{
+    assert.deepEqual(started,["server"]);
+    await supervisor.inspect();
+    await supervisor.apply();
+    assert.equal(supervisor.getState().phase,"error");
+    assert.match(supervisor.getState().error,/synthetic test failed/);
+    assert.equal(getHead(),SHA_A);
+    assert.ok(seen.some(x=>x.startsWith("git reset --keep "+SHA_A)));
+    assert.ok(seen.includes("npm run build:remote"),"rollback restores prior relay build");
+    assert.deepEqual(started,["server"],
+      "validation failed before restart, so original managed relay stays alive");
+  }finally{
+    await supervisor.close();
+  }
+});
+
+test("rollback restores the relay when no managed relay exists",async()=>{
+  const {supervisor,getHead,started}=fixture({failBuild:true});
+  // Deliberately model the missing-child recovery case separately.
   await supervisor.inspect();
   await supervisor.apply();
   assert.equal(supervisor.getState().phase,"error");
-  assert.match(supervisor.getState().error,/synthetic test failed/);
   assert.equal(getHead(),SHA_A);
-  assert.ok(seen.some(x=>x.startsWith("git reset --keep "+SHA_A)));
-  assert.deepEqual(started,[]);
+  assert.deepEqual(started,["server"],
+    "supervisor may launch the restored relay when its child was missing");
 });
 test("dirty or diverged branches do not execute merge, npm or restart",async()=>{
   for(const options of [{dirty:true},{diverged:true}]){
