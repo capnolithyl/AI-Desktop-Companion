@@ -69,6 +69,16 @@
       font-size:13px; cursor:pointer; }
     .toggle-row input { width:20px; height:20px; accent-color:#ffad7e; flex-shrink:0; }
     .settings-error { min-height:1.3em; color:#ffb5bd; font-size:12px; }
+    .brain-lab-controls { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin:10px 0; }
+    .brain-lab-controls label {display:flex;flex-direction:column;gap:6px;min-width:0;font-size:12px;}
+    .brain-lab-controls select {min-width:0;width:100%;border:1px solid #76556d;
+      background:#30232f;color:#fff3f9;padding:10px;border-radius:9px;}
+    .brain-lab-controls .full {grid-column:1/-1;}
+    .brain-lab-actions {display:flex;flex-wrap:wrap;gap:8px;margin-top:9px;}
+    .brain-lab-actions button {flex:1;min-width:100px;text-align:center;}
+    #brainLabProgress {display:block;width:100%;margin:10px 0;accent-color:#ffad7e;}
+    #brainLabStatus {white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px;line-height:1.55;color:#dfcbd7;}
+    @media(max-width:390px){.brain-lab-controls{grid-template-columns:1fr;}.brain-lab-controls .full{grid-column:1;}}
     @media (min-width:650px) { .settings-drawer { border-radius:18px 0 0 18px; } }
     #gate { display:flex; flex:1; align-items:center; justify-content:center; padding:20px; }
     #gate .panel { padding:25px; max-width:380px; width:100%; background:#302430; border:1px solid #684d60; border-radius:20px; }
@@ -175,6 +185,42 @@
       </label>
       <p class="settings-hint">These display preferences stay in this browser, not Mikan's memories.</p>
     </section>
+    <section class="settings-group" aria-labelledby="brainLabSectionTitle">
+      <h3 id="brainLabSectionTitle">Brain Lab · Overnight tests</h3>
+      <p class="settings-hint">Runs on your desktop, not your phone. You can close this page while Mikan tests. Keep your Windows PC, desktop Mikan, relay, and Ollama running.</p>
+      <div class="brain-lab-controls">
+        <label>Test mode
+          <select id="brainLabMode">
+            <option value="live">Live · local model</option>
+            <option value="routing">Fast · routing only</option>
+          </select>
+        </label>
+        <label>Repeat
+          <select id="brainLabRepeats">
+            <option value="1">1 ×</option>
+            <option value="2">2 ×</option>
+            <option value="3">3 ×</option>
+            <option value="5">5 ×</option>
+          </select>
+        </label>
+        <label class="full">Category
+          <select id="brainLabCategory"><option value="all">All categories</option></select>
+        </label>
+        <label class="full">Scenario
+          <select id="brainLabScenario"><option value="all">All selected scenarios</option></select>
+        </label>
+      </div>
+      <div class="brain-lab-actions">
+        <button id="brainLabStart" class="settings-action" type="button" disabled>Start test run</button>
+        <button id="brainLabStop" class="settings-action danger" type="button" disabled>Stop</button>
+      </div>
+      <progress id="brainLabProgress" value="0" max="1"></progress>
+      <div id="brainLabStatus" role="status" aria-live="polite">Waiting for desktop…</div>
+      <div class="brain-lab-actions">
+        <button id="brainLabJson" class="settings-action" type="button" disabled>Download JSON</button>
+        <button id="brainLabMarkdown" class="settings-action" type="button" disabled>Download Markdown</button>
+      </div>
+    </section>
     <section class="settings-group" aria-labelledby="privacySectionTitle">
       <h3 id="privacySectionTitle">Privacy &amp; Feedback</h3>
       <button id="copyDebugLog" class="settings-action" type="button">Copy conversation debug log</button>
@@ -256,6 +302,19 @@
   var menuToggle = document.getElementById("menuToggle");
   var closeSettingsButton = document.getElementById("closeSettings");
   var settingsError = document.getElementById("settingsError");
+  var brainLabMode = document.getElementById("brainLabMode");
+  var brainLabRepeats = document.getElementById("brainLabRepeats");
+  var brainLabCategory = document.getElementById("brainLabCategory");
+  var brainLabScenario = document.getElementById("brainLabScenario");
+  var brainLabStart = document.getElementById("brainLabStart");
+  var brainLabStop = document.getElementById("brainLabStop");
+  var brainLabStatus = document.getElementById("brainLabStatus");
+  var brainLabProgress = document.getElementById("brainLabProgress");
+  var brainLabJson = document.getElementById("brainLabJson");
+  var brainLabMarkdown = document.getElementById("brainLabMarkdown");
+  var brainLabCatalogSignature = "";
+  var brainLabCatalog = [];
+  var brainLabSubmitting = false;
   var avatarCaption = document.getElementById("avatarCaption");
   var showModelName = document.getElementById("showModelName");
   var showAvatarLabel = document.getElementById("showAvatarLabel");
@@ -274,11 +333,151 @@
     var routedModel = data.modelStatus && data.modelStatus.label
       ? data.modelStatus.label : (data.model || "local model");
     status.textContent = !data.connected ? "Desktop offline"
-      : (data.busy || data.queued ? "Thinking…"
-        : displaySettings.modelName ? "Online · " + routedModel : "Online");
+      : data.brainEval && data.brainEval.phase === "running"
+        ? "Brain Lab " + data.brainEval.done + "/" + data.brainEval.total
+        : (data.busy || data.queued ? "Thinking…"
+          : displaySettings.modelName ? "Online · " + routedModel : "Online");
     status.title = displaySettings.modelName
       ? (data.modelStatus && data.modelStatus.title || "") : "";
   }
+  function brainLabChosenIds() {
+    var items = brainLabCatalog.filter(function (item) {
+      return brainLabCategory.value === "all" || item.group === brainLabCategory.value;
+    });
+    if (brainLabScenario.value !== "all") {
+      items = items.filter(function (item) { return item.id === brainLabScenario.value; });
+    }
+    return items.map(function (item) { return item.id; });
+  }
+  function renderBrainLabScenarios() {
+    var selected = brainLabScenario.value;
+    brainLabScenario.replaceChildren(new Option("All selected scenarios","all"));
+    brainLabCatalog.filter(function (item) {
+      return brainLabCategory.value === "all" || item.group === brainLabCategory.value;
+    }).forEach(function (item) {
+      brainLabScenario.append(new Option(item.label + " (" + item.turns + " turns)",item.id));
+    });
+    brainLabScenario.value = brainLabChosenValue(selected);
+  }
+  function brainLabChosenValue(requested) {
+    return Array.from(brainLabScenario.options).some(function (item) { return item.value === requested; })
+      ? requested : "all";
+  }
+  function renderBrainLab(data) {
+    var catalog = Array.isArray(data.brainEvalCatalog) ? data.brainEvalCatalog : [];
+    var signature = JSON.stringify(catalog);
+    if (signature !== brainLabCatalogSignature) {
+      brainLabCatalogSignature = signature;
+      brainLabCatalog = catalog;
+      var category = brainLabCategory.value;
+      brainLabCategory.replaceChildren(new Option("All categories","all"));
+      var groupNames = [...new Set(catalog.map(function (item) { return item.group; }))].sort();
+      groupNames.forEach(function (group) { brainLabCategory.append(new Option(group,group)); });
+      brainLabCategory.value = groupNames.includes(category) ? category : "all";
+      renderBrainLabScenarios();
+    }
+    var run = data.brainEval || {};
+    var phase = run.phase || "idle";
+    var running = phase === "running";
+    var available = !!data.connected && !data.busy && !data.queued &&
+      !data.controlsBlocked && !running && !brainLabSubmitting;
+    var count = brainLabChosenIds().length;
+    var chosenTurns = brainLabCatalog.filter(function (item) {
+      return brainLabChosenIds().includes(item.id);
+    }).reduce(function (sum,item) { return sum + item.turns; },0);
+    brainLabStart.disabled = !available || count===0;
+    brainLabStart.textContent = "Start " + count + " scenarios (" +
+      (chosenTurns * Number(brainLabRepeats.value)) + " turns)";
+    brainLabStop.disabled = !data.connected || !running || brainLabSubmitting;
+    brainLabMode.disabled = running || brainLabSubmitting;
+    brainLabRepeats.disabled = running || brainLabSubmitting;
+    brainLabCategory.disabled = running || brainLabSubmitting;
+    brainLabScenario.disabled = running || brainLabSubmitting;
+    brainLabJson.disabled = !data.reportAvailable || brainLabSubmitting;
+    brainLabMarkdown.disabled = !data.reportAvailable || brainLabSubmitting;
+    brainLabProgress.max = Math.max(1,run.total||1);
+    brainLabProgress.value = Math.min(brainLabProgress.max,run.done||0);
+    var lines = [];
+    if (!data.connected) lines.push("Desktop offline. Start Mikan and the relay.");
+    else if (running) lines.push("Running on desktop · " + run.done + "/" +
+      run.total + " turns\n" + (run.label||"") +
+      "\nStarted: " + (run.startedAt||"unknown"));
+    else if (phase === "complete" || phase === "stopped" || phase === "failed") {
+      lines.push(phase.toUpperCase() + (run.finishedAt?" · "+run.finishedAt:""));
+      if (run.results) lines.push("Automated checks: " + run.results.passRate +
+        "% · Memory: " + run.results.recall + "% · Web: " + run.results.webAgreement +
+        "% · Human reviews: " + run.results.reviewTurns);
+      if (run.savedFolder) lines.push("Detailed JSON + Markdown auto-saved on desktop.");
+    } else lines.push("Ready for a manually started test run.");
+    if (data.reportAvailable) lines.push("Latest downloadable report: "+data.reportRunId);
+    if (run.error) lines.push("Note: "+run.error);
+    brainLabStatus.textContent = lines.join("\n");
+  }
+  brainLabCategory.addEventListener("change", function () {
+    renderBrainLabScenarios();
+    if (current) renderBrainLab(current);
+  });
+  brainLabScenario.addEventListener("change", function () {
+    if (current) renderBrainLab(current);
+  });
+  brainLabRepeats.addEventListener("change", function () {
+    if (current) renderBrainLab(current);
+  });
+  brainLabStart.addEventListener("click", async function () {
+    if (!current || brainLabSubmitting) return;
+    brainLabSubmitting = true;
+    brainLabStart.disabled = true;
+    try {
+      await api("/api/brain-eval", {
+        method:"POST",headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({
+          action:"start",mode:brainLabMode.value,
+          repetitions:Number(brainLabRepeats.value),scenarioIds:brainLabChosenIds()
+        })
+      });
+      brainLabStatus.textContent = "Start requested. Mikan is accepting the desktop job…";
+      await refresh();
+    } catch(error) { brainLabStatus.textContent = error.message; }
+    finally { brainLabSubmitting = false; if(current) renderBrainLab(current); }
+  });
+  brainLabStop.addEventListener("click", async function () {
+    if (brainLabSubmitting) return;
+    brainLabSubmitting = true;
+    try {
+      await api("/api/brain-eval", {
+        method:"POST",headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({action:"stop"})
+      });
+      brainLabStatus.textContent = "Stop requested. Finishing the current operation…";
+      await refresh();
+    } catch(error) { brainLabStatus.textContent = error.message; }
+    finally { brainLabSubmitting = false; if(current) renderBrainLab(current); }
+  });
+  async function downloadBrainLab(format) {
+    if (!key) return;
+    try {
+      var response = await fetch("/api/brain-eval/result?format="+encodeURIComponent(format),{
+        headers:{Authorization:"Bearer "+key},cache:"no-store"
+      });
+      if (!response.ok) {
+        var body = await response.json();
+        throw new Error(body.error || "Report unavailable");
+      }
+      var blob = await response.blob();
+      var url = URL.createObjectURL(blob);
+      var anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = "mikan-brain-eval-"+(current?.reportRunId||"latest")+
+        (format==="json"?".json":".md");
+      document.body.append(anchor);
+      anchor.click();
+      anchor.remove();
+      setTimeout(function () { URL.revokeObjectURL(url); },1500);
+    } catch(error) { brainLabStatus.textContent = error.message; }
+  }
+  brainLabJson.addEventListener("click",function(){void downloadBrainLab("json");});
+  brainLabMarkdown.addEventListener("click",function(){void downloadBrainLab("markdown");});
+
   function applyDisplaySettings() {
     showModelName.checked = displaySettings.modelName;
     showAvatarLabel.checked = displaySettings.avatarLabels;
@@ -476,8 +675,10 @@
     updateStatus(data);
     renderChats(data);
     renderModels(data);
+    renderBrainLab(data);
     void syncAvatar(data);
-    send.disabled = !data.connected || data.busy || data.queued || inFlight || !message.value.trim();
+    send.disabled = !data.connected || data.busy || data.queued ||
+      data.brainEval?.phase==="running" || inFlight || !message.value.trim();
   }
   async function refresh() {
     if (!key) return;
@@ -603,7 +804,8 @@
     document.getElementById("key").focus();
   });
   message.addEventListener("input", function () {
-    send.disabled = !current || !current.connected || current.busy || current.queued || inFlight || !message.value.trim();
+    send.disabled = !current || !current.connected || current.busy || current.queued ||
+      current.brainEval?.phase==="running" || inFlight || !message.value.trim();
   });
   message.addEventListener("keydown", function (event) {
     if (event.key === "Enter" && !event.shiftKey && !event.isComposing) {
