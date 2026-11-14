@@ -45,6 +45,41 @@ async function command(exe,args,{cwd=ROOT,timeout=120000}={}){
     return String(stdout).trim();
   }catch(error){throw new Error(formatError(error))}
 }
+/** npm ci is necessary for dependency-graph changes, not package version bumps.
+ * Compare the full lock graph, ignoring only the root package's own version,
+ * and the dependency-relevant manifest fields. Conservative on malformed data. */
+export function needsDependencyInstall(oldManifest,newManifest,oldLock,newLock){
+  try{
+    const previous=JSON.parse(oldManifest);
+    const next=JSON.parse(newManifest);
+    const pick=p=>({
+      dependencies:p.dependencies??{},
+      devDependencies:p.devDependencies??{},
+      optionalDependencies:p.optionalDependencies??{},
+      peerDependencies:p.peerDependencies??{},
+      peerDependenciesMeta:p.peerDependenciesMeta??{},
+      bundleDependencies:p.bundleDependencies??p.bundledDependencies??[],
+      overrides:p.overrides??{},
+      workspaces:p.workspaces??null,
+      engines:p.engines??{},
+      os:p.os??null,cpu:p.cpu??null,libc:p.libc??null,
+      packageManager:p.packageManager??null,
+      installScripts:Object.fromEntries(
+        ["preinstall","install","postinstall","prepare"].filter(k=>p.scripts?.[k])
+          .map(k=>[k,p.scripts[k]])
+      )
+    });
+    if(JSON.stringify(pick(previous))!==JSON.stringify(pick(next)))return true;
+    const a=JSON.parse(oldLock),b=JSON.parse(newLock);
+    delete a.version;delete b.version;
+    if(a.packages?.[""])delete a.packages[""].version;
+    if(b.packages?.[""])delete b.packages[""].version;
+    return JSON.stringify(a)!==JSON.stringify(b);
+  }catch{
+    // Never silently skip installation when dependency metadata can't be read.
+    return true;
+  }
+}
 export function isExpectedOrigin(remote){
   return /^(?:https:\/\/github\.com\/|git@github\.com:|ssh:\/\/git@github\.com\/)capnolithyl\/AI-Desktop-Companion(?:\.git)?\/?$/i.test(remote.trim());
 }
@@ -92,6 +127,19 @@ export function createDevSupervisor({
   const publish=changes=>{state={...state,...changes};};
   const repoGit=(...args)=>git(...args);
   const npmRun=script=>npm("run",script);
+
+  async function dependencyChangesBetween(before,after){
+    const changed=(await repoGit("diff","--name-only",before,after,
+      "--","package.json","package-lock.json")).trim();
+    if(!changed)return false;
+    const [oldManifest,newManifest,oldLock,newLock]=await Promise.all([
+      repoGit("show",before+":package.json"),
+      repoGit("show",after+":package.json"),
+      repoGit("show",before+":package-lock.json"),
+      repoGit("show",after+":package-lock.json")
+    ]);
+    return needsDependencyInstall(oldManifest,newManifest,oldLock,newLock);
+  }
 
   async function assertCheckout(){
     const [branch,origin,root,changes]=await Promise.all([
@@ -146,13 +194,16 @@ export function createDevSupervisor({
     }
     throw new Error("Browser relay never became healthy on 127.0.0.1:3847");
   }
-  async function restartChildren(){
-    publish({phase:"restarting",step:"Restarting managed browser relay"});
+  async function stopManagedChildren(){
     stopping=true;
     try{
       if(manageDesktop){await terminate(desktop);desktop=null}
       await terminate(relay);relay=null;
     }finally{stopping=false}
+  }
+  async function restartChildren(){
+    publish({phase:"restarting",step:"Restarting managed browser relay"});
+    await stopManagedChildren();
     relay=launch("server");
     await waitRelay();
     if(manageDesktop){
@@ -198,19 +249,24 @@ export function createDevSupervisor({
     const before=expectedHead,after=expectedRemote;
     publish({phase:"updating",error:null,step:"Rechecking repository state"});
     let merged=false,restartAttempted=false;
+    let dependenciesChanged=false,dependenciesInstallAttempted=false;
+    let childrenStoppedForInstall=false;
     try{
       await assertCheckout();
       const actual=await repoGit("rev-parse","HEAD");
       if(actual!==before)throw new Error("Local HEAD changed since approval. Check updates again.");
       const fetched=await repoGit("rev-parse","refs/remotes/origin/"+UPDATE_BRANCH);
       if(fetched!==after)throw new Error("Remote branch moved. Check updates again.");
-      const dependenciesChanged=!!(await repoGit("diff","--name-only",before,after,
-        "--","package.json","package-lock.json")).trim();
+      dependenciesChanged=await dependencyChangesBetween(before,after);
       publish({step:"Fast-forwarding approved branch"});
       await repoGit("merge","--ff-only",after);
       merged=true;
       if(dependenciesChanged){
-        publish({step:"Installing updated JavaScript dependencies"});
+        publish({step:"Stopping managed desktop and browser relay before npm dependency installation"});
+        await stopManagedChildren();
+        childrenStoppedForInstall=true;
+        publish({step:"Installing changed JavaScript dependencies"});
+        dependenciesInstallAttempted=true;
         await npm("ci","--ignore-scripts","--no-audit","--no-fund");
       }
       publish({step:"Building and checking desktop frontend (no Rust compile)"});
@@ -234,21 +290,31 @@ export function createDevSupervisor({
         try{
           // --keep refuses to discard tracked edits made after the clean preflight.
           await repoGit("reset","--keep",before);
-          const dependencyRollback=!!(await repoGit("diff","--name-only",before,after,
-            "--","package.json","package-lock.json")).trim();
-          if(dependencyRollback){
-            try{await npm("ci","--ignore-scripts","--no-audit","--no-fund")}catch{}
+          let restoredDependencies=true;
+          if(dependenciesInstallAttempted){
+            try{
+              publish({step:"Restoring previous dependency set after failed update"});
+              await npm("ci","--ignore-scripts","--no-audit","--no-fund");
+            }catch(dependencyError){
+              restoredDependencies=false;
+              publish({error:failure+"; rollback dependency install failed: "+
+                formatError(dependencyError)});
+            }
           }
-          try{await npmRun("build:remote")}catch{}
-          // Managed process is still serving the previous in-memory code until
-          // reboot, or the rollback's restored assets.
-          if(restartAttempted || !relay || relay.exitCode!==null){
-            try{await restartChildren()}catch(restartError){
-              publish({step:"Old source restored but relay restart failed: "+formatError(restartError)});
+          if(restoredDependencies){
+            try{await npmRun("build:remote")}catch{}
+            // Prior managed processes are still active unless we stopped them
+            // for a genuine dependency update or entered the restart phase.
+            if(childrenStoppedForInstall || restartAttempted || !relay || relay.exitCode!==null){
+              try{await restartChildren()}catch(restartError){
+                publish({step:"Old source restored but relay restart failed: "+formatError(restartError)});
+              }
             }
           }
           publish({phase:"error",current:before.slice(0,12),
-            step:"Update failed and Git checkout was rolled back; relay remains available."});
+            step:restoredDependencies
+              ?"Update failed and Git checkout was rolled back; managed services recovered where possible."
+              :"Git checkout rolled back, but node_modules requires repair on Windows."});
         }catch(rollbackError){
           publish({phase:"error",step:"Rollback requires attention on the PC: "+
             formatError(rollbackError)});
