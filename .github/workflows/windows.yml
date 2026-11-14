@@ -40,7 +40,9 @@ jobs:
         run: node --check scripts/eval-local.mjs
       - name: Verify self-knowledge matches release and native commands
         run: node --experimental-strip-types scripts/check-self-knowledge.mjs
-      - name: Test local remote browser relay and authentication
+      - name: Validate private development supervisor syntax
+        run: node --check scripts/remote-dev-supervisor.mjs
+      - name: Test local remote browser relay, dev supervisor and authentication
         run: npm run test:server
       - name: Test debug-log export
         run: npm run test:debug
