@@ -431,7 +431,7 @@ export const EVAL_SCENARIOS:ReadonlyArray<EvalScenario>=[
       "Our interstellar music scene needs work.",{web:false}),
     conversation("Maybe the Martians are secretly amazing guitarists.",
       "Continue joking about fictional performers without web research.",
-      "Galactic shredding champions, obviously.",{web:false}))
+      "Galactic shredding champions, obviously.",{web:false})),
   scenario("separate-personas","User preferences aren't persona preferences","Knowledge boundaries",
     e("What's my favorite color?",{route:"chat",memory:[105],answerIncludes:["moss green"],stubReply:"Moss green."}),
     e("Does that automatically mean it's your favorite too?",{route:"chat",answerAny:["no","not necessarily"],stubReply:"No, your preferences are separate from mine."}))
