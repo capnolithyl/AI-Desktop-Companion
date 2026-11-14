@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import {
   EVAL_FACTS,EVAL_SCENARIOS,runBrainEvaluation,brainEvalMetrics,
   brainEvalMarkdown,sameMeaning,scoreAnswer,brainMemoryEvidence,
@@ -203,4 +204,19 @@ test("manual cancellation cannot silently run the scenario catalog",async()=>{
   });
   assert.equal(report.cases.length,0);
   assert.equal(brainEvalMetrics(report).turns,0);
+});
+
+test("desktop Brain Lab has a real scrolling viewport and no nested clipped catalog",()=>{
+  const read=(path)=>readFileSync(new URL("../src/"+path,import.meta.url),"utf8");
+  const app=read("App.tsx");
+  const styles=read("styles.css");
+  const brainCss=read("brain-eval.css");
+  const panel=read("BrainEvalPanel.tsx");
+  assert.match(app,/settingsTab === "brain" \? "settings-body settings-brain"/);
+  assert.match(styles,/\.settings-layout > \.settings-body\.settings-brain\s*\{[^}]*overflow-y:\s*auto/s);
+  assert.match(styles,/\.settings-layout\.brain-lab-layout \.settings-tabs/);
+  assert.doesNotMatch(brainCss,/\.brain-eval-catalog\{[^}]*max-height/s);
+  assert.match(panel,/brain-eval-actionbar/);
+  assert.match(panel,/brain-eval-find/);
+  assert.match(panel,/brain-eval-explainer/);
 });
