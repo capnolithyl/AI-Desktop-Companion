@@ -215,6 +215,8 @@ export function BrainEvalPanel({settings}:{settings:Settings}){
             metrics.memoryDistractors+" extra records"],
           ["Factual answers",metrics.answers===null?"Not run":metrics.answers+"%",metrics.answerChecks+" graded turns"],
           ["Conversation reviews",String(metrics.reviewTurns),metrics.qualityFlagTurns+" potential quality warnings"],
+          ["AI reply triage",metrics.aiQualityConcernTurns+" flagged",metrics.aiQualityReviewed+
+            " locally reviewed · "+metrics.aiQualityUnavailable+" unavailable · advisory only"],
           ["Model speed",metrics.tokensPerSecond===null?"Not measured":metrics.tokensPerSecond+" tok/s","generation only"],
           ["Elapsed",formatMs(metrics.elapsedMs),metrics.cases+" scenario runs"]
         ] as const).map(([label,value,note])=><div key={label} className="brain-eval-metric">
@@ -281,6 +283,11 @@ export function BrainEvalPanel({settings}:{settings:Settings}){
               generation {(step.inferenceStats.evalDurationNs??0)>0?
                 ((step.inferenceStats.outputTokens??0)*1e9/(step.inferenceStats.evalDurationNs??1)).toFixed(1)+" tok/s":"n/a"}</small>}
             {step.answerFailures.map(reason=><small className="field-error" key={reason}>{reason}</small>)}
+            {step.qualityAssessment&&<small className="brain-eval-goal">
+              Local AI reply critique: {step.qualityAssessment.status==="concern"?"needs review":
+                step.qualityAssessment.status==="unavailable"?"unavailable":
+                "no concerns detected (not fact-verified)"}
+            </small>}
             {step.qualityFlags?.map(flag=><small className="brain-eval-review" key={flag}>
               Review warning: {flag}
             </small>)}
@@ -293,8 +300,10 @@ export function BrainEvalPanel({settings}:{settings:Settings}){
       <summary>How to interpret the scores <span>Read before approving tests</span></summary>
       <p><strong>Fast:</strong> deterministic routing and lexical memory selection, no LLM.
         <strong> Live:</strong> local Ollama plus simulated web planning, without real external searches or memory writes.</p>
-      <p>Unobserved decisions are not verified. Natural conversations require human review, and
-        factual checks are phrase/concept heuristics rather than a semantic judge.
+      <p>Unobserved decisions are not verified. Natural conversations require human review.
+        Live mode optionally uses the same local model to flag possible referent confusion,
+        constraint violations, and unsupported details, but these are advisory triage,
+        not independently verified facts. A green routing result is not a quality certificate.
         Exact route labels and memory-row IDs are diagnostic, not proof of a bad response.</p>
       <p>Repeated runs measure variability. Test results are scoped to the model, mode, build and
         scenario definition; unselected results remain intact. Reports are saved automatically
