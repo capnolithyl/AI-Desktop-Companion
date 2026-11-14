@@ -50,6 +50,7 @@ import {
   type CharacterCategory, type CharacterFact, type InterestItem
 } from "./memory-client";
 import { MemoryPanel } from "./MemoryPanel";
+import { BrainEvalPanel } from "./BrainEvalPanel";
 import type { IncomingCanon, IncomingInterest } from "./interest-import";
 import type {ImportMemory,MemoryCategory} from "./memory-import";
 import { NotionPanel } from "./NotionPanel";
@@ -99,7 +100,7 @@ import {
 } from "./iki-wardrobe";
 
 type Screen = "compact" | "log" | "settings" | "search" | "page" | "help";
-type SettingsTab = "ai" | "internet" | "notion" | "voice" | "appearance" | "interface" | "personality" | "memory" | "capabilities";
+type SettingsTab = "ai" | "internet" | "notion" | "voice" | "appearance" | "interface" | "personality" | "memory" | "capabilities" | "brain";
 type VoiceHealth = { ready: boolean; modelLoaded: boolean; device: string | null };
 type VoiceReference = { configured: boolean; transcript: string | null; durationSeconds: number | null; fileName: string | null };
 type SearchService = { state: string; message: string };
@@ -3385,7 +3386,8 @@ export default function App() {
               ["memory", "Memory & chats", Brain],
               ["ai", "AI & models", Cpu],
               ["internet", "Web & research", Globe2],
-              ["notion", "Notion notes", BookOpen]
+              ["notion", "Notion notes", BookOpen],
+              ["brain", "Brain lab", Brain]
             ] },
             { group: "APPLICATION", items: [
               ["interface", "Look & feel", Palette],
@@ -3410,7 +3412,8 @@ export default function App() {
             )}
           </div>)}
         </nav>
-        <div key={settingsTab} className={settingsTab === "memory" || settingsTab === "capabilities" ? "settings-body settings-embedded" : "settings-body"}>
+        <div key={settingsTab} className={settingsTab === "memory" || settingsTab === "capabilities" || settingsTab === "brain" ? "settings-body settings-embedded" : "settings-body"}>
+        {settingsTab === "brain" && <BrainEvalPanel settings={settings} />}
         {settingsTab === "memory" && <MemoryPanel embedded key={memoryInitialTab} initialTab={memoryInitialTab}
           conversations={conversations} sessionSummaries={sessionSummaries} facts={userFacts}
           characterFacts={characterFacts} interests={interests} currentId={activeConversationId}
