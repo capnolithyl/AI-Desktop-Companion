@@ -7,6 +7,8 @@ import { invoke } from "@tauri-apps/api/core";
 import type { Settings } from "./storage";
 import { shouldUseLocalThinking } from "./reasoning-mode";
 import { planPublicWebTools } from "./unified-planner";
+import { brainQualityPrompt,parseBrainQualityAssessment,
+  type BrainQualityInput } from "./brain-quality-audit";
 import { version as APP_VERSION } from "../package.json";
 import {
   gradeReportCases,mergeCaseRecords,parseCaseRecords,statusForScenario,
@@ -200,9 +202,18 @@ async function execute(
     return {search:decision.search,query:decision.query,reason:decision.reason,
       intent:decision.intent};
   };
+  const reviewReply=async(input:BrainQualityInput)=>{
+    if(controller.signal.aborted)throw new Error("Stopped by owner");
+    const prompt=brainQualityPrompt(input);
+    const raw=await invoke<string>("condense_local_context",{
+      endpoint:settings.endpoint,model:settings.model,prompt,
+      contextWindow:settings.contextWindow,maxOutputTokens:280,timeoutMs:22000
+    });
+    return parseBrainQualityAssessment(raw);
+  };
   const result=await runBrainEvaluation({
     mode:request.mode,model:settings.model,scenarios,repetitions:request.repetitions,
-    signal:controller.signal,...(request.mode==="live"?{infer,planWeb}:{}),
+    signal:controller.signal,...(request.mode==="live"?{infer,planWeb,reviewReply}:{}),
     onProgress:(done,total,label)=>setStatus({done,total,label})
   });
   report=result;
