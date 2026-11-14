@@ -2,7 +2,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   EVAL_FACTS,EVAL_SCENARIOS,runBrainEvaluation,brainEvalMetrics,
-  brainEvalMarkdown,sameMeaning,scoreAnswer
+  brainEvalMarkdown,sameMeaning,scoreAnswer,brainMemoryEvidence,
+  brainScenarioNumber,brainScenarioLabel
 } from "../src/brain-eval.ts";
 
 const byId=id=>EVAL_SCENARIOS.find(s=>s.id===id);
@@ -19,6 +20,39 @@ test("broad isolated test catalog covers multiple intentions and branches",()=>{
   assert.notEqual(byId("branch-a").steps.at(-1).user,byId("branch-b").steps.at(-1).user);
 });
 
+test("scenario numbers stay stable when a subset is selected",()=>{
+  assert.equal(EVAL_SCENARIOS.length,73);
+  assert.equal(brainScenarioNumber(EVAL_SCENARIOS[0].id),1);
+  assert.equal(brainScenarioNumber(EVAL_SCENARIOS[72].id),73);
+  assert.match(brainScenarioLabel(EVAL_SCENARIOS[0].id,EVAL_SCENARIOS[0].label),/^#01 · /);
+  assert.match(brainScenarioLabel(EVAL_SCENARIOS[72].id,EVAL_SCENARIOS[72].label),/^#73 · /);
+  assert.equal(brainScenarioLabel("not-in-catalog","Custom test"),"Custom test");
+});
+test("a richer synthetic memory can prove the same fact without matching an exact record ID",()=>{
+  assert.deepEqual(brainMemoryEvidence([109,120],[120]),[
+    {expectedId:109,supportingIds:[120]},
+    {expectedId:120,supportingIds:[120]}
+  ]);
+  assert.deepEqual(brainMemoryEvidence([120],[109]),[
+    {expectedId:120,supportingIds:[]}
+  ]);
+  assert.deepEqual(brainMemoryEvidence([102],[101]),[
+    {expectedId:102,supportingIds:[]}
+  ]);
+});
+test("observed web decision matters more than exact research route label",async()=>{
+  const report=await runBrainEvaluation({
+    mode:"live",scenarios:[byId("search-github")],model:"fake",repetitions:1,
+    planWeb:async()=>({search:true,query:"desktop companion GitHub features",reason:"Need actual repo evidence"}),
+    infer:async()=> "The actual repository would need checking."
+  });
+  const step=report.cases[0].steps[0];
+  assert.equal(step.actualRoute,"chat");
+  assert.equal(step.routeLabelMatch,false);
+  assert.equal(step.webPass,true);
+  assert.equal(step.routePass,true);
+  assert.equal(step.pass,true);
+});
 test("semantic answer assertion isn't exact wording or case-sensitive",()=>{
   assert.equal(sameMeaning("Absolutely! The singer is Nora Vale.","nora vale"),true);
   assert.deepEqual(scoreAnswer("Your favorite BAND is Cobalt Harbor, of course.",{
@@ -100,6 +134,25 @@ test("live web-planner decisions distinguish desired recommendations from unwant
   assert.equal(unwanted.cases[0].steps[0].webPass,false);
 });
 
+test("factual answers are still checked even when web execution is unobserved",async()=>{
+  const report=await runBrainEvaluation({
+    mode:"live",scenarios:[byId("branch-a")],model:"fake",repetitions:1,
+    infer:async({messages})=>{
+      const question=messages.at(-1).content;
+      if(question.includes("favorite band"))return "Cobalt Harbor";
+      if(question.includes("favorite song"))return "I don't know";
+      return "Nora Vale";
+    }
+  });
+  const [first,second,third]=report.cases[0].steps;
+  assert.equal(first.answerPass,true);
+  assert.equal(second.answerPass,false);
+  assert.equal(third.answerPass,true);
+  assert.equal(third.routeLabelMatch,false);
+  assert.equal(third.routePass,true);
+  assert.equal(third.reviewRequired,true);
+  assert.ok(brainEvalMarkdown(report).includes("#01"));
+});
 test("planning tests use independent context across repeated branching paths",async()=>{
   const samples=[byId("branch-a"),byId("branch-b"),byId("branch-c"),byId("branch-d")];
   const report=await runBrainEvaluation({scenarios:samples,repetitions:2,mode:"routing",model:"fixture-only"});
