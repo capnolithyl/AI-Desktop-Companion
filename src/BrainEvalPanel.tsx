@@ -21,6 +21,7 @@ export function BrainEvalPanel({settings}:{settings:Settings}){
   const [mode,setMode]=useState<EvalMode>("routing");
   const [category,setCategory]=useState("All categories");
   const [statusFilter,setStatusFilter]=useState<"all"|BrainCaseStatus>("all");
+  const [search,setSearch]=useState("");
   const [selectedIds,setSelectedIds]=useState<ReadonlySet<string>>(
     ()=>new Set(EVAL_SCENARIOS.map(s=>s.id))
   );
@@ -38,9 +39,12 @@ export function BrainEvalPanel({settings}:{settings:Settings}){
     [records,mode,settings.model]
   );
   const totals=summarizeCaseStatuses(EVAL_SCENARIOS,records,environment);
+  const searchTerm=search.trim().toLocaleLowerCase();
   const visible=EVAL_SCENARIOS.filter(s=>
     (category==="All categories"||s.group===category)&&
-    (statusFilter==="all"||statuses.get(s.id)?.status===statusFilter)
+    (statusFilter==="all"||statuses.get(s.id)?.status===statusFilter)&&
+    (!searchTerm||[s.id,s.group,brainScenarioLabel(s.id,s.label)]
+      .some(value=>value.toLocaleLowerCase().includes(searchTerm)))
   );
   const selected=EVAL_SCENARIOS.filter(s=>selectedIds.has(s.id));
   const toggle=(id:string,checked:boolean)=>setSelectedIds(previous=>{
@@ -90,11 +94,13 @@ export function BrainEvalPanel({settings}:{settings:Settings}){
 
   return <div className="brain-eval-panel">
     <div className="settings-section-title"><BrainCircuit size={17}/> Brain lab · P0 reliability</div>
-    <p className="settings-note">
-      Manual, isolated evaluation of Mikan's existing routing and local model. Synthetic names and facts only.
-      No real memory changes, no public web requests, no cloud API calls, and no installer rebuild.
-      <strong> This is a diagnostic harness, not a claim of full production end-to-end coverage.</strong>
-    </p>
+    <details className="brain-eval-explainer">
+      <summary>What Brain Lab tests <span>Isolated synthetic scenarios · no real tool calls</span></summary>
+      <p>Brain Lab tests Mikan's routing and local model using synthetic facts.
+        Fast mode doesn't call Ollama; Live mode calls the configured local model.
+        Neither mode performs real web searches or writes to saved memories.
+        This is a diagnostic harness, not a full end-to-end production test.</p>
+    </details>
     <div className="brain-eval-toolbar">
       <label>Test mode
         <select value={mode} disabled={busy} onChange={e=>setMode(e.target.value as EvalMode)}>
@@ -125,17 +131,39 @@ export function BrainEvalPanel({settings}:{settings:Settings}){
           {[1,2,3,5].map(n=><option key={n} value={n}>{n}×</option>)}
         </select>
       </label>
+      <label className="brain-eval-find">Find scenario
+        <input type="search" value={search}
+          onChange={e=>setSearch(e.target.value)}
+          placeholder="Search #65, anime, singer…" aria-label="Find Brain Lab scenario" />
+      </label>
     </div>
     <div className="brain-eval-status-summary">
       {(["passed","failed","review","stale","untested","incomplete"] as const).map(status=>
         <span className={"brain-eval-status "+status} key={status}>{status}: {totals[status]}</span>
       )}
     </div>
+    {totals.stale>0&&<p className="brain-eval-muted-note">
+      Stale means tested with an older build or fixture. Those are previous results, not new failures.
+    </p>}
     <div className="brain-eval-select-actions">
       <button type="button" disabled={busy} onClick={()=>selectOnly(visible.map(s=>s.id))}>Select visible ({visible.length})</button>
       <button type="button" disabled={busy} onClick={selectUnresolved}>Select unresolved</button>
       <button type="button" disabled={busy} onClick={selectRegression}>Passed regression sample</button>
       <button type="button" disabled={busy} onClick={()=>selectOnly([])}>Clear selection</button>
+    </div>
+    <div className="brain-eval-actions brain-eval-actionbar">
+      <button type="button" className="save-button" disabled={busy||selected.length===0} onClick={()=>void run()}>
+        <Play size={15}/> Run {selected.length} scenarios ({selected.reduce((n,s)=>n+s.steps.length,0)*repeats} turns)
+      </button>
+      {busy&&<button type="button" className="secondary-action" onClick={stop}><Square size={14}/> Stop</button>}
+      {report&&<button type="button" className="secondary-action" onClick={()=>void exportReport()}>
+        <Download size={15}/> Export JSON + Markdown
+      </button>}
+      {report&&<button type="button" className="secondary-action" onClick={()=>void copyMarkdown()}>Copy readable report</button>}
+    </div>
+    <div className="brain-eval-catalog-header">
+      <strong>Scenarios</strong>
+      <span>Showing {visible.length} of {EVAL_SCENARIOS.length} · {selected.length} selected</span>
     </div>
     <div className="brain-eval-catalog" role="group" aria-label="Select Brain Lab scenarios">
       {visible.length===0&&<p className="brain-eval-subtitle">No scenarios match this filter.</p>}
@@ -162,18 +190,9 @@ export function BrainEvalPanel({settings}:{settings:Settings}){
         </div>;
       })}
     </div>
-    <div className="brain-eval-actions">
-      <button type="button" className="save-button" disabled={busy||selected.length===0} onClick={()=>void run()}>
-        <Play size={15}/> Run {selected.length} scenarios ({selected.reduce((n,s)=>n+s.steps.length,0)*repeats} turns)
-      </button>
-      {busy&&<button type="button" className="secondary-action" onClick={stop}><Square size={14}/> Stop</button>}
-      {report&&<button type="button" className="secondary-action" onClick={()=>void exportReport()}>
-        <Download size={15}/> Export JSON + Markdown
-      </button>}
-      {report&&<button type="button" className="secondary-action" onClick={()=>void copyMarkdown()}>Copy readable report</button>}
-    </div>
-    <p className="brain-eval-subtitle">Catalog: {EVAL_SCENARIOS.length} scenarios · {totalFixtureTurns} turns,
-      including repeated starts, branching follow-ups, interruptions, private memories, web intent and conflicting context.</p>
+    <p className="brain-eval-muted-note">
+      Catalog: {EVAL_SCENARIOS.length} scenarios, {totalFixtureTurns} turns. Use the category, status or search filters to narrow the list.
+    </p>
     {busy&&<div className="brain-eval-progress" role="status">
       <progress max={Math.max(1,progress.total)} value={progress.done}/>
       <span>{progress.done}/{progress.total} turns · {progress.label}</span>
@@ -270,25 +289,17 @@ export function BrainEvalPanel({settings}:{settings:Settings}){
         </details>)}
       </div>
     </>}
-    <div className="settings-note">
-      <strong>What these scores mean:</strong> Fast mode runs production routing decisions plus lexical-memory fallback
-      on synthetic fixtures. It does not call Ollama, Qdrant or the actual search service.
-      Live mode additionally invokes your configured <em>local</em> Ollama model (and optional public-web planner),
-      but feeds only mocked facts and never performs external searches or memory writes.
-      Web scores measure intended/planned behavior, never a real network call. Unobserved decisions are excluded from web percentages.
-      A turn with no detected failure is not necessarily verified: the Verified Checks metric excludes unobserved decisions and pending human reviews.
-      Natural conversation is not marked as semantically correct just for producing text:
-      those turns show REVIEW with a concrete behavioral goal in their traces and exported report.
-      Exact route labels and memory IDs are diagnostic. The checks now prioritize whether the
-      expected fact is supported by retrieved evidence and whether the intended web behavior was observed.
-      Factual answer checks still use transparent phrase heuristics, not a perfect semantic judge.
-      Repeating a scenario measures output variability; exports include every input, decision and response.
-      Each scenario retains a version/model/mode-specific outcome; different builds or changed fixtures appear stale until rerun.
-      REVIEW cases require a person to approve or fail them, not just a plausible answer.
-      Selecting a subset does not erase unselected scenarios' previous results.
-      Reports are automatically saved on the PC when a run finishes. Browser-triggered runs survive closing the browser tab.
-      Saved history contains summary metrics only.
-    </div>
+    <details className="brain-eval-explainer">
+      <summary>How to interpret the scores <span>Read before approving tests</span></summary>
+      <p><strong>Fast:</strong> deterministic routing and lexical memory selection, no LLM.
+        <strong> Live:</strong> local Ollama plus simulated web planning, without real external searches or memory writes.</p>
+      <p>Unobserved decisions are not verified. Natural conversations require human review, and
+        factual checks are phrase/concept heuristics rather than a semantic judge.
+        Exact route labels and memory-row IDs are diagnostic, not proof of a bad response.</p>
+      <p>Repeated runs measure variability. Test results are scoped to the model, mode, build and
+        scenario definition; unselected results remain intact. Reports are saved automatically
+        on your PC, and browser-triggered runs continue after closing the tab.</p>
+    </details>
     {history.length>0&&<details className="service-panel">
       <summary><strong>Previous run history ({history.length})</strong></summary>
       {history.map(item=><div className="brain-eval-history" key={item.id}>
