@@ -214,6 +214,18 @@
       </label>
       <p class="settings-hint">These display preferences stay in this browser, not Mikan's memories.</p>
     </section>
+    <section class="settings-group" aria-labelledby="devUpdatesTitle">
+      <h3 id="devUpdatesTitle">Developer updates</h3>
+      <p class="settings-hint">Update the approved Git branch from your phone. Requires the local Windows supervisor, not just npm run server.</p>
+      <div id="devUpdateStatus" class="settings-hint" role="status" aria-live="polite">
+        Checking for supervised development mode…
+      </div>
+      <div class="brain-lab-actions">
+        <button id="devUpdateCheck" class="settings-action" type="button" disabled>Check GitHub</button>
+        <button id="devUpdateApply" class="settings-action" type="button" disabled>Update &amp; restart</button>
+      </div>
+      <p class="settings-hint">No shell commands or branch selectors are exposed here. Installed Mikan executables are not replaced by a Git pull.</p>
+    </section>
     <section class="settings-group" aria-labelledby="brainLabSectionTitle">
       <h3 id="brainLabSectionTitle">Brain Lab · Overnight tests</h3>
       <p class="settings-hint">Runs on your desktop, not your phone. You can close this page while Mikan tests. Keep your Windows PC, desktop Mikan, relay, and Ollama running.</p>
@@ -273,18 +285,7 @@
         <button id="brainLabMarkdown" class="settings-action" type="button" disabled>Download Markdown</button>
       </div>
     </section>
-    <section class="settings-group" aria-labelledby="devUpdatesTitle">
-      <h3 id="devUpdatesTitle">Developer updates</h3>
-      <p class="settings-hint">Update the approved Git branch from your phone. Requires the local Windows supervisor, not just npm run server.</p>
-      <div id="devUpdateStatus" class="settings-hint" role="status" aria-live="polite">
-        Checking for supervised development mode…
-      </div>
-      <div class="brain-lab-actions">
-        <button id="devUpdateCheck" class="settings-action" type="button" disabled>Check GitHub</button>
-        <button id="devUpdateApply" class="settings-action" type="button" disabled>Update &amp; restart</button>
-      </div>
-      <p class="settings-hint">No shell commands or branch selectors are exposed here. Installed Mikan executables are not replaced by a Git pull.</p>
-    </section>
+
     <section class="settings-group" aria-labelledby="privacySectionTitle">
       <h3 id="privacySectionTitle">Privacy &amp; Feedback</h3>
       <button id="copyDebugLog" class="settings-action" type="button">Copy conversation debug log</button>
