@@ -34,3 +34,7 @@
 .brain-eval-history{padding:6px 0;display:flex;gap:10px;justify-content:space-between;font-size:11px}
 .brain-eval-history strong{font-variant-numeric:tabular-nums}
 @media(max-width:550px){.brain-eval-toolbar{grid-template-columns:1fr}.brain-eval-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+/* Semantic dialogue checks remain explicitly ungraded until a person reviews them. */
+.brain-eval-review{color:#eed1a0}
+.brain-eval-step small.brain-eval-goal{color:#f5cfb4;font-weight:600;line-height:1.5}
