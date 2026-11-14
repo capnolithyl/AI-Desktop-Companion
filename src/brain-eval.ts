@@ -39,6 +39,8 @@ export type EvalStepResult = {
   plannedWeb: boolean | null;
   webPass: boolean | null;
   webPlannerDecision?: {search:boolean;query?:string;reason:string};
+  /** Previous validated public query available to this turn's planner (never assistant prose). */
+  activePublicQuery?: string;
   selectedMemoryIds: number[];
   selectedMemory: {id:number;fact:string}[];
   /** Facts not established by any retrieved synthetic evidence. */
@@ -88,7 +90,8 @@ export type EvalInference = (args:{
   scenarioId:string;
   stepIndex:number;
 })=>Promise<EvalInferenceResult>;
-export type EvalPlanner = (input:string,previous:EvalTurn[])=>Promise<{search:boolean;query?:string;reason:string}>;
+export type EvalPlanner = (input:string,previous:EvalTurn[],
+  context?:{activePublicQuery?:string})=>Promise<{search:boolean;query?:string;reason:string}>;
 export type EvalOptions = {
   mode:EvalMode;
   repetitions:number;
@@ -520,6 +523,9 @@ export async function runBrainEvaluation(options:EvalOptions):Promise<EvalReport
     if(options.signal?.aborted)break;
     const started=Date.now();
     const previous:EvalTurn[]=[];
+    // A public discovery task is explicit structured state, not guessed from a
+    // user phrase. Reset on each scenario and after any no-search decision.
+    let activePublicQuery:string|undefined;
     const steps:EvalStepResult[]=[];
     for(let stepIndex=0;stepIndex<scenario.steps.length;stepIndex++){
       if(options.signal?.aborted)break;
@@ -548,6 +554,7 @@ export async function runBrainEvaluation(options:EvalOptions):Promise<EvalReport
         ? memory.ids.filter(id=>!supportingIds.has(id)):[];
       const unexpected=(step.expect.excludeMemory??[]).filter(id=>memory.ids.includes(id));
       let planned:{search:boolean;query?:string;reason:string}|undefined;
+      const priorPublicQuery=activePublicQuery;
       let answer:string|undefined;
       let inferenceStats:EvalStepResult["inferenceStats"]|undefined;
       let modelUsed:string|undefined;
@@ -558,7 +565,8 @@ export async function runBrainEvaluation(options:EvalOptions):Promise<EvalReport
           // Give the planner a stable snapshot. Brain Lab appends the current
           // exchange to previous after this callback, but observers and
           // async adapters must not see the history mutate retroactively.
-          planned=await options.planWeb(step.user,previous.map(turn=>({...turn})));
+          planned=await options.planWeb(step.user,previous.map(turn=>({...turn})),
+            {activePublicQuery});
         if(options.mode==="live" && options.infer){
           const response=await options.infer({
             messages,selectedMemories:selected,evidence:step.mockEvidence,
@@ -605,7 +613,9 @@ export async function runBrainEvaluation(options:EvalOptions):Promise<EvalReport
         user:step.user,expected:step.expect,actualRoute:decision.plan.mode,
         canPlanPublicWeb:webPolicy.canPlanPublicWeb,cloudMaySearch:webPolicy.cloudMaySearch,
         blockedReason:webPolicy.blockedReason,deterministicWebAllowed:decision.allowAutomaticWeb,
-        plannedWeb,webPass,webPlannerDecision:planned,selectedMemoryIds:memory.ids,selectedMemory:selected,
+        plannedWeb,webPass,webPlannerDecision:planned,
+        ...(priorPublicQuery?{activePublicQuery:priorPublicQuery}:{}),
+        selectedMemoryIds:memory.ids,selectedMemory:selected,
         missingMemoryIds:missing,missingMemoryRecordIds:missingRecordIds,
         memoryEvidence,distractorMemoryIds:distractors,unexpectedMemoryIds:unexpected,
         routeLabelMatch,routePass,memoryPass,answerPass,reviewRequired,
@@ -615,6 +625,8 @@ export async function runBrainEvaluation(options:EvalOptions):Promise<EvalReport
           (options.mode!=="live" || !!answer)&&!error
       };
       steps.push(result);
+      activePublicQuery=planned?.search===true&&typeof planned.query==="string"
+        ?planned.query:undefined;
       previous.push({role:"user",content:step.user});
       // Planning mode uses fixed mock replies, preserving follow-up semantics.
       // Live mode uses the actual previous answer (including errors) as context.
@@ -723,6 +735,7 @@ export function brainEvalMarkdown(report:EvalReport):string {
       if(s.inferenceStats)lines.push("- Inference: "+JSON.stringify({model:s.modelUsed,stats:s.inferenceStats}));
       if(s.error)lines.push("- Error: "+s.error);
       if(s.answerFailures.length)lines.push("- Checks: "+s.answerFailures.join("; "));
+      if(s.activePublicQuery)lines.push("- Prior active public task: "+s.activePublicQuery);
       if(s.qualityFlags?.length)lines.push("- Human review warnings: "+s.qualityFlags.join("; "));
       lines.push("");
     }
