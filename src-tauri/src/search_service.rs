@@ -224,7 +224,7 @@ pub async fn search_service(action: String, endpoint: Option<String>) -> Result<
                 "no-results",
                 "SearXNG responds but returned zero results for a common public query. Check its search engines, Docker logs and outbound internet connection."
             )),
-            Err(error) => Ok(state("unavailable", &format!("Live SearXNG search failed: {error}")),
+            Err(error) => Ok(state("unavailable", &format!("Live SearXNG search failed: {error}"))),
         };
     }
 
