@@ -109,10 +109,11 @@ pub fn first_measure_matches(raw:&str,expected:Quantity)->bool {
             if let Some(q)=canonical(amount,&pair[1]){pairs.push((i,q))}
         }
     }
-    let Some((i,first))=pairs.first().copied() else{return false};
+    let compatible:Vec<_>=pairs.into_iter().filter(|(_,q)|q.dim==expected.dim).collect();
+    let Some((i,first))=compatible.first().copied() else{return false};
     if approx_equal(first,expected){return true}
     if first.dim==Dimension::Duration {
-        if let Some((j,next))=pairs.get(1).copied(){
+        if let Some((j,next))=compatible.get(1).copied(){
             if next.dim==Dimension::Duration
                 && (j==i+2 || (j==i+3 && t.get(i+2).is_some_and(|word|word=="and"))) {
                 let sum=Quantity{dim:Dimension::Duration,
@@ -173,6 +174,8 @@ mod tests{
             q(12.0,"episodes")));
         assert!(first_measure_matches(" runs for 1 hour and 35 minutes",
             q(95.0,"minutes")));
+        assert!(first_measure_matches(" season 1 contains 4 episodes",
+            q(4.0,"episodes")));
     }
     #[test]
     fn refuses_unitless_numbers_and_incompatible_dimensions(){
