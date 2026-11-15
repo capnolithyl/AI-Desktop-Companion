@@ -101,7 +101,8 @@ export function BrainEvalPanel({settings}:{settings:Settings}){
         runs approved public searches through the same Rust/SearXNG path as desktop chat.
         Real search snippets are returned to the model and recorded with their URLs.
         Neither mode writes to saved memories or private connected apps.
-        Live web tests need SearXNG running and can take longer.
+        Live runs containing web scenarios first verify a real public search returns actual sources;
+        an empty or broken SearXNG response stops the run before any misleading scores are recorded.
         Conversation quality still needs human review.</p>
     </details>
     <div className="brain-eval-toolbar">
