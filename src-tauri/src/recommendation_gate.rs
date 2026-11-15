@@ -104,17 +104,19 @@ fn quoted_requirement_valid(question: &str, req: &HardRequirement) -> bool {
     let text = norm(&req.quote);
     // These are comparison operators for numbers, NOT route/intent
     // classifiers; we deliberately don't guess what media a word denotes.
-    let expected = if ["under ", "less than", "fewer than", "below ", "shorter than"]
-        .iter().any(|marker| text.contains(*marker)) { Some("lt") }
-    else if ["at most", "no more than", "up to ", "maximum ", "max "]
-        .iter().any(|marker| text.contains(*marker)) { Some("lte") }
-    else if ["over ", "more than", "greater than", "above ", "longer than"]
-        .iter().any(|marker| text.contains(*marker)) { Some("gt") }
-    else if ["at least", "no less than", "minimum ", "min "]
+    // Negated comparisons have priority over their positive substrings:
+    // "no less than" means >=, not <.
+    let expected = if ["no less than","not less than","no fewer than","at least","minimum ","min "]
         .iter().any(|marker| text.contains(*marker)) { Some("gte") }
-    else if ["exactly ", "equal to "]
+    else if ["no more than","not more than","at most","up to ","maximum ","max "]
+        .iter().any(|marker| text.contains(*marker)) { Some("lte") }
+    else if ["under ","less than","fewer than","below ","shorter than"]
+        .iter().any(|marker| text.contains(*marker)) { Some("lt") }
+    else if ["over ","more than","greater than","above ","longer than"]
+        .iter().any(|marker| text.contains(*marker)) { Some("gt") }
+    else if ["exactly ","equal to "]
         .iter().any(|marker| text.contains(*marker)) { Some("eq") }
-    else { None };
+    else {None};
     expected == Some(req.relation.as_str())
 }
 
@@ -382,6 +384,16 @@ mod tests {
         assert_eq!(r.approved[0].title,"The Halo Effect");
         assert_eq!(r.rejected,1);
         assert_eq!(r.features_checked,1);
+    }
+
+    #[test]
+    fn negated_numeric_limit_does_not_flip_the_comparison() {
+        let gte=HardRequirement{quote:"no less than 10 songs".into(),
+            relation:"gte".into(),limit:10.0,unit:"songs".into()};
+        assert!(quoted_requirement_valid("albums with no less than 10 songs",&gte));
+        let wrong=HardRequirement{quote:"no less than 10 songs".into(),
+            relation:"lt".into(),limit:10.0,unit:"songs".into()};
+        assert!(!quoted_requirement_valid("albums with no less than 10 songs",&wrong));
     }
 
     #[test]
