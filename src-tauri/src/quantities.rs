@@ -97,6 +97,33 @@ pub fn measured_in(raw:&str)->Vec<Quantity>{
     out
 }
 
+/// Bind the first quantified property *after* a named subject to that
+/// subject. Prevent borrowing a later title's count from the same sentence.
+/// A compound time (1h 35m) may match either its stated components or the
+/// normalized sum, but not a second, unrelated property.
+pub fn first_measure_matches(raw:&str,expected:Quantity)->bool {
+    let t=tokens(raw);
+    let mut pairs=Vec::<(usize,Quantity)>::new();
+    for (i,pair) in t.windows(2).enumerate(){
+        if let Some(amount)=number_word(&pair[0]){
+            if let Some(q)=canonical(amount,&pair[1]){pairs.push((i,q))}
+        }
+    }
+    let Some((i,first))=pairs.first().copied() else{return false};
+    if approx_equal(first,expected){return true}
+    if first.dim==Dimension::Duration {
+        if let Some((j,next))=pairs.get(1).copied(){
+            if next.dim==Dimension::Duration
+                && (j==i+2 || (j==i+3 && t.get(i+2).is_some_and(|word|word=="and"))) {
+                let sum=Quantity{dim:Dimension::Duration,
+                    amount:first.amount+next.amount};
+                return approx_equal(sum,expected)
+            }
+        }
+    }
+    false
+}
+
 pub fn mention_supports(raw:&str,expected:Quantity)->bool{
     measured_in(raw).into_iter().any(|found|approx_equal(found,expected))
 }
@@ -137,6 +164,15 @@ mod tests{
         assert!(!compare(q(180.0,"pages"),"lt",q(10.0,"chapters")));
         assert!(compare(q(9.0,"tracks"),"lt",q(10.0,"songs")));
         assert!(!compare(q(10.0,"tracks"),"lt",q(10.0,"songs")));
+    }
+    #[test]
+    fn first_quantity_stays_with_its_named_subject(){
+        assert!(first_measure_matches(" has 4 episodes and another series has 12 episodes",
+            q(4.0,"episodes")));
+        assert!(!first_measure_matches(" has 4 episodes and another series has 12 episodes",
+            q(12.0,"episodes")));
+        assert!(first_measure_matches(" runs for 1 hour and 35 minutes",
+            q(95.0,"minutes")));
     }
     #[test]
     fn refuses_unitless_numbers_and_incompatible_dimensions(){
