@@ -870,9 +870,9 @@
         "Status: "+state.phase+" · "+(state.step||""),
       ];
       if(state.mode==="desktop-and-relay"){
-        lines.push("Desktop: "+(state.desktopConnected?"connected":
-          state.desktopState||"not yet connected"));
-        if(state.desktopExit)lines.push("Desktop process exit: "+state.desktopExit);
+        lines.push("Desktop relay: "+(state.desktopConnected?"connected":"offline"));
+        lines.push("Supervisor-managed process: "+(state.managedDesktopRunning?"running":"not running"));
+        if(state.desktopExit)lines.push("Managed process exit: "+state.desktopExit);
         if(!state.desktopConnected && state.desktopLog)
           lines.push("Recent startup output:\n"+state.desktopLog);
       }
