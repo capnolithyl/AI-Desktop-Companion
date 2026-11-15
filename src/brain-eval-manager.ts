@@ -93,6 +93,38 @@ function notify(){for(const listener of listeners)listener()}
 function setStatus(update:Partial<BrainEvalStatus>){status={...status,...update};notify()}
 export function getBrainEvalStatus(){return status}
 export function getBrainEvalReport(){return report}
+/** Rehydrate the latest auto-saved synthetic run after a managed Tauri restart.
+ * Keeps the phone download usable without repeating a costly Live web test.
+ * Never loads into real owner memories or the normal chat conversation.
+ */
+let restorePending:Promise<void>|null=null;
+export function restoreBrainEvalReport():Promise<void>{
+  if(restorePending)return restorePending;
+  if(report || status.phase!=="idle")return Promise.resolve();
+  restorePending=invoke<{
+    jsonReport:string;markdownReport:string;folder:string
+  }|null>("brain_eval_load_latest").then(saved=>{
+    if(!saved || report || status.phase!=="idle")return;
+    const value:unknown=JSON.parse(saved.jsonReport);
+    if(!value || typeof value!=="object" || Array.isArray(value))return;
+    const candidate=value as EvalReport;
+    if(candidate.version!==1 || candidate.writesToRealMemories!==false ||
+      !["isolated-synthetic","isolated-synthetic+live-public-web"].includes(candidate.environment) ||
+      (candidate.mode!=="live" && candidate.mode!=="routing") ||
+      !Array.isArray(candidate.cases) || typeof candidate.runId!=="string")return;
+    report=candidate;
+    setStatus({
+      phase:"complete",runId:candidate.runId,mode:candidate.mode,model:candidate.model,
+      startedAt:candidate.startedAt,finishedAt:candidate.finishedAt,
+      done:candidate.cases.reduce((n,c)=>n+c.steps.length,0),
+      total:candidate.cases.reduce((n,c)=>n+c.steps.length,0),
+      label:"Previous auto-saved report restored for download",
+      error:null,savedFolder:saved.folder,results:brainEvalMetrics(candidate)
+    });
+  }).catch(error=>{console.warn("Could not restore saved Brain Lab report",error)})
+    .finally(()=>{restorePending=null});
+  return restorePending;
+}
 export function subscribeBrainEval(listener:()=>void){listeners.add(listener);return()=>{listeners.delete(listener)}}
 export function brainEvalHistory():BrainEvalSummary[]{
   try{
