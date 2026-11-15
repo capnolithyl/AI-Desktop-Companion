@@ -426,3 +426,16 @@ test("production Brain Lab Live adapter delegates actual search to Rust chat_str
   assert.match(code,/sources\?:Array/);
   assert.match(code,/liveWeb:true/);
 });
+
+test("native Brain Lab report recovery reopens the last autosaved report after restart",()=>{
+  const app=readFileSync(new URL("../src/App.tsx",import.meta.url),"utf8");
+  const manager=readFileSync(new URL("../src/brain-eval-manager.ts",import.meta.url),"utf8");
+  const rust=readFileSync(new URL("../src-tauri/src/lib.rs",import.meta.url),"utf8");
+  assert.match(app,/restoreBrainEvalReport\(\)/);
+  assert.match(manager,/invoke<\{[\s\S]*?\}>?\|null>\("brain_eval_load_latest"\)/);
+  assert.match(manager,/report=candidate/);
+  assert.match(rust,/fn brain_eval_load_latest\(/);
+  assert.match(rust,/brain_eval_load_latest,/);
+  assert.match(rust,/join\("Brain-Evaluations"\)/);
+  assert.match(rust,/writesToRealMemories/);
+});
