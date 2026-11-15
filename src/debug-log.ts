@@ -26,6 +26,8 @@ export type ResearchAudit = {
   rejectedDetails?: string[];
   acceptedDetails?: {source:number;subject:string;claim:string;quote:string}[];
   extractionAttempts?: number;
+  candidateLeads?: string[];
+  candidateQueries?: string[];
   constraintsChecked?: number;
   featuresChecked?: number;
   exclusionsChecked?: number;
