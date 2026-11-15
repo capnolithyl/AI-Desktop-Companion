@@ -292,6 +292,11 @@ export function BrainEvalPanel({settings}:{settings:Settings}){
               {step.webExecution.researchAudit.rejected} rejected ·
               {step.webExecution.researchAudit.extractionAttempts??1} extraction attempt(s)
             </small>}
+            {step.webExecution?.researchAudit?.candidateLeads?.length ? <small>
+              Named candidate leads: {step.webExecution.researchAudit.candidateLeads.join(", ")}
+            </small> : null}
+            {step.webExecution?.researchAudit?.candidateQueries?.map((query,i)=><small
+              key={query+"-"+i}>Attempted candidate-specific lookup: {query}</small>)}
             {step.webExecution?.researchAudit?.acceptedDetails?.map((fact,i)=><small
               key={fact.source+"-"+fact.subject+"-"+i}>
               Supported fact [{fact.source}]: {fact.subject} · {fact.claim}
