@@ -47,7 +47,7 @@ pub struct ResearchEvidence {
     pub followup_query: Option<String>,
 }
 
-#[derive(Deserialize)]
+#[derive(Clone, Deserialize)]
 struct FactCandidate {
     source: usize,
     subject: String,
@@ -265,7 +265,12 @@ fn assemble_evidence(
 
     if let Some(mut response) = response {
         if task.kind == ResearchKind::Lookup {
-            if let Ok(facts) = serde_json::from_value(response["facts"].take()) {
+            if let Ok(facts) = serde_json::from_value::<Vec<FactCandidate>>(response["facts"].take()) {
+                audit.rejected_details = facts.iter().take(20)
+                    .filter(|fact| validate((*fact).clone(), sources).is_none())
+                    .map(|fact| format!("{} [source {}]: quote, subject or claim not grounded",
+                        fact.subject.chars().take(100).collect::<String>(), fact.source))
+                    .collect();
                 let (accepted, rejected) = collect_valid(facts, sources);
                 audit.accepted = accepted.len();
                 audit.rejected = rejected;
