@@ -221,7 +221,12 @@ async function execute(
         researchAudit?:{status:string;accepted:number;rejected:number;
           elapsedMs:number;note:string;recommendationTask?:boolean;
           recommendationApproved?:string[];recommendationRejected?:number;
-          constraintsChecked?:number;featuresChecked?:number}|null;stats?:{
+          constraintsChecked?:number;featuresChecked?:number;
+          exclusionsChecked?:number;relationsChecked?:number;
+          recommendationDetails?:Array<{source:number;title:string;creator:string;
+            identityQuote:string;fitQuote:string;measurements:Array<{
+              source:number;value:number;unit:string;quote:string}>;
+            relations:Array<{role:string;name:string;source:number;quote:string}>}>}|null;stats?:{
         promptTokens?:number|null;outputTokens?:number|null;
         evalDurationNs?:number|null;loadDurationNs?:number|null
       }|null}>("chat_stream",{request:{
