@@ -2,7 +2,7 @@
 //! The existing local extraction pass proposes candidates. Rust admits only
 //! works with exact quotes tied to THAT work and evidence for hard numeric
 //! limits. No name/genre/intent regexes and no second model-as-judge.
-use crate::web_search::SearchResult;
+use crate::{web_search::SearchResult, quantities, attribution};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 
@@ -10,14 +10,14 @@ use std::collections::HashSet;
 pub struct HardRequirement {
     pub quote: String,
     pub relation: String,
-    pub limit: u32,
+    pub limit: f64,
     pub unit: String,
 }
 
 #[derive(Clone, Debug, Deserialize)]
 pub struct Measurement {
     pub source: usize,
-    pub value: u32,
+    pub value: f64,
     pub unit: String,
     pub quote: String,
 }
@@ -32,6 +32,8 @@ pub struct Suggestion {
     pub fit_quote: String,
     #[serde(default)]
     pub measurements: Vec<Measurement>,
+    #[serde(default)]
+    pub relations: Vec<attribution::ProposedRelation>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -43,6 +45,7 @@ pub struct ApprovedSuggestion {
     pub identity_quote: String,
     pub fit_quote: String,
     pub measurements: Vec<MeasurementEvidence>,
+    pub relations: Vec<attribution::GroundedRelation>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -61,6 +64,8 @@ pub struct GateResult {
     pub requirements: usize,
     pub features_checked: usize,
     pub note: String,
+    pub relations_checked: usize,
+    pub exclusions_checked: usize,
 }
 
 fn norm(s: &str) -> String {
@@ -74,64 +79,25 @@ fn words(s: &str) -> Vec<String> {
         .map(str::to_owned).collect()
 }
 
-fn quantity_token(s: &str, count: u32) -> bool {
-    // Simple number words are numeric syntax, not an English-language
-    // classifier for discovery intent. Source quantities themselves must
-    // appear as digits within the same clause as the named work.
-    const NUMBER_WORDS: [&str; 21] = [
-        "zero","one","two","three","four","five","six","seven","eight",
-        "nine","ten","eleven","twelve","thirteen","fourteen","fifteen",
-        "sixteen","seventeen","eighteen","nineteen","twenty"
-    ];
-    words(s).iter().any(|w| w == &count.to_string()
-        || NUMBER_WORDS.get(count as usize).is_some_and(|name| w.as_str() == *name))
-}
-
-fn unit_key(s: &str) -> String {
-    let word = words(s).into_iter().next().unwrap_or_default();
-    // This removes only plural spelling, not the meaning of an entity.
-    word.trim_end_matches('s').to_owned()
-}
-
 fn quote_from_source<'a>(quote: &str, sources: &'a [SearchResult], idx: usize) -> Option<&'a SearchResult> {
-    if !(20..=550).contains(&quote.chars().count()) { return None; }
+    if !(14..=550).contains(&quote.chars().count()) { return None; }
     let source = sources.get(idx.checked_sub(1)?)?;
     if norm(&source.content).contains(norm(quote).as_str()) { Some(source) } else { None }
 }
 
-fn same_clause(quote: &str, title: &str, value: Option<u32>, unit: Option<&str>) -> bool {
+fn same_clause(quote: &str, title: &str, amount: Option<quantities::Quantity>) -> bool {
     let key = norm(title);
-    if key.len() < 3 { return false; }
-    quote.split(['.', '!', '?', ';', '\n'])
-        .map(str::trim)
-        .filter(|clause| norm(clause).contains(key.as_str()))
-        .any(|clause| {
-            value.is_none_or(|number| words(clause).contains(&number.to_string()))
-                && unit.is_none_or(|measure| {
-                    let expected = unit_key(measure);
-                    !expected.is_empty() && words(clause).iter()
-                        .any(|w| unit_key(w) == expected)
-                })
-        })
-}
-
-fn compare(value: u32, req: &HardRequirement) -> bool {
-    match req.relation.as_str() {
-        "lt" => value < req.limit,
-        "lte" => value <= req.limit,
-        "gt" => value > req.limit,
-        "gte" => value >= req.limit,
-        "eq" => value == req.limit,
-        _ => false,
-    }
+    if key.len() < 3 {return false}
+    attribution::clauses(quote).into_iter().any(|clause|
+        norm(clause).contains(key.as_str())
+        && amount.is_none_or(|q|quantities::mention_supports(clause,q)))
 }
 
 fn quoted_requirement_valid(question: &str, req: &HardRequirement) -> bool {
     if req.quote.len() < 5 || req.quote.len() > 120
-        || !norm(question).contains(norm(&req.quote).as_str())
-        || unit_key(&req.unit).len() < 2
-        || !quantity_token(&req.quote, req.limit)
-    { return false; }
+        || !norm(question).contains(norm(&req.quote).as_str()) { return false; }
+    let Some(target)=quantities::canonical(req.limit,&req.unit) else {return false};
+    if !quantities::mention_supports(&req.quote,target){return false}
     let text = norm(&req.quote);
     // These are comparison operators for numbers, NOT route/intent
     // classifiers; we deliberately don't guess what media a word denotes.
@@ -147,7 +113,6 @@ fn quoted_requirement_valid(question: &str, req: &HardRequirement) -> bool {
         .iter().any(|marker| text.contains(*marker)) { Some("eq") }
     else { None };
     expected == Some(req.relation.as_str())
-        && words(&req.quote).iter().any(|word| unit_key(word)==unit_key(&req.unit))
 }
 
 fn appears_to_have_hard_limit(question: &str) -> bool {
@@ -159,7 +124,7 @@ fn appears_to_have_hard_limit(question: &str) -> bool {
         "at least", "no less than", "minimum ", "min ", "exactly "
     ].iter().any(|s| lower.contains(*s));
     let has_quantity = words(&lower).iter().any(|w|
-        w.parse::<u32>().is_ok() || [
+        w.parse::<f64>().is_ok() || [
             "one","two","three","four","five","six","seven","eight",
             "nine","ten","eleven","twelve","thirteen","fourteen",
             "fifteen","sixteen","seventeen","eighteen","nineteen","twenty"
@@ -172,84 +137,95 @@ fn valid_suggestion(item: Suggestion, requirements: &[HardRequirement],
 {
     if item.title.trim().chars().count() < 3 || item.title.chars().count() > 110
         || item.creator.chars().count() > 110
-        || item.measurements.len() > 6 { return None; }
+        || item.measurements.len() > 6 || item.relations.len() > 6 { return None; }
     quote_from_source(&item.identity_quote, sources, item.source)?;
     quote_from_source(&item.fit_quote, sources, item.source)?;
     // Literal requested style/genre features must be attested in the SAME
     // candidate's quote. No hardcoded artists, genres or media classifications.
     if required_features.iter().any(|feature|
         !norm(&item.fit_quote).contains(norm(feature).as_str())) { return None; }
-    if !same_clause(&item.identity_quote, &item.title, None, None)
-        || !same_clause(&item.fit_quote, &item.title, None, None)
-    { return None; }
-    // Named work + creator must appear together in an identity quote.
-    if !item.creator.trim().is_empty() {
-        let title_key = norm(&item.title);
-        let creator_key = norm(&item.creator);
-        // A creator on the neighboring catalog card is not the creator
-        // of this work. Both names must share an exact source clause.
-        let paired = item.identity_quote.split(['.', '!', '?', ';', '\n'])
-            .any(|clause| {
-                let text = norm(clause);
-                text.contains(title_key.as_str()) && text.contains(creator_key.as_str())
-            });
-        if !paired { return None; }
-    }
+    if !same_clause(&item.identity_quote,&item.title,None)
+        || !same_clause(&item.fit_quote,&item.title,None) {return None}
 
-    let mut confirmed = Vec::new();
+    // A contributor's role must be explicitly evidenced. "Director X
+    // praised Movie Y" doesn't establish the director of Movie Y.
+    let mut roles=Vec::new();
+    for relation in item.relations {
+        let proven=attribution::verify(&item.title,relation,sources)?;
+        roles.push(proven);
+    }
+    if !item.creator.trim().is_empty() && !roles.iter().any(|edge|
+        norm(&edge.name)==norm(&item.creator)) { return None; }
+
+    let mut confirmed=Vec::new();
     for requirement in requirements {
-        let measure = item.measurements.iter().find(|measurement| {
-            unit_key(&measurement.unit) == unit_key(&requirement.unit)
-                && compare(measurement.value, requirement)
-                && quote_from_source(&measurement.quote,sources,measurement.source).is_some()
-                && same_clause(&measurement.quote,&item.title,Some(measurement.value),
-                    Some(&measurement.unit))
+        let threshold=quantities::canonical(requirement.limit,&requirement.unit)?;
+        let measure=item.measurements.iter().find(|candidate|{
+            let Some(observed)=quantities::canonical(candidate.value,&candidate.unit)
+                else {return false};
+            quantities::compare(observed,&requirement.relation,threshold)
+                && quote_from_source(&candidate.quote,sources,candidate.source).is_some()
+                && same_clause(&candidate.quote,&item.title,Some(observed))
         })?;
         confirmed.push(MeasurementEvidence{
-            source:measure.source,value:measure.value,
-            unit:measure.unit.clone(),quote:measure.quote.clone()
+            source:measure.source,value:measure.value,unit:measure.unit.clone(),
+            quote:measure.quote.clone()
         });
     }
     Some(ApprovedSuggestion {
         source:item.source,title:item.title.trim().to_owned(),
         creator:item.creator.trim().to_owned(),
         identity_quote:item.identity_quote,fit_quote:item.fit_quote,
-        measurements:confirmed,
+        measurements:confirmed,relations:roles,
     })
 }
 
 pub fn screen(question: &str, requirements: Vec<HardRequirement>,
     suggestions: Vec<Suggestion>, sources: &[SearchResult]) -> GateResult {
-    screen_with_features(question,requirements,vec![],suggestions,sources)
+    screen_with_criteria(question,requirements,vec![],vec![],suggestions,sources)
 }
 
 pub fn screen_with_features(question: &str, requirements: Vec<HardRequirement>,
-    features: Vec<String>, suggestions: Vec<Suggestion>, sources: &[SearchResult]) -> GateResult
+    features: Vec<String>, suggestions: Vec<Suggestion>, sources: &[SearchResult]) -> GateResult {
+    screen_with_criteria(question,requirements,features,vec![],suggestions,sources)
+}
+
+pub fn screen_with_criteria(question: &str, requirements: Vec<HardRequirement>,
+    features: Vec<String>, exclusions: Vec<String>,
+    suggestions: Vec<Suggestion>, sources: &[SearchResult]) -> GateResult
 {
     let count = suggestions.len();
-    if requirements.len() > 4 || features.len() > 3
+    if requirements.len() > 4 || features.len() > 3 || exclusions.len()>6
         || requirements.iter().any(|r| !quoted_requirement_valid(question,r))
+        || exclusions.iter().any(|name|name.len()<3 || name.len()>110
+            || !norm(question).contains(norm(name).as_str()))
         || (appears_to_have_hard_limit(question) && requirements.is_empty())
         || features.iter().any(|feature| feature.trim().len()<3
             || feature.len()>60 || !norm(question).contains(norm(feature).as_str())) {
         return GateResult {
             approved:vec![],rejected:count,requirements:requirements.len(),
-            features_checked:features.len(),
-            note:"A requirement could not be tied to the user's actual request; no candidates admitted.".into()
+            features_checked:features.len(),relations_checked:0,
+            exclusions_checked:exclusions.len(),
+            note:"A requirement could not be tied to the user's actual words; no candidates admitted.".into()
         };
     }
     let mut approved = Vec::new();
     let mut seen = HashSet::new();
     let mut rejected = 0;
     for suggestion in suggestions.into_iter().take(8) {
+        if exclusions.iter().any(|name|norm(name)==norm(&suggestion.title)){
+            rejected+=1;continue;
+        }
         match valid_suggestion(suggestion,&requirements,&features,sources) {
             Some(valid) if seen.insert(norm(&valid.title)) && approved.len()<3 => approved.push(valid),
             _ => rejected += 1,
         }
     }
     GateResult{
+        relations_checked:approved.iter().map(|candidate|candidate.relations.len()).sum(),
         approved,rejected,requirements:requirements.len(),features_checked:features.len(),
-        note:"Exact quotes and explicit constraints were checked; source reliability and broader meaning still need judgment.".into()
+        exclusions_checked:exclusions.len(),
+        note:"Quotes, typed roles, numeric limits and exclusions screened; source truth and style equivalence remain uncertain.".into()
     }
 }
 
@@ -278,6 +254,10 @@ pub fn shortlist_notes(result:&GateResult) -> String {
         for measure in &item.measurements {
             out.push_str(&format!("Measured constraint [{}]: {} {}. Quote: {}\n",
                 measure.source,measure.value,measure.unit,measure.quote));
+        }
+        for role in &item.relations {
+            out.push_str(&format!("Verified attribution [{}]: {} = {}. Quote: {}\n",
+                role.source,role.role,role.name,role.quote));
         }
     }
     out
