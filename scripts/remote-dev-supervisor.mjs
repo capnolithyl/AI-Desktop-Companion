@@ -115,6 +115,7 @@ export function safeSupervisorState(state){
     error:state.error||null,
     desktopState:state.desktopState||"not-managed",
     desktopConnected:state.desktopConnected===true,
+    managedDesktopRunning:state.managedDesktopRunning===true,
     desktopExit:state.desktopExit||null,
     desktopLog:state.desktopConnected?null:diagnosticTail(state.desktopLog),
     desktopNote:state.mode==="desktop-and-relay"
@@ -145,7 +146,7 @@ export function createDevSupervisor({
   let state={phase:"idle",mode,current:null,remote:null,commits:null,
     checkedAt:null,step:"No check performed yet",error:null,
     desktopState:manageDesktop?"not-started":"not-managed",desktopConnected:false,
-    desktopExit:null,desktopLog:null};
+    managedDesktopRunning:false,desktopExit:null,desktopLog:null};
   let running=false;
   let relay=null,desktop=null;
   let desktopLaunchedAt=0;
@@ -186,7 +187,7 @@ export function createDevSupervisor({
     if(name==="desktop"){
       desktopLaunchedAt=Date.now();
       publish({desktopState:"starting",desktopConnected:false,
-        desktopExit:null,desktopLog:null});
+        managedDesktopRunning:true,desktopExit:null,desktopLog:null});
     }
     if(startChild)return startChild(name);
     if(!process.env.npm_execpath)throw new Error("Start through npm run remote:dev");
@@ -213,7 +214,8 @@ export function createDevSupervisor({
     child.on("exit",(code,signal)=>{
       if(!stopping){
         const exit=String(signal??code??"unknown");
-        if(name==="desktop")publish({desktopState:"exited",desktopConnected:false,desktopExit:exit});
+        if(name==="desktop")publish({desktopState:"exited",desktopConnected:false,
+          managedDesktopRunning:false,desktopExit:exit});
         publish({step:"Managed "+name+" stopped ("+exit+"). Use Restart desktop from your phone if needed."});
       }
     });
@@ -247,14 +249,19 @@ export function createDevSupervisor({
   }
   async function refreshDesktopHealth(){
     if(!manageDesktop)return;
-    if(!desktop || desktop.exitCode!==null){
-      publish({desktopConnected:false,desktopState:"exited",
-        desktopExit:desktop?.exitCode==null?state.desktopExit:String(desktop.exitCode)});
-      return;
-    }
-    const connected=await desktopReady(desktopLaunchedAt);
-    publish({desktopConnected:connected,
-      desktopState:connected?"online":state.desktopState==="offline"?"offline":"starting"});
+    const managedRunning=!!desktop && desktop.exitCode===null;
+    // Mirror the browser relay's real heartbeat for its connection badge.
+    // The stricter launch-time gate is ONLY for waitForDesktop(), where it
+    // proves that a restarted managed process came online.
+    const connected=await desktopReady(0);
+    publish({
+      desktopConnected:connected,managedDesktopRunning:managedRunning,
+      desktopState:connected?"online"
+        :managedRunning?(state.desktopState==="offline"?"offline":"starting"):"exited",
+      ...(!managedRunning&&desktop?.exitCode!=null?{
+        desktopExit:String(desktop.exitCode)
+      }:{})
+    });
   }
   async function waitForDesktop(){
     if(!manageDesktop)return;
