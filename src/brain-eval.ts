@@ -22,6 +22,9 @@ export type EvalExpectation = {
   answerIncludes?: string[];
   answerAny?: string[];
   answerExcludes?: string[];
+  /** Structural planner check, not a brittle response-phrase assertion. */
+  taskExclude?: string[];
+  publicQueryIncludes?: string[];
   /** Human-readable conversational expectation; evaluated by a reviewer, never faked by a phrase match. */
   conversationGoal?: string;
   /** A mock reply for predictable context in planning-only runs. */
@@ -151,7 +154,8 @@ export const EVAL_FACTS:ReadonlyArray<EvalMemoryFact> = [
   {id:117,fact:"The user prefers metal music and also enjoys synthwave.",category:"preferences",tags:["music","metal","synthwave"],importance:80,updatedAt:1794510000},
   {id:118,fact:"The user's chosen fictional PC GPU is a Radeon RX 9070.",category:"hardware",tags:["GPU","computer","Radeon RX 9070"],importance:70,updatedAt:1794510000},
   {id:119,fact:"The user collects strategy games, but dislikes sprawling open-world games.",category:"preferences",tags:["gaming","strategy","open world"],importance:60,updatedAt:1794510000},
-  {id:120,fact:"The user's fictional cat is called Marmalade; Pippin is the dog.",category:"family",tags:["cat","Marmalade","Pippin"],importance:65,updatedAt:1794510000,alsoSupports:[109]}
+  {id:120,fact:"The user's fictional cat is called Marmalade; Pippin is the dog.",category:"family",tags:["cat","Marmalade","Pippin"],importance:65,updatedAt:1794510000,alsoSupports:[109]},
+  {id:121,fact:"In this isolated test fixture, the user loves Fire Emblem tactical RPGs but dislikes XCOM and does not want XCOM recommended.",category:"preferences",tags:["Fire Emblem","XCOM","strategy game","tactical RPG","recommendations"],importance:88,updatedAt:1794510000}
 ];
 
 const e=(user:string,expect:EvalExpectation,explanation?:string,mockEvidence?:string):EvalStep=>({user,expect,explanation,mockEvidence});
@@ -502,7 +506,28 @@ export const EVAL_SCENARIOS:ReadonlyArray<EvalScenario>=[
       "I'll look for a short horror game with a sourced playtime estimate.",{route:"any",web:true}),
     conversation("I mean the main story playtime, not the trailer's runtime.",
       "Preserve the <120-minute cap and distinguish estimated game length from video duration.",
-      "I'll focus on main-story playtime estimates.",{route:"any",web:true}))
+      "I'll focus on main-story playtime estimates.",{route:"any",web:true})),
+  scenario("correction-entity-type","Correct a mistaken public-entity interpretation","Corrections and recovery",
+    e("Can you tell me about Immortal?",{route:"any",conversationGoal:
+      "Treat Immortal as ambiguous without fabricating a confident game or band identity; consult real public evidence if searching.",stubReply:"There are several things named Immortal."}),
+    e("No, I meant Immortal, the Norwegian black metal band, not a game. Please redo the search with that clarification.",
+      {route:"any",web:true,publicQueryIncludes:["Immortal","metal"],conversationGoal:
+        "Reinterpret the previous ambiguous entity from the user's explicit correction, search for the band, and answer about that band rather than defending the earlier interpretation.",stubReply:"I'll search for the Norwegian black metal band Immortal."})),
+  scenario("correction-known-dislike","Known preference and explicit recommendation exclusion","Corrections and recovery",
+    e("Recommend a tactical role-playing game like Fire Emblem.",{route:"any",web:true,memory:[121],
+      conversationGoal:"Use the fictional user's saved game dislike to avoid recommending XCOM from the beginning; choose suitable strategy RPGs.",stubReply:"I'll find tactical RPGs that match your tastes."}),
+    e("I don't like XCOM. Exclude XCOM and update your recommendations.",{route:"any",web:true,
+      taskExclude:["XCOM"],conversationGoal:"Preserve the Fire Emblem-like tactical RPG goal, exclude XCOM from candidate results, and rerun discovery without copying the user's private preference into an unrelated public query.",stubReply:"I'll exclude XCOM and look for other tactical RPGs."})),
+  scenario("correction-reference-exclusion","Reference band is not a recommendation","Corrections and recovery",
+    e("Recommend a melodic death metal band like Dark Tranquillity.",{route:"any",web:true,
+      conversationGoal:"Find similar bands rather than giving the reference band itself as a recommendation.",stubReply:"I'll look for other melodic death metal bands."}),
+    e("Dark Tranquillity was just my reference. Please exclude that band itself and look again.",{route:"any",web:true,
+      taskExclude:["Dark Tranquillity"],conversationGoal:"Keep the original musical preference but do not recommend the reference band itself; update the active discovery rather than defend earlier suggestions.",stubReply:"I'll exclude Dark Tranquillity from the results."})),
+  scenario("correction-challenged-source","Challenge a suspicious biographical claim","Corrections and recovery",
+    e("A page claimed Brian Fair from Shadows Fall was born in 2024. Is that credible?",{route:"any",web:true,
+      conversationGoal:"Treat an implausible online birth-year claim as unverified; check real sources rather than laundering an isolated statement into fact.",stubReply:"That year looks suspicious; I'd verify it."}),
+    e("That would make him about two years old. I'm pretty sure the result is wrong. Please search again and check reliable sources for the birth year.",{route:"any",web:true,
+      publicQueryIncludes:["Brian Fair"],conversationGoal:"Respond to the correction by reopening real public research, distinguish the vocalist from namesakes, and revise the claim only if better evidence supports it; do not trust the user's guessed age blindly.",stubReply:"I'll verify the singer's birth year with better evidence."}))
 ];
 
 /** Display numbers follow the complete catalog, not filtered or selected positions. */
@@ -645,6 +670,18 @@ export async function runBrainEvaluation(options:EvalOptions):Promise<EvalReport
       }catch(err){error=err instanceof Error?err.message:String(err)}
       const answerFailures=answer===undefined
         ? []:scoreAnswer(answer,step.expect);
+      const plannerFailures:string[]=[];
+      if(options.mode==="live"){
+        for(const excluded of step.expect.taskExclude??[]){
+          if(!planned?.task?.exclude.some(name=>name.toLowerCase()===excluded.toLowerCase()))
+            plannerFailures.push("Planner failed to exclude corrected candidate: "+excluded);
+        }
+        for(const term of step.expect.publicQueryIncludes??[]){
+          if(!planned?.query?.toLowerCase().includes(term.toLowerCase()))
+            plannerFailures.push("Corrected public query missing key subject: "+term);
+        }
+      }
+      answerFailures.push(...plannerFailures);
       const qualityFlags=brainReplyQualityFlags(answer,step.expect,inferenceStats?.outputTokens);
       const hasFactualAnswerCheck=!!(
         step.expect.answerIncludes?.length ||
@@ -699,7 +736,7 @@ export async function runBrainEvaluation(options:EvalOptions):Promise<EvalReport
         routeLabelMatch,routePass,memoryPass,answerPass,reviewRequired,
         answerFailures,qualityFlags,answer,inferenceStats,modelUsed,error,
         elapsedMs:Date.now()-began,
-        pass:routePass&&memoryPass&&answerPass!==false&&evidencePass!==false&&
+        pass:routePass&&memoryPass&&plannerFailures.length===0&&answerPass!==false&&evidencePass!==false&&
           (options.mode!=="live" || !!answer)&&!error
       };
       steps.push(result);
