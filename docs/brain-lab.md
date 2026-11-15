@@ -539,7 +539,7 @@ Windows CI-generated installer of the selected commit.
    relay running, and ensure Windows won't sleep overnight.
 2. From your phone/browser open authenticated Mikan → **Settings → Brain Lab**.
 3. Pick Live or Fast, category or individual scenario, and 1–5 repeats.
-   **Start** returns immediately; the desktop processes the selected turns.
+   **Start** returns immediately; the desktop first probes real SearXNG results for any Live selection containing web-research cases. If even a general public query returns no sources, the run stops with an actionable error rather than a false success. On success it processes the selected turns.
 4. Close the tab if desired. Reopen it to view completed/total turns, current
    scenario, outcome metrics and errors. **Stop** issues an explicit desktop
    cancellation, even while a live test is running.
@@ -685,9 +685,9 @@ route; ambiguous prompts commonly require the optional AI web planner, so
 their unobserved web decisions are marked **REVIEW**, not counted as a confirmed
 search success. A failed web check may be due to the pre-planner policy, the
 local model choosing not to search, or an unsafe public query. Inspect the
-reason and selected plan. Actual external research remains disabled.
+reason and selected plan. Live mode allows real public SearXNG search when the planner authorizes it; private connectors and synthetic-memory writes remain disabled.
 
-In reports, a web decision means a **plan to search**, never a real network call.
+In reports, a web decision indicates a **plan**, not proof of retrieval. Inspect `webExecution.query` and `webExecution.results` to see whether the Rust host performed a real network call and received actual sources.
 A `null` decision means the harness could not observe it (for example,
 a Rust factual branch), not that a search failed.
 
@@ -726,10 +726,8 @@ For ambiguous behavior, write expectations about the *decision* and the
 
 1. A real disposable SQLite/FTS5 + Qdrant integration fixture for semantic
    candidate selection and provenance, without touching the user's database.
-2. Mocked SearXNG/Notion/GitHub service adapters with recorded request and response
-   traces, plus optional user-approved live integration tests.
-3. A richer semantic/claim-level evaluator for answers that cannot be graded
-   using simple expected factual phrases.
+2. Real source-backed web evaluation and optionally permissioned end-to-end GitHub/Notion checks. Do not replace public search with mocked search results; synthetic private facts stay isolated.
+3. Better deterministic claim/evidence checks and transparent human reviews for nuanced answers. Do not use Qwen to grade its own answers.
 4. True cross-client desktop/browser parity tests and test-run exports from
    the browser UI.
 5. Windows manual smoke verification and benchmark baselines before marking P0 done.
