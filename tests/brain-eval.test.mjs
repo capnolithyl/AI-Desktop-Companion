@@ -467,3 +467,44 @@ test("Live report preserves source extraction diagnostics without declaring a cl
   assert.match(brainEvalMarkdown(report),/Structured evidence extraction: used/);
   assert.match(brainEvalMarkdown(report),/not independently fact-verified|not verified factual correctness/i);
 });
+
+test("Live screen reports admitted and rejected recommendation candidates without certifying their factual correctness",async()=>{
+  const report=await runBrainEvaluation({
+    scenarios:[byId("discovery-anime")],mode:"live",model:"fixture",
+    repetitions:1,liveWeb:true,
+    planWeb:async()=>({search:true,query:"horror anime less than six episodes",
+      reason:"Public discovery"}),
+    infer:async({messages,researchQuery})=>{
+      const noMatch=messages.at(-1).content.includes("six episodes");
+      return {
+        text:noMatch
+          ?"I couldn't confirm any matches satisfying your episode limit."
+          :"I can investigate short horror anime with sources.",
+        webExecution:{
+          query:researchQuery,sourcesCarriedOver:false,
+          results:[{title:"Horror anime guide",url:"https://example.org/anime",
+            content:"Pet Shop of Horrors is a four-episode series.",engine:"test"}],
+          researchAudit:noMatch
+            ?{status:"no_supported_matches",accepted:0,rejected:2,elapsedMs:800,
+              note:"No candidates passed",recommendationTask:true,
+              recommendationApproved:[],recommendationRejected:2,constraintsChecked:1}
+            :{status:"shortlist",accepted:1,rejected:1,elapsedMs:900,
+              note:"Source screened",recommendationTask:true,
+              recommendationApproved:["Pet Shop of Horrors"],recommendationRejected:1,
+              constraintsChecked:0}
+        }
+      };
+    }
+  });
+  const metrics=brainEvalMetrics(report);
+  assert.equal(metrics.shortlistTurns,2);
+  assert.equal(metrics.shortlistedItems,1);
+  assert.equal(metrics.rejectedItems,3);
+  assert.equal(metrics.noSupportedMatches,1);
+  assert.equal(metrics.evidencePasses,1);
+  assert.equal(report.cases[0].steps[1].webExecution.researchAudit.recommendationRejected,2);
+  assert.match(brainEvalMarkdown(report),/Screened recommendation shortlists/);
+  assert.match(brainEvalMarkdown(report),/Pet Shop of Horrors/);
+  assert.equal(report.cases[0].steps[0].answerPass,null,
+    "Screened excerpts never automatically certify reply accuracy");
+});
