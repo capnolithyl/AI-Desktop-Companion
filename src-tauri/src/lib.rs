@@ -755,7 +755,8 @@ async fn chat_stream_impl(
                     &client, &url, &request.model, &user_request, task,
                     &sources, selected_context
                 ).await;
-                candidate_leads = leads.iter().map(|lead|lead.title.clone()).collect();
+                candidate_leads = leads.iter()
+                    .map(|lead|format!("{} [source {}]",lead.title,lead.source)).collect();
                 for lead in leads {
                     let Some(mut query) =
                         recommendation_gate::candidate_details_query(&lead.title,task)
