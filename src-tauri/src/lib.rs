@@ -11,6 +11,8 @@ mod research_intent;
 mod source_enrichment;
 mod evidence_pack;
 mod recommendation_gate;
+mod quantities;
+mod attribution;
 mod memory;
 mod interest_memory;
 mod memory_extraction;
@@ -728,19 +730,20 @@ async fn chat_stream_impl(
             "requestId": request.request_id,
             "text": "Checking source-anchored facts…"
         }));
-        let latest_question = request.messages.iter().rev()
-            .find(|message| message.role == "user")
-            .map(|message| message.content.as_str()).unwrap_or("");
-        // A short follow-up ("under six episodes") loses its subject if
-        // the evidence extractor only sees the last user text. The planner
-        // already supplied a public, permission-checked query carrying the
-        // full topic and refinements. This is task context, NOT evidence.
-        let focus = match search_query.as_deref() {
-            Some(query) => format!("Public research topic: {query}. Latest user constraint: {latest_question}"),
-            None => latest_question.to_owned(),
-        };
+        // A query like "short horror anime under 24 episodes" may be a
+        // PLANNER'S invented limit, not a preference stated by the owner.
+        // Keep these two inputs separate: only actual user turns may define
+        // numeric limits, exclusions and requested style/genre labels.
+        let mut user_turns: Vec<String> = request.messages.iter().rev()
+            .filter(|message| message.role == "user")
+            .take(5)
+            .map(|message| message.content.chars().take(300).collect())
+            .collect();
+        user_turns.reverse();
+        let actual_user_request = user_turns.join("\n");
         let (notes, audit) = evidence_pack::extract(
-            &client, &url, &request.model, &focus, &sources, selected_context
+            &client, &url, &request.model, &actual_user_request,
+            search_query.as_deref(), &sources, selected_context
         ).await;
         let recommendation_task = audit.recommendation_task;
         let screened_count = audit.recommendation_approved.len();
@@ -773,9 +776,10 @@ async fn chat_stream_impl(
                 "role":"system",
                 "content":"RECOMMENDATION OUTPUT BOUNDARY: A source-screened list of \
                     matching candidates was built from this search. Mention ONLY \
-                    candidates in that list, and only numeric details quoted for them. \
-                    Do not fill gaps with more names, release titles or guessed \
-                    quantities. You may discuss the criteria conversationally."
+                    candidates in that list, and only numeric details or \
+                    author/director/studio/artist/developer roles explicitly \
+                    evidenced for them. Do not add unscreened titles or metadata. \
+                    You may discuss the user's criteria conversationally."
             }));
         }
         if let Some(notes) = notes {
