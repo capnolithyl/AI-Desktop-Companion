@@ -304,6 +304,29 @@ test("active public task is a single focused model decision, not generic memory 
   }
 });
 
+test("saved dislikes influence only the local planner, never raw search terms",async()=>{
+  const relevant=[{id:91,fact:"The user dislikes XCOM and likes Fire Emblem.",
+    category:"preferences",tags:["Fire Emblem","XCOM","tactical RPG"],importance:90,updatedAt:1}];
+  let captured="";
+  const result=await planPublicWebTools("Recommend a tactical RPG like Fire Emblem.",
+    [...facts,...relevant],
+    async prompt=>{
+      captured=prompt;
+      return JSON.stringify({ids:[],web:{search:true,
+        query:"tactical RPGs like Fire Emblem excluding XCOM",
+        reason:"Respect an existing saved preference",
+        task:{kind:"discover",requirements:[],roles:[],exclude:["XCOM"]}}});
+    },
+    {automaticWebEnabled:true,sourcePreferences:prefs,
+      relevantUserFacts:relevant,history:[]});
+  assert.equal(result.search,true);
+  assert.deepEqual(result.task?.exclude,["XCOM"]);
+  assert.match(captured,/dislikes XCOM and likes Fire Emblem/);
+  assert.doesNotMatch(captured,/Alex Example|professional WordPress developer/,
+    "Unrelated private profile/work memories must not enter local preference context");
+  assert.doesNotMatch(result.query??"",/The user|dislikes|private|Alex/);
+});
+
 test("a user correction overrides old public entity interpretation",async()=>{
   const previous=[{role:"user",content:"Tell me about Immortal."},
     {role:"assistant",content:"Immortal is a game with fantasy elements."}];
