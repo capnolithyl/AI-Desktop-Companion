@@ -26,6 +26,8 @@ pub struct ResearchAudit {
     pub recommendation_task: bool,
     pub recommendation_approved: Vec<String>,
     pub recommendation_rejected: usize,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub rejected_details: Vec<String>,
     pub constraints_checked: usize,
     pub exclusions_checked: usize,
     pub relations_checked: usize,
@@ -235,6 +237,7 @@ fn assemble_evidence(
         recommendation_task: task.kind != ResearchKind::Lookup,
         recommendation_approved: vec![],
         recommendation_rejected: 0,
+        rejected_details: vec![],
         constraints_checked: 0,
         exclusions_checked: 0,
         relations_checked: 0,
@@ -274,6 +277,7 @@ fn assemble_evidence(
             audit.recommendation_approved = shortlist.approved.iter()
                 .map(|candidate| candidate.title.clone()).collect();
             audit.recommendation_rejected = shortlist.rejected;
+            audit.rejected_details = shortlist.rejected_details;
             audit.constraints_checked = shortlist.requirements.len();
             audit.exclusions_checked = shortlist.exclusions_checked;
             audit.relations_checked = shortlist.relations_checked;
