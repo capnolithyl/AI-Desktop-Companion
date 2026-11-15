@@ -609,8 +609,19 @@
                   ((audit.recommendationApproved||[]).join(", ")||"none supported")+
                   " | rejected: "+(audit.recommendationRejected||0)+
                   " | hard constraints: "+(audit.constraintsChecked||0)+
-                  " | style/genre criteria: "+(audit.featuresChecked||0);
+                  " | style/genre criteria: "+(audit.featuresChecked||0)+
+                  " | attributed roles: "+(audit.relationsChecked||0)+
+                  " | prior references excluded: "+(audit.exclusionsChecked||0);
                 section.append(shortlist);
+                for(var k=0;k<(audit.recommendationDetails||[]).length;k++){
+                  var candidate=audit.recommendationDetails[k];
+                  var detail=document.createElement("small");
+                  detail.textContent="Validated candidate ["+candidate.source+"]: "+
+                    candidate.title+" | "+
+                    (candidate.relations||[]).map(function(r){return r.role+": "+r.name}).join(", ")+
+                    (candidate.measurements||[]).map(function(m){return " · "+m.value+" "+m.unit}).join("");
+                  section.append(detail);
+                }
               }
             }
             for(var j=0;j<(step.webExecution.results||[]).length;j++){
