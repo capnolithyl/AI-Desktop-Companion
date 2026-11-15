@@ -83,7 +83,7 @@ fn quantity_token(s: &str, count: u32) -> bool {
         "sixteen","seventeen","eighteen","nineteen","twenty"
     ];
     words(s).iter().any(|w| w == &count.to_string()
-        || NUMBER_WORDS.get(count as usize).is_some_and(|name| w == name))
+        || NUMBER_WORDS.get(count as usize).is_some_and(|name| w.as_str() == *name))
 }
 
 fn unit_key(s: &str) -> String {
@@ -287,11 +287,12 @@ mod tests {
             "Pet Shop of Horrors is a horror anthology series with unusual stories.",
             Some(Measurement{source:1,value:4,unit:"episodes".into(),
                 quote:"Pet Shop of Horrors has 4 episodes.".into()}));
-        let bad=item("Junji Ito Collection",
+        let mut bad=item("Junji Ito Collection",
             "Junji Ito Collection has 12 episodes.",
             "Junji Ito Collection is an animated horror series based on manga.",
             Some(Measurement{source:2,value:12,unit:"episodes".into(),
                 quote:"Junji Ito Collection has 12 episodes.".into()}));
+        bad.source=2;
         let r=screen("short horror anime under six episodes",vec![limit()],
             vec![ok,bad],&[src(allowed),src(disallowed)]);
         assert_eq!(r.approved.len(),1);
