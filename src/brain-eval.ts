@@ -114,7 +114,7 @@ export type EvalInference = (args:{
   stepIndex:number;
 })=>Promise<EvalInferenceResult>;
 export type EvalPlanner = (input:string,previous:EvalTurn[],
-  context?:PublicResearchContext)=>Promise<EvalWebPlan>;
+  context?:PublicResearchContext,selectedFacts?:ReadonlyArray<EvalMemoryFact>)=>Promise<EvalWebPlan>;
 export type EvalOptions = {
   mode:EvalMode;
   repetitions:number;
@@ -622,8 +622,9 @@ export async function runBrainEvaluation(options:EvalOptions):Promise<EvalReport
       // No fabricated vector scores. The fixture tests the actual lexical/fusion fallback
       // without Qdrant, then reports when semantic retrieval would have been necessary.
       const memory=selectDeterministicMemoryIds([...EVAL_FACTS],step.user,[],lexicalIds,8);
-      const selected=memory.ids.map(id=>EVAL_FACTS.find(f=>f.id===id)!)
-        .filter(Boolean).map(f=>({id:f.id,fact:f.fact}));
+      const selectedFacts=memory.ids.map(id=>EVAL_FACTS.find(f=>f.id===id))
+        .filter((fact):fact is EvalMemoryFact=>!!fact);
+      const selected=selectedFacts.map(f=>({id:f.id,fact:f.fact}));
       // The target is a fact, not an arbitrary saved row. Richer synthetic
       // memories can explicitly support the same claim as a simpler record.
       const memoryEvidence=brainMemoryEvidence(step.expect.memory??[],memory.ids);
@@ -647,7 +648,7 @@ export async function runBrainEvaluation(options:EvalOptions):Promise<EvalReport
           // exchange to previous after this callback, but observers and
           // async adapters must not see the history mutate retroactively.
           planned=await options.planWeb(step.user,previous.map(turn=>({...turn})),
-            {...publicContext});
+            {...publicContext},selectedFacts);
         if(options.mode==="live" && options.infer){
           // Never search when the private permission boundary blocks web.
           // The local planner has already validated its proposed public query.
