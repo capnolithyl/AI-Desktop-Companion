@@ -384,9 +384,9 @@ fn validate_leads(proposals: Vec<CandidateLeadProposal>,
             || title.contains(['"', '<', '>', '@', '/'])
             || title.chars().any(char::is_control)
             || excluded.iter().any(|e| normalize(e)==name)
-            || !seen.insert(name.clone())
             || !normalize(&source.content).contains(&normalize(quote))
             || !normalize(quote).contains(&name)
+            || !seen.insert(name.clone())
         {return None}
         Some(CandidateLead{source:candidate.source,title:title.to_owned()})
     }).take(2).collect()
