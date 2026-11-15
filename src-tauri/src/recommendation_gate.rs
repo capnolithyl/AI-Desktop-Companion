@@ -455,6 +455,28 @@ mod tests {
     }
 
     #[test]
+    fn anchored_candidate_without_fit_triggers_real_lookup_not_a_fake_recommendation() {
+        // Search excerpt recorded from a live source, not a fabricated answer.
+        let snippet = "2. Iron Lung – playtime 30-40 minutes";
+        let candidate = item("Iron Lung", snippet,
+            "Horror game with highly atmospheric visuals", None);
+        let task = ResearchTask {
+            kind: ResearchKind::Discover,
+            requirements: vec![HardRequirement {
+                quote: "under two hours".into(),relation:"lt".into(),
+                limit:2.0,unit:"hours".into()
+            }],
+            ..Default::default()
+        };
+        let result = screen_task("horror games under two hours", &task,
+            vec![candidate], &[src(snippet)]);
+        assert!(result.approved.is_empty());
+        assert_eq!(result.followup_query.as_deref(), Some("\"Iron Lung\" duration"));
+        assert!(result.rejected_details.iter().any(|reason|
+            reason.contains("relevance_quote_not_found_in_cited_source")));
+    }
+
+    #[test]
     fn an_explicit_limit_requires_evidence_and_a_consistent_comparison() {
         let src_text="Pet Shop of Horrors has 4 episodes. Pet Shop of Horrors is a horror anthology series with unusual stories.";
         let item=item("Pet Shop of Horrors",
