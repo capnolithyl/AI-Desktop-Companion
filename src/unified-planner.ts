@@ -284,7 +284,7 @@ export function withLocalWebPreferences(prompt:string, query:string,
 export async function planPublicWebTools(
   query:string, ownerFacts:readonly RankableMemory[], localSelect:(prompt:string)=>Promise<string>,
   options:PublicResearchContext & {automaticWebEnabled:boolean;sourcePreferences:readonly SourcePreference[];
-    history?:readonly WebPlanningTurn[]}
+    history?:readonly WebPlanningTurn[];relevantUserFacts?:readonly RankableMemory[]}
 ):Promise<WebToolDecision>{
   if(!options.automaticWebEnabled)
     return {search:false,reason:"Automatic web tools disabled",method:"disabled"};
@@ -302,7 +302,7 @@ export async function planPublicWebTools(
   if(safePrior?.search && safePrior.query){
     try {
       const raw=await localSelect(withLocalWebPreferences(activePublicTaskPrompt(
-        query,options.history??[],safePrior.query,options.sourcePreferences,options),query,ownerFacts));
+        query,options.history??[],safePrior.query,options.sourcePreferences,options),query,options.relevantUserFacts??ownerFacts));
       return parseWebToolDecision(raw,true,options.sourcePreferences,ownerFacts);
     }catch{
       return {search:false,reason:"Local active-task planner unavailable",
@@ -311,7 +311,7 @@ export async function planPublicWebTools(
   }
   const selectWithContext=(prompt:string)=>localSelect(
     withLocalWebPreferences(
-      withPublicPlanningHistory(prompt,query,options.history??[]),query,ownerFacts)
+      withPublicPlanningHistory(prompt,query,options.history??[]),query,options.relevantUserFacts??ownerFacts)
   );
   const plan=(await planMemoriesAndTools([],query,[],0,selectWithContext,options)).web;
   if(!plan.search)return plan;
