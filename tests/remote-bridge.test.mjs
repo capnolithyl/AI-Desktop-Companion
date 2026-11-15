@@ -185,7 +185,8 @@ test("browser relay requires a private key and delegates to the desktop, not a s
     models:["qwen3.5:9b"],provider:"local",brainEvalCatalog:remoteCatalog,
     brainEval:{phase,done:phase==="running"?1:0,total:6,
       model:"qwen3.5:9b",startedAt:"2026-11-14T22:00:00.000Z",
-      results:phase==="complete"?{passRate:83.3,recall:95,webAgreement:80,reviewTurns:2}:null}
+      results:phase==="complete"?{passRate:83.3,recall:95,webAgreement:80,reviewTurns:2,
+        liveSearches:3,liveSearchesWithSources:2,liveSources:6}:null}
   });
   assert.equal((await request(agent + "/agent/state","POST",desktopHeaders,evalState("idle"))).status,200);
   assert.equal((await request(base + "/api/brain-eval/result?format=json","GET",authorized)).status,404);
@@ -247,7 +248,35 @@ test("browser relay requires a private key and delegates to the desktop, not a s
   const completeReply=await request(agent + "/agent/state","POST",desktopHeaders,evalState("complete"));
   assert.equal(completeReply.status,200);
   assert.equal((await completeReply.json()).reportId,sampleEval.runId);
-  assert.equal((await (await request(base + "/api/state","GET",authorized)).json()).reportAvailable,true);
+  const completeStatus=await (await request(base + "/api/state","GET",authorized)).json();
+  assert.equal(completeStatus.reportAvailable,true);
+  assert.equal(completeStatus.brainEval.results.liveSearches,3);
+  assert.equal(completeStatus.brainEval.results.liveSearchesWithSources,2);
+  assert.equal(completeStatus.brainEval.results.liveSources,6);
+  // New Live reports with actual public SearXNG results MUST be downloadable.
+  // Old offline reports must remain valid, while mismatched metadata is rejected.
+  const liveEval={...sampleEval,runId:"eval-1234567890-web12",
+    environment:"isolated-synthetic+live-public-web",liveWebEnabled:true,
+    cases:[{id:"discovery-bands-wish",steps:[{webExecution:{
+      query:"bands similar to Immortal black metal",
+      results:[{title:"Immortal band",url:"https://example.org/band",
+        content:"Public evidence",engine:"SearXNG"}],sourcesCarriedOver:false
+    }}]}]};
+  assert.equal((await request(agent+"/agent/brain-eval/report","POST",desktopHeaders,{
+    report:{...liveEval,environment:"isolated-synthetic"},markdown:"# Invalid"
+  })).status,400);
+  assert.equal((await request(agent+"/agent/brain-eval/report","POST",desktopHeaders,{
+    report:{...liveEval,mode:"routing"},markdown:"# Invalid"
+  })).status,400);
+  assert.equal((await request(agent+"/agent/brain-eval/report","POST",desktopHeaders,{
+    report:liveEval,markdown:"# Actual public research"
+  })).status,200);
+  const liveDownload=await request(base+"/api/brain-eval/result?format=json","GET",authorized);
+  assert.equal(liveDownload.status,200);
+  const retrieved=await liveDownload.json();
+  assert.equal(retrieved.liveWebEnabled,true);
+  assert.equal(retrieved.cases[0].steps[0].webExecution.results[0].url,"https://example.org/band");
+  assert.equal((await (await request(base+"/api/state","GET",authorized)).json()).reportRunId,liveEval.runId);
   // Browser receives only whitelisted test statuses, not a writable report.
   const reviewState=evalState("complete");
   reviewState.brainEvalCatalog=[
