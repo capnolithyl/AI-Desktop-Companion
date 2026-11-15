@@ -58,8 +58,9 @@ fn markers(role:&str)->Option<&'static [&'static str]> {
     match role {
         "author"=>Some(&["written by ","authored by ","author: ","author is ","book by ","novel by "]),
         "director"=>Some(&["directed by ","director: ","director is "]),
-        "studio"=>Some(&["produced by ","production studio: ","production studio is ",
+        "studio"=>Some(&["production studio: ","production studio is ",
                          "production company: ","studio: ","studio is "]),
+        "producer"=>Some(&["produced by ","producer: ","producer is "]),
         "distributor"=>Some(&["distributed by ","distributor: ","distributor is "]),
         "publisher"=>Some(&["published by ","publisher: ","publisher is "]),
         "developer"=>Some(&["developed by ","developer: ","developer is "]),
@@ -129,7 +130,7 @@ mod tests{
     #[test]
     fn verifies_director_and_differentiates_studio_from_distributor(){
         let director="The film Dune Part Two was directed by Denis Villeneuve.";
-        let studio="Dune Part Two was produced by Legendary Pictures and distributed by Warner Bros.";
+        let studio="Dune Part Two production studio: Legendary Pictures; Dune Part Two distributor: Warner Bros.";
         let s=vec![src(director)[0].clone(),src(studio)[0].clone()];
         assert!(verify("Dune Part Two",relation("director","Denis Villeneuve",director),&s).is_some());
         assert!(verify("Dune Part Two",relation("director","Legendary Pictures",director),&s).is_none());
@@ -138,6 +139,7 @@ mod tests{
         assert!(verify("Dune Part Two",mk("studio","Legendary Pictures"),&s).is_some());
         assert!(verify("Dune Part Two",mk("distributor","Warner Bros"),&s).is_some());
         assert!(verify("Dune Part Two",mk("studio","Warner Bros"),&s).is_none());
+        assert!(verify("Dune Part Two",mk("producer","Legendary Pictures"),&s).is_none());
         assert!(verify("Dune Part Two",mk("distributor","Legendary Pictures"),&s).is_none());
     }
     #[test]
@@ -155,6 +157,13 @@ mod tests{
         let byline="The Hollow Places by T. Kingfisher is a horror novel.";
         assert!(verify("The Hollow Places",relation("author","T. Kingfisher",byline),
             &src(byline)).is_some());
+    }
+
+    #[test]
+    fn producer_credit_is_not_automatically_a_production_studio_credit(){
+        let quote="The film Wild Lantern was produced by Jamie North.";
+        assert!(verify("Wild Lantern",relation("producer","Jamie North",quote),&src(quote)).is_some());
+        assert!(verify("Wild Lantern",relation("studio","Jamie North",quote),&src(quote)).is_none());
     }
 
     #[test]
