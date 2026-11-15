@@ -28,6 +28,9 @@ pub struct ResearchAudit {
     pub recommendation_rejected: usize,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub rejected_details: Vec<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub accepted_details: Vec<AcceptedFactAudit>,
+    pub extraction_attempts: u8,
     pub constraints_checked: usize,
     pub exclusions_checked: usize,
     pub relations_checked: usize,
@@ -39,6 +42,15 @@ pub struct ResearchAudit {
     pub ignored_requirements: Vec<HardRequirement>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub followup_query: Option<String>,
+}
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AcceptedFactAudit {
+    pub source: usize,
+    pub subject: String,
+    pub claim: String,
+    pub quote: String,
 }
 
 pub struct ResearchEvidence {
@@ -251,6 +263,8 @@ fn assemble_evidence(
         recommendation_approved: vec![],
         recommendation_rejected: 0,
         rejected_details: vec![],
+        accepted_details: vec![],
+        extraction_attempts: 1,
         constraints_checked: 0,
         exclusions_checked: 0,
         relations_checked: 0,
@@ -274,6 +288,10 @@ fn assemble_evidence(
                 let (accepted, rejected) = collect_valid(facts, sources);
                 audit.accepted = accepted.len();
                 audit.rejected = rejected;
+                audit.accepted_details = accepted.iter().map(|fact| AcceptedFactAudit {
+                    source:fact.source,subject:fact.subject.clone(),
+                    claim:fact.claim.clone(),quote:fact.quote.clone()
+                }).collect();
                 if accepted.is_empty() {
                     audit.note = "No factual claims matched the retrieved excerpts.".into();
                 } else {
@@ -325,11 +343,14 @@ pub async fn extract(
         .collect();
     let instructions = match task.kind {
         ResearchKind::Lookup =>
-            "Extract facts needed to answer the current question. Use numbered passages with text that binds the exact subject to each claim.",
+            "Extract facts DIRECTLY needed to answer the current question. If asked for the latest releases or updates, identify concrete released version or model tags, reported dates and release status from the freshest credible source. Do not substitute a roadmap, model still in training, or an unrelated product feature for an actual release. Distinguish stable releases from previews or nightly builds. Use the precise model/build tag as subject when the quote names that tag rather than the broader product. Every claimed number and date must appear verbatim in the cited quote. If sources cannot establish recency, report only what is supported.",
         ResearchKind::Discover =>
-            "Find up to three relevant options in the sources. Judge fit by meaning, including paraphrases. \
-             Prefer candidate-specific descriptions. Include a promising lead even when a requested measurement \
-             or credit is missing, so the application can look for that detail. Leave out any reference the user wants alternatives to.",
+            "Find up to three actual individual works, games, books, albums or other entities that fit the request. \
+             A search-result article title, ranked-list heading, YouTube video title, publisher, review or web page is NOT a candidate when the user seeks an item featured inside that page. \
+             Extract the exact named item from a numbered source excerpt, never use the page headline as the item name. \
+             Judge fit by meaning, including paraphrases, and prefer candidate-specific excerpts. \
+             Include a promising individually named lead even if a requested measurement or credit is missing, \
+             so the application can search for that detail. Leave out references the user wants alternatives to.",
         ResearchKind::Verify =>
             "Check the exact named subject in the task. Do not switch subjects or suggest alternatives. \
              Extract evidence about the requested properties even if it shows that the subject fails a limit. \
@@ -338,9 +359,12 @@ pub async fn extract(
     let evidence_rules = if task.kind == ResearchKind::Lookup {
         ""
     } else {
-        "Use the source title or excerpt for identity_quote. For discovery, fit_quote must say why this same option fits the user, using the source's own wording. \
-         Put measurements and credits in separate entries with their own source numbers and exact quotes. \
+        "Use an exact, contiguous source passage naming the INDIVIDUAL candidate for identity_quote. A page headline is source metadata, not the name of a work inside it. \
+         For discovery, fit_quote must be an exact passage naming that same item and showing why it fits the request. \
+         The same precise excerpt may support identity, relevance AND a measurement when it clearly names the item and connects that value to it. \
+         Put numeric measurements and credits in separate entries with their own source numbers and exact, contiguous quotes. \
          Bind each entry to the named subject and the property being checked. A number about a related object, part, or property cannot be used for the subject. \
+         When the source gives a measurement meeting the user's limit, include it in measurements; do not leave an obvious supported limit unchecked. \
          Preserve the source's scope, range, and estimates. For compound times like 1h 35m use value 95 and unit minutes. \
          For a reported range use its upper endpoint for an upper limit, lower endpoint for a lower limit. \
          Copy the exact role and credited name. A mention, review, or neighboring credit does not establish a role. \
