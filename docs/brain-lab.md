@@ -8,6 +8,37 @@ and 1–5 repetitions. The runner is owned by the desktop process, not a setting
 component or browser tab; closing a panel does not cancel it.
 This does not rebuild the installer.
 
+## v0.9.19 remote report download recovery
+
+A live-web run completed with 7 scenarios / 18 turns, but the phone's JSON
+and Markdown download buttons remained disabled. The desktop had finished
+the run and auto-saved both files. The browser relay was still validating
+the **old** `environment: isolated-synthetic` / `liveWebEnabled: false`
+report shape, so it rejected the new public-web report when the desktop
+tried to upload it. Its safe status whitelist also silently discarded
+`liveSearches`, `liveSearchesWithSources` and `liveSources`, displaying
+a misleading `0 searches` even if actual queries ran.
+
+The relay now accepts both strictly consistent synthetic report variants:
+`isolated-synthetic` with web disabled, or
+`isolated-synthetic+live-public-web` with Live mode and public web enabled.
+The real search counters are included in phone state. Invalid/mismatched
+reports remain rejected. The phone explains when a finished report is not
+yet accepted.
+
+**Recovering a costly completed run after an update:** Rust's new
+`brain_eval_load_latest` command can reopen the newest bounded JSON/Markdown
+auto-export from its fixed `Documents/Mikan/Brain-Evaluations` folder (or the
+same native app-data fallback as the exporter). It accepts no user-selected
+path and never touches actual chat memory. Desktop startup restores that
+run's report and read-only dashboard status so it can be re-uploaded to the
+relay after the managed updater restarts. No new Live test is necessary if
+the existing auto-export is still present and valid. This must be verified
+on the Windows machine after updating.
+
+Versions synced to **0.9.19**. Full native Tauri build and end-to-end
+remote export are not yet independently confirmed.
+
 ## Actual public web search in Live mode (v0.9.18)
 
 **Fast** still tests routing and synthetic lexical memory offline. **Live** now
