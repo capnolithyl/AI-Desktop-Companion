@@ -51,7 +51,7 @@ export function reviewBrainEvalScenario(id:string,mode:EvalMode,model:string,dec
 }
 import {
   EVAL_SCENARIOS, runBrainEvaluation, brainEvalMetrics, brainEvalMarkdown,
-  type EvalMode, type EvalReport, type EvalTurn, type EvalInference
+  type EvalMode, type EvalReport, type EvalTurn, type EvalInference, type EvalMemoryFact
 } from "./brain-eval";
 
 export type BrainEvalRequest = {
@@ -255,9 +255,9 @@ async function execute(
     }finally{if(requestId===id)requestId=null}
   };
   const planWeb=async(question:string,previous:EvalTurn[],
-    context?:PublicResearchContext)=>{
+    context?:PublicResearchContext,selectedFacts:ReadonlyArray<EvalMemoryFact>=[])=>{
     if(controller.signal.aborted)throw new Error("Stopped by owner");
-    const decision=await planPublicWebTools(question,[],async prompt=>
+    const decision=await planPublicWebTools(question,selectedFacts,async prompt=>
       invoke<string>("condense_local_context",{
         endpoint:settings.endpoint,model:settings.model,prompt,
         contextWindow:settings.contextWindow,maxOutputTokens:380,timeoutMs:22000
