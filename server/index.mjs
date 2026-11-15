@@ -172,6 +172,7 @@ const safeEvalStatus = value => {
     Object.fromEntries([
       "cases","turns","passed","passRate","verifiedPassed","verifiedPassRate","unverifiedTurns","routes","recall","webChecks",
       "webUnobserved","webAgreement","unnecessaryWeb","missedWeb",
+      "liveSearches","liveSearchesWithSources","liveSources",
       "tokensPerSecond","answers","answerChecks","reviewTurns","elapsedMs"
     ].map(name => [name,finite(value.results[name])])) : null;
   return {
@@ -577,8 +578,15 @@ export function createBridge({
         const body = await readJson(request, 8_000_000);
         const source = body.report;
         const markdown = body.markdown;
-        if (!source || source.version !== 1 || source.environment !== "isolated-synthetic" ||
-          source.liveWebEnabled !== false || source.writesToRealMemories !== false ||
+        // Accept both isolated offline and isolated-with-public-web reports.
+        // The schema must be internally consistent: real search execution
+        // never means access to real memories or connected private tools.
+        const validEnvironment = source?.environment === "isolated-synthetic"
+          ? source.liveWebEnabled === false
+          : source?.environment === "isolated-synthetic+live-public-web"
+            && source.liveWebEnabled === true && source.mode === "live";
+        if (!source || source.version !== 1 || !validEnvironment ||
+          source.writesToRealMemories !== false ||
           typeof source.runId !== "string" || !/^eval-[a-zA-Z0-9-]{4,90}$/.test(source.runId) ||
           !Array.isArray(source.cases) || source.cases.length > 400 ||
           typeof markdown !== "string" || markdown.length > 2_000_000)
