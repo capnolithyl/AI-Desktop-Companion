@@ -868,6 +868,10 @@ export function brainEvalMarkdown(report:EvalReport):string {
             lines.push("- Focused follow-up search: "+audit.followupQuery);
           if(audit.extractionAttempts && audit.extractionAttempts>1)
             lines.push("- Local evidence extraction attempts: "+audit.extractionAttempts);
+          if(audit.candidateLeads?.length)
+            lines.push("- Source-identified candidates: "+audit.candidateLeads.join(", "));
+          for(const query of audit.candidateQueries??[])
+            lines.push("- Executed candidate-specific search: "+query);
           for(const fact of audit.acceptedDetails??[])
             lines.push("- Accepted source fact ["+fact.source+"] "+fact.subject+" | "+
               fact.claim+" | exact quote: "+fact.quote);
