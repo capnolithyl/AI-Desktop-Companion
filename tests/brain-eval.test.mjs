@@ -22,11 +22,15 @@ test("broad isolated test catalog covers multiple intentions and branches",()=>{
 });
 
 test("scenario numbers stay stable when a subset is selected",()=>{
-  assert.equal(EVAL_SCENARIOS.length,73);
+  assert.equal(EVAL_SCENARIOS.length,77);
   assert.equal(brainScenarioNumber(EVAL_SCENARIOS[0].id),1);
   assert.equal(brainScenarioNumber(EVAL_SCENARIOS[72].id),73);
   assert.match(brainScenarioLabel(EVAL_SCENARIOS[0].id,EVAL_SCENARIOS[0].label),/^#01 · /);
   assert.match(brainScenarioLabel(EVAL_SCENARIOS[72].id,EVAL_SCENARIOS[72].label),/^#73 · /);
+  assert.deepEqual(["verification-movie-runtime","verification-album-songs",
+      "verification-book-author","verification-game-playtime"]
+    .map(brainScenarioNumber),[74,75,76,77],
+    "old scenario numbers stay stable while new proof cases append");
   assert.equal(brainScenarioLabel("not-in-catalog","Custom test"),"Custom test");
 });
 test("a richer synthetic memory can prove the same fact without matching an exact record ID",()=>{
