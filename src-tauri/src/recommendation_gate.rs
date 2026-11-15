@@ -222,16 +222,16 @@ pub fn screen_with_criteria(question: &str, requirements: Vec<HardRequirement>,
         }
     }
     GateResult{
-        relations_checked:approved.iter().map(|candidate|candidate.relations.len()).sum(),
-        approved,rejected,requirements:requirements.len(),features_checked:features.len(),
-        exclusions_checked:exclusions.len(),
         note:if count==0 {
             "No candidate proposals came out of the retrieved source excerpts; the next search needs better candidate-level evidence.".into()
         } else if approved.is_empty() {
             format!("All {count} proposed candidates lacked evidence, conflicted with a constraint or repeated the user's reference work.")
         } else {
             "Quotes, typed roles, numeric limits and exclusions screened; source truth and style equivalence remain uncertain.".into()
-        }
+        },
+        relations_checked:approved.iter().map(|candidate|candidate.relations.len()).sum(),
+        approved,rejected,requirements:requirements.len(),features_checked:features.len(),
+        exclusions_checked:exclusions.len(),
     }
 }
 
