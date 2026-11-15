@@ -370,9 +370,15 @@ export function createDevSupervisor({
       const fetched=await repoGit("rev-parse","refs/remotes/origin/"+UPDATE_BRANCH);
       if(fetched!==after)throw new Error("Remote branch moved. Check updates again.");
       dependenciesChanged=await dependencyChangesBetween(before,after);
-      const rustChanged=manageDesktop && Boolean((await repoGit(
+      const nativePaths=(await repoGit(
         "diff","--name-only",before,after,"--","src-tauri"
-      )).trim());
+      )).split("\n").filter(Boolean);
+      // A patch-version bump also edits Cargo.toml and Cargo.lock. Only
+      // actual native source/config edits need an extra compile pass.
+      const rustChanged=manageDesktop && nativePaths.some(path=>
+        path.startsWith("src-tauri/src/") || path==="src-tauri/build.rs"
+        || path==="src-tauri/tauri.conf.json"
+      );
       publish({step:"Fast-forwarding approved branch"});
       await repoGit("merge","--ff-only",after);
       merged=true;
