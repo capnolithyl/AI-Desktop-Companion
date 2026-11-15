@@ -99,8 +99,7 @@ pub fn measured_in(raw:&str)->Vec<Quantity>{
 
 /// Bind the first quantified property *after* a named subject to that
 /// subject. Prevent borrowing a later title's count from the same sentence.
-/// A compound time (1h 35m) may match either its stated components or the
-/// normalized sum, but not a second, unrelated property.
+/// A compound duration must match the full duration.
 pub fn first_measure_matches(raw:&str,expected:Quantity)->bool {
     let t=tokens(raw);
     let mut pairs=Vec::<(usize,Quantity)>::new();
@@ -111,7 +110,6 @@ pub fn first_measure_matches(raw:&str,expected:Quantity)->bool {
     }
     let compatible:Vec<_>=pairs.into_iter().filter(|(_,q)|q.dim==expected.dim).collect();
     let Some((i,first))=compatible.first().copied() else{return false};
-    if approx_equal(first,expected){return true}
     if first.dim==Dimension::Duration {
         if let Some((j,next))=compatible.get(1).copied(){
             if next.dim==Dimension::Duration
@@ -122,7 +120,7 @@ pub fn first_measure_matches(raw:&str,expected:Quantity)->bool {
             }
         }
     }
-    false
+    approx_equal(first,expected)
 }
 
 pub fn mention_supports(raw:&str,expected:Quantity)->bool{
@@ -174,6 +172,8 @@ mod tests{
             q(12.0,"episodes")));
         assert!(first_measure_matches(" runs for 1 hour and 35 minutes",
             q(95.0,"minutes")));
+        assert!(!first_measure_matches(" runs for 1 hour and 35 minutes",
+            q(60.0,"minutes")));
         assert!(first_measure_matches(" season 1 contains 4 episodes",
             q(4.0,"episodes")));
     }

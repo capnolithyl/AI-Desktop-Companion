@@ -549,15 +549,63 @@ test("Live report preserves normalized measurements and typed authors/directors 
   assert.equal(first.reviewRequired,true);
 });
 
-test("production extractor verifies user-authored limits independently of search query hints",()=>{
-  const src=readFileSync(new URL("../src-tauri/src/lib.rs",import.meta.url),"utf8");
-  const evidence=readFileSync(new URL("../src-tauri/src/evidence_pack.rs",import.meta.url),"utf8");
-  const gate=readFileSync(new URL("../src-tauri/src/recommendation_gate.rs",import.meta.url),"utf8");
-  assert.match(src,/let actual_user_request = user_turns\.join/);
-  assert.match(src,/search_query\.as_deref\(\), &sources/);
-  assert.match(evidence,/USER'S OWN REQUESTS \(the ONLY source of constraints/);
-  assert.match(evidence,/screen_with_criteria\(/);
-  assert.match(gate,/quoted_requirement_valid\(question,r\)/);
-  assert.match(gate,/quantities::canonical/);
-  assert.match(gate,/attribution::verify/);
+test("Live research carries the previous public result into a focused verification",async()=>{
+  const title = "Lantern Harbor";
+  const limit = {quote:"under two hours",relation:"lt",limit:2,unit:"hours"};
+  const discovery = {kind:"discover",requirements:[limit],roles:[],exclude:[]};
+  const verification = {kind:"verify",subject:title,requirements:[limit],
+    roles:["director","studio"],exclude:[]};
+  const report = await runBrainEvaluation({
+    scenarios:[byId("verification-movie-runtime")],mode:"live",model:"fixture-model",
+    repetitions:1,liveWeb:true,build:"test-build",
+    planWeb:async(_question,previous,context)=>{
+      if(!previous.length) return {
+        search:true,query:"creepy animated films",task:discovery,reason:"Find a film"
+      };
+      assert.deepEqual(context.publicSubjects,[title]);
+      assert.ok(context.publicAnswer.includes(title));
+      assert.equal(context.activePublicQuery,"creepy animated films");
+      return {search:true,query:title+" director production company",task:verification,
+        reason:"Check details for the previously suggested film"};
+    },
+    infer:async({researchQuery,researchTask,stepIndex})=>{
+      assert.deepEqual(researchTask,stepIndex===0 ? discovery : verification);
+      if(stepIndex===1) assert.equal(researchQuery,title+" director production company");
+      return {
+        text:title,
+        webExecution:{
+          query:researchQuery,results:[{title,url:"https://example.org/film",
+            content:"Catalog entry",engine:"fixture"}],sourcesCarriedOver:false,
+          researchAudit:{status:"shortlist",accepted:1,rejected:0,elapsedMs:0,
+            note:"fixture",taskKind:researchTask.kind,taskSubject:researchTask.subject,
+            recommendationApproved:[title]}
+        }
+      };
+    }
+  });
+  assert.equal(report.build,"test-build");
+  assert.match(brainEvalMarkdown(report),/Research task: verify \| Lantern Harbor/);
+});
+
+test("the local planner also supplies the task for a pre-routed search",async()=>{
+  const task={kind:"discover",requirements:[
+    {quote:"fewer than ten songs",relation:"lt",limit:10,unit:"songs"}
+  ],roles:["artist"],exclude:[]};
+  let observed=false;
+  const report=await runBrainEvaluation({
+    scenarios:[byId("verification-album-songs")],mode:"live",model:"fixture-model",
+    repetitions:1,liveWeb:true,
+    planWeb:async()=>({search:true,query:"moody metal albums under ten tracks",task,reason:"Find fitting albums"}),
+    infer:async({stepIndex,researchQuery,researchTask})=>{
+      if(stepIndex===0){
+        observed=true;
+        assert.equal(researchQuery,"moody metal albums under ten tracks");
+        assert.deepEqual(researchTask,task);
+      }
+      return "A sourced album.";
+    }
+  });
+  assert.equal(report.cases[0].steps[0].actualRoute,"research");
+  assert.equal(observed,true);
+  assert.equal(report.cases[0].steps[0].error,undefined);
 });

@@ -82,11 +82,18 @@ pub fn verify(
         || proposal.quote.chars().count()>550 { return None; }
     let source=sources.get(proposal.source.checked_sub(1)?)?;
     let quote=normalize(&proposal.quote);
-    if !normalize(&source.content).contains(quote.as_str()) {return None}
+    if !normalize(&source.content).contains(quote.as_str())
+        && !normalize(&source.title).contains(quote.as_str()) {return None}
     let subject=normalize(work);
     let value=normalize(name);
     let matched=clauses(&proposal.quote).into_iter().any(|clause|{
         let c=normalize(clause);
+        // Exact-title catalog entries can put a labeled credit on its own
+        // line. Collection pages cannot establish that link from a header.
+        let labeled_credit = normalize(&source.title) == subject
+            && markers.iter().any(|marker| marker.contains(':') &&
+                c.starts_with(&format!("{marker}{value}")));
+        if labeled_credit {return true}
         if !c.contains(subject.as_str()) || !c.contains(value.as_str()) {return false}
         // A director merely mentioned in the same sentence as the movie
         // is not its director. Require an explicit role-phrase leading

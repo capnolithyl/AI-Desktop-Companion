@@ -44,10 +44,9 @@ export function planDesktopWebExecution(input: DesktopWebInput): DesktopWebPolic
     input.existingSearch ? "Search panel supplied results already" : null;
   const eligible = reason === null;
   return {
-    // Even casual chat reaches the *local* model, which can return search:false.
-    // This avoids keyword gates mistakenly treating follow-up constraints as
-    // isolated preferences (or personal opinions as search requests).
-    canPlanPublicWeb: eligible && input.planMode === "chat",
+    // Both conversation and an explicit search can use the local planner.
+    // On an explicit search it can supply the target and verification criteria.
+    canPlanPublicWeb: eligible && input.planMode !== "factual",
     // Cloud tools must not receive free-form chat before a validated local
     // public-search decision. Explicitly routed research already has a public
     // task and still goes through backend URL/query permission checks.

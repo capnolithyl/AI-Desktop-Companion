@@ -598,18 +598,23 @@
             if(step.webExecution.researchAudit){
               var proof=document.createElement("small");
               var audit=step.webExecution.researchAudit;
-              proof.textContent="Source-anchored extraction: "+audit.status+
+              proof.textContent="Evidence: "+audit.status+
                 " | quote-matched: "+audit.accepted+
-                " | rejected: "+audit.rejected+
-                " (not independent fact verification)";
+                " | rejected: "+audit.rejected;
               section.append(proof);
+              if(audit.taskKind || audit.followupQuery){
+                var taskDetail=document.createElement("small");
+                taskDetail.textContent=(audit.taskKind?"Research task: "+audit.taskKind:"")+
+                  (audit.taskSubject?" · "+audit.taskSubject:"")+
+                  (audit.followupQuery?" | Follow-up search: "+audit.followupQuery:"");
+                section.append(taskDetail);
+              }
               if(audit.recommendationTask){
                 var shortlist=document.createElement("small");
-                shortlist.textContent="Source-screened recommendations: "+
+                shortlist.textContent="Candidates with evidence: "+
                   ((audit.recommendationApproved||[]).join(", ")||"none supported")+
                   " | rejected: "+(audit.recommendationRejected||0)+
                   " | hard constraints: "+(audit.constraintsChecked||0)+
-                  " | style/genre criteria: "+(audit.featuresChecked||0)+
                   " | attributed roles: "+(audit.relationsChecked||0)+
                   " | prior references excluded: "+(audit.exclusionsChecked||0);
                 section.append(shortlist);

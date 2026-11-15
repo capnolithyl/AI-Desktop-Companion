@@ -4,7 +4,7 @@
  * The CI checker detects unmapped Tauri commands, missing files and stale versions.
  * Add a feature here when adding capability, and update the matching source/docs.
  */
-export const CAPABILITY_RELEASE = "0.9.8";
+export const CAPABILITY_RELEASE = "0.9.24";
 
 export type CapabilityStage = "implemented" | "experimental" | "planned";
 export type RuntimeDependency = "none" | "ollama" | "search" | "mem0" | "voice" | "vision" | "pocket";
@@ -183,7 +183,7 @@ export const CAPABILITIES: readonly Capability[] = [
     stage:"experimental",runtime:"none",
     keywords:["brain","evaluation","test","regression","debug","diagnostics","benchmark","routing","memory","dashboard","manual","brain lab"],
     sources:["src/brain-eval.ts","src/brain-eval-manager.ts","src/BrainEvalPanel.tsx","src/App.tsx","src-tauri/src/lib.rs","server/index.mjs","server/public/index.html"],
-    docs:["docs/brain-lab.md"],commands:["brain_eval_export"]
+    docs:["docs/brain-lab.md"],commands:["brain_eval_export","brain_eval_load_latest"]
   },
   {
     id:"self-knowledge",label:"Self-knowledge of features, docs and source",category:"AI",

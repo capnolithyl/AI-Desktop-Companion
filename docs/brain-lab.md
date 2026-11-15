@@ -9,6 +9,34 @@ component or browser tab; closing a panel does not cancel it.
 This does not rebuild the installer.
 
 
+## v0.9.24 research planning and evidence
+
+Live run `eval-1794711699279-2uir5` covered 13 scenarios and 32 turns. It
+recorded 21 searched turns, nine empty shortlists, eleven turns that passed
+through general extraction or raw excerpts, and one admitted shortlist.
+The movie follow-up in #74 switched subjects, and #75 supplied track counts
+that its sources did not establish.
+
+The local planner now passes its selected task, target, numeric limits, and
+requested credits to the native evidence pass. The planner can resolve a
+reference from the previous public result. The quotes for the new answer
+come from the retrieved sources. A discovery task may make one focused
+lookup for missing details on a promising candidate. For example, it can search
+for a show's episode count after a general recommendation page names it.
+The model judges qualitative fit by meaning. Rust checks the original
+user wording, normalized comparisons, and source-bound credits.
+
+When structured extraction fails, the reply states the gap in evidence.
+When verification finds one of several requested details for the selected
+work, the notes identify the remaining gaps. Brain Lab exports the app build,
+the chosen task, unvalidated limits, and focused follow-up queries. Scenarios
+#56 and #64 also flag the two irrelevant memories observed in this run.
+
+After the phone updater finishes and the desktop reconnects, run all **77**
+scenarios in **Live · 1×**. Export the JSON in the morning. Review #65 and
+#74–77 for evidence coverage, #57–60 and #62–66 for regressions, and leave
+conversational results in review until their replies are inspected.
+
 ## v0.9.23 normalized quantities, typed attribution and source-of-constraint isolation
 
 **Why:** The recovered real-web 0.9.22 Brain Lab run

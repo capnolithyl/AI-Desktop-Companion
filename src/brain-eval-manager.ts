@@ -6,7 +6,8 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { Settings } from "./storage";
 import { shouldUseLocalThinking } from "./reasoning-mode";
-import { planPublicWebTools } from "./unified-planner";
+import { planPublicWebTools, type PublicResearchContext } from "./unified-planner";
+import type { ResearchAudit } from "./debug-log";
 import { responseFocusGuidance } from "./conversation-engine";
 import { PERSONAL_DETAIL_GROUNDING_GUIDANCE } from "./personal-grounding";
 import { chatRuntimeContext } from "./runtime-context";
@@ -50,7 +51,7 @@ export function reviewBrainEvalScenario(id:string,mode:EvalMode,model:string,dec
 }
 import {
   EVAL_SCENARIOS, runBrainEvaluation, brainEvalMetrics, brainEvalMarkdown,
-  type EvalMode, type EvalReport, type EvalTurn, type EvalInferenceResult
+  type EvalMode, type EvalReport, type EvalTurn, type EvalInference
 } from "./brain-eval";
 
 export type BrainEvalRequest = {
@@ -182,11 +183,9 @@ async function execute(
   settings:Settings,request:BrainEvalRequest,
   scenarios:typeof EVAL_SCENARIOS, controller:AbortController
 ){
-  const infer=async({messages,selectedMemories,evidence,researchPlanned,researchQuery}:{
-    messages:EvalTurn[];
-    selectedMemories:ReadonlyArray<{id:number;fact:string}>;
-    evidence?:string;researchPlanned?:boolean;researchQuery?:string;scenarioId:string;stepIndex:number;
-  }):Promise<EvalInferenceResult>=>{
+  const infer:EvalInference=async({
+    messages,selectedMemories,evidence,researchPlanned,researchQuery,researchTask
+  })=>{
     if(controller.signal.aborted)throw new Error("Stopped by owner");
     const id="mikan-brain-eval-"+crypto.randomUUID();
     requestId=id;
@@ -218,22 +217,14 @@ async function execute(
         searchQuery?:string|null; sources?:Array<{
           title:string;url:string;content:string;engine:string;publishedDate?:string
         }>;sourcesCarriedOver?:boolean;
-        researchAudit?:{status:string;accepted:number;rejected:number;
-          elapsedMs:number;note:string;recommendationTask?:boolean;
-          recommendationApproved?:string[];recommendationRejected?:number;
-          constraintsChecked?:number;featuresChecked?:number;
-          exclusionsChecked?:number;relationsChecked?:number;
-          recommendationDetails?:Array<{source:number;title:string;creator:string;
-            identityQuote:string;fitQuote:string;measurements:Array<{
-              source:number;value:number;unit:string;quote:string}>;
-            relations:Array<{role:string;name:string;source:number;quote:string}>}>}|null;stats?:{
+        researchAudit?:ResearchAudit|null;stats?:{
         promptTokens?:number|null;outputTokens?:number|null;
         evalDurationNs?:number|null;loadDurationNs?:number|null
       }|null}>("chat_stream",{request:{
         requestId:id,endpoint:settings.endpoint,model:settings.model,provider:"local",
         messages:[{role:"system",content:system},...messages.map(m=>({role:m.role,content:m.content}))],
         autoSearch:!!researchQuery,researchRoute:researchQuery?"research":"chat",
-        researchQuery:researchQuery||undefined,
+        researchQuery:researchQuery||undefined,researchTask,
         sourcePreferences:settings.sourcePreferences,
         cacheHours:settings.cacheHours,
         thinkingRequested:
@@ -249,19 +240,19 @@ async function execute(
     }finally{if(requestId===id)requestId=null}
   };
   const planWeb=async(question:string,previous:EvalTurn[],
-    context?:{activePublicQuery?:string})=>{
+    context?:PublicResearchContext)=>{
     if(controller.signal.aborted)throw new Error("Stopped by owner");
     const decision=await planPublicWebTools(question,[],async prompt=>
       invoke<string>("condense_local_context",{
         endpoint:settings.endpoint,model:settings.model,prompt,
-        contextWindow:settings.contextWindow,maxOutputTokens:250,timeoutMs:22000
+        contextWindow:settings.contextWindow,maxOutputTokens:380,timeoutMs:22000
       }),{automaticWebEnabled:true,sourcePreferences:settings.sourcePreferences,
-        history:previous,activePublicQuery:context?.activePublicQuery});
+        history:previous,...context});
     return {search:decision.search,query:decision.query,reason:decision.reason,
-      intent:decision.intent};
+      intent:decision.intent,task:decision.task};
   };
   const result=await runBrainEvaluation({
-    mode:request.mode,model:settings.model,scenarios,repetitions:request.repetitions,
+    mode:request.mode,model:settings.model,build:BRAIN_EVAL_BUILD,scenarios,repetitions:request.repetitions,
     signal:controller.signal,...(request.mode==="live"?{infer,planWeb,liveWeb:true}:{}),
     onProgress:(done,total,label)=>setStatus({done,total,label})
   });

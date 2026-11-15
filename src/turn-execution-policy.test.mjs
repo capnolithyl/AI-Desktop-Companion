@@ -15,7 +15,7 @@ test("policy only decides permissions and tool routing, not language intent",()=
   assert.equal(local.canPlanPublicWeb,true);
   assert.equal(local.cloudMaySearch,false);
   const explicit=planDesktopWebExecution({...defaults,planMode:"research"});
-  assert.equal(explicit.canPlanPublicWeb,false);
+  assert.equal(explicit.canPlanPublicWeb,true);
   const cloudChat=planDesktopWebExecution({...defaults,provider:"openrouter"});
   assert.equal(cloudChat.cloudMaySearch,false,
     "A cloud model must not receive arbitrary chat web tools before local public planning");

@@ -1,4 +1,5 @@
 import type { WebResult } from "./web-search";
+import type { ResearchLimit, ResearchTask } from "./unified-planner.ts";
 
 export type OllamaStats = {
   outputTokens: number | null;
@@ -10,11 +11,32 @@ export type OllamaStats = {
 };
 
 export type ResearchAudit = {
-  status: "used" | "fallback";
+  status: string;
   accepted: number;
   rejected: number;
   elapsedMs: number;
   note: string;
+  taskKind?: ResearchTask["kind"];
+  taskSubject?: string;
+  ignoredRequirements?: ResearchLimit[];
+  followupQuery?: string;
+  recommendationTask?: boolean;
+  recommendationApproved?: string[];
+  recommendationRejected?: number;
+  constraintsChecked?: number;
+  featuresChecked?: number;
+  exclusionsChecked?: number;
+  relationsChecked?: number;
+  recommendationDetails?: {
+    source: number;
+    title: string;
+    creator: string;
+    identityQuote: string;
+    fitQuote: string;
+    measurements: {source:number;value:number;unit:string;quote:string}[];
+    relations: {role:string;name:string;source:number;quote:string}[];
+    missingDetails?: string[];
+  }[];
 };
 
 export type MemoryRecallAudit = {

@@ -331,3 +331,27 @@ test("a contradictory model disposition cannot launch a public tool",()=>{
     assert.match(parsed.reason,/Contradictory/);
   }
 });
+
+test("verification keeps the previous result in a privacy-checked query",async()=>{
+  const context={
+    activePublicQuery:"creepy animated film recommendations",
+    publicSubjects:["Lantern Harbor"],
+    publicAnswer:"Try Lantern Harbor, its director is still unknown."
+  };
+  const result=await planPublicWebTools("Can you check who directed it?",facts,async prompt=>{
+    assert.match(prompt,/PUBLIC RESULTS FROM THE PREVIOUS TURN.*Lantern Harbor/);
+    assert.match(prompt,/local reference only, no claims here are evidence/);
+    return JSON.stringify({intent:"refine",web:{
+      search:true,query:"director credits",task:{kind:"verify",subject:"Lantern Harbor",roles:["director"]}
+    }});
+  },{automaticWebEnabled:true,sourcePreferences:prefs,...context});
+  assert.equal(result.query,'"Lantern Harbor" director credits');
+  assert.equal(result.task.kind,"verify");
+  assert.deepEqual(result.task.roles,["director"]);
+
+  const privateTarget=parseWebToolDecision(JSON.stringify({web:{
+    search:true,query:"director credits",task:{kind:"verify",subject:"Alex Example"}
+  }}),true,prefs,facts);
+  assert.equal(privateTarget.search,false);
+  assert.match(privateTarget.reason,/private identity/);
+});

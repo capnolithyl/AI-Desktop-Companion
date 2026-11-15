@@ -10,6 +10,8 @@ import { rankMemories, type RankableMemory } from "./memory-ranking.ts";
 import { isPersonalMemoryQuestion } from "./personal-memory.ts";
 import type { ResearchTurn } from "./research-routing.ts";
 import type { WebResult } from "./web-search.ts";
+import type { ResearchAudit } from "./debug-log.ts";
+import type { PublicResearchContext, ResearchTask } from "./unified-planner.ts";
 
 export type EvalRoute = "chat" | "research" | "factual" | "non-research" | "any";
 export type EvalExpectation = {
@@ -29,6 +31,13 @@ export type EvalStep = { user: string; expect: EvalExpectation; explanation?: st
 export type EvalScenario = { id: string; label: string; group: string; steps: EvalStep[]; note?: string };
 export type EvalTurn = ResearchTurn & { role:"user"|"assistant"; content:string };
 export type EvalMode = "routing" | "live";
+type EvalWebPlan = {search:boolean;query?:string;reason:string;intent?:string;task?:ResearchTask};
+type EvalWebExecution = {
+  query:string|null;
+  results:WebResult[];
+  sourcesCarriedOver:boolean;
+  researchAudit?:ResearchAudit|null;
+};
 export type EvalStepResult = {
   user: string;
   expected: EvalExpectation;
@@ -39,15 +48,10 @@ export type EvalStepResult = {
   deterministicWebAllowed: boolean;
   plannedWeb: boolean | null;
   webPass: boolean | null;
-  webPlannerDecision?: {search:boolean;query?:string;reason:string;intent?:string};
+  webPlannerDecision?: EvalWebPlan;
   /** Observed Rust/SearXNG execution, distinct from an AI decision to search. */
-  webExecution?:{query:string|null;results:WebResult[];sourcesCarriedOver:boolean;
-    researchAudit?:{status:string;accepted:number;rejected:number;elapsedMs:number;note:string;
-      recommendationTask?:boolean;recommendationApproved?:string[];
-      recommendationRejected?:number;constraintsChecked?:number;featuresChecked?:number;
-        exclusionsChecked?:number;relationsChecked?:number;
-        recommendationDetails?:EvalVerifiedRecommendation[]}|null};
-  /** Previous validated public query available to this turn's planner (never assistant prose). */
+  webExecution?: EvalWebExecution;
+  /** Previous validated public query available to this turn's planner. */
   activePublicQuery?: string;
   selectedMemoryIds: number[];
   selectedMemory: {id:number;fact:string}[];
@@ -79,33 +83,20 @@ export type EvalCaseResult = {
   id:string; number?:number; label:string; group:string; repeat:number; steps:EvalStepResult[];
   pass:boolean; elapsedMs:number;
 };
-export type EvalVerifiedRelation = {
-  role:string;name:string;source:number;quote:string;
-};
-export type EvalVerifiedRecommendation = {
-  source:number;title:string;creator:string;
-  identityQuote:string;fitQuote:string;
-  measurements:Array<{source:number;value:number;unit:string;quote:string}>;
-  relations:EvalVerifiedRelation[];
-};
 export type EvalReport = {
   version:1; runId:string; startedAt:string; finishedAt:string;
   mode:EvalMode; model:string; attempts:number; scenarios:string[];
   // Recording simulated vs actual conditions prevents misleading scoreboards.
   environment:"isolated-synthetic"|"isolated-synthetic+live-public-web";
   liveWebEnabled:boolean; writesToRealMemories:false;
+  build?:string;
   cases:EvalCaseResult[];
 };
 export type EvalInferenceResult = string | {
   text:string;
   stats?: {promptTokens?:number|null;outputTokens?:number|null;evalDurationNs?:number|null;loadDurationNs?:number|null};
   modelUsed?:string;
-  webExecution?:{query:string|null;results:WebResult[];sourcesCarriedOver:boolean;
-    researchAudit?:{status:string;accepted:number;rejected:number;elapsedMs:number;note:string;
-      recommendationTask?:boolean;recommendationApproved?:string[];
-      recommendationRejected?:number;constraintsChecked?:number;featuresChecked?:number;
-        exclusionsChecked?:number;relationsChecked?:number;
-        recommendationDetails?:EvalVerifiedRecommendation[]}|null};
+  webExecution?:EvalWebExecution;
 };
 export type EvalInference = (args:{
   messages:EvalTurn[];
@@ -113,15 +104,17 @@ export type EvalInference = (args:{
   evidence?:string;
   researchPlanned?:boolean;
   researchQuery?:string;
+  researchTask?:ResearchTask;
   scenarioId:string;
   stepIndex:number;
 })=>Promise<EvalInferenceResult>;
 export type EvalPlanner = (input:string,previous:EvalTurn[],
-  context?:{activePublicQuery?:string})=>Promise<{search:boolean;query?:string;reason:string;intent?:string}>;
+  context?:PublicResearchContext)=>Promise<EvalWebPlan>;
 export type EvalOptions = {
   mode:EvalMode;
   repetitions:number;
   model:string;
+  build?:string;
   scenarios:ReadonlyArray<EvalScenario>;
   signal?:AbortSignal;
   infer?:EvalInference;
@@ -419,7 +412,7 @@ export const EVAL_SCENARIOS:ReadonlyArray<EvalScenario>=[
       "There's a whole vein of strange-space horror worth exploring.",{route:"any",web:true}),
     conversation("Prefer something short this time.",
       "Treat length as a refinement to the book-discovery need.",
-      "Shorter, still creepy.",{route:"any",web:true})),
+      "Shorter, still creepy.",{route:"any",web:true,excludeMemory:[117]})),
   scenario("discovery-anime","Implicit short horror anime recommendations","Conversational discovery",
     conversation("I'm running out of short horror anime to watch.",
       "An implied request for currently available real titles. Searching would help avoid making up availability.",
@@ -575,7 +568,7 @@ export async function runBrainEvaluation(options:EvalOptions):Promise<EvalReport
     environment:options.mode==="live"&&options.liveWeb
       ?"isolated-synthetic+live-public-web":"isolated-synthetic",
     liveWebEnabled:options.mode==="live"&&options.liveWeb===true,
-    writesToRealMemories:false,cases:[]
+    writesToRealMemories:false,build:options.build,cases:[]
   };
   const total=report.attempts*options.scenarios.reduce((n,s)=>n+s.steps.length,0);
   let done=0;
@@ -585,7 +578,7 @@ export async function runBrainEvaluation(options:EvalOptions):Promise<EvalReport
     const previous:EvalTurn[]=[];
     // A public discovery task is explicit structured state, not guessed from a
     // user phrase. Reset on each scenario and after any no-search decision.
-    let activePublicQuery:string|undefined;
+    let publicContext:PublicResearchContext={};
     const steps:EvalStepResult[]=[];
     for(let stepIndex=0;stepIndex<scenario.steps.length;stepIndex++){
       if(options.signal?.aborted)break;
@@ -613,8 +606,8 @@ export async function runBrainEvaluation(options:EvalOptions):Promise<EvalReport
       const distractors=(step.expect.memory?.length??0)>0
         ? memory.ids.filter(id=>!supportingIds.has(id)):[];
       const unexpected=(step.expect.excludeMemory??[]).filter(id=>memory.ids.includes(id));
-      let planned:{search:boolean;query?:string;reason:string;intent?:string}|undefined;
-      const priorPublicQuery=activePublicQuery;
+      let planned:EvalWebPlan|undefined;
+      const priorPublicQuery=publicContext.activePublicQuery;
       let answer:string|undefined;
       let webExecution:EvalStepResult["webExecution"]|undefined;
       let inferenceStats:EvalStepResult["inferenceStats"]|undefined;
@@ -627,12 +620,12 @@ export async function runBrainEvaluation(options:EvalOptions):Promise<EvalReport
           // exchange to previous after this callback, but observers and
           // async adapters must not see the history mutate retroactively.
           planned=await options.planWeb(step.user,previous.map(turn=>({...turn})),
-            {activePublicQuery});
+            {...publicContext});
         if(options.mode==="live" && options.infer){
           // Never search when the private permission boundary blocks web.
           // The local planner has already validated its proposed public query.
           const permission=webPolicy.blockedReason===null;
-          const publicQuery=permission && webPolicy.canPlanPublicWeb && planned?.search===true
+          const publicQuery=permission && webPolicy.canPlanPublicWeb && planned?.search===true && planned.query
             ?planned.query
             : permission && decision.plan.mode==="research" && decision.allowAutomaticWeb
               ?decision.plan.query:undefined;
@@ -640,6 +633,7 @@ export async function runBrainEvaluation(options:EvalOptions):Promise<EvalReport
             messages,selectedMemories:selected,evidence:step.mockEvidence,
             researchPlanned:planned?.search===true || decision.plan.mode==="research",
             researchQuery:options.liveWeb?publicQuery:undefined,
+            researchTask:options.liveWeb && publicQuery ? planned?.task : undefined,
             scenarioId:scenario.id,stepIndex
           });
           if(typeof response==="string")answer=response;
@@ -697,8 +691,13 @@ export async function runBrainEvaluation(options:EvalOptions):Promise<EvalReport
           (options.mode!=="live" || !!answer)&&!error
       };
       steps.push(result);
-      activePublicQuery=planned?.search===true&&typeof planned.query==="string"
-        ?planned.query:undefined;
+      const activePublicQuery=planned?.search===true ? planned.query
+        : webExecution?.query?.split(" → ")[0];
+      publicContext=activePublicQuery ? {
+        activePublicQuery,
+        publicSubjects:webExecution?.researchAudit?.recommendationApproved,
+        publicAnswer:webExecution?.results.length ? answer : undefined
+      } : {};
       previous.push({role:"user",content:step.user});
       // Planning mode uses fixed mock replies, preserving follow-up semantics.
       // Live mode uses the actual previous answer (including errors) as context.
@@ -735,6 +734,7 @@ export function brainEvalMetrics(report:EvalReport){
     webUnobserved:steps.filter(s=>s.webPass===null && s.expected.web!==undefined).length,
     webAgreement:ratio(steps.filter(s=>s.webPass===true).length,steps.filter(s=>s.webPass!==null).length),
     liveSearches:steps.filter(s=>!!s.webExecution?.query).length,
+    focusedFollowups:steps.filter(s=>!!s.webExecution?.researchAudit?.followupQuery).length,
     liveSearchesWithSources:steps.filter(s=>(s.webExecution?.results.length??0)>0).length,
     liveSources:steps.reduce((n,s)=>n+(s.webExecution?.results.length??0),0),
     evidencePasses:steps.filter(s=>["used","shortlist"].includes(
@@ -778,6 +778,7 @@ export function brainEvalMarkdown(report:EvalReport):string {
     "",
     "Run: "+report.runId+" • "+report.finishedAt,
     "Mode: "+report.mode+" • Model: "+report.model+" • Attempts: "+report.attempts,
+    ...(report.build ? ["App build: "+report.build] : []),
     "Synthetic/isolated private facts; no production memory writes. "+
       (report.liveWebEnabled?"PUBLIC WEB ENABLED: live local SearXNG searches.":"No live external searches."),
     "",
@@ -796,8 +797,9 @@ export function brainEvalMarkdown(report:EvalReport):string {
     "| Unobserved explicit web expectations | "+m.webUnobserved+" |",
     "| Model tokens per second | "+(m.tokensPerSecond??"n/a")+" |",
     "| Web planning agreement | "+m.webAgreement+"% |",
-    "| Actual public SearXNG searches | "+m.liveSearches+
-      " attempts; "+m.liveSearchesWithSources+" with results; "+m.liveSources+" source previews |",
+    "| Public research | "+m.liveSearches+
+      " searched turns; "+m.liveSearchesWithSources+" with results; "+
+      m.focusedFollowups+" focused follow-ups; "+m.liveSources+" source previews |",
     "| Structured evidence (not verified factual correctness) | "+m.evidencePasses+
       " turns with matched quotes; "+m.evidenceFacts+" extracts; "+m.evidenceUnavailable+
       " searched turns without accepted extracts |",
@@ -845,11 +847,16 @@ export function brainEvalMarkdown(report:EvalReport):string {
           lines.push("- Structured evidence extraction: "+audit.status+
             "; accepted "+audit.accepted+"; rejected "+audit.rejected+
             "; "+audit.elapsedMs+" ms; "+audit.note);
+          if(audit.taskKind)
+            lines.push("- Research task: "+audit.taskKind+(audit.taskSubject ? " | "+audit.taskSubject : ""));
+          if(audit.followupQuery)
+            lines.push("- Focused follow-up search: "+audit.followupQuery);
+          for(const limit of audit.ignoredRequirements??[])
+            lines.push("- Unvalidated limit: "+JSON.stringify(limit));
           if(audit.recommendationTask){
-            lines.push("- Recommendation gate: "+(audit.recommendationApproved??[]).length+
+            lines.push("- Candidate evidence: "+(audit.recommendationApproved??[]).length+
               " admitted; "+(audit.recommendationRejected??0)+" rejected; "+
               (audit.constraintsChecked??0)+" hard limits; "+
-              (audit.featuresChecked??0)+" style/genre requirements; "+
               (audit.exclusionsChecked??0)+" existing references excluded; "+
               (audit.relationsChecked??0)+" typed creator relations; candidates: "+
               (audit.recommendationApproved??[]).join(", "));
@@ -864,6 +871,8 @@ export function brainEvalMarkdown(report:EvalReport):string {
               for(const relation of candidate.relations)
                 lines.push("    Attribution ["+relation.source+"]: "+relation.role+
                   " = "+relation.name+" | "+relation.quote);
+              if(candidate.missingDetails?.length)
+                lines.push("    Still unconfirmed: "+candidate.missingDetails.join(", "));
             }
           }
         }
