@@ -48,6 +48,8 @@ export type EvalStepResult = {
   deterministicWebAllowed: boolean;
   plannedWeb: boolean | null;
   webPass: boolean | null;
+  /** Did an actually executed public search yield structurally validated evidence? */
+  evidencePass?: boolean | null;
   webPlannerDecision?: EvalWebPlan;
   /** Observed Rust/SearXNG execution, distinct from an AI decision to search. */
   webExecution?: EvalWebExecution;
@@ -665,6 +667,16 @@ export async function runBrainEvaluation(options:EvalOptions):Promise<EvalReport
       // Chat versus factual is an implementation choice, not automatically a
       // failure. Grade actual search intent and keep exact labels as diagnostics.
       const routePass=webPass!==false;
+      // A planned search is not a successfully answered search. This check uses
+      // only the observed Rust source/evidence trace, NEVER Qwen grading itself.
+      const audit=webExecution?.researchAudit;
+      const evidencePass=options.liveWeb && webExecution?.query
+        ? webExecution.results.length===0 ? false
+          : audit ? (audit.status==="used" || audit.status==="shortlist") : null
+        : null;
+      if(evidencePass===false)answerFailures.push(
+        "Public search executed but produced no validated evidence; the user's research goal was not fulfilled."
+      );
       // Never present an unobserved search decision as passing a behavioral test.
       // Fast mode deliberately cannot run the optional model planner.
       const reviewRequired=(options.mode==="live" &&
@@ -678,7 +690,7 @@ export async function runBrainEvaluation(options:EvalOptions):Promise<EvalReport
         user:step.user,expected:step.expect,actualRoute:decision.plan.mode,
         canPlanPublicWeb:webPolicy.canPlanPublicWeb,cloudMaySearch:webPolicy.cloudMaySearch,
         blockedReason:webPolicy.blockedReason,deterministicWebAllowed:decision.allowAutomaticWeb,
-        plannedWeb,webPass,webPlannerDecision:planned,
+        plannedWeb,webPass,evidencePass,webPlannerDecision:planned,
         ...(webExecution?{webExecution}:{}),
         ...(priorPublicQuery?{activePublicQuery:priorPublicQuery}:{}),
         selectedMemoryIds:memory.ids,selectedMemory:selected,
@@ -687,7 +699,7 @@ export async function runBrainEvaluation(options:EvalOptions):Promise<EvalReport
         routeLabelMatch,routePass,memoryPass,answerPass,reviewRequired,
         answerFailures,qualityFlags,answer,inferenceStats,modelUsed,error,
         elapsedMs:Date.now()-began,
-        pass:routePass&&memoryPass&&answerPass!==false&&
+        pass:routePass&&memoryPass&&answerPass!==false&&evidencePass!==false&&
           (options.mode!=="live" || !!answer)&&!error
       };
       steps.push(result);
@@ -753,6 +765,7 @@ export function brainEvalMetrics(report:EvalReport){
     evidenceFacts:steps.reduce((n,s)=>n+(s.webExecution?.researchAudit?.accepted??0),0),
     evidenceUnavailable:steps.filter(s=>s.webExecution?.query &&
       !["used","shortlist"].includes(s.webExecution?.researchAudit?.status??"")).length,
+    evidenceFailures:steps.filter(s=>s.evidencePass===false).length,
     unnecessaryWeb:steps.filter(s=>s.webPass===false&&s.plannedWeb===true).length,
     missedWeb:steps.filter(s=>s.webPass===false&&s.plannedWeb===false).length,
     tokensPerSecond:(()=>{
