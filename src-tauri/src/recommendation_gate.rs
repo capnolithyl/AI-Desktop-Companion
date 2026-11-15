@@ -443,6 +443,37 @@ mod tests {
     }
 
     #[test]
+    fn movie_runtime_and_director_and_studio_roles_are_screened_together() {
+        let content="Lantern Harbor runs for 95 minutes. Lantern Harbor was directed by June Vale. Lantern Harbor production studio: North Shore Pictures. Lantern Harbor is an atmospheric horror film.";
+        let mut candidate=item("Lantern Harbor",
+            "Lantern Harbor was directed by June Vale.",
+            "Lantern Harbor is an atmospheric horror film.",
+            Some(Measurement{source:1,value:95.0,unit:"minutes".into(),
+                quote:"Lantern Harbor runs for 95 minutes.".into()}));
+        candidate.creator="June Vale".into();
+        candidate.relations=vec![
+            attribution::ProposedRelation{source:1,role:"director".into(),
+                name:"June Vale".into(),
+                quote:"Lantern Harbor was directed by June Vale.".into()},
+            attribution::ProposedRelation{source:1,role:"studio".into(),
+                name:"North Shore Pictures".into(),
+                quote:"Lantern Harbor production studio: North Shore Pictures.".into()}
+        ];
+        let limit=HardRequirement{quote:"under two hours".into(),
+            relation:"lt".into(),limit:2.0,unit:"hours".into()};
+        let good=screen("a horror movie under two hours",vec![limit],
+            vec![candidate.clone()],&[src(content)]);
+        assert_eq!(good.approved.len(),1);
+        assert_eq!(good.relations_checked,2);
+        assert_eq!(good.approved[0].measurements[0].value,95.0);
+        candidate.relations[1].role="distributor".into();
+        let bad=screen("a horror movie under two hours",vec![
+            HardRequirement{quote:"under two hours".into(),relation:"lt".into(),
+                limit:2.0,unit:"hours".into()}],vec![candidate],&[src(content)]);
+        assert!(bad.approved.is_empty(),"Production studio cannot become distributor");
+    }
+
+    #[test]
     fn relational_author_evidence_is_required_before_naming_an_author() {
         let source="The novel The Hollow Places was written by T. Kingfisher. The Hollow Places features an eerie setting.";
         let mut candidate=item("The Hollow Places",
