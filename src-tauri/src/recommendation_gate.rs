@@ -455,6 +455,26 @@ mod tests {
     }
 
     #[test]
+    fn game_list_excerpt_recommends_individual_work_not_article_title() {
+        let text = "1. The Convenience Store – playtime 1hr · 2. Iron Lung – playtime 30-40 minutes · 3. No One Lives Under the Lighthouse – playtime 45-60 minutes";
+        let quote = "2. Iron Lung – playtime 30-40 minutes";
+        let item = item("Iron Lung", quote, quote, Some(Measurement {
+            source:1, value:40.0, unit:"minutes".into(), quote:quote.into()
+        }));
+        let task = ResearchTask {
+            kind: ResearchKind::Discover,
+            requirements: vec![HardRequirement {quote:"under two hours".into(),
+                relation:"lt".into(),limit:2.0,unit:"hours".into()}],
+            ..Default::default()
+        };
+        let outcome = screen_task("short horror games under two hours", &task,
+            vec![item], &[src(text)]);
+        assert_eq!(outcome.approved.len(), 1);
+        assert_eq!(outcome.approved[0].title, "Iron Lung");
+        assert_eq!(outcome.approved[0].measurements[0].value, 40.0);
+    }
+
+    #[test]
     fn anchored_candidate_without_fit_triggers_real_lookup_not_a_fake_recommendation() {
         // Search excerpt recorded from a live source, not a fabricated answer.
         let snippet = "2. Iron Lung – playtime 30-40 minutes";
