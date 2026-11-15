@@ -273,11 +273,11 @@ mod tests {
     fn item(title:&str, identity:&str, fit:&str, measurement:Option<Measurement>)->Suggestion {
         Suggestion{source:1,title:title.into(),creator:String::new(),
             identity_quote:identity.into(),fit_quote:fit.into(),
-            measurements:measurement.into_iter().collect()}
+            measurements:measurement.into_iter().collect(),relations:vec![]}
     }
     fn limit()->HardRequirement {
         HardRequirement{quote:"under six episodes".into(),relation:"lt".into(),
-            limit:6,unit:"episodes".into()}
+            limit:6.0,unit:"episodes".into()}
     }
     #[test]
     fn four_episode_work_is_admitted_and_twelve_episode_work_rejected() {
@@ -286,12 +286,12 @@ mod tests {
         let ok=item("Pet Shop of Horrors",
             "Pet Shop of Horrors has 4 episodes.",
             "Pet Shop of Horrors is a horror anthology series with unusual stories.",
-            Some(Measurement{source:1,value:4,unit:"episodes".into(),
+            Some(Measurement{source:1,value:4.0,unit:"episodes".into(),
                 quote:"Pet Shop of Horrors has 4 episodes.".into()}));
         let mut bad=item("Junji Ito Collection",
             "Junji Ito Collection has 12 episodes.",
             "Junji Ito Collection is an animated horror series based on manga.",
-            Some(Measurement{source:2,value:12,unit:"episodes".into(),
+            Some(Measurement{source:2,value:12.0,unit:"episodes".into(),
                 quote:"Junji Ito Collection has 12 episodes.".into()}));
         bad.source=2;
         let r=screen("short horror anime under six episodes",vec![limit()],
@@ -306,7 +306,7 @@ mod tests {
         let item=item("High-Rise Invasion",
             "Watch High-Rise Invasion. High-Rise Invasion is a horror survival series.",
             "High-Rise Invasion is a horror survival series.",
-            Some(Measurement{source:1,value:6,unit:"episodes".into(),
+            Some(Measurement{source:1,value:6.0,unit:"episodes".into(),
                 quote:"6 Episodes TV-MA 2024. Watch High-Rise Invasion.".into()}));
         let r=screen("under six episodes",vec![limit()],vec![item],&[src(merged)]);
         assert!(r.approved.is_empty());
@@ -321,7 +321,7 @@ mod tests {
         assert!(screen("under six episodes",vec![],vec![item],&[src(src_text)]).approved.is_empty());
         assert!(screen("under six episodes",vec![HardRequirement{
             quote:"under six episodes".into(),relation:"lte".into(),
-            limit:6,unit:"episodes".into()}],vec![],&[src(src_text)]).approved.is_empty());
+            limit:6.0,unit:"episodes".into()}],vec![],&[src(src_text)]).approved.is_empty());
     }
     #[test]
     fn band_identity_requires_same_source_quotes_but_no_quantitative_gate() {
@@ -360,6 +360,79 @@ mod tests {
         assert_eq!(r.approved[0].title,"The Halo Effect");
         assert_eq!(r.rejected,1);
         assert_eq!(r.features_checked,1);
+    }
+
+    #[test]
+    fn runtime_units_and_song_track_aliases_follow_strict_user_limits() {
+        let movie="The film Quiet Harbor runs for 1h 35m. Quiet Harbor is a psychological horror film with tense atmosphere.";
+        let suggestion=item("Quiet Harbor",
+            "The film Quiet Harbor runs for 1h 35m.",
+            "Quiet Harbor is a psychological horror film with tense atmosphere.",
+            Some(Measurement{source:1,value:95.0,unit:"minutes".into(),
+                quote:"The film Quiet Harbor runs for 1h 35m.".into()}));
+        let req=HardRequirement{quote:"under 2 hours".into(),
+            relation:"lt".into(),limit:2.0,unit:"hours".into()};
+        let r=screen("a horror movie under 2 hours",vec![req],vec![suggestion],&[src(movie)]);
+        assert_eq!(r.approved.len(),1);
+
+        let album="The album Lantern Lines has 9 tracks. Lantern Lines is an atmospheric metal album.";
+        let suggestion=item("Lantern Lines",
+            "The album Lantern Lines has 9 tracks.",
+            "Lantern Lines is an atmospheric metal album.",
+            Some(Measurement{source:1,value:9.0,unit:"tracks".into(),
+                quote:"The album Lantern Lines has 9 tracks.".into()}));
+        let req=HardRequirement{quote:"less than 10 songs".into(),
+            relation:"lt".into(),limit:10.0,unit:"songs".into()};
+        let r=screen("an album with less than 10 songs",vec![req],vec![suggestion],&[src(album)]);
+        assert_eq!(r.approved.len(),1);
+    }
+
+    #[test]
+    fn explicit_prior_reference_artist_is_excluded_from_recommendations() {
+        let a="Dark Tranquillity is a melodic death metal band. Dark Tranquillity has a moody atmospheric sound.";
+        let b="The Halo Effect is a melodic death metal band. The Halo Effect performs atmospheric melodic death metal.";
+        let mut other=item("The Halo Effect","The Halo Effect is a melodic death metal band.",
+            "The Halo Effect performs atmospheric melodic death metal.",None);
+        other.source=2;
+        let ref_band=item("Dark Tranquillity","Dark Tranquillity is a melodic death metal band.",
+            "Dark Tranquillity has a moody atmospheric sound.",None);
+        let result=screen_with_criteria(
+            "I've been listening to Dark Tranquillity. Recommend me similar bands.",
+            vec![],vec![],vec!["Dark Tranquillity".into()],
+            vec![ref_band,other],&[src(a),src(b)]);
+        assert_eq!(result.approved.len(),1);
+        assert_eq!(result.approved[0].title,"The Halo Effect");
+        assert_eq!(result.rejected,1);
+        assert_eq!(result.exclusions_checked,1);
+    }
+
+    #[test]
+    fn copied_search_query_limit_is_not_allowed_when_the_user_never_requested_it() {
+        let candidate=item("Pet Shop of Horrors",
+            "Pet Shop of Horrors has 4 episodes.",
+            "Pet Shop of Horrors is a short horror anthology series.",None);
+        let sourced="Pet Shop of Horrors has 4 episodes. Pet Shop of Horrors is a short horror anthology series.";
+        let forged=HardRequirement{quote:"under 24 episodes".into(),
+            relation:"lt".into(),limit:24.0,unit:"episodes".into()};
+        let result=screen("I'm running out of short horror anime to watch",
+            vec![forged],vec![candidate],&[src(sourced)]);
+        assert!(result.approved.is_empty());
+        assert!(result.note.contains("actual words"));
+    }
+
+    #[test]
+    fn relational_author_evidence_is_required_before_naming_an_author() {
+        let source="The novel The Hollow Places was written by T. Kingfisher. The Hollow Places features an eerie setting.";
+        let mut candidate=item("The Hollow Places",
+            "The novel The Hollow Places was written by T. Kingfisher.",
+            "The Hollow Places features an eerie setting.",None);
+        candidate.creator="T. Kingfisher".into();
+        candidate.relations=vec![attribution::ProposedRelation{
+            role:"author".into(),name:"T. Kingfisher".into(),
+            source:1,quote:"The novel The Hollow Places was written by T. Kingfisher.".into()}];
+        let r=screen("books with eerie settings",vec![],vec![candidate],&[src(source)]);
+        assert_eq!(r.approved.len(),1);
+        assert_eq!(r.relations_checked,1);
     }
 
     #[test]
