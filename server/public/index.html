@@ -693,6 +693,8 @@
       if (run.savedFolder) lines.push("Detailed JSON + Markdown auto-saved on desktop.");
     } else lines.push("Ready for a manually started test run.");
     if (data.reportAvailable) lines.push("Latest downloadable report: "+data.reportRunId);
+    else if (phase==="complete" || phase==="stopped")
+      lines.push("Download pending: desktop report not yet accepted by the relay. The auto-saved files remain on your PC.");
     if (run.error) lines.push("Note: "+run.error);
     brainLabStatus.textContent = lines.join("\n");
   }
