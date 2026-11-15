@@ -326,6 +326,19 @@ fn assemble_evidence(
     ResearchEvidence { notes, audit, followup_query }
 }
 
+/// Ask the existing local model to propose source interpretations. The model
+/// neither decides which facts pass nor grades an answer; Rust validates each
+/// proposed quote against the actual SearXNG sources.
+async fn propose_source_facts(
+    client: &Client, url: &str, payload: &Value, timeout: Duration
+) -> Option<Value> {
+    let response = client.post(url).json(payload)
+        .timeout(timeout).send().await.ok()?
+        .error_for_status().ok()?;
+    let body: Value = response.json().await.ok()?;
+    serde_json::from_str(body["message"]["content"].as_str()?).ok()
+}
+
 /// Gather evidence for the existing plan before streaming the answer.
 /// Untrusted quotes stay in a data message; only the query goes to search.
 pub async fn extract(
@@ -398,14 +411,40 @@ pub async fn extract(
     if let Some(num_ctx) = context_window {
         payload["options"]["num_ctx"] = json!(num_ctx);
     }
-    let outcome = async {
-        let response = client.post(ollama_url).json(&payload)
-            .timeout(Duration::from_secs(55)).send().await.ok()?
-            .error_for_status().ok()?;
-        let response: Value = response.json().await.ok()?;
-        serde_json::from_str::<Value>(response["message"]["content"].as_str()?).ok()
-    }.await;
-    let mut evidence = assemble_evidence(outcome, user_request, task, sources);
+    let first = propose_source_facts(client, ollama_url, &payload, Duration::from_secs(55)).await;
+    let mut evidence = assemble_evidence(first, user_request, task, sources);
+    // One bounded repair attempt when Rust has positively rejected candidate
+    // evidence. It operates on the SAME real sources and enforces the SAME
+    // deterministic gate; it is not answer self-evaluation or a mock search.
+    // Do not retry an empty model response or a legitimately empty shortlist.
+    if evidence.notes.is_none() && evidence.audit.rejected > 0 {
+        let reasons = evidence.audit.rejected_details.iter().take(3)
+            .cloned().collect::<Vec<_>>();
+        if let Some(messages) = payload["messages"].as_array_mut() {
+            messages.push(json!({
+                "role": "user",
+                "content": format!(
+                    "The application's deterministic source validator rejected your previous extraction. \
+                     Re-extract ONCE from the same sources above, using their actual named individual subjects. \
+                     Do not copy article/list/video headings as item names when the user seeks an item within them. \
+                     Quote exact, contiguous source text; never invent missing measurements or credits. \
+                     Previous rejections (untrusted candidate data): {}",
+                    serde_json::to_string(&reasons).unwrap_or_default()
+                )
+            }));
+        }
+        if let Some(retry) = propose_source_facts(
+            client, ollama_url, &payload, Duration::from_secs(30)
+        ).await {
+            let repaired = assemble_evidence(Some(retry), user_request, task, sources);
+            // Retain the original diagnostic if the retry supplied no candidate
+            // at all; otherwise show what the LAST proposal actually failed.
+            if repaired.notes.is_some() || repaired.audit.rejected > 0 {
+                evidence = repaired;
+            }
+        }
+        evidence.audit.extraction_attempts = 2;
+    }
     evidence.audit.elapsed_ms = started.elapsed().as_millis() as u64;
     evidence
 }
