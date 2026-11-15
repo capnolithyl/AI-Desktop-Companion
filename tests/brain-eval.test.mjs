@@ -439,3 +439,31 @@ test("native Brain Lab report recovery reopens the last autosaved report after r
   assert.match(rust,/join\("Brain-Evaluations"\)/);
   assert.match(rust,/writesToRealMemories/);
 });
+
+test("Live report preserves source extraction diagnostics without declaring a claim verified",async()=>{
+  const report=await runBrainEvaluation({
+    scenarios:[byId("discovery-bands-wish")],mode:"live",
+    model:"fixture",repetitions:1,liveWeb:true,
+    planWeb:async()=>({search:true,query:"black metal bands similar to Immortal",
+      reason:"Public research"}),
+    infer:async({researchQuery})=>({
+      text:"There is a related artist in the search preview [1].",
+      webExecution:{
+        query:researchQuery,results:[{title:"Music article",
+          url:"https://example.org/music",content:"The source names an artist.",
+          engine:"test"}],sourcesCarriedOver:false,
+        researchAudit:{status:"used",accepted:2,rejected:1,
+          elapsedMs:1200,note:"Exact quotes matched; claims remain unverified."}
+      }
+    })
+  });
+  const step=report.cases[0].steps[0];
+  assert.equal(step.webExecution.researchAudit.accepted,2);
+  assert.equal(brainEvalMetrics(report).evidencePasses,2);
+  assert.equal(brainEvalMetrics(report).evidenceFacts,4);
+  assert.equal(brainEvalMetrics(report).evidenceUnavailable,0);
+  assert.equal(step.reviewRequired,true);
+  assert.equal(step.answerPass,null);
+  assert.match(brainEvalMarkdown(report),/Structured evidence extraction: used/);
+  assert.match(brainEvalMarkdown(report),/not independently fact-verified|not verified factual correctness/i);
+});
