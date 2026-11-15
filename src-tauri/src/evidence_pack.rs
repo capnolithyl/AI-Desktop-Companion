@@ -78,6 +78,25 @@ fn validate(candidate: FactCandidate, sources: &[SearchResult]) -> Option<Ground
     if !numbers_in_claim.is_subset(&numbers_in_quote) {
         return None;
     }
+    // A number in an unrelated card, sentence or neighboring search result
+    // is NOT evidence about this subject. Search previews frequently merge
+    // adjacent titles with counts belonging to *different* works.
+    // This structural check is independent of genre, artist or wording.
+    if !numbers_in_claim.is_empty() {
+        let subject_key = normalize(subject);
+        let anchored = quote
+            .split(['.', '!', '?', ';', '\n'])
+            .map(str::trim)
+            .filter(|clause| normalize(clause).contains(&subject_key))
+            .any(|clause| {
+                let numbers: HashSet<&str> = clause
+                    .split(|character: char| !character.is_ascii_digit())
+                    .filter(|piece| !piece.is_empty())
+                    .collect();
+                numbers_in_claim.is_subset(&numbers)
+            });
+        if !anchored { return None; }
+    }
     Some(GroundedFact {
         source: candidate.source,
         subject: subject.to_owned(),
@@ -279,6 +298,22 @@ mod tests {
         let entry = candidate(1, "Ember Tide", "Ember Tide confirmed an album in 2027.",
             "The band Ember Tide confirmed a new record will arrive in 2027, subject to production.");
         assert!(validate(entry, &sources).is_some());
+    }
+
+    #[test]
+    fn numbers_must_belong_to_the_same_work_not_a_neighboring_result() {
+        let sources = vec![make_source("Mixed streaming catalog",
+            "6 Episodes TV-MA 2024. My List. Watch. High-Rise Invasion. A spooky survival anime series.")];
+        assert!(validate(candidate(1, "High-Rise Invasion",
+            "High-Rise Invasion has 6 episodes.",
+            "6 Episodes TV-MA 2024. My List. Watch. High-Rise Invasion. A spooky survival anime series."),
+            &sources).is_none(), "A 6-episode label before a different title proves nothing");
+        let verified = vec![make_source("Episode list",
+            "Pet Shop of Horrors has 4 episodes. Each standalone tale unfolds in a mysterious pet shop.")];
+        assert!(validate(candidate(1, "Pet Shop of Horrors",
+            "Pet Shop of Horrors has 4 episodes.",
+            "Pet Shop of Horrors has 4 episodes. Each standalone tale unfolds in a mysterious pet shop."),
+            &verified).is_some());
     }
 
     #[test]
