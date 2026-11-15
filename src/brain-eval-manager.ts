@@ -262,7 +262,7 @@ async function execute(
         endpoint:settings.endpoint,model:settings.model,prompt,
         contextWindow:settings.contextWindow,maxOutputTokens:380,timeoutMs:22000
       }),{automaticWebEnabled:true,sourcePreferences:settings.sourcePreferences,
-        history:previous,...context});
+        history:previous,relevantUserFacts:selectedFacts,...context});
     return {search:decision.search,query:decision.query,reason:decision.reason,
       intent:decision.intent,task:decision.task};
   };
