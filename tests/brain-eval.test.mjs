@@ -22,7 +22,7 @@ test("broad isolated test catalog covers multiple intentions and branches",()=>{
 });
 
 test("scenario numbers stay stable when a subset is selected",()=>{
-  assert.equal(EVAL_SCENARIOS.length,77);
+  assert.equal(EVAL_SCENARIOS.length,81);
   assert.equal(brainScenarioNumber(EVAL_SCENARIOS[0].id),1);
   assert.equal(brainScenarioNumber(EVAL_SCENARIOS[72].id),73);
   assert.match(brainScenarioLabel(EVAL_SCENARIOS[0].id,EVAL_SCENARIOS[0].label),/^#01 · /);
@@ -31,6 +31,10 @@ test("scenario numbers stay stable when a subset is selected",()=>{
       "verification-book-author","verification-game-playtime"]
     .map(brainScenarioNumber),[74,75,76,77],
     "old scenario numbers stay stable while new proof cases append");
+  assert.deepEqual(["correction-entity-type","correction-known-dislike",
+      "correction-reference-exclusion","correction-challenged-source"]
+    .map(brainScenarioNumber),[78,79,80,81],
+    "new correction scenarios append without changing any old numbers");
   assert.equal(brainScenarioLabel("not-in-catalog","Custom test"),"Custom test");
 });
 test("a richer synthetic memory can prove the same fact without matching an exact record ID",()=>{
@@ -67,6 +71,56 @@ test("review-only heuristics flag rambling answers without inventing a semantic 
   assert.deepEqual(brainReplyQualityFlags("That sounds cool!",conversational,8),[]);
   assert.deepEqual(brainReplyQualityFlags(undefined,conversational,0),[]);
 });
+test("semantic persona correction is human-reviewed instead of phrase-matched",async()=>{
+  const report=await runBrainEvaluation({
+    mode:"live",model:"test-only",repetitions:1,
+    scenarios:[byId("separate-personas")],
+    infer:async({stepIndex})=>stepIndex===0?"Your favorite color is moss green.":
+      "Not at all. Your preferences and mine are separate."
+  });
+  const corrected=report.cases[0].steps[1];
+  assert.equal(corrected.answerPass,null);
+  assert.equal(corrected.reviewRequired,true);
+  assert.equal(corrected.pass,true);
+});
+
+test("corrected public identity requires an updated public query",async()=>{
+  const scenario=byId("correction-entity-type");
+  const report=await runBrainEvaluation({
+    mode:"live",model:"test-only",repetitions:1,scenarios:[scenario],
+    planWeb:async(question)=>question.includes("Norwegian")
+      ? {search:true,query:"Immortal Norwegian black metal band",
+          reason:"The user clarified which public entity they meant"}
+      : {search:false,reason:"Initial name is ambiguous"},
+    infer:async()=> "Immortal is a Norwegian black metal band."
+  });
+  const turn=report.cases[0].steps[1];
+  assert.equal(turn.webPlannerDecision.query,"Immortal Norwegian black metal band");
+  assert.equal(turn.pass,true);
+  assert.equal(turn.reviewRequired,true);
+  assert.equal(turn.webExecution,undefined,
+    "A planning-only unit test must never fabricate actual public search results");
+});
+
+test("a corrected preference must become a structured exclusion",async()=>{
+  const scenario=byId("correction-known-dislike");
+  const run=async(exclude)=>runBrainEvaluation({
+    mode:"live",model:"test-only",repetitions:1,scenarios:[scenario],
+    planWeb:async(question)=>({search:true,
+      query:question.includes("Exclude")?"Fire Emblem alternatives tactical RPG":"tactical RPG Fire Emblem alternatives",
+      reason:"Check tactical RPG options",
+      task:{kind:"discover",requirements:[],roles:[],exclude}
+    }),
+    infer:async()=> "The options need source verification."
+  });
+  const missing=await run([]);
+  assert.ok(missing.cases[0].steps[1].answerFailures.some(f=>f.includes("XCOM")));
+  assert.equal(missing.cases[0].steps[1].pass,false);
+  const fixed=await run(["XCOM"]);
+  assert.ok(!fixed.cases[0].steps[1].answerFailures.some(f=>f.includes("XCOM")));
+  assert.equal(fixed.cases[0].steps[1].pass,true);
+});
+
 test("semantic answer assertion isn't exact wording or case-sensitive",()=>{
   assert.equal(sameMeaning("Absolutely! The singer is Nora Vale.","nora vale"),true);
   assert.deepEqual(scoreAnswer("Your favorite BAND is Cobalt Harbor, of course.",{
