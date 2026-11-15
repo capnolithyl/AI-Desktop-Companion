@@ -508,3 +508,52 @@ test("Live screen reports admitted and rejected recommendation candidates withou
   assert.equal(report.cases[0].steps[0].answerPass,null,
     "Screened excerpts never automatically certify reply accuracy");
 });
+
+test("Live report preserves normalized measurements and typed authors/directors without marking answers fact-checked",async()=>{
+  const details=[{
+    source:1,title:"The Hollow Places",creator:"T. Kingfisher",
+    identityQuote:"The Hollow Places was written by T. Kingfisher.",
+    fitQuote:"The Hollow Places is an atmospheric horror novel.",
+    measurements:[{source:1,value:190,unit:"pages",
+      quote:"The Hollow Places has 190 pages in this edition."}],
+    relations:[{role:"author",name:"T. Kingfisher",source:1,
+      quote:"The Hollow Places was written by T. Kingfisher."}]
+  }];
+  const report=await runBrainEvaluation({
+    scenarios:[byId("discovery-book")],mode:"live",model:"fixture",
+    repetitions:1,liveWeb:true,
+    planWeb:async()=>({search:true,query:"short atmospheric horror books",
+      reason:"Public discovery"}),
+    infer:async({researchQuery})=>({
+      text:"The Hollow Places is a possible title [1].",
+      webExecution:{query:researchQuery,results:[{title:"Book catalog",
+        url:"https://example.org/book",engine:"test",content:"book evidence"}],
+        sourcesCarriedOver:false,researchAudit:{
+          status:"shortlist",accepted:1,rejected:0,elapsedMs:300,note:"Structural proof",
+          recommendationTask:true,recommendationApproved:["The Hollow Places"],
+          recommendationRejected:1,constraintsChecked:1,featuresChecked:0,
+          exclusionsChecked:0,relationsChecked:1,recommendationDetails:details
+        }}
+    })
+  });
+  const first=report.cases[0].steps[0];
+  assert.equal(first.webExecution.researchAudit.recommendationDetails[0].relations[0].role,"author");
+  assert.equal(first.webExecution.researchAudit.recommendationDetails[0].measurements[0].value,190);
+  assert.ok(brainEvalMetrics(report).attributedRoles>=1);
+  assert.match(brainEvalMarkdown(report),/Attribution \[1\]: author = T\. Kingfisher/);
+  assert.equal(first.answerPass,null);
+  assert.equal(first.reviewRequired,true);
+});
+
+test("production extractor verifies user-authored limits independently of search query hints",()=>{
+  const src=readFileSync(new URL("../src-tauri/src/lib.rs",import.meta.url),"utf8");
+  const evidence=readFileSync(new URL("../src-tauri/src/evidence_pack.rs",import.meta.url),"utf8");
+  const gate=readFileSync(new URL("../src-tauri/src/recommendation_gate.rs",import.meta.url),"utf8");
+  assert.match(src,/let actual_user_request = user_turns\.join/);
+  assert.match(src,/search_query\.as_deref\(\), &sources/);
+  assert.match(evidence,/USER'S OWN REQUESTS \(the ONLY source of constraints/);
+  assert.match(evidence,/screen_with_criteria\(/);
+  assert.match(gate,/quoted_requirement_valid\(question,r\)/);
+  assert.match(gate,/quantities::canonical/);
+  assert.match(gate,/attribution::verify/);
+});
