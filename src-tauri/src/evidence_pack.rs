@@ -31,6 +31,10 @@ pub struct ResearchAudit {
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub accepted_details: Vec<AcceptedFactAudit>,
     pub extraction_attempts: u8,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub candidate_leads: Vec<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub candidate_queries: Vec<String>,
     pub constraints_checked: usize,
     pub exclusions_checked: usize,
     pub relations_checked: usize,
@@ -273,6 +277,8 @@ fn assemble_evidence(
         rejected_details: vec![],
         accepted_details: vec![],
         extraction_attempts: 1,
+        candidate_leads: vec![],
+        candidate_queries: vec![],
         constraints_checked: 0,
         exclusions_checked: 0,
         relations_checked: 0,
