@@ -324,7 +324,7 @@ test("saved dislikes influence only the local planner, never raw search terms",a
   assert.match(captured,/dislikes XCOM and likes Fire Emblem/);
   assert.doesNotMatch(captured,/Alex Example|professional WordPress developer/,
     "Unrelated private profile/work memories must not enter local preference context");
-  assert.doesNotMatch(result.query??"",/The user|dislikes|private|Alex/);
+  assert.doesNotMatch(result.query??"",/The user|dislikes|private|Alex|XCOM/);
 });
 
 test("a user correction overrides old public entity interpretation",async()=>{
