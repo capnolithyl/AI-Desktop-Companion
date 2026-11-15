@@ -137,6 +137,9 @@ export function createDevSupervisor({
     return command(process.execPath,[process.env.npm_execpath,...args],{cwd,timeout:210000});
   },
   startChild=null,stopChild=null,
+  /** Injected for tests; only fixed Cargo check args are executed. */
+  cargoCheck=()=>command("cargo",["check","--locked","--manifest-path","src-tauri/Cargo.toml"],
+    {cwd,timeout:420000}),
   relayReady=null,
   desktopReady=loopbackDesktopReady,
   desktopReadyAttempts=180,desktopRetryMs=1000
@@ -367,6 +370,9 @@ export function createDevSupervisor({
       const fetched=await repoGit("rev-parse","refs/remotes/origin/"+UPDATE_BRANCH);
       if(fetched!==after)throw new Error("Remote branch moved. Check updates again.");
       dependenciesChanged=await dependencyChangesBetween(before,after);
+      const rustChanged=manageDesktop && Boolean((await repoGit(
+        "diff","--name-only",before,after,"--","src-tauri"
+      )).trim());
       publish({step:"Fast-forwarding approved branch"});
       await repoGit("merge","--ff-only",after);
       merged=true;
@@ -384,6 +390,10 @@ export function createDevSupervisor({
       await npmRun("test:brain");
       publish({step:"Building and testing authenticated browser relay"});
       await npmRun("test:server");
+      if(rustChanged){
+        publish({step:"Checking changed native Tauri/Rust source before restarting desktop"});
+        await cargoCheck();
+      }
       restartAttempted=true;
       await restartChildren();
       if(manageDesktop){
