@@ -178,9 +178,17 @@ fn valid_suggestion(item: Suggestion, requirements: &[HardRequirement],
         || !same_clause(&item.fit_quote, &item.title, None, None)
     { return None; }
     // Named work + creator must appear together in an identity quote.
-    if !item.creator.trim().is_empty()
-        && !same_clause(&item.identity_quote, &item.creator, None, None) {
-        return None;
+    if !item.creator.trim().is_empty() {
+        let title_key = norm(&item.title);
+        let creator_key = norm(&item.creator);
+        // A creator on the neighboring catalog card is not the creator
+        // of this work. Both names must share an exact source clause.
+        let paired = item.identity_quote.split(['.', '!', '?', ';', '\n'])
+            .any(|clause| {
+                let text = norm(clause);
+                text.contains(&title_key) && text.contains(&creator_key)
+            });
+        if !paired { return None; }
     }
 
     let mut confirmed = Vec::new();
@@ -331,6 +339,17 @@ mod tests {
         let r=screen("more atmospheric melodic death metal",vec![],vec![ok],&[src(text)]);
         assert_eq!(r.approved.len(),1);
     }
+    #[test]
+    fn unrelated_neighboring_creator_does_not_validate_a_work() {
+        let content="The album Hegemony was released by Samael in 2017. Emperor is a Norwegian black metal band. Hegemony is an industrial metal album.";
+        let mut proposal=item("Hegemony",
+            "The album Hegemony was released by Samael in 2017. Emperor is a Norwegian black metal band.",
+            "Hegemony is an industrial metal album.",None);
+        proposal.creator="Emperor".into();
+        assert!(screen("industrial metal albums",vec![],vec![proposal],&[src(content)])
+            .approved.is_empty(), "Creator from another sentence must not pass");
+    }
+
     #[test]
     fn a_creator_not_appearing_with_the_title_is_rejected() {
         let text="The book A Short Stay in Hell is a novella. A Short Stay in Hell explores a very large mysterious library.";
