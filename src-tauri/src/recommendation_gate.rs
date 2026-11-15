@@ -88,6 +88,8 @@ pub struct GateResult {
     pub relations_checked: usize,
     pub exclusions_checked: usize,
     pub followup_query: Option<String>,
+    /// Stable failure stages for the owner to debug real extracted candidates.
+    pub rejected_details: Vec<String>,
 }
 
 fn norm(s: &str) -> String {
@@ -177,21 +179,23 @@ fn candidate_evidence<'a>(
     required_roles: &'a [String],
     kind: ResearchKind,
     sources: &[SearchResult],
-) -> Option<(ApprovedSuggestion, Vec<&'a str>)> {
+) -> Result<(ApprovedSuggestion, Vec<&'a str>), &'static str> {
     let title = item.title.trim();
     if !(3..=110).contains(&title.chars().count()) || item.creator.chars().count() > 110
         || item.measurements.len() > 6 || item.relations.len() > 6
     {
-        return None;
+        return Err("invalid_candidate_fields");
     }
-    quote_from_source(&item.identity_quote, sources, item.source)?;
+    quote_from_source(&item.identity_quote, sources, item.source)
+        .ok_or("identity_quote_not_found_in_cited_source")?;
     if !same_clause(&item.identity_quote, title, None) {
-        return None;
+        return Err("identity_quote_does_not_name_candidate");
     }
     if kind == ResearchKind::Discover || !item.fit_quote.is_empty() {
-        quote_from_source(&item.fit_quote, sources, item.source)?;
+        quote_from_source(&item.fit_quote, sources, item.source)
+            .ok_or("relevance_quote_not_found_in_cited_source")?;
         if !same_clause(&item.fit_quote, title, None) || norm(&item.fit_quote) == norm(title) {
-            return None;
+            return Err("relevance_quote_does_not_describe_candidate");
         }
     }
 
@@ -201,7 +205,7 @@ fn candidate_evidence<'a>(
     if !item.creator.trim().is_empty()
         && !relations.iter().any(|edge| norm(&edge.name) == norm(&item.creator))
     {
-        return None;
+        return Err("claimed_creator_has_no_supported_credit");
     }
     let mut missing: Vec<_> = required_roles.iter()
         .filter(|role| !relations.iter().any(|edge| &edge.role == *role))
@@ -209,7 +213,8 @@ fn candidate_evidence<'a>(
         .collect();
     let mut measurements = Vec::new();
     for requirement in requirements {
-        let threshold = quantities::canonical(requirement.limit, &requirement.unit)?;
+        let threshold = quantities::canonical(requirement.limit, &requirement.unit)
+            .ok_or("unsupported_requirement_unit")?;
         let observed = item.measurements.iter().find_map(|measure| {
             let value = quantities::canonical(measure.value, &measure.unit)?;
             if threshold.dim != value.dim {
@@ -224,7 +229,7 @@ fn candidate_evidence<'a>(
             if kind == ResearchKind::Discover
                 && !quantities::compare(value, &requirement.relation, threshold)
             {
-                return None;
+                return Err("measurement_does_not_satisfy_strict_limit");
             }
             measurements.push(MeasurementEvidence {
                 source: measure.source,
@@ -239,10 +244,10 @@ fn candidate_evidence<'a>(
     if kind == ResearchKind::Verify && item.fit_quote.is_empty()
         && required_roles.is_empty() && requirements.is_empty()
     {
-        return None;
+        return Err("verification_has_no_supported_property");
     }
     missing.dedup();
-    Some((ApprovedSuggestion {
+    Ok((ApprovedSuggestion {
         source: item.source,
         title: title.to_owned(),
         creator: item.creator.trim().to_owned(),
@@ -271,25 +276,54 @@ pub fn screen_task(
     let mut approved = Vec::new();
     let mut seen = HashSet::new();
     let mut next_query = None;
+    let mut rejected_details = Vec::new();
     let count = suggestions.len();
 
     for item in suggestions.into_iter().take(3).filter(|_| !unresolved_limit) {
         let title = norm(&item.title);
-        if (task.kind == ResearchKind::Discover && exclusions.contains(&title))
-            || (task.kind == ResearchKind::Verify && target.as_ref() != Some(&title))
-        {
+        if task.kind == ResearchKind::Discover && exclusions.contains(&title) {
+            rejected_details.push(format!("{}: explicitly_excluded", item.title));
             continue;
         }
-        if let Some((candidate, missing)) =
-            candidate_evidence(item, &requirements, &task.roles, task.kind, sources)
-        {
-            let partial_verification = task.kind == ResearchKind::Verify
-                && (!candidate.relations.is_empty() || !candidate.measurements.is_empty()
-                    || !candidate.fit_quote.is_empty());
-            if (missing.is_empty() || partial_verification) && seen.insert(title) {
-                approved.push(candidate);
-            } else if next_query.is_none() && task.kind == ResearchKind::Discover {
-                next_query = followup_query(&candidate.title, &missing);
+        if task.kind == ResearchKind::Verify && target.as_ref() != Some(&title) {
+            rejected_details.push(format!("{}: not_the_named_verification_subject", item.title));
+            continue;
+        }
+        // An identity quote may justify a *focused real search* even when the
+        // initial preview cannot prove fit, a credit, or a strict measurement.
+        // It NEVER justifies accepting or recommending the candidate by itself.
+        let identity_anchored = quote_from_source(&item.identity_quote, sources, item.source)
+            .is_some_and(|_| same_clause(&item.identity_quote, &item.title, None));
+        let lead_title = item.title.clone();
+        match candidate_evidence(item, &requirements, &task.roles, task.kind, sources) {
+            Ok((candidate, missing)) => {
+                let partial_verification = task.kind == ResearchKind::Verify
+                    && (!candidate.relations.is_empty() || !candidate.measurements.is_empty()
+                        || !candidate.fit_quote.is_empty());
+                if (missing.is_empty() || partial_verification) && seen.insert(title) {
+                    approved.push(candidate);
+                } else {
+                    rejected_details.push(format!("{}: missing {}", candidate.title, missing.join(", ")));
+                    if next_query.is_none() && task.kind == ResearchKind::Discover {
+                        next_query = followup_query(&candidate.title, &missing);
+                    }
+                }
+            },
+            Err(reason) => {
+                rejected_details.push(format!("{lead_title}: {reason}"));
+                if next_query.is_none() && identity_anchored && task.kind == ResearchKind::Discover {
+                    let mut fields = Vec::new();
+                    for limit in &requirements {
+                        if let Some(value) = quantities::canonical(limit.limit, &limit.unit) {
+                            fields.push(missing_field(value.dim));
+                        }
+                    }
+                    for role in &task.roles {
+                        if let Some(field) = role_search_term(role) { fields.push(field); }
+                    }
+                    if fields.is_empty() { fields.push("description"); }
+                    next_query = followup_query(&lead_title, &fields);
+                }
             }
         }
     }
@@ -309,6 +343,7 @@ pub fn screen_task(
         rejected: count - approved.len(),
         relations_checked: approved.iter().map(|candidate| candidate.relations.len()).sum(),
         followup_query: approved.is_empty().then_some(next_query).flatten(),
+        rejected_details,
         approved,
         requirements,
         ignored_requirements,
