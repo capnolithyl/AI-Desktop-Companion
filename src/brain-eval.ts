@@ -44,7 +44,9 @@ export type EvalStepResult = {
   webExecution?:{query:string|null;results:WebResult[];sourcesCarriedOver:boolean;
     researchAudit?:{status:string;accepted:number;rejected:number;elapsedMs:number;note:string;
       recommendationTask?:boolean;recommendationApproved?:string[];
-      recommendationRejected?:number;constraintsChecked?:number;featuresChecked?:number}|null};
+      recommendationRejected?:number;constraintsChecked?:number;featuresChecked?:number;
+        exclusionsChecked?:number;relationsChecked?:number;
+        recommendationDetails?:EvalVerifiedRecommendation[]}|null};
   /** Previous validated public query available to this turn's planner (never assistant prose). */
   activePublicQuery?: string;
   selectedMemoryIds: number[];
@@ -77,6 +79,15 @@ export type EvalCaseResult = {
   id:string; number?:number; label:string; group:string; repeat:number; steps:EvalStepResult[];
   pass:boolean; elapsedMs:number;
 };
+export type EvalVerifiedRelation = {
+  role:string;name:string;source:number;quote:string;
+};
+export type EvalVerifiedRecommendation = {
+  source:number;title:string;creator:string;
+  identityQuote:string;fitQuote:string;
+  measurements:Array<{source:number;value:number;unit:string;quote:string}>;
+  relations:EvalVerifiedRelation[];
+};
 export type EvalReport = {
   version:1; runId:string; startedAt:string; finishedAt:string;
   mode:EvalMode; model:string; attempts:number; scenarios:string[];
@@ -92,7 +103,9 @@ export type EvalInferenceResult = string | {
   webExecution?:{query:string|null;results:WebResult[];sourcesCarriedOver:boolean;
     researchAudit?:{status:string;accepted:number;rejected:number;elapsedMs:number;note:string;
       recommendationTask?:boolean;recommendationApproved?:string[];
-      recommendationRejected?:number;constraintsChecked?:number;featuresChecked?:number}|null};
+      recommendationRejected?:number;constraintsChecked?:number;featuresChecked?:number;
+        exclusionsChecked?:number;relationsChecked?:number;
+        recommendationDetails?:EvalVerifiedRecommendation[]}|null};
 };
 export type EvalInference = (args:{
   messages:EvalTurn[];
@@ -704,6 +717,10 @@ export function brainEvalMetrics(report:EvalReport){
       n+(s.webExecution?.researchAudit?.recommendationRejected??0),0),
     noSupportedMatches:steps.filter(s=>
       s.webExecution?.researchAudit?.status==="no_supported_matches").length,
+    attributedRoles:steps.reduce((n,s)=>n+
+      (s.webExecution?.researchAudit?.relationsChecked??0),0),
+    excludedReferences:steps.reduce((n,s)=>n+
+      (s.webExecution?.researchAudit?.exclusionsChecked??0),0),
     evidenceFacts:steps.reduce((n,s)=>n+(s.webExecution?.researchAudit?.accepted??0),0),
     evidenceUnavailable:steps.filter(s=>s.webExecution?.query &&
       !["used","shortlist"].includes(s.webExecution?.researchAudit?.status??"")).length,
@@ -758,6 +775,8 @@ export function brainEvalMarkdown(report:EvalReport):string {
     "| Screened recommendation shortlists | "+m.shortlistedItems+" admitted; "+
       m.rejectedItems+" rejected; "+m.noSupportedMatches+
       " turns with no supported candidates |",
+    "| Explicit evidence relationships | "+m.attributedRoles+
+      " verified source predicates; "+m.excludedReferences+" prior references excluded |",
     "| Unnecessary / missed planned searches | "+m.unnecessaryWeb+" / "+m.missedWeb+" |",
     "| Factual answer checks | "+(m.answers===null?"Not run":m.answers+"% ("+m.answerChecks+" scored)")+" |",
     "| Conversational turns needing review | "+m.reviewTurns+" |",
@@ -797,12 +816,27 @@ export function brainEvalMarkdown(report:EvalReport):string {
           lines.push("- Structured evidence extraction: "+audit.status+
             "; accepted "+audit.accepted+"; rejected "+audit.rejected+
             "; "+audit.elapsedMs+" ms; "+audit.note);
-          if(audit.recommendationTask)lines.push(
-            "- Recommendation gate: "+(audit.recommendationApproved??[]).length+
-            " admitted; "+(audit.recommendationRejected??0)+" rejected; "+
-            (audit.constraintsChecked??0)+" hard limits; "+
-            (audit.featuresChecked??0)+" style/genre requirements; candidates: "+
-            (audit.recommendationApproved??[]).join(", "));
+          if(audit.recommendationTask){
+            lines.push("- Recommendation gate: "+(audit.recommendationApproved??[]).length+
+              " admitted; "+(audit.recommendationRejected??0)+" rejected; "+
+              (audit.constraintsChecked??0)+" hard limits; "+
+              (audit.featuresChecked??0)+" style/genre requirements; "+
+              (audit.exclusionsChecked??0)+" existing references excluded; "+
+              (audit.relationsChecked??0)+" typed creator relations; candidates: "+
+              (audit.recommendationApproved??[]).join(", "));
+            for(const candidate of audit.recommendationDetails??[]){
+              lines.push("  - "+candidate.title+" [source "+candidate.source+"] "+
+                candidate.creator,
+                "    Identity quote: "+candidate.identityQuote,
+                "    Relevance quote: "+candidate.fitQuote);
+              for(const measure of candidate.measurements)
+                lines.push("    Quantity ["+measure.source+"]: "+measure.value+" "+
+                  measure.unit+" | "+measure.quote);
+              for(const relation of candidate.relations)
+                lines.push("    Attribution ["+relation.source+"]: "+relation.role+
+                  " = "+relation.name+" | "+relation.quote);
+            }
+          }
         }
         for(const [n,src] of s.webExecution.results.entries())
           lines.push("  - ["+(n+1)+"] "+src.title+" | "+src.url+
