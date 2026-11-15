@@ -373,11 +373,11 @@ export function createDevSupervisor({
       const nativePaths=(await repoGit(
         "diff","--name-only",before,after,"--","src-tauri"
       )).split("\n").filter(Boolean);
-      // A patch-version bump also edits Cargo.toml and Cargo.lock. Only
-      // actual native source/config edits need an extra compile pass.
+      // Each patch-version bump also edits Cargo metadata and Tauri's
+      // version-only config. Avoid recompiling Rust for those changes.
+      // Actual native source or build-script changes do require a check.
       const rustChanged=manageDesktop && nativePaths.some(path=>
         path.startsWith("src-tauri/src/") || path==="src-tauri/build.rs"
-        || path==="src-tauri/tauri.conf.json"
       );
       publish({step:"Fast-forwarding approved branch"});
       await repoGit("merge","--ff-only",after);
