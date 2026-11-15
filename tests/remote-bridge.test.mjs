@@ -100,7 +100,10 @@ test("browser relay requires a private key and delegates to the desktop, not a s
   assert.equal((await request(base + "/api/state", "GET", authorized)).status, 200);
   assert.equal((await request(base + "/api/dev-update","GET")).status,401);
   assert.equal((await request(base + "/api/dev-update","GET",authorized)).status,200);
-  assert.equal((await (await request(base + "/api/dev-update","GET",authorized)).json()).commits,2);
+  const initialDevStatus=await (await request(base + "/api/dev-update","GET",authorized)).json();
+  assert.equal(initialDevStatus.commits,2);
+  assert.equal(initialDevStatus.relayDesktopConnected,false,
+    "Developer status is based on the relay, not a possibly stale supervisor report");
   assert.equal((await request(base + "/api/dev-update","POST",{"Content-Type":"application/json"},
     {action:"apply"})).status,401);
   assert.equal((await request(base + "/api/dev-update","POST",
@@ -146,6 +149,12 @@ test("browser relay requires a private key and delegates to the desktop, not a s
   })).status, 200);
   const state = await (await request(base + "/api/state", "GET", authorized)).json();
   assert.equal(state.connected, true);
+  // Supervisor fixture deliberately reports OFFLINE. The relay is ONLINE.
+  // The developer view must reflect the latter and expose the discrepancy.
+  const devWithDesktop=await (await request(base+"/api/dev-update","GET",authorized)).json();
+  assert.equal(devWithDesktop.desktopConnected,false);
+  assert.equal(devWithDesktop.relayDesktopConnected,true);
+  assert.equal(state.connected,devWithDesktop.relayDesktopConnected);
   assert.equal(state.conversationId, "same-desktop-conversation");
   assert.deepEqual(state.messages, history);
   assert.equal(state.conversations[1].title, "Old conversation");
