@@ -221,6 +221,8 @@ export function BrainEvalPanel({settings}:{settings:Settings}){
             " without matched extracts · not independently fact-verified"],
           ["Recommendation shortlist",String(metrics.shortlistedItems)+" admitted",metrics.rejectedItems+
             " rejected · "+metrics.noSupportedMatches+" turns with no supported matches"],
+          ["Verified roles",String(metrics.attributedRoles),metrics.excludedReferences+
+            " prior reference(s) excluded"],
           ["Memory fact coverage",metrics.recall+"%",metrics.memoryRecordMisses+" exact row misses · "+
             metrics.memoryDistractors+" extra records"],
           ["Factual answers",metrics.answers===null?"Not run":metrics.answers+"%",metrics.answerChecks+" graded turns"],
@@ -291,8 +293,15 @@ export function BrainEvalPanel({settings}:{settings:Settings}){
               Screened shortlist: {step.webExecution.researchAudit.recommendationApproved?.join(", ")||"no supported matches"} ·
               {step.webExecution.researchAudit.recommendationRejected??0} rejected ·
               {step.webExecution.researchAudit.constraintsChecked??0} hard limits ·
-              {step.webExecution.researchAudit.featuresChecked??0} style/genre criteria
+              {step.webExecution.researchAudit.featuresChecked??0} style/genre criteria ·
+              {step.webExecution.researchAudit.relationsChecked??0} typed roles ·
+              {step.webExecution.researchAudit.exclusionsChecked??0} prior references excluded
             </small>}
+            {step.webExecution?.researchAudit?.recommendationDetails?.map((candidate,i)=><small key={candidate.title+"-"+i}>
+              Verified candidate [{candidate.source}] {candidate.title}
+              {candidate.relations.map(r=>" · "+r.role+": "+r.name).join("")}
+              {candidate.measurements.map(m=>" · "+m.value+" "+m.unit).join("")}
+            </small>)}
             {step.webExecution?.results.map((src,i)=><small key={src.url}>
               Source [{i+1}]: {src.title} · {src.url}
             </small> )}
