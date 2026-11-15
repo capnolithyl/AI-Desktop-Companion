@@ -89,7 +89,8 @@ pub fn measured_in(raw:&str)->Vec<Quantity>{
     // Requiring adjacency limits accidental merging of unrelated quantities.
     for w in parts.windows(2){
         let (i,a)=w[0];let (j,b)=w[1];
-        if a.dim==Dimension::Duration && b.dim==Dimension::Duration && j==i+2 {
+        if a.dim==Dimension::Duration && b.dim==Dimension::Duration &&
+            (j==i+2 || (j==i+3 && t.get(i+2).is_some_and(|word|word=="and"))) {
             out.push(Quantity{dim:Dimension::Duration,amount:a.amount+b.amount});
         }
     }
@@ -122,6 +123,7 @@ mod tests{
         assert!(approx_equal(q(5400.0,"seconds"),q(1.5,"hours")));
         assert!(mention_supports("Movie runtime: 1h 35m.",q(95.0,"minutes")));
         assert!(mention_supports("The film is 1 hour 35 minutes long.",q(95.0,"minutes")));
+        assert!(mention_supports("The film runs for 1 hour and 35 minutes.",q(95.0,"minutes")));
         assert!(mention_supports("The movie runs for 1.5 hours.",q(90.0,"minutes")));
         assert!(!mention_supports("The movie debuted in 1995.",q(95.0,"minutes")));
         assert!(compare(q(95.0,"minutes"),"lt",q(2.0,"hours")));
