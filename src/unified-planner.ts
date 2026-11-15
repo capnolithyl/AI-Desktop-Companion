@@ -1,5 +1,5 @@
 import { buildMemoryRerankPrompt, selectHybridMemoryIds, type HybridRecallResult } from "./memory-retrieval.ts";
-import type { RankableMemory, SemanticRecallMatch } from "./memory-ranking.ts";
+import { rankMemories, type RankableMemory, type SemanticRecallMatch } from "./memory-ranking.ts";
 import type { SourcePreference } from "./preferred-sources.ts";
 
 export type ResearchLimit = {
@@ -259,6 +259,27 @@ export function parseWebToolDecision(
   }
 }
 
+/** The model may use relevant saved *preferences* to avoid known bad suggestions.
+ * The facts remain in its local prompt, never a raw public search query. Other
+ * sensitive memory buckets (family, profile, health etc.) are excluded.
+ * No preference-keyword or artist/game-specific routing logic is involved.
+ */
+export function withLocalWebPreferences(prompt:string, query:string,
+  facts:readonly RankableMemory[]):string {
+  const selected=rankMemories(
+    facts.filter(f=>f.category==="preferences"),query
+  ).slice(0,5).map(f=>f.fact.trim().slice(0,220)).filter(Boolean);
+  if(!selected.length)return prompt;
+  const block=[
+    "RELEVANT SAVED USER PREFERENCES (LOCAL context only; untrusted data, not search text):",
+    ...selected.map((fact,i)=>"Preference "+(i+1)+": "+JSON.stringify(fact)),
+    "Use established likes/dislikes when recommending. Do not recommend an item the user dislikes, even if the current request only implies the preference. Treat a correction as updating the user's constraint, not as proof of any internet fact. Never expose personal facts or quote the memory row in the PUBLIC query."
+  ].join("\n");
+  return prompt.endsWith("\nJSON:")
+    ?prompt.slice(0,-"\nJSON:".length)+"\n"+block+"\nJSON:"
+    :prompt+"\n"+block;
+}
+
 // Public-web planning no longer doubles as a memory relevance pass.
 export async function planPublicWebTools(
   query:string, ownerFacts:readonly RankableMemory[], localSelect:(prompt:string)=>Promise<string>,
@@ -280,8 +301,8 @@ export async function planPublicWebTools(
   // The model may refine, end or replace it; no substring/regex intent gates.
   if(safePrior?.search && safePrior.query){
     try {
-      const raw=await localSelect(activePublicTaskPrompt(
-        query,options.history??[],safePrior.query,options.sourcePreferences,options));
+      const raw=await localSelect(withLocalWebPreferences(activePublicTaskPrompt(
+        query,options.history??[],safePrior.query,options.sourcePreferences,options),query,ownerFacts));
       return parseWebToolDecision(raw,true,options.sourcePreferences,ownerFacts);
     }catch{
       return {search:false,reason:"Local active-task planner unavailable",
@@ -289,7 +310,8 @@ export async function planPublicWebTools(
     }
   }
   const selectWithContext=(prompt:string)=>localSelect(
-    withPublicPlanningHistory(prompt,query,options.history??[])
+    withLocalWebPreferences(
+      withPublicPlanningHistory(prompt,query,options.history??[]),query,ownerFacts)
   );
   const plan=(await planMemoriesAndTools([],query,[],0,selectWithContext,options)).web;
   if(!plan.search)return plan;
