@@ -10,6 +10,7 @@ mod openrouter_stream;
 mod research_intent;
 mod source_enrichment;
 mod evidence_pack;
+mod recommendation_gate;
 mod memory;
 mod interest_memory;
 mod memory_extraction;
@@ -741,7 +742,42 @@ async fn chat_stream_impl(
         let (notes, audit) = evidence_pack::extract(
             &client, &url, &request.model, &focus, &sources, selected_context
         ).await;
+        let recommendation_task = audit.recommendation_task;
+        let screened_count = audit.recommendation_approved.len();
         research_audit = Some(audit);
+        if recommendation_task {
+            // The original search snippets are useful to the extractor, but
+            // they must NOT let the final model bypass the screened shortlist.
+            // Source indexes and URLs remain available to the UI for review.
+            messages.retain(|message| {
+                if message["role"] != "user" { return true; }
+                let content = message["content"].as_str().unwrap_or("");
+                !content.starts_with("UNTRUSTED RETRIEVED WEB DATA.")
+                    && !content.starts_with("Previously retrieved evidence, NOT freshly searched.")
+            });
+            if screened_count == 0 {
+                let content = "I found some sources, but couldn't confirm any recommendations \
+                    that meet those criteria, and I don't want to guess.".to_owned();
+                let _ = app.emit("mikan://chat", ChatChunk {
+                    request_id: request.request_id.clone(),content: content.clone()
+                });
+                return Ok(ChatCompletion {
+                    content, stats: None, sources, search_query, sources_carried_over,
+                    research_audit, model_used: request.model.clone(),
+                    fallback_reason: fallback_reason.clone()
+                });
+            }
+            let insert_at = usize::from(messages.first()
+                .is_some_and(|message| message["role"] == "system"));
+            messages.insert(insert_at, json!({
+                "role":"system",
+                "content":"RECOMMENDATION OUTPUT BOUNDARY: A source-screened list of \
+                    matching candidates was built from this search. Mention ONLY \
+                    candidates in that list, and only numeric details quoted for them. \
+                    Do not fill gaps with more names, release titles or guessed \
+                    quantities. You may discuss the criteria conversationally."
+            }));
+        }
         if let Some(notes) = notes {
             let insert_at = usize::from(messages.first().is_some_and(|m| m["role"] == "system"));
             messages.insert(insert_at, json!({
