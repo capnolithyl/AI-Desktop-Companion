@@ -478,7 +478,36 @@ export const EVAL_SCENARIOS:ReadonlyArray<EvalScenario>=[
       "Galactic shredding champions, obviously.",{web:false})),
   scenario("separate-personas","User preferences aren't persona preferences","Knowledge boundaries",
     e("What's my favorite color?",{route:"chat",memory:[105],answerIncludes:["moss green"],stubReply:"Moss green."}),
-    e("Does that automatically mean it's your favorite too?",{route:"chat",answerAny:["no","not necessarily"],stubReply:"No, your preferences are separate from mine."}))
+    e("Does that automatically mean it's your favorite too?",{route:"chat",answerAny:["no","not necessarily"],stubReply:"No, your preferences are separate from mine."})),
+  // New evidence-screening cases appended so all previous #01-#73 IDs stay stable.
+  scenario("verification-movie-runtime","Movie under two hours with director/studio proof","Evidence and attribution",
+    conversation("I'd love a creepy animated movie I can finish in under two hours.",
+      "Find actual films with source-backed runtimes below 120 minutes; don't invent durations.",
+      "I can look for a dark animated film with a confirmed short runtime.",{route:"any",web:true}),
+    conversation("And please verify who directed it and which studio produced it.",
+      "Carry forward the runtime limit and distinguish film director, studio and distributor in source evidence.",
+      "I'll check those exact credits rather than guessing.",{route:"any",web:true})),
+  scenario("verification-album-songs","Album with fewer than ten songs and correct artist","Evidence and attribution",
+    conversation("Find me a moody metal album with fewer than ten songs.",
+      "Source-check strict track/song count and avoid inventing releases or artists.",
+      "I'll look for a short, atmospheric metal album.",{route:"any",web:true}),
+    conversation("Make sure the record is credited to the actual band, not a related artist.",
+      "Preserve the <10 threshold and verify the exact album-to-artist relationship.",
+      "I'll double-check the specific album credit.",{route:"any",web:true})),
+  scenario("verification-book-author","Short horror book with verified author","Evidence and attribution",
+    conversation("I'd like a strange horror novella under 200 pages, with the author verified.",
+      "Find specific works, explicit edition-dependent page counts and actual author relationships.",
+      "I'll look for a compact horror novella with a sourced author credit.",{route:"any",web:true}),
+    conversation("Don't confuse the author with somebody who reviewed the book.",
+      "Keep the page limit and exclude misattributed reviewers or publisher names.",
+      "A reviewer's name isn't the author's, so I'll verify the role.",{route:"any",web:true})),
+  scenario("verification-game-playtime","Horror game under two hours of playtime","Evidence and attribution",
+    conversation("I'd like a compact horror game I can finish in under two hours.",
+      "Search real game playtimes and compare minutes/hours without inventing completion durations.",
+      "I'll look for a short horror game with a sourced playtime estimate.",{route:"any",web:true}),
+    conversation("I mean the main story playtime, not the trailer's runtime.",
+      "Preserve the <120-minute cap and distinguish estimated game length from video duration.",
+      "I'll focus on main-story playtime estimates.",{route:"any",web:true}))
 ];
 
 /** Display numbers follow the complete catalog, not filtered or selected positions. */
