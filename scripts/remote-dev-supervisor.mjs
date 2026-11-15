@@ -138,7 +138,7 @@ export function createDevSupervisor({
   },
   startChild=null,stopChild=null,
   /** Injected for tests; only fixed Cargo check args are executed. */
-  cargoCheck=()=>command("cargo",["check","--locked","--manifest-path","src-tauri/Cargo.toml"],
+  cargoCheck=()=>command("cargo",["check","--tests","--locked","--manifest-path","src-tauri/Cargo.toml"],
     {cwd,timeout:420000}),
   relayReady=null,
   desktopReady=loopbackDesktopReady,
