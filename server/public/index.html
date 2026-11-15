@@ -608,7 +608,8 @@
                 shortlist.textContent="Source-screened recommendations: "+
                   ((audit.recommendationApproved||[]).join(", ")||"none supported")+
                   " | rejected: "+(audit.recommendationRejected||0)+
-                  " | hard constraints: "+(audit.constraintsChecked||0);
+                  " | hard constraints: "+(audit.constraintsChecked||0)+
+                  " | style/genre criteria: "+(audit.featuresChecked||0);
                 section.append(shortlist);
               }
             }
