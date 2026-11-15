@@ -138,13 +138,13 @@ fn quoted_requirement_valid(question: &str, req: &HardRequirement) -> bool {
     let expected = if ["under ", "less than", "fewer than", "below ", "shorter than"]
         .iter().any(|marker| text.contains(*marker)) { Some("lt") }
     else if ["at most", "no more than", "up to ", "maximum ", "max "]
-        .iter().any(|marker| text.contains(marker)) { Some("lte") }
+        .iter().any(|marker| text.contains(*marker)) { Some("lte") }
     else if ["over ", "more than", "greater than", "above ", "longer than"]
-        .iter().any(|marker| text.contains(marker)) { Some("gt") }
+        .iter().any(|marker| text.contains(*marker)) { Some("gt") }
     else if ["at least", "no less than", "minimum ", "min "]
-        .iter().any(|marker| text.contains(marker)) { Some("gte") }
+        .iter().any(|marker| text.contains(*marker)) { Some("gte") }
     else if ["exactly ", "equal to "]
-        .iter().any(|marker| text.contains(marker)) { Some("eq") }
+        .iter().any(|marker| text.contains(*marker)) { Some("eq") }
     else { None };
     expected == Some(req.relation.as_str())
         && words(&req.quote).iter().any(|word| unit_key(word)==unit_key(&req.unit))
