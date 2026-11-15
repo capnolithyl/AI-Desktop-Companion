@@ -26,6 +26,7 @@ pub struct ResearchAudit {
     pub recommendation_approved: Vec<String>,
     pub recommendation_rejected: usize,
     pub constraints_checked: usize,
+    pub features_checked: usize,
 }
 
 #[derive(Deserialize)]
@@ -36,6 +37,8 @@ struct FactCandidates {
     recommendation_task: bool,
     #[serde(default)]
     requirements: Vec<recommendation_gate::HardRequirement>,
+    #[serde(default)]
+    features: Vec<String>,
     #[serde(default)]
     suggestions: Vec<recommendation_gate::Suggestion>,
 }
@@ -159,6 +162,7 @@ fn extraction_schema() -> Value {
         "type": "object",
         "properties": {
             "recommendationTask": {"type":"boolean"},
+            "features": {"type":"array","maxItems":3,"items":{"type":"string"}},
             "requirements": {"type":"array","maxItems":4,"items":{
                 "type":"object","properties":{
                     "quote":{"type":"string"},
@@ -205,7 +209,7 @@ fn extraction_schema() -> Value {
                 }
             }
         },
-        "required":["facts","recommendationTask","requirements","suggestions"],
+        "required":["facts","recommendationTask","requirements","features","suggestions"],
         "additionalProperties": false
     })
 }
@@ -235,7 +239,7 @@ pub async fn extract(
         status: "fallback".into(), accepted: 0, rejected: 0,
         elapsed_ms: 0, note: "No valid source-anchored facts; original excerpts used.".into(),
         recommendation_task:false,recommendation_approved:vec![],
-        recommendation_rejected:0,constraints_checked:0
+        recommendation_rejected:0,constraints_checked:0,features_checked:0
     };
     let mut payload = json!({
         "model": model,
@@ -264,7 +268,12 @@ pub async fn extract(
                 per relevant measurement, where its exact title, the number and unit \
                 appear in the SAME clause. Do not use numbers from neighboring cards. \
                 A qualitative preference (short, atmospheric) is NOT a fabricated \
-                numerical limit; describe it in fit_quote instead. \
+                numerical limit. For explicit genre/style labels that appear \
+                VERBATIM in the user's question (such as melodic death metal), \
+                list up to three exact phrases in features. Each candidate's \
+                fit_quote must also contain those same phrases. Do not invent \
+                labels, expand to unrelated genres or use vague filler words. \
+                If no exact meaningful feature is provided, set features=[]. \
                 Omit a candidate if ANY required property cannot be quoted from its \
                 sources. If nothing qualifies, return an EMPTY suggestions array. \
                 Facts should normally be [] for a recommendation task. \
@@ -289,8 +298,8 @@ pub async fn extract(
         let content = response["message"]["content"].as_str().ok_or(())?;
         let proposal: FactCandidates = serde_json::from_str(content).map_err(|_| ())?;
         let facts = collect_valid(proposal.facts, sources);
-        let shortlist = proposal.recommendation_task.then(|| recommendation_gate::screen(
-            question, proposal.requirements, proposal.suggestions, sources
+        let shortlist = proposal.recommendation_task.then(|| recommendation_gate::screen_with_features(
+            question, proposal.requirements, proposal.features, proposal.suggestions, sources
         ));
         Ok::<_, ()>((facts,shortlist))
     }.await;
@@ -303,6 +312,7 @@ pub async fn extract(
                     .map(|entry| entry.title.clone()).collect();
                 audit.recommendation_rejected = shortlist.rejected;
                 audit.constraints_checked = shortlist.requirements;
+                audit.features_checked = shortlist.features_checked;
                 audit.rejected = rejected;
                 audit.accepted = shortlist.approved.len();
                 audit.status = if shortlist.approved.is_empty() {
