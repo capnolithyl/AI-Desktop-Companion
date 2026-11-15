@@ -41,7 +41,8 @@ export type EvalStepResult = {
   webPass: boolean | null;
   webPlannerDecision?: {search:boolean;query?:string;reason:string;intent?:string};
   /** Observed Rust/SearXNG execution, distinct from an AI decision to search. */
-  webExecution?:{query:string|null;results:WebResult[];sourcesCarriedOver:boolean};
+  webExecution?:{query:string|null;results:WebResult[];sourcesCarriedOver:boolean;
+    researchAudit?:{status:string;accepted:number;rejected:number;elapsedMs:number;note:string}|null};
   /** Previous validated public query available to this turn's planner (never assistant prose). */
   activePublicQuery?: string;
   selectedMemoryIds: number[];
@@ -86,7 +87,8 @@ export type EvalInferenceResult = string | {
   text:string;
   stats?: {promptTokens?:number|null;outputTokens?:number|null;evalDurationNs?:number|null;loadDurationNs?:number|null};
   modelUsed?:string;
-  webExecution?:{query:string|null;results:WebResult[];sourcesCarriedOver:boolean};
+  webExecution?:{query:string|null;results:WebResult[];sourcesCarriedOver:boolean;
+    researchAudit?:{status:string;accepted:number;rejected:number;elapsedMs:number;note:string}|null};
 };
 export type EvalInference = (args:{
   messages:EvalTurn[];
@@ -689,6 +691,10 @@ export function brainEvalMetrics(report:EvalReport){
     liveSearches:steps.filter(s=>!!s.webExecution?.query).length,
     liveSearchesWithSources:steps.filter(s=>(s.webExecution?.results.length??0)>0).length,
     liveSources:steps.reduce((n,s)=>n+(s.webExecution?.results.length??0),0),
+    evidencePasses:steps.filter(s=>s.webExecution?.researchAudit?.status==="used").length,
+    evidenceFacts:steps.reduce((n,s)=>n+(s.webExecution?.researchAudit?.accepted??0),0),
+    evidenceUnavailable:steps.filter(s=>s.webExecution?.query &&
+      s.webExecution?.researchAudit?.status!=="used").length,
     unnecessaryWeb:steps.filter(s=>s.webPass===false&&s.plannedWeb===true).length,
     missedWeb:steps.filter(s=>s.webPass===false&&s.plannedWeb===false).length,
     tokensPerSecond:(()=>{
@@ -734,6 +740,9 @@ export function brainEvalMarkdown(report:EvalReport):string {
     "| Web planning agreement | "+m.webAgreement+"% |",
     "| Actual public SearXNG searches | "+m.liveSearches+
       " attempts; "+m.liveSearchesWithSources+" with results; "+m.liveSources+" source previews |",
+    "| Structured evidence (not verified factual correctness) | "+m.evidencePasses+
+      " turns with matched quotes; "+m.evidenceFacts+" extracts; "+m.evidenceUnavailable+
+      " searched turns without accepted extracts |",
     "| Unnecessary / missed planned searches | "+m.unnecessaryWeb+" / "+m.missedWeb+" |",
     "| Factual answer checks | "+(m.answers===null?"Not run":m.answers+"% ("+m.answerChecks+" scored)")+" |",
     "| Conversational turns needing review | "+m.reviewTurns+" |",
@@ -768,6 +777,12 @@ export function brainEvalMarkdown(report:EvalReport):string {
       if(s.webExecution){
         lines.push("- Executed SearXNG query: "+(s.webExecution.query??"not executed"),
           "- Actual source previews: "+s.webExecution.results.length);
+        if(s.webExecution.researchAudit){
+          const audit=s.webExecution.researchAudit;
+          lines.push("- Structured evidence extraction: "+audit.status+
+            "; accepted "+audit.accepted+"; rejected "+audit.rejected+
+            "; "+audit.elapsedMs+" ms; "+audit.note);
+        }
         for(const [n,src] of s.webExecution.results.entries())
           lines.push("  - ["+(n+1)+"] "+src.title+" | "+src.url+
             " | "+src.content.slice(0,400).replace(/\s+/g," "));
