@@ -8,7 +8,8 @@ const SHA_A="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 const SHA_B="bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
 const token="local-test-secret-with-more-than-thirty-two-characters";
 function fixture({dirty=false,diverged=false,failBuild=false,failInstall=false,
-  packageChange="none",manageDesktop=false,desktopReadyOutcome=true}={}){
+  packageChange="none",manageDesktop=false,desktopReadyOutcome=true,
+  desktopReadyProbe=null}={}){
   let head=SHA_A,remote=SHA_B;
   const seen=[],started=[],stopped=[];
   const oldManifest={name:"mikan-desktop-companion",version:"0.9.8",
@@ -69,7 +70,7 @@ function fixture({dirty=false,diverged=false,failBuild=false,failInstall=false,
     cwd:"/repo",token,git,npm,port:0,manageDesktop,
     startChild:(name)=>{started.push(name);return {pid:7,exitCode:null,name}},
     stopChild:async(child)=>{stopped.push(child.name)},
-    relayReady:async()=>{},desktopReady:async()=>desktopReadyOutcome,
+    relayReady:async()=>{},desktopReady:desktopReadyProbe??(async()=>desktopReadyOutcome),
     desktopReadyAttempts:3,desktopRetryMs:0
   });
   return {supervisor,seen,started,stopped,getHead:()=>head};
@@ -327,5 +328,36 @@ test("relay-only supervisor refuses desktop restart without touching processes",
       "/restart-desktop",{method:"POST",headers:{"X-Mikan-Supervisor":token}});
     assert.equal(response.status,409);
     assert.deepEqual(started,["server"]);
+  }finally{await supervisor.close()}
+});
+
+test("developer status follows actual relay heartbeat while restart readiness stays launch-scoped",async()=>{
+  const checked=[];
+  const {supervisor}=fixture({
+    manageDesktop:true,
+    desktopReadyProbe:async after=>{
+      checked.push(after);
+      // Simulate a desktop visible to the relay whose heartbeat predates
+      // the last supervisor-managed launch. Status should still say Online.
+      return after===0;
+    }
+  });
+  await supervisor.start();
+  try {
+    const {server}=supervisor;
+    const get=()=>fetch("http://127.0.0.1:"+server.address().port+
+      "/status",{headers:{"X-Mikan-Supervisor":token}});
+    const state=await (await get()).json();
+    assert.equal(state.desktopConnected,true);
+    assert.equal(state.desktopState,"online");
+    assert.equal(state.managedDesktopRunning,true);
+    assert.deepEqual(checked,[0],"status reads relay health without launch-time gate");
+    await supervisor.restartDesktop();
+    assert.equal(supervisor.getState().phase,"error",
+      "restart still requires a fresh post-launch heartbeat");
+    assert.ok(checked.some(after=>after>0));
+    const recovered=await (await get()).json();
+    assert.equal(recovered.desktopConnected,true,
+      "the existing online agent remains online even when a managed restart failed");
   }finally{await supervisor.close()}
 });
