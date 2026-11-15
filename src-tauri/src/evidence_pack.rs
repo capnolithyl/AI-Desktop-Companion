@@ -80,12 +80,23 @@ fn validate(candidate: FactCandidate, sources: &[SearchResult]) -> Option<Ground
         return None;
     }
     let normalized_quote = normalize(quote);
-    if !normalize(&source.content).contains(&normalized_quote) {
+    if !normalize(&source.content).contains(&normalized_quote)
+        && !normalize(&source.title).contains(&normalized_quote) {
         return None;
     }
-    // The exact subject should appear in the quoted passage, not merely the
-    // article's title. This catches many accidental cross-entity mixups.
-    if !normalized_quote.contains(&normalize(subject)) {
+    // For a named website, the actual URL can establish which website the
+    // matching excerpt describes. Require an exact registrable host (optionally
+    // www), never a substring or a similarly named third-party website.
+    let official_website = reqwest::Url::parse(&source.url).ok()
+        .and_then(|url| url.host_str().map(str::to_owned))
+        .is_some_and(|host| {
+            let domain = subject.trim().to_ascii_lowercase();
+            domain.contains('.') && !domain.contains(['/', ' ', '@', ':'])
+                && (host == domain || host == format!("www.{domain}"))
+        });
+    // For other entities, quotes must still name the subject exactly; the
+    // surrounding search result title cannot lend the quote a new referent.
+    if !normalized_quote.contains(&normalize(subject)) && !official_website {
         return None;
     }
     let numbers_in_claim: HashSet<&str> = claim
