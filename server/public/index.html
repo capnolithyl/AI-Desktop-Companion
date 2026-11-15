@@ -603,6 +603,14 @@
                 " | rejected: "+audit.rejected+
                 " (not independent fact verification)";
               section.append(proof);
+              if(audit.recommendationTask){
+                var shortlist=document.createElement("small");
+                shortlist.textContent="Source-screened recommendations: "+
+                  ((audit.recommendationApproved||[]).join(", ")||"none supported")+
+                  " | rejected: "+(audit.recommendationRejected||0)+
+                  " | hard constraints: "+(audit.constraintsChecked||0);
+                section.append(shortlist);
+              }
             }
             for(var j=0;j<(step.webExecution.results||[]).length;j++){
               var result=step.webExecution.results[j];
@@ -699,7 +707,8 @@
         "% · Pending reviews: " + run.results.reviewTurns+
         " · Actual SearXNG searches: "+(run.results.liveSearches??0)+
         " ("+(run.results.liveSearchesWithSources??0)+" with sources)"+
-        " · Quote-matched evidence: "+(run.results.evidenceFacts??0));
+        " · Quote-matched evidence: "+(run.results.evidenceFacts??0)+
+        " · Screened items: "+(run.results.shortlistedItems??0));
       if (run.savedFolder) lines.push("Detailed JSON + Markdown auto-saved on desktop.");
     } else lines.push("Ready for a manually started test run.");
     if (data.reportAvailable) lines.push("Latest downloadable report: "+data.reportRunId);
