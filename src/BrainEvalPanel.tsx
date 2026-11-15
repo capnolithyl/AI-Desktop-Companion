@@ -217,6 +217,7 @@ export function BrainEvalPanel({settings}:{settings:Settings}){
           ["Web decisions",metrics.webAgreement+"%",metrics.webChecks+" observed · "+metrics.unnecessaryWeb+" extra · "+metrics.missedWeb+" missed"],
           ["Real web searches",String(metrics.liveSearches),metrics.liveSearchesWithSources+
             " with sources · "+metrics.liveSources+" returned snippets"],
+          ["Evidence failures",String(metrics.evidenceFailures),"searches with no accepted evidence; not a verified answer"],
           ["Source-anchored facts",String(metrics.evidenceFacts),metrics.evidencePasses+
             " search turns with exact quotes · "+metrics.evidenceUnavailable+
             " without matched extracts · not independently fact-verified"],
@@ -290,6 +291,8 @@ export function BrainEvalPanel({settings}:{settings:Settings}){
               {step.webExecution.researchAudit.accepted} quote-matched ·
               {step.webExecution.researchAudit.rejected} rejected
             </small>}
+            {step.webExecution?.researchAudit?.rejectedDetails?.map((reason,i)=><small
+              key={reason+"-"+i} className="brain-eval-review">Rejected evidence: {reason}</small>)}
             {step.webExecution?.researchAudit?.recommendationTask&&<small>
               Screened shortlist: {step.webExecution.researchAudit.recommendationApproved?.join(", ")||"no supported matches"} ·
               {step.webExecution.researchAudit.recommendationRejected??0} rejected ·
