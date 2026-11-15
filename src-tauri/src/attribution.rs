@@ -56,14 +56,14 @@ pub fn clauses(input:&str)->Vec<&str>{
 fn markers(role:&str)->Option<&'static [&'static str]> {
     // These are typed attribution predicates, NOT media/entity routing rules.
     match role {
-        "author"=>Some(&["written by ","authored by ","author: ","author is ","book by ","novel by "," by "]),
+        "author"=>Some(&["written by ","authored by ","author: ","author is ","book by ","novel by "]),
         "director"=>Some(&["directed by ","director: ","director is "]),
         "studio"=>Some(&["produced by ","production studio: ","production studio is ",
                          "production company: ","studio: ","studio is "]),
         "distributor"=>Some(&["distributed by ","distributor: ","distributor is "]),
         "publisher"=>Some(&["published by ","publisher: ","publisher is "]),
         "developer"=>Some(&["developed by ","developer: ","developer is "]),
-        "artist"=>Some(&["performed by ","recorded by ","artist: ","artist is ","album by ","track by "," by "]),
+        "artist"=>Some(&["performed by ","recorded by ","artist: ","artist is ","album by ","track by "]),
         "composer"=>Some(&["composed by ","composer: ","composer is "]),
         "creator"=>Some(&["created by ","creator: ","creator is "]),
         _=>None
@@ -90,7 +90,11 @@ pub fn verify(
         // A director merely mentioned in the same sentence as the movie
         // is not its director. Require an explicit role-phrase leading
         // directly to the claimed value, with optional "the" / "its".
-        markers.iter().any(|marker|{
+        // A bare "by" is accepted ONLY as the work-title attribution
+        // pattern "Title by Creator", never "Title reviewed/praised by X".
+        let title_by=(role=="author" || role=="artist") &&
+            c.contains(format!("{subject} by {value}").as_str());
+        title_by || markers.iter().any(|marker|{
             let direct=format!("{marker}{value}");
             let qualified=format!("{marker}the {value}");
             let possessive=format!("{marker}its {value}");
@@ -143,6 +147,16 @@ mod tests{
         assert!(verify("Arrival",relation("director","Denis Villeneuve",quote),&s).is_some());
         assert!(verify("Arrival",relation("director","Christopher Nolan",quote),&s).is_none());
     }
+    #[test]
+    fn a_reviewer_is_not_the_author_even_with_the_same_sentence(){
+        let quoted="The Hollow Places was reviewed by Maria White for a book website.";
+        assert!(verify("The Hollow Places",relation("author","Maria White",quoted),
+            &src(quoted)).is_none());
+        let byline="The Hollow Places by T. Kingfisher is a horror novel.";
+        assert!(verify("The Hollow Places",relation("author","T. Kingfisher",byline),
+            &src(byline)).is_some());
+    }
+
     #[test]
     fn rejects_wrong_album_artist_and_publisher_developer_swap(){
         let album="The album Hegemony was recorded by Samael. Emperor played a different album.";
