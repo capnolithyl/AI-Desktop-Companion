@@ -290,7 +290,8 @@ export function BrainEvalPanel({settings}:{settings:Settings}){
             {step.webExecution?.researchAudit?.recommendationTask&&<small>
               Screened shortlist: {step.webExecution.researchAudit.recommendationApproved?.join(", ")||"no supported matches"} ·
               {step.webExecution.researchAudit.recommendationRejected??0} rejected ·
-              {step.webExecution.researchAudit.constraintsChecked??0} hard limits
+              {step.webExecution.researchAudit.constraintsChecked??0} hard limits ·
+              {step.webExecution.researchAudit.featuresChecked??0} style/genre criteria
             </small>}
             {step.webExecution?.results.map((src,i)=><small key={src.url}>
               Source [{i+1}]: {src.title} · {src.url}
