@@ -304,6 +304,56 @@ test("active public task is a single focused model decision, not generic memory 
   }
 });
 
+test("a user correction overrides old public entity interpretation",async()=>{
+  const previous=[{role:"user",content:"Tell me about Immortal."},
+    {role:"assistant",content:"Immortal is a game with fantasy elements."}];
+  let prompt="";
+  const updated=await planPublicWebTools(
+    "No, I meant Immortal, the Norwegian black metal band, not a game.",[],
+    async text=>{
+      prompt=text;
+      return JSON.stringify({intent:"refine",web:{search:true,
+        query:"Immortal Norwegian black metal band discography",
+        reason:"Use the user's correction instead of the old interpretation",
+        task:{kind:"lookup",requirements:[],roles:[],exclude:[]}}});
+    },{automaticWebEnabled:true,sourcePreferences:prefs,history:previous,
+      activePublicQuery:"Immortal fantasy video game information"});
+  assert.equal(updated.search,true);
+  assert.equal(updated.intent,"refine");
+  assert.match(updated.query,/Norwegian black metal/);
+  assert.match(prompt,/corrects a previously misunderstood public entity/);
+  assert.doesNotMatch(prompt,/fantasy elements/,"Do not trust the assistant's old interpretation");
+});
+
+test("a rejected recommendation becomes a typed exclusion without a keyword gate",async()=>{
+  const corrected=await planPublicWebTools(
+    "I don't like XCOM. Please exclude it and suggest something else.",[],
+    async()=>JSON.stringify({intent:"refine",web:{search:true,
+      query:"Fire Emblem tactical RPG alternatives excluding XCOM",
+      reason:"Exclude rejected option and continue discovery",
+      task:{kind:"discover",requirements:[],roles:[],exclude:["XCOM"]}}}),
+    {automaticWebEnabled:true,sourcePreferences:prefs,
+      history:[{role:"user",content:"Recommend a game like Fire Emblem."}],
+      activePublicQuery:"strategy RPGs like Fire Emblem"});
+  assert.equal(corrected.search,true);
+  assert.deepEqual(corrected.task?.exclude,["XCOM"]);
+});
+
+test("disputing a source reopens independent verification without treating either assertion as proven",async()=>{
+  const decision=await planPublicWebTools(
+    "I'm pretty sure that birth year is wrong. Please verify Brian Fair from better sources.",[],
+    async()=>JSON.stringify({intent:"refine",web:{search:true,
+      query:"Brian Fair Shadows Fall vocalist verified birth year",
+      reason:"A disputed biographical claim needs new sources",
+      task:{kind:"lookup",requirements:[],roles:[],exclude:[]}}}),
+    {automaticWebEnabled:true,sourcePreferences:prefs,
+      history:[{role:"user",content:"A page claimed Brian Fair was born in 2024."}],
+      activePublicQuery:"Brian Fair Shadows Fall date of birth"});
+  assert.equal(decision.search,true);
+  assert.equal(decision.task?.kind,"lookup");
+  assert.doesNotMatch(decision.query??"",/2024/);
+});
+
 test("focused task decisions still reject private names and private context",async()=>{
   const decide=(query)=>planPublicWebTools("Under six episodes.",facts,
     async()=>JSON.stringify({intent:"refine",web:{
