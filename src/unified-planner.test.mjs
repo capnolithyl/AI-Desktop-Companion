@@ -15,6 +15,8 @@ test("one local planner prompt requests memory IDs and a public web decision",()
   assert.match(prompt,/LIVE PUBLIC WEB SEARCH/);
   assert.match(prompt,/Source priority topic/);
   assert.match(prompt,/music, coding, gaming/);
+  assert.match(prompt,/release histories, latest versions and general status questions/,
+    "A release-history lookup must not be planned as a recommendation task");
 });
 test("model can select developer background and independently plan music search",async()=>{
   let calls=0;
