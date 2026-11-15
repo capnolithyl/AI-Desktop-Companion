@@ -59,6 +59,7 @@ pub struct GateResult {
     pub approved: Vec<ApprovedSuggestion>,
     pub rejected: usize,
     pub requirements: usize,
+    pub features_checked: usize,
     pub note: String,
 }
 
@@ -167,13 +168,17 @@ fn appears_to_have_hard_limit(question: &str) -> bool {
 }
 
 fn valid_suggestion(item: Suggestion, requirements: &[HardRequirement],
-    sources: &[SearchResult]) -> Option<ApprovedSuggestion>
+    required_features: &[String], sources: &[SearchResult]) -> Option<ApprovedSuggestion>
 {
     if item.title.trim().chars().count() < 3 || item.title.chars().count() > 110
         || item.creator.chars().count() > 110
         || item.measurements.len() > 6 { return None; }
     quote_from_source(&item.identity_quote, sources, item.source)?;
     quote_from_source(&item.fit_quote, sources, item.source)?;
+    // Literal requested style/genre features must be attested in the SAME
+    // candidate's quote. No hardcoded artists, genres or media classifications.
+    if required_features.iter().any(|feature|
+        !norm(&item.fit_quote).contains(&norm(feature))) { return None; }
     if !same_clause(&item.identity_quote, &item.title, None, None)
         || !same_clause(&item.fit_quote, &item.title, None, None)
     { return None; }
@@ -214,29 +219,37 @@ fn valid_suggestion(item: Suggestion, requirements: &[HardRequirement],
 }
 
 pub fn screen(question: &str, requirements: Vec<HardRequirement>,
-    suggestions: Vec<Suggestion>, sources: &[SearchResult]) -> GateResult
+    suggestions: Vec<Suggestion>, sources: &[SearchResult]) -> GateResult {
+    screen_with_features(question,requirements,vec![],suggestions,sources)
+}
+
+pub fn screen_with_features(question: &str, requirements: Vec<HardRequirement>,
+    features: Vec<String>, suggestions: Vec<Suggestion>, sources: &[SearchResult]) -> GateResult
 {
     let count = suggestions.len();
-    if requirements.len() > 4
+    if requirements.len() > 4 || features.len() > 3
         || requirements.iter().any(|r| !quoted_requirement_valid(question,r))
-        || (appears_to_have_hard_limit(question) && requirements.is_empty()) {
+        || (appears_to_have_hard_limit(question) && requirements.is_empty())
+        || features.iter().any(|feature| feature.trim().len()<3
+            || feature.len()>60 || !norm(question).contains(&norm(feature))) {
         return GateResult {
             approved:vec![],rejected:count,requirements:requirements.len(),
-            note:"Explicit numeric requirement could not be safely parsed; no candidates admitted.".into()
+            features_checked:features.len(),
+            note:"A requirement could not be tied to the user's actual request; no candidates admitted.".into()
         };
     }
     let mut approved = Vec::new();
     let mut seen = HashSet::new();
     let mut rejected = 0;
     for suggestion in suggestions.into_iter().take(8) {
-        match valid_suggestion(suggestion,&requirements,sources) {
+        match valid_suggestion(suggestion,&requirements,&features,sources) {
             Some(valid) if seen.insert(norm(&valid.title)) && approved.len()<3 => approved.push(valid),
             _ => rejected += 1,
         }
     }
     GateResult{
-        approved,rejected,requirements:requirements.len(),
-        note:"Source quotes are structurally checked; interpretation, genre and source reliability still need judgment.".into()
+        approved,rejected,requirements:requirements.len(),features_checked:features.len(),
+        note:"Exact quotes and explicit constraints were checked; source reliability and broader meaning still need judgment.".into()
     }
 }
 
@@ -348,6 +361,25 @@ mod tests {
         proposal.creator="Emperor".into();
         assert!(screen("industrial metal albums",vec![],vec![proposal],&[src(content)])
             .approved.is_empty(), "Creator from another sentence must not pass");
+    }
+
+    #[test]
+    fn literal_style_requirements_must_match_the_candidates_own_quote() {
+        let moody="The Halo Effect is a Swedish melodic death metal band. The Halo Effect performs melodic death metal with atmospheric guitar melodies.";
+        let thrash="Havok is an American thrash metal band. Havok plays fast thrash metal guitar riffs.";
+        let mut other=item("Havok","Havok is an American thrash metal band.",
+            "Havok plays fast thrash metal guitar riffs.",None);
+        other.source=2;
+        let good=item("The Halo Effect",
+            "The Halo Effect is a Swedish melodic death metal band.",
+            "The Halo Effect performs melodic death metal with atmospheric guitar melodies.",None);
+        let r=screen_with_features("bands playing melodic death metal",
+            vec![],vec!["melodic death metal".into()],
+            vec![other,good],&[src(moody),src(thrash)]);
+        assert_eq!(r.approved.len(),1);
+        assert_eq!(r.approved[0].title,"The Halo Effect");
+        assert_eq!(r.rejected,1);
+        assert_eq!(r.features_checked,1);
     }
 
     #[test]
