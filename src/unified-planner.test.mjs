@@ -344,8 +344,10 @@ test("a user correction overrides old public entity interpretation",async()=>{
   assert.equal(updated.search,true);
   assert.equal(updated.intent,"refine");
   assert.match(updated.query,/Norwegian black metal/);
-  assert.match(prompt,/discard that interpretation and re-search using the corrected public identity/,
-    "Active task instructions must explicitly require reinterpreting the corrected entity");
+  assert.match(prompt,/CURRENT USER TURN.*Norwegian black metal band/,
+    "The user's correction must reach the local planner as the authoritative current turn");
+  assert.match(prompt,/PREVIOUS VALIDATED PUBLIC TASK/,
+    "The local planner must retain the context of the earlier mistaken lookup");
   assert.doesNotMatch(prompt,/fantasy elements/,"Do not trust the assistant's old interpretation");
 });
 
