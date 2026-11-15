@@ -49,7 +49,7 @@ const privateUrl = /https?:\/\//i;
 const defaultWeb: WebToolDecision = {search:false,reason:"No external lookup selected",method:"not-needed"};
 
 const researchTaskInstructions = [
-  "For a search, also return web.task. Choose kind 'discover' when the user wants suitable options, 'verify' when they want details about a specific named result, or 'lookup' for other factual questions.",
+  "For a search, also return web.task. Choose 'discover' ONLY when the user seeks suitable works, products or other options. Choose 'verify' ONLY when checking claims about one identifiable, specific named item. Choose 'lookup' for factual explanations, current events, release histories, latest versions and general status questions, even when several items might appear in search results. Searching for recent releases is NOT by itself a recommendation request.",
   "For 'verify', set subject to the exact public name being checked and use that name plus the missing details as search terms. A reference used as a comparison is not the subject of a discovery search.",
   "Copy each explicit, still-active numerical limit from the user's words as a short verbatim quote, a relation (lt, lte, gt, gte, eq), a number (limit), and a unit. Leave open-ended preferences as preferences. Never add a numerical limit to the query or task that the user did not specify.",
   "If the user wants specific credits, list those roles in task.roles. Use author, director, studio, producer, distributor, publisher, developer, artist, composer or creator. In task.exclude, copy names from the user's request that should not be suggested, including a reference they want alternatives to.",
