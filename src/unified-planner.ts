@@ -53,6 +53,7 @@ const researchTaskInstructions = [
   "For 'verify', set subject to the exact public name being checked and use that name plus the missing details as search terms. A reference used as a comparison is not the subject of a discovery search.",
   "Copy each explicit, still-active numerical limit from the user's words as a short verbatim quote, a relation (lt, lte, gt, gte, eq), a number (limit), and a unit. Leave open-ended preferences as preferences. Never add a numerical limit to the query or task that the user did not specify.",
   "If the user wants specific credits, list those roles in task.roles. Use author, director, studio, producer, distributor, publisher, developer, artist, composer or creator. In task.exclude, copy names from the user's request that should not be suggested, including a reference they want alternatives to.",
+  "A correction by the user is authoritative about their intended meaning or personal preferences, NOT authoritative evidence that an external factual claim is true. If they correct an entity type (such as a band rather than a game), replan the original task with that meaning. If they reject a public work, include that exact work in task.exclude during continued discovery. If they dispute a factual claim or quote, search again for independent reliable sources instead of repeating the old answer.",
   'Task shape: {"kind":"discover|verify|lookup","subject":"","requirements":[{"quote":"under two hours","relation":"lt","limit":2,"unit":"hours"}],"roles":[],"exclude":[]}. Use empty arrays when no such criterion applies.'
 ].join("\n");
 
@@ -121,6 +122,7 @@ export function withPublicPlanningHistory(prompt:string,current:string,
     "CURRENT USER TURN (the only request being judged now): "+JSON.stringify(current.slice(0,400)),
     "FIRST infer the user's continuing goal from the prior USER turns, then judge the current turn.",
     "If an earlier turn opened a public discovery/recommendation task, a short current follow-up describing desired properties, exclusions, limitations, budget or other constraints usually CONTINUES that task. Do not reinterpret it as an unrelated personal disclosure. Refine the public query and use web.search=true if actual public facts would improve the ongoing answer.",
+    "When the user corrects a previously misunderstood public entity or rejects a suggested option, revise the ongoing goal rather than defend the earlier assistant answer. Treat the user's new meaning and exclusions as authoritative; treat disputed historical or biographical facts as hypotheses requiring independent corroboration.",
     "If the current turn changes subject, closes the discovery task, or declines recommendations or research, choose web.search=false unless the CURRENT turn makes a distinct new public research request.",
     "A standalone personal observation, praise, complaint, greeting, joke, emotional update or simple conversation is not a research request. Choose web.search=false without needing exact opt-out words.",
     "Judge meaning in context, not the presence of words like wish, prefer, want, search, or venting.",
@@ -158,6 +160,7 @@ export function activePublicTaskPrompt(current:string,
     "CURRENT USER TURN (authoritative): "+JSON.stringify(current.slice(0,400)),
     "Decide what the current user is doing relative to that active task:",
     "- refine: supplies a requirement, preference, exclusion or clarification for the same discovery, or asks to verify an earlier result. A reference such as 'it' or 'the first one' may refer to a particular result. For that follow-up, search for its exact name and the new details. If no result was offered, retain the discovery goal and add the requested criteria.",
+    "- correction: if the user says you interpreted an entity as the wrong type, discard that interpretation and re-search using the corrected public identity. If the user dislikes or refuses a suggestion, add that item's exact name to task.exclude and preserve the broader goal. A user's challenge to a sourced fact is a reason to verify with independent sources, not automatic proof that either side is right.",
     "- end: declines, cancels, or withdraws the search/recommendations. No search.",
     "- new: switches to a genuinely new public research request. Plan only that new query.",
     "- chat: changes to ordinary conversation, appreciation, a joke, or a personal concern with no actionable refinement. No search.",
