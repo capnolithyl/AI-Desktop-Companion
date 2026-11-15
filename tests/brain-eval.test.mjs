@@ -523,6 +523,46 @@ test("production Brain Lab Live adapter delegates actual search to Rust chat_str
   assert.match(code,/liveWeb:true/);
 });
 
+test("candidate-first recovery is restricted to source-grounded names and genuine SearXNG",()=>{
+  const lib=readFileSync(new URL("../src-tauri/src/lib.rs",import.meta.url),"utf8");
+  const evidence=readFileSync(new URL("../src-tauri/src/evidence_pack.rs",import.meta.url),"utf8");
+  const gate=readFileSync(new URL("../src-tauri/src/recommendation_gate.rs",import.meta.url),"utf8");
+  assert.match(lib,/discover_candidate_leads\(/);
+  assert.match(lib,/candidate_details_query\(/);
+  assert.match(lib,/web_search::web_search\(/);
+  assert.match(lib,/focused_task\.subject=Some\(lead\.title\.clone\(\)\)/);
+  assert.match(evidence,/normalize\(&source\.content\)\.contains\(&normalize\(quote\)\)/);
+  assert.match(evidence,/validate_leads\(proposals,sources,&task\.exclude\)/);
+  assert.match(gate,/not_the_named_target_subject/);
+});
+
+test("live report shows candidate-first attempts but cannot call a failed shortlist a success",async()=>{
+  const report=await runBrainEvaluation({
+    scenarios:[byId("verification-game-playtime")],mode:"live",
+    model:"fixture",repetitions:1,liveWeb:true,
+    planWeb:async()=>({search:true,query:"short horror games under two hours",
+      reason:"Search real game runtimes"}),
+    infer:async({researchQuery})=>({
+      text:"The found sources did not establish a safe recommendation.",
+      webExecution:{query:researchQuery,results:[{
+        title:"Indie horror game list",url:"https://example.org/list",
+        content:"A listing of several games.",engine:"test"}],
+        sourcesCarriedOver:false,researchAudit:{
+          status:"no_supported_matches",accepted:0,rejected:2,elapsedMs:1000,
+          note:"Insufficient evidence",candidateLeads:["Iron Lung [source 1]"],
+          candidateQueries:["\"Iron Lung\" duration short horror game"],
+          recommendationTask:true,recommendationApproved:[],
+          recommendationRejected:2
+        }}
+    })
+  });
+  const step=report.cases[0].steps[0];
+  assert.equal(step.evidencePass,false);
+  assert.equal(step.pass,false);
+  assert.match(brainEvalMarkdown(report),/Source-identified candidates: Iron Lung/);
+  assert.match(brainEvalMarkdown(report),/Attempted candidate-specific public lookup/);
+});
+
 test("native Brain Lab report recovery reopens the last autosaved report after restart",()=>{
   const app=readFileSync(new URL("../src/App.tsx",import.meta.url),"utf8");
   const manager=readFileSync(new URL("../src/brain-eval-manager.ts",import.meta.url),"utf8");
