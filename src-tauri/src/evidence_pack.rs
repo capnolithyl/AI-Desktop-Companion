@@ -458,7 +458,8 @@ pub async fn extract(
         ResearchKind::Lookup =>
             "Extract facts DIRECTLY needed to answer the current question. If asked for the latest releases or updates, identify concrete released version or model tags, reported dates and release status from the freshest credible source. Do not substitute a roadmap, model still in training, or an unrelated product feature for an actual release. Distinguish stable releases from previews or nightly builds. Use the precise model/build tag as subject when the quote names that tag rather than the broader product. Every claimed number and date must appear verbatim in the cited quote. If sources cannot establish recency, report only what is supported.",
         ResearchKind::Discover =>
-            "Find up to three actual individual works, games, books, albums or other entities that fit the request. \
+            "If the selected Subject is a specific named work, verify ONLY that work using its specific excerpts. Never substitute a different work or an article headline. \
+             Find up to three actual individual works, games, books, albums or other entities that fit the request. \
              A search-result article title, ranked-list heading, YouTube video title, publisher, review or web page is NOT a candidate when the user seeks an item featured inside that page. \
              Extract the exact named item from a numbered source excerpt, never use the page headline as the item name. \
              Judge fit by meaning, including paraphrases, and prefer candidate-specific excerpts. \
