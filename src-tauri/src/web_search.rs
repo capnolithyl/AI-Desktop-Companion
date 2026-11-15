@@ -132,6 +132,9 @@ async fn web_search_impl(endpoint: String, query: String, recent: bool) -> Resul
 
     let url = format!("{}/search", local_searxng_url(&endpoint)?);
     let client = reqwest::Client::builder()
+        // Local Docker traffic must never be sent through a system HTTP proxy.
+        // The service health check already uses the same direct-loopback policy.
+        .no_proxy()
         .connect_timeout(Duration::from_secs(5))
         .timeout(Duration::from_secs(22))
         .redirect(reqwest::redirect::Policy::none())
@@ -169,7 +172,18 @@ async fn web_search_impl(endpoint: String, query: String, recent: bool) -> Resul
     }
     let data: Value = serde_json::from_slice(&bytes)
         .map_err(|_| "SearXNG did not return JSON. Verify search.formats includes json.".to_owned())?;
-    Ok(search_results(&data))
+    let results = search_results(&data);
+    if results.is_empty() {
+        // A healthy homepage says nothing about the upstream search engines.
+        // Do not hide engine failures behind the ordinary "no matches" reply.
+        let unavailable = data["unresponsive_engines"].as_array().map_or(0, |engines| engines.len());
+        if unavailable > 0 {
+            return Err(format!(
+                "SearXNG returned no results and reported {unavailable} unresponsive engine(s). Check Docker logs, enabled engines and outbound internet access."
+            ));
+        }
+    }
+    Ok(results)
 }
 
 #[cfg(test)]
