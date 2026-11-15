@@ -174,6 +174,7 @@ const safeEvalStatus = value => {
       "webUnobserved","webAgreement","unnecessaryWeb","missedWeb",
       "liveSearches","liveSearchesWithSources","liveSources",
       "evidencePasses","evidenceFacts","evidenceUnavailable",
+      "shortlistTurns","shortlistedItems","rejectedItems","noSupportedMatches",
       "tokensPerSecond","answers","answerChecks","reviewTurns","elapsedMs"
     ].map(name => [name,finite(value.results[name])])) : null;
   return {
