@@ -52,7 +52,7 @@ pub struct ApprovedSuggestion {
 #[serde(rename_all = "camelCase")]
 pub struct MeasurementEvidence {
     pub source: usize,
-    pub value: u32,
+    pub value: f64,
     pub unit: String,
     pub quote: String,
 }
@@ -225,7 +225,13 @@ pub fn screen_with_criteria(question: &str, requirements: Vec<HardRequirement>,
         relations_checked:approved.iter().map(|candidate|candidate.relations.len()).sum(),
         approved,rejected,requirements:requirements.len(),features_checked:features.len(),
         exclusions_checked:exclusions.len(),
-        note:"Quotes, typed roles, numeric limits and exclusions screened; source truth and style equivalence remain uncertain.".into()
+        note:if count==0 {
+            "No candidate proposals came out of the retrieved source excerpts; the next search needs better candidate-level evidence.".into()
+        } else if approved.is_empty() {
+            format!("All {count} proposed candidates lacked evidence, conflicted with a constraint or repeated the user's reference work.")
+        } else {
+            "Quotes, typed roles, numeric limits and exclusions screened; source truth and style equivalence remain uncertain.".into()
+        }
     }
 }
 
