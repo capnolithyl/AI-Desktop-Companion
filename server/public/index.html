@@ -880,10 +880,16 @@
         "Status: "+state.phase+" · "+(state.step||""),
       ];
       if(state.mode==="desktop-and-relay"){
-        lines.push("Desktop relay: "+(state.desktopConnected?"connected":"offline"));
+        // Same relay state used by the Online/Offline header. Supervisor
+        // process ownership is a separate concern, NOT a connectivity test.
+        var relayOnline=state.relayDesktopConnected===true;
+        lines.push("Desktop relay: "+(relayOnline?"connected":"offline"));
         lines.push("Supervisor-managed process: "+(state.managedDesktopRunning?"running":"not running"));
+        if(state.desktopConnected!==relayOnline)
+          lines.push("Supervisor probe: "+(state.desktopConnected?"connected":"unavailable")+
+            " (does not override the live relay connection)");
         if(state.desktopExit)lines.push("Managed process exit: "+state.desktopExit);
-        if(!state.desktopConnected && state.desktopLog)
+        if(!relayOnline && state.desktopLog)
           lines.push("Recent startup output:\n"+state.desktopLog);
       }
       if(state.error)lines.push("Problem: "+state.error);
