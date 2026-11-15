@@ -313,7 +313,7 @@ test("saved dislikes influence only the local planner, never raw search terms",a
     async prompt=>{
       captured=prompt;
       return JSON.stringify({ids:[],web:{search:true,
-        query:"tactical RPGs like Fire Emblem excluding XCOM",
+        query:"tactical RPGs like Fire Emblem",
         reason:"Respect an existing saved preference",
         task:{kind:"discover",requirements:[],roles:[],exclude:["XCOM"]}}});
     },
