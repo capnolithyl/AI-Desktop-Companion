@@ -25,6 +25,34 @@ fn normalize(s:&str)->String {
     s.split_whitespace().collect::<Vec<_>>().join(" ").to_lowercase()
 }
 
+/// Split sentences without treating initials ("T. Kingfisher") or decimal
+/// separators ("1.5") as boundaries.
+pub fn clauses(input:&str)->Vec<&str>{
+    let mut result=Vec::new();
+    let mut start=0;
+    for (index,ch) in input.char_indices(){
+        let separator=match ch {
+            '!'|'?'|';'|'\n'=>true,
+            '.'=>{
+                let after=input[index+1..].chars().next();
+                let before=input[..index].split_whitespace().last().unwrap_or("");
+                after.is_none_or(char::is_whitespace) && before.chars().count()>1
+            },
+            _=>false
+        };
+        if separator {
+            if let Some(part)=input.get(start..index) {
+                if !part.trim().is_empty(){result.push(part)}
+            }
+            start=index+ch.len_utf8();
+        }
+    }
+    if let Some(part)=input.get(start..){
+        if !part.trim().is_empty(){result.push(part)}
+    }
+    result
+}
+
 fn markers(role:&str)->Option<&'static [&'static str]> {
     // These are typed attribution predicates, NOT media/entity routing rules.
     match role {
@@ -56,7 +84,7 @@ pub fn verify(
     if !normalize(&source.content).contains(quote.as_str()) {return None}
     let subject=normalize(work);
     let value=normalize(name);
-    let matched=proposal.quote.split(['.','!','?',';','\n']).any(|clause|{
+    let matched=clauses(&proposal.quote).into_iter().any(|clause|{
         let c=normalize(clause);
         if !c.contains(subject.as_str()) || !c.contains(value.as_str()) {return false}
         // A director merely mentioned in the same sentence as the movie
