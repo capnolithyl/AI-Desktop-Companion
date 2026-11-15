@@ -219,7 +219,9 @@ async function execute(
           title:string;url:string;content:string;engine:string;publishedDate?:string
         }>;sourcesCarriedOver?:boolean;
         researchAudit?:{status:string;accepted:number;rejected:number;
-          elapsedMs:number;note:string}|null;stats?:{
+          elapsedMs:number;note:string;recommendationTask?:boolean;
+          recommendationApproved?:string[];recommendationRejected?:number;
+          constraintsChecked?:number}|null;stats?:{
         promptTokens?:number|null;outputTokens?:number|null;
         evalDurationNs?:number|null;loadDurationNs?:number|null
       }|null}>("chat_stream",{request:{
