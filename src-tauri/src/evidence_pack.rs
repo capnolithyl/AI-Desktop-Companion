@@ -199,7 +199,7 @@ fn extraction_schema() -> Value {
                     "relations":{"type":"array","maxItems":6,"items":{
                         "type":"object","properties":{
                             "role":{"type":"string","enum":[
-                                "author","director","studio","distributor",
+                                "author","director","studio","producer","distributor",
                                 "publisher","developer","artist","composer","creator"
                             ]},
                             "name":{"type":"string"},
@@ -296,8 +296,10 @@ pub async fn extract(
                 For factual attribution, set creator only when the source explicitly \
                 attributes that specific work. Set creator='' and relations=[] when \
                 nobody is explicitly attributed. Otherwise supply matching typed relations with \
-                exact quote, role (author/director/studio/distributor/publisher/developer/artist/ \
-                composer/creator) and name. Do NOT swap producer and distributor, \
+                exact quote, role (author/director/studio/producer/distributor/publisher/developer/artist/ \
+                composer/creator) and name. Studio means an explicitly named \
+                production studio/company; a person who produced the film is a producer. \
+                Do NOT swap studio, producer, publisher or distributor, \
                 or infer a director from somebody praising the movie. If an attribution \
                 is not explicit, omit it, rather than hallucinating it. \
                 Copy all quotes exactly from the numbered source excerpt. Never borrow \
