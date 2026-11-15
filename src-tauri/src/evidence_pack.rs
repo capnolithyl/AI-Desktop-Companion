@@ -347,6 +347,27 @@ mod tests {
     }
 
     #[test]
+    fn shortlist_extractor_schema_and_json_are_consistent() {
+        let schema = extraction_schema();
+        assert_eq!(schema["properties"]["suggestions"]["maxItems"], 3);
+        assert_eq!(schema["properties"]["features"]["maxItems"], 3);
+        assert!(schema["required"].as_array().unwrap().iter()
+            .any(|field| field == "recommendationTask"));
+        let proposal: FactCandidates = serde_json::from_value(json!({
+            "facts": [], "recommendationTask": true,
+            "requirements": [{
+                "quote":"under six episodes","relation":"lt",
+                "limit":6,"unit":"episodes"
+            }],
+            "features":["horror"],
+            "suggestions":[]
+        })).expect("the exact structured Ollama response must deserialize");
+        assert!(proposal.recommendation_task);
+        assert_eq!(proposal.requirements.len(),1);
+        assert_eq!(proposal.features,vec!["horror".to_owned()]);
+    }
+
+    #[test]
     fn extract_science_plan_without_attributing_later_goal_to_earlier_step() {
         let sources = vec![make_source("Mission timeline",
             "Artemis III will test docking systems in Earth orbit in 2027. Artemis IV is planned to land humans on the Moon in 2028.")];
