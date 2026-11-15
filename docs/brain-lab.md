@@ -54,7 +54,7 @@ and cross-genre examples. The app version is **0.9.22**.
 
 To reduce remote startup risk, the supervisor now runs a fixed, bounded
 `cargo check --locked --manifest-path src-tauri/Cargo.toml` **only if
-native Rust source/config changed**, after JavaScript build/tests and
+native Rust source/build-script files changed**, after JavaScript build/tests and
 before restarting its managed desktop. A native compile failure rolls back
 the checkout instead of first trying to launch broken Rust. No arbitrary
 commands are passed through the phone; Cargo metadata-only version bumps
