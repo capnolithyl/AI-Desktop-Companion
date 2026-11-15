@@ -908,7 +908,7 @@ export function brainEvalMarkdown(report:EvalReport):string {
           if(audit.candidateLeads?.length)
             lines.push("- Source-identified candidates: "+audit.candidateLeads.join(", "));
           for(const query of audit.candidateQueries??[])
-            lines.push("- Executed candidate-specific search: "+query);
+            lines.push("- Attempted candidate-specific public lookup: "+query);
           for(const fact of audit.acceptedDetails??[])
             lines.push("- Accepted source fact ["+fact.source+"] "+fact.subject+" | "+
               fact.claim+" | exact quote: "+fact.quote);
