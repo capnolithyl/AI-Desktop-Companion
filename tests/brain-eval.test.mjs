@@ -286,6 +286,19 @@ test("live harness accepts a model adapter and records replies without mutating 
   assert.equal(original,JSON.stringify(EVAL_FACTS));
 });
 
+test("live web evaluation preflight uses real SearXNG, not fake source results or HTTP-only readiness",()=>{
+  const manager=readFileSync(new URL("../src/brain-eval-manager.ts",import.meta.url),"utf8");
+  const service=readFileSync(new URL("../src-tauri/src/search_service.rs",import.meta.url),"utf8");
+  const search=readFileSync(new URL("../src-tauri/src/web_search.rs",import.meta.url),"utf8");
+  assert.match(manager,/action:"probe",endpoint:settings\.searxngEndpoint/);
+  assert.match(manager,/step\.expect\.web===true \|\| step\.expect\.route==="research"/);
+  assert.match(manager,/if\(probe\.state!=="ready"\)throw new Error/);
+  assert.match(service,/source_priority::search\(\s*endpoint, "Python programming language"/);
+  assert.match(service,/"no-results"/);
+  assert.match(search,/\.no_proxy\(\)/);
+  assert.match(search,/unresponsive_engines/);
+});
+
 test("manual cancellation cannot silently run the scenario catalog",async()=>{
   const controller=new AbortController();
   controller.abort();
