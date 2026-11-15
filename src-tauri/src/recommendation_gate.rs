@@ -12,7 +12,7 @@ pub enum ResearchKind {
     Lookup,
 }
 
-#[derive(Debug, Default, Deserialize)]
+#[derive(Clone, Debug, Default, Deserialize)]
 pub struct ResearchTask {
     pub kind: ResearchKind,
     #[serde(default)]
@@ -161,7 +161,7 @@ fn role_search_term(role: &str) -> Option<&str> {
     }
 }
 
-fn followup_query(title: &str, fields: &[&str]) -> Option<String> {
+pub(crate) fn followup_query(title: &str, fields: &[&str]) -> Option<String> {
     // The title must come from a matched public excerpt. Use it as a quoted
     // search term and append only field names from the application.
     if fields.is_empty() || title.contains(['"', '@', '<', '>'])
@@ -171,6 +171,25 @@ fn followup_query(title: &str, fields: &[&str]) -> Option<String> {
     }
     let query = format!("\"{title}\" {}", fields.join(" "));
     (query.chars().count() <= 180).then_some(query)
+}
+
+/// Public candidate-title query. Fields are derived from typed limits/roles,
+/// never from injected source instructions or private profile text.
+pub(crate) fn candidate_details_query(title: &str, task: &ResearchTask) -> Option<String> {
+    let mut fields = Vec::new();
+    for requirement in &task.requirements {
+        if let Some(value) = quantities::canonical(requirement.limit, &requirement.unit) {
+            let field = missing_field(value.dim);
+            if !fields.contains(&field) { fields.push(field); }
+        }
+    }
+    for role in &task.roles {
+        if let Some(field) = role_search_term(role) {
+            if !fields.contains(&field) { fields.push(field); }
+        }
+    }
+    if fields.is_empty() { fields.push("details"); }
+    followup_query(title, &fields)
 }
 
 fn candidate_evidence<'a>(
@@ -285,8 +304,8 @@ pub fn screen_task(
             rejected_details.push(format!("{}: explicitly_excluded", item.title));
             continue;
         }
-        if task.kind == ResearchKind::Verify && target.as_ref() != Some(&title) {
-            rejected_details.push(format!("{}: not_the_named_verification_subject", item.title));
+        if task.subject.is_some() && target.as_ref() != Some(&title) {
+            rejected_details.push(format!("{}: not_the_named_target_subject", item.title));
             continue;
         }
         // An identity quote may justify a *focused real search* even when the
@@ -472,6 +491,26 @@ mod tests {
         assert_eq!(outcome.approved.len(), 1);
         assert_eq!(outcome.approved[0].title, "Iron Lung");
         assert_eq!(outcome.approved[0].measurements[0].value, 40.0);
+    }
+
+    #[test]
+    fn a_targeted_discovery_can_never_switch_to_an_unrelated_work() {
+        let data = "Iron Lung is a short horror game. The Exit 8 is another short horror game.";
+        let task = ResearchTask {kind:ResearchKind::Discover,subject:Some("Iron Lung".into()), ..Default::default()};
+        let other = item("The Exit 8","The Exit 8 is another short horror game.",
+            "The Exit 8 is another short horror game.",None);
+        let out = screen_task("short horror games",&task,vec![other],&[src(data)]);
+        assert!(out.approved.is_empty());
+        assert!(out.rejected_details[0].contains("not_the_named_target_subject"));
+    }
+    #[test]
+    fn a_candidate_details_query_uses_numeric_dimensions_and_credit_roles() {
+        let task=ResearchTask {kind:ResearchKind::Discover,
+            requirements:vec![HardRequirement{quote:"under two hours".into(),
+                relation:"lt".into(),limit:2.0,unit:"hours".into()}],
+            roles:vec!["director".into()],..Default::default()};
+        assert_eq!(candidate_details_query("Iron Lung",&task).as_deref(),
+            Some("\"Iron Lung\" duration director"));
     }
 
     #[test]
