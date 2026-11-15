@@ -44,7 +44,7 @@ export type EvalStepResult = {
   webExecution?:{query:string|null;results:WebResult[];sourcesCarriedOver:boolean;
     researchAudit?:{status:string;accepted:number;rejected:number;elapsedMs:number;note:string;
       recommendationTask?:boolean;recommendationApproved?:string[];
-      recommendationRejected?:number;constraintsChecked?:number}|null};
+      recommendationRejected?:number;constraintsChecked?:number;featuresChecked?:number}|null};
   /** Previous validated public query available to this turn's planner (never assistant prose). */
   activePublicQuery?: string;
   selectedMemoryIds: number[];
@@ -92,7 +92,7 @@ export type EvalInferenceResult = string | {
   webExecution?:{query:string|null;results:WebResult[];sourcesCarriedOver:boolean;
     researchAudit?:{status:string;accepted:number;rejected:number;elapsedMs:number;note:string;
       recommendationTask?:boolean;recommendationApproved?:string[];
-      recommendationRejected?:number;constraintsChecked?:number}|null};
+      recommendationRejected?:number;constraintsChecked?:number;featuresChecked?:number}|null};
 };
 export type EvalInference = (args:{
   messages:EvalTurn[];
@@ -800,7 +800,8 @@ export function brainEvalMarkdown(report:EvalReport):string {
           if(audit.recommendationTask)lines.push(
             "- Recommendation gate: "+(audit.recommendationApproved??[]).length+
             " admitted; "+(audit.recommendationRejected??0)+" rejected; "+
-            (audit.constraintsChecked??0)+" hard requirements; candidates: "+
+            (audit.constraintsChecked??0)+" hard limits; "+
+            (audit.featuresChecked??0)+" style/genre requirements; candidates: "+
             (audit.recommendationApproved??[]).join(", "));
         }
         for(const [n,src] of s.webExecution.results.entries())
