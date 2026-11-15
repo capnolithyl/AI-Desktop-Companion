@@ -217,7 +217,9 @@ async function execute(
       const result=await invoke<{content:string;modelUsed?:string;
         searchQuery?:string|null; sources?:Array<{
           title:string;url:string;content:string;engine:string;publishedDate?:string
-        }>;sourcesCarriedOver?:boolean;stats?:{
+        }>;sourcesCarriedOver?:boolean;
+        researchAudit?:{status:string;accepted:number;rejected:number;
+          elapsedMs:number;note:string}|null;stats?:{
         promptTokens?:number|null;outputTokens?:number|null;
         evalDurationNs?:number|null;loadDurationNs?:number|null
       }|null}>("chat_stream",{request:{
@@ -235,7 +237,8 @@ async function execute(
       return {text:result.content.trim(),modelUsed:result.modelUsed??settings.model,
         stats:result.stats??undefined,
         webExecution:{query:result.searchQuery??null,
-          results:result.sources??[],sourcesCarriedOver:result.sourcesCarriedOver===true}};
+          results:result.sources??[],sourcesCarriedOver:result.sourcesCarriedOver===true,
+          researchAudit:result.researchAudit??null}};
     }finally{if(requestId===id)requestId=null}
   };
   const planWeb=async(question:string,previous:EvalTurn[],
