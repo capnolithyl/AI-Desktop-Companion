@@ -423,6 +423,6 @@ test("production Brain Lab Live adapter delegates actual search to Rust chat_str
   assert.match(code,/researchRoute:researchQuery\?"research":"chat"/);
   assert.match(code,/researchQuery:researchQuery\|\|undefined/);
   assert.match(code,/searxngEndpoint:settings\.searxngEndpoint/);
-  assert.match(code,/sources:?.*Array/);
+  assert.match(code,/sources\?:Array/);
   assert.match(code,/liveWeb:true/);
 });
