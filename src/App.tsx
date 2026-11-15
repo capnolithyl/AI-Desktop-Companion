@@ -52,7 +52,7 @@ import {
 import { MemoryPanel } from "./MemoryPanel";
 import { BrainEvalPanel } from "./BrainEvalPanel";
 import {
-  subscribeBrainEval, getBrainEvalStatus, getBrainEvalReport,
+  subscribeBrainEval, getBrainEvalStatus, getBrainEvalReport, restoreBrainEvalReport,
   startBrainEvaluation, stopBrainEvaluation, reviewBrainEvalScenario,
   getBrainEvalCaseRecords, brainEvalEnvironment, BRAIN_EVAL_BUILD,
   type BrainEvalRequest
@@ -244,6 +244,7 @@ function ReplyMetrics({ diagnostics }: { diagnostics?: Diagnostics }) {
 
 export default function App() {
   const brainEvalStatus = useSyncExternalStore(subscribeBrainEval, getBrainEvalStatus, getBrainEvalStatus);
+  useEffect(()=>{void restoreBrainEvalReport()},[]);
   const [screen, setScreen] = useState<Screen>("compact");
   const [settings, setSettings] = useState<Settings>(loadSettings);
   const [draft, setDraft] = useState<Settings>(settings);
