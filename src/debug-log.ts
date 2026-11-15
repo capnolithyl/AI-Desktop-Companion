@@ -23,6 +23,7 @@ export type ResearchAudit = {
   recommendationTask?: boolean;
   recommendationApproved?: string[];
   recommendationRejected?: number;
+  rejectedDetails?: string[];
   constraintsChecked?: number;
   featuresChecked?: number;
   exclusionsChecked?: number;
@@ -182,6 +183,8 @@ function performanceLines(diagnostics: Diagnostics): string[] {
       "  Research evidence: " + diagnostics.research.status,
       "  Accepted source-anchored facts: " + diagnostics.research.accepted,
       "  Rejected candidates: " + diagnostics.research.rejected,
+      ...(diagnostics.research.rejectedDetails?.length
+        ? ["  Rejection reasons: " + diagnostics.research.rejectedDetails.join("; ")] : []),
       "  Extraction time: " + duration(diagnostics.research.elapsedMs),
       "  Evidence note: " + diagnostics.research.note
     ] : []),
