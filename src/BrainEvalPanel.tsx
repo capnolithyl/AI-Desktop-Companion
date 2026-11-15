@@ -289,8 +289,14 @@ export function BrainEvalPanel({settings}:{settings:Settings}){
             {step.webExecution?.researchAudit&&<small>
               Evidence extraction: {step.webExecution.researchAudit.status} ·
               {step.webExecution.researchAudit.accepted} quote-matched ·
-              {step.webExecution.researchAudit.rejected} rejected
+              {step.webExecution.researchAudit.rejected} rejected ·
+              {step.webExecution.researchAudit.extractionAttempts??1} extraction attempt(s)
             </small>}
+            {step.webExecution?.researchAudit?.acceptedDetails?.map((fact,i)=><small
+              key={fact.source+"-"+fact.subject+"-"+i}>
+              Supported fact [{fact.source}]: {fact.subject} · {fact.claim}
+              <span title={fact.quote}> · Quote: {fact.quote.slice(0,240)}</span>
+            </small>)}
             {step.webExecution?.researchAudit?.rejectedDetails?.map((reason,i)=><small
               key={reason+"-"+i} className="brain-eval-review">Rejected evidence: {reason}</small>)}
             {step.webExecution?.researchAudit?.recommendationTask&&<small>
