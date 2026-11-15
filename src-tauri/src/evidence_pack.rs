@@ -91,7 +91,8 @@ fn validate(candidate: FactCandidate, sources: &[SearchResult]) -> Option<Ground
         .and_then(|url| url.host_str().map(str::to_owned))
         .is_some_and(|host| {
             let domain = subject.trim().to_ascii_lowercase();
-            domain.contains('.') && !domain.contains(['/', ' ', '@', ':'])
+            domain.contains('.') && domain.chars().all(|ch|
+                ch.is_ascii_alphanumeric() || ch == '.' || ch == '-')
                 && (host == domain || host == format!("www.{domain}"))
         });
     // For other entities, quotes must still name the subject exactly; the
@@ -226,9 +227,10 @@ fn extraction_schema(kind: ResearchKind) -> Value {
 
 fn source_input(sources: &[SearchResult]) -> String {
     sources.iter().enumerate().map(|(i, source)| format!(
-        "[{}] {} (Published: {})\nExcerpt: {}\n",
+        "[{}] {} (Published: {})\nURL: {}\nExcerpt: {}\n",
         i + 1, source.title,
         source.published_date.as_deref().unwrap_or("unknown"),
+        source.url,
         source.content.chars().take(MAX_SOURCE_CHARS).collect::<String>()
     )).collect::<Vec<_>>().join("\n")
 }
@@ -436,6 +438,21 @@ mod tests {
         ] {
             assert!(validate(bad, &sources).is_none());
         }
+    }
+
+    #[test]
+    fn official_website_url_can_anchor_its_own_fact_but_unrelated_hosts_cannot() {
+        let mut source = make_source("Welcome to Python.org",
+            "The official home of the Python Programming Language.");
+        source.url = "https://www.python.org/".into();
+        let fact = candidate(1, "python.org",
+            "Python.org is the official home of the Python programming language.",
+            "The official home of the Python Programming Language.");
+        assert!(validate(fact, &[source.clone()]).is_some());
+        source.url = "https://python.org.attacker.example/".into();
+        assert!(validate(candidate(1, "python.org",
+            "Python.org is the official home of the Python programming language.",
+            "The official home of the Python Programming Language."), &[source]).is_none());
     }
 
     #[test]
