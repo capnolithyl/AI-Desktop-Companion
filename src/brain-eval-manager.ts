@@ -183,6 +183,21 @@ async function execute(
   settings:Settings,request:BrainEvalRequest,
   scenarios:typeof EVAL_SCENARIOS, controller:AbortController
 ){
+  // Live evidence tests require real search results, not just a Docker homepage.
+  // Skip the network probe for selected scenarios that never expect web research.
+  if(request.mode==="live" && scenarios.some(scenario=>scenario.steps.some(step=>
+    step.expect.web===true || step.expect.route==="research"
+  ))){
+    setStatus({label:"Verifying live SearXNG results with a real public search…"});
+    const probe=await invoke<{state:string;message:string}>("search_service",{
+      action:"probe",endpoint:settings.searxngEndpoint
+    });
+    if(controller.signal.aborted)throw new Error("Evaluation stopped during search preflight");
+    if(probe.state!=="ready")throw new Error(
+      "Live web preflight failed: "+probe.message+
+      " The evaluation has not started. Fix live search before trusting research scores."
+    );
+  }
   const infer:EvalInference=async({
     messages,selectedMemories,evidence,researchPlanned,researchQuery,researchTask
   })=>{
