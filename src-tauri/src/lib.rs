@@ -733,10 +733,10 @@ async fn chat_stream_impl(
             let _ = app.emit("mikan://activity", json!({
                 "requestId": request.request_id, "text": "Checking source evidence…"
             }));
+            let evidence_started = std::time::Instant::now();
             let mut evidence = evidence_pack::extract(
                 &client, &url, &request.model, &user_request, task, &sources, selected_context
             ).await;
-            let mut evidence_ms = evidence.audit.elapsed_ms;
             let mut candidate_leads = Vec::new();
             let mut candidate_queries = Vec::new();
             // Discovery has two different jobs: identify the *individual item*
@@ -800,7 +800,6 @@ async fn chat_stream_impl(
                         &client, &url, &request.model, &user_request,
                         &focused_task, &sources, selected_context
                     ).await;
-                    evidence_ms += checked.audit.elapsed_ms;
                     evidence=checked;
                     if evidence.notes.is_some() { break; }
                 }
@@ -839,7 +838,9 @@ async fn chat_stream_impl(
                 evidence.audit.followup_query = Some(query);
             }
             }
-            evidence.audit.elapsed_ms = evidence_ms.max(evidence.audit.elapsed_ms);
+            // Includes both local extraction and any genuine focused public
+            // searches; the previous value counted only generation latency.
+            evidence.audit.elapsed_ms = evidence_started.elapsed().as_millis() as u64;
             evidence.audit.candidate_leads = candidate_leads;
             evidence.audit.candidate_queries = candidate_queries;
 
