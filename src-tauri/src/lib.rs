@@ -622,10 +622,13 @@ async fn chat_stream_impl(
                 });
             }
 
-            // Time-sensitive research benefits from fuller source passages.
-            // Search previews can omit key qualifiers, dates and distinctions
-            // between related entities or separate stages of a project.
-            if research_intent::needs_primary_source_verification(&messages) {
+            // Structured research needs source-page context, not just search
+            // previews that may blend neighboring works and unrelated numbers.
+            // Read at most two safely validated HTTPS pages in parallel; a
+            // failed page read leaves the original excerpt intact. The normal
+            // lighter path remains for conversations without this setting.
+            if request.structured_research
+                || research_intent::needs_primary_source_verification(&messages) {
                 let _ = app.emit("mikan://activity", json!({
                     "requestId": request.request_id,
                     "text": "Checking source pages…"
@@ -727,8 +730,16 @@ async fn chat_stream_impl(
         let latest_question = request.messages.iter().rev()
             .find(|message| message.role == "user")
             .map(|message| message.content.as_str()).unwrap_or("");
+        // A short follow-up ("under six episodes") loses its subject if
+        // the evidence extractor only sees the last user text. The planner
+        // already supplied a public, permission-checked query carrying the
+        // full topic and refinements. This is task context, NOT evidence.
+        let focus = match search_query.as_deref() {
+            Some(query) => format!("Public research topic: {query}. Latest user constraint: {latest_question}"),
+            None => latest_question.to_owned(),
+        };
         let (notes, audit) = evidence_pack::extract(
-            &client, &url, &request.model, latest_question, &sources, selected_context
+            &client, &url, &request.model, &focus, &sources, selected_context
         ).await;
         research_audit = Some(audit);
         if let Some(notes) = notes {
