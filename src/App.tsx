@@ -2285,6 +2285,7 @@ export default function App() {
         }),{
           automaticWebEnabled:canPlanPublicWeb,
           sourcePreferences:settings.sourcePreferences,
+          relevantUserFacts:liveFacts.filter(f=>selection.ids.includes(f.id)),
           history:messages,activePublicQuery:priorPublicQuery,
           publicSubjects:priorPublicQuery ? lastAssistant?.diagnostics?.research?.recommendationApproved : undefined,
           publicAnswer:priorPublicQuery && lastAssistant?.sources?.length ? lastAssistant.content : undefined
