@@ -8,6 +8,7 @@ const SHA_A="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 const SHA_B="bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
 const token="local-test-secret-with-more-than-thirty-two-characters";
 function fixture({dirty=false,diverged=false,failBuild=false,failInstall=false,
+  failCargoCheck=false,rustChanged=false,
   packageChange="none",manageDesktop=false,desktopReadyOutcome=true,
   desktopReadyProbe=null}={}){
   let head=SHA_A,remote=SHA_B;
@@ -49,6 +50,8 @@ function fixture({dirty=false,diverged=false,failBuild=false,failInstall=false,
       if(diverged)throw new Error("not a fast-forward");
       return "";
     }
+    if(op.startsWith("diff --name-only ") && op.endsWith(" -- src-tauri"))
+      return rustChanged?"src-tauri/src/recommendation_gate.rs":"";
     if(op.startsWith("diff --name-only "))return packageChange==="none"
       ?"":"package.json\npackage-lock.json";
     if(op.startsWith("show ")){
@@ -68,6 +71,8 @@ function fixture({dirty=false,diverged=false,failBuild=false,failInstall=false,
   };
   const supervisor=createDevSupervisor({
     cwd:"/repo",token,git,npm,port:0,manageDesktop,
+    cargoCheck:async()=>{seen.push("cargo check");
+      if(failCargoCheck)throw new Error("synthetic Rust compile error")},
     startChild:(name)=>{started.push(name);return {pid:7,exitCode:null,name}},
     stopChild:async(child)=>{stopped.push(child.name)},
     relayReady:async()=>{},desktopReady:desktopReadyProbe??(async()=>desktopReadyOutcome),
@@ -359,5 +364,46 @@ test("developer status follows actual relay heartbeat while restart readiness st
     const recovered=await (await get()).json();
     assert.equal(recovered.desktopConnected,true,
       "the existing online agent remains online even when a managed restart failed");
+  }finally{await supervisor.close()}
+});
+
+test("native Rust edits are compiled before a managed desktop restart",async()=>{
+  const {supervisor,seen,started}=fixture({
+    manageDesktop:true,rustChanged:true
+  });
+  await supervisor.start();
+  try{
+    await supervisor.inspect();
+    await supervisor.apply();
+    assert.equal(supervisor.getState().phase,"updated");
+    assert.ok(seen.includes("cargo check"));
+    assert.deepEqual(started,["server","desktop","server","desktop"]);
+  }finally{await supervisor.close()}
+});
+
+test("native compile failure rolls source back before starting a broken desktop",async()=>{
+  const {supervisor,seen,getHead,started}=fixture({
+    manageDesktop:true,rustChanged:true,failCargoCheck:true
+  });
+  await supervisor.start();
+  try{
+    await supervisor.inspect();
+    await supervisor.apply();
+    assert.equal(supervisor.getState().phase,"error");
+    assert.equal(getHead(),SHA_A);
+    assert.ok(seen.includes("cargo check"));
+    assert.match(supervisor.getState().error,/synthetic Rust compile error/);
+    assert.deepEqual(started,["server","desktop"],
+      "No restart into uncompiled Rust source");
+  }finally{await supervisor.close()}
+});
+
+test("frontend-only updates do not waste time rebuilding unchanged Rust",async()=>{
+  const {supervisor,seen}=fixture({manageDesktop:true,rustChanged:false});
+  await supervisor.start();
+  try{
+    await supervisor.inspect();
+    await supervisor.apply();
+    assert.ok(!seen.includes("cargo check"));
   }finally{await supervisor.close()}
 });
