@@ -189,6 +189,10 @@ function performanceLines(diagnostics: Diagnostics): string[] {
       "  Rejected candidates: " + diagnostics.research.rejected,
       ...(diagnostics.research.rejectedDetails?.length
         ? ["  Rejection reasons: " + diagnostics.research.rejectedDetails.join("; ")] : []),
+      ...(diagnostics.research.candidateLeads?.length
+        ? ["  Individually identified candidates: " + diagnostics.research.candidateLeads.join(", ")] : []),
+      ...(diagnostics.research.candidateQueries?.length
+        ? diagnostics.research.candidateQueries.map(query=>"  Attempted candidate verification: "+query) : []),
       ...(diagnostics.research.acceptedDetails?.length
         ? diagnostics.research.acceptedDetails.map(fact =>
             "  Accepted excerpt [" + fact.source + "] " + fact.subject + ": " +
