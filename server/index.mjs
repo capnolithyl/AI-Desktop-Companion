@@ -278,8 +278,17 @@ export function createBridge({
         if (!updater)
           return json(response,200,{available:false,
             reason:"Updater is not running. On Windows, stop npm run server and start npm run remote:dev."});
-        try {json(response,200,await updater.status())}
-        catch {json(response,200,{available:false,reason:"Local development supervisor is offline."})}
+        try {
+          // Developer update status and the phone header MUST use the same
+          // authoritative relay heartbeat. A supervisor probe is independent
+          // diagnostic information and may fail despite a working desktop.
+          json(response,200,{...await updater.status(),
+            relayDesktopConnected:state().connected});
+        } catch {
+          json(response,200,{available:false,
+            relayDesktopConnected:state().connected,
+            reason:"Local development supervisor is offline."});
+        }
       } else if (request.method === "POST" && url.pathname === "/api/dev-update") {
         if (!updater)return fail(response,409,
           "Start the managed development relay with npm run remote:dev on Windows");
