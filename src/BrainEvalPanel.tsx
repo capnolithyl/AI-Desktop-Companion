@@ -219,6 +219,8 @@ export function BrainEvalPanel({settings}:{settings:Settings}){
           ["Source-anchored facts",String(metrics.evidenceFacts),metrics.evidencePasses+
             " search turns with exact quotes · "+metrics.evidenceUnavailable+
             " without matched extracts · not independently fact-verified"],
+          ["Recommendation shortlist",String(metrics.shortlistedItems)+" admitted",metrics.rejectedItems+
+            " rejected · "+metrics.noSupportedMatches+" turns with no supported matches"],
           ["Memory fact coverage",metrics.recall+"%",metrics.memoryRecordMisses+" exact row misses · "+
             metrics.memoryDistractors+" extra records"],
           ["Factual answers",metrics.answers===null?"Not run":metrics.answers+"%",metrics.answerChecks+" graded turns"],
@@ -284,6 +286,11 @@ export function BrainEvalPanel({settings}:{settings:Settings}){
               Evidence extraction: {step.webExecution.researchAudit.status} ·
               {step.webExecution.researchAudit.accepted} quote-matched ·
               {step.webExecution.researchAudit.rejected} rejected
+            </small>}
+            {step.webExecution?.researchAudit?.recommendationTask&&<small>
+              Screened shortlist: {step.webExecution.researchAudit.recommendationApproved?.join(", ")||"no supported matches"} ·
+              {step.webExecution.researchAudit.recommendationRejected??0} rejected ·
+              {step.webExecution.researchAudit.constraintsChecked??0} hard limits
             </small>}
             {step.webExecution?.results.map((src,i)=><small key={src.url}>
               Source [{i+1}]: {src.title} · {src.url}
