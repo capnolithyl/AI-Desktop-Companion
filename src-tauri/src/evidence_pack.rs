@@ -352,7 +352,7 @@ mod tests {
         assert_eq!(schema["properties"]["suggestions"]["maxItems"], 3);
         assert_eq!(schema["properties"]["features"]["maxItems"], 3);
         assert!(schema["required"].as_array().unwrap().iter()
-            .any(|field| field == "recommendationTask"));
+            .any(|field| field.as_str() == Some("recommendationTask")));
         let proposal: FactCandidates = serde_json::from_value(json!({
             "facts": [], "recommendationTask": true,
             "requirements": [{
