@@ -517,6 +517,16 @@ mod tests {
     }
 
     #[test]
+    fn dotted_product_names_and_semver_numbers_are_not_split_into_unrelated_clauses() {
+        let quote = "The llama.cpp release v1.0.0 was published on 13 November 2026.";
+        let source = make_source("llama.cpp changelog", quote);
+        let proposal = candidate(1, "llama.cpp",
+            "llama.cpp release v1.0.0 was published on 13 November 2026.", quote);
+        assert!(validate(proposal, &[source]).is_some(),
+            "A decimal version and dotted product name belong to one clause");
+    }
+
+    #[test]
     fn official_website_url_can_anchor_its_own_fact_but_unrelated_hosts_cannot() {
         let mut source = make_source("Welcome to Python.org",
             "The official home of the Python Programming Language.");
