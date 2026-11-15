@@ -96,7 +96,7 @@ fn unit_key(s: &str) -> String {
 fn quote_from_source<'a>(quote: &str, sources: &'a [SearchResult], idx: usize) -> Option<&'a SearchResult> {
     if !(20..=550).contains(&quote.chars().count()) { return None; }
     let source = sources.get(idx.checked_sub(1)?)?;
-    if norm(&source.content).contains(&norm(quote)) { Some(source) } else { None }
+    if norm(&source.content).contains(norm(quote).as_str()) { Some(source) } else { None }
 }
 
 fn same_clause(quote: &str, title: &str, value: Option<u32>, unit: Option<&str>) -> bool {
@@ -104,7 +104,7 @@ fn same_clause(quote: &str, title: &str, value: Option<u32>, unit: Option<&str>)
     if key.len() < 3 { return false; }
     quote.split(['.', '!', '?', ';', '\n'])
         .map(str::trim)
-        .filter(|clause| norm(clause).contains(&key))
+        .filter(|clause| norm(clause).contains(key.as_str()))
         .any(|clause| {
             value.is_none_or(|number| words(clause).contains(&number.to_string()))
                 && unit.is_none_or(|measure| {
@@ -128,7 +128,7 @@ fn compare(value: u32, req: &HardRequirement) -> bool {
 
 fn quoted_requirement_valid(question: &str, req: &HardRequirement) -> bool {
     if req.quote.len() < 5 || req.quote.len() > 120
-        || !norm(question).contains(&norm(&req.quote))
+        || !norm(question).contains(norm(&req.quote).as_str())
         || unit_key(&req.unit).len() < 2
         || !quantity_token(&req.quote, req.limit)
     { return false; }
@@ -136,7 +136,7 @@ fn quoted_requirement_valid(question: &str, req: &HardRequirement) -> bool {
     // These are comparison operators for numbers, NOT route/intent
     // classifiers; we deliberately don't guess what media a word denotes.
     let expected = if ["under ", "less than", "fewer than", "below ", "shorter than"]
-        .iter().any(|marker| text.contains(marker)) { Some("lt") }
+        .iter().any(|marker| text.contains(*marker)) { Some("lt") }
     else if ["at most", "no more than", "up to ", "maximum ", "max "]
         .iter().any(|marker| text.contains(marker)) { Some("lte") }
     else if ["over ", "more than", "greater than", "above ", "longer than"]
@@ -157,7 +157,7 @@ fn appears_to_have_hard_limit(question: &str) -> bool {
         "at most", "no more than", "up to ", "maximum ", "max ",
         "over ", "more than", "greater than", "above ", "longer than",
         "at least", "no less than", "minimum ", "min ", "exactly "
-    ].iter().any(|s| lower.contains(s));
+    ].iter().any(|s| lower.contains(*s));
     let has_quantity = words(&lower).iter().any(|w|
         w.parse::<u32>().is_ok() || [
             "one","two","three","four","five","six","seven","eight",
@@ -178,7 +178,7 @@ fn valid_suggestion(item: Suggestion, requirements: &[HardRequirement],
     // Literal requested style/genre features must be attested in the SAME
     // candidate's quote. No hardcoded artists, genres or media classifications.
     if required_features.iter().any(|feature|
-        !norm(&item.fit_quote).contains(&norm(feature))) { return None; }
+        !norm(&item.fit_quote).contains(norm(feature).as_str())) { return None; }
     if !same_clause(&item.identity_quote, &item.title, None, None)
         || !same_clause(&item.fit_quote, &item.title, None, None)
     { return None; }
@@ -191,7 +191,7 @@ fn valid_suggestion(item: Suggestion, requirements: &[HardRequirement],
         let paired = item.identity_quote.split(['.', '!', '?', ';', '\n'])
             .any(|clause| {
                 let text = norm(clause);
-                text.contains(&title_key) && text.contains(&creator_key)
+                text.contains(title_key.as_str()) && text.contains(creator_key.as_str())
             });
         if !paired { return None; }
     }
@@ -231,7 +231,7 @@ pub fn screen_with_features(question: &str, requirements: Vec<HardRequirement>,
         || requirements.iter().any(|r| !quoted_requirement_valid(question,r))
         || (appears_to_have_hard_limit(question) && requirements.is_empty())
         || features.iter().any(|feature| feature.trim().len()<3
-            || feature.len()>60 || !norm(question).contains(&norm(feature))) {
+            || feature.len()>60 || !norm(question).contains(norm(feature).as_str())) {
         return GateResult {
             approved:vec![],rejected:count,requirements:requirements.len(),
             features_checked:features.len(),
