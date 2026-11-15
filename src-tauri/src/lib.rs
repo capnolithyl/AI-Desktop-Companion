@@ -736,6 +736,77 @@ async fn chat_stream_impl(
             let mut evidence = evidence_pack::extract(
                 &client, &url, &request.model, &user_request, task, &sources, selected_context
             ).await;
+            let mut evidence_ms = evidence.audit.elapsed_ms;
+            let mut candidate_leads = Vec::new();
+            let mut candidate_queries = Vec::new();
+            // Discovery has two different jobs: identify the *individual item*
+            // and then verify its numeric limits / credits. For small local
+            // models, attempting both in one source-extraction step often
+            // mistakes an article headline for a game, book, movie or album.
+            // Only enter this bounded fallback if the strict first attempt
+            // couldn't supply a recommendation. Real public searches only.
+            if task.kind == recommendation_gate::ResearchKind::Discover
+                && evidence.notes.is_none() {
+                let _ = app.emit("mikan://activity", json!({
+                    "requestId": request.request_id,
+                    "text": "Identifying individual source-backed candidates…"
+                }));
+                let leads = evidence_pack::discover_candidate_leads(
+                    &client, &url, &request.model, &user_request, task,
+                    &sources, selected_context
+                ).await;
+                candidate_leads = leads.iter().map(|lead|lead.title.clone()).collect();
+                for lead in leads {
+                    let Some(mut query) =
+                        recommendation_gate::candidate_details_query(&lead.title,task)
+                    else { continue };
+                    // The first query was already screened for public/private
+                    // boundaries by the local planner; retain its public topic
+                    // to disambiguate similarly named films, games or albums.
+                    if let Some(original) = search_query.as_deref()
+                        .and_then(|value|value.split(" → ").next()) {
+                        let contextual = format!("{query} {original}");
+                        if contextual.chars().count() <= 180 { query = contextual; }
+                    }
+                    candidate_queries.push(query.clone());
+                    let _ = app.emit("mikan://activity", json!({
+                        "requestId": request.request_id,
+                        "text": format!("Verifying {} against public sources…", lead.title)
+                    }));
+                    if let Ok(mut more) = web_search::web_search(
+                        request.searxng_endpoint.clone(), query.clone()
+                    ).await {
+                        more.truncate(4);
+                        if !more.is_empty() {
+                            source_enrichment::enrich_relevant_sources(
+                                &app, &mut more, &query, request.cache_hours
+                            ).await;
+                            // Keep source indexes stable so every final [n]
+                            // points to the same displayed public URL.
+                            for source in more {
+                                if let Some(previous) = sources.iter_mut()
+                                    .find(|item|item.url == source.url) {
+                                    if previous.engine != "webpage excerpt" {
+                                        *previous = source;
+                                    }
+                                } else { sources.push(source); }
+                            }
+                        }
+                    }
+                    let mut focused_task=task.clone();
+                    focused_task.subject=Some(lead.title.clone());
+                    let checked=evidence_pack::extract(
+                        &client, &url, &request.model, &user_request,
+                        &focused_task, &sources, selected_context
+                    ).await;
+                    evidence_ms += checked.audit.elapsed_ms;
+                    evidence=checked;
+                    if evidence.notes.is_some() { break; }
+                }
+            }
+            // The original single broad follow-up remains a fallback only
+            // when no candidate-specific lookup was possible.
+            if candidate_queries.is_empty() {
             if let Some(query) = evidence.followup_query.take() {
                 let _ = app.emit("mikan://activity", json!({
                     "requestId": request.request_id, "text": format!("Checking details: {query}")
@@ -766,6 +837,10 @@ async fn chat_stream_impl(
                 }
                 evidence.audit.followup_query = Some(query);
             }
+            }
+            evidence.audit.elapsed_ms = evidence_ms.max(evidence.audit.elapsed_ms);
+            evidence.audit.candidate_leads = candidate_leads;
+            evidence.audit.candidate_queries = candidate_queries;
 
             research_audit = Some(evidence.audit);
             let Some(notes) = evidence.notes else {
