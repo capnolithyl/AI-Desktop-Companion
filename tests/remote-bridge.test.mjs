@@ -197,7 +197,8 @@ test("browser relay requires a private key and delegates to the desktop, not a s
       results:phase==="complete"?{passRate:83.3,recall:95,webAgreement:80,reviewTurns:2,
         liveSearches:3,liveSearchesWithSources:2,liveSources:6,
         evidencePasses:1,evidenceFacts:3,evidenceUnavailable:2,
-        shortlistTurns:1,shortlistedItems:2,rejectedItems:3,noSupportedMatches:1}:null}
+        shortlistTurns:1,shortlistedItems:2,rejectedItems:3,noSupportedMatches:1,
+        attributedRoles:2,excludedReferences:1}:null}
   });
   assert.equal((await request(agent + "/agent/state","POST",desktopHeaders,evalState("idle"))).status,200);
   assert.equal((await request(base + "/api/brain-eval/result?format=json","GET",authorized)).status,404);
@@ -271,6 +272,8 @@ test("browser relay requires a private key and delegates to the desktop, not a s
   assert.equal(completeStatus.brainEval.results.shortlistedItems,2);
   assert.equal(completeStatus.brainEval.results.rejectedItems,3);
   assert.equal(completeStatus.brainEval.results.noSupportedMatches,1);
+  assert.equal(completeStatus.brainEval.results.attributedRoles,2);
+  assert.equal(completeStatus.brainEval.results.excludedReferences,1);
   // New Live reports with actual public SearXNG results MUST be downloadable.
   // Old offline reports must remain valid, while mismatched metadata is rejected.
   const liveEval={...sampleEval,runId:"eval-1234567890-web12",
@@ -282,7 +285,16 @@ test("browser relay requires a private key and delegates to the desktop, not a s
       researchAudit:{status:"shortlist",accepted:1,rejected:1,elapsedMs:400,
         note:"Source-screened candidates, not fact verified.",
         recommendationTask:true,recommendationApproved:["Pet Shop of Horrors"],
-        recommendationRejected:2,constraintsChecked:1}
+        recommendationRejected:2,constraintsChecked:1,featuresChecked:0,
+        exclusionsChecked:1,relationsChecked:1,recommendationDetails:[{
+          source:1,title:"Pet Shop of Horrors",creator:"Director A",
+          identityQuote:"Pet Shop of Horrors was directed by Director A.",
+          fitQuote:"Pet Shop of Horrors is a horror miniseries.",
+          measurements:[{source:1,value:4,unit:"episodes",
+            quote:"Pet Shop of Horrors has 4 episodes."}],
+          relations:[{role:"director",name:"Director A",source:1,
+            quote:"Pet Shop of Horrors was directed by Director A."}]
+        }]}
     }}]}]};
   assert.equal((await request(agent+"/agent/brain-eval/report","POST",desktopHeaders,{
     report:{...liveEval,environment:"isolated-synthetic"},markdown:"# Invalid"
@@ -301,6 +313,10 @@ test("browser relay requires a private key and delegates to the desktop, not a s
   assert.equal(retrieved.cases[0].steps[0].webExecution.researchAudit.accepted,1);
   assert.deepEqual(retrieved.cases[0].steps[0].webExecution.researchAudit.recommendationApproved,
     ["Pet Shop of Horrors"]);
+  assert.equal(retrieved.cases[0].steps[0].webExecution.researchAudit.recommendationDetails[0]
+    .relations[0].role,"director");
+  assert.equal(retrieved.cases[0].steps[0].webExecution.researchAudit.recommendationDetails[0]
+    .measurements[0].value,4);
   assert.equal((await (await request(base+"/api/state","GET",authorized)).json()).reportRunId,liveEval.runId);
   // Browser receives only whitelisted test statuses, not a writable report.
   const reviewState=evalState("complete");
