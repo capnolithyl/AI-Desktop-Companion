@@ -8,6 +8,66 @@ and 1–5 repetitions. The runner is owned by the desktop process, not a setting
 component or browser tab; closing a panel does not cancel it.
 This does not rebuild the installer.
 
+## v0.9.22 source-screened recommendation shortlist
+
+The previously identified P0 answer-quality failure remained after real
+SearXNG searching: the local model proposed fabricated releases, unrelated
+genres and recommendations violating strict numeric requirements even when
+retrieved sources were available. Search planning works; unbounded synthesis
+from mixed snippets is the problem.
+
+The **existing** Rust source-evidence extraction pass (not a second model
+reviewer) now returns a structured recommendation shortlist when the
+local extractor recognizes a discovery/recommendation task. Each proposed
+item carries a numbered source, exact title, optional creator and two exact
+quotes tied to that title: identity and fit to the requested qualities.
+Explicit style/genre phrases copied verbatim from the user's research request
+must also occur in each item's fit quote. A hard quantitative requirement
+(e.g. "under six episodes") is copied verbatim from the request, with a
+relation, limit and unit. Each candidate supplies its own source-backed
+measurement quote; Rust validates the requested comparison and checks that
+the title, number and unit occur in the same clause, not a neighboring
+result. When a creator is claimed, it must appear alongside the specific
+work in the same quoted clause. These are **structural evidence tests**,
+not independent verification that a source is correct or genres are
+semantically equivalent.
+
+The final answer is then given ONLY the bounded, source-screened shortlist
+instead of the full noisy search excerpts. The prompt forbids inventing
+additional releases, creators and numeric details. If no candidate meets
+the gate, Mikan gives a brief honest "couldn't confirm a match" response
+rather than fabricating a recommendation. A model that fails to classify
+a discovery intent as a recommendation or a local extraction failure can
+still leave weak answers; future Live reports must measure those cases.
+Fast mode, ordinary conversation and non-recommendation research are
+unchanged. Real memory isolation and private tool permissions remain
+unchanged. No hardcoded Immortal/Dark Tranquillity/anime-specific routing
+or same-model final-answer reviewer was added.
+
+Brain Lab now exports `researchAudit.recommendationTask`,
+`recommendationApproved`, `recommendationRejected`,
+`constraintsChecked` and `featuresChecked`, with separate shortlist
+metrics in the JSON/Markdown, desktop dashboard and phone report.
+Rust tests include a verified four-episode example, a twelve-episode
+mismatch, a neighboring-card number, a mismatched creator attribution
+and cross-genre examples. The app version is **0.9.22**.
+
+To reduce remote startup risk, the supervisor now runs a fixed, bounded
+`cargo check --locked --manifest-path src-tauri/Cargo.toml` **only if
+native Rust source/config changed**, after JavaScript build/tests and
+before restarting its managed desktop. A native compile failure rolls back
+the checkout instead of first trying to launch broken Rust. No arbitrary
+commands are passed through the phone; Cargo metadata-only version bumps
+do not trigger an extra native check.
+
+**Verification pending on Windows:** First install this iteration from
+the phone, confirm tests and desktop reconnect. Then run Live · 1× on
+`62,65` and export JSON. Check that shortlisted candidates actually match
+the requested genre/episode limits, and that no-match cases are reported
+accurately rather than hallucinated. Expect false negatives when good
+source evidence is not explicit. A green route score still does not
+prove qualitative accuracy.
+
 ## v0.9.21 use one authoritative desktop connection status
 
 The 2026-11-15 01:06 UTC Live report on v0.9.20 succeeded with two
