@@ -8,6 +8,47 @@ and 1–5 repetitions. The runner is owned by the desktop process, not a setting
 component or browser tab; closing a panel does not cancel it.
 This does not rebuild the installer.
 
+## v0.9.21 use one authoritative desktop connection status
+
+The 2026-11-15 01:06 UTC Live report on v0.9.20 succeeded with two
+scenarios, five turns, four SearXNG searches and four source-extraction
+passes, yet phone Developer updates still showed `Desktop relay: offline`
+even while its chat header said `Online` and Brain Lab ran correctly.
+
+The two UI labels came from **different backends**. The chat's `Online`
+label is backed by the browser relay's fresh `/api/state.connected` value,
+derived directly from its last desktop-agent heartbeat. Developer updates
+was instead relying on an independent supervisor-to-agent health probe,
+which may fail separately from the working relay. The supervisor health
+probe is not the authority on whether the browser relay is connected.
+
+The authenticated `GET /api/dev-update` response now also returns
+`relayDesktopConnected` computed from the **same** relay heartbeat as
+`/api/state.connected`. The Developer updates **Desktop relay** line uses
+this value only. Its own separately-owned process status remains visible;
+when the supervisor's own probe disagrees, it reports that disagreement
+as `Supervisor probe: unavailable`, without mislabeling the real chat
+connection or suppressing process diagnostics. A regression test explicitly
+sets the supervisor's reported connection false, sends a valid desktop
+agent state, and checks that both authenticated endpoints agree the relay
+is truly online. The strict post-launch heartbeat gate remains enabled
+when confirming a restart, because that answers a different question.
+
+Manual review of the attached v0.9.20 report shows factual answer quality
+still poor: `#62` invented Dark Tranquillity releases, mislabeled the
+Canadian melodeath group Quo Vadis as Finnish and offered non-matching
+genre recommendations; `#65` offered the 12-episode Junji Ito Collection
+and 13-episode Mouryou no Hako after an explicit under-six-episode
+constraint. Source extraction accepted 10 passages across the four
+search turns, but quotes do not prove the eventual answer meets the user's
+constraints. **Next research iteration:** ensure candidate works and their
+hard constraints are explicitly checked against evidence BEFORE answer
+generation, with no entity-specific regexes and no same-model critic.
+This release intentionally addresses the connection display alone.
+
+Metadata bumped to **0.9.21**. Windows update/build and visual verification
+must still be performed. The PR remains draft/unmerged.
+
 ## v0.9.20 research evidence grounding and desktop status
 
 The first fully recovered public-web Live report (`eval-1794702527001-7e5qe`)
