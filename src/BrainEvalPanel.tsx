@@ -216,6 +216,9 @@ export function BrainEvalPanel({settings}:{settings:Settings}){
           ["Web decisions",metrics.webAgreement+"%",metrics.webChecks+" observed · "+metrics.unnecessaryWeb+" extra · "+metrics.missedWeb+" missed"],
           ["Real web searches",String(metrics.liveSearches),metrics.liveSearchesWithSources+
             " with sources · "+metrics.liveSources+" returned snippets"],
+          ["Source-anchored facts",String(metrics.evidenceFacts),metrics.evidencePasses+
+            " search turns with exact quotes · "+metrics.evidenceUnavailable+
+            " without matched extracts · not independently fact-verified"],
           ["Memory fact coverage",metrics.recall+"%",metrics.memoryRecordMisses+" exact row misses · "+
             metrics.memoryDistractors+" extra records"],
           ["Factual answers",metrics.answers===null?"Not run":metrics.answers+"%",metrics.answerChecks+" graded turns"],
@@ -276,6 +279,11 @@ export function BrainEvalPanel({settings}:{settings:Settings}){
             {step.webExecution?.query&&<small>
               SearXNG executed: {step.webExecution.query} ·
               {step.webExecution.results.length} source previews
+            </small>}
+            {step.webExecution?.researchAudit&&<small>
+              Evidence extraction: {step.webExecution.researchAudit.status} ·
+              {step.webExecution.researchAudit.accepted} quote-matched ·
+              {step.webExecution.researchAudit.rejected} rejected
             </small>}
             {step.webExecution?.results.map((src,i)=><small key={src.url}>
               Source [{i+1}]: {src.title} · {src.url}
