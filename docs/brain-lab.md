@@ -8,6 +8,52 @@ and 1–5 repetitions. The runner is owned by the desktop process, not a setting
 component or browser tab; closing a panel does not cancel it.
 This does not rebuild the installer.
 
+## v0.9.20 research evidence grounding and desktop status
+
+The first fully recovered public-web Live report (`eval-1794702527001-7e5qe`)
+showed 13 real SearXNG searches and 104 returned result previews, and all
+18 turns passed routing/memory tests. Manual review still caught multiple
+invalid cross-entity facts and ignored recommendation constraints, including
+a six-episode label incorrectly attributed to a different anime title.
+Search planning works; factual synthesis from snippets does not yet reliably
+respect source boundaries.
+
+**Production research improvements, shared by Brain Lab:**
+
+- When structured research is enabled (the default), production
+  `chat_stream` now reads up to two relevant **public HTTPS** source pages
+  per planned search through the existing bounded/cached page reader before
+  extracting source-anchored facts. This is the same path for real desktop
+  chat and isolated Live tests. Failed page reads retain normal search previews.
+  The lightweight mode stays available by disabling structured research.
+- The existing evidence extraction receives both the public research query
+  carrying the multi-turn subject and the user's latest constraint. A follow-up
+  such as "under six episodes" therefore isn't evaluated in isolation.
+- Machine validation of numeric claims now requires the number to occur in
+  the **same quoted sentence/clause as the named subject**, not merely
+  elsewhere in the search snippet. This rejects one common class of
+  cross-title count/date confusion. It is a conservative source-structure
+  check, **not** independent factual verification or a hardcoded anime rule.
+- The existing synthesis instructions say to test each candidate against
+  explicit user constraints and to offer fewer suggestions when evidence is
+  insufficient, rather than padding a list with guessed titles.
+- Actual per-turn Rust `researchAudit` status, accepted/rejected quote
+  counts and timing are now included in Live JSON/Markdown exports and
+  visible on the desktop and phone. Separate metrics don't change routing
+  success or substitute for owner/ChatGPT manual review. No self-critic
+  of the answer has been reintroduced.
+
+**Phone developer status:** The relay's current real agent heartbeat now
+controls "Desktop relay: connected". The supervised child process's running
+status is shown separately. The strict "heartbeat after managed launch"
+gate remains exclusively for proving that a particular restart succeeded.
+This resolves the mismatch where the chat was clearly Online but developer
+updates said the desktop wasn't yet connected.
+
+Version bumped to **0.9.20** across all app manifests. The Windows build,
+supervised restart and real Qwen/SearXNG outcomes are still subject to
+verification; no result should be claimed before another Live report.
+
 ## v0.9.19 remote report download recovery
 
 A live-web run completed with 7 scenarios / 18 turns, but the phone's JSON
