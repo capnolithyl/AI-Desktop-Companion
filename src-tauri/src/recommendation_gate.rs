@@ -88,9 +88,12 @@ fn quote_from_source<'a>(quote: &str, sources: &'a [SearchResult], idx: usize) -
 fn same_clause(quote: &str, title: &str, amount: Option<quantities::Quantity>) -> bool {
     let key = norm(title);
     if key.len() < 3 {return false}
-    attribution::clauses(quote).into_iter().any(|clause|
-        norm(clause).contains(key.as_str())
-        && amount.is_none_or(|q|quantities::mention_supports(clause,q)))
+    attribution::clauses(quote).into_iter().any(|clause|{
+        let lowered=norm(clause);
+        let Some(at)=lowered.find(key.as_str()) else {return false};
+        amount.is_none_or(|q|quantities::first_measure_matches(
+            &lowered[at+key.len()..],q))
+    })
 }
 
 fn quoted_requirement_valid(question: &str, req: &HardRequirement) -> bool {
@@ -317,6 +320,19 @@ mod tests {
         let r=screen("under six episodes",vec![limit()],vec![item],&[src(merged)]);
         assert!(r.approved.is_empty());
     }
+    #[test]
+    fn two_works_in_one_sentence_do_not_share_episode_counts() {
+        let quote="Pet Shop of Horrors has 4 episodes and Junji Ito Collection has 12 episodes.";
+        let source=format!("{quote} Junji Ito Collection is a horror anime.");
+        let invalid=item("Junji Ito Collection",quote,
+            "Junji Ito Collection is a horror anime.",
+            Some(Measurement{source:1,value:4.0,unit:"episodes".into(),
+                quote:quote.into()}));
+        let result=screen("horror anime under six episodes",vec![limit()],
+            vec![invalid],&[src(&source)]);
+        assert!(result.approved.is_empty(),"Cross-entity numeric borrow must fail");
+    }
+
     #[test]
     fn cannot_bypass_a_missing_or_fake_numerical_constraint() {
         let src_text="Pet Shop of Horrors has 4 episodes. Pet Shop of Horrors is a horror anthology series with unusual stories.";
