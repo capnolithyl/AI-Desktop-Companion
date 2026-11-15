@@ -8,6 +8,90 @@ and 1–5 repetitions. The runner is owned by the desktop process, not a setting
 component or browser tab; closing a panel does not cancel it.
 This does not rebuild the installer.
 
+
+## v0.9.23 normalized quantities, typed attribution and source-of-constraint isolation
+
+**Why:** The recovered real-web 0.9.22 Brain Lab run
+`eval-1794707622253-a3obg` (Nov 15, 2026 01:53–01:54 UTC)
+had 2 scenarios, 5 turns, 4 SearXNG searches, and 5/5 routing checks.
+Quality was still unsatisfactory:
+- **#62:** First attempt extracted zero proposed bands despite topical search
+  results. Next admitted Dark Tranquillity *itself* (the user's starting
+  example), Soilwork and Pinkroom; a general claim about Pinkroom's
+  melancholy did not establish melodic-death-metal relevance.
+- **#65:** The search planner's first query introduced "under 24 episodes"
+  despite no episode count in the user's first message. Later, with the
+  actual *under six* request, the extractor returned one unvalidated limit
+  (exact wording mismatch) and no accepted titles. Zero matches can mean
+  *no candidates proposed* or *candidates rejected*; those require different
+  fixes. The source previews were mostly broad listicles, so individual
+  episode counts were hard to confirm.
+
+**Implemented across normal local research and Live Brain Lab:**
+
+1. The evidence extractor now receives the last five actual USER turns,
+   retaining the latest turn, and receives the SearXNG query in a distinct
+   **topic-hint-only** field. Numeric/genre requirements and named exclusions
+   are checked **only against the owner's exact original wording**, never
+   against an AI-generated search query. An invented "under 24 episodes"
+   is therefore not an authorized constraint. The extractor is asked to
+   avoid recommending the reference work back to its fan; Rust verifies
+   excluded names occurred in the actual user messages.
+2. New `src-tauri/src/quantities.rs` performs structural normalization and
+   comparisons: seconds/minutes/hours including 1h 35m and 1 hour and
+   35 minutes; episodes; songs/tracks; pages; chapters; words; seasons.
+   Strict comparisons remain strict, and incompatible dimensions do not
+   compare. The quoted evidence must contain the particular work and
+   measurable property, not just a neighboring list entry. The validator
+   now checks the first measured property after the work in a clause,
+   avoiding an incorrect count taken from the next work in the *same*
+   sentence. Numeric word forms one through twenty are supported.
+3. New `src-tauri/src/attribution.rs` screens typed work-to-creator
+   relations: author, director, production **studio**, producer, distributor,
+   publisher, developer, musical artist, composer, creator. The exact source
+   quote must name the correct work, identify the intended role explicitly
+   and attach that role to the claimed person/company. A reviewer is not
+   an author, someone who praises a movie is not its director, and a
+   production company is not automatically its distributor. The short
+   "`Book Title by Author`" form is supported, while `reviewed by` is not
+   used as author evidence. Source text can still be false or stale.
+4. The existing local evidence extraction pass proposes typed
+   `relations`, normalized measurements and `excludedNames`; it is
+   **not** another Qwen model reviewing a completed answer. Rust checks
+   these candidates before the final generation. If insufficient evidence
+   remains, the reply still reports uncertainty rather than fabricating
+   precise claims.
+5. The Brain Lab JSON/Markdown now records **accepted candidate details**
+   including each original source number, verbatim quotes, measured
+   amounts/units, and typed relationship edges, plus counts of
+   `relationsChecked` and `exclusionsChecked`. The phone and desktop
+   views include a compact summary. Passing the structural gate does
+   not automatically grade the answer as factually correct.
+
+New unit test coverage: 95 min vs 1h35m vs 1.5h; strict 120 min
+boundary; songs/tracks and pages/chapters compatibility; attribution
+for book authors, movie director vs producer vs studio vs distributor,
+album artist, game developer vs publisher; a reviewer misattributed as
+author; two works with different episode counts in one sentence; already
+mentioned reference artist exclusion; and a fabricated search limit
+not present in user text. The existing phone updater's conditional
+`cargo check --tests --locked --manifest-path src-tauri/Cargo.toml`
+still protects managed startup from native type errors.
+
+**Current limitations:** Book page counts depend on edition. Game playtime
+is generally an estimate rather than fixed media runtime. Songs and tracks
+are treated as comparable catalog counts, not as proof every track is a
+distinct full song. Relationship checks validate source quotation structure,
+not factual accuracy of the website. Genre similarity remains a judgment,
+and search results may lack the exact metadata needed to admit otherwise
+valid recommendations. Empty candidate proposals now get a distinct
+diagnostic from candidates rejected by the gate. A targeted follow-up
+metadata search and stronger source selection may still be needed.
+
+**Next real test after updating to 0.9.23:** Live 1× #62 and #65,
+export JSON. Inspect `recommendationDetails` and the no-match reason.
+This is source-screened evidence, not an independent fact-check.
+
 ## v0.9.22 source-screened recommendation shortlist
 
 The previously identified P0 answer-quality failure remained after real
