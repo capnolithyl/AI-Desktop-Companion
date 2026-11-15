@@ -299,6 +299,31 @@ test("live web evaluation preflight uses real SearXNG, not fake source results o
   assert.match(search,/unresponsive_engines/);
 });
 
+test("a real-source research turn cannot pass merely because planning succeeded",async()=>{
+  const result=await runBrainEvaluation({
+    scenarios:[byId("search-website")],mode:"live",model:"local-test",repetitions:1,
+    liveWeb:true,
+    planWeb:async()=>({search:true,query:"What is python.org?",reason:"Check current official site"}),
+    infer:async()=>({text:"The sources didn't provide enough evidence.",webExecution:{
+      query:"What is python.org?",sourcesCarriedOver:false,
+      // Recorded public source excerpt, not a web-search simulation. This unit
+      // test checks scorekeeping only; Live Brain Lab must contact real SearXNG.
+      results:[{title:"Welcome to Python.org",url:"https://www.python.org/",
+        content:"The official home of the Python Programming Language.",engine:"google cse"}],
+      researchAudit:{status:"unavailable",accepted:0,rejected:2,elapsedMs:100,
+        note:"No factual claims matched the retrieved excerpts.",taskKind:"lookup"}
+    }})
+  });
+  const step=result.cases[0].steps[0];
+  assert.equal(step.webPass,true,"the search decision itself was correct");
+  assert.equal(step.webExecution.results.length,1,"realistic nonempty search results");
+  assert.equal(step.evidencePass,false,"no validated answer");
+  assert.equal(step.pass,false,"no more false-green research");
+  assert.equal(result.cases[0].pass,false);
+  assert.equal(brainEvalMetrics(result).evidenceFailures,1);
+  assert.match(brainEvalMarkdown(result),/NO VERIFIED ANSWER/);
+});
+
 test("manual cancellation cannot silently run the scenario catalog",async()=>{
   const controller=new AbortController();
   controller.abort();
