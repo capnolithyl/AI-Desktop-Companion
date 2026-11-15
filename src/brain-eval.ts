@@ -477,7 +477,7 @@ export const EVAL_SCENARIOS:ReadonlyArray<EvalScenario>=[
       "Galactic shredding champions, obviously.",{web:false})),
   scenario("separate-personas","User preferences aren't persona preferences","Knowledge boundaries",
     e("What's my favorite color?",{route:"chat",memory:[105],answerIncludes:["moss green"],stubReply:"Moss green."}),
-    e("Does that automatically mean it's your favorite too?",{route:"chat",answerAny:["no","not necessarily"],stubReply:"No, your preferences are separate from mine."})),
+    e("Does that automatically mean it's your favorite too?",{route:"chat",conversationGoal:"Keep the user's preference separate from Mikan's persona; an ordinary negative answer such as 'Not at all' is correct even if it omits the exact word 'no'.",stubReply:"No, your preferences are separate from mine."})),
   // New evidence-screening cases appended so all previous #01-#73 IDs stay stable.
   scenario("verification-movie-runtime","Movie under two hours with director/studio proof","Evidence and attribution",
     conversation("I'd love a creepy animated movie I can finish in under two hours.",
