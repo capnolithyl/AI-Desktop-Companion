@@ -8,6 +8,34 @@ and 1–5 repetitions. The runner is owned by the desktop process, not a setting
 component or browser tab; closing a panel does not cancel it.
 This does not rebuild the installer.
 
+## Actual public web search in Live mode (v0.9.18)
+
+**Fast** still tests routing and synthetic lexical memory offline. **Live** now
+runs the configured local Qwen and sends any approved PUBLIC discovery query
+through the exact same Rust `chat_stream` → source-prioritized SearXNG path
+used by normal desktop Mikan. Real public search results, the actual executed
+query, source titles, URLs and excerpts are retained **per turn** in the
+JSON and Markdown reports. The source count and count of searches returning
+results are separate metrics from planner agreement. If SearXNG is offline,
+an actual search errors visibly rather than silently simulating evidence.
+
+Each test still uses fabricated, isolated local memory facts. No production
+SQLite/Qdrant memory reads or writes, Notion/GitHub private tools, or remote
+relay writes occur. The local planner must first authorize a public query,
+and permission restrictions protect personal/roleplay/attachment paths.
+Outgoing search terms do not include synthetic private memory material.
+The Rust tool uses its normal result filtering, fallback query, and optional
+source enrichment/evidence extraction. External snippets remain untrusted
+source DATA, not prompt instructions. The same-model AI self-review remains
+removed; send JSON exports to ChatGPT for manual quality review.
+
+**Limits:** This is a real public search and real response generation, not an
+exact copy of every production-chat integration (for example semantic Qdrant
+retrieval still uses synthetic lexical fixtures). Expect slower Live tests and
+requires working SearXNG. A green routing score alone still does not verify
+answer factuality or a source actually supports a claim. Fast test cases and
+older JSON report versions remain parseable.
+
 ## Conversation-aware public research planning
 
 **What changed:** Production Mikan and the isolated Live Brain Lab now pass
