@@ -344,7 +344,8 @@ test("a user correction overrides old public entity interpretation",async()=>{
   assert.equal(updated.search,true);
   assert.equal(updated.intent,"refine");
   assert.match(updated.query,/Norwegian black metal/);
-  assert.match(prompt,/corrects a previously misunderstood public entity/);
+  assert.match(prompt,/discard that interpretation and re-search using the corrected public identity/,
+    "Active task instructions must explicitly require reinterpreting the corrected entity");
   assert.doesNotMatch(prompt,/fantasy elements/,"Do not trust the assistant's old interpretation");
 });
 
