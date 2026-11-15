@@ -371,6 +371,61 @@ fn brain_eval_export(app: tauri::AppHandle, json_report: String, markdown_report
     Ok(folder.to_string_lossy().to_string())
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SavedBrainEvaluation {
+    json_report: String,
+    markdown_report: String,
+    folder: String,
+}
+
+/// Restore the most recent auto-export after a managed desktop restart.
+/// No caller-provided paths and no writes to production memories or tools.
+#[tauri::command]
+fn brain_eval_load_latest(app: tauri::AppHandle) -> Result<Option<SavedBrainEvaluation>, String> {
+    let mut newest: Option<(std::time::SystemTime, std::path::PathBuf)> = None;
+    for base in [app.path().document_dir(), app.path().app_data_dir()] {
+        let Ok(base) = base else { continue };
+        let folder = base.join("Mikan").join("Brain-Evaluations");
+        let Ok(entries) = std::fs::read_dir(folder) else { continue };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            let Some(name) = path.file_name().and_then(|n| n.to_str()) else { continue };
+            if !name.starts_with("mikan-brain_") || !name.ends_with(".json") { continue }
+            let Ok(meta) = entry.metadata() else { continue };
+            if !meta.is_file() || meta.len() > 4_000_000 { continue }
+            let Ok(modified) = meta.modified() else { continue };
+            if newest.as_ref().is_none_or(|(old, _)| modified > *old) {
+                newest = Some((modified, path));
+            }
+        }
+    }
+    let Some((_, path)) = newest else { return Ok(None) };
+    let json_report = std::fs::read_to_string(&path)
+        .map_err(|_| "Could not read saved Brain Lab report".to_string())?;
+    let report: Value = serde_json::from_str(&json_report)
+        .map_err(|_| "The latest saved Brain Lab report is invalid JSON".to_string())?;
+    let valid = report["version"] == 1
+        && report["writesToRealMemories"] == false
+        && report["runId"].as_str().is_some()
+        && report["cases"].is_array()
+        && (report["environment"] == "isolated-synthetic"
+            || report["environment"] == "isolated-synthetic+live-public-web");
+    if !valid {
+        return Err("The latest report is not a supported synthetic Brain Lab export".into());
+    }
+    let markdown_path = path.with_extension("md");
+    let markdown_report = std::fs::metadata(&markdown_path).ok()
+        .filter(|meta| meta.is_file() && meta.len() <= 2_000_000)
+        .and_then(|_| std::fs::read_to_string(markdown_path).ok())
+        .unwrap_or_default();
+    Ok(Some(SavedBrainEvaluation {
+        json_report,
+        markdown_report,
+        folder: path.parent().unwrap_or(path.as_path()).to_string_lossy().to_string(),
+    }))
+}
+
 #[tauri::command]
 fn cancel_chat(app: tauri::AppHandle, request_id: String) -> Result<(), String> {
     let state = app.state::<ChatCancellation>();
@@ -814,6 +869,7 @@ pub fn run() {
             condense_local_context,
             cancel_chat,
             brain_eval_export,
+            brain_eval_load_latest,
             voice::voice_health,
             voice::voice_synthesize,
             voice::voice_reference_status,
