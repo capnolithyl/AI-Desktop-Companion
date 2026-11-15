@@ -853,6 +853,8 @@ export function brainEvalMarkdown(report:EvalReport):string {
       if(s.error)lines.push("- Error: "+s.error);
       if(s.answerFailures.length)lines.push("- Checks: "+s.answerFailures.join("; "));
       if(s.webExecution){
+        if(s.evidencePass!==null && s.evidencePass!==undefined)
+          lines.push("- Real source-evidence outcome: "+(s.evidencePass?"validated":"NO VERIFIED ANSWER"));
         lines.push("- Executed SearXNG query: "+(s.webExecution.query??"not executed"),
           "- Actual source previews: "+s.webExecution.results.length);
         if(s.webExecution.researchAudit){
@@ -864,6 +866,8 @@ export function brainEvalMarkdown(report:EvalReport):string {
             lines.push("- Research task: "+audit.taskKind+(audit.taskSubject ? " | "+audit.taskSubject : ""));
           if(audit.followupQuery)
             lines.push("- Focused follow-up search: "+audit.followupQuery);
+          for(const explanation of audit.rejectedDetails??[])
+            lines.push("- Rejected evidence lead: "+explanation);
           for(const limit of audit.ignoredRequirements??[])
             lines.push("- Unvalidated limit: "+JSON.stringify(limit));
           if(audit.recommendationTask){
