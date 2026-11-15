@@ -81,20 +81,22 @@ fn normalize(text: &str) -> String {
 
 /// A valid quote is a contiguous passage from the *specific* cited result.
 /// Number/date anchors in a paraphrase must also appear in the evidence.
-fn validate(candidate: FactCandidate, sources: &[SearchResult]) -> Option<GroundedFact> {
-    let source = sources.get(candidate.source.checked_sub(1)?)?;
+fn validate_with_reason(candidate: FactCandidate, sources: &[SearchResult]) -> Result<GroundedFact, &'static str> {
+    let source = candidate.source.checked_sub(1)
+        .and_then(|index| sources.get(index))
+        .ok_or("invalid_source_index")?;
     let subject = candidate.subject.trim();
     let claim = candidate.claim.trim();
     let quote = candidate.quote.trim();
     if subject.len() < 2 || subject.chars().count() > 100
         || claim.len() < 12 || claim.chars().count() > 260
         || quote.chars().count() < 28 || quote.chars().count() > MAX_QUOTE_CHARS {
-        return None;
+        return Err("invalid_claim_or_quote_fields");
     }
     let normalized_quote = normalize(quote);
     if !normalize(&source.content).contains(&normalized_quote)
         && !normalize(&source.title).contains(&normalized_quote) {
-        return None;
+        return Err("quote_not_contiguous_in_cited_source");
     }
     // For a named website, the actual URL can establish which website the
     // matching excerpt describes. Require an exact registrable host (optionally
@@ -110,7 +112,7 @@ fn validate(candidate: FactCandidate, sources: &[SearchResult]) -> Option<Ground
     // For other entities, quotes must still name the subject exactly; the
     // surrounding search result title cannot lend the quote a new referent.
     if !normalized_quote.contains(&normalize(subject)) && !official_website {
-        return None;
+        return Err("subject_not_identified_by_quote");
     }
     let numbers_in_claim: HashSet<&str> = claim
         .split(|character: char| !character.is_ascii_digit())
@@ -121,7 +123,7 @@ fn validate(candidate: FactCandidate, sources: &[SearchResult]) -> Option<Ground
         .filter(|piece| !piece.is_empty())
         .collect();
     if !numbers_in_claim.is_subset(&numbers_in_quote) {
-        return None;
+        return Err("claim_numbers_missing_from_quote");
     }
     // A number in an unrelated card, sentence or neighboring search result
     // is NOT evidence about this subject. Search previews frequently merge
@@ -129,9 +131,10 @@ fn validate(candidate: FactCandidate, sources: &[SearchResult]) -> Option<Ground
     // This structural check is independent of genre, artist or wording.
     if !numbers_in_claim.is_empty() {
         let subject_key = normalize(subject);
-        let anchored = quote
-            .split(['.', '!', '?', ';', '\n'])
-            .map(str::trim)
+        // Keep dotted product names and semantic version tags intact while
+        // still separating unrelated sentences and neighboring results.
+        let anchored = crate::attribution::clauses(quote)
+            .into_iter().map(str::trim)
             .filter(|clause| normalize(clause).contains(&subject_key))
             .any(|clause| {
                 let numbers: HashSet<&str> = clause
@@ -140,14 +143,19 @@ fn validate(candidate: FactCandidate, sources: &[SearchResult]) -> Option<Ground
                     .collect();
                 numbers_in_claim.is_subset(&numbers)
             });
-        if !anchored { return None; }
+        if !anchored { return Err("claim_number_not_tied_to_subject"); }
     }
-    Some(GroundedFact {
+    Ok(GroundedFact {
         source: candidate.source,
         subject: subject.to_owned(),
         claim: claim.to_owned(),
         quote: quote.to_owned()
     })
+}
+
+
+fn validate(candidate: FactCandidate, sources: &[SearchResult]) -> Option<GroundedFact> {
+    validate_with_reason(candidate, sources).ok()
 }
 
 fn collect_valid(candidates: Vec<FactCandidate>, sources: &[SearchResult]) -> (Vec<GroundedFact>, usize) {
@@ -281,9 +289,9 @@ fn assemble_evidence(
         if task.kind == ResearchKind::Lookup {
             if let Ok(facts) = serde_json::from_value::<Vec<FactCandidate>>(response["facts"].take()) {
                 audit.rejected_details = facts.iter().take(20)
-                    .filter(|fact| validate((*fact).clone(), sources).is_none())
-                    .map(|fact| format!("{} [source {}]: quote, subject or claim not grounded",
-                        fact.subject.chars().take(100).collect::<String>(), fact.source))
+                    .filter_map(|fact| validate_with_reason(fact.clone(), sources).err()
+                        .map(|reason| format!("{} [source {}]: {reason}",
+                            fact.subject.chars().take(100).collect::<String>(), fact.source)))
                     .collect();
                 let (accepted, rejected) = collect_valid(facts, sources);
                 audit.accepted = accepted.len();
