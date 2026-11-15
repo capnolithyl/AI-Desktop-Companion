@@ -9,6 +9,50 @@ component or browser tab; closing a panel does not cancel it.
 This does not rebuild the installer.
 
 
+## v0.9.27 candidate-first evidence recovery and correction tests
+
+**State:** Committed to draft PR #91, pending Windows compile and real Live verification.
+The catalog contains **81** scenarios; original numbers 01–77 are unchanged.
+
+When a DISCOVERY task's initial strict evidence screening finds no supported
+recommendation, the native pipeline makes a bounded second-stage attempt:
+
+1. A separate local extraction proposes at most two individually named works
+   from **verbatim quotes in genuine SearXNG source excerpts**, never from
+   article titles alone. An ungrounded lead cannot be used in an answer.
+2. Each candidate receives a public, candidate-specific search for the
+   applicable duration, track count, page count or typed creator credit. The
+   original validated public topic is retained to disambiguate similarly
+   named works (for example a horror game versus a film).
+3. The full extractor and existing Rust strict-quantity/typed-attribution gate
+   check ONLY that named candidate. If no evidence establishes the actual
+   requirements, Mikan still says she could not verify a suitable option.
+   These are actual additional SearXNG searches; no web result is simulated.
+4. Reports show grounded lead names, source numbers, attempted candidate queries
+   and validation rejection reasons. This can be slower than ordinary lookups.
+   It is not an additional LLM reviewing its own final answer.
+
+**New correction and recovery cases** (Live, current local model and real
+SearXNG only): 78 ambiguous *Immortal* corrected to the Norwegian black-metal
+band; 79 known dislike of XCOM after a Fire Emblem-style recommendation;
+80 a reference band explicitly excluded from revised recommendations;
+81 dubious singer birth-year information challenged and reverified.
+A correction changes the intended entity, constraint or exclusion; it does
+not magically make a user's statement about external facts true. The model
+should re-check sources when a prior fact is challenged.
+
+**Deliberately false web results** are NOT injected into the Live engine:
+those would invalidate the real-search reliability metric and violate the
+previous decision not to mock SearXNG. A separate opt-in, explicitly labeled
+adversarial-fixture mode could later test resistance to one fabricated,
+untrusted excerpt and its correction. Case 81 instead uses a deliberately
+suspicious USER-SUPPLIED claim and searches independently for verification.
+
+**Recommended focused test after updating to v0.9.27:** Live 1×
+`77,78,79,81`, export JSON. If the source-validation results improve,
+try `74,75,76,80`. Only run the entire 81-test suite when focused regressions
+have stabilized. The original v0.9.24 instructions below are historical.
+
 ## v0.9.24 research planning and evidence
 
 Live run `eval-1794711699279-2uir5` covered 13 scenarios and 32 turns. It
