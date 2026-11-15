@@ -595,6 +595,15 @@
             queryDetail.textContent="ACTUAL SearXNG search: "+step.webExecution.query+
               " | Returned sources: "+(step.webExecution.results||[]).length;
             section.append(queryDetail);
+            if(step.webExecution.researchAudit){
+              var proof=document.createElement("small");
+              var audit=step.webExecution.researchAudit;
+              proof.textContent="Source-anchored extraction: "+audit.status+
+                " | quote-matched: "+audit.accepted+
+                " | rejected: "+audit.rejected+
+                " (not independent fact verification)";
+              section.append(proof);
+            }
             for(var j=0;j<(step.webExecution.results||[]).length;j++){
               var result=step.webExecution.results[j];
               var evidence=document.createElement("small");
@@ -689,7 +698,8 @@
         "% · Memory fact coverage: " + run.results.recall + "% · Web: " + run.results.webAgreement +
         "% · Pending reviews: " + run.results.reviewTurns+
         " · Actual SearXNG searches: "+(run.results.liveSearches??0)+
-        " ("+(run.results.liveSearchesWithSources??0)+" with sources)");
+        " ("+(run.results.liveSearchesWithSources??0)+" with sources)"+
+        " · Quote-matched evidence: "+(run.results.evidenceFacts??0));
       if (run.savedFolder) lines.push("Detailed JSON + Markdown auto-saved on desktop.");
     } else lines.push("Ready for a manually started test run.");
     if (data.reportAvailable) lines.push("Latest downloadable report: "+data.reportRunId);
