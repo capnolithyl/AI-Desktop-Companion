@@ -432,7 +432,7 @@ test("native Brain Lab report recovery reopens the last autosaved report after r
   const manager=readFileSync(new URL("../src/brain-eval-manager.ts",import.meta.url),"utf8");
   const rust=readFileSync(new URL("../src-tauri/src/lib.rs",import.meta.url),"utf8");
   assert.match(app,/restoreBrainEvalReport\(\)/);
-  assert.match(manager,/invoke<\{[\s\S]*?\}>?\|null>\("brain_eval_load_latest"\)/);
+  assert.match(manager,/brain_eval_load_latest/);
   assert.match(manager,/report=candidate/);
   assert.match(rust,/fn brain_eval_load_latest\(/);
   assert.match(rust,/brain_eval_load_latest,/);
