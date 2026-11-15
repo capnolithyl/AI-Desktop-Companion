@@ -88,8 +88,19 @@ valid recommendations. Empty candidate proposals now get a distinct
 diagnostic from candidates rejected by the gate. A targeted follow-up
 metadata search and stronger source selection may still be needed.
 
-**Next real test after updating to 0.9.23:** Live 1× #62 and #65,
-export JSON. Inspect `recommendationDetails` and the no-match reason.
+**Additional real-web scenarios:** The Brain Lab catalog now has **77**
+scenarios. All original #01–#73 numbers remain stable. New cross-media
+cases #74 (movie under two hours and director/studio), #75 (album with
+fewer than ten songs and correct artist), #76 (book under 200 pages and
+actual author versus reviewer), #77 (game under two hours of main-story
+playtime versus trailer length). These test the production pipeline and
+source availability, not simulated facts or automatic quality grading.
+
+**Next real test after updating to 0.9.23:** Start with Live · 1×
+**#65 and #74**, export JSON; these quickly exercise strict episode
+limits and duration/director/studio evidence. If the filter works, try
+#62/#75/#76/#77 separately as needed. Inspect `recommendationDetails`
+and the no-match reason.
 This is source-screened evidence, not an independent fact-check.
 
 ## v0.9.22 source-screened recommendation shortlist
