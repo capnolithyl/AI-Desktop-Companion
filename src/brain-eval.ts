@@ -866,6 +866,11 @@ export function brainEvalMarkdown(report:EvalReport):string {
             lines.push("- Research task: "+audit.taskKind+(audit.taskSubject ? " | "+audit.taskSubject : ""));
           if(audit.followupQuery)
             lines.push("- Focused follow-up search: "+audit.followupQuery);
+          if(audit.extractionAttempts && audit.extractionAttempts>1)
+            lines.push("- Local evidence extraction attempts: "+audit.extractionAttempts);
+          for(const fact of audit.acceptedDetails??[])
+            lines.push("- Accepted source fact ["+fact.source+"] "+fact.subject+" | "+
+              fact.claim+" | exact quote: "+fact.quote);
           for(const explanation of audit.rejectedDetails??[])
             lines.push("- Rejected evidence lead: "+explanation);
           for(const limit of audit.ignoredRequirements??[])
