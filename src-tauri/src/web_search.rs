@@ -1,10 +1,37 @@
 use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::{collections::HashSet, time::Duration};
+use std::{collections::HashSet, sync::{Mutex, OnceLock}, time::{Duration, Instant}};
 
 const MAX_RESULT_BYTES: usize = 2_000_000;
 const MAX_RESULTS: usize = 8;
+
+// Each SearXNG query fans out to multiple external engines. Live Brain Lab
+// can otherwise issue a burst of broad, preferred-domain and candidate
+// searches, causing CAPTCHAs and 429s across *all* providers.
+// Reserve request-start times locally; never sleep while holding the mutex.
+// This is process-wide, including manual chat research and live diagnostics.
+const MIN_SEARCH_SPACING: Duration = Duration::from_secs(3);
+
+fn search_slot(next: Instant, now: Instant) -> (Duration, Instant) {
+    let wait = next.saturating_duration_since(now);
+    (wait, now + wait + MIN_SEARCH_SPACING)
+}
+
+async fn pace_live_search() {
+    static NEXT_SEARCH: OnceLock<Mutex<Instant>> = OnceLock::new();
+    let now = Instant::now();
+    let wait = {
+        let guard = NEXT_SEARCH.get_or_init(|| Mutex::new(now));
+        let mut next = guard.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        let (wait, reserved) = search_slot(*next, now);
+        *next = reserved;
+        wait
+    };
+    if !wait.is_zero() {
+        tokio::time::sleep(wait).await;
+    }
+}
 
 #[derive(Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -144,6 +171,7 @@ async fn web_search_impl(endpoint: String, query: String, recent: bool) -> Resul
     if recent {
         params.push(("time_range", "year"));
     }
+    pace_live_search().await;
     let response = client
         .get(url)
         .query(&params)
@@ -189,6 +217,18 @@ async fn web_search_impl(endpoint: String, query: String, recent: bool) -> Resul
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn search_slot_reservations_space_parallel_requests() {
+        let now = Instant::now();
+        let (first, next) = search_slot(now, now);
+        assert_eq!(first, Duration::ZERO);
+        let (second, next2) = search_slot(next, now);
+        assert_eq!(second, MIN_SEARCH_SPACING);
+        assert_eq!(next2, next + MIN_SEARCH_SPACING);
+        let (after_cooldown, _) = search_slot(next2, now + Duration::from_secs(10));
+        assert_eq!(after_cooldown, Duration::ZERO);
+    }
+
     #[test]
     fn fallback_album_query_is_broad_and_canonically_quoted() {
         assert_eq!(
