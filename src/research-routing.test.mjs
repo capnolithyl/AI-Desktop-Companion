@@ -11,6 +11,23 @@ test("freshness and explicit research use an online search, not a guessed reply"
     { query: "What is the capital of Germany?", recent: false });
 });
 
+test("look for is a public lookup, but recently watched is not a prior research task", () => {
+  const prior=[
+    {role:"user",content:"Any updates on the Chainsmoker Cat catgirl anime?"},
+    {role:"assistant",content:"It features a catgirl with a smoking habit."},
+    {role:"user",content:"I watched another anime recently. I love yuri but hated the drinking scenes."},
+    {role:"assistant",content:"That sounds unpleasant."}
+  ];
+  const publicAsk="Could you look for other yuri anime without heavy drinking or smoking themes?";
+  assert.equal(researchRequest("And what else?",prior),null,
+    "An incidental recently in a personal opinion must not create a public-research continuation");
+  const request=researchRequest(publicAsk,prior);
+  assert.ok(request,"An explicit look-for request should not depend on prior lookup state");
+  assert.equal(request?.query,publicAsk);
+  assert.equal(planResearch(publicAsk,prior).mode,"research");
+  assert.equal(planResearch("I watched another anime recently. I hated the drinking scenes.",prior).mode,"chat");
+});
+
 test("casual conversation, personal memory and roleplay stay local", () => {
   for (const text of ["Hi Mikan!", "How are you?", "What do you think of metal?",
     "What's my favorite color?", "Tell me about yourself", "Remember that I like cats"]) {
