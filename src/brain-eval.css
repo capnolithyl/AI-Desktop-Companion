@@ -304,6 +304,7 @@
   min-width:0;
 }
 .brain-eval-catalog-disclosure:not([open]){display:block}
+.brain-eval-catalog-disclosure:not([open]) > .brain-eval-catalog{display:none}
 .brain-eval-catalog-disclosure>summary{
   list-style:none;
   cursor:pointer;
