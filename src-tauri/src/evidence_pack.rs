@@ -98,10 +98,16 @@ fn validate_with_reason(candidate: FactCandidate, sources: &[SearchResult]) -> R
     let subject = candidate.subject.trim();
     let claim = candidate.claim.trim();
     let quote = candidate.quote.trim();
-    if subject.len() < 2 || subject.chars().count() > 100
-        || claim.len() < 12 || claim.chars().count() > 260
-        || quote.chars().count() < 28 || quote.chars().count() > MAX_QUOTE_CHARS {
-        return Err("invalid_claim_or_quote_fields");
+    // Distinguish malformed extractor fields for the bounded repair pass.
+    // A short claim can be useful if the full subject and number are sourced.
+    if subject.len() < 2 || subject.chars().count() > 100 {
+        return Err("invalid_subject_field");
+    }
+    if claim.chars().count() < 8 || claim.chars().count() > 260 {
+        return Err("invalid_claim_field");
+    }
+    if quote.chars().count() < 18 || quote.chars().count() > MAX_QUOTE_CHARS {
+        return Err("invalid_quote_field");
     }
     let normalized_quote = normalize(quote);
     if !normalize(&source.content).contains(&normalized_quote)
@@ -656,6 +662,17 @@ mod tests {
         ] {
             assert!(validate(bad, &sources).is_none());
         }
+    }
+
+    #[test]
+    fn short_biographical_fact_is_valid_only_with_subject_and_number_anchored() {
+        let quote="Cora Vale was born in 1975.";
+        let source=make_source("Biography",quote);
+        assert!(validate(candidate(1,"Cora Vale","Born in 1975",quote), &[source.clone()]).is_some());
+        assert_eq!(validate_with_reason(candidate(1,"Cora Vale","1975",quote),&[source.clone()])
+            .unwrap_err(),"invalid_claim_field");
+        assert_eq!(validate_with_reason(candidate(1,"Cora Vale","Born in 1975","Cora Vale"),&[source])
+            .unwrap_err(),"invalid_quote_field");
     }
 
     #[test]

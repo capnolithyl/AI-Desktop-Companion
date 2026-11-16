@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { verifyResearchAnswer, groundedResearchFallback } from "./evidence-verification.ts";
+import { verifyResearchAnswer, groundedResearchFallback, reviewResearchCompletion } from "./evidence-verification.ts";
 
 const sources = [
   {title:"Maximum the Hormone discography",url:"https://example.org/discography",
@@ -106,4 +106,48 @@ test("fallback prefers exact named album over a different artist's near-identica
   assert.match(answer,/Shadows Fall album/);
   assert.match(answer,/\[2\]/);
   assert.doesNotMatch(answer,/\[1\]/);
+});
+
+test("recommendation completion cannot add unapproved works or turn source anecdotes into owner memories",()=>{
+  const docs=[{title:"Atmospheric bands",url:"https://example.org/bands",
+    content:"Silver Harbor blends melodic death metal with atmospheric passages. The reviewer first saw Silver Harbor live in 2004."}];
+  const audit={status:"shortlist",recommendationTask:true,unresolvedDetails:[],
+    recommendationDetails:[{source:1,title:"Silver Harbor",creator:"",
+      identityQuote:"Silver Harbor blends melodic death metal with atmospheric passages.",
+      fitQuote:"Silver Harbor blends melodic death metal with atmospheric passages.",
+      measurements:[],relations:[]}]};
+  const generated="Your first concert was in 2004! Try Silver Harbor, Gold Circuit and Ember Woods.";
+  const reviewed=reviewResearchCompletion(generated,docs,audit);
+  assert.equal(reviewed.usable,true);
+  assert.match(reviewed.text,/Silver Harbor/);
+  assert.match(reviewed.text,/Source excerpt/);
+  assert.doesNotMatch(reviewed.text,/Gold Circuit|Ember Woods|Your first concert/);
+});
+
+test("unresolved recommendation constraints remain tentative, not guaranteed matches",()=>{
+  const docs=[{title:"Character drama",url:"https://example.org/drama",
+    content:"Quiet Orchard explores personal relationships, grief and friendship."}];
+  const audit={status:"shortlist",recommendationTask:true,
+    unresolvedDetails:["genre requirement","substance themes"],
+    recommendationDetails:[{source:1,title:"Quiet Orchard",creator:"",
+      identityQuote:docs[0].content,fitQuote:docs[0].content,
+      measurements:[],relations:[]}]};
+  const reviewed=reviewResearchCompletion("Quiet Orchard definitely meets your criteria.",docs,audit);
+  assert.equal(reviewed.usable,true);
+  assert.match(reviewed.text,/haven't verified/);
+  assert.doesNotMatch(reviewed.text,/definitely meets/);
+});
+
+test("fallback quotes the source instead of presenting an unproved interpretation",()=>{
+  const docs=[{title:"Preview announced",url:"https://example.org/preview",
+    content:"The film Lantern Cove is planned for release in December 2027."}];
+  const audit={status:"partial",recommendationTask:false,
+    acceptedDetails:[{source:1,subject:"Lantern Cove",
+      claim:"Lantern Cove has already released.",
+      quote:docs[0].content}],
+    unresolvedDetails:["whether the film actually premiered"]};
+  const reviewed=reviewResearchCompletion('Lantern Cove released "Festival Cut" in 2027. [1]',docs,audit);
+  assert.equal(reviewed.usable,true);
+  assert.match(reviewed.text,/Source \[1\] states/);
+  assert.doesNotMatch(reviewed.text,/has already released|Festival Cut/);
 });

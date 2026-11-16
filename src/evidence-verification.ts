@@ -110,11 +110,51 @@ export function verifyResearchAnswer(
   return {text,rejected,checked,usable:true};
 }
 
+/**
+ * A generated recommendation cannot enlarge the approved Rust shortlist.
+ * Quotes retain their source attribution: a reviewer's first-person story
+ * must never be presented as a memory about the owner.
+ * Passing this gate proves excerpt provenance, not full semantic entailment.
+ */
+function reviewedRecommendation(
+  sources:readonly EvidenceSource[], audit:ResearchAudit
+):EvidenceReview {
+  const same=(s:string)=>s.toLowerCase().replace(/\s+/g," ").trim();
+  const clean=(s:string)=>s.replace(/[\r\n\t]+/g," ").replace(/[\\*_`\[\]<>]/g,"").trim();
+  const seen=new Set<string>();
+  const approved=(audit.recommendationDetails??[]).filter(item=>{
+    const source=sources[item.source-1];
+    const identity=same(item.title);
+    const quote=same(item.fitQuote);
+    if(!source || !identity || !quote || seen.has(identity) ||
+       !same(source.content).includes(quote) || !quote.includes(identity))return false;
+    seen.add(identity);
+    return true;
+  });
+  if(!approved.length)return {
+    text:"I searched, but I couldn't verify a recommendation that meets the request. I don't want to invent options.",
+    rejected:1,checked:0,usable:false
+  };
+  const unresolved=approved.some(item=>item.missingDetails?.length) ||
+    !!audit.unresolvedDetails?.length || !!audit.ignoredRequirements?.length;
+  const lines=approved.map(item=>{
+    const excerpt=clean(item.fitQuote).slice(0,250);
+    return "- **"+clean(item.title)+"** ["+item.source+"]: Source excerpt: “"+excerpt+
+      (clean(item.fitQuote).length>250?"…":"")+"”";
+  });
+  const intro=unresolved
+    ?"I found these source-backed leads, but I haven't verified that they satisfy every requested requirement:"
+    :"Here are the recommendations I could support with the retrieved sources:";
+  return {text:intro+"\n\n"+lines.join("\n"),
+    rejected:0,checked:approved.length,usable:true};
+}
+
 /** Shared desktop/evaluation postprocessing. A rejected draft must not erase
  * useful facts that the native extraction already anchored to exact sources. */
 export function reviewResearchCompletion(answer:string,sources:EvidenceSource[],audit?:ResearchAudit|null):EvidenceReview|null {
-  if(!sources.length || audit?.recommendationTask ||
-    audit && !["used","partial"].includes(audit.status))return null;
+  if(!sources.length)return null;
+  if(audit?.recommendationTask)return reviewedRecommendation(sources,audit);
+  if(audit && !["used","partial"].includes(audit.status))return null;
   const facts=audit?.acceptedDetails??[];
   const grounded=facts.length ? sources.map((source,i)=>({...source,title:"",
     content:facts.filter(f=>f.source===i+1).map(f=>f.quote).join("\n")})) : sources;
@@ -125,7 +165,7 @@ export function reviewResearchCompletion(answer:string,sources:EvidenceSource[],
     const exact=(s:string)=>s.toLowerCase().replace(/\s+/g," ").trim();
     return source && !!f.quote.trim() &&
       (exact(source.title).includes(exact(f.quote)) || exact(source.content).includes(exact(f.quote)));
-  }).map(f=>`${f.claim} [${f.source}]`);
+  }).map(f=>`Source [${f.source}] states: “${f.quote}”`);
   if(!recover.length)return review;
   return {...review,usable:true,text:[...new Set(recover),
     ...(audit?.unresolvedDetails?.length ? ["Still unconfirmed: "+audit.unresolvedDetails.join("; ")+"."] : [])].join("\n\n")};

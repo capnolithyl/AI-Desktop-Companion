@@ -304,10 +304,22 @@ pub fn screen_task(
         norm(question).contains(&norm(&limit.quote))
         && !quantities::measured_in(&limit.quote).is_empty()
     );
-    let exclusions: HashSet<_> = task.exclude.iter().take(6)
+    let mut exclusions: HashSet<_> = task.exclude.iter().take(6)
         .filter(|name| (3..=110).contains(&name.trim().chars().count())
             && norm(question).contains(&norm(name)))
         .map(|name| norm(name)).collect();
+    // A reference for similarity is the target of the comparison, not
+    // a candidate answer. Reuse the structured relationship the planner made.
+    if task.kind == ResearchKind::Discover {
+        for detail in &task.details {
+            let lower=detail.trim().to_ascii_lowercase();
+            if let Some(reference)=lower.strip_prefix("similar to ") {
+                if (3..=110).contains(&reference.chars().count()) {
+                    exclusions.insert(norm(reference));
+                }
+            }
+        }
+    }
     let target = task.subject.as_deref().map(norm);
     let mut approved = Vec::new();
     let mut seen = HashSet::new();
@@ -642,6 +654,27 @@ mod tests {
         assert_eq!(result.approved.len(),1);
         assert_eq!(result.approved[0].title,"The Halo Effect");
         assert_eq!(result.rejected,1);
+        assert_eq!(result.exclusions_checked,1);
+    }
+
+    #[test]
+    fn a_structured_similarity_reference_is_not_its_own_recommendation() {
+        let a="Copper Atlas is a melodic death metal band. Copper Atlas plays atmospheric melodic death metal.";
+        let b="Silver Harbor is a melodic death metal band. Silver Harbor plays atmospheric melodic death metal.";
+        let mut alternative=item("Silver Harbor",
+            "Silver Harbor is a melodic death metal band.",
+            "Silver Harbor plays atmospheric melodic death metal.", None);
+        alternative.source=2;
+        let reference=item("Copper Atlas",
+            "Copper Atlas is a melodic death metal band.",
+            "Copper Atlas plays atmospheric melodic death metal.", None);
+        let task=ResearchTask{kind:ResearchKind::Discover,
+            details:vec!["similar to Copper Atlas".into(),"melodic death metal".into()],
+            ..Default::default()};
+        let result=screen_task("Recommend a melodic death metal band like Copper Atlas.",
+            &task,vec![reference,alternative],&[src(a),src(b)]);
+        assert_eq!(result.approved.len(),1);
+        assert_eq!(result.approved[0].title,"Silver Harbor");
         assert_eq!(result.exclusions_checked,1);
     }
 

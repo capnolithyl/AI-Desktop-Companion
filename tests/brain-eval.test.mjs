@@ -852,3 +852,32 @@ test("the local planner also supplies the task for a pre-routed search",async()=
   assert.equal(observed,true);
   assert.equal(report.cases[0].steps[0].error,undefined);
 });
+
+test("Live web-required research fails when the local planner times out before any search",async()=>{
+  const report=await runBrainEvaluation({
+    scenarios:[byId("search-explicit")],mode:"live",model:"slow-fixture",
+    repetitions:1,liveWeb:true,
+    planWeb:async()=>({search:false,method:"fallback",reason:"Local tool planner unavailable"}),
+    infer:async()=>({text:"I cannot search right now.",
+      webExecution:{query:null,results:[],sourcesCarriedOver:false,researchAudit:null}})
+  });
+  const step=report.cases[0].steps[0];
+  assert.equal(step.plannedWeb,null,"a failed planner isn't a positive search decision");
+  assert.equal(step.webPass,false,"actual search execution was missing");
+  assert.equal(step.evidencePass,false);
+  assert.equal(step.pass,false);
+  assert.equal(report.cases[0].pass,false);
+  assert.match(step.answerFailures.join(" "),/not executed/);
+});
+
+test("Live no-search scenarios are graded on execution, not the model's decision",async()=>{
+  const scenario={id:"private-no-web",label:"No public web",group:"Test",
+    steps:[{user:"I love this song.",expect:{route:"chat",web:false}}]};
+  const report=await runBrainEvaluation({
+    scenarios:[scenario],mode:"live",model:"fixture",repetitions:1,liveWeb:true,
+    planWeb:async()=>({search:false,method:"not-needed",reason:"Personal reaction"}),
+    infer:async()=>({text:"That's a good one!",
+      webExecution:{query:"private song query",results:[],sourcesCarriedOver:false}})
+  });
+  assert.equal(report.cases[0].steps[0].webPass,false);
+});

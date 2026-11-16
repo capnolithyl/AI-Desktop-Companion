@@ -755,7 +755,8 @@ export async function runBrainEvaluation(options:EvalOptions):Promise<EvalReport
       const routeLabelMatch=routeMatches(decision.plan.mode,step.expect.route);
       // A model decision takes precedence over legacy route labels. Fast mode
       // cannot observe optional semantic planning or native tool execution.
-      const plannedWeb:boolean|null=planned && planned.method!=="fallback" ? planned.search
+      const plannedWeb:boolean|null=planned
+        ? planned.method==="fallback" ? null : planned.search
         : decision.plan.mode==="research" ? true
         : decision.plan.mode==="factual" ? null
         : webPolicy.canPlanPublicWeb ? null : false;
@@ -763,18 +764,27 @@ export async function runBrainEvaluation(options:EvalOptions):Promise<EvalReport
         step.expect.route==="research" ? true :
         step.expect.route==="chat" ? false : null
       );
-      const webPass=expectedWeb===null||plannedWeb===null?null:plannedWeb===expectedWeb;
-      // Chat versus factual is an implementation choice, not automatically a
-      // failure. Grade actual search intent and keep exact labels as diagnostics.
+      // In Live web mode only native execution proves that a public search
+      // happened; neither a route label nor a fallback planner can do so.
+      const observedQuery=!!webExecution?.query;
+      const webPass=options.mode==="live" && options.liveWeb && expectedWeb!==null
+        ? expectedWeb===observedQuery
+        : expectedWeb===null||plannedWeb===null?null:plannedWeb===expectedWeb;
+      // Grade executed web behavior, not a preferred chat/research route.
       const routePass=webPass!==false;
       // A planned search is not a successfully answered search. This check uses
       // only the observed Rust source/evidence trace, NEVER Qwen grading itself.
       const audit=webExecution?.researchAudit;
-      const evidencePass=options.liveWeb && webExecution?.query
-        ? webExecution.results.length===0 ? false
+      const missingRequiredWeb=options.mode==="live" && options.liveWeb &&
+        expectedWeb===true && !observedQuery;
+      const evidencePass=missingRequiredWeb ? false : options.liveWeb && observedQuery
+        ? webExecution!.results.length===0 ? false
           : audit ? audit.status==="partial" ? null : (audit.status==="used" || audit.status==="shortlist") : null
         : null;
-      if(evidencePass===false)answerFailures.push(
+      if(missingRequiredWeb)answerFailures.push(
+        "Required public research was not executed; the user's research goal was not fulfilled."
+      );
+      else if(evidencePass===false)answerFailures.push(
         "Public search executed but produced no validated evidence; the user's research goal was not fulfilled."
       );
       // Never present an unobserved search decision as passing a behavioral test.
