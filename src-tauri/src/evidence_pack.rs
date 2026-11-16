@@ -857,7 +857,11 @@ mod task_contract_tests {
         assert_eq!(evidence.audit.unresolved_details,vec!["current tour dates"]);
         assert!(evidence.notes.is_some());
         let mut background=candidate();background.detail=None;
-        assert_eq!(validate_task_fact(&background,&task,&[source()]).unwrap_err(),"does_not_answer_requested_detail");
+        assert!(validate_task_fact(&background,&task,&[source()]).is_ok(),
+            "a source-anchored contextual fact is preserved in a general lookup");
+        let mut invalid=candidate();invalid.detail=Some(3);
+        assert_eq!(validate_task_fact(&invalid,&task,&[source()]).unwrap_err(),
+            "does_not_answer_requested_detail");
     }
     #[test]
     fn broad_lookup_retains_context_without_claiming_it_answers_the_latest_release() {

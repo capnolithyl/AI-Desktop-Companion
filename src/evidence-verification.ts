@@ -162,26 +162,20 @@ export function reviewResearchCompletion(answer:string,sources:EvidenceSource[],
   // into a definitive "latest", "first", "best" or exact-status conclusion.
   // Use only the original quoted excerpts, not a model-inferred ranking.
   if(audit?.status==="partial" && facts.length){
-    const exact=(s:string)=>s.toLowerCase().replace(/s+/g," ").trim();
+    const exact=(s:string)=>s.toLowerCase().replace(/\s+/g," ").trim();
     const excerpts=facts.filter(f=>{
       const source=sources[f.source-1];
       return source && !!f.quote.trim() &&
         (exact(source.title).includes(exact(f.quote)) || exact(source.content).includes(exact(f.quote)));
     }).map(f=>"- ["+f.source+"] "+f.subject+": “"+f.quote+"”");
     if(excerpts.length)return {
-      text:"Here's what the retrieved sources actually say, although I couldn't fully verify the requested answer:
-
-"+
-        [...new Set(excerpts)].join("
-
-")+
-        (audit.unresolvedDetails?.length?"
-
-Still unconfirmed: "+audit.unresolvedDetails.join("; ")+".":""),
+      text:"Here's what the retrieved sources actually say, although I couldn't fully verify the requested answer:\n\n"+
+        [...new Set(excerpts)].join("\n\n")+
+        (audit.unresolvedDetails?.length?"\n\nStill unconfirmed: "+audit.unresolvedDetails.join("; ")+".":""),
       checked:facts.length,rejected:0,usable:true
     };
   }
-  const review=verifyResearchAnswer(answer,grounded);
+    const review=verifyResearchAnswer(answer,grounded);
   if(review.usable || !facts.length)return review;
   const recover=facts.filter(f=>{
     const source=sources[f.source-1];
