@@ -1,5 +1,18 @@
-# Inherit SearXNG engine defaults; this is a private, single-PC instance.
-use_default_settings: true
+# Private single-PC instance; retain upstream defaults except consistently failing engines.
+# The Nov 15-16 live tests saw repeated CAPTCHA from DuckDuckGo and timeouts
+# from Wikidata. Keep Brave + Google CSE, the two confirmed working providers.
+# Bing and Qwant are fallback engines to evaluate on the user's own connection.
+use_default_settings:
+  engines:
+    remove:
+      - duckduckgo
+      - wikidata
+
+engines:
+  - name: bing
+    disabled: false
+  - name: qwant
+    disabled: false
 
 general:
   instance_name: "Mikan Search"
