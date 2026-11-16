@@ -4,6 +4,44 @@ Mikan uses **your own local SearXNG container**, with no paid search API account
 
 All incoming traffic is bound to **127.0.0.1:8888**. Do not forward this port on your router or expose it publicly.
 
+## Search engine health after repeated Live tests (November 2026)
+
+A successful local search request proves the Docker endpoint is reachable,
+but upstream engines can independently block or rate-limit repeated queries.
+For example, a manual query returned 46 results, with Brave supplying 26 and
+Google CSE 20, even while the logs showed repeated DuckDuckGo CAPTCHAs,
+Wikidata timeouts, and intermittent Brave / Google CSE rate limiting.
+
+The version-controlled config/settings.yml keeps these two proven providers,
+removes DuckDuckGo and Wikidata from the default engine list, and enables Bing
+and Qwant as **unverified alternatives**. Those alternatives can also be
+rate-limited on individual networks. Mikan's Rust search client additionally
+reserves outgoing local SearXNG request starts at least three seconds apart
+per desktop process to reduce public-provider bursts. That does not circumvent
+CAPTCHAs or guarantee unlimited free searches.
+
+**Applying configuration after a GitHub or remote-browser code update:**
+the config directory is volume-mounted into Docker, but the browser
+"Update & restart" action only rebuilds/restarts Mikan, **not** SearXNG.
+After the update completes, run from any Windows PowerShell:
+
+```powershell
+docker restart mikan-searxng
+$r = Invoke-RestMethod 'http://127.0.0.1:8888/search?q=Python%20programming&format=json'
+"Results: $($r.results.Count)"
+$r.results | Group-Object engine | Sort-Object Count -Descending | Select-Object Count, Name
+$r.unresponsive_engines | Format-List
+docker logs --tail 40 mikan-searxng
+```
+
+Restart the **existing** container only, without recreating it or modifying
+the secret/environment. Allow a normal restart before sending test queries.
+A nonzero result count is evidence the search itself worked; engine names
+and errors identify which providers contributed or failed. Retry a handful
+of different queries with some spacing, not a full 81-scenario Brain Lab run,
+until real results persist across requests. If Bing/Qwant are unreliable,
+remove or disable them after inspecting the actual engine errors.
+
 ## First-time setup
 
 1. Install [Docker Desktop for Windows](https://docs.docker.com/desktop/setup/install/windows-install/). Docker Desktop is free for personal use. Choose the Linux/WSL2 backend. If it asks for WSL2 or a restart, complete those steps and launch Docker Desktop.
