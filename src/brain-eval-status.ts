@@ -50,6 +50,10 @@ export function caseGrade(
     )
   ));
   if(requiredWebWasUnobserved)return "incomplete";
+  // A memory-capture scenario needs an actual isolated Ollama extractor pass.
+  // Human approval cannot turn missing extraction evidence into a green result.
+  if(cases.some(c=>c.steps.some(s=>
+    !!s.expected?.memoryCapture && !s.memoryCapturePreview)))return "incomplete";
   if(cases.some(c=>c.steps.some(s=>s.reviewRequired)))return "review";
   return "passed";
 }
