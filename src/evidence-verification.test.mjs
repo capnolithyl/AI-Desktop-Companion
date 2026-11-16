@@ -150,10 +150,10 @@ test("fallback quotes the source instead of presenting an unproved interpretatio
   assert.equal(reviewed.usable,true);
   // A partial answer presents a literal, numbered source excerpt rather than
   // the formerly used raw "Source [1] states" fallback sentence.
-  assert.match(reviewed.text,/retrieved sources actually say/);
-  assert.match(reviewed.text,/- \[1\] Lantern Cove:/);
+  assert.match(reviewed.text,/source reports mentioning/);
+  assert.match(reviewed.text,/\*\*Lantern Cove\*\* \[1\]/);
   assert.match(reviewed.text,/planned for release in December 2027/);
-  assert.match(reviewed.text,/Still unconfirmed: whether the film actually premiered/);
+  assert.match(reviewed.text,/Not independently established:.*whether the film actually premiered/);
   assert.doesNotMatch(reviewed.text,/has already released|Festival Cut/);
 });
 
@@ -170,7 +170,51 @@ test("partially verified release comparisons show literal excerpts rather than d
     "Aurora 6 Preview is definitely the newest official stable release. [1]",docs,audit);
   assert.equal(review.usable,true);
   assert.match(review.text,/Aurora 6 Preview/);
-  assert.match(review.text,/retrieved sources actually say/);
-  assert.match(review.text,/Still unconfirmed: latest officially released version/);
+  assert.match(review.text,/source reports mentioning/);
+  assert.match(review.text,/Not independently established:.*latest officially released version/);
   assert.doesNotMatch(review.text,/definitely the newest|official stable release/);
+});
+
+test("partial release evidence is grouped by named subject with source provenance, not a fabricated ranking",()=>{
+  const docs=[
+    {title:"Preview notice",url:"https://example.org/preview",
+      content:"Orchid 5 Preview was released on November 11, 2026."},
+    {title:"Release bulletin",url:"https://publisher.test/release",
+      content:"Orchid 5 Stable was released on November 16, 2026."},
+    {title:"Second report",url:"https://news.test/stable",
+      content:"Orchid 5 Stable has a November 16, 2026 release announcement."}
+  ];
+  const audit={status:"partial",recommendationTask:false,
+    acceptedDetails:[
+      {source:1,subject:"Orchid 5 Preview",claim:"Orchid 5 Preview was released November 11",
+        quote:docs[0].content},
+      {source:2,subject:"Orchid 5 Stable",claim:"Orchid 5 Stable was released November 16",
+        quote:docs[1].content},
+      {source:3,subject:"Orchid 5 Stable",claim:"Orchid 5 Stable released November 16",
+        quote:docs[2].content},
+    ],
+    unresolvedDetails:["official newest release"]};
+  const reviewed=reviewResearchCompletion("Orchid 5 Stable is definitely the latest official release. [2]",docs,audit);
+  assert.equal(reviewed.usable,true);
+  assert.match(reviewed.text,/source reports mentioning/);
+  assert.match(reviewed.text,/Orchid 5 Preview/);
+  assert.match(reviewed.text,/Orchid 5 Stable/);
+  assert.match(reviewed.text,/\[2\] \(\[publisher\.test\]\(https:\/\/publisher\.test\/release\)\)/);
+  assert.match(reviewed.text,/Not independently established:.*official newest release/);
+  assert.doesNotMatch(reviewed.text,/definitely the latest official release/);
+  assert.equal((reviewed.text.match(/\*\*Orchid 5 Stable\*\*/g)??[]).length,3);
+});
+test("partial answer ignores unanchored and malicious markdown-labeled proposed facts",()=>{
+  const docs=[{title:"Status bulletin",url:"javascript:alert(1)",
+    content:"Aster 5 was only scheduled for December 2027."}];
+  const audit={status:"partial",recommendationTask:false,
+    acceptedDetails:[
+      {source:1,subject:"Aster 5",claim:"Already released",quote:docs[0].content},
+      {source:1,subject:"Aster 6",claim:"Invented claim",quote:"Aster 6 was officially released."}],
+    unresolvedDetails:["actual release status"]};
+  const reviewed=reviewResearchCompletion("Aster 5 was released already. [1]",docs,audit);
+  assert.equal(reviewed.usable,true);
+  assert.match(reviewed.text,/only scheduled for December 2027/);
+  assert.doesNotMatch(reviewed.text,/javascript:|Aster 6|Already released/);
+  assert.match(reviewed.text,/Not independently established/);
 });

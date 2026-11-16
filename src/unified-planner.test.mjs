@@ -475,3 +475,10 @@ test("optional conceptual lookup policy is parsed, but missing/invalid policy is
   assert.equal(parseWebToolDecision(input("verify","optional"),true,prefs).sourceRequirement,"optional");
   assert.match(extendPlanningPrompt('Select.\nJSON:',prefs),/timeless technical comparisons can be answered directly without search/);
 });
+
+test("research planner instructions ask for the actual comparison goal, not merely supporting release dates",()=>{
+  const prompt=extendPlanningPrompt("What is the latest officially released version?\nJSON:",[]);
+  assert.match(prompt,/actual answer sought/);
+  assert.match(prompt,/NOT merely a supporting attribute/);
+  assert.match(prompt,/official release/);
+});

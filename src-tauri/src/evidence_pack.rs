@@ -62,6 +62,9 @@ pub struct AcceptedFactAudit {
     pub subject: String,
     pub claim: String,
     pub quote: String,
+    /// Model-proposed mapping to one requested property, not semantic proof.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub detail: Option<usize>,
 }
 
 pub struct ResearchEvidence {
@@ -343,14 +346,9 @@ fn assemble_evidence(
     if let Some(mut response) = response {
         if task.uses_fact_evidence() {
             if let Ok(facts) = serde_json::from_value::<Vec<FactCandidate>>(response["facts"].take()) {
-                // The model binds an extract to a requested property. Rust checks
-                // that the reference exists and its quotation passed the same
-                // provenance gate. Coverage is diagnostic, not semantic proof.
-                let covered: HashSet<_> = facts.iter().filter(|fact|
-                    validate_task_fact(fact, task, sources).is_ok())
-                    .filter_map(|fact|fact.detail.filter(|i|*i < task.details.len())).collect();
-                audit.unresolved_details = task.details.iter().enumerate()
-                    .filter(|(i,_)|!covered.contains(i)).map(|(_,s)|s.clone()).collect();
+                // Coverage must be computed from the *retained* anchored facts,
+                // not from raw proposals that may later be deduplicated or dropped.
+                // Mapping remains a model proposal and is not semantic proof.
                 audit.rejected_details = facts.iter().take(20)
                     .filter_map(|fact| validate_task_fact(fact, task, sources).err()
                         .map(|reason| format!("{} [source {}]: {reason}",
@@ -359,13 +357,18 @@ fn assemble_evidence(
                 let rejected=facts.iter().filter(|fact|validate_task_fact(fact,task,sources).is_err()).count();
                 let (accepted, _) = collect_valid(facts.into_iter()
                     .filter(|fact|validate_task_fact(fact,task,sources).is_ok()).collect(), sources);
+                let covered: HashSet<_> = accepted.iter()
+                    .filter_map(|fact|fact.detail.filter(|i|*i<task.details.len())).collect();
+                audit.unresolved_details = task.details.iter().enumerate()
+                    .filter(|(i,_)|!covered.contains(i)).map(|(_,s)|s.clone()).collect();
                 audit.accepted = accepted.len();
                 audit.contextual_count = accepted.iter()
                     .filter(|fact|fact.detail.is_none() && !task.details.is_empty()).count();
                 audit.rejected = rejected;
                 audit.accepted_details = accepted.iter().map(|fact| AcceptedFactAudit {
                     source:fact.source,subject:fact.subject.clone(),
-                    claim:fact.claim.clone(),quote:fact.quote.clone()
+                    claim:fact.claim.clone(),quote:fact.quote.clone(),
+                    detail:fact.detail
                 }).collect();
                 if accepted.is_empty() {
                     audit.note = "No factual claims matched the retrieved excerpts.".into();
@@ -585,7 +588,7 @@ pub async fn extract(
              Use fit_quote for any additional requested property backed by the same source, or leave it empty.",
     };
     let evidence_rules = if task.uses_fact_evidence() {
-        "Use subject for the ENTITY named in the quoted passage, never the page heading. For each fact, set detail to the zero-based index of the requested property it actually answers, or null for background context. A dated release or concrete named status can supply one piece of evidence for a request to identify or compare releases, even if the quotation never literally says 'latest'; map it to the requested property when it actually bears on that comparison. Do NOT treat one dated release report as proof that nothing newer exists. A related project, a page existing, or identifying a manga does not answer a different product's releases or an adaptation's status. Extract a disputed property's actual value, even when it contradicts the user's claim. Missing evidence never establishes a negative claim. Leave unsupported details unresolved."
+        "Use subject for the ENTITY named in the quoted passage, never the page heading. For each fact, set detail to the zero-based index of a requested property ONLY when the exact quotation really answers that property; otherwise use null for useful background context. In comparative or latest/first/current-status tasks, a dated mention of one release is background evidence unless the quoted source explicitly establishes the requested comparison and appropriate release status. Never treat a publication date as a release date, a preview as a stable release, one press report as independent official confirmation, or the absence of a newer result as proof that none exists. Prefer direct publisher release announcements or original model cards as stronger evidence, but identify their provenance from the actual URL rather than assumptions about the article title. A related project, a page existing, or identifying a manga does not answer a different product's release or adaptation status. Extract disputed values even when they contradict the user; leave unsupported comparisons unresolved."
     } else {
         "Use an exact, contiguous source passage naming the INDIVIDUAL candidate for identity_quote. A page headline is source metadata, not the name of a work inside it. \
          For discovery, fit_quote must be an exact passage naming that same item and showing why it fits the request. \
@@ -883,6 +886,7 @@ mod task_contract_tests {
         assert_eq!(evidence.audit.status,"partial");
         assert_eq!(evidence.audit.accepted,1);
         assert_eq!(evidence.audit.contextual_count,1);
+        assert_eq!(evidence.audit.accepted_details[0].detail,None);
         assert_eq!(evidence.audit.unresolved_details,vec!["latest officially released version"]);
         let notes=evidence.notes.unwrap();
         assert!(notes.contains("Context only; does NOT establish any requested detail"));

@@ -149,6 +149,68 @@ function reviewedRecommendation(
     rejected:0,checked:approved.length,usable:true};
 }
 
+/**
+ * Render a bounded partial answer from SOURCE QUOTES, not the generator's
+ * proposed paraphrases. Source URLs identify provenance, but neither their
+ * domains nor matching quotations establish the official/latest answer.
+ */
+function partialResearchSummary(
+  sources:readonly EvidenceSource[],
+  audit:ResearchAudit
+):EvidenceReview|null {
+  const normalized=(s:string)=>s.toLowerCase().replace(/\s+/g," ").trim();
+  const escaped=(s:string,max:number)=>[...s.replace(/\s+/g," ").trim()].slice(0,max)
+    .join("").replace(/[\\\`*_\[\]<>]/g,"\\/** Shared desktop/evaluation postprocessing. A rejected draft must not erase
+ * useful facts that the native extraction already anchored to exact sources. */");
+  const groups=new Map<string,{name:string;quotes:{source:number;quote:string}[]}>();
+  const seen=new Set<string>();
+  let checked=0;
+  for(const item of audit.acceptedDetails??[]){
+    const source=sources[item.source-1];
+    if(!source||!item.quote.trim()||!item.subject.trim())continue;
+    if(!normalized(source.content).includes(normalized(item.quote)) &&
+        !normalized(source.title).includes(normalized(item.quote)))continue;
+    const subject=normalized(item.subject);
+    const key=subject+"|"+item.source+"|"+normalized(item.quote);
+    if(seen.has(key))continue;
+    seen.add(key);
+    checked++;
+    if(!groups.has(subject) && groups.size>=4)continue;
+    if(!groups.has(subject))groups.set(subject,{name:item.subject,quotes:[]});
+    const group=groups.get(subject)!;
+    if(group.quotes.length<2)group.quotes.push({source:item.source,quote:item.quote});
+  }
+  if(!groups.size)return null;
+  const summaries=[...groups.values()];
+  const labels=summaries.map(g=>"**"+escaped(g.name,100)+"**");
+  const subjects=labels.length===1?labels[0]:
+    labels.slice(0,-1).join(", ")+" and "+labels[labels.length-1];
+  const lines=summaries.flatMap(g=>g.quotes.map(({source:index,quote})=>{
+    const result=sources[index-1];
+    let origin="";
+    try{
+      const uri=new URL(result.url);
+      if(["https:","http:"].includes(uri.protocol) && !uri.username && !uri.password)
+        origin=" (["+escaped(uri.hostname,100)+"]("+uri.href+"))";
+    }catch{ /* Source URLs are untrusted; omit malformed destinations. */ }
+    const excerpt=escaped(quote,330);
+    const shortened=[...quote.replace(/\s+/g," ").trim()].length>330?"…":"";
+    return "- **"+escaped(g.name,100)+"** ["+index+"]"+origin+": “"+excerpt+shortened+"”";
+  }));
+  // An extracted date is a reported value, not confirmation of the
+  // official release status or an exhaustive "latest" comparison.
+  const remaining=(audit.unresolvedDetails??[]).map(s=>escaped(s,140)).filter(Boolean).slice(0,4);
+  const caveat=remaining.length
+    ?"**Not independently established:** "+remaining.join("; ")+". These excerpts alone do not establish the definitive answer."
+    :"**Not independently established:** whether these source reports fully answer the question.";
+  return {
+    text:"I found source reports mentioning "+subjects+
+      ", but I can't confirm a definitive answer from the retrieved excerpts alone.\n\n"+
+      lines.join("\n")+"\n\n"+caveat,
+    checked,rejected:0,usable:true
+  };
+}
+
 /** Shared desktop/evaluation postprocessing. A rejected draft must not erase
  * useful facts that the native extraction already anchored to exact sources. */
 export function reviewResearchCompletion(answer:string,sources:EvidenceSource[],audit?:ResearchAudit|null):EvidenceReview|null {
@@ -162,20 +224,10 @@ export function reviewResearchCompletion(answer:string,sources:EvidenceSource[],
   // into a definitive "latest", "first", "best" or exact-status conclusion.
   // Use only the original quoted excerpts, not a model-inferred ranking.
   if(audit?.status==="partial" && facts.length){
-    const exact=(s:string)=>s.toLowerCase().replace(/\s+/g," ").trim();
-    const excerpts=facts.filter(f=>{
-      const source=sources[f.source-1];
-      return source && !!f.quote.trim() &&
-        (exact(source.title).includes(exact(f.quote)) || exact(source.content).includes(exact(f.quote)));
-    }).map(f=>"- ["+f.source+"] "+f.subject+": “"+f.quote+"”");
-    if(excerpts.length)return {
-      text:"Here's what the retrieved sources actually say, although I couldn't fully verify the requested answer:\n\n"+
-        [...new Set(excerpts)].join("\n\n")+
-        (audit.unresolvedDetails?.length?"\n\nStill unconfirmed: "+audit.unresolvedDetails.join("; ")+".":""),
-      checked:facts.length,rejected:0,usable:true
-    };
+    const partial=partialResearchSummary(sources,audit);
+    if(partial)return partial;
   }
-    const review=verifyResearchAnswer(answer,grounded);
+  const review=verifyResearchAnswer(answer,grounded);
   if(review.usable || !facts.length)return review;
   const recover=facts.filter(f=>{
     const source=sources[f.source-1];
