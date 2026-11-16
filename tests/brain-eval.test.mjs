@@ -22,7 +22,7 @@ test("broad isolated test catalog covers multiple intentions and branches",()=>{
 });
 
 test("scenario numbers stay stable when a subset is selected",()=>{
-  assert.equal(EVAL_SCENARIOS.length,82);
+  assert.equal(EVAL_SCENARIOS.length,83);
   assert.equal(brainScenarioNumber(EVAL_SCENARIOS[0].id),1);
   assert.equal(brainScenarioNumber(EVAL_SCENARIOS[72].id),73);
   assert.match(brainScenarioLabel(EVAL_SCENARIOS[0].id,EVAL_SCENARIOS[0].label),/^#01 · /);
@@ -37,6 +37,8 @@ test("scenario numbers stay stable when a subset is selected",()=>{
     "new correction scenarios append without changing any old numbers");
   assert.equal(brainScenarioNumber("temporal-old-announcement"),82,
     "new time-aware source review must not renumber existing cases");
+  assert.equal(brainScenarioNumber("reaction-after-anime-news"),83,
+    "opinion/memory test appends after existing scenarios");
   assert.equal(brainScenarioLabel("not-in-catalog","Custom test"),"Custom test");
 });
 test("live stale-announcement regression requires real search and human date reasoning",async()=>{
@@ -55,6 +57,75 @@ test("live stale-announcement regression requires real search and human date rea
   assert.equal(second.webPass,true);
   assert.equal(second.answerPass,null,"A plausible-sounding recap is not proof of correct temporal reasoning");
   assert.equal(second.reviewRequired,true);
+});
+
+test("anime news to yuri reaction to explicit recommendation is tested as separate intents",async()=>{
+  const scenario=byId("reaction-after-anime-news");
+  assert.equal(scenario.steps.length,3);
+  assert.deepEqual(scenario.steps.map(s=>s.expect.web),[true,false,true]);
+  const personal=scenario.steps[1];
+  assert.equal(personal.expect.route,"chat");
+  assert.ok(personal.expect.conversationGoal.includes("Do NOT search"));
+  assert.equal(personal.expect.memoryCapture.minUserFacts,2);
+  assert.ok(personal.expect.memoryCapture.reviewGoals.some(goal=>goal.includes("drinking")));
+  assert.ok(personal.expect.memoryCapture.reviewGoals.some(goal=>goal.includes("smoking")));
+  const calls=[];
+  const memoryCalls=[];
+  const report=await runBrainEvaluation({
+    scenarios:[scenario],mode:"live",model:"test-only",repetitions:1,
+    planWeb:async(question)=>{
+      calls.push(question);
+      const search=question===scenario.steps[0].user || question===scenario.steps[2].user;
+      return {search,query:search?"Chainsmoker Cat anime yuri recommendations":"",
+        reason:search?"Actual public lookup":"Personal opinion, no lookup needed",
+        intent:search?"new":"chat"};
+    },
+    infer:async()=> "I can see why the heavy drinking would put you off.",
+    previewMemory:async input=>{
+      memoryCalls.push(input);
+      return {userFacts:[
+        {fact:"The user loves yuri anime.",evidence:"i love yuri anime"},
+        {fact:"The user disliked the drinking scenes in Botan Kamiina Fully Blossoms When Drunk.",
+          evidence:"i hate the drinking part. it was so gross at some point."}
+      ],interestItems:[{
+        kind:"anime",name:"Botan Kamiina Fully Blossoms When Drunk",status:"experienced",
+        evidence:"i watched botan kamiina fully blossoms when drunk recently"
+      }],writesToRealMemories:false};
+    }
+  });
+  assert.deepEqual(report.cases[0].steps.map(s=>s.webPass),[true,true,true]);
+  assert.equal(report.cases[0].steps[1].memoryCapturePass,true);
+  assert.equal(report.cases[0].steps[1].memoryCapturePreview.userFacts.length,2);
+  assert.equal(report.cases[0].steps[1].memoryCapturePreview.writesToRealMemories,false);
+  assert.equal(report.cases[0].steps[1].reviewRequired,true);
+  assert.equal(memoryCalls.length,1,"Only the owner's preference turn warrants extraction");
+  assert.equal(memoryCalls[0].user,personal.user);
+  assert.equal(memoryCalls[0].priorUser,scenario.steps[0].user);
+  assert.equal(calls.length,3);
+  assert.equal(report.writesToRealMemories,false);
+  assert.match(brainEvalMarkdown(report),/Read-only memory review expectations/);
+  assert.match(brainEvalMarkdown(report),/Proposed user fact \(not saved\)/);
+});
+
+test("unrequested research and missing memory captures are not silently graded as success",async()=>{
+  const scenario=byId("reaction-after-anime-news");
+  const unwanted=await runBrainEvaluation({
+    scenarios:[scenario],mode:"live",model:"test-only",repetitions:1,
+    planWeb:async()=>({search:true,query:"catgirl anime smoking new shows",
+      reason:"Incorrectly interpreted opinion as discovery"}),
+    infer:async()=> "I couldn't find a recommendation.",
+    previewMemory:async()=>({userFacts:[],interestItems:[],writesToRealMemories:false})
+  });
+  assert.equal(unwanted.cases[0].steps[1].webPass,false,
+    "A needless search after a personal reaction is a real failure");
+  assert.equal(unwanted.cases[0].steps[1].memoryCapturePass,false);
+  const missing=await runBrainEvaluation({
+    scenarios:[scenario],mode:"live",model:"test-only",repetitions:1,
+    planWeb:async()=>({search:false,reason:"No research"}),
+    infer:async()=> "The drinking focus was unpleasant."
+  });
+  assert.equal(missing.cases[0].steps[1].memoryCapturePass,null);
+  assert.equal(missing.cases[0].steps[1].memoryCapturePreview,undefined);
 });
 
 test("a richer synthetic memory can prove the same fact without matching an exact record ID",()=>{
