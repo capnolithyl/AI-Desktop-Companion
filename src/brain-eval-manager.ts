@@ -10,7 +10,7 @@ import { planPublicWebTools, type PublicResearchContext } from "./unified-planne
 import type { ResearchAudit } from "./debug-log";
 import { responseFocusGuidance } from "./conversation-engine";
 import { PERSONAL_DETAIL_GROUNDING_GUIDANCE } from "./personal-grounding";
-import { chatRuntimeContext } from "./runtime-context";
+import { chatRuntimeContext, runtimeContext } from "./runtime-context";
 import { version as APP_VERSION } from "../package.json";
 import {
   gradeReportCases,mergeCaseRecords,parseCaseRecords,statusForScenario,
@@ -217,7 +217,9 @@ async function execute(
     const system=[
       settings.systemPrompt.trim(),
       PERSONAL_DETAIL_GROUNDING_GUIDANCE,
-      chatRuntimeContext(),
+      // Match desktop production: researched answers get the complete live
+      // calendar and source-freshness instructions, ordinary chat stays light.
+      researchQuery ? runtimeContext() : chatRuntimeContext(),
       responseFocusGuidance(messages.slice(0,-1),last),
       "ISOLATED BRAIN LAB: This run uses synthetic owner memories and must never write real memories, contact GitHub/Notion, or use private integrations. Public SearXNG search IS available when the local planner selected it, and the normal Rust search pipeline supplies actual numbered evidence.",
       "Use the conversation context consistently; do not invent unknown facts about the owner. Resolve ambiguous names from user-established context, never from a guessed interpretation.",
