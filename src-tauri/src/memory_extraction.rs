@@ -853,6 +853,56 @@ mod tests {
     use super::*;
 
     #[test]
+    fn grounded_yuri_and_drinking_reaction_can_save_without_disliking_entire_anime() {
+        let user="i watched botan kamiina fully blossoms when drunk recently. a yuri anime about girls that like drinking. i love yuri anime. i hate the drinking part. it was so gross at some point. i don't think smoking is gonna be any better";
+        assert!(user_fact_candidate(user));
+        let mut db=Connection::open_in_memory().unwrap();
+        memory::initialize_database(&db).unwrap();
+        db.execute("INSERT INTO conversations(id,title,created_at,updated_at)
+            VALUES('c','brain-fixture',0,0)",[]).unwrap();
+        db.execute("INSERT INTO messages(id,conversation_id,role,content,created_at)
+            VALUES('u','c','user',?1,0)",params![user]).unwrap();
+        db.execute("INSERT INTO messages(id,conversation_id,role,content,created_at)
+            VALUES('a','c','assistant','I get why those scenes bothered you.',0)",[]).unwrap();
+        let proposed=Extracted {
+            user_facts:vec![
+                ProposedUserFact{fact:"The user loves yuri anime.".into(),
+                    evidence:"i love yuri anime".into(),scope:"long_term".into(),
+                    relation:"new".into(),related_memory_id:None,related_interest_id:None},
+                ProposedUserFact{fact:"The user disliked the drinking focus in Botan Kamiina Fully Blossoms When Drunk.".into(),
+                    evidence:"i hate the drinking part. it was so gross at some point".into(),
+                    scope:"long_term".into(),relation:"new".into(),
+                    related_memory_id:None,related_interest_id:None},
+            ],
+            interest_items:vec![ProposedInterest{
+                kind:"anime".into(),name:"botan kamiina fully blossoms when drunk".into(),
+                status:"experienced".into(),
+                evidence:"i watched botan kamiina fully blossoms when drunk recently".into()
+            }],
+            character_facts:vec![]
+        };
+        let result=persist(&mut db,proposed,user,"I get why those scenes bothered you.",
+            "u","a",true,false,&[],&[],None,None).unwrap();
+        assert_eq!(result.user_saved,2);
+        assert_eq!(result.interests_saved,1);
+        let facts:Vec<String>=db.prepare("SELECT fact FROM user_memories ORDER BY id").unwrap()
+            .query_map([],|row|row.get(0)).unwrap().map(Result::unwrap).collect();
+        assert_eq!(facts.len(),2);
+        assert!(facts.iter().any(|fact|fact.contains("yuri anime")));
+        assert!(facts.iter().any(|fact|fact.contains("drinking focus")));
+        let interest_status:String=db.query_row(
+            "SELECT status FROM interest_items WHERE kind='anime'",[],|row|row.get(0)).unwrap();
+        assert_eq!(interest_status,"experienced");
+        // An isolated emotional reaction to scenes is not a sourced negative
+        // status for the ENTIRE named work.
+        assert!(clean_interest_candidate(&ProposedInterest {
+            kind:"anime".into(),name:"botan kamiina fully blossoms when drunk".into(),
+            status:"dislike".into(),
+            evidence:"i hate the drinking part".into()
+        },user).is_none());
+    }
+
+    #[test]
     fn interest_status_update_reports_committed_details_without_duplicate() {
         let mut db=Connection::open_in_memory().unwrap();
         memory::initialize_database(&db).unwrap();
