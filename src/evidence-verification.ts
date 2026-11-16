@@ -14,11 +14,20 @@ export type EvidenceSource = {
   content: string;
   publishedDate?: string;
 };
+/** Machine-checkable support behind a partial answer, never a claim of
+ * semantic entailment or independent source authenticity. */
+export type PartialEvidence = {
+  status: "partial";
+  supportedQuotes: {source:number;subject:string;quote:string}[];
+  unresolvedDetails: string[];
+};
 export type EvidenceReview = {
   text: string;
   rejected: number;
   checked: number;
   usable: boolean;
+  /** Optional for answers assembled from validated quotations. */
+  evidence?: PartialEvidence;
 };
 const stop = new Set(("the a an and or but if to in on at from for into of their its it they them that this " +
   "is are was were have has had been be did do does will would can could with about who what when " +
@@ -163,7 +172,7 @@ function partialResearchSummary(
     .join("").replace(/[\\\`*_\[\]<>]/g,"\\$&");
   const groups=new Map<string,{name:string;quotes:{source:number;quote:string}[]}>();
   const seen=new Set<string>();
-  let checked=0;
+  const supportedQuotes:PartialEvidence["supportedQuotes"]=[];
   for(const item of audit.acceptedDetails??[]){
     const source=sources[item.source-1];
     if(!source||!item.quote.trim()||!item.subject.trim())continue;
@@ -173,11 +182,13 @@ function partialResearchSummary(
     const key=subject+"|"+item.source+"|"+normalized(item.quote);
     if(seen.has(key))continue;
     seen.add(key);
-    checked++;
     if(!groups.has(subject) && groups.size>=4)continue;
     if(!groups.has(subject))groups.set(subject,{name:item.subject,quotes:[]});
     const group=groups.get(subject)!;
-    if(group.quotes.length<2)group.quotes.push({source:item.source,quote:item.quote});
+    if(group.quotes.length<2){
+      group.quotes.push({source:item.source,quote:item.quote});
+      supportedQuotes.push({source:item.source,subject:item.subject,quote:item.quote});
+    }
   }
   if(!groups.size)return null;
   const summaries=[...groups.values()];
@@ -198,7 +209,8 @@ function partialResearchSummary(
   }));
   // An extracted date is a reported value, not confirmation of the
   // official release status or an exhaustive "latest" comparison.
-  const remaining=(audit.unresolvedDetails??[]).map(s=>escaped(s,140)).filter(Boolean).slice(0,4);
+  const unresolvedDetails=(audit.unresolvedDetails??[]).filter(s=>s.trim()).slice(0,4);
+  const remaining=unresolvedDetails.map(s=>escaped(s,140));
   const caveat=remaining.length
     ?"**Not independently established:** "+remaining.join("; ")+". These excerpts alone do not establish the definitive answer."
     :"**Not independently established:** whether these source reports fully answer the question.";
@@ -206,7 +218,8 @@ function partialResearchSummary(
     text:"I found source reports mentioning "+subjects+
       ", but I can't confirm a definitive answer from the retrieved excerpts alone.\n\n"+
       lines.join("\n")+"\n\n"+caveat,
-    checked,rejected:0,usable:true
+    checked:supportedQuotes.length,rejected:0,usable:true,
+    evidence:{status:"partial",supportedQuotes,unresolvedDetails}
   };
 }
 

@@ -71,9 +71,16 @@ test("a failed final draft recovers source-anchored partial facts without invent
     acceptedDetails:[{source:1,subject:"Cora Vale",claim:"Cora Vale was born in 1975.",quote}],
     unresolvedDetails:["current tour dates"]};
   const recovered=reviewResearchCompletion("Cora Vale was born in 2024. [1]",sources,audit);
-  assert.match(recovered.text,/1975/);
-  assert.doesNotMatch(recovered.text,/2024/);
-  assert.match(recovered.text,/Still unconfirmed: current tour dates/);
+  assert.equal(recovered.usable,true);
+  assert.equal(recovered.checked,1);
+  assert.deepEqual(recovered.evidence,{
+    status:"partial",
+    supportedQuotes:[{source:1,subject:"Cora Vale",quote}],
+    unresolvedDetails:["current tour dates"]
+  });
+  assert.ok(recovered.text.includes(quote),"The verified quote must appear in the rendered answer");
+  assert.ok(!recovered.text.includes("Cora Vale was born in 2024"),
+    "The generator's fabricated claim must not be repeated");
   assert.equal(reviewResearchCompletion("A casual reaction",[],undefined),null);
   const malformed={...audit,acceptedDetails:[{...audit.acceptedDetails[0],quote:"Fabricated source passage"}]};
   assert.equal(reviewResearchCompletion("An album released in 2024. [1]",sources,malformed).usable,false);

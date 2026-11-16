@@ -150,11 +150,14 @@ test("fallback quotes the source instead of presenting an unproved interpretatio
   assert.equal(reviewed.usable,true);
   // A partial answer presents a literal, numbered source excerpt rather than
   // the formerly used raw "Source [1] states" fallback sentence.
-  assert.match(reviewed.text,/source reports mentioning/);
-  assert.match(reviewed.text,/\*\*Lantern Cove\*\* \[1\]/);
-  assert.match(reviewed.text,/planned for release in December 2027/);
-  assert.match(reviewed.text,/Not independently established:.*whether the film actually premiered/);
-  assert.doesNotMatch(reviewed.text,/has already released|Festival Cut/);
+  assert.deepEqual(reviewed.evidence,{
+    status:"partial",
+    supportedQuotes:[{source:1,subject:"Lantern Cove",quote:docs[0].content}],
+    unresolvedDetails:["whether the film actually premiered"]
+  });
+  assert.ok(reviewed.text.includes(docs[0].content));
+  assert.ok(!reviewed.text.includes("Lantern Cove has already released"));
+  assert.ok(!reviewed.text.includes("Festival Cut"));
 });
 
 
@@ -169,10 +172,13 @@ test("partially verified release comparisons show literal excerpts rather than d
   const review=reviewResearchCompletion(
     "Aurora 6 Preview is definitely the newest official stable release. [1]",docs,audit);
   assert.equal(review.usable,true);
-  assert.match(review.text,/Aurora 6 Preview/);
-  assert.match(review.text,/source reports mentioning/);
-  assert.match(review.text,/Not independently established:.*latest officially released version/);
-  assert.doesNotMatch(review.text,/definitely the newest|official stable release/);
+  assert.deepEqual(review.evidence,{
+    status:"partial",
+    supportedQuotes:[{source:1,subject:"Aurora 6 Preview",quote:docs[0].content}],
+    unresolvedDetails:["latest officially released version"]
+  });
+  assert.ok(review.text.includes(docs[0].content));
+  assert.ok(!review.text.includes("definitely the newest official stable release"));
 });
 
 test("partial release evidence is grouped by named subject with source provenance, not a fabricated ranking",()=>{
@@ -196,13 +202,19 @@ test("partial release evidence is grouped by named subject with source provenanc
     unresolvedDetails:["official newest release"]};
   const reviewed=reviewResearchCompletion("Orchid 5 Stable is definitely the latest official release. [2]",docs,audit);
   assert.equal(reviewed.usable,true);
-  assert.match(reviewed.text,/source reports mentioning/);
-  assert.match(reviewed.text,/Orchid 5 Preview/);
-  assert.match(reviewed.text,/Orchid 5 Stable/);
+  assert.deepEqual(reviewed.evidence,{
+    status:"partial",
+    supportedQuotes:[
+      {source:1,subject:"Orchid 5 Preview",quote:docs[0].content},
+      {source:2,subject:"Orchid 5 Stable",quote:docs[1].content},
+      {source:3,subject:"Orchid 5 Stable",quote:docs[2].content}
+    ],
+    unresolvedDetails:["official newest release"]
+  });
+  assert.equal(reviewed.checked,3);
+  assert.ok(!reviewed.text.includes("definitely the latest official release"));
+  // This is specifically a renderer contract: show the real URL next to its source number.
   assert.match(reviewed.text,/\[2\] \(\[publisher\.test\]\(https:\/\/publisher\.test\/release\)\)/);
-  assert.match(reviewed.text,/Not independently established:.*official newest release/);
-  assert.doesNotMatch(reviewed.text,/definitely the latest official release/);
-  assert.equal((reviewed.text.match(/\*\*Orchid 5 Stable\*\*/g)??[]).length,3);
 });
 test("partial answer ignores unanchored and malicious markdown-labeled proposed facts",()=>{
   const docs=[{title:"Status bulletin",url:"javascript:alert(1)",
@@ -214,9 +226,15 @@ test("partial answer ignores unanchored and malicious markdown-labeled proposed 
     unresolvedDetails:["actual release status"]};
   const reviewed=reviewResearchCompletion("Aster 5 was released already. [1]",docs,audit);
   assert.equal(reviewed.usable,true);
-  assert.match(reviewed.text,/only scheduled for December 2027/);
-  assert.doesNotMatch(reviewed.text,/javascript:|Aster 6|Already released/);
-  assert.match(reviewed.text,/Not independently established/);
+  assert.deepEqual(reviewed.evidence,{
+    status:"partial",
+    supportedQuotes:[{source:1,subject:"Aster 5",quote:docs[0].content}],
+    unresolvedDetails:["actual release status"]
+  });
+  assert.ok(reviewed.text.includes(docs[0].content));
+  assert.ok(!reviewed.text.includes("javascript:"));
+  assert.ok(!reviewed.text.includes("Aster 6"));
+  assert.ok(!reviewed.text.includes("Already released"));
 });
 
 test("Markdown formatting in source quotes is escaped, not executable",()=>{
@@ -230,4 +248,25 @@ test("Markdown formatting in source quotes is escaped, not executable",()=>{
   assert.match(result.text,/Crystal 7/);
   assert.match(result.text,/\\\[draft\\\]/);
   assert.doesNotMatch(result.text,/Already out!/);
+});
+
+test("partial answer metadata contains only excerpts actually rendered after caps and deduplication",()=>{
+  const entries=Array.from({length:5},(_,i)=>({
+    title:"Public bulletin "+i,url:"https://example.org/item/"+i,
+    content:"Documented fact for item "+i+" in 2026."
+  }));
+  const audit={status:"partial",recommendationTask:false,
+    acceptedDetails:[
+      ...entries.map((doc,i)=>({source:i+1,subject:"Item "+i,
+        claim:"Claim "+i,quote:doc.content})),
+      {source:1,subject:"Item 0",claim:"Duplicated",quote:entries[0].content}
+    ],
+    unresolvedDetails:["which item is the newest"]};
+  const result=reviewResearchCompletion("Item 4 is the newest.",entries,audit);
+  assert.equal(result.usable,true);
+  assert.equal(result.checked,4);
+  assert.deepEqual(result.evidence?.supportedQuotes,
+    entries.slice(0,4).map((doc,i)=>({source:i+1,subject:"Item "+i,quote:doc.content})));
+  assert.deepEqual(result.evidence?.unresolvedDetails,["which item is the newest"]);
+  assert.ok(!result.text.includes("Documented fact for item 4"));
 });
