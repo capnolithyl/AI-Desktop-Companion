@@ -9,6 +9,28 @@ import {
 
 const byId=id=>EVAL_SCENARIOS.find(s=>s.id===id);
 
+test("desktop Brain Lab displays persistent progress and completion ABOVE the scenario checklist",()=>{
+  const panel=readFileSync(new URL("../src/BrainEvalPanel.tsx",import.meta.url),"utf8");
+  const css=readFileSync(new URL("../src/brain-eval.css",import.meta.url),"utf8");
+  const actionbar=panel.indexOf('className="brain-eval-actionbar"');
+  const progress=panel.indexOf('aria-label="Brain Lab completed turns"');
+  const catalog=panel.indexOf('className="brain-eval-catalog"');
+  const dashboard=panel.indexOf('Results dashboard');
+  assert.ok(actionbar>=0 && progress>actionbar && catalog>progress && dashboard>catalog,
+    "Run progress and its final outcome must remain before the long checklist");
+  assert.match(panel,/runtime\.phase==="complete"\?"Evaluation finished"/);
+  assert.match(panel,/runtime\.phase==="failed"\?"Evaluation failed"/);
+  assert.match(panel,/runtime\.phase==="stopped"\?"Evaluation stopped"/);
+  assert.match(panel,/runtime\.results\.reviewTurns>0/,
+    "Completion must not misrepresent unreviewed responses as fully passing");
+  assert.match(panel,/setCatalogOpen\(false\)/,
+    "Starting a run should collapse the checklist without changing selections");
+  assert.match(panel,/Select scenario numbers/);
+  assert.match(css,/\.brain-eval-actionbar\s*\{[\s\S]*?position:sticky;/,
+    "The run monitor must remain visible when the user scrolls");
+});
+
+
 test("broad isolated test catalog covers multiple intentions and branches",()=>{
   assert.ok(EVAL_SCENARIOS.length>=30);
   assert.ok(EVAL_SCENARIOS.reduce((sum,s)=>sum+s.steps.length,0)>=75);
