@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { planDesktopWebExecution } from "./turn-execution-policy.ts";
+import { planDesktopWebExecution, resolvePublicWebExecution } from "./turn-execution-policy.ts";
 import { planPublicWebTools } from "./unified-planner.ts";
 import { DEFAULT_SOURCE_PREFERENCES } from "./preferred-sources.ts";
 
@@ -98,4 +98,22 @@ test("model may plan a refinement across domains after policy permits it",async(
       sourcePreferences:DEFAULT_SOURCE_PREFERENCES,history});
     assert.equal(selected.search,true,current);
   }
+});
+
+test("only optional general lookup tasks can fall back to unsourced conceptual explanation",()=>{
+  const policy=planDesktopWebExecution({...defaults,planMode:"research"});
+  const task={kind:"lookup",requirements:[],roles:[],exclude:[]};
+  const decision={search:true,query:"SQLite FTS5 vector embeddings design",method:"ai-planned",
+    sourceRequirement:"optional",task};
+  const run=(selected,plan={mode:"research",recent:false})=>
+    resolvePublicWebExecution(policy,plan,selected);
+  assert.equal(run(decision).researchGeneralFallback,true);
+  assert.equal(run({...decision,sourceRequirement:"required"}).researchGeneralFallback,false);
+  assert.equal(run({...decision,task:{...task,kind:"verify"}}).researchGeneralFallback,false);
+  assert.equal(run({...decision,task:{...task,kind:"discover"}}).researchGeneralFallback,false);
+  assert.equal(run({...decision,task:{...task,sourceUrl:"https://example.org/docs"}}).researchGeneralFallback,false);
+  assert.equal(run({...decision,task:{...task,requirements:[{quote:"under 6",relation:"lt",limit:6,unit:"episodes"}]}}).researchGeneralFallback,false);
+  assert.equal(run(decision,{mode:"research",recent:true}).researchGeneralFallback,false);
+  assert.equal(run({...decision,task:undefined}).researchGeneralFallback,false);
+  assert.equal(run({...decision,search:false}).researchGeneralFallback,false);
 });

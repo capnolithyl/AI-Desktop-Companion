@@ -76,6 +76,8 @@ struct ChatRequest {
     #[serde(default)]
     research_recent: bool,
     #[serde(default)]
+    research_general_fallback: bool,
+    #[serde(default)]
     thinking_requested: bool,
     #[serde(default)]
     searxng_endpoint: String,
@@ -89,6 +91,18 @@ struct ChatRequest {
     source_preferences: Vec<source_priority::SourcePreference>,
     #[serde(default)]
     source_topic: Option<String>,
+}
+fn general_knowledge_fallback_allowed(
+    approved: bool,
+    route: Option<&str>,
+    recent: bool,
+    task: Option<&recommendation_gate::ResearchTask>,
+) -> bool {
+    approved && route==Some("research") && !recent &&
+        task.is_some_and(|item|
+            item.kind==recommendation_gate::ResearchKind::Lookup &&
+            item.source_url.is_none() && item.requirements.is_empty() &&
+            item.roles.is_empty())
 }
 fn default_cache_hours() -> u64 { 24 }
 fn default_structured_research() -> bool { true }
@@ -108,6 +122,33 @@ mod local_chat_route_tests {
         assert!(web_tools_allowed(true, Some("factual")));
         // Keep legacy callers supported until they use explicit routing.
         assert!(web_tools_allowed(true, None));
+    }
+    #[test]
+    fn source_optional_fallback_never_bypasses_verified_or_time_sensitive_tasks() {
+        let general=recommendation_gate::ResearchTask::default();
+        assert!(general_knowledge_fallback_allowed(true,Some("research"),false,Some(&general)));
+        assert!(!general_knowledge_fallback_allowed(false,Some("research"),false,Some(&general)));
+        assert!(!general_knowledge_fallback_allowed(true,Some("research"),true,Some(&general)));
+        assert!(!general_knowledge_fallback_allowed(true,Some("chat"),false,Some(&general)));
+        assert!(!general_knowledge_fallback_allowed(true,Some("research"),false,None));
+        let verified=recommendation_gate::ResearchTask {
+            kind:recommendation_gate::ResearchKind::Verify,..Default::default()
+        };
+        assert!(!general_knowledge_fallback_allowed(true,Some("research"),false,Some(&verified)));
+        let discovery=recommendation_gate::ResearchTask {
+            kind:recommendation_gate::ResearchKind::Discover,..Default::default()
+        };
+        assert!(!general_knowledge_fallback_allowed(true,Some("research"),false,Some(&discovery)));
+        let linked=recommendation_gate::ResearchTask {
+            source_url:Some("https://example.com".into()),..Default::default()
+        };
+        assert!(!general_knowledge_fallback_allowed(true,Some("research"),false,Some(&linked)));
+        let measured=recommendation_gate::ResearchTask {
+            requirements:vec![recommendation_gate::HardRequirement {
+                quote:"under two hours".into(),relation:"lt".into(),limit:2.0,unit:"hours".into()
+            }],..Default::default()
+        };
+        assert!(!general_knowledge_fallback_allowed(true,Some("research"),false,Some(&measured)));
     }
 }
 fn valid_context_window(context: Option<u32>) -> Option<u32> {
@@ -577,6 +618,7 @@ async fn chat_stream_impl(
     let mut sources_carried_over = false;
     let mut newly_researched = false;
     let mut research_audit = None;
+    let mut optional_search_error: Option<String> = None;
     let selected_context = valid_context_window(request.context_window);
     // The chat route is authoritative. Even old clients that accidentally
     // leave auto_search enabled must not invoke web tools or carry unrelated
@@ -594,6 +636,10 @@ async fn chat_stream_impl(
     }).flatten();
     let explicit_search = explicit_query.is_some();
     let task = request.research_task.as_ref();
+    let general_fallback=general_knowledge_fallback_allowed(
+        request.research_general_fallback,request.research_route.as_deref(),
+        request.research_recent,task
+    );
     // A forecast about an already researched topic needs the cited evidence,
     // not another non-streaming tool-planning pass. Explicit searches still run.
     let reuse_prediction_evidence = explicit_query.is_none()
@@ -635,11 +681,18 @@ async fn chat_stream_impl(
                     engine:"direct webpage".into(),published_date:None
                 });
             } else {
-            sources = source_priority::search_for_task(
+            sources = match source_priority::search_for_task(
                 request.searxng_endpoint.clone(),query.clone(),
                 request.research_recent || research_intent::is_album_research(&messages),
                 &request.source_preferences,request.source_topic.as_deref(),task.and_then(|t|t.subject.as_deref())
-            ).await?;
+            ).await {
+                Ok(items)=>items,
+                Err(error) if general_fallback => {
+                    optional_search_error=Some(error);
+                    Vec::new()
+                },
+                Err(error)=>return Err(error)
+            };
             }
             search_query = Some(query.clone());
             if sources.is_empty() && task.is_none() {
@@ -658,11 +711,26 @@ async fn chat_stream_impl(
                 }
             }
             if sources.is_empty() {
-                let content = "SearXNG didn't return any relevant sources for that search.".to_owned();
-                return Ok(ChatCompletion {
-                    content, stats: None, sources, search_query, sources_carried_over,
-                    research_audit, model_used: request.model.clone(), fallback_reason: fallback_reason.clone()
-                });
+                if general_fallback {
+                    let _ = app.emit("mikan://activity", json!({
+                        "requestId":request.request_id,
+                        "text":"No public sources; answering general concepts locally…"
+                    }));
+                    // Do not pass unsourced snippets or fake numbered evidence.
+                    // Allow stable conceptual explanations, never freshly verified facts.
+                    messages.insert(1,json!({"role":"system","content":
+                        "A background public lookup was attempted but no usable sources are available.                          The user asked for a general conceptual explanation, so answer from established                          model knowledge with appropriate uncertainty and without numbered citations.                          Do NOT invent source results, version numbers, dates, current status, exact                          biographical facts, strict quantitative claims, or source-verified recommendations.                          If live verification is essential, clearly say it remains unverified."}));
+                    if optional_search_error.is_some() {
+                        // The original networking failure remains observable via
+                        // the attempted query; no private diagnostics enter prompts.
+                    }
+                } else {
+                    let content = "SearXNG didn't return any relevant sources for that search.".to_owned();
+                    return Ok(ChatCompletion {
+                        content, stats: None, sources, search_query, sources_carried_over,
+                        research_audit, model_used: request.model.clone(), fallback_reason: fallback_reason.clone()
+                    });
+                }
             }
 
             // Structured research needs source-page context, not just search
@@ -681,7 +749,7 @@ async fn chat_stream_impl(
                 ).await;
             }
 
-            newly_researched = true;
+            newly_researched = !sources.is_empty();
         } else if reuse_prediction_evidence {
             // Stream directly from the prior excerpts with the same [n] indexes
             // shown in the UI. Avoid an uncited answer from tool preflight.

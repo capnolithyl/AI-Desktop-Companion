@@ -43,6 +43,8 @@ export type WebToolDecision = {
   intent?: "refine" | "end" | "new" | "chat";
   /** Effort for the reply, independent of whether public search is needed. */
   replyEffort?: "quick" | "deliberate";
+  /** Whether the user needs externally verified evidence to complete this request. */
+  sourceRequirement?: "required" | "optional";
   task?: ResearchTask;
 };
 export type UnifiedPlan = {
@@ -56,6 +58,8 @@ const privateUrl = /https?:\/\//i;
 const defaultWeb: WebToolDecision = {search:false,reason:"No external lookup selected",method:"not-needed"};
 
 const researchTaskInstructions = [
+  "For general, timeless explanations or technology comparisons answer directly from established model knowledge when the user did not request public citations or freshness. Do not search merely because the question is technical or complicated. Current versions, announcements, named factual verification, user-requested live sources, constrained discovery and direct documents REQUIRE source evidence.",
+  "On every search return web.sourceRequirement='required' unless optional background reading might improve a self-contained, general conceptual explanation that can still be usefully answered without web. Only in that second case choose 'optional'. Missing or invalid requirement MUST be treated as required. This field never authorizes inventing current facts, exact numeric values, source citations or named recommendations.",
   "For a search, also return web.task. Choose 'discover' ONLY when the user seeks suitable works, products or other options. Choose 'verify' ONLY when checking claims about one identifiable, specific named item. Choose 'lookup' for factual explanations, current events, release histories, latest versions and general status questions, even when several items might appear in search results. Searching for recent releases is NOT by itself a recommendation request.",
   "For lookup or verify, set subject to the public entity NAME ONLY, entityType to its kind, and details to the requested properties/questions (up to four). Keep search terms, dates and property names OUT of subject. Page titles are not entity names. For discovery leave subject empty; put qualitative suitability criteria in preferences, not exclude. A comparison reference is not the discovery target.",
   "Copy each explicit, still-active numerical limit from the user's words as a short verbatim quote, a relation (lt, lte, gt, gte, eq), a number (limit), and a unit. Leave open-ended preferences as preferences. Never add a numerical limit to the query or task that the user did not specify.",
@@ -184,7 +188,7 @@ export function activePublicTaskPrompt(current:string,
     "Topic labels are optional; available priorities: "+topics.map(t=>t.topic).join(", ")+".",
     researchTaskInstructions,
     "Choose replyEffort independently of web.search: quick for conversation, jokes, reactions and straightforward facts, even when they MENTION debugging, reasoning or development; deliberate only for a CURRENT REQUEST to do multi-step analysis, troubleshooting or problem solving. Judge intent, not topic words.",
-    'Return ONLY JSON: {"intent":"refine|end|new|chat","replyEffort":"quick|deliberate","web":{"search":true,"query":"public search terms","topic":"","reason":"brief explanation","task":{...}}}',
+    'Return ONLY JSON: {"intent":"refine|end|new|chat","replyEffort":"quick|deliberate","web":{"search":true,"query":"public search terms","sourceRequirement":"required|optional","topic":"","reason":"brief explanation","task":{...}}}',
     "JSON:"
   ].join("\n");
 }
@@ -196,14 +200,14 @@ export function extendPlanningPrompt(
   return memoryPrompt
     .replace(
       "Return ONLY JSON with key \"ids\" containing integer IDs from the supplied facts. Return {\"ids\":[]} if no facts apply.",
-      'Return ONLY a JSON object with fields "ids" (integer fact IDs), "replyEffort" ("quick" or "deliberate") and "web" (object with "search", "query", "topic", "reason" and "task").'
+      'Return ONLY a JSON object with fields "ids" (integer fact IDs), "replyEffort" ("quick" or "deliberate") and "web" (object with "search", "query", "sourceRequirement", "topic", "reason" and "task").'
     )
     .replace(/\nJSON:$/, `
 Decide whether LIVE PUBLIC WEB SEARCH would materially improve the user's current conversational goal.
 Resolve intent from the CURRENT message and, if provided, recent USER messages. A recommendation/discovery goal can span multiple turns: a follow-up constraint refines that existing goal, even if phrased only as a preference, unless the owner ends it or switches topic.
 For a continuing public discovery, search for real options matching ALL current constraints. Do not discard the earlier request; do not search for an unrelated topic.
 Do NOT search for casual opinions, personal disclosures, appreciation, venting, jokes, greetings, emotional support, or private/local file/Notion material. Respect the user's decision to stop or decline research, regardless of exact phrasing. If the turn also separately asks for legitimate public research, judge that new request on its own merits.
-Search for uncertain public factual claims, recommendations requiring real titles/release status, recent information, unfamiliar public entities, or information likely to be outdated. For a casual mention of an ambiguous name, leave its identity open unless the conversation establishes it.
+Search for uncertain public factual claims, recommendations requiring real titles/release status, recent information, unfamiliar public entities, or information likely to be outdated. General conceptual explanations and timeless technical comparisons can be answered directly without search, even if complex; search is not mandatory just because a question mentions software. For a casual mention of an ambiguous name, leave its identity open unless the conversation establishes it.
 Use your selected user memories to tailor the decision, but NEVER include the owner's name, family, address, private notes, or private facts in a search query.
 Write a short standalone, PUBLIC search query that contains only ordinary publicly searchable topics. Prefer verifying real releases or official sources over inventing examples. Do not claim a live search has happened yet.
 Source priority topic (optional): choose one of [${topicNames}] when applicable, otherwise empty string. These priorities do NOT limit what can be searched.
@@ -224,12 +228,13 @@ export function parseWebToolDecision(
     const parsed=JSON.parse(raw.slice(start,end+1)) as {web?:unknown;intent?:unknown;replyEffort?:unknown};
     if(!parsed.web || typeof parsed.web!=="object" || Array.isArray(parsed.web))
       return {...defaultWeb,method:"fallback"};
-    const web=parsed.web as {search?:unknown;query?:unknown;topic?:unknown;reason?:unknown;task?:unknown};
+    const web=parsed.web as {search?:unknown;query?:unknown;sourceRequirement?:unknown;topic?:unknown;reason?:unknown;task?:unknown};
     const reason=typeof web.reason==="string" ? web.reason.trim().slice(0,130) : "";
     const intent=["refine","end","new","chat"].includes(String(parsed.intent))
       ?parsed.intent as WebToolDecision["intent"]:undefined;
     const replyEffort=parsed.replyEffort==="quick"||parsed.replyEffort==="deliberate"
       ?parsed.replyEffort:undefined;
+    const sourceRequirement=web.sourceRequirement==="optional"?"optional" as const:"required" as const;
     // Model outputs are untrusted even when they use a valid JSON shape:
     // an intent it classified as "end" or "chat" cannot grant public search.
     // This is schema consistency, never a keyword guess about user language.
@@ -277,7 +282,7 @@ export function parseWebToolDecision(
     return {search:true,query,topic:topics.some(x=>x.topic===topic)?topic:undefined,
       reason:reason||"Public evidence would improve answer",method:"ai-planned",
       ...(intent?{intent}:{}),...(task?{task}:{}),
-      ...(replyEffort?{replyEffort}:{})};
+      ...(replyEffort?{replyEffort}:{}),sourceRequirement};
   } catch {
     return {...defaultWeb,method:"fallback",reason:"Tool planner did not return valid JSON"};
   }
@@ -347,7 +352,7 @@ export async function planPublicWebTools(
   const plan=(await planMemoriesAndTools([],query,[],0,selectWithContext,options)).web;
   if(!plan.search)return plan;
   const checked=parseWebToolDecision(
-    JSON.stringify({replyEffort:plan.replyEffort,web:{search:true,query:plan.query,topic:plan.topic??"",reason:plan.reason,task:plan.task}}),
+    JSON.stringify({replyEffort:plan.replyEffort,web:{search:true,query:plan.query,sourceRequirement:plan.sourceRequirement,topic:plan.topic??"",reason:plan.reason,task:plan.task}}),
     true,options.sourcePreferences,ownerFacts
   );
   return authorize(checked.search?plan:{...checked,method:"fallback"});

@@ -459,3 +459,19 @@ test("semantic reply effort stays independent of web search decisions",async()=>
   assert.equal(parseWebToolDecision(JSON.stringify({replyEffort:"unlimited",
     web:{search:false,reason:"No web"}}),true,prefs).replyEffort,undefined);
 });
+
+test("optional conceptual lookup policy is parsed, but missing/invalid policy is source-required",()=>{
+  const input=(kind,sourceRequirement)=>JSON.stringify({
+    replyEffort:"deliberate",
+    web:{search:true,query:"SQLite FTS5 versus vector embeddings conceptual design",
+      sourceRequirement,task:{kind,subject:"SQLite FTS5",details:["conceptual comparison"],
+        requirements:[],roles:[],exclude:[]}}
+  });
+  const optional=parseWebToolDecision(input("lookup","optional"),true,prefs);
+  assert.equal(optional.search,true);
+  assert.equal(optional.sourceRequirement,"optional");
+  assert.equal(optional.replyEffort,"deliberate");
+  assert.equal(parseWebToolDecision(input("lookup","unrecognized"),true,prefs).sourceRequirement,"required");
+  assert.equal(parseWebToolDecision(input("verify","optional"),true,prefs).sourceRequirement,"optional");
+  assert.match(extendPlanningPrompt('Select.\nJSON:',prefs),/timeless technical comparisons can be answered directly without search/);
+});

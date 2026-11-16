@@ -60,7 +60,7 @@ export function planDesktopWebExecution(input: DesktopWebInput): DesktopWebPolic
 export function resolvePublicWebExecution(
   policy: DesktopWebPolicy,
   plan: {mode:string;query?:string;recent?:boolean},
-  decision?: {search:boolean;query?:string;method?:string;task?:import("./unified-planner.ts").ResearchTask}
+  decision?: {search:boolean;query?:string;method?:string;task?:import("./unified-planner.ts").ResearchTask;sourceRequirement?:"required"|"optional"}
 ) {
   const permitted=policy.blockedReason===null;
   const semantic=decision && decision.method!=="disabled";
@@ -72,6 +72,14 @@ export function resolvePublicWebExecution(
     researchRoute:query ? "research" : factualFallback ? "factual" : "chat",
     researchQuery:query,
     researchTask:query && decision?.search ? decision.task : undefined,
-    researchRecent:!!plan.recent
+    researchRecent:!!plan.recent,
+    // A failed optional lookup may fall back to general model knowledge.
+    // All named verification, hard constraints, discovery, URLs and recent
+    // research still require actual sources, never an invented sourced answer.
+    researchGeneralFallback:!!query && decision?.search===true &&
+      decision.sourceRequirement==="optional" && !plan.recent &&
+      decision.task?.kind==="lookup" &&
+      !decision.task.sourceUrl &&
+      !decision.task.requirements.length && !decision.task.roles.length
   };
 }

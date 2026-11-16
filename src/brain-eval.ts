@@ -48,7 +48,7 @@ export type EvalScenario = { id: string; label: string; group: string; steps: Ev
 export type EvalTurn = ResearchTurn & { role:"user"|"assistant"; content:string; sources?:WebResult[] };
 export type EvalMode = "routing" | "live";
 type EvalWebPlan = {search:boolean;query?:string;reason:string;method?:string;intent?:string;task?:ResearchTask;
-  replyEffort?:"quick"|"deliberate"};
+  replyEffort?:"quick"|"deliberate";sourceRequirement?:"required"|"optional"};
 type EvalWebExecution = {
   query:string|null;
   results:WebResult[];

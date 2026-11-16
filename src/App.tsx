@@ -2309,6 +2309,7 @@ export default function App() {
         ? (plannerWeb.topic ?? matchingSourceTopic(researchPlan.query ?? text,settings.sourcePreferences))
         : undefined;
       toolAudit = {
+        sourceRequirement:plannedPublicSearch ? plannerWeb.sourceRequirement : undefined,
         method: plannedPublicSearch ? "ai-web" : turn.allowAutomaticWeb ? "deterministic-web"
           : plannerWeb.method,
         reason:plannedPublicSearch ? plannerWeb.reason :

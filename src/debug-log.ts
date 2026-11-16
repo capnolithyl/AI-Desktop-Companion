@@ -79,6 +79,7 @@ export type MemoryRecallAudit = {
 export type ToolPlanningAudit = {
   method: string;
   reason: string;
+  sourceRequirement?: "required" | "optional";
   query?: string;
   task?: ResearchTask;
   topic?: string;
@@ -223,6 +224,9 @@ function performanceLines(diagnostics: Diagnostics): string[] {
       "Tool planning:",
       "  Route: " + diagnostics.toolPlan.method,
       "  Reason: " + diagnostics.toolPlan.reason,
+      ...(diagnostics.toolPlan.sourceRequirement ? [
+        "  Source requirement: "+diagnostics.toolPlan.sourceRequirement
+      ] : []),
       "  Public web allowed: " + (diagnostics.toolPlan.publicWebAllowed ? "yes" : "no"),
       ...(diagnostics.toolPlan.searchOutcome ? [
         "  Web outcome: " + diagnostics.toolPlan.searchOutcome,

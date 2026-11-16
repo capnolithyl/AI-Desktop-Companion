@@ -279,7 +279,8 @@ async function execute(
       }),{automaticWebEnabled:true,sourcePreferences:settings.sourcePreferences,
         history:previous,relevantUserFacts:selectedFacts,...context});
     return {search:decision.search,query:decision.query,reason:decision.reason,method:decision.method,
-      intent:decision.intent,task:decision.task,replyEffort:decision.replyEffort};
+      intent:decision.intent,task:decision.task,replyEffort:decision.replyEffort,
+      sourceRequirement:decision.sourceRequirement};
   };
   const result=await runBrainEvaluation({
     mode:request.mode,model:settings.model,build:BRAIN_EVAL_BUILD,buildInfo:BUILD_INFO,
