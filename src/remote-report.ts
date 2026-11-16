@@ -76,7 +76,10 @@ export function remoteDiagnosticMessages(messages: readonly DiagnosticMessage[])
         answerVerification: d.answerVerification ? {
           checked: finite(d.answerVerification.checked),
           rejected: finite(d.answerVerification.rejected),
-          recoveredHeadline: d.answerVerification.recoveredHeadline
+          recoveredHeadline: d.answerVerification.recoveredHeadline,
+          presentation: d.answerVerification.presentation === "model-voice-preserved"
+            ? "model-voice-preserved"
+            : d.answerVerification.presentation === "source-only" ? "source-only" : null
         } : null,
         notion: d.notion ? {
           cachedPages: finite(d.notion.cachedPages),

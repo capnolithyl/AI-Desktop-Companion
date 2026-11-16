@@ -19,6 +19,8 @@ test("remote diagnostic snapshot retains counts, routing and failures without me
       toolPlan:{method:"web-search",reason:"PRIVATE TOOL CONTEXT",query:"PRIVATE SEARCH QUERY",
         topic:"PRIVATE TOPIC",publicWebAllowed:true,freshSources:2,searchOutcome:"completed"},
       research:{status:"used",accepted:3,rejected:1,elapsedMs:22,note:"PRIVATE WEB EXCERPT"},
+      answerVerification:{checked:2,rejected:0,recoveredHeadline:false,
+        presentation:"model-voice-preserved"},
       notion:{selectedPage:"PRIVATE CHAPTER NAME",cachedPages:3,excerptCount:8,
         fullReadAttempted:true,readSucceeded:false,linkedScenesRead:1,
         readFailure:"PRIVATE NOTION ERROR"},
@@ -31,6 +33,7 @@ test("remote diagnostic snapshot retains counts, routing and failures without me
   assert.equal(log[1].diagnostics.memory.strongSemanticMatches,3);
   assert.equal(log[1].diagnostics.memory.interestsIncluded,1);
   assert.equal(log[1].diagnostics.toolPlan.freshSources,2);
+  assert.equal(log[1].diagnostics.answerVerification.presentation,"model-voice-preserved");
   assert.equal(log[1].diagnostics.notion.readSucceeded,false);
   assert.equal(log[1].diagnostics.privateDetails.notionReadFailure,"PRIVATE NOTION ERROR");
   const serialized=JSON.stringify(log);

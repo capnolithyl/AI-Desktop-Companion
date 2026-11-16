@@ -8,6 +8,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: brain-reliability-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   typescript:
     name: Research contracts and UI typecheck
@@ -22,6 +26,8 @@ jobs:
         run: npm ci --no-audit --no-fund
       - name: Verify Brain Lab and research contracts
         run: npm run test:brain
+      - name: Test sanitized remote research report
+        run: node --experimental-strip-types --test src/remote-report.test.mjs
       - name: Typecheck and build frontend
         run: npm run build
 
