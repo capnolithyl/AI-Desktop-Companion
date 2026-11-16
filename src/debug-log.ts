@@ -87,7 +87,8 @@ export type ToolPlanningAudit = {
   publicWebAllowed: boolean;
   searchOutcome?: string;
   freshSources?: number;
-  searchTrace?: {attemptedQueries:string[];rawResults:number;returnedResults:number;upstreamErrors:string[]};
+  searchTrace?: {attemptedQueries:string[];rawResults:number;returnedResults:number;
+    provisionalResults?:number;rejectedTitles?:string[];upstreamErrors:string[]};
 };
 export type NotionRetrievalAudit = {
   selectedPage?: string;
@@ -240,6 +241,11 @@ function performanceLines(diagnostics: Diagnostics): string[] {
       ...(diagnostics.toolPlan.searchTrace ? [
         "  Search engine returned raw candidates: "+diagnostics.toolPlan.searchTrace.rawResults,
         "  Sources retained after ranking: "+diagnostics.toolPlan.searchTrace.returnedResults,
+        ...(diagnostics.toolPlan.searchTrace.provisionalResults ? [
+          "  Provisional candidates awaiting source validation: "+diagnostics.toolPlan.searchTrace.provisionalResults
+        ] : []),
+        ...(diagnostics.toolPlan.searchTrace.rejectedTitles??[]).map(title=>
+          "  Lexically rejected result title (untrusted): "+title),
         ...diagnostics.toolPlan.searchTrace.attemptedQueries.map((query,index)=>
           "  Executed search "+(index+1)+": "+query),
         ...diagnostics.toolPlan.searchTrace.upstreamErrors.map(error=>

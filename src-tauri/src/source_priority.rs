@@ -9,11 +9,17 @@ pub struct SearchTrace {
     pub attempted_queries: Vec<String>,
     pub raw_results: usize,
     pub returned_results: usize,
+    /// Results rescued as unverified candidates after strict lexical filtering.
+    pub provisional_results: usize,
+    /// Up to four untrusted result headlines, for debugging a zero-match filter.
+    pub rejected_titles: Vec<String>,
     pub upstream_errors: Vec<String>,
 }
 pub struct SearchBatch {
     pub sources: Vec<SearchResult>,
     pub trace: SearchTrace,
+    // Only considered for structured research after an empty strict match.
+    provisional_pool: Vec<SearchResult>,
 }
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -157,10 +163,22 @@ fn assemble_search(
         return Err(errors.join("; "));
     }
     let raw_results=all.len();
-    let sources=rank_for_task(all,Vec::new(),rule,query,subject);
+    let sources=rank_for_task(all.clone(),Vec::new(),rule,query,subject);
+    let rejected_titles=if sources.is_empty() {
+        all.iter().take(4).map(|hit|hit.title.chars().take(110).collect()).collect()
+    } else {Vec::new()};
+    // SearXNG has already ranked these by search relevance. If a brittle
+    // lexical screen rejects every hit, retain at most a few as CANDIDATES for
+    // the existing source-quote and task-validation stages, not as trusted facts.
+    let mut provisional_pool=if sources.is_empty() {all} else {Vec::new()};
+    provisional_pool.sort_by_key(|hit|-priority_score(hit,rule,query));
+    let mut seen=HashSet::new();
+    provisional_pool.retain(|hit|seen.insert(hit.url.clone()));
+    provisional_pool.truncate(3);
     let returned_results=sources.len();
-    Ok(SearchBatch{sources,trace:SearchTrace{
-        attempted_queries,raw_results,returned_results,upstream_errors:errors
+    Ok(SearchBatch{sources,provisional_pool,trace:SearchTrace{
+        attempted_queries,raw_results,returned_results,provisional_results:0,
+        rejected_titles,upstream_errors:errors
     }})
 }
 async fn search_once(
@@ -202,7 +220,23 @@ pub async fn search_with_trace(
             first.trace.attempted_queries.extend(second.trace.attempted_queries);
             first.trace.raw_results+=second.trace.raw_results;
             first.trace.upstream_errors.extend(second.trace.upstream_errors);
-            first.sources=second.sources;
+            if !second.sources.is_empty() {
+                first.sources=second.sources;
+            } else {
+                first.provisional_pool.extend(second.provisional_pool);
+            }
+            if !second.trace.rejected_titles.is_empty() {
+                first.trace.rejected_titles.extend(second.trace.rejected_titles);
+                first.trace.rejected_titles.truncate(4);
+            }
+            first.trace.returned_results=first.sources.len();
+        }
+        if first.sources.is_empty() {
+            let mut seen=HashSet::new();
+            first.sources=std::mem::take(&mut first.provisional_pool)
+                .into_iter().filter(|item|seen.insert(item.url.clone()))
+                .take(3).collect();
+            first.trace.provisional_results=first.sources.len();
             first.trace.returned_results=first.sources.len();
         }
     }
@@ -301,6 +335,28 @@ mod search_recovery_tests {
         assert_eq!(relaxed_subject_query("latest release",Some("Private Person")),None);
         assert_eq!(relaxed_subject_query("Qwen release",Some("Qwen\nprivate")),None);
     }
+
+    #[test]
+    fn structured_search_can_inspect_rejected_results_without_calling_them_verified(){
+        let raw=vec![hit("Generic AI commentary"),hit("Qwen3.5 technical release notes"),
+            hit("Cloud model comparison")];
+        // Query includes two unrelated filler terms, and structured subject was
+        // omitted by the planner. Strict matching must remain conservative.
+        let mut batch=assemble_search(
+            "latest officially released Qwen model AI Model",None,None,
+            vec!["latest officially released Qwen model AI Model".into()],
+            vec![Ok(raw)]).unwrap();
+        // The result pool remains provisional until a separate quote check.
+        assert!(batch.sources.is_empty() || batch.trace.provisional_results==0);
+        let mut seen=HashSet::new();
+        batch.sources=std::mem::take(&mut batch.provisional_pool)
+            .into_iter().filter(|item|seen.insert(item.url.clone()))
+            .take(3).collect();
+        batch.trace.provisional_results=batch.sources.len();
+        assert!(batch.trace.provisional_results>0);
+        assert_eq!(batch.trace.raw_results,3);
+        assert!(batch.trace.rejected_titles.iter().any(|title|title.contains("Qwen")));
+    }
     #[test]
     fn raw_hit_counts_distinguish_no_results_from_relevance_filtering() {
         let empty=assemble_search("Cora birth year",Some("Cora"),None,
@@ -311,6 +367,8 @@ mod search_recovery_tests {
             vec!["Cora birth year".into()],vec![Ok(vec![hit("Coral reef study")])]).unwrap();
         assert_eq!(filtered.trace.raw_results,1);
         assert_eq!(filtered.trace.returned_results,0);
+        assert_eq!(filtered.trace.provisional_results,0);
+        assert_eq!(filtered.trace.rejected_titles,vec!["Coral reef study"]);
         assert!(assemble_search("Cora birth year",Some("Cora"),None,
             vec!["Cora birth year".into(),"Cora birth year site:example.com".into()],
             vec![Err("upstream failed".into()),Ok(vec![])]).is_err());

@@ -20,7 +20,8 @@ test("copies all message text, source details and response timings", () => {
         toolPlan:{method:"ai-planned",reason:"Current public source required",
           publicWebAllowed:true,searchOutcome:"search attempted; no sources",freshSources:0,
           searchTrace:{attemptedQueries:["Qwen latest release","Qwen"],
-            rawResults:9,returnedResults:0,upstreamErrors:[]}},
+            rawResults:9,returnedResults:3,provisionalResults:3,
+            rejectedTitles:["Model release bulletin"],upstreamErrors:[]}},
         research: {status: "used", accepted: 3, rejected: 2, elapsedMs: 2100,
           note: "Quoted text matched sources; candidate claims still require semantic judgment."},
         stats: {
@@ -65,7 +66,9 @@ test("copies all message text, source details and response timings", () => {
   assert.match(result, /Local reasoning: auto \/ quick \(planner-quick\)/);
   assert.match(result, /Research evidence: used/);
   assert.match(result, /Search engine returned raw candidates: 9/);
-  assert.match(result, /Sources retained after ranking: 0/);
+  assert.match(result, /Sources retained after ranking: 3/);
+  assert.match(result, /Provisional candidates awaiting source validation: 3/);
+  assert.match(result, /Lexically rejected result title \(untrusted\): Model release bulletin/);
   assert.match(result, /Executed search 2: Qwen/);
   assert.match(result, /Accepted source-anchored facts: 3/);
   assert.match(result, /Rejected candidates: 2/);

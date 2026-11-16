@@ -697,7 +697,8 @@ async fn chat_stream_impl(
                 Err(error) if general_fallback => {
                     search_trace=Some(source_priority::SearchTrace{
                         attempted_queries:vec![query.clone()],raw_results:0,
-                        returned_results:0,upstream_errors:vec![error.clone()]
+                        returned_results:0,provisional_results:0,rejected_titles:vec![],
+                        upstream_errors:vec![error.clone()]
                     });
                     optional_search_error=Some(error);
                     Vec::new()
@@ -721,6 +722,9 @@ async fn chat_stream_impl(
                         trace.raw_results+=batch.trace.raw_results;
                         trace.upstream_errors.extend(batch.trace.upstream_errors);
                         trace.returned_results=batch.sources.len();
+                        trace.provisional_results+=batch.trace.provisional_results;
+                        trace.rejected_titles.extend(batch.trace.rejected_titles);
+                        trace.rejected_titles.truncate(4);
                     } else {search_trace=Some(batch.trace);}
                     sources=batch.sources;
                 }
@@ -977,8 +981,12 @@ async fn chat_stream_impl(
                         "The sources I found didn't give me enough evidence to recommend a match.".to_owned(),
                     recommendation_gate::ResearchKind::Verify |
                     recommendation_gate::ResearchKind::Lookup =>
-                        evidence_pack::source_preview_fallback(&sources)
-                            .unwrap_or_else(|| "I found no source-backed answer to the requested detail.".into()),
+                        if search_trace.as_ref().is_some_and(|trace|trace.provisional_results>0) {
+                            "The search provider returned candidate pages, but none passed verification for the requested fact. I can't confidently identify the answer from those results.".to_owned()
+                        } else {
+                            evidence_pack::source_preview_fallback(&sources)
+                                .unwrap_or_else(|| "I found no source-backed answer to the requested detail.".into())
+                        },
                 };
                 let _ = app.emit("mikan://chat", ChatChunk {
                     request_id: request.request_id.clone(), content: content.clone()
