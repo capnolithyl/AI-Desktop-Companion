@@ -9,6 +9,52 @@ component or browser tab; closing a panel does not cancel it.
 This does not rebuild the installer.
 
 
+## v0.9.31: personal reaction, memory capture and unsolicited tool use
+
+**Scenario #83 · Reaction after anime news (three turns).** This is a
+regression from a real desktop exchange: public catgirl-anime news lookup,
+owner's personal reaction expressing love of yuri but disgust with the heavy
+drinking focus of a named anime and skepticism about smoking-themed stories,
+then an explicit request to research alternatives.
+
+Required behavior:
+1. First turn performs a REAL public-news lookup with normal production
+   SearXNG evidence and human status/source review.
+2. Middle turn is **ordinary conversation**, with zero public search,
+   unsolicited recommendations or source-gate refusal. The local planner
+   sees the prior public lookup but must not mistake it for perpetual
+   discovery permission. Review the quality of Mikan's acknowledgement.
+3. After that middle turn, a **read-only memory extraction preview** runs
+   against the real local Ollama model with production memory-extraction
+   instructions and quote/validation logic. It makes NO SQLite, Qdrant,
+   review-queue, interest-collection or cloud writes. The report and Brain
+   Lab UI show the proposed stable user facts and interest items alongside
+   exact supporting owner quotes. At least **two durable fact proposals**
+   are expected, with human review of their meaning: (a) loves yuri anime;
+   (b) specifically disliked the drinking portrayal in *Botan Kamiina
+   Fully Blossoms When Drunk*. Possible additional nuance: smoking-heavy
+   anime probably would not appeal. The owner did NOT necessarily dislike
+   the entire series or categorically say they hate smoking. If recording
+   the named title as an interest, `experienced`/watched is supported; a
+   blanket `dislike` status is not necessarily justified. Avoid redundant
+   genre-as-title interest records and fabricated details.
+4. Final turn explicitly asks for other anime. At this point public search
+   is warranted, and the stored preference should guide the answer locally.
+
+The isolated preview measures the *proposed* capture on a model run,
+not whether the production memory job persisted duplicates or updated an
+existing database. A Rust unit regression separately writes exactly two
+grounded facts and one `experienced` interest into an **in-memory**
+SQLite database and checks source validation. Neither test mutates real
+owner memories. Extraction meaning still requires human review; the
+minimum fact count is only a structural assertion, not proof of quality.
+
+Catalog is now **83** scenarios (#01–#82 unchanged). Prefer running
+**#83 Live · 1×** by itself after updating. The middle turn should not
+invoke the expensive native search or recommendation evidence pass.
+This is intentionally a failing regression for the observed problem:
+**no production planner fix has been applied yet**.
+
 ## v0.9.30: live research-context parity and current-status regression
 
 The latest desktop research trace (2026-11-16) successfully retrieved real
@@ -32,7 +78,7 @@ that a February announcement about an expected July premiere is not repeated
 as upcoming in November, and that an old forecast isn't treated as proof
 that airing/completion occurred. The scenario does **not** inject synthetic
 news or grade correctness from a keyword. Its result requires human review.
-Catalog is now **82** scenarios; #01–#81 retain their existing numbers.
+Catalog was **82** scenarios at v0.9.30; #01–#81 retained their existing numbers.
 
 This change repairs measurement parity, not the production model's underlying
 time-awareness or semantic memory precision. A stronger model and production
