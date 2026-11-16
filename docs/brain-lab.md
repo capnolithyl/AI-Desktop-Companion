@@ -9,6 +9,35 @@ component or browser tab; closing a panel does not cancel it.
 This does not rebuild the installer.
 
 
+## v0.9.32: desktop Brain Lab progress parity with remote browser
+
+The desktop Settings Brain Lab previously rendered its progress **after the
+entire 83-scenario checklist**, so a running or finished evaluation was hidden
+far below the fold. The browser has a permanently visible progress element
+and a compact scenario picker. The desktop now:
+
+- Shows a **sticky run status/progress monitor above the scenario catalog**
+  containing percentage, completed/total turns, current work label, and
+  clear Ready / Running / Finished / Stopped / Failed outcomes.
+- Keeps the **completed result state visible** (including when Settings is
+  closed/reopened). A finished run is **not** represented as all tests passing:
+  the status explicitly distinguishes automatically detected failures and
+  replies awaiting human review.
+- Exposes auto-save location and export errors, and provides **View results**
+  to jump directly to the retained dashboard and traces.
+- Allows comma-separated scenario numbers (for example `20, 21, 83`) just
+  like the remote browser, with validation, and collapses the lengthy
+  checklist when a run starts. Owner selections are preserved. A disclosure
+  expands the checklist again without nested scrollbars.
+- Uses the existing process-lifetime Brain Lab status store and runner;
+  no new polling loops, background processes, changes to evaluation grading,
+  or extra data persistence were added.
+
+Node test coverage guards the desktop layout ordering and terminal states.
+The browser-side controls and shared engine behavior are unchanged. Verify
+the desktop layout with a long Live run and after a completed or failed run
+before considering it fully validated.
+
 ## v0.9.31: personal reaction, memory capture and unsolicited tool use
 
 **Scenario #83 · Reaction after anime news (three turns).** This is a
