@@ -527,7 +527,19 @@ export const EVAL_SCENARIOS:ReadonlyArray<EvalScenario>=[
     e("A page claimed Brian Fair from Shadows Fall was born in 2024. Is that credible?",{route:"any",web:true,
       conversationGoal:"Treat an implausible online birth-year claim as unverified; check real sources rather than laundering an isolated statement into fact.",stubReply:"That year looks suspicious; I'd verify it."}),
     e("That would make him about two years old. I'm pretty sure the result is wrong. Please search again and check reliable sources for the birth year.",{route:"any",web:true,
-      publicQueryIncludes:["Brian Fair"],conversationGoal:"Respond to the correction by reopening real public research, distinguish the vocalist from namesakes, and revise the claim only if better evidence supports it; do not trust the user's guessed age blindly.",stubReply:"I'll verify the singer's birth year with better evidence."}))
+      publicQueryIncludes:["Brian Fair"],conversationGoal:"Respond to the correction by reopening real public research, distinguish the vocalist from namesakes, and revise the claim only if better evidence supports it; do not trust the user's guessed age blindly.",stubReply:"I'll verify the singer's birth year with better evidence."})),
+  // Regression from a real Nov 2026 chat: a February announcement about a July
+  // premiere was repeated as upcoming in November despite a correct live clock.
+  // The model must distinguish a past *planned date* from a verified outcome.
+  // These use normal real SearXNG results and require HUMAN answer review.
+  scenario("temporal-old-announcement","Old announcements versus current status","Evidence and attribution",
+    conversation("What's new with the Chainsmoker Cat anime right now?",
+      "Look up the latest credible reporting about this public anime. As of the host's current date, do not treat a stale release announcement as upcoming or treat an announced schedule as proof the airing happened.",
+      "I'll check current reporting rather than rely on an old premiere announcement.",{route:"any",web:true}),
+    conversation("A February 2026 announcement said it would premiere in July 2026. Please verify its current status rather than just repeating that old announcement.",
+      "Carry forward the named title and compare the event date to the trusted live local clock. Distinguish an older future-tense plan from independently confirmed release or completion, cite the actual sources used, and admit missing evidence.",
+      "That was the schedule at the time. I'll look for subsequent reporting to establish what actually happened.",{route:"any",web:true,
+        publicQueryIncludes:["Chainsmoker Cat"]}))
 ];
 
 /** Display numbers follow the complete catalog, not filtered or selected positions. */
