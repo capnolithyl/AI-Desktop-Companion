@@ -182,3 +182,14 @@ test("a fictional favorite band or game is not topical to a different named arti
   assert.deepEqual(picked("Not another giant open world, please."),[119]);
   assert.deepEqual(picked("What's my favorite band?"),[101]);
 });
+
+test("sentiment and grammatical overlap cannot inject unrelated memories; topic and semantic recall remain",()=>{
+  const facts=[
+    {id:1,fact:"The user loves tactical games.",tags:["games"],category:"preferences",updatedAt:1},
+    {id:2,fact:"The user's hometown was Cedar Bay.",tags:["hometown"],category:"profile",updatedAt:1},
+    {id:3,fact:"The user prefers mystery novels.",tags:["mystery","novels"],category:"preferences",updatedAt:1}
+  ];
+  assert.deepEqual(selectDeterministicMemoryIds(facts,"I love watercolor. It was relaxing.",[],[1,2,3],8).ids,[]);
+  assert.deepEqual(selectDeterministicMemoryIds(facts,"Recommend mystery novels",[],[1,2,3],8).ids,[3]);
+  assert.ok(selectDeterministicMemoryIds(facts,"Something to read",[{id:3,score:0.94}],[],8).ids.includes(3));
+});

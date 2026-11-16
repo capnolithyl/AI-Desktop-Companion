@@ -4,7 +4,7 @@
  * A small local Ollama JSON pass judges relevance, not factual truth.
  */
 import {
-  filterStaleActivities, prioritizeCoreMemories, rankMemories, strongSemanticIds, memoryTerms,
+  filterStaleActivities, prioritizeCoreMemories, rankMemories, strongSemanticIds, memoryTerms, meaningfulTerms,
   type RankableMemory, type SemanticRecallMatch
 } from "./memory-ranking.ts";
 import { dialogueEligibleMemories } from "./identity-memory.ts";
@@ -153,17 +153,7 @@ export function selectDeterministicMemoryIds<T extends RankableMemory>(
     return {ids:[],mode:"small-talk",candidateCount:0,elapsedMs:0};
 
   const byId=new Map(eligible.map(f=>[f.id,f]));
-  const stop=new Set(["what","when","where","which","could","would","should",
-    "please","about","with","this","that","from","your","mine","our",
-    "have","just","some","there","how","any","tell","said","user","owner",
-    "favorite","favourite","favorites","favourites","date",
-    "mikan","remember","does","were","will","can","the","and","for","are",
-    // Structural words must never retrieve unrelated stored facts just because
-    // their prose contains "not" or "their" (the source of fabricated relatives
-    // and hometowns in Brain Lab #57/#58/#60/#66).
-    "not","another","their","they","them","its","it","rather",
-    "asking","really","only","like","more","than","way","again","also"]);
-  const terms=new Set(memoryTerms(query).filter(t=>t.length>=3&&!stop.has(t)));
+  const terms=new Set(meaningfulTerms(query));
   // Broad domains are useful for direct user-memory questions ("favorite
   // song?"), but must not make a different named band/game automatically
   // relevant merely because both are songs, bands or RPGs.

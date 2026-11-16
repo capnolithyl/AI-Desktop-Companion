@@ -885,3 +885,10 @@ For ambiguous behavior, write expectations about the *decision* and the
 5. Windows manual smoke verification and benchmark baselines before marking P0 done.
 
 Tracking: https://trello.com/c/ZChbjxzI
+# v0.9.33 research reliability changes
+
+See [the implementation and validation note](p0-brain-reliability-v0.9.33.md)
+for shared execution, source selection, direct document reads, extraction,
+memory precision, and the focused Live targets `20,21,24,80,81,82,83`.
+Partial evidence remains review-required; an accepted quotation is not a
+certificate that the user's question was answered correctly.
