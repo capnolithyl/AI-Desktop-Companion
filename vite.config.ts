@@ -13,12 +13,14 @@ if (!pocketVersion) throw new Error("Android versionName not found in app/build.
 const appVersion = JSON.parse(readFileSync(new URL("./package.json",import.meta.url),"utf8")).version;
 let buildCommit = "nogit";
 try {
-  buildCommit=execFileSync("git",["rev-parse","--short=12","HEAD"],{
+  const revision=execFileSync("git",["rev-parse","HEAD"],{
     cwd:new URL(".",import.meta.url),encoding:"utf8",timeout:2000,stdio:["ignore","pipe","ignore"]
   }).trim();
-} catch { /* Version fallback still invalidates previous release results. */ }
+  if(/^[0-9a-f]{40}$/.test(revision))buildCommit=revision;
+} catch { /* Never substitute Git HEAD at runtime for an unknown build ID. */ }
+const buildTimestamp=new Date().toISOString();
 
-export default defineConfig({
+export default defineConfig(({command})=>({
   plugins: [react(), tailwindcss()],
   clearScreen: false,
   server: {
@@ -29,6 +31,10 @@ export default defineConfig({
   envPrefix: ["VITE_", "TAURI_ENV_*"],
   define: {
     __POCKET_VERSION__: JSON.stringify(pocketVersion),
-    __MIKAN_EVAL_BUILD__: JSON.stringify(appVersion+"+"+buildCommit)
+    __MIKAN_EVAL_BUILD__: JSON.stringify(appVersion+"+"+buildCommit.slice(0,12)),
+    __MIKAN_BUILD_INFO__: JSON.stringify({
+      version:appVersion,commit:buildCommit,builtAt:buildTimestamp,
+      kind:command==="serve"?"development":"release"
+    })
   }
-});
+}));

@@ -105,6 +105,7 @@ export type EvalCaseResult = {
   id:string; number?:number; label:string; group:string; repeat:number; steps:EvalStepResult[];
   pass:boolean; elapsedMs:number;
 };
+import type { BuildInfo } from "./build-info";
 export type EvalReport = {
   version:1; runId:string; startedAt:string; finishedAt:string;
   mode:EvalMode; model:string; attempts:number; scenarios:string[];
@@ -112,6 +113,7 @@ export type EvalReport = {
   environment:"isolated-synthetic"|"isolated-synthetic+live-public-web";
   liveWebEnabled:boolean; writesToRealMemories:false;
   build?:string;
+  buildInfo?:BuildInfo;
   cases:EvalCaseResult[];
 };
 export type EvalInferenceResult = string | {
@@ -141,6 +143,7 @@ export type EvalOptions = {
   repetitions:number;
   model:string;
   build?:string;
+  buildInfo?:BuildInfo;
   scenarios:ReadonlyArray<EvalScenario>;
   signal?:AbortSignal;
   infer?:EvalInference;
@@ -649,7 +652,7 @@ export async function runBrainEvaluation(options:EvalOptions):Promise<EvalReport
     environment:options.mode==="live"&&options.liveWeb
       ?"isolated-synthetic+live-public-web":"isolated-synthetic",
     liveWebEnabled:options.mode==="live"&&options.liveWeb===true,
-    writesToRealMemories:false,build:options.build,cases:[]
+    writesToRealMemories:false,build:options.build,buildInfo:options.buildInfo,cases:[]
   };
   const total=report.attempts*options.scenarios.reduce((n,s)=>n+s.steps.length,0);
   let done=0;
@@ -919,6 +922,12 @@ export function brainEvalMarkdown(report:EvalReport):string {
     "Run: "+report.runId+" • "+report.finishedAt,
     "Mode: "+report.mode+" • Model: "+report.model+" • Attempts: "+report.attempts,
     ...(report.build ? ["App build: "+report.build] : []),
+    ...(report.buildInfo ? [
+      "Desktop version: "+report.buildInfo.version,
+      "Desktop commit (compiled): "+report.buildInfo.commit,
+      "Desktop build timestamp: "+report.buildInfo.builtAt,
+      "Desktop build type: "+report.buildInfo.kind
+    ] : []),
     "Synthetic/isolated private facts; no production memory writes. "+
       (report.liveWebEnabled?"PUBLIC WEB ENABLED: live local SearXNG searches.":"No live external searches."),
     "",

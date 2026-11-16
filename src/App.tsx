@@ -95,6 +95,7 @@ import { extractReplyEmojis, MIN_EMOJI_BUBBLE_SECONDS, MAX_EMOJI_BUBBLE_SECONDS 
 import { avatarDebugText, type AvatarDebugSnapshot } from "./avatar-debug";
 import { defaultOutfitName } from "./bundled-iki-outfits";
 import { version as DESKTOP_VERSION } from "../package.json";
+import { BUILD_INFO, buildIdentityLabel } from "./build-info";
 import {
   loadAvatarDisplay, saveAvatarDisplay,
   loadIkiOutfitFolder, saveIkiOutfitFolder,
@@ -2777,6 +2778,7 @@ export default function App() {
     }),
     reportDiagnostics: {
       desktopVersion: DESKTOP_VERSION,
+      buildInfo: BUILD_INFO,
       contextWindow: settings.contextWindow,
       avatar: remoteAvatarDiagnostics(avatarDebug),
       messages: remoteDiagnosticMessages(messages)
@@ -2912,6 +2914,7 @@ export default function App() {
         geminiModel: settings.geminiModel,
         openrouterModel: settings.openrouterModel,
         contextWindow: settings.contextWindow,
+        buildInfo: BUILD_INFO,
         avatarAnimation: avatarDebugText(avatarDebug, avatarDisplay, lastReplyCue)
       }));
       setCopyLogState("copied");
@@ -4214,6 +4217,16 @@ export default function App() {
         <footer className="settings-footer">
           <button className="save-button" onClick={saveConfiguration}><Check size={17}/> Save settings</button>
         </footer>}
+      <footer className="settings-build-footer" title={"Built: "+BUILD_INFO.builtAt+" · Commit: "+BUILD_INFO.commit}>
+        <span>Desktop {buildIdentityLabel()}</span>
+        <button type="button" className="inline-action" aria-label="Copy desktop build information"
+          onClick={() => void copyTextToClipboard([
+            "Desktop: "+buildIdentityLabel(),
+            "Commit: "+BUILD_INFO.commit,
+            "Build timestamp: "+BUILD_INFO.builtAt,
+            "Build type: "+BUILD_INFO.kind
+          ].join("\n"))}><Copy size={12}/> Copy</button>
+      </footer>
     </section>}
   </main>;
 }

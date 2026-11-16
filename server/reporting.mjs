@@ -26,6 +26,14 @@ export function safeReportDiagnostics(value) {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   return {
     desktopVersion: summary(value.desktopVersion, 32),
+    buildInfo:value.buildInfo && typeof value.buildInfo==="object" ? {
+      version:/^\d+\.\d+\.\d+(?:[-+][\w.-]+)?$/.test(value.buildInfo.version)
+        ? value.buildInfo.version : "unknown",
+      commit:/^[0-9a-f]{40}$/.test(value.buildInfo.commit) ? value.buildInfo.commit : "nogit",
+      builtAt:/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/.test(value.buildInfo.builtAt)
+        ? summary(value.buildInfo.builtAt,35) : "unknown",
+      kind:allowed(value.buildInfo.kind,["development","release","unknown"])
+    } : null,
     contextWindow: positive(value.contextWindow),
     avatar: value.avatar && typeof value.avatar === "object" ? {
       status: allowed(value.avatar.status, ["ready","loading","error","offline"]),
@@ -147,6 +155,8 @@ export function publicIssuePreview(report) {
     "",
     "## Sanitized diagnostics",
     "- Desktop version: " + formatted(d?.desktopVersion),
+    "- Desktop compiled commit: " + formatted(d?.buildInfo?.commit),
+    "- Desktop build type: " + formatted(d?.buildInfo?.kind),
     "- Inference provider: " + textLine(report.runtime.provider),
     "- Configured model: " + textLine(report.runtime.model),
     "- Context window: " + formatted(d?.contextWindow),

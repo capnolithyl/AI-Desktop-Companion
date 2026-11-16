@@ -881,3 +881,26 @@ test("Live no-search scenarios are graded on execution, not the model's decision
   });
   assert.equal(report.cases[0].steps[0].webPass,false);
 });
+
+test("Brain Lab path opens the native app-owned reports directory",()=>{
+  const ui=readFileSync(new URL("../src/BrainEvalPanel.tsx",import.meta.url),"utf8");
+  const rust=readFileSync(new URL("../src-tauri/src/lib.rs",import.meta.url),"utf8");
+  assert.match(ui,/brain_eval_open_folder/);
+  assert.match(ui,/brain-eval-folder-link/);
+  assert.match(rust,/fn brain_eval_report_directory\(/);
+  assert.match(rust,/fn brain_eval_open_folder\(app: tauri::AppHandle\)/);
+  assert.match(rust,/brain_eval_open_folder,/);
+  assert.match(rust,/Command::new\("explorer.exe"\)/);
+});
+test("Brain Lab report includes the immutable build identity in JSON and Markdown",async()=>{
+  const info={version:"1.2.3",commit:"a".repeat(40),builtAt:"2026-11-16T19:40:00.000Z",kind:"development"};
+  const report=await runBrainEvaluation({
+    scenarios:[byId("search-explicit")],mode:"routing",model:"fixture",repetitions:1,
+    build:"1.2.3+aaaaaaaaaaaa",buildInfo:info
+  });
+  assert.deepEqual(report.buildInfo,info);
+  const markdown=brainEvalMarkdown(report);
+  assert.match(markdown,/Desktop version: 1\.2\.3/);
+  assert.ok(markdown.includes("Desktop commit (compiled): "+"a".repeat(40)));
+  assert.match(markdown,/Desktop build type: development/);
+});

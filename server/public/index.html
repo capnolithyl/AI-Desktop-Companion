@@ -165,7 +165,7 @@
   <header>
     <div class="avatar" aria-hidden="true">🐈</div>
     <div class="heading"><strong>Mikan</strong><small id="status">Connecting…</small></div>
-    <span id="remoteBuild" class="remote-build" title="Browser relay version and Git revision" aria-label="Browser relay version __MIKAN_REMOTE_VERSION__, revision __MIKAN_REMOTE_COMMIT__"><span>v__MIKAN_REMOTE_VERSION__</span><small>__MIKAN_REMOTE_COMMIT__</small></span>
+    <span id="remoteBuild" class="remote-build" data-relay-version="__MIKAN_REMOTE_VERSION__" data-relay-commit="__MIKAN_REMOTE_COMMIT__" title="Browser relay version and Git revision" aria-label="Browser relay version __MIKAN_REMOTE_VERSION__, revision __MIKAN_REMOTE_COMMIT__"><span>v__MIKAN_REMOTE_VERSION__</span><small>__MIKAN_REMOTE_COMMIT__</small></span>
     <button id="menuToggle" class="menu-button" type="button" aria-label="Open settings" aria-controls="settingsSheet" aria-expanded="false" title="Settings">☰</button>
   </header>
   <section id="avatarPanel" class="avatar-panel" aria-label="Mikan's animated portrait">
@@ -229,6 +229,7 @@
     <section class="settings-group" aria-labelledby="devUpdatesTitle">
       <h3 id="devUpdatesTitle">Developer updates</h3>
       <p class="settings-hint">Update the approved Git branch from your phone. Requires the local Windows supervisor, not just npm run server.</p>
+      <p id="buildIdentityStatus" class="settings-hint" role="status">Waiting for desktop build identity…</p>
       <div id="devUpdateStatus" class="settings-hint" role="status" aria-live="polite">
         Checking for supervised development mode…
       </div>
@@ -394,6 +395,8 @@
   var closeSettingsButton = document.getElementById("closeSettings");
   var settingsError = document.getElementById("settingsError");
   var devUpdateStatus = document.getElementById("devUpdateStatus");
+  var buildIdentityStatus = document.getElementById("buildIdentityStatus");
+  var relayBuild = document.getElementById("remoteBuild");
   var devUpdateCheck = document.getElementById("devUpdateCheck");
   var devUpdateApply = document.getElementById("devUpdateApply");
   var devRestartDesktop = document.getElementById("devRestartDesktop");
@@ -449,6 +452,22 @@
     } catch (e) { return {modelName:true, avatarLabels:true}; }
   })();
   function updateStatus(data) {
+    var compiled = data.connected && data.reportDiagnostics && data.reportDiagnostics.buildInfo;
+    var relayVersion = relayBuild.dataset.relayVersion || "unknown";
+    var relayCommit = relayBuild.dataset.relayCommit || "local";
+    if (compiled) {
+      var mismatch = /^[0-9a-f]{40}$/.test(compiled.commit) &&
+        /^[0-9a-f]{7,12}$/.test(relayCommit) &&
+        !compiled.commit.startsWith(relayCommit);
+      buildIdentityStatus.textContent =
+        "Desktop: v" + compiled.version + " · " + compiled.commit.slice(0,12) +
+        " · " + compiled.kind + " · built " + compiled.builtAt +
+        "\nRelay: v" + relayVersion + " · " + relayCommit +
+        (mismatch ? "\n⚠ Desktop and browser relay are running different commits." : "");
+    } else {
+      buildIdentityStatus.textContent = "Relay: v" + relayVersion + " · " + relayCommit +
+        "\nDesktop build identity: " + (data.connected ? "unavailable" : "desktop offline");
+    }
     var routedModel = data.modelStatus && data.modelStatus.label
       ? data.modelStatus.label : (data.model || "local model");
     status.textContent = !data.connected ? "Desktop offline"
@@ -1309,6 +1328,9 @@
     var log = [
       "MIKAN REMOTE DEBUG LOG",
       "Exported: " + new Date().toISOString(),
+      "Browser relay version: " + (relayBuild.dataset.relayVersion || "unknown"),
+      "Browser relay commit (process start): " + (relayBuild.dataset.relayCommit || "unknown"),
+      "Desktop compiled build: " + JSON.stringify(current.reportDiagnostics?.buildInfo || {version:"unknown",commit:"unknown",builtAt:"unknown",kind:"unknown"}),
       "Conversation: " + (current.conversationId || "none"),
       "Provider/model: " + (current.provider || "unknown") + " / " + (current.model || "unknown"),
       "Desktop connected: " + !!current.connected,

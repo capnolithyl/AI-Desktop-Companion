@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { Activity, BrainCircuit, Download, Play, Square, RotateCw, CheckCircle2, XCircle } from "lucide-react";
+import { Activity, BrainCircuit, Download, Play, Square, RotateCw, CheckCircle2, XCircle, FolderOpen } from "lucide-react";
 import type { Settings } from "./storage";
 import { EVAL_SCENARIOS, brainEvalMetrics, brainEvalMarkdown, brainScenarioLabel, type EvalMode } from "./brain-eval";
 import {
@@ -30,12 +30,14 @@ export function BrainEvalPanel({settings}:{settings:Settings}){
   const [numberFeedback,setNumberFeedback]=useState("Enter scenario numbers such as 20, 21, 83.");
   const [catalogOpen,setCatalogOpen]=useState(true);
   const [message,setMessage]=useState("");
+  const [lastExportFolder,setLastExportFolder]=useState<string|null>(null);
   const resultsRef=useRef<HTMLDivElement>(null);
   const runtime=useSyncExternalStore(subscribeBrainEval,getBrainEvalStatus,getBrainEvalStatus);
   const report=getBrainEvalReport();
   const history=brainEvalHistory();
   const busy=runtime.phase==="running";
   const progress={done:runtime.done,total:runtime.total,label:runtime.label};
+  const reportFolder=runtime.savedFolder??lastExportFolder;
   const progressPercent=progress.total>0
     ?Math.round(Math.min(progress.done,progress.total)/progress.total*100):0;
   const records=getBrainEvalCaseRecords();
@@ -97,6 +99,7 @@ export function BrainEvalPanel({settings}:{settings:Settings}){
         mode,repetitions:repeats,scenarioIds:selected.map(s=>s.id)
       });
       setMessage("");
+      setLastExportFolder(null);
       // The large checklist used to bury progress and completion results.
       // Collapse it during a run, retaining the exact owner selection.
       setCatalogOpen(false);
@@ -112,8 +115,13 @@ export function BrainEvalPanel({settings}:{settings:Settings}){
       const path=await invoke<string>("brain_eval_export",{
         jsonReport:JSON.stringify(report,null,2),markdownReport:brainEvalMarkdown(report)
       });
-      setMessage("Saved JSON + Markdown reports to "+path);
+      setLastExportFolder(path);
+      setMessage("Saved JSON + Markdown reports.");
     }catch(error){setMessage("File export failed: "+String(error))}
+  }
+  async function openReportFolder(){
+    try{await invoke("brain_eval_open_folder");}
+    catch(error){setMessage("Could not open report folder: "+String(error))}
   }
   async function copyMarkdown(){
     if(!report)return;
@@ -242,8 +250,11 @@ export function BrainEvalPanel({settings}:{settings:Settings}){
             ?" "+runtime.results.reviewTurns+" turns require human review.":""}
         </small>}
         {runtime.error&&<small className="brain-eval-run-error" role="alert">{runtime.error}</small>}
-        {runtime.savedFolder&&<small className="brain-eval-run-saved">
-          Reports saved automatically: {runtime.savedFolder}
+        {reportFolder&&<small className="brain-eval-run-saved">
+          Reports saved: <button type="button" className="brain-eval-folder-link"
+            title="Open in Windows File Explorer" onClick={()=>void openReportFolder()}>
+            <FolderOpen size={12} aria-hidden="true"/>{reportFolder}
+          </button>
         </small>}
       </section>
     </div>

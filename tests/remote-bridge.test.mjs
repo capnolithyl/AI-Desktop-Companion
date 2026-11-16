@@ -75,6 +75,10 @@ test("browser relay requires a private key and delegates to the desktop, not a s
   assert.match(mainView, /class="remote-build"[^>]*aria-label="Browser relay version/);
   assert.match(settingsView, /role="dialog" aria-modal="true"/);
   assert.match(settingsView,/id="devRestartDesktop"/);
+  assert.match(settingsView,/id="buildIdentityStatus"/);
+  assert.match(mainView,/data-relay-commit="/);
+  assert.match(html,/Desktop and browser relay are running different commits/);
+  assert.match(html,/Desktop compiled build:/);
   assert.match(html,/devUpdateAction\("restart-desktop"\)/);
   for (const control of ["conversationSelect", "newChat", "modelSelect",
     "refreshModels", "enlargeAvatar", "lock", "report", "showModelName",

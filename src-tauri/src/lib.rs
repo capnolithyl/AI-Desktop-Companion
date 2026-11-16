@@ -325,6 +325,28 @@ async fn chat_stream(
     }
 }
 
+// Native-only trusted directory. No renderer-supplied filesystem paths.
+fn brain_eval_report_directory(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
+    let base = app.path().document_dir()
+        .or_else(|_| app.path().app_data_dir())
+        .map_err(|e| format!("Cannot determine report directory: {e}"))?;
+    Ok(base.join("Mikan").join("Brain-Evaluations"))
+}
+#[tauri::command]
+fn brain_eval_open_folder(app: tauri::AppHandle) -> Result<(), String> {
+    let folder = brain_eval_report_directory(&app)?;
+    if !folder.is_dir() { return Err("No Brain Lab reports have been saved yet".into()); }
+    #[cfg(target_os = "windows")]
+    {
+        std::process::Command::new("explorer.exe").arg(&folder)
+            .spawn().map_err(|e| format!("Could not open File Explorer: {e}"))?;
+        Ok(())
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        Err("Opening report folders is only supported on Windows".into())
+    }
+}
 #[tauri::command]
 fn brain_eval_export(app: tauri::AppHandle, json_report: String, markdown_report: String) -> Result<String, String> {
     // User-triggered only. Never accept a path supplied from the renderer.
@@ -334,10 +356,7 @@ fn brain_eval_export(app: tauri::AppHandle, json_report: String, markdown_report
     }
     let report: Value = serde_json::from_str(&json_report)
         .map_err(|_| "Cannot export invalid evaluation JSON".to_string())?;
-    let base = app.path().document_dir()
-        .or_else(|_| app.path().app_data_dir())
-        .map_err(|e| format!("Cannot determine report directory: {e}"))?;
-    let folder = base.join("Mikan").join("Brain-Evaluations");
+    let folder = brain_eval_report_directory(&app)?;
     std::fs::create_dir_all(&folder)
         .map_err(|e| format!("Cannot create report folder: {e}"))?;
     // Derive the filename entirely from validated report metadata, not from
@@ -1033,6 +1052,7 @@ pub fn run() {
             cancel_chat,
             brain_eval_export,
             brain_eval_load_latest,
+            brain_eval_open_folder,
             voice::voice_health,
             voice::voice_synthesize,
             voice::voice_reference_status,

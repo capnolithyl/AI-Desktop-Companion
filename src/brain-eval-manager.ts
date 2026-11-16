@@ -13,6 +13,7 @@ import { PERSONAL_DETAIL_GROUNDING_GUIDANCE } from "./personal-grounding";
 import { reviewResearchCompletion } from "./evidence-verification";
 import { chatRuntimeContext, runtimeContext } from "./runtime-context";
 import { version as APP_VERSION } from "../package.json";
+import { BUILD_INFO } from "./build-info";
 import {
   gradeReportCases,mergeCaseRecords,parseCaseRecords,statusForScenario,
   type BrainCaseRecord,type BrainCaseEnvironment
@@ -281,7 +282,8 @@ async function execute(
       intent:decision.intent,task:decision.task};
   };
   const result=await runBrainEvaluation({
-    mode:request.mode,model:settings.model,build:BRAIN_EVAL_BUILD,scenarios,repetitions:request.repetitions,
+    mode:request.mode,model:settings.model,build:BRAIN_EVAL_BUILD,buildInfo:BUILD_INFO,
+    scenarios,repetitions:request.repetitions,
     signal:controller.signal,...(request.mode==="live"?{infer,planWeb,previewMemory,liveWeb:true}:{}),
     onProgress:(done,total,label)=>setStatus({done,total,label})
   });

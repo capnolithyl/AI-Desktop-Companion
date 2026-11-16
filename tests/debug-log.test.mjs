@@ -33,10 +33,15 @@ test("copies all message text, source details and response timings", () => {
     }
   ], {
     conversationId: "conversation-1", model: "qwen3.5:9b", contextWindow: 16384,
+    buildInfo:{version:"0.9.33",commit:"a".repeat(40),builtAt:"2026-11-16T19:40:00.000Z",kind:"development"},
     exportedAt: new Date("2026-11-06T21:40:00Z")
   });
 
   assert.match(result, /MIKAN DEBUG LOG/);
+  assert.match(result, /Desktop version: 0\.9\.33/);
+  assert.ok(result.includes("Desktop commit (compiled): "+"a".repeat(40)));
+  assert.match(result, /Desktop built at: 2026-11-16T19:40:00\.000Z/);
+  assert.match(result, /Desktop build type: development/);
   assert.match(result, /Conversation ID: conversation-1/);
   assert.match(result, /Context window: 16384 tokens/);
   assert.match(result, /What happened with Artemis\?/);

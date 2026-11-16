@@ -1,4 +1,5 @@
 import type { WebResult } from "./web-search";
+import type { BuildInfo } from "./build-info";
 import type { ResearchLimit, ResearchTask } from "./unified-planner.ts";
 
 export type OllamaStats = {
@@ -150,6 +151,7 @@ export type DebugLogOptions = {
   openrouterModel?: string;
   contextWindow: number | null;
   avatarAnimation?: string;
+  buildInfo?: BuildInfo;
   exportedAt?: Date;
 };
 
@@ -317,6 +319,10 @@ export function formatDebugLog(messages: readonly DebugLogMessage[], options: De
   const lines = [
     "MIKAN DEBUG LOG",
     "Exported: " + (options.exportedAt ?? new Date()).toISOString(),
+    "Desktop version: " + (options.buildInfo?.version ?? "unknown"),
+    "Desktop commit (compiled): " + (options.buildInfo?.commit ?? "unknown"),
+    "Desktop built at: " + (options.buildInfo?.builtAt ?? "unknown"),
+    "Desktop build type: " + (options.buildInfo?.kind ?? "unknown"),
     "Conversation ID: " + (options.conversationId ?? "none"),
     "Current selected model: " + options.model,
     ...(options.provider ? ["Inference provider setting: " + options.provider] : []),
