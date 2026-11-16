@@ -2632,7 +2632,8 @@ export default function App() {
       if(answerReview){
         diagnostics.answerVerification={
           checked:answerReview.checked,rejected:answerReview.rejected,
-          recoveredHeadline:!answerReview.usable
+          recoveredHeadline:!answerReview.usable,
+          presentation:answerReview.presentation
         };
       }
       const verifiedText=answerReview

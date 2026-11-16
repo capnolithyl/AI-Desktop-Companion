@@ -10,6 +10,7 @@ import { planPublicWebTools, type PublicResearchContext } from "./unified-planne
 import type { ResearchAudit } from "./debug-log";
 import { responseFocusGuidance } from "./conversation-engine";
 import { PERSONAL_DETAIL_GROUNDING_GUIDANCE } from "./personal-grounding";
+import { personalityGuidance } from "./personality";
 import { reviewResearchCompletion } from "./evidence-verification";
 import { chatRuntimeContext, runtimeContext } from "./runtime-context";
 import { version as APP_VERSION } from "../package.json";
@@ -220,6 +221,7 @@ async function execute(
     const system=[
       settings.systemPrompt.trim(),
       PERSONAL_DETAIL_GROUNDING_GUIDANCE,
+      personalityGuidance(settings.personality),
       // Match desktop production: researched answers get the complete live
       // calendar and source-freshness instructions, ordinary chat stays light.
       researchQuery ? runtimeContext() : chatRuntimeContext(),

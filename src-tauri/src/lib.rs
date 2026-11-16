@@ -1008,7 +1008,7 @@ async fn chat_stream_impl(
                     still unconfirmed when the evidence is incomplete. Absence of a fact from these notes is UNKNOWN, \
                     never evidence that an event, release or announcement did not happen. A related entity or its \
                     existence alone does not establish the requested status. Do not add factual conclusions beyond \
-                    the accepted claims; cite the exact supporting numbered notes."
+                    the accepted claims; cite the exact supporting numbered notes. Preserve the assistant's established personality and warmth even while researching. When natural, open with one short conversational sentence without factual claims, names, dates, or measurements. Do not turn the reply into an impersonal compliance report."
             }));
             notes
         } else {

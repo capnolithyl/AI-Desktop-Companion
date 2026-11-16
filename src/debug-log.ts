@@ -128,7 +128,10 @@ export type Diagnostics = {
   fallbackReason?: string | null;
   stats: OllamaStats | null;
   research?: ResearchAudit;
-  answerVerification?: {checked:number;rejected:number;recoveredHeadline:boolean};
+  answerVerification?: {
+    checked:number;rejected:number;recoveredHeadline:boolean;
+    presentation?:"model-voice-preserved"|"source-only"
+  };
   memory?: MemoryRecallAudit;
   toolPlan?: ToolPlanningAudit;
   reasoning?: {mode:"fast"|"auto"|"deep";enabled:boolean;reason:string};
@@ -224,7 +227,9 @@ function performanceLines(diagnostics: Diagnostics): string[] {
       "Final answer evidence check:",
       "  Model claims checked: " + diagnostics.answerVerification.checked,
       "  Model claims rejected: " + diagnostics.answerVerification.rejected,
-      "  Source-headline fallback: " + (diagnostics.answerVerification.recoveredHeadline ? "yes" : "no")
+      "  Source-headline fallback: " + (diagnostics.answerVerification.recoveredHeadline ? "yes" : "no"),
+      ...(diagnostics.answerVerification.presentation
+        ? ["  Research presentation: "+diagnostics.answerVerification.presentation] : [])
     ] : []),
     ...(diagnostics.toolPlan ? [
       "Tool planning:",

@@ -28,6 +28,8 @@ export type EvidenceReview = {
   usable: boolean;
   /** Optional for answers assembled from validated quotations. */
   evidence?: PartialEvidence;
+  /** Whether the original model supplied safe conversational framing. */
+  presentation?: "model-voice-preserved" | "source-only";
 };
 const stop = new Set(("the a an and or but if to in on at from for into of their its it they them that this " +
   "is are was were have has had been be did do does will would can could with about who what when " +
@@ -159,11 +161,34 @@ function reviewedRecommendation(
 }
 
 /**
+ * Recover the MODEL'S conversational voice, never its unsupported facts.
+ * This only selects a short opening sentence for presentation. It does not
+ * classify user intent, judge source trust, or change any factual coverage.
+ *
+ * When an opening contains a number, citation, named source subject, term
+ * from an unresolved fact, or other concrete research claim, leave it out.
+ * The attributed source excerpts remain the sole factual payload.
+ */
+function safeModelOpening(draft:string,audit:ResearchAudit):string|null{
+  const opening=segments(draft)[0]?.trim();
+  if(!opening || opening.length>165 || opening.includes("\n") ||
+      /^[-#>|]/.test(opening) || /[\d\[\]<>\x60]|https?:\/\//i.test(opening) ||
+      factualClaim(opening))return null;
+  const anchors=new Set([
+    ...(audit.acceptedDetails??[]).flatMap(f=>significant(f.subject+" "+f.claim+" "+f.quote)),
+    ...(audit.unresolvedDetails??[]).flatMap(significant)
+  ]);
+  if(significant(opening).some(token=>anchors.has(token)))return null;
+  return opening;
+}
+
+/**
  * Render a bounded partial answer from SOURCE QUOTES, not the generator's
  * proposed paraphrases. Source URLs identify provenance, but neither their
  * domains nor matching quotations establish the official/latest answer.
  */
 function partialResearchSummary(
+  draft:string,
   sources:readonly EvidenceSource[],
   audit:ResearchAudit
 ):EvidenceReview|null {
@@ -214,12 +239,15 @@ function partialResearchSummary(
   const caveat=remaining.length
     ?"**Not independently established:** "+remaining.join("; ")+". These excerpts alone do not establish the definitive answer."
     :"**Not independently established:** whether these source reports fully answer the question.";
+  const voice=safeModelOpening(draft,audit);
   return {
-    text:"I found source reports mentioning "+subjects+
+    text:(voice ? voice+"\n\n" : "")+
+      "I found source reports mentioning "+subjects+
       ", but I can't confirm a definitive answer from the retrieved excerpts alone.\n\n"+
       lines.join("\n")+"\n\n"+caveat,
     checked:supportedQuotes.length,rejected:0,usable:true,
-    evidence:{status:"partial",supportedQuotes,unresolvedDetails}
+    evidence:{status:"partial",supportedQuotes,unresolvedDetails},
+    presentation:voice?"model-voice-preserved":"source-only"
   };
 }
 
@@ -236,7 +264,7 @@ export function reviewResearchCompletion(answer:string,sources:EvidenceSource[],
   // into a definitive "latest", "first", "best" or exact-status conclusion.
   // Use only the original quoted excerpts, not a model-inferred ranking.
   if(audit?.status==="partial" && facts.length){
-    const partial=partialResearchSummary(sources,audit);
+    const partial=partialResearchSummary(answer,sources,audit);
     if(partial)return partial;
   }
   const review=verifyResearchAnswer(answer,grounded);

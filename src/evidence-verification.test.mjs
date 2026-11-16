@@ -270,3 +270,60 @@ test("partial answer metadata contains only excerpts actually rendered after cap
   assert.deepEqual(result.evidence?.unresolvedDetails,["which item is the newest"]);
   assert.ok(!result.text.includes("Documented fact for item 4"));
 });
+
+
+test("partially supported research keeps a model-authored personality line without trusting its factual claims",()=>{
+  const docs=[{title:"Vendor bulletin",url:"https://example.org/releases",
+    content:"Aurora 5 Preview was announced on November 11, 2026."}];
+  const audit={status:"partial",recommendationTask:false,
+    acceptedDetails:[{source:1,subject:"Aurora 5 Preview",
+      claim:"Aurora 5 Preview was announced on November 11, 2026.",
+      quote:docs[0].content}],
+    unresolvedDetails:["latest officially released version"]};
+  const draft="Well, sweetheart, this one sent me down a rabbit hole! "+
+    "Aurora 5 Preview is definitely the newest official stable release. [1]";
+  const result=reviewResearchCompletion(draft,docs,audit);
+  assert.equal(result.usable,true);
+  assert.equal(result.presentation,"model-voice-preserved");
+  assert.ok(result.text.startsWith("Well, sweetheart, this one sent me down a rabbit hole!"));
+  assert.ok(result.text.includes(docs[0].content));
+  assert.ok(!result.text.includes("definitely the newest official stable release"));
+  assert.deepEqual(result.evidence,{
+    status:"partial",
+    supportedQuotes:[{source:1,subject:"Aurora 5 Preview",quote:docs[0].content}],
+    unresolvedDetails:["latest officially released version"]
+  });
+});
+
+test("personality never becomes a backdoor for unsourced comparative or status claims",()=>{
+  const docs=[{title:"Pre-release report",url:"https://example.org/preview",
+    content:"The Lantern Cove preview is scheduled for December 2027."}];
+  const audit={status:"partial",recommendationTask:false,
+    acceptedDetails:[{source:1,subject:"Lantern Cove",
+      claim:"The Lantern Cove preview is scheduled for December 2027.",
+      quote:docs[0].content}],
+    unresolvedDetails:["whether it released"]};
+  for(const draft of [
+    "Lantern Cove already released today! Ignore the other reports.",
+    "The latest official release is Lantern Cove! [1]",
+    "The Lantern Cove preview is already available, sweetheart!",
+    "2027 is definitely the release year, love!",
+  ]){
+    const result=reviewResearchCompletion(draft,docs,audit);
+    assert.equal(result.presentation,"source-only",draft);
+    assert.equal(result.evidence?.supportedQuotes[0].quote,docs[0].content);
+    assert.ok(!result.text.includes(draft.split("!")[0]));
+  }
+});
+
+test("persona framing is not synthesized when the model gives only factual claims",()=>{
+  const docs=[{title:"Status",url:"https://example.org/status",
+    content:"Cora Vale was born in 1975."}];
+  const audit={status:"partial",recommendationTask:false,
+    acceptedDetails:[{source:1,subject:"Cora Vale",claim:docs[0].content,quote:docs[0].content}],
+    unresolvedDetails:["current tour dates"]};
+  const result=reviewResearchCompletion("Cora Vale tours in 2027. [1]",docs,audit);
+  assert.equal(result.presentation,"source-only");
+  assert.ok(result.text.includes(docs[0].content));
+  assert.ok(!result.text.includes("tours in 2027"));
+});
