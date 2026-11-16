@@ -835,6 +835,11 @@ mod task_contract_tests {
     use super::*;
     fn source()->SearchResult {SearchResult{title:"Cora Vale - Biography".into(),url:"https://example.org/cora".into(),
         content:"Cora Vale was born in 1975 and is the singer of Amber Glass.".into(),engine:"isolated fixture".into(),published_date:None}}
+    // Test modules have separate scopes: the neighboring tests::make_source
+    // helper is not visible here. Keep this fixture local to this module.
+    fn make_source(title:&str, content:&str)->SearchResult {
+        SearchResult{title:title.into(),content:content.into(),..source()}
+    }
     #[test]
     fn biographical_verification_uses_facts_with_a_fixed_entity_not_page_titles(){
         let task=ResearchTask{kind:ResearchKind::Verify,subject:Some("Cora Vale".into()),details:vec!["birth year".into()],..Default::default()};
