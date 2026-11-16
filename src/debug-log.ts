@@ -127,6 +127,7 @@ export type Diagnostics = {
   answerVerification?: {checked:number;rejected:number;recoveredHeadline:boolean};
   memory?: MemoryRecallAudit;
   toolPlan?: ToolPlanningAudit;
+  reasoning?: {mode:"fast"|"auto"|"deep";enabled:boolean;reason:string};
   notion?: NotionRetrievalAudit;
   parallelTasks?: PreparationTaskAudit[];
 };
@@ -187,6 +188,11 @@ function performanceLines(diagnostics: Diagnostics): string[] {
     "  Load time: " + fromNanoseconds(s?.loadDurationNs),
     "  Prompt eval: " + fromNanoseconds(s?.promptEvalDurationNs),
     "  Model: " + diagnostics.model,
+    ...(diagnostics.reasoning ? [
+      "  Local reasoning: "+diagnostics.reasoning.mode+
+      " / "+(diagnostics.reasoning.enabled?"thinking":"quick")+
+      " ("+diagnostics.reasoning.reason+")"
+    ] : []),
     ...(diagnostics.fallbackReason ? ["  Cloud fallback: " + diagnostics.fallbackReason] : []),
     ...(diagnostics.research ? [
       "  Research evidence: " + diagnostics.research.status,

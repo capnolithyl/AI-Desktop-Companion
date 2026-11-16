@@ -202,7 +202,7 @@ async function execute(
     );
   }
   const infer:EvalInference=async({
-    messages,selectedMemories,evidence,researchPlanned,researchQuery,webRequest
+    messages,selectedMemories,evidence,researchPlanned,researchQuery,replyEffort,webRequest
   })=>{
     if(controller.signal.aborted)throw new Error("Stopped by owner");
     const id="mikan-brain-eval-"+crypto.randomUUID();
@@ -247,7 +247,7 @@ async function execute(
         sourcePreferences:settings.sourcePreferences,
         cacheHours:settings.cacheHours,
         thinkingRequested:
-          shouldUseLocalThinking(settings.reasoningMode,last,settings.model),
+          shouldUseLocalThinking(settings.reasoningMode,last,settings.model,replyEffort),
         searxngEndpoint:settings.searxngEndpoint,contextWindow:settings.contextWindow,
         structuredResearch:!!webRequest?.autoSearch && settings.structuredResearch
       }});
@@ -279,7 +279,7 @@ async function execute(
       }),{automaticWebEnabled:true,sourcePreferences:settings.sourcePreferences,
         history:previous,relevantUserFacts:selectedFacts,...context});
     return {search:decision.search,query:decision.query,reason:decision.reason,method:decision.method,
-      intent:decision.intent,task:decision.task};
+      intent:decision.intent,task:decision.task,replyEffort:decision.replyEffort};
   };
   const result=await runBrainEvaluation({
     mode:request.mode,model:settings.model,build:BRAIN_EVAL_BUILD,buildInfo:BUILD_INFO,

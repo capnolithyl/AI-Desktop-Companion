@@ -433,3 +433,29 @@ test("verification keeps the previous result in a privacy-checked query",async()
   assert.equal(privateTarget.search,false);
   assert.match(privateTarget.reason,/private identity/);
 });
+
+test("semantic reply effort stays independent of web search decisions",async()=>{
+  const casual=await planPublicWebTools(
+    "I'm working on your brain; it's hard to implement reasoning",
+    [],async prompt=>{
+      assert.match(prompt,/replyEffort/);
+      return JSON.stringify({ids:[],replyEffort:"quick",
+        web:{search:false,reason:"Casual observation"}});
+    },{automaticWebEnabled:true,sourcePreferences:prefs});
+  assert.equal(casual.replyEffort,"quick");
+  assert.equal(casual.search,false);
+  const work=await planPublicWebTools(
+    "Analyze the tradeoffs among different cache architectures",
+    [],async()=>JSON.stringify({ids:[],replyEffort:"deliberate",
+      web:{search:false,reason:"Local architectural problem"}}),
+    {automaticWebEnabled:true,sourcePreferences:prefs});
+  assert.equal(work.search,false);
+  assert.equal(work.replyEffort,"deliberate");
+  const web=parseWebToolDecision(JSON.stringify({replyEffort:"deliberate",
+    web:{search:true,query:"latest Vulkan graphics API specifications",reason:"Public facts"}}),
+    true,prefs);
+  assert.equal(web.search,true);
+  assert.equal(web.replyEffort,"deliberate");
+  assert.equal(parseWebToolDecision(JSON.stringify({replyEffort:"unlimited",
+    web:{search:false,reason:"No web"}}),true,prefs).replyEffort,undefined);
+});

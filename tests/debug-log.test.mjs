@@ -16,6 +16,7 @@ test("copies all message text, source details and response timings", () => {
       }],
       diagnostics: {
         elapsedMs: 5000, firstTokenMs: 1200, model: "qwen3.5:9b",
+        reasoning:{mode:"auto",enabled:false,reason:"planner-quick"},
         research: {status: "used", accepted: 3, rejected: 2, elapsedMs: 2100,
           note: "Quoted text matched sources; candidate claims still require semantic judgment."},
         stats: {
@@ -57,6 +58,7 @@ test("copies all message text, source details and response timings", () => {
   assert.match(result, /Speed: 50\.0 tok\/s/);
   assert.match(result, /Prompt: 2500 tokens/);
   assert.match(result, /Model: qwen3\.5:9b/);
+  assert.match(result, /Local reasoning: auto \/ quick \(planner-quick\)/);
   assert.match(result, /Research evidence: used/);
   assert.match(result, /Accepted source-anchored facts: 3/);
   assert.match(result, /Rejected candidates: 2/);

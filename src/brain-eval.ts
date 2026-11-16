@@ -47,7 +47,8 @@ export type EvalStep = { user: string; expect: EvalExpectation; explanation?: st
 export type EvalScenario = { id: string; label: string; group: string; steps: EvalStep[]; note?: string };
 export type EvalTurn = ResearchTurn & { role:"user"|"assistant"; content:string; sources?:WebResult[] };
 export type EvalMode = "routing" | "live";
-type EvalWebPlan = {search:boolean;query?:string;reason:string;method?:string;intent?:string;task?:ResearchTask};
+type EvalWebPlan = {search:boolean;query?:string;reason:string;method?:string;intent?:string;task?:ResearchTask;
+  replyEffort?:"quick"|"deliberate"};
 type EvalWebExecution = {
   query:string|null;
   results:WebResult[];
@@ -129,6 +130,7 @@ export type EvalInference = (args:{
   researchPlanned?:boolean;
   researchQuery?:string;
   researchTask?:ResearchTask;
+  replyEffort?:"quick"|"deliberate";
   webRequest?:ReturnType<typeof resolvePublicWebExecution> & {priorSources:WebResult[]};
   scenarioId:string;
   stepIndex:number;
@@ -717,6 +719,7 @@ export async function runBrainEvaluation(options:EvalOptions):Promise<EvalReport
             researchPlanned:planned?.search===true || decision.plan.mode==="research",
             researchQuery:options.liveWeb?publicQuery:undefined,
             researchTask:options.liveWeb && publicQuery ? planned?.task : undefined,
+            replyEffort:planned?.replyEffort,
             webRequest:options.liveWeb ? {...execution,priorSources:priorResearchSources(previous,step.user)} : undefined,
             scenarioId:scenario.id,stepIndex
           });

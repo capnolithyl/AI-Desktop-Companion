@@ -39,7 +39,7 @@ import { modelSwitcherStatus, modelSwitcherChoice } from "./model-switcher";
 import { formatDebugLog, type Diagnostics, type MemoryRecallAudit, type OllamaStats, type ResearchAudit } from "./debug-log";
 import { remoteDiagnosticMessages, remoteAvatarDiagnostics } from "./remote-report";
 import { strongSemanticIds } from "./memory-ranking";
-import { shouldUseLocalThinking } from "./reasoning-mode";
+import { localThinkingChoice } from "./reasoning-mode";
 import { selectDeterministicMemoryIds } from "./memory-retrieval";
 import { planPublicWebTools, type WebToolDecision } from "./unified-planner";
 import { matchingSourceTopic } from "./preferred-sources";
@@ -2294,6 +2294,8 @@ export default function App() {
       );
       if(stopRequested.current)throw new Error("Generation stopped");
       const webExecution=resolvePublicWebExecution(webPolicy,researchPlan,plannerWeb);
+      const reasoningChoice=localThinkingChoice(settings.reasoningMode,text,settings.model,
+        plannerWeb.replyEffort);
       const plannedPublicSearch = canPlanPublicWeb && plannerWeb.search && !!plannerWeb.query;
       if(plannedPublicSearch) {
         researchPlan = {...researchPlan,mode:"research",query:plannerWeb.query};
@@ -2559,7 +2561,7 @@ export default function App() {
           searxngEndpoint: settings.searxngEndpoint,
           cacheHours: settings.cacheHours,
           contextWindow: settings.contextWindow,
-          thinkingRequested: shouldUseLocalThinking(settings.reasoningMode,text,settings.model),
+          thinkingRequested: reasoningChoice.enabled,
           priorSources,
           messages: [
             { role: "system", content: [settings.systemPrompt.trim(), communicationGuidance(settings.communication), PERSONAL_DETAIL_GROUNDING_GUIDANCE, personalityGuidance(settings.personality), !allowRoleplay ? "REPLY FORMAT: No narrated actions in asterisks, no fictional physical touching or descriptions of your ears, tail or face. Speak directly in Mikan\'s voice. Asterisks may emphasize a word or enclose a vocalization such as *meow*, but never precede a reply with a physical action. Earlier assistant replies with *gestures* are formatting errors, not examples to imitate." : "", researchPlan.mode==="chat" ? chatRuntimeContext() : runtimeContext(), selfContext, screenNotes, attachmentNotes, groundedChapterTurn ? "" : remembered.text,
@@ -2606,6 +2608,7 @@ export default function App() {
         research: completion.researchAudit ?? undefined,
         memory: memoryAudit,
         toolPlan:toolAudit,
+        reasoning:{mode:settings.reasoningMode,...reasoningChoice},
         notion:notionAudit,
         parallelTasks:parallelTimings
       };
