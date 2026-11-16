@@ -871,6 +871,28 @@ mod task_contract_tests {
         assert_eq!(validate_task_fact(&invalid,&task,&[source()]).unwrap_err(),
             "does_not_answer_requested_detail");
     }
+
+    #[test]
+    fn only_retained_facts_count_as_completed_requested_details() {
+        let quotes=(0..7).map(|n|format!(
+            "Orchid model release {n} was recorded in 2026 by this source."
+        )).collect::<Vec<_>>();
+        let source=make_source("Orchid timeline",&quotes.join(" "));
+        let entries=(0..7).map(|i|json!({
+            "source":1,"subject":"Orchid","claim":quotes[i],"quote":quotes[i],
+            "detail":if i==6 {1} else {0}
+        })).collect::<Vec<_>>();
+        let task=ResearchTask{kind:ResearchKind::Lookup,
+            subject:Some("Orchid".into()),
+            details:vec!["version identity".into(),"official release status".into()],
+            ..Default::default()};
+        let result=assemble_evidence(Some(json!({"facts":entries})),
+            "What is the identity and official status of Orchid?",&task,&[source]);
+        assert_eq!(result.audit.accepted,MAX_FACTS);
+        assert_eq!(result.audit.status,"partial");
+        assert_eq!(result.audit.unresolved_details,vec!["official release status"]);
+    }
+
     #[test]
     fn broad_lookup_retains_context_without_claiming_it_answers_the_latest_release() {
         let source=make_source("Release report",

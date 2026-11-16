@@ -190,7 +190,7 @@ function partialResearchSummary(
     try{
       const uri=new URL(result.url);
       if(["https:","http:"].includes(uri.protocol) && !uri.username && !uri.password)
-        origin=" (["+escaped(uri.hostname,100)+"]("+uri.href+"))";
+        origin=" (["+escaped(uri.hostname,100)+"]("+uri.href.replace(/\(/g,"%28").replace(/\)/g,"%29")+"))";
     }catch{ /* Source URLs are untrusted; omit malformed destinations. */ }
     const excerpt=escaped(quote,330);
     const shortened=[...quote.replace(/\s+/g," ").trim()].length>330?"…":"";
