@@ -44,6 +44,7 @@ test("real research still searches and verifies",()=>{
     "Can you search the web for new Qwen models?",
     "Can you search for the latest news about NASA?",
     "Can you browse for information about Tauri 2 plugins?",
+    "Could you look for other yuri anime without heavy drinking or smoking themes?",
     "What is the capital of Germany?"
   ]){
     const result=decideDesktopTurn(question,[],{automaticWebEnabled:true});
