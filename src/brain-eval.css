@@ -194,3 +194,127 @@
   .brain-eval-toolbar{grid-template-columns:1fr}
   .brain-eval-actionbar .save-button{width:100%}
 }
+
+
+/* Keep the same run status visible on desktop that the remote browser shows.
+   This is one sticky panel within the existing Settings scroller, NOT a
+   second nested scrolling region for the long scenario catalog. */
+.brain-eval-actionbar{
+  display:flex;
+  flex-direction:column;
+  align-items:stretch;
+  gap:9px;
+}
+.brain-eval-action-buttons{min-width:0}
+.brain-eval-run-monitor{
+  min-width:0;
+  display:grid;
+  gap:6px;
+  border:1px solid #67505f;
+  border-radius:9px;
+  padding:10px;
+  background:#261f2b;
+  color:#ead8e0;
+  font-size:11px;
+  line-height:1.45;
+}
+.brain-eval-run-monitor.running{border-color:#9b7566}
+.brain-eval-run-monitor.complete{border-color:#60866e}
+.brain-eval-run-monitor.failed{border-color:#ac656b}
+.brain-eval-run-monitor.stopped{border-color:#b19065}
+.brain-eval-run-heading,
+.brain-eval-run-details{
+  display:flex;
+  flex-wrap:wrap;
+  justify-content:space-between;
+  align-items:center;
+  gap:5px 10px;
+  min-width:0;
+}
+.brain-eval-run-heading strong{
+  display:flex;
+  align-items:center;
+  gap:7px;
+  font-size:12px;
+  color:#ffe7d8;
+}
+.brain-eval-run-monitor.complete .brain-eval-run-heading strong{color:#aedec2}
+.brain-eval-run-monitor.failed .brain-eval-run-heading strong{color:#ffd0c9}
+.brain-eval-run-monitor.stopped .brain-eval-run-heading strong{color:#f8d6a0}
+.brain-eval-run-heading>span{
+  font-weight:700;
+  font-variant-numeric:tabular-nums;
+  color:#fff0e6;
+}
+.brain-eval-run-monitor progress{
+  width:100%;
+  height:11px;
+  accent-color:var(--accent,#ffad7e);
+}
+.brain-eval-run-monitor.complete progress{accent-color:#8dcba6}
+.brain-eval-run-details{color:#d2bbc9;overflow-wrap:anywhere}
+.brain-eval-run-details span:first-child{
+  color:#ffdfc9;
+  font-variant-numeric:tabular-nums;
+  white-space:nowrap;
+}
+.brain-eval-run-details span:last-child{flex:1 1 180px}
+.brain-eval-run-monitor small{font-size:11px;overflow-wrap:anywhere;line-height:1.45}
+.brain-eval-run-summary{color:#c0d8c8}
+.brain-eval-run-error{color:#ffbeb5}
+.brain-eval-run-saved{color:#baa6b5}
+.brain-eval-number-select{
+  display:grid;
+  gap:6px;
+  padding:10px;
+  border:1px solid #624a60;
+  border-radius:10px;
+  background:#211a25;
+}
+.brain-eval-number-select label{font-size:12px;font-weight:700;color:#f4d5c8}
+.brain-eval-number-row{display:flex;gap:6px;min-width:0}
+.brain-eval-number-row input{
+  min-width:0;
+  flex:1;
+  padding:9px 10px;
+  border:1px solid #785969;
+  border-radius:8px;
+  background:#30232f;
+  color:#fff3f9;
+  font:inherit;
+  font-size:12px;
+}
+.brain-eval-number-row button{
+  flex:0 0 auto;
+  border:1px solid #795869;
+  border-radius:8px;
+  padding:9px 12px;
+  background:#4a3748;
+  color:#ffe6d9;
+}
+.brain-eval-number-select small{font-size:11px;color:#d8c3d1;line-height:1.4}
+.brain-eval-number-row input:focus-visible,
+.brain-eval-number-row button:focus-visible{
+  outline:2px solid #ffc99f;
+  outline-offset:2px;
+}
+.brain-eval-catalog-disclosure{
+  display:grid;
+  gap:8px;
+  min-width:0;
+}
+.brain-eval-catalog-disclosure:not([open]){display:block}
+.brain-eval-catalog-disclosure>summary{
+  list-style:none;
+  cursor:pointer;
+  border-radius:7px;
+  padding:7px 5px;
+}
+.brain-eval-catalog-disclosure>summary::-webkit-details-marker{display:none}
+.brain-eval-catalog-disclosure>summary:hover{background:#3c2d3c}
+.brain-eval-results-anchor{scroll-margin-top:185px}
+@media(max-width:760px){
+  .brain-eval-actionbar{gap:6px}
+  .brain-eval-run-monitor{padding:8px}
+  .brain-eval-run-details span:last-child{flex-basis:100%}
+}
