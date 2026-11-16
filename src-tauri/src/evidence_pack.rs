@@ -19,6 +19,9 @@ const MAX_QUOTE_CHARS: usize = 550;
 pub struct ResearchAudit {
     pub status: String,
     pub accepted: usize,
+    /// Number of accepted excerpts that support context without fulfilling a
+    /// requested fact slot. Never count these toward the user's goal.
+    pub contextual_count: usize,
     pub rejected: usize,
     pub elapsed_ms: u64,
     pub note: String,
@@ -83,6 +86,8 @@ struct GroundedFact {
     subject: String,
     claim: String,
     quote: String,
+    /// None means useful source context, NOT coverage of a requested detail.
+    detail: Option<usize>,
 }
 
 fn normalize(text: &str) -> String {
@@ -165,7 +170,8 @@ fn validate_with_reason(candidate: FactCandidate, sources: &[SearchResult]) -> R
         source: candidate.source,
         subject: subject.to_owned(),
         claim: claim.to_owned(),
-        quote: quote.to_owned()
+        quote: quote.to_owned(),
+        detail: candidate.detail,
     })
 }
 
@@ -195,8 +201,17 @@ fn collect_valid(candidates: Vec<FactCandidate>, sources: &[SearchResult]) -> (V
 fn validate_task_fact(candidate:&FactCandidate,task:&ResearchTask,sources:&[SearchResult])->Result<GroundedFact,&'static str>{
     if task.kind==ResearchKind::Verify && task.subject.as_ref().is_some_and(|name|
         normalize(name)!=normalize(&candidate.subject)) {return Err("not_the_named_target_subject")}
-    if !task.details.is_empty() && !candidate.detail.is_some_and(|i|i<task.details.len()) {
-        return Err("does_not_answer_requested_detail");
+    if !task.details.is_empty() {
+        match candidate.detail {
+            Some(index) if index < task.details.len() => {},
+            // A general public lookup can contain source-anchored contextual
+            // facts that inform the answer without resolving a requested slot.
+            // Do not turn that context into an asserted answer, and keep exact
+            // named verification and hard constraints strict.
+            None if task.kind==ResearchKind::Lookup &&
+                task.requirements.is_empty() && task.roles.is_empty() => {},
+            _ => return Err("does_not_answer_requested_detail")
+        }
     }
     validate_with_reason(candidate.clone(),sources)
 }
@@ -211,8 +226,11 @@ fn evidence_notes(facts: &[GroundedFact]) -> String {
     );
     for fact in facts {
         text.push_str(&format!(
-            "\n[{}] Subject: {}\nCandidate interpretation: {}\nExact evidence quote: \"{}\"\n",
-            fact.source, fact.subject, fact.claim, fact.quote
+            "\n[{}] Subject: {}\n{}: {}\nExact evidence quote: \"{}\"\n",
+            fact.source, fact.subject,
+            if fact.detail.is_some() { "Requested detail candidate" }
+                else { "Context only; does NOT establish any requested detail" },
+            fact.claim, fact.quote
         ));
     }
     text
@@ -296,6 +314,7 @@ fn assemble_evidence(
     let mut audit = ResearchAudit {
         status: "unavailable".into(),
         accepted: 0,
+        contextual_count: 0,
         rejected: 0,
         elapsed_ms: 0,
         note: "The local evidence pass returned no usable result.".into(),
@@ -341,6 +360,8 @@ fn assemble_evidence(
                 let (accepted, _) = collect_valid(facts.into_iter()
                     .filter(|fact|validate_task_fact(fact,task,sources).is_ok()).collect(), sources);
                 audit.accepted = accepted.len();
+                audit.contextual_count = accepted.iter()
+                    .filter(|fact|fact.detail.is_none() && !task.details.is_empty()).count();
                 audit.rejected = rejected;
                 audit.accepted_details = accepted.iter().map(|fact| AcceptedFactAudit {
                     source:fact.source,subject:fact.subject.clone(),
@@ -349,11 +370,18 @@ fn assemble_evidence(
                 if accepted.is_empty() {
                     audit.note = "No factual claims matched the retrieved excerpts.".into();
                 } else {
-                    audit.status = "used".into();
-                    audit.note = "Factual claims were matched to numbered excerpts.".into();
+                    audit.status = if audit.unresolved_details.is_empty() {
+                        "used".into()
+                    } else {
+                        "partial".into()
+                    };
+                    audit.note = if audit.contextual_count>0 {
+                        "Source-anchored contextual excerpts retained without claiming requested details are verified.".into()
+                    } else {
+                        "Requested fact excerpts matched numbered sources.".into()
+                    };
                     let mut text=evidence_notes(&accepted);
                     if !audit.unresolved_details.is_empty() {
-                        audit.status="partial".into();
                         text.push_str(&format!("\nUNRESOLVED REQUESTED DETAILS: {:?}. No conclusion, positive OR negative, is established for these.\n",audit.unresolved_details));
                     }
                     notes = Some(text);
@@ -383,6 +411,37 @@ fn assemble_evidence(
         }
     }
     ResearchEvidence { notes, audit, followup_query }
+}
+
+/// When the model cannot bind a fact to the requested detail, the verified
+/// retrieval still has value. Show only attributed, bounded, UNVERIFIED source
+/// excerpts. Never promote a preview to a confirmed latest/best/exact answer,
+/// and never let an unvalidated generated claim bypass the fact gate.
+pub(crate) fn source_preview_fallback(sources:&[SearchResult]) -> Option<String> {
+    fn short(text:&str,limit:usize)->String{
+        let flattened=text.split_whitespace().collect::<Vec<_>>().join(" ");
+        let length=flattened.chars().count();
+        let head=flattened.chars().take(limit).collect::<String>();
+        if length>limit { format!("{head}…") } else {head}
+    }
+    let excerpts=sources.iter().enumerate()
+        .filter(|(_,s)|s.content.trim().chars().count()>=25)
+        .take(3)
+        .map(|(i,s)|format!(
+            "- [{}] **{}**{}: “{}”",
+            i+1,short(&s.title,125),
+            s.published_date.as_deref().map_or(String::new(),|date|
+                format!(" (page date: {})",short(date,26))),
+            short(&s.content,290)
+        ))
+        .collect::<Vec<_>>();
+    if excerpts.is_empty(){return None;}
+    Some(format!(
+        "I found relevant public search results, but couldn't confirm a definitive answer. \
+         These are **source excerpts, not independently verified conclusions**:\n\n{}\n\n\
+         I can't reliably establish the exact requested fact from these excerpts alone.",
+        excerpts.join("\n")
+    ))
 }
 
 /// Ask the existing local model to propose source interpretations. The model
@@ -526,7 +585,7 @@ pub async fn extract(
              Use fit_quote for any additional requested property backed by the same source, or leave it empty.",
     };
     let evidence_rules = if task.uses_fact_evidence() {
-        "Use subject for the ENTITY named in the quoted passage, never the page heading. For each fact, set detail to the zero-based index of the requested property it actually answers, or null for background context. A related project, a page existing, or identifying a manga does not answer a different product's releases or an adaptation's status. Extract a disputed property's actual value, even when it contradicts the user's claim. Missing evidence never establishes a negative claim. Leave unsupported details unresolved."
+        "Use subject for the ENTITY named in the quoted passage, never the page heading. For each fact, set detail to the zero-based index of the requested property it actually answers, or null for background context. A dated release or concrete named status can supply one piece of evidence for a request to identify or compare releases, even if the quotation never literally says 'latest'; map it to the requested property when it actually bears on that comparison. Do NOT treat one dated release report as proof that nothing newer exists. A related project, a page existing, or identifying a manga does not answer a different product's releases or an adaptation's status. Extract a disputed property's actual value, even when it contradicts the user's claim. Missing evidence never establishes a negative claim. Leave unsupported details unresolved."
     } else {
         "Use an exact, contiguous source passage naming the INDIVIDUAL candidate for identity_quote. A page headline is source metadata, not the name of a work inside it. \
          For discovery, fit_quote must be an exact passage naming that same item and showing why it fits the request. \
@@ -799,6 +858,58 @@ mod task_contract_tests {
         assert!(evidence.notes.is_some());
         let mut background=candidate();background.detail=None;
         assert_eq!(validate_task_fact(&background,&task,&[source()]).unwrap_err(),"does_not_answer_requested_detail");
+    }
+    #[test]
+    fn broad_lookup_retains_context_without_claiming_it_answers_the_latest_release() {
+        let source=make_source("Release report",
+            "Aurora 5 Preview was released on November 11 2026 according to the vendor's announcement.");
+        let task=ResearchTask{kind:ResearchKind::Lookup,
+            subject:Some("Aurora".into()),details:vec!["latest officially released version".into()],
+            ..Default::default()};
+        let output=json!({"facts":[{"source":1,"subject":"Aurora 5 Preview",
+            "claim":"Aurora 5 Preview was released on November 11 2026.",
+            "quote":source.content,"detail":null}]});
+        let evidence=assemble_evidence(Some(output),"What is the latest officially released Aurora version?",
+            &task,&[source]);
+        assert_eq!(evidence.audit.status,"partial");
+        assert_eq!(evidence.audit.accepted,1);
+        assert_eq!(evidence.audit.contextual_count,1);
+        assert_eq!(evidence.audit.unresolved_details,vec!["latest officially released version"]);
+        let notes=evidence.notes.unwrap();
+        assert!(notes.contains("Context only; does NOT establish any requested detail"));
+        assert!(notes.contains("Aurora 5 Preview"));
+        assert!(notes.contains("UNRESOLVED REQUESTED DETAILS"));
+    }
+
+    #[test]
+    fn strict_verification_does_not_accept_unmapped_context_as_a_fact() {
+        let source=source();
+        let task=ResearchTask{kind:ResearchKind::Verify,subject:Some("Cora Vale".into()),
+            details:vec!["birth year".into()],..Default::default()};
+        let output=json!({"facts":[{"source":1,"subject":"Cora Vale",
+            "claim":"Cora Vale was born in 1975.","quote":source.content,"detail":null}]});
+        let evidence=assemble_evidence(Some(output),"Verify the singer's birth year",&task,&[source]);
+        assert!(evidence.notes.is_none());
+        assert_eq!(evidence.audit.accepted,0);
+        assert_eq!(evidence.audit.rejected,1);
+    }
+
+    #[test]
+    fn fallback_shows_only_cited_unverified_excerpts_not_an_unsourced_conclusion() {
+        let sources=[
+            make_source("New version report",
+                "Aurora 6 Preview appeared on November 10, 2026, based on a release tracker."),
+            make_source("Earlier release report",
+                "Aurora 5 Stable was released on October 20, 2026, according to another report.")
+        ];
+        let text=source_preview_fallback(&sources).unwrap();
+        assert!(text.contains("[1]"));
+        assert!(text.contains("[2]"));
+        assert!(text.contains("Aurora 6 Preview"));
+        assert!(text.contains("Aurora 5 Stable"));
+        assert!(text.contains("not independently verified conclusions"));
+        assert!(!text.contains("Aurora 6 Preview is the latest officially released"));
+        assert!(source_preview_fallback(&[]).is_none());
     }
     #[test]
     fn discovery_finds_individual_names_inside_an_article_without_relaxing_quotes(){

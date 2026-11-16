@@ -158,6 +158,29 @@ export function reviewResearchCompletion(answer:string,sources:EvidenceSource[],
   const facts=audit?.acceptedDetails??[];
   const grounded=facts.length ? sources.map((source,i)=>({...source,title:"",
     content:facts.filter(f=>f.source===i+1).map(f=>f.quote).join("\n")})) : sources;
+  // A partially answered task is not a license to turn one dated source
+  // into a definitive "latest", "first", "best" or exact-status conclusion.
+  // Use only the original quoted excerpts, not a model-inferred ranking.
+  if(audit?.status==="partial" && facts.length){
+    const exact=(s:string)=>s.toLowerCase().replace(/s+/g," ").trim();
+    const excerpts=facts.filter(f=>{
+      const source=sources[f.source-1];
+      return source && !!f.quote.trim() &&
+        (exact(source.title).includes(exact(f.quote)) || exact(source.content).includes(exact(f.quote)));
+    }).map(f=>"- ["+f.source+"] "+f.subject+": “"+f.quote+"”");
+    if(excerpts.length)return {
+      text:"Here's what the retrieved sources actually say, although I couldn't fully verify the requested answer:
+
+"+
+        [...new Set(excerpts)].join("
+
+")+
+        (audit.unresolvedDetails?.length?"
+
+Still unconfirmed: "+audit.unresolvedDetails.join("; ")+".":""),
+      checked:facts.length,rejected:0,usable:true
+    };
+  }
   const review=verifyResearchAnswer(answer,grounded);
   if(review.usable || !facts.length)return review;
   const recover=facts.filter(f=>{

@@ -14,6 +14,7 @@ export type OllamaStats = {
 export type ResearchAudit = {
   status: string;
   accepted: number;
+  contextualCount?: number;
   rejected: number;
   elapsedMs: number;
   note: string;
@@ -198,6 +199,9 @@ function performanceLines(diagnostics: Diagnostics): string[] {
     ...(diagnostics.research ? [
       "  Research evidence: " + diagnostics.research.status,
       "  Accepted source-anchored facts: " + diagnostics.research.accepted,
+      ...(diagnostics.research.contextualCount ? [
+        "  Context-only excerpts (not proven requested details): " + diagnostics.research.contextualCount
+      ] : []),
       "  Rejected candidates: " + diagnostics.research.rejected,
       ...(diagnostics.research.rejectedDetails?.length
         ? ["  Rejection reasons: " + diagnostics.research.rejectedDetails.join("; ")] : []),

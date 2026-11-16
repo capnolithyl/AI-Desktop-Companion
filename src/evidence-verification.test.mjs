@@ -151,3 +151,21 @@ test("fallback quotes the source instead of presenting an unproved interpretatio
   assert.match(reviewed.text,/Source \[1\] states/);
   assert.doesNotMatch(reviewed.text,/has already released|Festival Cut/);
 });
+
+
+test("partially verified release comparisons show literal excerpts rather than definitive invented rankings",()=>{
+  const docs=[{title:"Release tracker",url:"https://example.org/releases",
+    content:"Aurora 6 Preview was released on November 11 2026 according to a release tracker."}];
+  const audit={status:"partial",recommendationTask:false,
+    acceptedDetails:[{source:1,subject:"Aurora 6 Preview",
+      claim:"Aurora 6 Preview was released on November 11 2026.",
+      quote:docs[0].content}],
+    unresolvedDetails:["latest officially released version"]};
+  const review=reviewResearchCompletion(
+    "Aurora 6 Preview is definitely the newest official stable release. [1]",docs,audit);
+  assert.equal(review.usable,true);
+  assert.match(review.text,/Aurora 6 Preview/);
+  assert.match(review.text,/retrieved sources actually say/);
+  assert.match(review.text,/Still unconfirmed: latest officially released version/);
+  assert.doesNotMatch(review.text,/definitely the newest|official stable release/);
+});

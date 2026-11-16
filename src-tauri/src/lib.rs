@@ -957,10 +957,10 @@ async fn chat_stream_impl(
                 let content = match task.kind {
                     recommendation_gate::ResearchKind::Discover =>
                         "The sources I found didn't give me enough evidence to recommend a match.".to_owned(),
-                    recommendation_gate::ResearchKind::Verify =>
-                        "I couldn't confirm the requested details from the sources I found.".to_owned(),
+                    recommendation_gate::ResearchKind::Verify |
                     recommendation_gate::ResearchKind::Lookup =>
-                        "The sources I found didn't give me enough evidence to verify an answer.".to_owned(),
+                        evidence_pack::source_preview_fallback(&sources)
+                            .unwrap_or_else(|| "I found no source-backed answer to the requested detail.".into()),
                 };
                 let _ = app.emit("mikan://chat", ChatChunk {
                     request_id: request.request_id.clone(), content: content.clone()
