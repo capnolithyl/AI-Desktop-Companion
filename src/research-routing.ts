@@ -21,7 +21,7 @@ export type ResearchPlan = {
 // to send a private chat message to an external search provider.
 const timeSensitive = /\b(latest|recent|recently|updates?|new (?:album|single|record|release|song|tour)|today|tonight|yesterday|this week|this month|right now|currently|current|upcoming|next (?:album|mission|launch|event|tour|release|major milestone|milestone)|news|202[5-9]|announc\w*|release date|schedule|weather|price|stock|election|president|ceo|updated|new version|newest)\b/i;
 // Requests to find public information for the user are research, not self-disclosure.
-const explicitResearch = /^(?:(?:please\s+)?(?:search(?:\s+(?:for|the web))?|look up|lookup|google|find(?:\s+me)?|research|verify|fact.check|check online|browse)\b|(?:can|could|would|will)\s+you\s+(?:please\s+)?(?:search|look up|find(?:\s+me)?|research|verify|check online|browse)\b)/i;
+const explicitResearch = /^(?:(?:please\s+)?(?:search(?:\s+(?:for|the web))?|look up|lookup|google|find(?:\s+me)?|research|verify|fact.check|check online|browse)\b|(?:can|could|would|will)\s+you\s+(?:please\s+)?(?:search|look\s+(?:up|for)|find(?:\s+me)?|research|verify|check online|browse)\b)/i;
 const factSeeking = /^(?:what(?:'s| is| are| was| were| happened| caused)|when (?:is|was|did|will)|where (?:is|are|was|did)|who (?:is|are|was|were)|how (?:many|much|long|old)|tell me (?:about|more about)|what do you know about|what can you tell me about)\b/i;
 const informationQuestion = /^(?:what(?:'s|\s)|when\b|where\b|who\b|why\b|how\b|which\b|is\b|are\b|was\b|were\b|does\b|did\b|do\b|can\b|could\b|will\b|would\b|has\b|have\b|any (?:news|updates|info|details|word)\b|tell me\b|give me\b)/i;
 const followUpQuestion = /^(?:(?:and|also|but|so)\s+)?(?:what(?:'s|\s)|when\b|where\b|why\b|how\b|who\b|which\b|is\b|are\b|does\b|did\b|do\b|can\b|could\b|will\b|would\b|any updates\b|tell me more\b)/i;
@@ -62,8 +62,13 @@ export function researchRequest(question: string, previous: ResearchTurn[] = [])
   const current = timeSensitive.test(text) && informationQuestion.test(text);
   const factual = factSeeking.test(text) && (!privateContext.test(text) || publicWebPermission);
   const lastUser = previous.slice().reverse().find(turn => turn.role === "user");
+  // A prior personal statement such as "I watched a show recently" is not
+  // evidence that the user requested research. Only inherit a public task
+  // from an explicit lookup or an actual time-sensitive information question.
   const previousResearch = lastUser &&
-    (explicitResearch.test(lastUser.content) || timeSensitive.test(lastUser.content)) ? lastUser : undefined;
+    (explicitResearch.test(lastUser.content) ||
+      (timeSensitive.test(lastUser.content) && informationQuestion.test(lastUser.content)))
+      ? lastUser : undefined;
   const independentTopic = /^(?:what (?:is|are|was|were) (?!it\b|that\b|they\b|those\b)|who (?:is|was) (?!he\b|she\b|that\b)|where (?:is|are) (?!it\b|that\b))/i.test(text);
   const continuation = followUpQuestion.test(text) && !independentTopic && previousResearch !== undefined &&
     !/\b(my|me|mine|your|yours|myself)\b/i.test(text);
