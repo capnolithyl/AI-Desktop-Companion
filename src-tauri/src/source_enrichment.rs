@@ -69,7 +69,7 @@ fn source_score(item: &SearchResult, host: &str, terms: &[String]) -> i32 {
 
 /// Pick relevant passages rather than an arbitrary first 400 characters.
 /// Return text in original page order to preserve context and chronology.
-fn focused_page_excerpt(page: &str, topic: &str) -> String {
+pub(crate) fn focused_page_excerpt(page: &str, topic: &str) -> String {
     let terms = topic_terms(topic);
     let paragraphs: Vec<&str> = page.split("\n\n")
         .map(str::trim)

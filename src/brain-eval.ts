@@ -4,7 +4,8 @@
  * use invented names so the model cannot pass by guessing its training data.
  */
 import { decideDesktopTurn } from "./desktop-turn-routing.ts";
-import { planDesktopWebExecution } from "./turn-execution-policy.ts";
+import { planDesktopWebExecution, resolvePublicWebExecution } from "./turn-execution-policy.ts";
+import { priorResearchSources } from "./research-context.ts";
 import { selectDeterministicMemoryIds } from "./memory-retrieval.ts";
 import { rankMemories, type RankableMemory } from "./memory-ranking.ts";
 import { isPersonalMemoryQuestion } from "./personal-memory.ts";
@@ -44,9 +45,9 @@ export type EvalExpectation = {
 };
 export type EvalStep = { user: string; expect: EvalExpectation; explanation?: string; mockEvidence?: string };
 export type EvalScenario = { id: string; label: string; group: string; steps: EvalStep[]; note?: string };
-export type EvalTurn = ResearchTurn & { role:"user"|"assistant"; content:string };
+export type EvalTurn = ResearchTurn & { role:"user"|"assistant"; content:string; sources?:WebResult[] };
 export type EvalMode = "routing" | "live";
-type EvalWebPlan = {search:boolean;query?:string;reason:string;intent?:string;task?:ResearchTask};
+type EvalWebPlan = {search:boolean;query?:string;reason:string;method?:string;intent?:string;task?:ResearchTask};
 type EvalWebExecution = {
   query:string|null;
   results:WebResult[];
@@ -126,6 +127,7 @@ export type EvalInference = (args:{
   researchPlanned?:boolean;
   researchQuery?:string;
   researchTask?:ResearchTask;
+  webRequest?:ReturnType<typeof resolvePublicWebExecution> & {priorSources:WebResult[]};
   scenarioId:string;
   stepIndex:number;
 })=>Promise<EvalInferenceResult>;
@@ -705,16 +707,14 @@ export async function runBrainEvaluation(options:EvalOptions):Promise<EvalReport
         if(options.mode==="live" && options.infer){
           // Never search when the private permission boundary blocks web.
           // The local planner has already validated its proposed public query.
-          const permission=webPolicy.blockedReason===null;
-          const publicQuery=permission && webPolicy.canPlanPublicWeb && planned?.search===true && planned.query
-            ?planned.query
-            : permission && decision.plan.mode==="research" && decision.allowAutomaticWeb
-              ?decision.plan.query:undefined;
+          const execution=resolvePublicWebExecution(webPolicy,decision.plan,planned);
+          const publicQuery=execution.researchQuery;
           const response=await options.infer({
             messages,selectedMemories:selected,evidence:step.mockEvidence,
             researchPlanned:planned?.search===true || decision.plan.mode==="research",
             researchQuery:options.liveWeb?publicQuery:undefined,
             researchTask:options.liveWeb && publicQuery ? planned?.task : undefined,
+            webRequest:options.liveWeb ? {...execution,priorSources:priorResearchSources(previous,step.user)} : undefined,
             scenarioId:scenario.id,stepIndex
           });
           if(typeof response==="string")answer=response;
@@ -753,12 +753,11 @@ export async function runBrainEvaluation(options:EvalOptions):Promise<EvalReport
         step.expect.answerExcludes?.length
       );
       const routeLabelMatch=routeMatches(decision.plan.mode,step.expect.route);
-      // A route marked research would fetch public evidence in the real app.
-      // The test harness never executes that fetch. Factual Rust tool planning
-      // and optional AI planning are unobserved in planning-only mode.
-      const plannedWeb:boolean|null=decision.plan.mode==="research" ? true
+      // A model decision takes precedence over legacy route labels. Fast mode
+      // cannot observe optional semantic planning or native tool execution.
+      const plannedWeb:boolean|null=planned && planned.method!=="fallback" ? planned.search
+        : decision.plan.mode==="research" ? true
         : decision.plan.mode==="factual" ? null
-        : planned ? planned.search
         : webPolicy.canPlanPublicWeb ? null : false;
       const expectedWeb=step.expect.web??(
         step.expect.route==="research" ? true :
@@ -773,7 +772,7 @@ export async function runBrainEvaluation(options:EvalOptions):Promise<EvalReport
       const audit=webExecution?.researchAudit;
       const evidencePass=options.liveWeb && webExecution?.query
         ? webExecution.results.length===0 ? false
-          : audit ? (audit.status==="used" || audit.status==="shortlist") : null
+          : audit ? audit.status==="partial" ? null : (audit.status==="used" || audit.status==="shortlist") : null
         : null;
       if(evidencePass===false)answerFailures.push(
         "Public search executed but produced no validated evidence; the user's research goal was not fulfilled."
@@ -782,7 +781,7 @@ export async function runBrainEvaluation(options:EvalOptions):Promise<EvalReport
       // Fast mode deliberately cannot run the optional model planner.
       const reviewRequired=(options.mode==="live" &&
         (!!step.expect.conversationGoal || !hasFactualAnswerCheck || qualityFlags.length>0)) ||
-        (expectedWeb!==null && webPass===null);
+        (expectedWeb!==null && webPass===null) || audit?.status==="partial";
       const memoryPass=missing.length===0 && unexpected.length===0;
       // This checks only how many structurally supported new facts the REAL
       // local extractor proposed. Human review must judge their semantics.
@@ -820,12 +819,14 @@ export async function runBrainEvaluation(options:EvalOptions):Promise<EvalReport
       publicContext=activePublicQuery ? {
         activePublicQuery,
         publicSubjects:webExecution?.researchAudit?.recommendationApproved,
+        activeTask:planned?.task,
         publicAnswer:webExecution?.results.length ? answer : undefined
       } : {};
       previous.push({role:"user",content:step.user});
       // Planning mode uses fixed mock replies, preserving follow-up semantics.
       // Live mode uses the actual previous answer (including errors) as context.
-      previous.push({role:"assistant",content:answer??step.expect.stubReply??"(No answer supplied)"});
+      previous.push({role:"assistant",content:answer??step.expect.stubReply??"(No answer supplied)",
+        ...(webExecution?.results.length ? {sources:webExecution.results} : {})});
       done++;
       options.onProgress?.(done,total,brainScenarioLabel(scenario.id,scenario.label)+" • turn "+(stepIndex+1));
     }
@@ -859,8 +860,10 @@ export function brainEvalMetrics(report:EvalReport){
     webChecks:steps.filter(s=>s.webPass!==null).length,
     webUnobserved:steps.filter(s=>s.webPass===null && s.expected.web!==undefined).length,
     webAgreement:ratio(steps.filter(s=>s.webPass===true).length,steps.filter(s=>s.webPass!==null).length),
-    liveSearches:steps.filter(s=>!!s.webExecution?.query).length,
-    focusedFollowups:steps.filter(s=>!!s.webExecution?.researchAudit?.followupQuery).length,
+    liveSearches:steps.filter(s=>!!s.webExecution?.query && !s.webExecution.results.some(r=>r.engine==="direct webpage")).length,
+    documentReads:steps.filter(s=>s.webExecution?.results.some(r=>r.engine==="direct webpage")).length,
+    focusedFollowups:steps.reduce((n,s)=>n+(s.webExecution?.researchAudit?.candidateQueries?.length??0)+
+      (s.webExecution?.researchAudit?.followupQuery?1:0),0),
     liveSearchesWithSources:steps.filter(s=>(s.webExecution?.results.length??0)>0).length,
     liveSources:steps.reduce((n,s)=>n+(s.webExecution?.results.length??0),0),
     evidencePasses:steps.filter(s=>["used","shortlist"].includes(
@@ -978,7 +981,8 @@ export function brainEvalMarkdown(report:EvalReport):string {
       if(s.webExecution){
         if(s.evidencePass!==null && s.evidencePass!==undefined)
           lines.push("- Real source-evidence outcome: "+(s.evidencePass?"validated":"NO VERIFIED ANSWER"));
-        lines.push("- Executed SearXNG query: "+(s.webExecution.query??"not executed"),
+        const direct=s.webExecution.results.find(source=>source.engine==="direct webpage");
+        lines.push(direct ? "- Read public document: "+direct.url : "- Executed SearXNG query: "+(s.webExecution.query??"not executed"),
           "- Actual source previews: "+s.webExecution.results.length);
         if(s.webExecution.researchAudit){
           const audit=s.webExecution.researchAudit;
@@ -987,6 +991,8 @@ export function brainEvalMarkdown(report:EvalReport):string {
             "; "+audit.elapsedMs+" ms; "+audit.note);
           if(audit.taskKind)
             lines.push("- Research task: "+audit.taskKind+(audit.taskSubject ? " | "+audit.taskSubject : ""));
+          if(audit.candidateDiscovery)lines.push("- Candidate extraction outcome: "+audit.candidateDiscovery);
+          if(audit.unresolvedDetails?.length)lines.push("- Unresolved requested details: "+audit.unresolvedDetails.join("; "));
           if(audit.followupQuery)
             lines.push("- Focused follow-up search: "+audit.followupQuery);
           if(audit.extractionAttempts && audit.extractionAttempts>1)

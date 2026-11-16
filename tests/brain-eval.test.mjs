@@ -628,9 +628,7 @@ test("Live web never searches for a user who ended discovery or a private Notion
 
 test("production Brain Lab Live adapter delegates actual search to Rust chat_stream, not a mock result",()=>{
   const code=readFileSync(new URL("../src/brain-eval-manager.ts",import.meta.url),"utf8");
-  assert.match(code,/autoSearch:!!researchQuery/);
-  assert.match(code,/researchRoute:researchQuery\?"research":"chat"/);
-  assert.match(code,/researchQuery:researchQuery\|\|undefined/);
+  assert.match(code,/\.\.\.\(webRequest\?\?\{autoSearch:false,researchRoute:"chat"\}\)/);
   assert.match(code,/searxngEndpoint:settings\.searxngEndpoint/);
   assert.match(code,/sources\?:Array/);
   assert.match(code,/liveWeb:true/);

@@ -605,11 +605,23 @@ async fn chat_stream_impl(
                 "requestId": request.request_id,
                 "text": format!("Searching: {query}")
             }));
-            sources = source_priority::search(
+            if let Some(document)=task.and_then(|task|task.source_url.as_deref()) {
+                if !research_intent::user_supplied_document_url(&messages,document) {
+                    return Err("The requested public document URL was not supplied by the user".into());
+                }
+                let page=web_reader::read_page_impl(&app,document,false,request.cache_hours).await?;
+                sources.push(web_search::SearchResult {
+                    title:page.title,url:page.url,
+                    content:source_enrichment::focused_page_excerpt(&page.content,&query),
+                    engine:"direct webpage".into(),published_date:None
+                });
+            } else {
+            sources = source_priority::search_for_task(
                 request.searxng_endpoint.clone(),query.clone(),
                 request.research_recent || research_intent::is_album_research(&messages),
-                &request.source_preferences,request.source_topic.as_deref()
+                &request.source_preferences,request.source_topic.as_deref(),task.and_then(|t|t.subject.as_deref())
             ).await?;
+            }
             search_query = Some(query.clone());
             if sources.is_empty() && task.is_none() {
                 if let Some(fallback) = research_intent::fallback_research_query(&messages, &query) {
@@ -639,8 +651,8 @@ async fn chat_stream_impl(
             // Read at most two safely validated HTTPS pages in parallel; a
             // failed page read leaves the original excerpt intact. The normal
             // lighter path remains for conversations without this setting.
-            if request.structured_research
-                || research_intent::needs_primary_source_verification(&messages) {
+            if task.and_then(|t|t.source_url.as_ref()).is_none() && (request.structured_research
+                || research_intent::needs_primary_source_verification(&messages)) {
                 let _ = app.emit("mikan://activity", json!({
                     "requestId": request.request_id,
                     "text": "Checking source pages…"
@@ -734,10 +746,21 @@ async fn chat_stream_impl(
                 "requestId": request.request_id, "text": "Checking source evidence…"
             }));
             let evidence_started = std::time::Instant::now();
+            // Identify entities before asking a small model for properties,
+            // credits and measurements. The former recovery pass now supplies
+            // the initial subject instead of repeating a malformed headline.
+            let (leads,discovery_status)=if task.kind==recommendation_gate::ResearchKind::Discover {
+                evidence_pack::discover_candidate_leads(
+                    &client,&url,&request.model,&user_request,task,&sources,selected_context
+                ).await
+            } else {(Vec::new(),String::new())};
+            let candidate_leads = leads.iter().map(|lead|
+                format!("{} [source {}]",lead.title,lead.source)).collect();
+            let mut initial_task=task.clone();
+            if let Some(lead)=leads.first(){initial_task.subject=Some(lead.title.clone())}
             let mut evidence = evidence_pack::extract(
-                &client, &url, &request.model, &user_request, task, &sources, selected_context
+                &client, &url, &request.model, &user_request, &initial_task, &sources, selected_context
             ).await;
-            let mut candidate_leads = Vec::new();
             let mut candidate_queries = Vec::new();
             // Discovery has two different jobs: identify the *individual item*
             // and then verify its numeric limits / credits. For small local
@@ -751,12 +774,6 @@ async fn chat_stream_impl(
                     "requestId": request.request_id,
                     "text": "Identifying individual source-backed candidates…"
                 }));
-                let leads = evidence_pack::discover_candidate_leads(
-                    &client, &url, &request.model, &user_request, task,
-                    &sources, selected_context
-                ).await;
-                candidate_leads = leads.iter()
-                    .map(|lead|format!("{} [source {}]",lead.title,lead.source)).collect();
                 for lead in leads {
                     let Some(mut query) =
                         recommendation_gate::candidate_details_query(&lead.title,task)
@@ -774,8 +791,9 @@ async fn chat_stream_impl(
                         "requestId": request.request_id,
                         "text": format!("Verifying {} against public sources…", lead.title)
                     }));
-                    if let Ok(mut more) = web_search::web_search(
-                        request.searxng_endpoint.clone(), query.clone()
+                    if let Ok(mut more) = source_priority::search_for_task(
+                        request.searxng_endpoint.clone(), query.clone(),false,
+                        &request.source_preferences,request.source_topic.as_deref(),Some(&lead.title)
                     ).await {
                         more.truncate(4);
                         if !more.is_empty() {
@@ -843,6 +861,7 @@ async fn chat_stream_impl(
             evidence.audit.elapsed_ms = evidence_started.elapsed().as_millis() as u64;
             evidence.audit.candidate_leads = candidate_leads;
             evidence.audit.candidate_queries = candidate_queries;
+            evidence.audit.candidate_discovery=(!discovery_status.is_empty()).then_some(discovery_status);
 
             research_audit = Some(evidence.audit);
             let Some(notes) = evidence.notes else {
@@ -873,7 +892,10 @@ async fn chat_stream_impl(
                     to verify a particular subject, report the supported details for that subject, including any mismatch \
                     with the user's criteria. Preserve the scope, range, and uncertainty of the source measurement. \
                     A general estimate does not establish a narrower kind of runtime. Say which requested detail is \
-                    still unconfirmed when the evidence is incomplete."
+                    still unconfirmed when the evidence is incomplete. Absence of a fact from these notes is UNKNOWN, \
+                    never evidence that an event, release or announcement did not happen. A related entity or its \
+                    existence alone does not establish the requested status. Do not add factual conclusions beyond \
+                    the accepted claims; cite the exact supporting numbered notes."
             }));
             notes
         } else {

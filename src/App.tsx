@@ -5,7 +5,7 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 import { webContext, pageContext, type PageDocument, type WebResult } from "./web-search";
 import { priorResearchSources } from "./research-context";
 import { planResearch, stripUnsupportedCitations } from "./research-routing";
-import { verifyResearchAnswer, groundedResearchFallback } from "./evidence-verification";
+import { reviewResearchCompletion, groundedResearchFallback } from "./evidence-verification";
 import { resolveConversationQuestion, needsContextResolution, contextGuidance, responseFocusGuidance } from "./conversation-engine";
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
@@ -33,7 +33,7 @@ import { PERSONAL_DETAIL_GROUNDING_GUIDANCE } from "./personal-grounding";
 import { parseSlashCommand, SLASH_HELP } from "./slash-commands";
 import { runtimeContext, chatRuntimeContext } from "./runtime-context";
 import { decideDesktopTurn } from "./desktop-turn-routing";
-import { planDesktopWebExecution } from "./turn-execution-policy";
+import { planDesktopWebExecution, resolvePublicWebExecution } from "./turn-execution-policy";
 import { isModelStatusQuestion, modelStatusAnswer } from "./model-status";
 import { modelSwitcherStatus, modelSwitcherChoice } from "./model-switcher";
 import { formatDebugLog, type Diagnostics, type MemoryRecallAudit, type OllamaStats, type ResearchAudit } from "./debug-log";
@@ -2266,8 +2266,7 @@ export default function App() {
         existingSearch:!!withSearch, attachment:!!attachment,
         screenshot:!!screenshot, liveFrame:!!liveFrame, roleplay:allowRoleplay
       });
-      const canPlanPublicWeb = webPolicy.canPlanPublicWeb &&
-        (researchPlan.mode === "chat" || settings.structuredResearch);
+      const canPlanPublicWeb = webPolicy.canPlanPublicWeb;
       const selection = selectDeterministicMemoryIds(
         liveFacts,text,semanticMatches,lexicalIds,budget.maxFacts
       );
@@ -2288,19 +2287,21 @@ export default function App() {
           relevantUserFacts:liveFacts.filter(f=>selection.ids.includes(f.id)),
           history:messages,activePublicQuery:priorPublicQuery,
           publicSubjects:priorPublicQuery ? lastAssistant?.diagnostics?.research?.recommendationApproved : undefined,
+          activeTask:priorPublicQuery ? lastAssistant?.diagnostics?.toolPlan?.task : undefined,
           publicAnswer:priorPublicQuery && lastAssistant?.sources?.length ? lastAssistant.content : undefined
         }
       );
       if(stopRequested.current)throw new Error("Generation stopped");
+      const webExecution=resolvePublicWebExecution(webPolicy,researchPlan,plannerWeb);
       const plannedPublicSearch = canPlanPublicWeb && plannerWeb.search && !!plannerWeb.query;
       if(plannedPublicSearch) {
         researchPlan = {...researchPlan,mode:"research",query:plannerWeb.query};
         setActivity("Preparing evidence-backed answer…");
       }
-      const cloudMaySearch = webPolicy.cloudMaySearch;
+      const cloudMaySearch = webPolicy.cloudMaySearch && webExecution.autoSearch;
       // Cloud providers independently decide when read-only web tools are useful.
       // Local Qwen still respects the existing deterministic/planned routes.
-      const effectiveWeb = webPolicy.blockedReason === null && (turn.allowAutomaticWeb || plannedPublicSearch);
+      const effectiveWeb = webExecution.autoSearch;
       const preferredTopic = effectiveWeb
         ? (plannerWeb.topic ?? matchingSourceTopic(researchPlan.query ?? text,settings.sourcePreferences))
         : undefined;
@@ -2311,6 +2312,7 @@ export default function App() {
           turn.allowAutomaticWeb ? "Explicit or factual research routing" :
             (webPolicy.blockedReason ?? plannerWeb.reason),
         query:plannedPublicSearch ? plannerWeb.query : researchPlan.mode==="research" ? researchPlan.query : undefined,
+        task:webExecution.researchTask,
         topic:preferredTopic,
         publicWebAllowed:effectiveWeb || cloudMaySearch
       };
@@ -2547,16 +2549,12 @@ export default function App() {
           geminiModel: settings.geminiModel,
           openrouterModel: settings.openrouterModel,
           cloudAllowWeb: cloudMaySearch,
-          autoSearch: effectiveWeb,
           structuredResearch: settings.structuredResearch && effectiveWeb,
           sourcePreferences:settings.sourcePreferences,
           sourceTopic:preferredTopic,
           // These hints come from shared TypeScript rules used by Pocket too.
           // Rust still owns SearXNG query refinement, retries and web tools.
-          researchRoute: researchPlan.mode,
-          researchRecent: researchPlan.recent,
-          researchQuery: researchPlan.mode === "research" ? researchPlan.query : undefined,
-          researchTask: plannedPublicSearch ? plannerWeb.task : undefined,
+          ...webExecution,
           searxngEndpoint: settings.searxngEndpoint,
           cacheHours: settings.cacheHours,
           contextWindow: settings.contextWindow,
@@ -2620,10 +2618,8 @@ export default function App() {
       const rawText = completion.content || accumulated || "(The model returned no visible text.)";
       // Structured candidate answers already use the native evidence notes.
       // The older headline fallback can reintroduce an unrelated result.
-      const structuredCandidateAnswer = completion.researchAudit?.recommendationTask === true;
-      const answerReview = verifiedSources?.length && !structuredCandidateAnswer
-        && (!completion.researchAudit || completion.researchAudit.status === "used")
-        ? verifyResearchAnswer(rawText, verifiedSources) : null;
+      const answerReview = verifiedSources?.length
+        ? reviewResearchCompletion(rawText,verifiedSources,completion.researchAudit) : null;
       if(answerReview){
         diagnostics.answerVerification={
           checked:answerReview.checked,rejected:answerReview.rejected,

@@ -46,11 +46,32 @@ export function planDesktopWebExecution(input: DesktopWebInput): DesktopWebPolic
   return {
     // Both conversation and an explicit search can use the local planner.
     // On an explicit search it can supply the target and verification criteria.
-    canPlanPublicWeb: eligible && input.planMode !== "factual",
+    canPlanPublicWeb: eligible,
     // Cloud tools must not receive free-form chat before a validated local
     // public-search decision. Explicitly routed research already has a public
     // task and still goes through backend URL/query permission checks.
     cloudMaySearch: eligible && input.provider !== "local" && input.planMode !== "chat",
     blockedReason: reason
+  };
+}
+
+/** One execution decision for desktop and Brain Lab. A successful semantic
+ * no-search decision must not be overridden by a legacy route label. */
+export function resolvePublicWebExecution(
+  policy: DesktopWebPolicy,
+  plan: {mode:string;query?:string;recent?:boolean},
+  decision?: {search:boolean;query?:string;method?:string;task?:import("./unified-planner.ts").ResearchTask}
+) {
+  const permitted=policy.blockedReason===null;
+  const semantic=decision && decision.method!=="disabled";
+  const query=permitted ? semantic ? decision.search ? decision.query : undefined
+    : plan.mode==="research" ? plan.query : undefined : undefined;
+  const factualFallback=permitted && !semantic && plan.mode==="factual";
+  return {
+    autoSearch:!!query || factualFallback,
+    researchRoute:query ? "research" : factualFallback ? "factual" : "chat",
+    researchQuery:query,
+    researchTask:query && decision?.search ? decision.task : undefined,
+    researchRecent:!!plan.recent
   };
 }

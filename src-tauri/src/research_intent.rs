@@ -1,6 +1,20 @@
 use serde_json::Value;
 use crate::web_search::SearchResult;
 
+/// Only exact locators in authentic user turns may bypass search. DNS and
+/// address safety remain the existing web reader's responsibility.
+pub fn user_supplied_document_url(messages: &[Value], requested: &str) -> bool {
+    let Ok(url)=reqwest::Url::parse(requested) else {return false};
+    if url.scheme()!="https" || !url.username().is_empty() || url.password().is_some()
+        || url.query().is_some() || url.fragment().is_some() || requested.len()>2048 {return false}
+    messages.iter().filter(|m|m["role"]=="user")
+        .filter_map(|m|m["content"].as_str()).any(|text|
+            text.match_indices("https://").any(|(start,_)| {
+                let part=text[start..].split(|c:char|c.is_whitespace() || matches!(c,'<'|'>'|'"'|'\'')).next().unwrap_or("");
+                part.trim_end_matches([')',',','.',';'])==requested
+            }))
+}
+
 /// Deterministic routing for explicit factual/research requests. We do not
 /// rely on the model choosing whether to browse when the user requests facts.
 pub fn explicit_research_query(messages: &[Value]) -> Option<String> {
@@ -557,5 +571,22 @@ mod tests {
         assert!(rules.contains("clear base-case prediction"));
         assert!(rules.contains("ENTITY / EVENT CONSISTENCY"));
         assert!(rules.contains("a preparatory step, announcement, prototype"));
+    }
+}
+
+#[cfg(test)]
+mod document_locator_tests {
+    use super::*;
+    use serde_json::json;
+    #[test]
+    fn explicit_user_url_can_be_read_but_source_or_model_urls_cannot(){
+        let url="https://github.com/example/project";
+        assert!(user_supplied_document_url(&[json!({"role":"user","content":format!("Read {url}")})],url));
+        assert!(user_supplied_document_url(&[json!({"role":"user","content":format!("Read [this repository]({url}).")})],url));
+        assert!(!user_supplied_document_url(&[json!({"role":"assistant","content":url})],url));
+        assert!(!user_supplied_document_url(&[json!({"role":"user","content":format!("Read {url}/other")})],url));
+        for bad in ["http://example.org/a","https://u:p@example.org/a","https://example.org/a?token=secret"] {
+            assert!(!user_supplied_document_url(&[json!({"role":"user","content":bad})],bad));
+        }
     }
 }

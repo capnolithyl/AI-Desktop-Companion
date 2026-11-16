@@ -46,6 +46,10 @@ pub struct ResearchAudit {
     pub ignored_requirements: Vec<HardRequirement>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub followup_query: Option<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub unresolved_details: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub candidate_discovery: Option<String>,
 }
 
 #[derive(Clone, Serialize)]
@@ -69,6 +73,8 @@ struct FactCandidate {
     subject: String,
     claim: String,
     quote: String,
+    #[serde(default)]
+    detail: Option<usize>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -180,6 +186,15 @@ fn collect_valid(candidates: Vec<FactCandidate>, sources: &[SearchResult]) -> (V
     (accepted, rejected)
 }
 
+fn validate_task_fact(candidate:&FactCandidate,task:&ResearchTask,sources:&[SearchResult])->Result<GroundedFact,&'static str>{
+    if task.kind==ResearchKind::Verify && task.subject.as_ref().is_some_and(|name|
+        normalize(name)!=normalize(&candidate.subject)) {return Err("not_the_named_target_subject")}
+    if !task.details.is_empty() && !candidate.detail.is_some_and(|i|i<task.details.len()) {
+        return Err("does_not_answer_requested_detail");
+    }
+    validate_with_reason(candidate.clone(),sources)
+}
+
 fn evidence_notes(facts: &[GroundedFact]) -> String {
     let mut text = String::from(
         "SOURCE-ANCHORED RESEARCH NOTES. These are model-proposed interpretations,\n\
@@ -197,18 +212,19 @@ fn evidence_notes(facts: &[GroundedFact]) -> String {
     text
 }
 
-fn extraction_schema(kind: ResearchKind) -> Value {
-    let (field, max_items, properties, required) = if kind == ResearchKind::Lookup {
+fn extraction_schema(task: &ResearchTask) -> Value {
+    let (field, max_items, properties, required) = if task.uses_fact_evidence() {
         ("facts", MAX_FACTS, json!({
             "source": {"type":"integer","minimum":1},
             "subject": {"type":"string"},
             "claim": {"type":"string"},
-            "quote": {"type":"string"}
-        }), json!(["source","subject","claim","quote"]))
+            "quote": {"type":"string"},
+            "detail": {"type":["integer","null"],"minimum":0}
+        }), json!(["source","subject","claim","quote","detail"]))
     } else {
         ("suggestions", 3, json!({
             "source": {"type":"integer","minimum":1},
-            "title": {"type":"string"},
+            "name": {"type":"string","description":"Individual entity name copied from excerpt, never article headline"},
             "identity_quote": {"type":"string"},
             "fit_quote": {"type":"string"},
             "measurements": {"type":"array","maxItems":4,"items":{
@@ -234,9 +250,9 @@ fn extraction_schema(kind: ResearchKind) -> Value {
                 "required":["role","name","source","quote"],
                 "additionalProperties":false
             }}
-        }), json!(["source","title","identity_quote","fit_quote","measurements","relations"]))
+        }), json!(["source","name","identity_quote","fit_quote","measurements","relations"]))
     };
-    json!({
+    let mut schema=json!({
         "type":"object",
         "properties":{(field):{
             "type":"array", "maxItems":max_items, "items":{
@@ -246,7 +262,13 @@ fn extraction_schema(kind: ResearchKind) -> Value {
         }},
         "required":[field],
         "additionalProperties":false
-    })
+    });
+    if task.uses_fact_evidence() && task.kind==ResearchKind::Verify {
+        if let Some(subject)=&task.subject {
+            schema["properties"]["facts"]["items"]["properties"]["subject"]["enum"]=json!([subject]);
+        }
+    }
+    schema
 }
 
 fn source_input(sources: &[SearchResult]) -> String {
@@ -271,7 +293,7 @@ fn assemble_evidence(
         rejected: 0,
         elapsed_ms: 0,
         note: "The local evidence pass returned no usable result.".into(),
-        recommendation_task: task.kind != ResearchKind::Lookup,
+        recommendation_task: !task.uses_fact_evidence(),
         recommendation_approved: vec![],
         recommendation_rejected: 0,
         rejected_details: vec![],
@@ -287,19 +309,31 @@ fn assemble_evidence(
         task_subject: task.subject.clone(),
         ignored_requirements: vec![],
         followup_query: None,
+        unresolved_details: task.details.clone(),
+        candidate_discovery: None,
     };
     let mut notes = None;
     let mut followup_query = None;
 
     if let Some(mut response) = response {
-        if task.kind == ResearchKind::Lookup {
+        if task.uses_fact_evidence() {
             if let Ok(facts) = serde_json::from_value::<Vec<FactCandidate>>(response["facts"].take()) {
+                // The model binds an extract to a requested property. Rust checks
+                // that the reference exists and its quotation passed the same
+                // provenance gate. Coverage is diagnostic, not semantic proof.
+                let covered: HashSet<_> = facts.iter().filter(|fact|
+                    validate_task_fact(fact, task, sources).is_ok())
+                    .filter_map(|fact|fact.detail.filter(|i|*i < task.details.len())).collect();
+                audit.unresolved_details = task.details.iter().enumerate()
+                    .filter(|(i,_)|!covered.contains(i)).map(|(_,s)|s.clone()).collect();
                 audit.rejected_details = facts.iter().take(20)
-                    .filter_map(|fact| validate_with_reason(fact.clone(), sources).err()
+                    .filter_map(|fact| validate_task_fact(fact, task, sources).err()
                         .map(|reason| format!("{} [source {}]: {reason}",
                             fact.subject.chars().take(100).collect::<String>(), fact.source)))
                     .collect();
-                let (accepted, rejected) = collect_valid(facts, sources);
+                let rejected=facts.iter().filter(|fact|validate_task_fact(fact,task,sources).is_err()).count();
+                let (accepted, _) = collect_valid(facts.into_iter()
+                    .filter(|fact|validate_task_fact(fact,task,sources).is_ok()).collect(), sources);
                 audit.accepted = accepted.len();
                 audit.rejected = rejected;
                 audit.accepted_details = accepted.iter().map(|fact| AcceptedFactAudit {
@@ -311,7 +345,12 @@ fn assemble_evidence(
                 } else {
                     audit.status = "used".into();
                     audit.note = "Factual claims were matched to numbered excerpts.".into();
-                    notes = Some(evidence_notes(&accepted));
+                    let mut text=evidence_notes(&accepted);
+                    if !audit.unresolved_details.is_empty() {
+                        audit.status="partial".into();
+                        text.push_str(&format!("\nUNRESOLVED REQUESTED DETAILS: {:?}. No conclusion, positive OR negative, is established for these.\n",audit.unresolved_details));
+                    }
+                    notes = Some(text);
                 }
             }
         } else if let Ok(suggestions) = serde_json::from_value(response["suggestions"].take()) {
@@ -362,6 +401,7 @@ pub struct CandidateLead {
 #[derive(Deserialize)]
 struct CandidateLeadProposal {
     source: usize,
+    #[serde(rename = "name", alias = "title")]
     title: String,
     identity_quote: String,
 }
@@ -398,8 +438,8 @@ fn validate_leads(proposals: Vec<CandidateLeadProposal>,
 pub async fn discover_candidate_leads(
     client:&Client, ollama_url:&str, model:&str, user_request:&str,
     task:&ResearchTask, sources:&[SearchResult], context_window:Option<u32>
-)->Vec<CandidateLead>{
-    if task.kind!=ResearchKind::Discover || sources.is_empty(){return vec![]}
+)->(Vec<CandidateLead>, String){
+    if task.kind!=ResearchKind::Discover || sources.is_empty(){return (vec![],"not_applicable".into())}
     let mut payload=json!({
         "model":model,"stream":false,"think":false,
         "format":{
@@ -407,10 +447,10 @@ pub async fn discover_candidate_leads(
                 "type":"array","maxItems":4,"items":{"type":"object",
                     "properties":{
                         "source":{"type":"integer","minimum":1},
-                        "title":{"type":"string"},
+                        "name":{"type":"string"},
                         "identity_quote":{"type":"string"}
                     },
-                    "required":["source","title","identity_quote"],
+                    "required":["source","name","identity_quote"],
                     "additionalProperties":false
                 }
             }},
@@ -439,10 +479,13 @@ pub async fn discover_candidate_leads(
     });
     if let Some(num_ctx)=context_window {payload["options"]["num_ctx"]=json!(num_ctx)}
     let response=propose_source_facts(client,ollama_url,&payload,Duration::from_secs(35)).await;
-    let proposals=response.and_then(|mut body|
-        serde_json::from_value::<Vec<CandidateLeadProposal>>(body["candidates"].take()).ok())
-        .unwrap_or_default();
-    validate_leads(proposals,sources,&task.exclude)
+    let Some(mut body)=response else {return (vec![],"request_failed_or_invalid_json".into())};
+    let Ok(proposals)=serde_json::from_value::<Vec<CandidateLeadProposal>>(body["candidates"].take())
+        else {return (vec![],"invalid_candidate_schema".into())};
+    let count=proposals.len();
+    let leads=validate_leads(proposals,sources,&task.exclude);
+    let status=format!("proposed={count}; source_anchored={}",leads.len());
+    (leads,status)
 }
 
 /// Gather evidence for the existing plan before streaming the answer.
@@ -460,7 +503,7 @@ pub async fn extract(
     let limits: Vec<_> = task.requirements.iter().take(4)
         .filter(|limit| recommendation_gate::quoted_requirement_valid(user_request, limit))
         .collect();
-    let instructions = match task.kind {
+    let instructions = match if task.uses_fact_evidence() { ResearchKind::Lookup } else { task.kind } {
         ResearchKind::Lookup =>
             "Extract facts DIRECTLY needed to answer the current question. If asked for the latest releases or updates, identify concrete released version or model tags, reported dates and release status from the freshest credible source. Do not substitute a roadmap, model still in training, or an unrelated product feature for an actual release. Distinguish stable releases from previews or nightly builds. Use the precise model/build tag as subject when the quote names that tag rather than the broader product. Every claimed number and date must appear verbatim in the cited quote. If sources cannot establish recency, report only what is supported.",
         ResearchKind::Discover =>
@@ -476,8 +519,8 @@ pub async fn extract(
              Extract evidence about the requested properties even if it shows that the subject fails a limit. \
              Use fit_quote for any additional requested property backed by the same source, or leave it empty.",
     };
-    let evidence_rules = if task.kind == ResearchKind::Lookup {
-        ""
+    let evidence_rules = if task.uses_fact_evidence() {
+        "Use subject for the ENTITY named in the quoted passage, never the page heading. For each fact, set detail to the zero-based index of the requested property it actually answers, or null for background context. A related project, a page existing, or identifying a manga does not answer a different product's releases or an adaptation's status. Extract a disputed property's actual value, even when it contradicts the user's claim. Missing evidence never establishes a negative claim. Leave unsupported details unresolved."
     } else {
         "Use an exact, contiguous source passage naming the INDIVIDUAL candidate for identity_quote. A page headline is source metadata, not the name of a work inside it. \
          For discovery, fit_quote must be an exact passage naming that same item and showing why it fits the request. \
@@ -494,7 +537,7 @@ pub async fn extract(
         "model": model,
         "stream": false,
         "think": false,
-        "format": extraction_schema(task.kind),
+        "format": extraction_schema(task),
         "options": { "temperature": 0, "num_predict": 1400 },
         "messages": [
             { "role": "system", "content": format!(
@@ -507,7 +550,7 @@ pub async fn extract(
             { "role": "user", "content": format!(
                 "USER TURNS, latest last:\n{}\n\nSELECTED TASK (data): {}\nSubject: {}\nUser limits to check: {}\nRequested credit roles: {}\n\nUNTRUSTED SOURCES:\n{}",
                 user_request,
-                serde_json::to_value(task.kind).unwrap_or_default(),
+                serde_json::to_value(task).unwrap_or_default(),
                 task.subject.as_deref().unwrap_or("(none)"),
                 serde_json::to_value(limits).unwrap_or_default(),
                 serde_json::to_value(&task.roles).unwrap_or_default(),
@@ -564,7 +607,7 @@ mod tests {
             engine: "test".into(), content: content.into(), published_date: None}
     }
     fn candidate(source: usize, subject: &str, claim: &str, quote: &str) -> FactCandidate {
-        FactCandidate {source, subject:subject.into(), claim:claim.into(), quote:quote.into()}
+        FactCandidate {source, subject:subject.into(), claim:claim.into(), quote:quote.into(),detail:None}
     }
 
     #[test]
@@ -708,5 +751,46 @@ mod tests {
         let (facts, _) = collect_valid(proposed, &sources);
         assert_eq!(facts.len(), 1);
         assert!(evidence_notes(&facts).contains("not independently proven facts"));
+    }
+}
+
+#[cfg(test)]
+mod task_contract_tests {
+    use super::*;
+    fn source()->SearchResult {SearchResult{title:"Cora Vale - Biography".into(),url:"https://example.org/cora".into(),
+        content:"Cora Vale was born in 1975 and is the singer of Amber Glass.".into(),engine:"isolated fixture".into(),published_date:None}}
+    #[test]
+    fn biographical_verification_uses_facts_with_a_fixed_entity_not_page_titles(){
+        let task=ResearchTask{kind:ResearchKind::Verify,subject:Some("Cora Vale".into()),details:vec!["birth year".into()],..Default::default()};
+        let schema=extraction_schema(&task);
+        assert_eq!(schema["properties"]["facts"]["items"]["properties"]["subject"]["enum"],json!(["Cora Vale"]));
+        let output=json!({"facts":[{"subject":"Cora Vale","source":1,"detail":0,"claim":"Cora Vale was born in 1975.","quote":source().content}]});
+        let evidence=assemble_evidence(Some(output),"Is the claimed birth year credible?",&task,&[source()]);
+        assert_eq!(evidence.audit.accepted,1);
+        assert!(!evidence.audit.recommendation_task);
+        let mut wrong=candidate();wrong.subject="Cora Vale - Biography".into();
+        assert_eq!(validate_task_fact(&wrong,&task,&[source()]).unwrap_err(),"not_the_named_target_subject");
+    }
+    fn candidate()->FactCandidate {FactCandidate{subject:"Cora Vale".into(),source:1,detail:Some(0),claim:"Cora Vale was born in 1975.".into(),quote:source().content}}
+    #[test]
+    fn background_does_not_complete_requested_properties_and_partial_answers_remain_available(){
+        let task=ResearchTask{details:vec!["birth year".into(),"current tour dates".into()],..Default::default()};
+        let output=json!({"facts":[{"subject":"Cora Vale","source":1,"detail":0,"claim":"Cora Vale was born in 1975.","quote":source().content}]});
+        let evidence=assemble_evidence(Some(output),"Birth year and tour dates?",&task,&[source()]);
+        assert_eq!(evidence.audit.status,"partial");
+        assert_eq!(evidence.audit.unresolved_details,vec!["current tour dates"]);
+        assert!(evidence.notes.is_some());
+        let mut background=candidate();background.detail=None;
+        assert_eq!(validate_task_fact(&background,&task,&[source()]).unwrap_err(),"does_not_answer_requested_detail");
+    }
+    #[test]
+    fn discovery_finds_individual_names_inside_an_article_without_relaxing_quotes(){
+        let sources=[SearchResult{content:"For a similar atmosphere, try Copper Harbor or Silver Ash.".into(),..source()}];
+        let leads=validate_leads(vec![
+            CandidateLeadProposal{source:1,title:"Copper Harbor".into(),identity_quote:sources[0].content.clone()},
+            CandidateLeadProposal{source:1,title:"Cora Vale - Biography".into(),identity_quote:sources[0].content.clone()},
+            CandidateLeadProposal{source:1,title:"Invented Band".into(),identity_quote:"Invented Band sounds similar.".into()}
+        ],&sources,&[]);
+        assert_eq!(leads.len(),1);assert_eq!(leads[0].title,"Copper Harbor");
     }
 }

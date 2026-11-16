@@ -28,6 +28,8 @@ export type ResearchAudit = {
   extractionAttempts?: number;
   candidateLeads?: string[];
   candidateQueries?: string[];
+  candidateDiscovery?: string;
+  unresolvedDetails?: string[];
   constraintsChecked?: number;
   featuresChecked?: number;
   exclusionsChecked?: number;
@@ -77,6 +79,7 @@ export type ToolPlanningAudit = {
   method: string;
   reason: string;
   query?: string;
+  task?: ResearchTask;
   topic?: string;
   publicWebAllowed: boolean;
   searchOutcome?: string;

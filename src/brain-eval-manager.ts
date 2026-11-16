@@ -10,6 +10,7 @@ import { planPublicWebTools, type PublicResearchContext } from "./unified-planne
 import type { ResearchAudit } from "./debug-log";
 import { responseFocusGuidance } from "./conversation-engine";
 import { PERSONAL_DETAIL_GROUNDING_GUIDANCE } from "./personal-grounding";
+import { reviewResearchCompletion } from "./evidence-verification";
 import { chatRuntimeContext, runtimeContext } from "./runtime-context";
 import { version as APP_VERSION } from "../package.json";
 import {
@@ -200,7 +201,7 @@ async function execute(
     );
   }
   const infer:EvalInference=async({
-    messages,selectedMemories,evidence,researchPlanned,researchQuery,researchTask
+    messages,selectedMemories,evidence,researchPlanned,researchQuery,webRequest
   })=>{
     if(controller.signal.aborted)throw new Error("Stopped by owner");
     const id="mikan-brain-eval-"+crypto.randomUUID();
@@ -241,16 +242,16 @@ async function execute(
       }|null}>("chat_stream",{request:{
         requestId:id,endpoint:settings.endpoint,model:settings.model,provider:"local",
         messages:[{role:"system",content:system},...messages.map(m=>({role:m.role,content:m.content}))],
-        autoSearch:!!researchQuery,researchRoute:researchQuery?"research":"chat",
-        researchQuery:researchQuery||undefined,researchTask,
+        ...(webRequest??{autoSearch:false,researchRoute:"chat"}),
         sourcePreferences:settings.sourcePreferences,
         cacheHours:settings.cacheHours,
         thinkingRequested:
           shouldUseLocalThinking(settings.reasoningMode,last,settings.model),
         searxngEndpoint:settings.searxngEndpoint,contextWindow:settings.contextWindow,
-        structuredResearch:!!researchQuery && settings.structuredResearch
+        structuredResearch:!!webRequest?.autoSearch && settings.structuredResearch
       }});
-      return {text:result.content.trim(),modelUsed:result.modelUsed??settings.model,
+      const review=reviewResearchCompletion(result.content.trim(),result.sources??[],result.researchAudit);
+      return {text:review?.text??result.content.trim(),modelUsed:result.modelUsed??settings.model,
         stats:result.stats??undefined,
         webExecution:{query:result.searchQuery??null,
           results:result.sources??[],sourcesCarriedOver:result.sourcesCarriedOver===true,
@@ -276,7 +277,7 @@ async function execute(
         contextWindow:settings.contextWindow,maxOutputTokens:380,timeoutMs:22000
       }),{automaticWebEnabled:true,sourcePreferences:settings.sourcePreferences,
         history:previous,relevantUserFacts:selectedFacts,...context});
-    return {search:decision.search,query:decision.query,reason:decision.reason,
+    return {search:decision.search,query:decision.query,reason:decision.reason,method:decision.method,
       intent:decision.intent,task:decision.task};
   };
   const result=await runBrainEvaluation({

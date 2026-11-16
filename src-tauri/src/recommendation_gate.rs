@@ -12,17 +12,33 @@ pub enum ResearchKind {
     Lookup,
 }
 
-#[derive(Clone, Debug, Default, Deserialize)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ResearchTask {
     pub kind: ResearchKind,
     #[serde(default)]
     pub subject: Option<String>,
+    #[serde(default)]
+    pub entity_type: String,
+    #[serde(default)]
+    pub details: Vec<String>,
+    #[serde(default)]
+    pub preferences: Vec<String>,
+    #[serde(default)]
+    pub source_url: Option<String>,
     #[serde(default)]
     pub requirements: Vec<HardRequirement>,
     #[serde(default)]
     pub roles: Vec<String>,
     #[serde(default)]
     pub exclude: Vec<String>,
+}
+
+impl ResearchTask {
+    pub fn uses_fact_evidence(&self) -> bool {
+        self.kind == ResearchKind::Lookup ||
+            (self.kind == ResearchKind::Verify && self.requirements.is_empty() && self.roles.is_empty())
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -44,6 +60,7 @@ pub struct Measurement {
 #[derive(Clone, Debug, Deserialize)]
 pub struct Suggestion {
     pub source: usize,
+    #[serde(rename = "name", alias = "title")]
     pub title: String,
     #[serde(default)]
     pub creator: String,

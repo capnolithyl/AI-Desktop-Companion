@@ -6,6 +6,8 @@
  * when the retrieved snippet cannot support a concrete claim. It is not a
  * full semantic entailment model and cannot guarantee that a source is true.
  */
+import type { ResearchAudit } from "./debug-log.ts";
+
 export type EvidenceSource = {
   title: string;
   url: string;
@@ -106,6 +108,27 @@ export function verifyResearchAnswer(
   // Removing unsafe claims is enough: avoid appending a robotic disclaimer
   // that derails an otherwise warm, accurate companion response.
   return {text,rejected,checked,usable:true};
+}
+
+/** Shared desktop/evaluation postprocessing. A rejected draft must not erase
+ * useful facts that the native extraction already anchored to exact sources. */
+export function reviewResearchCompletion(answer:string,sources:EvidenceSource[],audit?:ResearchAudit|null):EvidenceReview|null {
+  if(!sources.length || audit?.recommendationTask ||
+    audit && !["used","partial"].includes(audit.status))return null;
+  const facts=audit?.acceptedDetails??[];
+  const grounded=facts.length ? sources.map((source,i)=>({...source,title:"",
+    content:facts.filter(f=>f.source===i+1).map(f=>f.quote).join("\n")})) : sources;
+  const review=verifyResearchAnswer(answer,grounded);
+  if(review.usable || !facts.length)return review;
+  const recover=facts.filter(f=>{
+    const source=sources[f.source-1];
+    const exact=(s:string)=>s.toLowerCase().replace(/\s+/g," ").trim();
+    return source && !!f.quote.trim() &&
+      (exact(source.title).includes(exact(f.quote)) || exact(source.content).includes(exact(f.quote)));
+  }).map(f=>`${f.claim} [${f.source}]`);
+  if(!recover.length)return review;
+  return {...review,usable:true,text:[...new Set(recover),
+    ...(audit?.unresolvedDetails?.length ? ["Still unconfirmed: "+audit.unresolvedDetails.join("; ")+"."] : [])].join("\n\n")};
 }
 
 

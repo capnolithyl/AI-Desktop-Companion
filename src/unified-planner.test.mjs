@@ -248,7 +248,7 @@ test("validated previous public task is visible only to local planning and never
       activePublicQuery:"bands similar to Immortal black metal"});
     assert.equal(decision.search,shouldSearch);
     assert.match(prompt,/PREVIOUS VALIDATED PUBLIC TASK/);
-    assert.match(prompt,/refine: supplies a requirement/);
+    assert.ok(prompt.includes(current),"the current follow-up is supplied verbatim for semantic interpretation");
     assert.match(prompt,/end: declines, cancels/);
     assert.match(prompt,/bands similar to Immortal black metal/);
     assert.doesNotMatch(prompt,/Made-up artist performed/);
