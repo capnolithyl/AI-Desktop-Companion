@@ -9,6 +9,39 @@ component or browser tab; closing a panel does not cancel it.
 This does not rebuild the installer.
 
 
+## v0.9.30: live research-context parity and current-status regression
+
+The latest desktop research trace (2026-11-16) successfully retrieved real
+SearXNG sources for `Chainsmoker Cat`, but its answer described an already-past
+July 2026 premiere as future news in November. The same trace showed irrelevant
+personal facts selected for a public anime-news question. Neither a model's
+source count nor a routing PASS certifies a useful answer.
+
+**One concrete Brain Lab fidelity bug corrected:** Live Brain Lab supplied the
+compact `chatRuntimeContext()` instructions for every turn, even when it was
+actually performing research. Regular desktop research instead supplies the
+full `runtimeContext()` with host local date, source chronology, and instructions
+to distinguish past schedules from independently confirmed outcomes.
+Live Brain Lab now selects that production research context when a genuine
+public query is about to be executed. It still uses the lightweight context
+for conversational or blocked/no-search turns.
+
+**Scenario #82: Old announcements versus current status** uses a real public
+anime name and REAL SearXNG news searches in two turns. The reviewer checks
+that a February announcement about an expected July premiere is not repeated
+as upcoming in November, and that an old forecast isn't treated as proof
+that airing/completion occurred. The scenario does **not** inject synthetic
+news or grade correctness from a keyword. Its result requires human review.
+Catalog is now **82** scenarios; #01–#81 retain their existing numbers.
+
+This change repairs measurement parity, not the production model's underlying
+time-awareness or semantic memory precision. A stronger model and production
+answer-stage changes still require separate real-world comparison.
+Suggested focused Live 1× quick-select: `20,21,74,76,77,79,82`, only when
+the real search provider probe is healthy. Review actual answers and traces,
+not the automatic PASS tally. Repeat the failing subset twice to measure
+model variance before changing another component.
+
 ## v0.9.27 candidate-first evidence recovery and correction tests
 
 **State:** Committed to draft PR #91, pending Windows compile and real Live verification.
