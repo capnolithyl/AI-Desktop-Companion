@@ -1068,6 +1068,7 @@ pub fn run() {
             memory::memory_update_character_fact,
             memory::memory_delete_character_fact,
             memory_extraction::memory_process_turn,
+            memory_extraction::brain_eval_preview_memory,
             memory_jobs::memory_enqueue_turn,
             memory_jobs::memory_process_pending_jobs,
             memory_jobs::memory_jobs_status,
