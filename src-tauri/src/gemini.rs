@@ -263,7 +263,8 @@ pub(crate) async fn chat(
                     total_duration_ns:None,load_duration_ns:None,
                     prompt_eval_duration_ns:None,eval_duration_ns:None
                 }),
-                sources,search_query,sources_carried_over,
+                // Cloud tool calls do not use native SearXNG candidate ranking.
+                search_trace:None,sources,search_query,sources_carried_over,
                 research_audit:None,model_used:format!("Gemini {model}"),fallback_reason:None
             });
         }
