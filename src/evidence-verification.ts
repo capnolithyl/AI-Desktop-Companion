@@ -160,8 +160,7 @@ function partialResearchSummary(
 ):EvidenceReview|null {
   const normalized=(s:string)=>s.toLowerCase().replace(/\s+/g," ").trim();
   const escaped=(s:string,max:number)=>[...s.replace(/\s+/g," ").trim()].slice(0,max)
-    .join("").replace(/[\\\`*_\[\]<>]/g,"\\/** Shared desktop/evaluation postprocessing. A rejected draft must not erase
- * useful facts that the native extraction already anchored to exact sources. */");
+    .join("").replace(/[\\\`*_\[\]<>]/g,"\\$&");
   const groups=new Map<string,{name:string;quotes:{source:number;quote:string}[]}>();
   const seen=new Set<string>();
   let checked=0;

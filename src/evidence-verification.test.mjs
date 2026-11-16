@@ -218,3 +218,16 @@ test("partial answer ignores unanchored and malicious markdown-labeled proposed 
   assert.doesNotMatch(reviewed.text,/javascript:|Aster 6|Already released/);
   assert.match(reviewed.text,/Not independently established/);
 });
+
+test("Markdown formatting in source quotes is escaped, not executable",()=>{
+  const docs=[{title:"Untrusted source",url:"https://news.test/x",
+    content:"Crystal 7 [draft] is planned for late 2027."}];
+  const audit={status:"partial",recommendationTask:false,
+    acceptedDetails:[{source:1,subject:"Crystal 7",
+      claim:"Crystal 7 [draft] is planned for late 2027.",quote:docs[0].content}],
+    unresolvedDetails:["current status"]};
+  const result=reviewResearchCompletion("Already out!",docs,audit);
+  assert.match(result.text,/Crystal 7/);
+  assert.match(result.text,/\\\[draft\\\]/);
+  assert.doesNotMatch(result.text,/Already out!/);
+});
