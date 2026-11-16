@@ -22,7 +22,7 @@ test("broad isolated test catalog covers multiple intentions and branches",()=>{
 });
 
 test("scenario numbers stay stable when a subset is selected",()=>{
-  assert.equal(EVAL_SCENARIOS.length,81);
+  assert.equal(EVAL_SCENARIOS.length,82);
   assert.equal(brainScenarioNumber(EVAL_SCENARIOS[0].id),1);
   assert.equal(brainScenarioNumber(EVAL_SCENARIOS[72].id),73);
   assert.match(brainScenarioLabel(EVAL_SCENARIOS[0].id,EVAL_SCENARIOS[0].label),/^#01 · /);
@@ -35,8 +35,28 @@ test("scenario numbers stay stable when a subset is selected",()=>{
       "correction-reference-exclusion","correction-challenged-source"]
     .map(brainScenarioNumber),[78,79,80,81],
     "new correction scenarios append without changing any old numbers");
+  assert.equal(brainScenarioNumber("temporal-old-announcement"),82,
+    "new time-aware source review must not renumber existing cases");
   assert.equal(brainScenarioLabel("not-in-catalog","Custom test"),"Custom test");
 });
+test("live stale-announcement regression requires real search and human date reasoning",async()=>{
+  const scenario=byId("temporal-old-announcement");
+  assert.equal(scenario.steps.length,2);
+  assert.ok(scenario.steps.every(step=>step.expect.web===true));
+  assert.ok(scenario.steps.every(step=>step.expect.conversationGoal.includes("date")
+    || step.expect.conversationGoal.includes("clock")));
+  const report=await runBrainEvaluation({
+    scenarios:[scenario],mode:"live",model:"fixture-only",repetitions:1,
+    planWeb:async()=>({search:true,query:"Chainsmoker Cat anime current airing status",
+      reason:"Verify more recent reporting"}),
+    infer:async()=> "A February article announced a July premiere, but the current outcome needs checking."
+  });
+  const second=report.cases[0].steps[1];
+  assert.equal(second.webPass,true);
+  assert.equal(second.answerPass,null,"A plausible-sounding recap is not proof of correct temporal reasoning");
+  assert.equal(second.reviewRequired,true);
+});
+
 test("a richer synthetic memory can prove the same fact without matching an exact record ID",()=>{
   assert.deepEqual(brainMemoryEvidence([109,120],[120]),[
     {expectedId:109,supportingIds:[120]},
