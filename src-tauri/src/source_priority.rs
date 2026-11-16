@@ -165,7 +165,10 @@ fn assemble_search(
     let raw_results=all.len();
     let sources=rank_for_task(all.clone(),Vec::new(),rule,query,subject);
     let rejected_titles=if sources.is_empty() {
-        all.iter().take(4).map(|hit|hit.title.chars().take(110).collect()).collect()
+        // The web can contain untrusted control characters. Debug lines must
+        // not allow a search headline to spoof subsequent diagnostic fields.
+        all.iter().take(4).map(|hit|hit.title.split_whitespace()
+            .collect::<Vec<_>>().join(" ").chars().take(110).collect()).collect()
     } else {Vec::new()};
     // SearXNG has already ranked these by search relevance. If a brittle
     // lexical screen rejects every hit, retain at most a few as CANDIDATES for
@@ -204,6 +207,17 @@ async fn search_once(
     }
     assemble_search(&query,subject,rule,vec![query.clone()],vec![broad.await])
 }
+/// Promote only a few engine-ranked candidates after *all* strict matches
+/// and bounded retries have failed. This changes retrieval, not verification.
+fn promote_provisional(batch:&mut SearchBatch){
+    if !batch.sources.is_empty(){return}
+    let mut seen=HashSet::new();
+    batch.sources=std::mem::take(&mut batch.provisional_pool)
+        .into_iter().filter(|item|seen.insert(item.url.clone()))
+        .take(3).collect();
+    batch.trace.provisional_results=batch.sources.len();
+    batch.trace.returned_results=batch.sources.len();
+}
 /// Search once, then retry ONE broader public-entity query only if the ranked
 /// result is empty. The caller can log raw hits vs retained hits reliably.
 pub async fn search_with_trace(
@@ -231,14 +245,7 @@ pub async fn search_with_trace(
             }
             first.trace.returned_results=first.sources.len();
         }
-        if first.sources.is_empty() {
-            let mut seen=HashSet::new();
-            first.sources=std::mem::take(&mut first.provisional_pool)
-                .into_iter().filter(|item|seen.insert(item.url.clone()))
-                .take(3).collect();
-            first.trace.provisional_results=first.sources.len();
-            first.trace.returned_results=first.sources.len();
-        }
+        promote_provisional(&mut first);
     }
     Ok(first)
 }
@@ -346,13 +353,10 @@ mod search_recovery_tests {
             "latest officially released Qwen model AI Model",None,None,
             vec!["latest officially released Qwen model AI Model".into()],
             vec![Ok(raw)]).unwrap();
-        // The result pool remains provisional until a separate quote check.
-        assert!(batch.sources.is_empty() || batch.trace.provisional_results==0);
-        let mut seen=HashSet::new();
-        batch.sources=std::mem::take(&mut batch.provisional_pool)
-            .into_iter().filter(|item|seen.insert(item.url.clone()))
-            .take(3).collect();
-        batch.trace.provisional_results=batch.sources.len();
+        // Test the same promotion path used by production search_with_trace.
+        assert!(batch.sources.is_empty());
+        assert_eq!(batch.trace.provisional_results,0);
+        promote_provisional(&mut batch);
         assert!(batch.trace.provisional_results>0);
         assert_eq!(batch.trace.raw_results,3);
         assert!(batch.trace.rejected_titles.iter().any(|title|title.contains("Qwen")));
