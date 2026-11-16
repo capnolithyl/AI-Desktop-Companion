@@ -203,6 +203,15 @@ fn category_for_query(q: &str) -> Vec<&'static str> {
     if any(&["book","books","novel","novels","read","reading"]) {result.push("book");}
     result
 }
+// Require full, contiguous title names for ungrouped interest queries.
+// Ordinary second-person pronouns must not match a media title via FTS.
+fn query_mentions_interest_name(query: &str, name: &str) -> bool {
+    let compact=|text:&str|text.to_lowercase().split(|c:char|!c.is_alphanumeric())
+        .filter(|word|!word.is_empty()).collect::<Vec<_>>().join(" ");
+    let title=compact(name);
+    if title.chars().count()<5 {return false;}
+    format!(" {} ",compact(query)).contains(&format!(" {title} "))
+}
 #[tauri::command]
 pub fn memory_search_interests(app: AppHandle, query: String) -> Result<Vec<InterestItem>,String> {
     if query.chars().count()>2000 {return Err("Search query is too long".into());}
@@ -219,7 +228,7 @@ pub fn memory_search_interests(app: AppHandle, query: String) -> Result<Vec<Inte
         "maybe","might","think","because","heard","first","them","their","really","definitely"];
     let terms:Vec<String>=q.split(|c:char| !c.is_alphanumeric())
         .filter(|v|v.chars().count()>=3 && !ignored.contains(v) && !kinds.contains(v))
-        .take(8).map(|v|format!("{v}*")).collect();
+        .take(8).map(str::to_owned).collect();
     if terms.is_empty() && kinds.is_empty() && !overall_favorites{return Ok(vec![]);}
     let db=memory::open_db(&app)?;
     let mut found=Vec::new();
@@ -247,16 +256,16 @@ pub fn memory_search_interests(app: AppHandle, query: String) -> Result<Vec<Inte
     // An explicit named title is a much stronger signal than unrelated
     // favorites in the same genre. Avoid stuffing other bands/anime into
     // narrow music conversations just because "favorite" was mentioned.
-    let compact=|text:&str|text.split(|c:char|!c.is_alphanumeric())
-        .filter(|w|!w.is_empty()).collect::<Vec<_>>().join(" ");
-    let clean_query=compact(&q);
-    let exact=|name:&str| {
-        let clean=compact(&name.to_lowercase());
-        clean.len()>=5 && clean_query.contains(&clean)
-    };
-    let explicit_match=found.iter().any(|item|exact(&item.name));
+    let explicit_match=found.iter().any(|item|query_mentions_interest_name(&q,&item.name));
+    // Uncategorized chat can only retrieve a fully named title. Do not
+    // treat a fuzzy FTS hit as evidence that a random favorite is relevant.
+    if kinds.is_empty() && !overall_favorites {
+        found.retain(|item|query_mentions_interest_name(&q,&item.name));
+        found.truncate(10);
+        return Ok(found);
+    }
     if explicit_match {
-        found.retain(|item|exact(&item.name));
+        found.retain(|item|query_mentions_interest_name(&q,&item.name));
     }
     // Broad recommendations still include relevant curated favorites.
     if !explicit_match { for kind in kinds {
@@ -413,6 +422,15 @@ mod tests {
             "I dislike Sakura Trick now").unwrap());
         let status:String=db.query_row("SELECT status FROM interest_items",[],|r|r.get(0)).unwrap();
         assert_eq!(status,"dislike");
+    }
+
+    #[test]
+    fn uncategorized_search_requires_a_full_named_title() {
+        assert!(!query_mentions_interest_name("hehe.. tinker with you","Youjo Senki"));
+        assert!(!query_mentions_interest_name("I enjoy your ideas","Your Name"));
+        assert!(query_mentions_interest_name("Did I watch Youjo Senki?","Youjo Senki"));
+        assert!(query_mentions_interest_name("Tell me about Your Name","Your Name"));
+        assert!(!query_mentions_interest_name("Sakura Tricky","Sakura Trick"));
     }
 
     #[test]
