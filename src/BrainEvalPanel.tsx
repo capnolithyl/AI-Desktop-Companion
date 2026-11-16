@@ -229,6 +229,7 @@ export function BrainEvalPanel({settings}:{settings:Settings}){
             metrics.memoryDistractors+" extra records"],
           ["Factual answers",metrics.answers===null?"Not run":metrics.answers+"%",metrics.answerChecks+" graded turns"],
           ["Conversation reviews",String(metrics.reviewTurns),metrics.qualityFlagTurns+" potential quality warnings"],
+          ["Read-only memory previews",String(metrics.memoryPreviews),metrics.memoryPreviewMisses+" minimum-fact misses; review meaning manually"],
           ["Model speed",metrics.tokensPerSecond===null?"Not measured":metrics.tokensPerSecond+" tok/s","generation only"],
           ["Elapsed",formatMs(metrics.elapsedMs),metrics.cases+" scenario runs"]
         ] as const).map(([label,value,note])=><div key={label} className="brain-eval-metric">
@@ -277,6 +278,20 @@ export function BrainEvalPanel({settings}:{settings:Settings}){
             {step.expected.conversationGoal&&<small className="brain-eval-goal">
               Review goal: {step.expected.conversationGoal}
             </small>}
+            {step.expected.memoryCapture&&<div className="brain-eval-goal">
+              <strong>Memory capture review (isolated, nothing saved)</strong>
+              {step.expected.memoryCapture.reviewGoals.map(goal=><small key={goal}>{goal}</small>)}
+              <small>Structurally validated user facts: {step.memoryCapturePreview?.userFacts.length??"not observed"}
+                {" · minimum "+step.expected.memoryCapture.minUserFacts}
+                {" · "+(step.memoryCapturePass===null?"not measured":step.memoryCapturePass?"count met":"count missed")}
+              </small>
+              {step.memoryCapturePreview?.userFacts.map((fact,i)=><small key={"user-"+i}>
+                Proposed user memory: {fact.fact} | Exact user quote: {fact.evidence}
+              </small>)}
+              {step.memoryCapturePreview?.interestItems.map((item,i)=><small key={"interest-"+i}>
+                Proposed interest: {item.kind} / {item.name} / {item.status} | Quote: {item.evidence}
+              </small>)}
+            </div>}
             <small>Route {step.actualRoute} (expected label {step.expected.route??"any"};
               exact {step.routeLabelMatch?"matched":"different, informational"});
               predicted web {step.plannedWeb===null?"unobserved":String(step.plannedWeb)};
