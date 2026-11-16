@@ -17,6 +17,10 @@ test("copies all message text, source details and response timings", () => {
       diagnostics: {
         elapsedMs: 5000, firstTokenMs: 1200, model: "qwen3.5:9b",
         reasoning:{mode:"auto",enabled:false,reason:"planner-quick"},
+        toolPlan:{method:"ai-planned",reason:"Current public source required",
+          publicWebAllowed:true,searchOutcome:"search attempted; no sources",freshSources:0,
+          searchTrace:{attemptedQueries:["Qwen latest release","Qwen"],
+            rawResults:9,returnedResults:0,upstreamErrors:[]}},
         research: {status: "used", accepted: 3, rejected: 2, elapsedMs: 2100,
           note: "Quoted text matched sources; candidate claims still require semantic judgment."},
         stats: {
@@ -60,6 +64,9 @@ test("copies all message text, source details and response timings", () => {
   assert.match(result, /Model: qwen3\.5:9b/);
   assert.match(result, /Local reasoning: auto \/ quick \(planner-quick\)/);
   assert.match(result, /Research evidence: used/);
+  assert.match(result, /Search engine returned raw candidates: 9/);
+  assert.match(result, /Sources retained after ranking: 0/);
+  assert.match(result, /Executed search 2: Qwen/);
   assert.match(result, /Accepted source-anchored facts: 3/);
   assert.match(result, /Rejected candidates: 2/);
   assert.match(result, /Extraction time: 2\.10 s/);

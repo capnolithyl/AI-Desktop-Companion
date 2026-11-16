@@ -183,6 +183,8 @@ struct ChatCompletion {
     stats: Option<ChatStats>,
     sources: Vec<web_search::SearchResult>,
     search_query: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    search_trace: Option<source_priority::SearchTrace>,
     sources_carried_over: bool,
     research_audit: Option<evidence_pack::ResearchAudit>,
     model_used: String,
@@ -615,6 +617,7 @@ async fn chat_stream_impl(
     messages.insert(0, identity_message.clone());
     let mut sources = Vec::new();
     let mut search_query: Option<String> = None;
+    let mut search_trace: Option<source_priority::SearchTrace> = None;
     let mut sources_carried_over = false;
     let mut newly_researched = false;
     let mut research_audit = None;
@@ -681,13 +684,21 @@ async fn chat_stream_impl(
                     engine:"direct webpage".into(),published_date:None
                 });
             } else {
-            sources = match source_priority::search_for_task(
+            sources = match source_priority::search_with_trace(
                 request.searxng_endpoint.clone(),query.clone(),
                 request.research_recent || research_intent::is_album_research(&messages),
-                &request.source_preferences,request.source_topic.as_deref(),task.and_then(|t|t.subject.as_deref())
+                &request.source_preferences,request.source_topic.as_deref(),
+                task.and_then(|t|t.subject.as_deref()),task.is_some()
             ).await {
-                Ok(items)=>items,
+                Ok(batch)=>{
+                    search_trace=Some(batch.trace);
+                    batch.sources
+                },
                 Err(error) if general_fallback => {
+                    search_trace=Some(source_priority::SearchTrace{
+                        attempted_queries:vec![query.clone()],raw_results:0,
+                        returned_results:0,upstream_errors:vec![error.clone()]
+                    });
                     optional_search_error=Some(error);
                     Vec::new()
                 },
@@ -701,14 +712,21 @@ async fn chat_stream_impl(
                         "requestId": request.request_id,
                         "text": format!("Trying a broader search: {fallback}")
                     }));
-                    sources = source_priority::search(
-                        request.searxng_endpoint.clone(),fallback.clone(),false,
-                        &request.source_preferences,request.source_topic.as_deref()
+                    let batch=source_priority::search_with_trace(
+                        request.searxng_endpoint.clone(),fallback,false,
+                        &request.source_preferences,request.source_topic.as_deref(),None,false
                     ).await?;
-                    // Log both actual search requests rather than pretending
-                    // the narrower query found the final source results.
-                    search_query = Some(format!("{query} → {fallback}"));
+                    if let Some(trace)=search_trace.as_mut(){
+                        trace.attempted_queries.extend(batch.trace.attempted_queries);
+                        trace.raw_results+=batch.trace.raw_results;
+                        trace.upstream_errors.extend(batch.trace.upstream_errors);
+                        trace.returned_results=batch.sources.len();
+                    } else {search_trace=Some(batch.trace);}
+                    sources=batch.sources;
                 }
+            }
+            if let Some(trace)=search_trace.as_ref(){
+                search_query=Some(trace.attempted_queries.join(" → "));
             }
             if sources.is_empty() {
                 if general_fallback {
@@ -727,7 +745,7 @@ async fn chat_stream_impl(
                 } else {
                     let content = "SearXNG didn't return any relevant sources for that search.".to_owned();
                     return Ok(ChatCompletion {
-                        content, stats: None, sources, search_query, sources_carried_over,
+                        content, stats: None, sources, search_query, search_trace, sources_carried_over,
                         research_audit, model_used: request.model.clone(), fallback_reason: fallback_reason.clone()
                     });
                 }
@@ -799,7 +817,7 @@ async fn chat_stream_impl(
                         prompt_eval_duration_ns: data["prompt_eval_duration"].as_u64(),
                         eval_duration_ns: data["eval_duration"].as_u64(),
                     };
-                    return Ok(ChatCompletion { content, stats: Some(stats), sources, search_query, sources_carried_over, research_audit, model_used: request.model.clone(), fallback_reason: fallback_reason.clone() });
+                    return Ok(ChatCompletion { content, stats: Some(stats), sources, search_query, search_trace, sources_carried_over, research_audit, model_used: request.model.clone(), fallback_reason: fallback_reason.clone() });
                 }
             }
         }
@@ -966,7 +984,7 @@ async fn chat_stream_impl(
                     request_id: request.request_id.clone(), content: content.clone()
                 });
                 return Ok(ChatCompletion {
-                    content, stats: None, sources, search_query, sources_carried_over,
+                    content, stats: None, sources, search_query, search_trace, sources_carried_over,
                     research_audit, model_used: request.model.clone(),
                     fallback_reason: fallback_reason.clone()
                 });
@@ -1066,7 +1084,7 @@ async fn chat_stream_impl(
     }
     // The final text is returned as well as streamed so that no event-ordering
     // race can lose the last characters when the frontend removes its listener.
-    Ok(ChatCompletion { content, stats, sources, search_query, sources_carried_over, research_audit, model_used: request.model.clone(), fallback_reason })
+    Ok(ChatCompletion { content, stats, sources, search_query, search_trace, sources_carried_over, research_audit, model_used: request.model.clone(), fallback_reason })
 }
 
 fn toggle_window(app: &tauri::AppHandle) {

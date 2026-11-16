@@ -117,7 +117,9 @@ type CacheInfo = { pages: number; bytes: number };
 type Activity = { requestId: string; text: string };
 type Connection = { mode: "loading" | "online" | "offline"; text: string };
 type ChatChunk = { requestId: string; content: string };
-type ChatCompletion = { content: string; modelUsed?: string; fallbackReason?: string | null; stats: OllamaStats | null; sources: WebResult[]; searchQuery?: string | null; sourcesCarriedOver?: boolean; researchAudit?: ResearchAudit | null };
+type ChatCompletion = { content: string; modelUsed?: string; fallbackReason?: string | null; stats: OllamaStats | null; sources: WebResult[]; searchQuery?: string | null;
+  searchTrace?: {attemptedQueries:string[];rawResults:number;returnedResults:number;upstreamErrors:string[]}|null;
+  sourcesCarriedOver?: boolean; researchAudit?: ResearchAudit | null };
 type LogMessage = Message & { createdAt: number; diagnostics?: Diagnostics; failed?: boolean; sources?: WebResult[]; searchQuery?: string; sourcesCarriedOver?: boolean };
 const HOTKEY = "Control+Alt+M";
 const BUNDLED_PORTRAIT = "/mikan.png";
@@ -2593,6 +2595,7 @@ export default function App() {
       if(toolAudit){
         const fresh=completion.sourcesCarriedOver !== true ? (completion.sources?.length ?? 0) : 0;
         toolAudit={...toolAudit,freshSources:fresh,
+          searchTrace:completion.searchTrace ?? undefined,
           searchOutcome:completion.sourcesCarriedOver?"reused earlier evidence"
             : fresh>0?"fresh evidence returned"
             : completion.searchQuery?"search attempted; no sources"

@@ -87,6 +87,7 @@ export type ToolPlanningAudit = {
   publicWebAllowed: boolean;
   searchOutcome?: string;
   freshSources?: number;
+  searchTrace?: {attemptedQueries:string[];rawResults:number;returnedResults:number;upstreamErrors:string[]};
 };
 export type NotionRetrievalAudit = {
   selectedPage?: string;
@@ -235,6 +236,14 @@ function performanceLines(diagnostics: Diagnostics): string[] {
       ...(diagnostics.toolPlan.searchOutcome ? [
         "  Web outcome: " + diagnostics.toolPlan.searchOutcome,
         "  Fresh sources returned: " + (diagnostics.toolPlan.freshSources ?? 0)
+      ] : []),
+      ...(diagnostics.toolPlan.searchTrace ? [
+        "  Search engine returned raw candidates: "+diagnostics.toolPlan.searchTrace.rawResults,
+        "  Sources retained after ranking: "+diagnostics.toolPlan.searchTrace.returnedResults,
+        ...diagnostics.toolPlan.searchTrace.attemptedQueries.map((query,index)=>
+          "  Executed search "+(index+1)+": "+query),
+        ...diagnostics.toolPlan.searchTrace.upstreamErrors.map(error=>
+          "  Upstream search issue: "+error)
       ] : []),
       ...(diagnostics.toolPlan.query ? ["  Public search query: " + diagnostics.toolPlan.query] : []),
       ...(diagnostics.toolPlan.topic ? ["  Preferred source topic: " + diagnostics.toolPlan.topic] : [])
