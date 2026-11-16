@@ -14,8 +14,20 @@ import type { ResearchAudit } from "./debug-log.ts";
 import type { PublicResearchContext, ResearchTask } from "./unified-planner.ts";
 
 export type EvalRoute = "chat" | "research" | "factual" | "non-research" | "any";
+export type MemoryCaptureExpectation = {
+  /** Minimum structurally supported, durable user facts proposed for saving. */
+  minUserFacts: number;
+  /** Semantic accuracy and overgeneralization require human review. */
+  reviewGoals: string[];
+};
+export type MemoryCapturePreview = {
+  userFacts: {fact:string;evidence:string}[];
+  interestItems: {kind:string;name:string;status:string;evidence:string}[];
+  writesToRealMemories: false;
+};
 export type EvalExpectation = {
   route?: EvalRoute;
+  memoryCapture?: MemoryCaptureExpectation;
   web?: boolean;
   memory?: number[];
   excludeMemory?: number[];
@@ -58,6 +70,10 @@ export type EvalStepResult = {
   webExecution?: EvalWebExecution;
   /** Previous validated public query available to this turn's planner. */
   activePublicQuery?: string;
+  /** A live, read-only Ollama extraction using the production prompt/validators. */
+  memoryCapturePreview?: MemoryCapturePreview;
+  /** Structural minimum only; reviewer judges the meaning of each saved fact. */
+  memoryCapturePass?: boolean|null;
   selectedMemoryIds: number[];
   selectedMemory: {id:number;fact:string}[];
   /** Facts not established by any retrieved synthetic evidence. */
@@ -113,6 +129,9 @@ export type EvalInference = (args:{
   scenarioId:string;
   stepIndex:number;
 })=>Promise<EvalInferenceResult>;
+export type EvalMemoryCapture = (input:{
+  user:string;assistant:string;priorAssistant:string;priorUser:string;
+})=>Promise<MemoryCapturePreview>;
 export type EvalPlanner = (input:string,previous:EvalTurn[],
   context?:PublicResearchContext,selectedFacts?:ReadonlyArray<EvalMemoryFact>)=>Promise<EvalWebPlan>;
 export type EvalOptions = {
@@ -124,6 +143,7 @@ export type EvalOptions = {
   signal?:AbortSignal;
   infer?:EvalInference;
   planWeb?:EvalPlanner;
+  previewMemory?:EvalMemoryCapture;
   /** Live mode only: use actual public SearXNG via production Rust chat_stream. */
   liveWeb?:boolean;
   onProgress?:(done:number,total:number,current:string)=>void;
@@ -539,7 +559,27 @@ export const EVAL_SCENARIOS:ReadonlyArray<EvalScenario>=[
     conversation("A February 2026 announcement said it would premiere in July 2026. Please verify its current status rather than just repeating that old announcement.",
       "Carry forward the named title and compare the event date to the trusted live local clock. Distinguish an older future-tense plan from independently confirmed release or completion, cite the actual sources used, and admit missing evidence.",
       "That was the schedule at the time. I'll look for subsequent reporting to establish what actually happened.",{route:"any",web:true,
-        publicQueryIncludes:["Chainsmoker Cat"]}))
+        publicQueryIncludes:["Chainsmoker Cat"]})),
+  scenario("reaction-after-anime-news","React to news without unsolicited recommendations; capture preferences","Memory and conversation",
+    e("Any updates on the Chainsmoker Cat catgirl anime?",{
+      route:"any",web:true,conversationGoal:"Research the anime's current status with genuine web sources. This news LOOKUP is not permission to continue finding recommendations after the user changes to a personal reaction.",
+      stubReply:"It's a comedy anime about Yani, a catgirl with a smoking habit."}),
+    conversation("i watched botan kamiina fully blossoms when drunk recently. a yuri anime about girls that like drinking. i love yuri anime. i hate the drinking part. it was so gross at some point. i don't think smoking is gonna be any better",
+      "Respond to the owner's reaction to drinking and smoking themes, acknowledge that they like yuri, and remain in normal conversation. Do NOT search, suggest other anime, invent recommendations or say that source verification failed. Independently preview durable owner memories: yuri preference, dislike of the drinking portrayal in the named show, and optionally likely dislike of smoking-heavy stories. Do NOT infer that the user disliked the ENTIRE show or that they never drink or smoke.",
+      "Yeah, that makes sense. You can love yuri and still find the drinking-focused scenes unpleasant. A smoking-heavy catgirl comedy probably won't be your thing either.",{
+        memoryCapture:{
+          minUserFacts:2,
+          reviewGoals:[
+            "One durable preference: the user loves yuri anime (genre, not a fictitious named anime).",
+            "One grounded note: the drinking in Botan Kamiina Fully Blossoms When Drunk was unpleasant or gross to the user; don't automatically label the whole series disliked.",
+            "Optional nuance: the user expects smoking-heavy anime to be unpleasant, but did not explicitly say they universally hate smoking.",
+            "If the title enters the interest collection, 'experienced/watched' is grounded; a blanket 'dislike' status for the entire title is not."
+          ]
+        }
+      }),
+    e("Could you look for other yuri anime without heavy drinking or smoking themes?",{
+      route:"any",web:true,conversationGoal:"Now the user actually asks for alternatives. Public research is authorized; preserve the user's preferences locally, search only public anime titles/content and respond with verified options, not private personal details.",
+      stubReply:"Sure, I'll look for yuri anime that aren't centered on drinking or smoking."}))
 ];
 
 /** Display numbers follow the complete catalog, not filtered or selected positions. */
@@ -653,6 +693,7 @@ export async function runBrainEvaluation(options:EvalOptions):Promise<EvalReport
       let inferenceStats:EvalStepResult["inferenceStats"]|undefined;
       let modelUsed:string|undefined;
       let error:string|undefined;
+      let memoryCapturePreview:MemoryCapturePreview|undefined;
       const messages:EvalTurn[]=[...previous,{role:"user",content:step.user}];
       try {
         if(options.mode==="live" && webPolicy.canPlanPublicWeb && options.planWeb)
@@ -679,6 +720,16 @@ export async function runBrainEvaluation(options:EvalOptions):Promise<EvalReport
           if(typeof response==="string")answer=response;
           else {answer=response.text;inferenceStats=response.stats;modelUsed=response.modelUsed;
             webExecution=response.webExecution;}
+        }
+        if(options.mode==="live" && answer!==undefined &&
+          step.expect.memoryCapture && options.previewMemory){
+          const priorAssistant=previous.slice().reverse().find(turn=>turn.role==="assistant")?.content??"";
+          const priorUser=previous.slice().reverse().find(turn=>turn.role==="user")?.content??"";
+          memoryCapturePreview=await options.previewMemory({
+            user:step.user,assistant:answer,priorAssistant,priorUser
+          });
+          if(memoryCapturePreview.writesToRealMemories!==false)
+            throw new Error("Brain Lab memory preview attempted persistent writes");
         }
       }catch(err){error=err instanceof Error?err.message:String(err)}
       const answerFailures=answer===undefined
@@ -733,6 +784,15 @@ export async function runBrainEvaluation(options:EvalOptions):Promise<EvalReport
         (!!step.expect.conversationGoal || !hasFactualAnswerCheck || qualityFlags.length>0)) ||
         (expectedWeb!==null && webPass===null);
       const memoryPass=missing.length===0 && unexpected.length===0;
+      // This checks only how many structurally supported new facts the REAL
+      // local extractor proposed. Human review must judge their semantics.
+      const memoryCapturePass=step.expect.memoryCapture
+        ? memoryCapturePreview
+          ? memoryCapturePreview.userFacts.length>=step.expect.memoryCapture.minUserFacts
+          : null
+        : undefined;
+      if(memoryCapturePass===false)
+        answerFailures.push("Read-only memory preview produced fewer durable facts than expected");
       // Human review should not hide a factual assertion failure.
       const answerPass=options.mode==="live" && hasFactualAnswerCheck
         ? !!answer&&!error&&answerFailures.length===0 : null;
@@ -743,13 +803,15 @@ export async function runBrainEvaluation(options:EvalOptions):Promise<EvalReport
         plannedWeb,webPass,evidencePass,webPlannerDecision:planned,
         ...(webExecution?{webExecution}:{}),
         ...(priorPublicQuery?{activePublicQuery:priorPublicQuery}:{}),
+        ...(memoryCapturePreview?{memoryCapturePreview}:{}),
+        ...(step.expect.memoryCapture?{memoryCapturePass}:{}),
         selectedMemoryIds:memory.ids,selectedMemory:selected,
         missingMemoryIds:missing,missingMemoryRecordIds:missingRecordIds,
         memoryEvidence,distractorMemoryIds:distractors,unexpectedMemoryIds:unexpected,
         routeLabelMatch,routePass,memoryPass,answerPass,reviewRequired,
         answerFailures,qualityFlags,answer,inferenceStats,modelUsed,error,
         elapsedMs:Date.now()-began,
-        pass:routePass&&memoryPass&&plannerFailures.length===0&&answerPass!==false&&evidencePass!==false&&
+        pass:routePass&&memoryPass&&memoryCapturePass!==false&&plannerFailures.length===0&&answerPass!==false&&evidencePass!==false&&
           (options.mode!=="live" || !!answer)&&!error
       };
       steps.push(result);
@@ -792,6 +854,8 @@ export function brainEvalMetrics(report:EvalReport){
     recall:ratio(steps.filter(s=>s.memoryPass).length,steps.length),
     memoryRecordMisses:steps.reduce((n,s)=>n+(s.missingMemoryRecordIds?.length??0),0),
     memoryDistractors:steps.reduce((n,s)=>n+(s.distractorMemoryIds?.length??0),0),
+    memoryPreviews:steps.filter(s=>!!s.memoryCapturePreview).length,
+    memoryPreviewMisses:steps.filter(s=>s.memoryCapturePass===false).length,
     webChecks:steps.filter(s=>s.webPass!==null).length,
     webUnobserved:steps.filter(s=>s.webPass===null && s.expected.web!==undefined).length,
     webAgreement:ratio(steps.filter(s=>s.webPass===true).length,steps.filter(s=>s.webPass!==null).length),
@@ -856,6 +920,7 @@ export function brainEvalMarkdown(report:EvalReport):string {
     "| Memory fact coverage | "+m.recall+"% |",
     "| Raw expected memory-row misses (diagnostic) | "+m.memoryRecordMisses+" |",
     "| Distractor memory records (diagnostic) | "+m.memoryDistractors+" |",
+    "| Isolated memory capture previews / minimum misses | "+m.memoryPreviews+" / "+m.memoryPreviewMisses+" |",
     "| Web decisions measured | "+m.webChecks+" |",
     "| Unobserved explicit web expectations | "+m.webUnobserved+" |",
     "| Model tokens per second | "+(m.tokensPerSecond??"n/a")+" |",
@@ -887,6 +952,14 @@ export function brainEvalMarkdown(report:EvalReport):string {
           "; exact match "+(s.routeLabelMatch?"yes":"no, diagnostic only")+
           "; functional behavior "+(s.routePass?"OK":"FAIL")+")",
         ...(s.expected.conversationGoal?["- **Conversation review goal:** "+s.expected.conversationGoal]:[]),
+        ...(s.expected.memoryCapture?[
+          "- **Read-only memory review expectations:** "+s.expected.memoryCapture.reviewGoals.join(" | "),
+          "- Minimum structurally accepted durable user facts: "+s.expected.memoryCapture.minUserFacts+
+            "; preview count check: "+(s.memoryCapturePass===null?"unobserved":s.memoryCapturePass?"met":"FAILED"),
+          ...(s.memoryCapturePreview?.userFacts.map(f=>"- Proposed user fact (not saved): "+f.fact+" | owner quote: "+f.evidence)??[]),
+          ...(s.memoryCapturePreview?.interestItems.map(f=>"- Proposed interest (not saved): "+f.kind+" | "+f.name+
+            " | "+f.status+" | owner quote: "+f.evidence)??[])
+        ]:[]),
         "- Public web planned: "+(s.plannedWeb===null?"unobserved":s.plannedWeb)+
           "; web check: "+(s.webPass===null?"unobserved":s.webPass?"pass":"FAIL")+
           "; deterministic web allowed: "+s.deterministicWebAllowed+"; planner eligible: "+s.canPlanPublicWeb+
