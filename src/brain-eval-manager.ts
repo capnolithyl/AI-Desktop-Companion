@@ -51,7 +51,8 @@ export function reviewBrainEvalScenario(id:string,mode:EvalMode,model:string,dec
 }
 import {
   EVAL_SCENARIOS, runBrainEvaluation, brainEvalMetrics, brainEvalMarkdown,
-  type EvalMode, type EvalReport, type EvalTurn, type EvalInference, type EvalMemoryFact
+  type EvalMode, type EvalReport, type EvalTurn, type EvalInference, type EvalMemoryFact,
+  type EvalMemoryCapture, type MemoryCapturePreview
 } from "./brain-eval";
 
 export type BrainEvalRequest = {
@@ -256,6 +257,16 @@ async function execute(
           researchAudit:result.researchAudit??null}};
     }finally{if(requestId===id)requestId=null}
   };
+  // This command uses production extraction instructions/validators, but NO
+  // SQLite connection. Results are previews, not claims of actual saved data.
+  const previewMemory:EvalMemoryCapture=async({user,assistant,priorAssistant,priorUser})=>{
+    if(controller.signal.aborted)throw new Error("Stopped by owner");
+    return invoke<MemoryCapturePreview>("brain_eval_preview_memory",{
+      endpoint:settings.endpoint,model:settings.model,
+      userText:user,assistantText:assistant,priorAssistant,priorUser,
+      contextWindow:settings.contextWindow
+    });
+  };
   const planWeb=async(question:string,previous:EvalTurn[],
     context?:PublicResearchContext,selectedFacts:ReadonlyArray<EvalMemoryFact>=[])=>{
     if(controller.signal.aborted)throw new Error("Stopped by owner");
@@ -270,7 +281,7 @@ async function execute(
   };
   const result=await runBrainEvaluation({
     mode:request.mode,model:settings.model,build:BRAIN_EVAL_BUILD,scenarios,repetitions:request.repetitions,
-    signal:controller.signal,...(request.mode==="live"?{infer,planWeb,liveWeb:true}:{}),
+    signal:controller.signal,...(request.mode==="live"?{infer,planWeb,previewMemory,liveWeb:true}:{}),
     onProgress:(done,total,label)=>setStatus({done,total,label})
   });
   report=result;
