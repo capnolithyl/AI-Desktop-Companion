@@ -174,6 +174,11 @@ function safeModelOpening(draft:string,audit:ResearchAudit):string|null{
   if(!opening || opening.length>165 || opening.includes("\n") ||
       /^[-#>|]/.test(opening) || /[\d\[\]<>\x60]|https?:\/\//i.test(opening) ||
       factualClaim(opening))return null;
+  // A bare exclamation ("Already out!") can assert a fact without using a
+  // recognizable factual noun. Only lift first-person *tone* out of the draft;
+  // never promote a standalone status declaration as conversational framing.
+  if(!/\b(?:I|me|my|we|our)\b/i.test(opening) ||
+      /\b(?:it|its|they|them|their|he|she)\b/i.test(opening))return null;
   const anchors=new Set([
     ...(audit.acceptedDetails??[]).flatMap(f=>significant(f.subject+" "+f.claim+" "+f.quote)),
     ...(audit.unresolvedDetails??[]).flatMap(significant)
