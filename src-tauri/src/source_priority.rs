@@ -408,7 +408,8 @@ mod search_recovery_tests {
     fn provisional_selection_rewards_discriminating_terms_and_diverse_domains(){
         let make=|name:&str,host:&str|SearchResult{
             title:name.into(),content:name.into(),
-            url:format!("https://{host}/result"),engine:"test".into(),published_date:None};
+            url:format!("https://{host}/{}",name.replace(' ',"-")),
+            engine:"test".into(),published_date:None};
         let inputs=vec![
             make("AI model release guide","generic-one.test"),
             make("Model release guide","generic-two.test"),
@@ -424,9 +425,9 @@ mod search_recovery_tests {
         assert_eq!(chosen.len(),6);
         assert_eq!(chosen[0].title,"Qwen4-Max official model release");
         assert!(chosen.iter().any(|hit|hit.title=="Qwen release announcement"));
-        assert!(chosen.iter().any(|hit|hit.title=="Qwen4-Max details"));
-        // The two publisher.test results have separate URLs in real data,
-        // but an identical URL is still rejected before selection.
+        assert!(!chosen.iter().any(|hit|hit.title=="Qwen4-Max details"),
+            "diverse sources outrank a second page from the same host at the six-source cap");
+        assert!(chosen.iter().any(|hit|hit.url.starts_with("https://publisher.test/")));
     }
     #[test]
     fn raw_hit_counts_distinguish_no_results_from_relevance_filtering() {
