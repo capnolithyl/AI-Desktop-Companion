@@ -144,6 +144,50 @@ fn relaxed_subject_query(query:&str,subject:Option<&str>)->Option<String> {
     }
     Some(subject.to_owned())
 }
+/// Relevance of a search hit among THIS query's candidates.
+///
+/// Rare matching terms provide more identifying power than boilerplate shared
+/// by almost every result (e.g. "model", "news"). This uses no entity/domain
+/// hardcoding and never approves a factual claim by itself.
+fn provisional_score(hit:&SearchResult, query:&str, corpus:&[SearchResult]) -> i32 {
+    let wanted=terms(query);
+    let title=terms(&hit.title);
+    let body=terms(&hit.content);
+    let size=corpus.len() as i32;
+    wanted.iter().map(|term|{
+        let matched_title=title.iter().any(|candidate|matches_term(term,candidate));
+        let matched_body=body.iter().any(|candidate|matches_term(term,candidate));
+        if !(matched_title||matched_body){return 0}
+        let frequency=corpus.iter().filter(|other|{
+            let words=terms(&(other.title.clone()+" "+&other.content));
+            words.iter().any(|candidate|matches_term(term,candidate))
+        }).count() as i32;
+        let rarity=(size-frequency+1).max(1);
+        rarity * (if matched_title {3} else {1})
+    }).sum()
+}
+
+/// Preserve domain diversity so a single aggregator cannot consume every
+/// provisional slot. This is a selection policy, not a trust designation.
+fn select_provisional(mut hits:Vec<SearchResult>,query:&str)->Vec<SearchResult>{
+    let corpus=hits.clone();
+    hits.sort_by_key(|hit|-provisional_score(hit,query,&corpus));
+    let mut unique_urls=HashSet::new();
+    hits.retain(|hit|unique_urls.insert(hit.url.clone()));
+    let mut seen_hosts=HashSet::new();
+    let mut distinct=Vec::new();
+    let mut remaining=Vec::new();
+    for hit in hits {
+        let host=reqwest::Url::parse(&hit.url).ok()
+            .and_then(|url|url.host_str().map(str::to_owned))
+            .unwrap_or_else(||hit.url.clone());
+        let host=host.strip_prefix("www.").unwrap_or(&host).to_owned();
+        if seen_hosts.insert(host){distinct.push(hit)}else{remaining.push(hit)}
+    }
+    distinct.extend(remaining);
+    distinct.truncate(6);
+    distinct
+}
 fn assemble_search(
     query:&str, subject:Option<&str>, rule:Option<&SourcePreference>,
     attempted_queries:Vec<String>, responses:Vec<Result<Vec<SearchResult>,String>>
@@ -173,11 +217,9 @@ fn assemble_search(
     // SearXNG has already ranked these by search relevance. If a brittle
     // lexical screen rejects every hit, retain at most a few as CANDIDATES for
     // the existing source-quote and task-validation stages, not as trusted facts.
-    let mut provisional_pool=if sources.is_empty() {all} else {Vec::new()};
-    provisional_pool.sort_by_key(|hit|-priority_score(hit,rule,query));
-    let mut seen=HashSet::new();
-    provisional_pool.retain(|hit|seen.insert(hit.url.clone()));
-    provisional_pool.truncate(3);
+    let provisional_pool=if sources.is_empty() {
+        select_provisional(all,query)
+    } else {Vec::new()};
     let returned_results=sources.len();
     Ok(SearchBatch{sources,provisional_pool,trace:SearchTrace{
         attempted_queries,raw_results,returned_results,provisional_results:0,
@@ -207,14 +249,14 @@ async fn search_once(
     }
     assemble_search(&query,subject,rule,vec![query.clone()],vec![broad.await])
 }
-/// Promote only a few engine-ranked candidates after *all* strict matches
+/// Promote a bounded, diverse candidate set after *all* strict matches
 /// and bounded retries have failed. This changes retrieval, not verification.
 fn promote_provisional(batch:&mut SearchBatch){
     if !batch.sources.is_empty(){return}
     let mut seen=HashSet::new();
     batch.sources=std::mem::take(&mut batch.provisional_pool)
         .into_iter().filter(|item|seen.insert(item.url.clone()))
-        .take(3).collect();
+        .take(6).collect();
     batch.trace.provisional_results=batch.sources.len();
     batch.trace.returned_results=batch.sources.len();
 }
@@ -360,6 +402,31 @@ mod search_recovery_tests {
         assert!(batch.trace.provisional_results>0);
         assert_eq!(batch.trace.raw_results,3);
         assert!(batch.trace.rejected_titles.iter().any(|title|title.contains("Qwen")));
+    }
+
+    #[test]
+    fn provisional_selection_rewards_discriminating_terms_and_diverse_domains(){
+        let make=|name:&str,host:&str|SearchResult{
+            title:name.into(),content:name.into(),
+            url:format!("https://{host}/result"),engine:"test".into(),published_date:None};
+        let inputs=vec![
+            make("AI model release guide","generic-one.test"),
+            make("Model release guide","generic-two.test"),
+            make("Cloud model news","generic-three.test"),
+            make("Qwen4-Max official model release","publisher.test"),
+            make("Qwen4-Max details","publisher.test"),
+            make("Generic AI model overview","generic-four.test"),
+            make("Qwen release announcement","release.test"),
+            make("AI model update","generic-five.test")
+        ];
+        let chosen=select_provisional(inputs,
+            "latest officially released Qwen model AI Model");
+        assert_eq!(chosen.len(),6);
+        assert_eq!(chosen[0].title,"Qwen4-Max official model release");
+        assert!(chosen.iter().any(|hit|hit.title=="Qwen release announcement"));
+        assert!(chosen.iter().any(|hit|hit.title=="Qwen4-Max details"));
+        // The two publisher.test results have separate URLs in real data,
+        // but an identical URL is still rejected before selection.
     }
     #[test]
     fn raw_hit_counts_distinguish_no_results_from_relevance_filtering() {
