@@ -148,7 +148,12 @@ test("fallback quotes the source instead of presenting an unproved interpretatio
     unresolvedDetails:["whether the film actually premiered"]};
   const reviewed=reviewResearchCompletion('Lantern Cove released "Festival Cut" in 2027. [1]',docs,audit);
   assert.equal(reviewed.usable,true);
-  assert.match(reviewed.text,/Source \[1\] states/);
+  // A partial answer presents a literal, numbered source excerpt rather than
+  // the formerly used raw "Source [1] states" fallback sentence.
+  assert.match(reviewed.text,/retrieved sources actually say/);
+  assert.match(reviewed.text,/- \[1\] Lantern Cove:/);
+  assert.match(reviewed.text,/planned for release in December 2027/);
+  assert.match(reviewed.text,/Still unconfirmed: whether the film actually premiered/);
   assert.doesNotMatch(reviewed.text,/has already released|Festival Cut/);
 });
 
