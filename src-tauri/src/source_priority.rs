@@ -1,7 +1,20 @@
 use crate::web_search::{self, SearchResult};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 
+
+#[derive(Clone, Debug, Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SearchTrace {
+    pub attempted_queries: Vec<String>,
+    pub raw_results: usize,
+    pub returned_results: usize,
+    pub upstream_errors: Vec<String>,
+}
+pub struct SearchBatch {
+    pub sources: Vec<SearchResult>,
+    pub trace: SearchTrace,
+}
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SourcePreference {
@@ -38,9 +51,34 @@ fn match_topic<'a>(
     }).filter(|p| p.cues.iter().any(|cue| words.iter().any(|w| w.eq_ignore_ascii_case(cue))))
 }
 
+// A family name can have a numeric model suffix without a word boundary
+// (e.g. Qwen3.5 versus Qwen). Do not accept alphabetic partial names.
+fn matches_term(wanted:&str, actual:&str)->bool {
+    wanted==actual || (wanted.chars().last().is_some_and(|c|c.is_alphabetic())
+        && actual.starts_with(wanted)
+        && actual[wanted.len()..].chars().next().is_some_and(|c|c.is_ascii_digit()))
+}
+fn words(text:&str)->Vec<String>{
+    text.to_lowercase().split(|c:char|!c.is_alphanumeric())
+        .filter(|w|!w.is_empty()).map(str::to_owned).collect()
+}
+fn subject_matches(text:&str,subject:&str)->bool {
+    let wanted=words(subject);
+    if wanted.is_empty(){return false}
+    let actual=words(text);
+    actual.windows(wanted.len()).any(|window|
+        wanted.iter().enumerate().all(|(i,part)|
+            if i+1==wanted.len(){matches_term(part,&window[i])}
+            else {part==&window[i]})
+    )
+}
+fn overlap(query:&str,text:&str)->usize {
+    let requested=terms(query);
+    let actual=terms(text);
+    requested.iter().filter(|q|actual.iter().any(|word|matches_term(q,word))).count()
+}
 fn priority_score(item:&SearchResult, rule:Option<&SourcePreference>, query:&str) -> i32 {
-    let text=terms(&(item.title.clone()+" "+&item.content));
-    let relevance=terms(query).intersection(&text).count() as i32 * 4;
+    let relevance=overlap(query,&(item.title.clone()+" "+&item.content)) as i32 * 4;
     let domain_bonus=rule.map_or(0,|r| {
         if relevance>0 && r.domains.iter().any(|d| domain_matches(&item.url,d)) {2} else {0}
     });
@@ -55,15 +93,13 @@ fn terms(text:&str)->HashSet<String>{
 }
 
 fn relevant(item:&SearchResult,query:&str,subject:Option<&str>)->bool{
-    let text=format!("{} {}",item.title,item.content).to_lowercase();
-    // A model-selected named entity can be a single word. Otherwise a lone
-    // shared category word cannot qualify a multi-term query.
-    let words=|s:&str|s.to_lowercase().split(|c:char|!c.is_alphanumeric())
-        .filter(|w|!w.is_empty()).collect::<Vec<_>>().join(" ");
+    let text=format!("{} {}",item.title,item.content);
+    // Structured public subjects are identity anchors, not a demand that
+    // each result repeat the model's verbose query verbatim.
     if subject.filter(|s|s.trim().chars().count()>=2)
-        .is_some_and(|s|format!(" {} ",words(&text)).contains(&format!(" {} ",words(s)))) {return true}
+        .is_some_and(|s|subject_matches(&text,s)) {return true}
     let requested=terms(query);
-    !requested.is_empty() && requested.intersection(&terms(&text)).count()>=requested.len().min(2)
+    !requested.is_empty() && overlap(query,&text)>=requested.len().min(2)
 }
 
 #[cfg(test)]
@@ -85,40 +121,105 @@ fn rank_for_task(broad:Vec<SearchResult>,focused:Vec<SearchResult>,rule:Option<&
     candidates
 }
 
-/// Broad public search and a *single* optional preferred domain search happen
-/// concurrently. Neither domain nor topic becomes an allowlist.
+// Only a named public subject already present in the approved query may
+// become a broader retry. No new private terms can enter a web request.
+fn relaxed_subject_query(query:&str,subject:Option<&str>)->Option<String> {
+    let subject=subject?.trim();
+    if !(3..=90).contains(&subject.chars().count())
+        || subject.chars().any(|c|c.is_control() ||
+            !(c.is_alphanumeric() || c.is_whitespace() || matches!(c,'-'|'.'|'_'|'+'|'&'))) {
+        return None;
+    }
+    let original=words(query);
+    let wanted=words(subject);
+    if wanted.is_empty() || original==wanted
+        || !original.windows(wanted.len()).any(|w|w==wanted.as_slice()) {
+        return None;
+    }
+    Some(subject.to_owned())
+}
+fn assemble_search(
+    query:&str, subject:Option<&str>, rule:Option<&SourcePreference>,
+    attempted_queries:Vec<String>, responses:Vec<Result<Vec<SearchResult>,String>>
+)->Result<SearchBatch,String> {
+    let mut all=Vec::new();
+    let mut errors=Vec::new();
+    let mut successes=0;
+    for response in responses {
+        match response {
+            Ok(mut items)=>{successes+=1;all.append(&mut items);}
+            Err(err)=>errors.push(err)
+        }
+    }
+    // A failed broad search plus an empty targeted search is an upstream error,
+    // NOT a genuine empty search. This was previously silently swallowed.
+    if successes==0 || (all.is_empty() && !errors.is_empty()) {
+        return Err(errors.join("; "));
+    }
+    let raw_results=all.len();
+    let sources=rank_for_task(all,Vec::new(),rule,query,subject);
+    let returned_results=sources.len();
+    Ok(SearchBatch{sources,trace:SearchTrace{
+        attempted_queries,raw_results,returned_results,upstream_errors:errors
+    }})
+}
+async fn search_once(
+    endpoint:String,query:String,recent:bool,
+    preferences:&[SourcePreference],selected_topic:Option<&str>,
+    subject:Option<&str>,preferred_enabled:bool
+)->Result<SearchBatch,String> {
+    let rule=match_topic(preferences,selected_topic,&query);
+    let preferred=if preferred_enabled {
+        rule.and_then(|r|r.domains.iter().find(|d|valid_domain(d)))
+            .map(|domain|format!("{query} site:{domain}"))
+            .filter(|q|q.chars().count()<=250)
+    } else {None};
+    let broad_endpoint=endpoint.clone();
+    let broad_query=query.clone();
+    let broad=async move {web_search::search_candidates(broad_endpoint,broad_query,recent,24).await};
+    if let Some(targeted)=preferred {
+        let (broad_result,preferred_result)=futures_util::future::join(
+            broad,web_search::web_search(endpoint,targeted.clone())
+        ).await;
+        return assemble_search(&query,subject,rule,vec![query.clone(),targeted],
+            vec![broad_result,preferred_result]);
+    }
+    assemble_search(&query,subject,rule,vec![query.clone()],vec![broad.await])
+}
+/// Search once, then retry ONE broader public-entity query only if the ranked
+/// result is empty. The caller can log raw hits vs retained hits reliably.
+pub async fn search_with_trace(
+    endpoint:String,query:String,recent:bool,
+    preferences:&[SourcePreference],selected_topic:Option<&str>,
+    subject:Option<&str>,retry_empty:bool
+)->Result<SearchBatch,String> {
+    let mut first=search_once(endpoint.clone(),query.clone(),recent,
+        preferences,selected_topic,subject,true).await?;
+    if first.sources.is_empty() && retry_empty {
+        if let Some(retry)=relaxed_subject_query(&query,subject) {
+            let second=search_once(endpoint,retry,false,
+                preferences,selected_topic,subject,false).await?;
+            first.trace.attempted_queries.extend(second.trace.attempted_queries);
+            first.trace.raw_results+=second.trace.raw_results;
+            first.trace.upstream_errors.extend(second.trace.upstream_errors);
+            first.sources=second.sources;
+            first.trace.returned_results=first.sources.len();
+        }
+    }
+    Ok(first)
+}
 pub async fn search(
-    endpoint:String, query:String, recent:bool,
-    preferences:&[SourcePreference], selected_topic:Option<&str>
+    endpoint:String,query:String,recent:bool,
+    preferences:&[SourcePreference],selected_topic:Option<&str>
 )->Result<Vec<SearchResult>,String>{
     search_for_task(endpoint,query,recent,preferences,selected_topic,None).await
 }
-
-pub async fn search_for_task(endpoint:String,query:String,recent:bool,
+pub async fn search_for_task(
+    endpoint:String,query:String,recent:bool,
     preferences:&[SourcePreference],selected_topic:Option<&str>,subject:Option<&str>
 )->Result<Vec<SearchResult>,String>{
-    let rule=match_topic(preferences,selected_topic,&query);
-    let first=rule.and_then(|r|r.domains.iter().find(|d|valid_domain(d))).cloned();
-    let broad_endpoint=endpoint.clone();
-    let broad_query=query.clone();
-    let broad=async move {
-        web_search::search_candidates(broad_endpoint,broad_query,recent,24).await
-    };
-    if let Some(domain)=first {
-        let targeted=format!("{} site:{}",query,domain);
-        // Avoid runaway query expansion if a long user-supplied term is present.
-        if targeted.chars().count()<=250 {
-            let (broad_result,preferred_result)=futures_util::future::join(
-                broad, web_search::web_search(endpoint,targeted)
-            ).await;
-            if broad_result.is_err() && preferred_result.is_err() {
-                return Err(broad_result.err().unwrap_or_else(|| preferred_result.err().unwrap()));
-            }
-            return Ok(rank_for_task(
-                broad_result.unwrap_or_default(),preferred_result.unwrap_or_default(),rule,&query,subject));
-        }
-    }
-    broad.await.map(|items|rank_for_task(items,Vec::new(),rule,&query,subject))
+    search_with_trace(endpoint,query,recent,preferences,selected_topic,subject,false)
+        .await.map(|batch|batch.sources)
 }
 
 #[cfg(test)]
@@ -172,5 +273,46 @@ mod relevance_tests {
         assert!(relevant(&hit("Cora: born 1975", "https://example.org/cora"),"Cora birth year",Some("Cora")));
         assert!(!relevant(&hit("Coral reefs", "https://example.org/coral"),"Cora birth year",Some("Cora")));
         assert!(!relevant(&hit("Melodic dictionary definition", "https://example.org/word"),"melodic death metal bands",None));
+    }
+}
+
+#[cfg(test)]
+mod search_recovery_tests {
+    use super::*;
+    fn hit(title:&str)->SearchResult {
+        SearchResult{title:title.into(),content:title.into(),
+            url:format!("https://example.org/{}",title.replace(' ',"-")),
+            engine:"isolated fixture".into(),published_date:None}
+    }
+    #[test]
+    fn versioned_names_match_a_family_but_an_alphabetic_substring_does_not() {
+        let versioned=hit("Qwen3.5 latest officially released model");
+        assert!(relevant(&versioned,"latest officially released Qwen model AI Model",Some("Qwen")));
+        assert!(relevant(&versioned,"Qwen latest model",None));
+        assert!(!subject_matches("Coral reef study","Cora"));
+        assert!(!relevant(&hit("Coral reef study"),"Cora birth year",Some("Cora")));
+        assert!(!subject_matches("Qwen35 technical notes","Qwen3"));
+    }
+    #[test]
+    fn relaxed_retry_uses_only_a_name_present_in_the_original_public_query(){
+        assert_eq!(relaxed_subject_query("latest officially released Qwen model",Some("Qwen")),
+            Some("Qwen".into()));
+        assert_eq!(relaxed_subject_query("Qwen",Some("Qwen")),None);
+        assert_eq!(relaxed_subject_query("latest release",Some("Private Person")),None);
+        assert_eq!(relaxed_subject_query("Qwen release",Some("Qwen\nprivate")),None);
+    }
+    #[test]
+    fn raw_hit_counts_distinguish_no_results_from_relevance_filtering() {
+        let empty=assemble_search("Cora birth year",Some("Cora"),None,
+            vec!["Cora birth year".into()],vec![Ok(vec![])]).unwrap();
+        assert_eq!(empty.trace.raw_results,0);
+        assert_eq!(empty.trace.returned_results,0);
+        let filtered=assemble_search("Cora birth year",Some("Cora"),None,
+            vec!["Cora birth year".into()],vec![Ok(vec![hit("Coral reef study")])]).unwrap();
+        assert_eq!(filtered.trace.raw_results,1);
+        assert_eq!(filtered.trace.returned_results,0);
+        assert!(assemble_search("Cora birth year",Some("Cora"),None,
+            vec!["Cora birth year".into(),"Cora birth year site:example.com".into()],
+            vec![Err("upstream failed".into()),Ok(vec![])]).is_err());
     }
 }
