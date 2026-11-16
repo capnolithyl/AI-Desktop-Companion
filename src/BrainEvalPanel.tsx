@@ -1,4 +1,4 @@
-import { useMemo, useState, useSyncExternalStore } from "react";
+import { useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { Activity, BrainCircuit, Download, Play, Square, RotateCw, CheckCircle2, XCircle } from "lucide-react";
 import type { Settings } from "./storage";
@@ -26,12 +26,18 @@ export function BrainEvalPanel({settings}:{settings:Settings}){
     ()=>new Set(EVAL_SCENARIOS.map(s=>s.id))
   );
   const [repeats,setRepeats]=useState(1);
+  const [numberSelection,setNumberSelection]=useState("");
+  const [numberFeedback,setNumberFeedback]=useState("Enter scenario numbers such as 20, 21, 83.");
+  const [catalogOpen,setCatalogOpen]=useState(true);
   const [message,setMessage]=useState("");
+  const resultsRef=useRef<HTMLDivElement>(null);
   const runtime=useSyncExternalStore(subscribeBrainEval,getBrainEvalStatus,getBrainEvalStatus);
   const report=getBrainEvalReport();
   const history=brainEvalHistory();
   const busy=runtime.phase==="running";
   const progress={done:runtime.done,total:runtime.total,label:runtime.label};
+  const progressPercent=progress.total>0
+    ?Math.round(Math.min(progress.done,progress.total)/progress.total*100):0;
   const records=getBrainEvalCaseRecords();
   const environment=brainEvalEnvironment(mode,settings.model);
   const statuses=useMemo(()=>
@@ -53,6 +59,26 @@ export function BrainEvalPanel({settings}:{settings:Settings}){
     return next;
   });
   const selectOnly=(ids:ReadonlyArray<string>)=>setSelectedIds(new Set(ids));
+  const selectScenarioNumbers=()=>{
+    const entries=numberSelection.trim().split(/[,;\s]+/).filter(Boolean);
+    if(!entries.length){
+      setNumberFeedback("Enter at least one scenario number.");
+      return;
+    }
+    const invalid=entries.find(value=>{
+      if(!/^#?\d+$/.test(value))return true;
+      const number=Number(value.replace(/^#/,""));
+      return !Number.isInteger(number)||number<1||number>EVAL_SCENARIOS.length;
+    });
+    if(invalid){
+      setNumberFeedback("Unknown scenario: "+invalid+". Choose numbers 1–"+EVAL_SCENARIOS.length+".");
+      return;
+    }
+    const numbers=[...new Set(entries.map(value=>Number(value.replace(/^#/,""))))];
+    selectOnly(numbers.map(number=>EVAL_SCENARIOS[number-1].id));
+    setCatalogOpen(true);
+    setNumberFeedback("Selected "+numbers.length+" scenario(s): "+numbers.map(number=>"#"+number).join(", "));
+  };
   const unresolved=new Set<BrainCaseStatus>(["failed","review","incomplete","untested","stale"]);
   const selectUnresolved=()=>selectOnly(EVAL_SCENARIOS
     .filter(s=>unresolved.has(statuses.get(s.id)!.status)).map(s=>s.id));
@@ -70,12 +96,15 @@ export function BrainEvalPanel({settings}:{settings:Settings}){
       startBrainEvaluation(settings,{
         mode,repetitions:repeats,scenarioIds:selected.map(s=>s.id)
       });
-      setMessage("Running independently from Settings. You may close this panel or browser.");
+      setMessage("");
+      // The large checklist used to bury progress and completion results.
+      // Collapse it during a run, retaining the exact owner selection.
+      setCatalogOpen(false);
     }catch(error){setMessage("Could not start: "+String(error))}
   }
   function stop(){
     stopBrainEvaluation();
-    setMessage("Requested cancellation.");
+    setMessage("");
   }
   async function exportReport(){
     if(!report)return;
@@ -149,27 +178,83 @@ export function BrainEvalPanel({settings}:{settings:Settings}){
     {totals.stale>0&&<p className="brain-eval-muted-note">
       Stale means tested with an older build or fixture. Those are previous results, not new failures.
     </p>}
+    <div className="brain-eval-number-select">
+      <label htmlFor="brain-eval-numbers">Select scenario numbers</label>
+      <div className="brain-eval-number-row">
+        <input id="brain-eval-numbers" type="text" value={numberSelection}
+          disabled={busy} placeholder="20, 21, 83"
+          aria-describedby="brain-eval-number-feedback"
+          onChange={e=>setNumberSelection(e.target.value)}
+          onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();selectScenarioNumbers();}}}/>
+        <button type="button" disabled={busy} onClick={selectScenarioNumbers}>Select these</button>
+      </div>
+      <small id="brain-eval-number-feedback" role="status">{numberFeedback}</small>
+    </div>
     <div className="brain-eval-select-actions">
       <button type="button" disabled={busy} onClick={()=>selectOnly(visible.map(s=>s.id))}>Select visible ({visible.length})</button>
       <button type="button" disabled={busy} onClick={selectUnresolved}>Select unresolved</button>
       <button type="button" disabled={busy} onClick={selectRegression}>Passed regression sample</button>
       <button type="button" disabled={busy} onClick={()=>selectOnly([])}>Clear selection</button>
     </div>
-    <div className="brain-eval-actions brain-eval-actionbar">
-      <button type="button" className="save-button" disabled={busy||selected.length===0} onClick={()=>void run()}>
-        <Play size={15}/> Run {selected.length} scenarios ({selected.reduce((n,s)=>n+s.steps.length,0)*repeats} turns)
-      </button>
-      {busy&&<button type="button" className="secondary-action" onClick={stop}><Square size={14}/> Stop</button>}
-      {report&&<button type="button" className="secondary-action" onClick={()=>void exportReport()}>
-        <Download size={15}/> Export JSON + Markdown
-      </button>}
-      {report&&<button type="button" className="secondary-action" onClick={()=>void copyMarkdown()}>Copy readable report</button>}
+    <div className="brain-eval-actionbar">
+      <div className="brain-eval-actions brain-eval-action-buttons">
+        <button type="button" className="save-button" disabled={busy||selected.length===0} onClick={()=>void run()}>
+          <Play size={15}/> Run {selected.length} scenarios ({selected.reduce((n,s)=>n+s.steps.length,0)*repeats} turns)
+        </button>
+        {busy&&<button type="button" className="secondary-action" onClick={stop}><Square size={14}/> Stop</button>}
+        {report&&!busy&&<button type="button" className="secondary-action"
+          onClick={()=>resultsRef.current?.scrollIntoView({behavior:"smooth",block:"start"})}>
+          <Activity size={14}/> View results
+        </button>}
+        {report&&<button type="button" className="secondary-action" onClick={()=>void exportReport()}>
+          <Download size={15}/> Export JSON + Markdown
+        </button>}
+        {report&&<button type="button" className="secondary-action" onClick={()=>void copyMarkdown()}>Copy readable report</button>}
+      </div>
+      <section className={"brain-eval-run-monitor "+runtime.phase} aria-label="Brain Lab run progress">
+        <div className="brain-eval-run-heading" role="status" aria-live="polite">
+          <strong>
+            {runtime.phase==="running"?<Activity size={15} aria-hidden="true"/>:
+              runtime.phase==="complete"?<CheckCircle2 size={15} aria-hidden="true"/>:
+              runtime.phase==="failed"?<XCircle size={15} aria-hidden="true"/>:
+              runtime.phase==="stopped"?<Square size={14} aria-hidden="true"/>:
+              <BrainCircuit size={15} aria-hidden="true"/>}
+            {runtime.phase==="running"?"Running evaluation":
+              runtime.phase==="complete"?"Evaluation finished":
+              runtime.phase==="failed"?"Evaluation failed":
+              runtime.phase==="stopped"?"Evaluation stopped":"Ready for evaluation"}
+          </strong>
+          <span>{progress.total>0?progressPercent+"%":"Ready"}</span>
+        </div>
+        <progress aria-label="Brain Lab completed turns" max={Math.max(1,progress.total)}
+          value={Math.min(progress.done,Math.max(1,progress.total))}/>
+        <div className="brain-eval-run-details">
+          <span>{progress.total>0
+            ?progress.done+" / "+progress.total+" turns completed"
+            :"Select scenarios and start a run"}</span>
+          <span>{runtime.phase==="running"?progress.label:
+            runtime.phase==="idle"?"Runs continue if you close Settings.":
+            runtime.label+(runtime.finishedAt?" · "+new Date(runtime.finishedAt).toLocaleString():"")}</span>
+        </div>
+        {runtime.phase==="complete"&&runtime.results&&<small className="brain-eval-run-summary">
+          {runtime.results.passed}/{runtime.results.turns} turns had no automated failures.
+          {runtime.results.reviewTurns>0
+            ?" "+runtime.results.reviewTurns+" turns require human review.":""}
+        </small>}
+        {runtime.error&&<small className="brain-eval-run-error" role="alert">{runtime.error}</small>}
+        {runtime.savedFolder&&<small className="brain-eval-run-saved">
+          Reports saved automatically: {runtime.savedFolder}
+        </small>}
+      </section>
     </div>
-    <div className="brain-eval-catalog-header">
-      <strong>Scenarios</strong>
-      <span>Showing {visible.length} of {EVAL_SCENARIOS.length} · {selected.length} selected</span>
-    </div>
-    <div className="brain-eval-catalog" role="group" aria-label="Select Brain Lab scenarios">
+    <details className="brain-eval-catalog-disclosure" open={catalogOpen}
+      onToggle={e=>setCatalogOpen(e.currentTarget.open)}>
+      <summary className="brain-eval-catalog-header">
+        <strong>Scenarios {catalogOpen?"▾":"▸"}</strong>
+        <span>Showing {visible.length} of {EVAL_SCENARIOS.length} · {selected.length} selected
+          {catalogOpen?" · click to collapse":" · click to expand"}</span>
+      </summary>
+      <div className="brain-eval-catalog" role="group" aria-label="Select Brain Lab scenarios">
       {visible.length===0&&<p className="brain-eval-subtitle">No scenarios match this filter.</p>}
       {visible.map(s=>{
         const view=statuses.get(s.id)!;
@@ -193,21 +278,16 @@ export function BrainEvalPanel({settings}:{settings:Settings}){
           </div>}
         </div>;
       })}
-    </div>
+      </div>
+    </details>
     <p className="brain-eval-muted-note">
       Catalog: {EVAL_SCENARIOS.length} scenarios, {totalFixtureTurns} turns. Use the category, status or search filters to narrow the list.
     </p>
-    {busy&&<div className="brain-eval-progress" role="status">
-      <progress max={Math.max(1,progress.total)} value={progress.done}/>
-      <span>{progress.done}/{progress.total} turns · {progress.label}</span>
-    </div>}
-    {(message||runtime.error||busy||runtime.phase==="complete"||runtime.phase==="stopped")&&
-      <p className="brain-eval-message" role="status">
-        {runtime.error??message??runtime.label}
-        {runtime.savedFolder?" · Automatically saved: "+runtime.savedFolder:""}
-      </p>}
+    {message&&<p className="brain-eval-message" role="status">{message}</p>}
     {metrics&&report&&<>
-      <div className="settings-section-title"><Activity size={17}/> Results dashboard</div>
+      <div ref={resultsRef} className="settings-section-title brain-eval-results-anchor">
+        <Activity size={17}/> Results dashboard
+      </div>
       <div className="brain-eval-metrics">
         {([
           ["No detected failures",metrics.passRate+"%",metrics.passed+"/"+metrics.turns+" turns, includes unverified"],
