@@ -164,15 +164,15 @@ test("a richer synthetic memory can prove the same fact without matching an exac
     {expectedId:102,supportingIds:[]}
   ]);
 });
-test("observed web decision matters more than exact research route label",async()=>{
+test("explicit repository link routes to research and the observed web execution controls scoring",async()=>{
   const report=await runBrainEvaluation({
     mode:"live",scenarios:[byId("search-github")],model:"fake",repetitions:1,
     planWeb:async()=>({search:true,query:"desktop companion GitHub features",reason:"Need actual repo evidence"}),
     infer:async()=> "The actual repository would need checking."
   });
   const step=report.cases[0].steps[0];
-  assert.equal(step.actualRoute,"chat");
-  assert.equal(step.routeLabelMatch,false);
+  assert.equal(step.actualRoute,"research");
+  assert.equal(step.routeLabelMatch,true);
   assert.equal(step.webPass,true);
   assert.equal(step.routePass,true);
   assert.equal(step.pass,true);
@@ -472,9 +472,9 @@ test("a real-source research turn cannot pass merely because planning succeeded"
   const result=await runBrainEvaluation({
     scenarios:[byId("search-website")],mode:"live",model:"local-test",repetitions:1,
     liveWeb:true,
-    planWeb:async()=>({search:true,query:"What is python.org?",reason:"Check current official site"}),
+    planWeb:async()=>({search:true,query:"python org official website",reason:"Read the public website"}),
     infer:async()=>({text:"The sources didn't provide enough evidence.",webExecution:{
-      query:"What is python.org?",sourcesCarriedOver:false,
+      query:"python org official website",sourcesCarriedOver:false,
       // Recorded public source excerpt, not a web-search simulation. This unit
       // test checks scorekeeping only; Live Brain Lab must contact real SearXNG.
       results:[{title:"Welcome to Python.org",url:"https://www.python.org/",
@@ -905,4 +905,28 @@ test("Brain Lab report includes the immutable build identity in JSON and Markdow
   assert.match(markdown,/Desktop version: 1\.2\.3/);
   assert.ok(markdown.includes("Desktop commit (compiled): "+"a".repeat(40)));
   assert.match(markdown,/Desktop build type: development/);
+});
+
+test("Brain Lab transports a recovered document read to native execution",async()=>{
+  const target="https://github.com/capnolithyl/AI-Desktop-Companion";
+  let seen;
+  const report=await runBrainEvaluation({
+    mode:"live",scenarios:[byId("search-github")],model:"fixture-local",repetitions:1,
+    liveWeb:true,
+    planWeb:async()=>({search:false,method:"planner-error",reason:"Local planner timed out"}),
+    infer:async input=>{
+      seen=input;
+      return {text:"The requested document read requires source review.",webExecution:{
+        query:input.researchQuery??null,results:[],sourcesCarriedOver:false
+      }};
+    }
+  });
+  assert.equal(seen.researchTask?.sourceUrl,target);
+  assert.equal(seen.webRequest?.researchTask?.sourceUrl,target);
+  assert.equal(seen.webRequest?.researchRoute,"research");
+  assert.ok(seen.researchQuery);
+  assert.equal(report.cases[0].steps[0].webPass,true,
+    "Only an actual native query will prove that public research executed");
+  assert.equal(report.cases[0].steps[0].pass,false,
+    "No sources must never count as a useful researched answer");
 });
