@@ -33,7 +33,7 @@ function validConfig(input:unknown):BrainEvalPresetConfig|null{
   const scenarioIds=stringList(c.scenarioIds,MAX_TESTS);
   const models=stringList(c.models,10);
   if(!scenarioIds||!models||!["routing","live"].includes(String(c.mode))||
-      !repeats.has(Number(c.repetitions))||
+      (typeof c.repetitions!=="number"||!repeats.has(c.repetitions))||
       !statuses.has(String(c.statusFilter))||
       typeof c.category!=="string"||c.category.length>100||
       typeof c.search!=="string"||c.search.length>180)return null;
