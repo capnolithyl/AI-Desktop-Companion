@@ -274,3 +274,16 @@ test("public websites and distinctive unfamiliar entities trigger a grounded sea
     assert.equal(planResearch(privateText).mode, "chat", privateText);
   }
 });
+
+test("user-directed reads of public URLs route to research without creating searches from casual links",()=>{
+  for(const request of [
+    "Check the repository at https://github.com/ggml-org/llama.cpp and summarize it.",
+    "Read https://www.python.org/ and explain the site.",
+    "Inspect https://docs.example.org/guide for changes."
+  ])assert.equal(planResearch(request).mode,"research",request);
+  for(const statement of [
+    "I love this project https://github.com/ggml-org/llama.cpp",
+    "Here's a link https://docs.example.org/guide",
+    "Remember https://www.python.org/"
+  ])assert.equal(planResearch(statement).mode,"chat",statement);
+});
