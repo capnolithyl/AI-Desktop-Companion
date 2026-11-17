@@ -148,8 +148,15 @@ fn relaxed_subject_query(query:&str,subject:Option<&str>)->Option<String> {
 /// still has unresolved facts. Use ONLY a named subject already present in the
 /// approved public query; never build a public query from private history.
 pub(crate) fn primary_followup_query(query:&str,subject:Option<&str>)->Option<String> {
-    let public_subject=relaxed_subject_query(query,subject)?;
-    let followup=format!("{public_subject} official release announcement");
+    // The planner may omit the entity subject or name it differently than its
+    // search query. That must not disable recovery after a genuine search.
+    // Fall back ONLY to the existing, previously privacy-approved public query,
+    // never to an unvalidated subject, memory, or source excerpt.
+    let approved=query.trim();
+    if approved.is_empty() {return None}
+    let public_seed=relaxed_subject_query(approved,subject)
+        .unwrap_or_else(||approved.to_owned());
+    let followup=format!("{public_seed} official release announcement");
     (followup.chars().count()<=250).then_some(followup)
 }
 
@@ -395,11 +402,17 @@ mod search_recovery_tests {
     }
 
     #[test]
-    fn primary_lookup_reuses_only_a_subject_in_the_approved_public_query(){
+    fn primary_lookup_uses_public_query_when_planner_subject_is_missing_or_wrong(){
         assert_eq!(primary_followup_query("latest officially released Qwen model",Some("Qwen")),
             Some("Qwen official release announcement".into()));
-        assert_eq!(primary_followup_query("public software release",Some("Private Name")),None);
-        assert_eq!(primary_followup_query("Qwen latest model",Some("Qwen\\nsecret")),None);
+        assert_eq!(primary_followup_query("latest officially released Qwen model",None),
+            Some("latest officially released Qwen model official release announcement".into()));
+        assert_eq!(primary_followup_query("public software release",Some("Private Name")),
+            Some("public software release official release announcement".into()));
+        assert_eq!(primary_followup_query("Qwen latest model",Some("Qwen\\nsecret")),
+            Some("Qwen latest model official release announcement".into()));
+        assert_eq!(primary_followup_query("  ",None),None);
+        assert_eq!(primary_followup_query(&"a".repeat(246),None),None);
     }
 
     #[test]
