@@ -17,6 +17,21 @@ const positive = value => {
   const v = finite(value);
   return v != null && v >= 0 ? v : null;
 };
+const boundedCount = (value, max = 24) =>
+  Number.isSafeInteger(value) && value >= 0 && value <= max ? value : null;
+const factReasons = [
+  "invalid_source_index", "invalid_subject_field", "invalid_claim_field",
+  "invalid_quote_field", "quote_not_contiguous_in_cited_source",
+  "subject_not_identified_by_quote", "claim_numbers_missing_from_quote",
+  "claim_number_not_tied_to_subject", "not_the_named_target_subject",
+  "does_not_answer_requested_detail"
+];
+const safePublicHost = value => typeof value === "string" && value.length <= 100
+  && /^[a-z0-9.-]+$/.test(value) && value.includes(".")
+  && !/^\d+\.\d+\.\d+\.\d+$/.test(value)
+  && ![".local",".localhost",".internal",".test"].some(suffix => value.endsWith(suffix))
+  ? value : null;
+
 
 /**
  * Validate the desktop's optional support summary again on the Node side.
@@ -103,7 +118,27 @@ export function safeReportDiagnostics(value) {
             followupAttempted: d.research.followupAttempted === true,
             primaryRecoveryStatus: allowed(d.research.primaryRecoveryStatus,
               ["not-needed","not-eligible","no-approved-query","searched-no-new-sources","new-sources-unresolved","improved-coverage","more-context-no-coverage","search-unavailable"]),
-            elapsedMs: positive(d.research.elapsedMs)
+            elapsedMs: positive(d.research.elapsedMs),
+            taskKind: allowed(d.research.taskKind,["lookup","verify","discover"]),
+            requestedDetailCount: boundedCount(d.research.requestedDetailCount,4),
+            unresolvedDetailCount: boundedCount(d.research.unresolvedDetailCount,4),
+            contextOnlyCount: boundedCount(d.research.contextOnlyCount,20),
+            rejectedReasonCodes: Array.isArray(d.research.rejectedReasonCodes)
+              ? [...new Set(d.research.rejectedReasonCodes.slice(0,12)
+                .filter(code => factReasons.includes(code)))].slice(0,8) : [],
+            acceptedFactSlots: Array.isArray(d.research.acceptedFactSlots)
+              ? d.research.acceptedFactSlots.slice(0,8).flatMap(fact => {
+                const source=boundedCount(fact?.source,24);
+                const detail=fact?.detail===null?null:boundedCount(fact?.detail,3);
+                return source && detail !== undefined && (detail !== null || fact?.detail === null)
+                  ? [{source,detail}] : [];
+              }) : [],
+            sourceHosts: Array.isArray(d.research.sourceHosts)
+              ? d.research.sourceHosts.slice(0,12).flatMap(entry => {
+                const source=boundedCount(entry?.source,24);
+                const host=safePublicHost(entry?.host);
+                return source && host ? [{source,host}] : [];
+              }) : []
           } : null,
           answerVerification: d.answerVerification ? {
             checked: positive(d.answerVerification.checked),
