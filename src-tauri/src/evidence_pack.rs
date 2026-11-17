@@ -700,10 +700,10 @@ pub async fn extract(
             "extractor_timeout"|"extractor_json_invalid"|"extractor_missing_content")
         {
             let mut compact=payload.clone();
-            let subset=&sources[..sources.len().min(4)];
+            let subset=&sources[..sources.len().min(6)];
             compact["options"]["num_predict"]=json!(320);
             compact["messages"][1]["content"]=json!(
-                evidence_request_text(user_request,task,&limits,subset,650));
+                evidence_request_text(user_request,task,&limits,subset,450));
             let retry=propose_source_facts(
                 client,ollama_url,&compact,Duration::from_secs(20)).await;
             evidence=match retry {
@@ -782,12 +782,12 @@ mod tests {
             engine:"fixture".into(),published_date:None
         }).collect::<Vec<_>>();
         let full=source_input(&items);
-        let small=source_input_limited(&items[..4],650);
+        let small=source_input_limited(&items[..6],450);
         assert!(small.len()<full.len()/2);
         assert!(small.contains("[1] Example public announcement 0"));
-        assert!(small.contains("[4] Example public announcement 3"));
-        assert!(!small.contains("[5]"));
-        assert!(!small.contains("https://sources.example/4"));
+        assert!(small.contains("[6] Example public announcement 5"));
+        assert!(!small.contains("[7]"));
+        assert!(small.contains("https://sources.example/5"));
     }
 
     #[test]
