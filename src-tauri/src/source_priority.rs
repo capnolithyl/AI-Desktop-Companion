@@ -416,7 +416,7 @@ mod search_recovery_tests {
         assert_eq!(primary_followup_query("Qwen latest model",Some("Qwen\\nsecret")),
             Some("Qwen latest model official announcement".into()));
         assert_eq!(primary_followup_query("  ",None),None);
-        assert_eq!(primary_followup_query("public\\nprivate",None),None);
+        assert_eq!(primary_followup_query("public\nprivate",None),None);
         assert_eq!(primary_followup_query(&"a".repeat(246),None),None);
     }
 
