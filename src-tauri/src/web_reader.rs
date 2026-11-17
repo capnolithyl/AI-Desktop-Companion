@@ -73,7 +73,7 @@ fn cache_path(app: &tauri::AppHandle, url: &str) -> Result<PathBuf, String> {
         .map_err(|e| format!("App storage unavailable: {e}"))?
         .join("web-cache");
     fs::create_dir_all(&folder).map_err(|e| format!("Cannot create web cache: {e}"))?;
-    let key = format!("{:x}", Sha256::digest(url.as_bytes()));
+    // Reader v2 adds canonical public document adapters; never reuse stale\n    // HTML-only GitHub page cache entries from earlier builds.\n    let key = format!("{:x}", Sha256::digest(format!("reader-v2:{url}").as_bytes()));
     Ok(folder.join(format!("{key}.json")))
 }
 
