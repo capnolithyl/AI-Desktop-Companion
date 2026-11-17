@@ -343,3 +343,6 @@
 .brain-eval-comparison table{width:100%;border-collapse:collapse;text-align:left;font-size:11px}
 .brain-eval-comparison th,.brain-eval-comparison td{padding:7px 9px;border-bottom:1px solid #654d60;white-space:nowrap}
 .brain-eval-comparison th{color:#f4d5c8}
+
+.brain-eval-model-trace-picker{display:flex;flex-wrap:wrap;align-items:center;gap:8px;font-size:12px}
+.brain-eval-model-trace-picker select{max-width:100%;background:#30232f;color:#fff3f9;border:1px solid #76556d;border-radius:8px;padding:7px}
