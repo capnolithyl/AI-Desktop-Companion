@@ -1,4 +1,6 @@
 import type { WebPlanningTurn } from "./unified-planner.ts";
+import { parseWebToolDecision } from "./unified-planner.ts";
+import type { RankableMemory } from "./memory-ranking.ts";
 import type { ResearchPlan } from "./research-routing.ts";
 
 /**
@@ -60,13 +62,24 @@ export function planDesktopWebExecution(input: DesktopWebInput): DesktopWebPolic
 export function resolvePublicWebExecution(
   policy: DesktopWebPolicy,
   plan: {mode:string;query?:string;recent?:boolean},
-  decision?: {search:boolean;query?:string;method?:string;task?:import("./unified-planner.ts").ResearchTask;sourceRequirement?:"required"|"optional"}
+  decision?: {search:boolean;query?:string;method?:string;task?:import("./unified-planner.ts").ResearchTask;sourceRequirement?:"required"|"optional"},
+  ownerFacts:readonly RankableMemory[]=[]
 ) {
   const permitted=policy.blockedReason===null;
-  const semantic=decision && decision.method!=="disabled";
-  const query=permitted ? semantic ? decision.search ? decision.query : undefined
-    : plan.mode==="research" ? plan.query : undefined : undefined;
-  const factualFallback=permitted && !semantic && plan.mode==="factual";
+  // Local planner transport/JSON failures are not semantic refusals.
+  // Reuse only a *freshly validated* query from the independent public-research
+  // route. This cannot bypass an explicit "not-needed" decision, invalid
+  // query/privacy rejection, or the deterministic tool-permission boundary.
+  const plannerError=decision?.method==="planner-error";
+  const safeRecovery=permitted && plannerError && plan.mode==="research" && plan.query
+    ? parseWebToolDecision(JSON.stringify({web:{
+        search:true,query:plan.query,reason:"Validated public route after planner error"
+      }}),true,[],ownerFacts) : null;
+  const recoveredQuery=safeRecovery?.search ? safeRecovery.query : undefined;
+  const semantic=decision && decision.method!=="disabled" && !plannerError;
+  const query=permitted ? recoveredQuery ?? (semantic ? decision.search ? decision.query : undefined
+    : plan.mode==="research" && !plannerError ? plan.query : undefined) : undefined;
+  const factualFallback=permitted && !semantic && !plannerError && plan.mode==="factual";
   return {
     autoSearch:!!query || factualFallback,
     researchRoute:query ? "research" : factualFallback ? "factual" : "chat",
