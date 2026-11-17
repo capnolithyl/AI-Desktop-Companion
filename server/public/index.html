@@ -808,7 +808,7 @@
     var config=preset.config;
     var allowed=new Set(brainLabCatalog.map(function(item){return item.id}));
     var known=config.scenarioIds.filter(function(id){return allowed.has(id)});
-    if(!known.length){brainLabPresetFeedback.textContent="Preset has no scenarios in this build; selection unchanged.";return}
+    if(config.scenarioIds.length>0&&!known.length){brainLabPresetFeedback.textContent="Preset has no scenarios in this build; selection unchanged.";return}
     var models=Array.isArray(current?.models)?current.models:[];
     var available=new Set(models);
     var loadedModels=config.models.filter(function(model){return available.has(model)});
