@@ -218,6 +218,64 @@ test("partial release evidence is grouped by named subject with source provenanc
   assert.match(reviewed.text,/Orchid 5 Stable \[2\] \[3\]/);
   assert.doesNotMatch(reviewed.text,/https?:\/\//);
 });
+test("partial coverage reports the dated release evidence rather than hiding it behind a generic refusal",()=>{
+  const docs=[
+    {title:"Company announces Aurora 5",url:"https://press.example.com/aurora5",
+      content:"On November 16, 2026, Aurora's development team officially released Aurora 5."},
+    {title:"Model release tracker",url:"https://tracker.example.com/aurora",
+      content:"The most recent Aurora model tracked here is Aurora 5, released on Nov 16 2026."}
+  ];
+  const audit={status:"partial",recommendationTask:false,
+    acceptedDetails:[
+      {source:1,subject:"Aurora 5",detail:0,
+        claim:"Aurora 5 was officially released on November 16, 2026.",
+        quote:docs[0].content},
+      {source:2,subject:"Aurora 5",detail:null,
+        claim:"Aurora 5 is the newest model tracked by this release tracker.",
+        quote:docs[1].content}
+    ],
+    unresolvedDetails:["latest official stable model"]};
+  const result=reviewResearchCompletion(
+    "Aurora 5 is definitely the newest official stable model. [1]",docs,audit);
+  assert.equal(result.usable,true);
+  assert.match(result.text,/Aurora 5 \[1\] \[2\]/);
+  assert.match(result.text,/November 16, 2026/);
+  assert.match(result.text,/most recent Aurora model tracked here/);
+  assert.match(result.text,/still couldn't independently establish latest official stable model/);
+  assert.doesNotMatch(result.text,/but that's not enough to establish the answer|I'd rather not guess/);
+  assert.doesNotMatch(result.text,/definitely the newest official stable model/);
+  assert.equal(result.evidence?.supportedQuotes.length,2);
+});
+
+test("a matching quote without requested-detail coverage cannot be promoted to a release conclusion",()=>{
+  const doc={title:"Aurora preview",url:"https://example.org/preview",
+    content:"Aurora 6 Preview was announced on November 12, 2026."};
+  const audit={status:"partial",recommendationTask:false,
+    acceptedDetails:[{source:1,subject:"Aurora 6 Preview",detail:null,
+      claim:"Aurora 6 Preview is the latest official stable release.",quote:doc.content}],
+    unresolvedDetails:["which stable version is newest"]};
+  const result=reviewResearchCompletion("Aurora 6 Preview definitely released.",[doc],audit);
+  assert.match(result.text,/reports mentioning Aurora 6 Preview/);
+  assert.doesNotMatch(result.text,/November 12, 2026|definitely released/);
+});
+
+test("source excerpts in a partial supported detail are length-bounded and escaped",()=>{
+  const quote="Aurora 5 was released in 2026. **Read this** [malicious](https://example.org/x) "+
+    "Detailed technical context continues. ".repeat(20);
+  const docs=[{title:"Public bulletin",url:"https://example.org/release",content:quote}];
+  const audit={status:"partial",recommendationTask:false,
+    acceptedDetails:[{source:1,subject:"Aurora 5",detail:0,claim:"Aurora 5 released in 2026.",quote}],
+    unresolvedDetails:["whether this is latest"]};
+  const result=reviewResearchCompletion("Aurora 5 released today.",docs,audit);
+  assert.match(result.text,/Aurora 5 \[1\]/);
+  assert.match(result.text,/reports:/);
+  assert.ok(result.text.length<500);
+  assert.ok(!result.text.includes("https://example.org/x"));
+  assert.ok(!result.text.includes("**Read this**"));
+  assert.ok(!result.text.includes(quote));
+  assert.ok(!result.text.includes("released today"));
+});
+
 test("partial answer ignores unanchored and malicious markdown-labeled proposed facts",()=>{
   const docs=[{title:"Status bulletin",url:"javascript:alert(1)",
     content:"Aster 5 was only scheduled for December 2027."}];
