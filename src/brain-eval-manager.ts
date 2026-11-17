@@ -53,7 +53,7 @@ export function reviewBrainEvalScenario(id:string,mode:EvalMode,model:string,dec
   saveCaseRecords(mergeCaseRecords(records,[next]));
 }
 import {
-  EVAL_SCENARIOS, runBrainEvaluation, brainEvalMetrics, brainEvalMarkdown,
+  EVAL_SCENARIOS, runBrainEvaluation, brainEvalMetrics, brainEvalMarkdown, brainEvalModels,
   type EvalMode, type EvalReport, type EvalTurn, type EvalInference, type EvalMemoryFact,
   type EvalMemoryCapture, type MemoryCapturePreview
 } from "./brain-eval";
@@ -196,21 +196,6 @@ export function startBrainEvaluation(
   }).finally(()=>{if(abort===controller)abort=null;requestId=null});
   return status;
 }
-/** Strict model selection prevents the browser relay from injecting arbitrary IDs.
- * Fast routing contains no model inference, so sweeping it is misleading. */
-export function brainEvalModels(
-  requested:ReadonlyArray<string>|undefined,current:string,
-  installed:ReadonlyArray<string>,mode:EvalMode
-):string[]{
-  if(requested===undefined)return [current];
-  if(mode!=="live")throw new Error("Model comparison requires Live mode");
-  if(!Array.isArray(requested)||!requested.length||requested.length>10 ||
-    requested.some(model=>typeof model!=="string"||!installed.includes(model)) ||
-    new Set(requested).size!==requested.length)
-    throw new Error("Choose 1–10 unique installed Ollama models");
-  return [...requested];
-}
-
 async function executeBatch(
   settings:Settings,request:BrainEvalRequest,scenarios:typeof EVAL_SCENARIOS,
   models:ReadonlyArray<string>,controller:AbortController
