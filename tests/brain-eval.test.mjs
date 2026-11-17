@@ -44,7 +44,7 @@ test("broad isolated test catalog covers multiple intentions and branches",()=>{
 });
 
 test("scenario numbers stay stable when a subset is selected",()=>{
-  assert.equal(EVAL_SCENARIOS.length,83);
+  assert.equal(EVAL_SCENARIOS.length,84);
   assert.equal(brainScenarioNumber(EVAL_SCENARIOS[0].id),1);
   assert.equal(brainScenarioNumber(EVAL_SCENARIOS[72].id),73);
   assert.match(brainScenarioLabel(EVAL_SCENARIOS[0].id,EVAL_SCENARIOS[0].label),/^#01 · /);
@@ -61,6 +61,8 @@ test("scenario numbers stay stable when a subset is selected",()=>{
     "new time-aware source review must not renumber existing cases");
   assert.equal(brainScenarioNumber("reaction-after-anime-news"),83,
     "opinion/memory test appends after existing scenarios");
+  assert.equal(brainScenarioNumber("research-current-model"),84,
+    "model-comparison research appends without renumbering the prior catalog");
   assert.equal(brainScenarioLabel("not-in-catalog","Custom test"),"Custom test");
 });
 test("live stale-announcement regression requires real search and human date reasoning",async()=>{
