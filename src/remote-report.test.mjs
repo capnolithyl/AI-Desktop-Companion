@@ -19,7 +19,8 @@ test("remote diagnostic snapshot retains counts, routing and failures without me
       },
       toolPlan:{method:"web-search",reason:"PRIVATE TOOL CONTEXT",query:"PRIVATE SEARCH QUERY",
         topic:"PRIVATE TOPIC",publicWebAllowed:true,freshSources:2,searchOutcome:"completed"},
-      research:{status:"partial",accepted:3,rejected:1,elapsedMs:22,note:"PRIVATE WEB EXCERPT"},
+      research:{status:"partial",accepted:3,rejected:1,elapsedMs:22,
+        followupQuery:"PRIVATE PRIMARY LOOKUP",note:"PRIVATE WEB EXCERPT"},
       answerVerification:{checked:2,rejected:0,recoveredHeadline:false,
         presentation:"model-voice-preserved"},
       notion:{selectedPage:"PRIVATE CHAPTER NAME",cachedPages:3,excerptCount:8,
@@ -36,6 +37,8 @@ test("remote diagnostic snapshot retains counts, routing and failures without me
   assert.equal(log[1].diagnostics.toolPlan.freshSources,2);
   assert.equal(log[1].diagnostics.answerVerification.presentation,"model-voice-preserved");
   const relayed = safeReportDiagnostics({messages:log});
+  assert.equal(log[1].diagnostics.research.followupAttempted,true);
+  assert.equal(relayed.messages[1].diagnostics.research.followupAttempted,true);
   assert.equal(relayed.messages[1].diagnostics.research.status,"partial",
     "a partial research state must survive BOTH desktop and relay sanitizers");
   assert.equal(relayed.messages[1].diagnostics.answerVerification.presentation,"model-voice-preserved");
@@ -47,7 +50,7 @@ test("remote diagnostic snapshot retains counts, routing and failures without me
   assert.equal(log[1].diagnostics.notion.readSucceeded,false);
   assert.equal(log[1].diagnostics.privateDetails.notionReadFailure,"PRIVATE NOTION ERROR");
   const serialized=JSON.stringify(log);
-  for (const text of ["PRIVATE MEMORY FACT","PRIVATE INTEREST","PRIVATE SEARCH QUERY",
+  for (const text of ["PRIVATE MEMORY FACT","PRIVATE INTEREST","PRIVATE SEARCH QUERY","PRIVATE PRIMARY LOOKUP",
     "PRIVATE TOPIC","PRIVATE CHAPTER NAME"]) {
     assert.equal(serialized.includes(text),false);
   }
