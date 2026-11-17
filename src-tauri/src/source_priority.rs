@@ -144,6 +144,15 @@ fn relaxed_subject_query(query:&str,subject:Option<&str>)->Option<String> {
     }
     Some(subject.to_owned())
 }
+/// Search for the publisher's own announcement when a time-sensitive lookup
+/// still has unresolved facts. Use ONLY a named subject already present in the
+/// approved public query; never build a public query from private history.
+pub(crate) fn primary_followup_query(query:&str,subject:Option<&str>)->Option<String> {
+    let public_subject=relaxed_subject_query(query,subject)?;
+    let followup=format!("{public_subject} official release announcement");
+    (followup.chars().count()<=250).then_some(followup)
+}
+
 /// Relevance of a search hit among THIS query's candidates.
 ///
 /// Rare matching terms provide more identifying power than boilerplate shared
@@ -383,6 +392,14 @@ mod search_recovery_tests {
         assert_eq!(relaxed_subject_query("Qwen",Some("Qwen")),None);
         assert_eq!(relaxed_subject_query("latest release",Some("Private Person")),None);
         assert_eq!(relaxed_subject_query("Qwen release",Some("Qwen\nprivate")),None);
+    }
+
+    #[test]
+    fn primary_lookup_reuses_only_a_subject_in_the_approved_public_query(){
+        assert_eq!(primary_followup_query("latest officially released Qwen model",Some("Qwen")),
+            Some("Qwen official release announcement".into()));
+        assert_eq!(primary_followup_query("public software release",Some("Private Name")),None);
+        assert_eq!(primary_followup_query("Qwen latest model",Some("Qwen\\nsecret")),None);
     }
 
     #[test]
