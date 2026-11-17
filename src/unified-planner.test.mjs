@@ -492,3 +492,25 @@ test("research planner instructions ask for the actual comparison goal, not mere
   assert.match(prompt,/NOT merely a supporting attribute/);
   assert.match(prompt,/official release/);
 });
+
+test("document follow-up planning preserves a previously user-authorized public source",async()=>{
+  const url="https://github.com/example/demo";
+  const history=[
+    {role:"user",content:"Look up "+url},
+    {role:"assistant",content:"I read the public repository."}
+  ];
+  const plan=await planPublicWebTools("What does its README say about memory?",[],
+    async prompt=>{
+      assert.match(prompt,/PREVIOUS TASK STRUCTURE/);
+      assert.match(prompt,/previous authorized task.sourceUrl/);
+      assert.ok(prompt.includes(url));
+      return JSON.stringify({intent:"refine",web:{search:true,
+        query:"example demo README memory features",reason:"Read the document section",
+        task:{kind:"lookup",subject:"example/demo",details:["memory architecture"],
+          sourceUrl:url,requirements:[],roles:[],exclude:[]}}});
+    },{automaticWebEnabled:true,sourcePreferences:prefs,
+      history,activePublicQuery:"github example demo public repository",
+      activeTask:{kind:"lookup",sourceUrl:url,requirements:[],roles:[],exclude:[]}});
+  assert.equal(plan.search,true);
+  assert.equal(plan.task.sourceUrl,url);
+});
