@@ -757,6 +757,98 @@
     } catch(error) { brainLabStatus.textContent = error.message; }
     finally { brainLabSubmitting = false; if(current)renderBrainLab(current); }
   }
+  function renderBrainLabPresets(running){
+    var names=brainLabPresets.map(function(p){return p.name});
+    var signature=JSON.stringify(names);
+    if(signature!==brainLabPresetSignature){
+      var chosen=brainLabPresetSelect.value;
+      brainLabPresetSelect.replaceChildren(new Option("Choose a preset…",""));
+      names.forEach(function(name){brainLabPresetSelect.append(new Option(name,name))});
+      brainLabPresetSelect.value=names.includes(chosen)?chosen:"";
+      brainLabPresetSignature=signature;
+    }
+    brainLabPresetSelect.disabled=running||brainLabSubmitting;
+    brainLabPresetName.disabled=running||brainLabSubmitting;
+    brainLabPresetLoad.disabled=running||brainLabSubmitting||!brainLabPresetSelect.value;
+    brainLabPresetDelete.disabled=running||brainLabSubmitting||!brainLabPresetSelect.value;
+    brainLabPresetSave.disabled=running||brainLabSubmitting||!brainLabPresetName.value.trim();
+  }
+  function persistBrainLabPresets(items){
+    localStorage.setItem(brainLabPresetStorageKey,JSON.stringify(items));
+    brainLabPresets=items;
+    brainLabPresetSignature="";
+  }
+  function saveBrainLabPreset(){
+    if(brainLabSubmitting||current?.brainEval?.phase==="running")return;
+    var name=brainLabPresetName.value.trim();
+    if(!name||name.length>60){brainLabPresetFeedback.textContent="Enter a name between 1 and 60 characters.";return}
+    if(!brainLabCatalog.length){brainLabPresetFeedback.textContent="Connect to Mikan and load the scenarios first.";return}
+    var config={
+      mode:brainLabMode.value,repetitions:Number(brainLabRepeats.value),
+      scenarioIds:brainLabChosenIds(),models:[...(brainLabSelectedModels||[])],
+      category:brainLabCategory.value,statusFilter:brainLabStatusFilter.value,search:""
+    };
+    var previous=brainLabPresets.findIndex(function(item){return item.name.toLowerCase()===name.toLowerCase()});
+    if(previous<0&&brainLabPresets.length>=25){brainLabPresetFeedback.textContent="Maximum 25 presets reached.";return}
+    var next=brainLabPresets.slice();
+    if(previous<0)next.push({name:name,config:config});else next[previous]={name:name,config:config};
+    try{
+      persistBrainLabPresets(next);
+      if(current)renderBrainLab(current);
+      brainLabPresetSelect.value=name;
+      brainLabPresetFeedback.textContent="Saved "+name+". Saving with the same name updates the preset.";
+    }catch(error){brainLabPresetFeedback.textContent="Could not save: "+String(error)}
+  }
+  function loadBrainLabPreset(){
+    if(brainLabSubmitting||current?.brainEval?.phase==="running")return;
+    var selected=brainLabPresetSelect.value;
+    var preset=brainLabPresets.find(function(p){return p.name===selected});
+    if(!preset){brainLabPresetFeedback.textContent="Choose a preset first.";return}
+    if(!brainLabCatalog.length){brainLabPresetFeedback.textContent="Wait for the scenario catalog to load.";return}
+    var config=preset.config;
+    var allowed=new Set(brainLabCatalog.map(function(item){return item.id}));
+    var known=config.scenarioIds.filter(function(id){return allowed.has(id)});
+    if(!known.length){brainLabPresetFeedback.textContent="Preset has no scenarios in this build; selection unchanged.";return}
+    var models=Array.isArray(current?.models)?current.models:[];
+    var available=new Set(models);
+    var loadedModels=config.models.filter(function(model){return available.has(model)});
+    var missing=config.models.filter(function(model){return !available.has(model)});
+    brainLabMode.value=config.mode;
+    brainLabRepeats.value=String(config.repetitions);
+    brainLabSelectedIds=new Set(known);
+    brainLabSelectedModels=new Set(loadedModels);
+    brainLabCategory.value=[...brainLabCategory.options].some(function(option){return option.value===config.category})?
+      config.category:"all";
+    brainLabStatusFilter.value=config.statusFilter;
+    brainLabPresetName.value=preset.name;
+    brainLabModelsSignature="";
+    brainLabPresetFeedback.textContent="Loaded "+preset.name+": "+known.length+" scenarios."+
+      (known.length!==config.scenarioIds.length?" "+(config.scenarioIds.length-known.length)+" missing scenarios ignored.":"")+
+      (missing.length?" Missing Ollama models: "+missing.join(", ")+". Select installed models before running.":"");
+    if(current)renderBrainLab(current);
+  }
+  function deleteBrainLabPreset(){
+    if(brainLabSubmitting||current?.brainEval?.phase==="running")return;
+    var name=brainLabPresetSelect.value;
+    if(!name||!window.confirm('Delete Brain Lab preset "'+name+'"?'))return;
+    try{
+      persistBrainLabPresets(brainLabPresets.filter(function(p){return p.name!==name}));
+      if(current)renderBrainLab(current);
+      brainLabPresetFeedback.textContent="Deleted "+name+".";
+    }catch(error){brainLabPresetFeedback.textContent="Could not delete: "+String(error)}
+  }
+  brainLabPresetSave.addEventListener("click",saveBrainLabPreset);
+  brainLabPresetLoad.addEventListener("click",loadBrainLabPreset);
+  brainLabPresetDelete.addEventListener("click",deleteBrainLabPreset);
+  brainLabPresetSelect.addEventListener("change",function(){
+    var preset=brainLabPresets.find(function(p){return p.name===brainLabPresetSelect.value});
+    if(preset)brainLabPresetName.value=preset.name;
+    if(current)renderBrainLab(current);
+  });
+  brainLabPresetName.addEventListener("input",function(){if(current)renderBrainLab(current)});
+  brainLabPresetName.addEventListener("keydown",function(event){
+    if(event.key==="Enter"){event.preventDefault();saveBrainLabPreset()}
+  });
   function renderBrainLabModels(data,running){
     var availableModels=Array.isArray(data.models)?data.models.slice(0,100):[];
     var allowed=new Set(availableModels);
@@ -808,6 +900,7 @@
     var phase = run.phase || "idle";
     var running = phase === "running";
     renderBrainLabModels(data,running);
+    renderBrainLabPresets(running);
     var chosenModels=brainLabMode.value==="live" ? [...(brainLabSelectedModels||[])] : [data.model];
     var available = !!data.connected && !data.busy && !data.queued &&
       !data.controlsBlocked && !running && !brainLabSubmitting;
