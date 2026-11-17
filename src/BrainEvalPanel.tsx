@@ -532,7 +532,8 @@ export function BrainEvalPanel({settings,availableModels}:{settings:Settings;ava
               exact {step.routeLabelMatch?"matched":"different, informational"});
               predicted web {step.plannedWeb===null?"unobserved":String(step.plannedWeb)};
               expected {step.expected.web??(step.expected.route==="research"?true:step.expected.route==="chat"?false:"unspecified")};
-              planner {step.webPlannerDecision?.search?"requested":step.webPlannerDecision?"skipped":"not run"}</small>
+              planner {step.webPlannerDecision?.search?"requested":step.webPlannerDecision?"skipped":"not run"}
+              {step.plannerElapsedMs!==undefined?" · "+formatMs(step.plannerElapsedMs):""}</small>
             {step.webExecution?.query&&<small>
               SearXNG executed: {step.webExecution.query} ·
               {step.webExecution.results.length} source previews
