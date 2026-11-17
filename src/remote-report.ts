@@ -72,6 +72,7 @@ export function remoteDiagnosticMessages(messages: readonly DiagnosticMessage[])
           accepted: finite(d.research.accepted),
           rejected: finite(d.research.rejected),
           followupAttempted: typeof d.research.followupQuery === "string" && d.research.followupQuery.trim().length > 0,
+          primaryRecoveryStatus: d.research.primaryRecoveryStatus ?? null,
           elapsedMs: finite(d.research.elapsedMs)
         } : null,
         answerVerification: d.answerVerification ? {
