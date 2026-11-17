@@ -62,12 +62,22 @@ export type BrainEvalRequest = {
   mode: EvalMode;
   repetitions: number;
   scenarioIds: string[];
+  /** Optional Ollama model sweep. Each model receives independent fresh scenarios. */
+  models?: string[];
+};
+export type BrainEvalModelResult = {
+  model: string;
+  reportId: string;
+  savedFolder: string | null;
+  metrics: ReturnType<typeof brainEvalMetrics>;
 };
 export type BrainEvalStatus = {
   phase: "idle" | "running" | "complete" | "stopped" | "failed";
   runId: string | null;
   mode: EvalMode | null;
   model: string | null;
+  models?: string[];
+  comparison?: BrainEvalModelResult[];
   startedAt: string | null;
   finishedAt: string | null;
   done: number;
@@ -86,7 +96,7 @@ const listeners=new Set<()=>void>();
 const repeatChoices=new Set([1,2,3,5]);
 const catalog=new Map(EVAL_SCENARIOS.map(s=>[s.id,s]));
 const initial:BrainEvalStatus={
-  phase:"idle",runId:null,mode:null,model:null,startedAt:null,
+  phase:"idle",runId:null,mode:null,model:null,models:[],comparison:[],startedAt:null,
   finishedAt:null,done:0,total:0,label:"",error:null,savedFolder:null,results:null
 };
 let status:BrainEvalStatus=initial;
@@ -163,19 +173,22 @@ export function stopBrainEvaluation(){
   return true;
 }
 /** Returns after the run is accepted; the evaluation Promise continues on desktop. */
-export function startBrainEvaluation(settings:Settings,request:BrainEvalRequest):BrainEvalStatus{
+export function startBrainEvaluation(
+  settings:Settings,request:BrainEvalRequest,installedModels:ReadonlyArray<string>=[settings.model]
+):BrainEvalStatus{
   const scenarios=validateRequest(request);
+  const models=brainEvalModels(request.models,settings.model,installedModels,request.mode);
   const controller=new AbortController();
   abort=controller;
   report=null;
-  const total=scenarios.reduce((sum,s)=>sum+s.steps.length,0)*request.repetitions;
+  const total=scenarios.reduce((sum,s)=>sum+s.steps.length,0)*request.repetitions*models.length;
   setStatus({
-    phase:"running",runId:null,mode:request.mode,model:settings.model,
+    phase:"running",runId:null,mode:request.mode,model:models[0],models,comparison:[],
     startedAt:new Date().toISOString(),finishedAt:null,done:0,total,
     label:"Preparing first scenario",error:null,savedFolder:null,results:null
   });
   // A rejection must update status; never let an unhandled Promise break the bridge.
-  void execute(settings,request,scenarios,controller).catch(error=>{
+  void executeBatch(settings,request,scenarios,models,controller).catch(error=>{
     setStatus({
       phase:"failed",finishedAt:new Date().toISOString(),
       error:String(error),label:"Evaluation failed"
@@ -183,10 +196,49 @@ export function startBrainEvaluation(settings:Settings,request:BrainEvalRequest)
   }).finally(()=>{if(abort===controller)abort=null;requestId=null});
   return status;
 }
-async function execute(
-  settings:Settings,request:BrainEvalRequest,
-  scenarios:typeof EVAL_SCENARIOS, controller:AbortController
+/** Strict model selection prevents the browser relay from injecting arbitrary IDs.
+ * Fast routing contains no model inference, so sweeping it is misleading. */
+export function brainEvalModels(
+  requested:ReadonlyArray<string>|undefined,current:string,
+  installed:ReadonlyArray<string>,mode:EvalMode
+):string[]{
+  if(requested===undefined)return [current];
+  if(mode!=="live")throw new Error("Model comparison requires Live mode");
+  if(!Array.isArray(requested)||!requested.length||requested.length>10 ||
+    requested.some(model=>typeof model!=="string"||!installed.includes(model)) ||
+    new Set(requested).size!==requested.length)
+    throw new Error("Choose 1–10 unique installed Ollama models");
+  return [...requested];
+}
+
+async function executeBatch(
+  settings:Settings,request:BrainEvalRequest,scenarios:typeof EVAL_SCENARIOS,
+  models:ReadonlyArray<string>,controller:AbortController
 ){
+  const eachTotal=scenarios.reduce((sum,s)=>sum+s.steps.length,0)*request.repetitions;
+  const comparison:BrainEvalModelResult[]=[];
+  for(const [index,model] of models.entries()){
+    if(controller.signal.aborted)break;
+    // One model loads at a time: avoids VRAM contention and makes runs comparable.
+    setStatus({model,label:"Model "+(index+1)+"/"+models.length+": "+model,
+      done:index*eachTotal,comparison:[...comparison]});
+    const run=await executeOne({...settings,model},request,scenarios,controller,
+      index*eachTotal,models.length,index);
+    comparison.push(run);
+    setStatus({comparison:[...comparison],done:(index+1)*eachTotal,
+      runId:run.reportId,results:run.metrics,savedFolder:run.savedFolder});
+  }
+  setStatus({phase:controller.signal.aborted?"stopped":"complete",
+    finishedAt:new Date().toISOString(),
+    label:controller.signal.aborted?"Stopped; completed model results retained":
+      "Comparison complete ("+comparison.length+" model"+(comparison.length===1?"":"s")+")"});
+}
+
+async function executeOne(
+  settings:Settings,request:BrainEvalRequest,
+  scenarios:typeof EVAL_SCENARIOS, controller:AbortController,
+  progressOffset:number,modelCount:number,modelIndex:number
+):Promise<BrainEvalModelResult>{
   // Live evidence tests require real search results, not just a Docker homepage.
   // Skip the network probe for selected scenarios that never expect web research.
   if(request.mode==="live" && scenarios.some(scenario=>scenario.steps.some(step=>
@@ -288,7 +340,8 @@ async function execute(
     mode:request.mode,model:settings.model,build:BRAIN_EVAL_BUILD,buildInfo:BUILD_INFO,
     scenarios,repetitions:request.repetitions,
     signal:controller.signal,...(request.mode==="live"?{infer,planWeb,previewMemory,liveWeb:true}:{}),
-    onProgress:(done,total,label)=>setStatus({done,total,label})
+    onProgress:(done,_total,label)=>setStatus({done:progressOffset+done,
+      label:"Model "+(modelIndex+1)+"/"+modelCount+" ("+settings.model+"): "+label})
   });
   report=result;
   saveCaseRecords(mergeCaseRecords(getBrainEvalCaseRecords(),
@@ -312,10 +365,6 @@ async function execute(
       markdownReport:brainEvalMarkdown(result)
     });
   }catch(error){saveError="Automatic export failed: "+String(error)}
-  setStatus({
-    phase:controller.signal.aborted?"stopped":"complete",
-    runId:result.runId,finishedAt:result.finishedAt,results:metrics,
-    label:controller.signal.aborted?"Stopped, partial results kept":"Evaluation complete",
-    savedFolder:folder,error:saveError
-  });
+  if(saveError)setStatus({error:saveError});
+  return {model:settings.model,reportId:result.runId,savedFolder:folder,metrics};
 }
