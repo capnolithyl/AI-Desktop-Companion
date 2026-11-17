@@ -871,6 +871,48 @@ async fn chat_stream_impl(
                 &client, &url, &request.model, &user_request, &initial_task, &sources, selected_context
             ).await;
             let mut candidate_queries = Vec::new();
+            // If a current, fact-seeking lookup is still unresolved, give real
+            // first-party announcement pages one bounded discovery chance.
+            // This uses only the subject from the already-approved public query.
+            // It never infers that an announcement proves "latest" by itself.
+            if task.uses_fact_evidence()
+                && !evidence.audit.unresolved_details.is_empty()
+                && task.source_url.is_none()
+                && research_intent::needs_primary_source_verification(&messages) {
+                if let Some(primary_query)=search_query.as_deref().and_then(|query|
+                    source_priority::primary_followup_query(query,task.subject.as_deref())) {
+                    let _=app.emit("mikan://activity",json!({
+                        "requestId":request.request_id,
+                        "text":"Checking an official announcement source…"
+                    }));
+                    if let Ok(mut more)=source_priority::search_for_task(
+                        request.searxng_endpoint.clone(),primary_query.clone(),false,
+                        &request.source_preferences,request.source_topic.as_deref(),
+                        task.subject.as_deref()
+                    ).await {
+                        more.retain(|source|!sources.iter().any(|old|old.url==source.url));
+                        more.truncate(4);
+                        if !more.is_empty() {
+                            source_enrichment::enrich_relevant_sources(
+                                &app,&mut more,&primary_query,request.cache_hours
+                            ).await;
+                            sources.extend(more);
+                            let checked=evidence_pack::extract(
+                                &client,&url,&request.model,&user_request,task,&sources,selected_context
+                            ).await;
+                            let fewer_missing=checked.audit.unresolved_details.len() <
+                                evidence.audit.unresolved_details.len();
+                            let stronger_context=checked.audit.unresolved_details.len() ==
+                                evidence.audit.unresolved_details.len()
+                                && checked.audit.accepted > evidence.audit.accepted;
+                            if checked.notes.is_some() && (fewer_missing || stronger_context) {
+                                evidence=checked;
+                            }
+                        }
+                    }
+                    evidence.audit.followup_query=Some(primary_query);
+                }
+            }
             // Discovery has two different jobs: identify the *individual item*
             // and then verify its numeric limits / credits. For small local
             // models, attempting both in one source-extraction step often
