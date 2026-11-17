@@ -426,10 +426,11 @@ export function BrainEvalPanel({settings,availableModels}:{settings:Settings;ava
       </label>
       <div className="brain-eval-comparison-scroll">
         <table>
-          <thead><tr><th>Model</th><th>Detected failures</th><th>Verified checks</th><th>Web misses</th><th>Sources</th><th>Time</th></tr></thead>
+          <thead><tr><th>Model</th><th>Automated checks passed</th><th>Needs human review</th><th>No review needed</th><th>Web misses</th><th>Sources</th><th>Time</th></tr></thead>
           <tbody>{runtime.comparison.map(entry=><tr key={entry.reportId}>
             <th scope="row">{entry.model}</th>
             <td>{entry.metrics.passed}/{entry.metrics.turns}</td>
+            <td>{entry.metrics.reviewTurns}/{entry.metrics.turns}</td>
             <td>{entry.metrics.verifiedPassed}/{entry.metrics.turns}</td>
             <td>{entry.metrics.missedWeb}</td>
             <td>{entry.metrics.liveSources}</td>
