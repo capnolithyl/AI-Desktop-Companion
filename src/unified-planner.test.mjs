@@ -510,6 +510,52 @@ test("document follow-up planning preserves a previously user-authorized public 
   assert.equal(plan.task.sourceUrl,url);
 });
 
+test("a real document follow-up re-reads the prior authorized source when the model says answer",async()=>{
+  const url="https://github.com/example/demo";
+  const history=[
+    {role:"user",content:"Look up "+url},
+    {role:"assistant",content:"Read README from a verified direct webpage."}
+  ];
+  const active={activePublicQuery:"Public document on github.com",
+    activeTask:{kind:"document",sourceUrl:url,requirements:[],roles:[],exclude:[]},
+    history,publicAnswer:"README overview with source citations"};
+  const choose=(question,response,options=active)=>planPublicWebTools(question,[],
+    async prompt=>{
+      assert.match(prompt,/PREVIOUS TASK STRUCTURE/);
+      assert.ok(prompt.includes(url));
+      return JSON.stringify(response);
+    },{automaticWebEnabled:true,sourcePreferences:prefs,...options});
+  const observed={intent:"refine",replyEffort:"quick",
+    web:{operation:"answer",reason:"Local answer selected"}};
+  const recovered=await choose("What did the README say about memory?",observed);
+  assert.equal(recovered.search,true);
+  assert.equal(recovered.task?.kind,"document");
+  assert.equal(recovered.task?.sourceUrl,url);
+  assert.deepEqual(recovered.task?.details,["What did the README say about memory?"]);
+  assert.equal(recovered.query,"Public document on github.com");
+  assert.equal(recovered.intent,"refine");
+
+  // The fallback is not a license to browse unrelated chat or ignored links.
+  for(const intent of ["chat","end","new"]){
+    const skipped=await choose("That's fine, let's move on.",
+      {...observed,intent});
+    assert.equal(skipped.search,false,intent);
+  }
+  const independent=await choose("Search for TypeScript 6 updates.",
+    {intent:"new",web:{operation:"search",query:"TypeScript 6 updates",
+      task:{kind:"lookup",details:["latest version"],requirements:[],roles:[],exclude:[]}}});
+  assert.equal(independent.task?.kind,"lookup");
+  assert.equal(independent.query,"TypeScript 6 updates");
+
+  // A historical link that was never the executed document is not authority.
+  const notExecuted=await choose("What did that README say?",observed,
+    {...active,activeTask:{...active.activeTask,kind:"lookup"}});
+  assert.equal(notExecuted.search,false);
+  const unrelatedUrl=await choose("What did that README say?",observed,
+    {...active,history:[{role:"user",content:"Read https://github.com/else/repo"}]});
+  assert.equal(unrelatedUrl.search,false);
+});
+
 test("document operations bind to user handles independently of search usefulness",async()=>{
   const url="https://handbook.example.org/observatory", other="https://sky.example.org/map";
   const run=(text, response, options={})=>planPublicWebTools(text,[],async()=>JSON.stringify(response),

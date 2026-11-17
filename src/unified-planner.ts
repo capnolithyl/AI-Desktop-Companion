@@ -304,7 +304,20 @@ export async function planPublicWebTools(
   } catch {
     return {...defaultWeb,method:"planner-error",reason:"Local tool planner unavailable"};
   }
-  return parseWebToolDecision(raw,true,options.sourcePreferences,ownerFacts,urls);
+  const chosen=parseWebToolDecision(raw,true,options.sourcePreferences,ownerFacts,urls);
+  // The model may recognize a continued document question (intent=refine)
+  // yet mistakenly choose an unsourced local answer. Only reopen a document
+  // actually used for the immediately active public task, still authorized
+  // by a prior USER-supplied locator. The current question is local focus,
+  // never a public search query. A new topic, chat, opt-out or an independent
+  // search keeps the planner's decision.
+  const continuedDocument=chosen.intent==="refine" && chosen.method==="not-needed" &&
+    active?.kind==="document" && priorUrl && urls.includes(priorUrl) &&
+    history.some(turn=>turn.role==="user" &&
+      publicDocumentUrls([turn.content]).includes(priorUrl));
+  return continuedDocument
+    ? documentReadDecision(priorUrl,chosen.intent,chosen.replyEffort,query.slice(0,180))
+    : chosen;
 }
 
 /** This label is local bookkeeping. The native reader gets the exact URL and
