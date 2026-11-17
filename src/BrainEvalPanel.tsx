@@ -4,7 +4,7 @@ import { Activity, BrainCircuit, Download, Play, Square, RotateCw, CheckCircle2,
 import type { Settings } from "./storage";
 import { EVAL_SCENARIOS, brainEvalMetrics, brainEvalMarkdown, brainScenarioLabel, type EvalMode } from "./brain-eval";
 import {
-  subscribeBrainEval, getBrainEvalStatus, getBrainEvalReport, brainEvalHistory,
+  subscribeBrainEval, getBrainEvalStatus, getBrainEvalReport, getBrainEvalModelReport, brainEvalHistory,
   clearBrainEvalHistory, startBrainEvaluation, stopBrainEvaluation,
   getBrainEvalCaseRecords, brainEvalEnvironment, reviewBrainEvalScenario
 } from "./brain-eval-manager";
@@ -26,6 +26,7 @@ export function BrainEvalPanel({settings,availableModels}:{settings:Settings;ava
     ()=>new Set(EVAL_SCENARIOS.map(s=>s.id))
   );
   const [repeats,setRepeats]=useState(1);
+  const [viewModel,setViewModel]=useState("");
   const [selectedModels,setSelectedModels]=useState<ReadonlySet<string>>(()=>new Set([settings.model]));
   const localModels=[...new Set([settings.model,...availableModels])];
   const modelsToRun=mode==="live"?localModels.filter(model=>selectedModels.has(model)): [settings.model];
@@ -36,7 +37,7 @@ export function BrainEvalPanel({settings,availableModels}:{settings:Settings;ava
   const [lastExportFolder,setLastExportFolder]=useState<string|null>(null);
   const resultsRef=useRef<HTMLDivElement>(null);
   const runtime=useSyncExternalStore(subscribeBrainEval,getBrainEvalStatus,getBrainEvalStatus);
-  const report=getBrainEvalReport();
+  const report=(viewModel?getBrainEvalModelReport(viewModel):null)??getBrainEvalReport();
   const history=brainEvalHistory();
   const busy=runtime.phase==="running";
   const progress={done:runtime.done,total:runtime.total,label:runtime.label};
@@ -44,10 +45,10 @@ export function BrainEvalPanel({settings,availableModels}:{settings:Settings;ava
   const progressPercent=progress.total>0
     ?Math.round(Math.min(progress.done,progress.total)/progress.total*100):0;
   const records=getBrainEvalCaseRecords();
-  const environment=brainEvalEnvironment(mode,settings.model);
+  const environment=brainEvalEnvironment(mode,viewModel||settings.model);
   const statuses=useMemo(()=>
     new Map(EVAL_SCENARIOS.map(s=>[s.id,statusForScenario(s,records,environment)])),
-    [records,mode,settings.model]
+    [records,mode,settings.model,viewModel]
   );
   const totals=summarizeCaseStatuses(EVAL_SCENARIOS,records,environment);
   const searchTerm=search.trim().toLocaleLowerCase();
@@ -104,6 +105,7 @@ export function BrainEvalPanel({settings,availableModels}:{settings:Settings;ava
       },localModels);
       setMessage("");
       setLastExportFolder(null);
+      setViewModel("");
       // The large checklist used to bury progress and completion results.
       // Collapse it during a run, retaining the exact owner selection.
       setCatalogOpen(false);
@@ -308,10 +310,10 @@ export function BrainEvalPanel({settings,availableModels}:{settings:Settings;ava
             {view.status==="stale"&&view.previous?" ("+view.previous+")":""}</span>
           {view.status==="review"&&<div className="brain-eval-review-actions">
             <button type="button" disabled={busy}
-              onClick={()=>{try{reviewBrainEvalScenario(s.id,mode,settings.model,"passed")}
+              onClick={()=>{try{reviewBrainEvalScenario(s.id,mode,viewModel||settings.model,"passed")}
                 catch(error){setMessage(String(error))}}}>Approve</button>
             <button type="button" disabled={busy}
-              onClick={()=>{try{reviewBrainEvalScenario(s.id,mode,settings.model,"failed")}
+              onClick={()=>{try{reviewBrainEvalScenario(s.id,mode,viewModel||settings.model,"failed")}
                 catch(error){setMessage(String(error))}}}>Fail</button>
           </div>}
         </div>;
@@ -324,6 +326,12 @@ export function BrainEvalPanel({settings,availableModels}:{settings:Settings;ava
     {message&&<p className="brain-eval-message" role="status">{message}</p>}
     {runtime.comparison && runtime.comparison.length>1&&<section className="brain-eval-comparison">
       <strong>Model comparison · same scenarios and repetitions</strong>
+      <label className="brain-eval-model-trace-picker">Inspect a model's full run
+        <select value={viewModel} onChange={event=>setViewModel(event.target.value)}>
+          <option value="">Latest completed model</option>
+          {runtime.comparison.map(item=><option key={item.reportId} value={item.model}>{item.model}</option>)}
+        </select>
+      </label>
       <div className="brain-eval-comparison-scroll">
         <table>
           <thead><tr><th>Model</th><th>Detected failures</th><th>Verified checks</th><th>Web misses</th><th>Sources</th><th>Time</th></tr></thead>
@@ -341,7 +349,7 @@ export function BrainEvalPanel({settings,availableModels}:{settings:Settings;ava
     </section>}
     {metrics&&report&&<>
       <div ref={resultsRef} className="settings-section-title brain-eval-results-anchor">
-        <Activity size={17}/> Results dashboard
+        <Activity size={17}/> Results dashboard · {report.model}
       </div>
       <div className="brain-eval-metrics">
         {([
