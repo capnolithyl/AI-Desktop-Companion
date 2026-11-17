@@ -265,7 +265,9 @@ export const EVAL_SCENARIOS:ReadonlyArray<EvalScenario>=[
   scenario("search-explicit","Explicit public research","Web search",
     e("Search the web for the latest Qwen releases.",{route:"research",stubReply:"I'd search current Qwen releases."})),
   scenario("search-website","Named public website lookup","Web search",
-    e("What is python.org?",{route:"research",stubReply:"It's the Python language's official website."})),
+    e("Open https://www.python.org/ and tell me what the site is for.",{
+      route:"research",web:true,stubReply:"It's the Python language's official website."
+    })),
   scenario("search-github","Explicit GitHub repository link","Web search",
     e("Check your GitHub repository at https://github.com/capnolithyl/AI-Desktop-Companion and tell me what's implemented.",{route:"research",stubReply:"I'd open the repository before claiming its current state."})),
   scenario("search-github-followup","Repository link then files","Web search",
