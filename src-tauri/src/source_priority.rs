@@ -116,6 +116,24 @@ fn rank_sources(
     rank_for_task(broad,focused,rule,query,None)
 }
 
+/// Ranking remains about topical relevance. Diversity prevents one search
+/// aggregator or model-hosting site from occupying every source slot.
+/// No host is treated as proof of a claim or as a universal authority.
+fn diversify_hosts(hits:Vec<SearchResult>)->Vec<SearchResult>{
+    let mut seen=HashSet::new();
+    let mut distinct=Vec::new();
+    let mut remaining=Vec::new();
+    for hit in hits {
+        let host=reqwest::Url::parse(&hit.url).ok()
+            .and_then(|url|url.host_str().map(str::to_owned))
+            .unwrap_or_else(||hit.url.clone());
+        let host=host.strip_prefix("www.").unwrap_or(&host).to_owned();
+        if seen.insert(host) { distinct.push(hit); } else { remaining.push(hit); }
+    }
+    distinct.extend(remaining);
+    distinct
+}
+
 fn rank_for_task(broad:Vec<SearchResult>,focused:Vec<SearchResult>,rule:Option<&SourcePreference>,query:&str,subject:Option<&str>)->Vec<SearchResult>{
     let mut seen=HashSet::new();
     let mut candidates:Vec<SearchResult>=broad.into_iter().chain(focused)
@@ -123,6 +141,7 @@ fn rank_for_task(broad:Vec<SearchResult>,focused:Vec<SearchResult>,rule:Option<&
     // Retain original relevance order on ties. Preferred domains gain a modest
     // boost, but nonpreferred sources remain eligible and can still win.
     candidates.sort_by_key(|s| -priority_score(s,rule,query));
+    let mut candidates=diversify_hosts(candidates);
     candidates.truncate(8);
     candidates
 }
@@ -144,19 +163,14 @@ fn relaxed_subject_query(query:&str,subject:Option<&str>)->Option<String> {
     }
     Some(subject.to_owned())
 }
-/// Search for the publisher's own announcement when a time-sensitive lookup
-/// still has unresolved facts. Use ONLY a named subject already present in the
-/// approved public query; never build a public query from private history.
-pub(crate) fn primary_followup_query(query:&str,subject:Option<&str>)->Option<String> {
-    // The planner may omit the entity subject or name it differently than its
-    // search query. That must not disable recovery after a genuine search.
-    // Fall back ONLY to the existing, previously privacy-approved public query,
-    // never to an unvalidated subject, memory, or source excerpt.
-    let approved=query.trim();
-    if approved.is_empty() {return None}
-    let public_seed=relaxed_subject_query(approved,subject)
-        .unwrap_or_else(||approved.to_owned());
-    let followup=format!("{public_seed} official release announcement");
+/// Preserve the entire already privacy-approved PUBLIC search query when
+/// looking for primary announcements. Reducing "latest released X" to "X"
+/// silently discards the user's comparison and favors older model listings.
+/// A named task subject is not itself a search authorization.
+pub(crate) fn primary_followup_query(query:&str,_subject:Option<&str>)->Option<String> {
+    let public_query=query.trim();
+    if public_query.is_empty() || public_query.chars().any(char::is_control) { return None }
+    let followup=format!("{public_query} official announcement");
     (followup.chars().count()<=250).then_some(followup)
 }
 
@@ -190,17 +204,7 @@ fn select_provisional(mut hits:Vec<SearchResult>,query:&str)->Vec<SearchResult>{
     hits.sort_by_key(|hit|-provisional_score(hit,query,&corpus));
     let mut unique_urls=HashSet::new();
     hits.retain(|hit|unique_urls.insert(hit.url.clone()));
-    let mut seen_hosts=HashSet::new();
-    let mut distinct=Vec::new();
-    let mut remaining=Vec::new();
-    for hit in hits {
-        let host=reqwest::Url::parse(&hit.url).ok()
-            .and_then(|url|url.host_str().map(str::to_owned))
-            .unwrap_or_else(||hit.url.clone());
-        let host=host.strip_prefix("www.").unwrap_or(&host).to_owned();
-        if seen_hosts.insert(host){distinct.push(hit)}else{remaining.push(hit)}
-    }
-    distinct.extend(remaining);
+    let mut distinct=diversify_hosts(hits);
     distinct.truncate(6);
     distinct
 }
@@ -402,16 +406,17 @@ mod search_recovery_tests {
     }
 
     #[test]
-    fn primary_lookup_uses_public_query_when_planner_subject_is_missing_or_wrong(){
+    fn primary_lookup_keeps_latest_goal_instead_of_collapsing_to_family_name(){
         assert_eq!(primary_followup_query("latest officially released Qwen model",Some("Qwen")),
-            Some("Qwen official release announcement".into()));
+            Some("latest officially released Qwen model official announcement".into()));
         assert_eq!(primary_followup_query("latest officially released Qwen model",None),
-            Some("latest officially released Qwen model official release announcement".into()));
+            Some("latest officially released Qwen model official announcement".into()));
         assert_eq!(primary_followup_query("public software release",Some("Private Name")),
-            Some("public software release official release announcement".into()));
+            Some("public software release official announcement".into()));
         assert_eq!(primary_followup_query("Qwen latest model",Some("Qwen\\nsecret")),
-            Some("Qwen latest model official release announcement".into()));
+            Some("Qwen latest model official announcement".into()));
         assert_eq!(primary_followup_query("  ",None),None);
+        assert_eq!(primary_followup_query("public\\nprivate",None),None);
         assert_eq!(primary_followup_query(&"a".repeat(246),None),None);
     }
 
@@ -459,6 +464,28 @@ mod search_recovery_tests {
             "diverse sources outrank a second page from the same host at the six-source cap");
         assert!(chosen.iter().any(|hit|hit.url.starts_with("https://publisher.test/")));
     }
+    #[test]
+    fn top_eight_keep_relevant_independent_sources_when_one_host_dominates() {
+        let mut hits:Vec<_>=(0..15).map(|i|SearchResult{
+            title:"Latest officially released Qwen model official announcement".into(),
+            url:format!("https://aggregator.example/release/{i}"),
+            content:"Latest officially released Qwen model official announcement".into(),
+            engine:"fixture".into(),published_date:None
+        }).collect();
+        hits.push(SearchResult{
+            title:"Publisher releases Qwen model".into(),
+            url:"https://publisher.example/press/announcement".into(),
+            content:"Publisher has released a new Qwen model.".into(),
+            engine:"fixture".into(),published_date:None
+        });
+        let ranked=rank_for_task(hits,vec![],None,
+            "latest officially released Qwen model",Some("Qwen"));
+        assert_eq!(ranked.len(),8);
+        assert!(ranked.iter().any(|s|s.url.contains("publisher.example")),
+            "independent publisher evidence cannot be crowded out by one aggregator");
+        assert!(ranked.iter().all(|s|s.title.contains("Qwen")));
+    }
+
     #[test]
     fn raw_hit_counts_distinguish_no_results_from_relevance_filtering() {
         let empty=assemble_search("Cora birth year",Some("Cora"),None,
