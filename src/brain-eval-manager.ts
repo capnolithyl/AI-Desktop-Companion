@@ -101,6 +101,10 @@ const initial:BrainEvalStatus={
 };
 let status:BrainEvalStatus=initial;
 let report:EvalReport|null=null;
+const batchReports=new Map<string,EvalReport>();
+export function getBrainEvalModelReport(model:string):EvalReport|null{
+  return batchReports.get(model)??null;
+}
 let abort:AbortController|null=null;
 let requestId:string|null=null;
 
@@ -128,6 +132,7 @@ export function restoreBrainEvalReport():Promise<void>{
       (candidate.mode!=="live" && candidate.mode!=="routing") ||
       !Array.isArray(candidate.cases) || typeof candidate.runId!=="string")return;
     report=candidate;
+    batchReports.set(candidate.model,candidate);
     setStatus({
       phase:"complete",runId:candidate.runId,mode:candidate.mode,model:candidate.model,
       startedAt:candidate.startedAt,finishedAt:candidate.finishedAt,
@@ -181,6 +186,7 @@ export function startBrainEvaluation(
   const controller=new AbortController();
   abort=controller;
   report=null;
+  batchReports.clear();
   const total=scenarios.reduce((sum,s)=>sum+s.steps.length,0)*request.repetitions*models.length;
   setStatus({
     phase:"running",runId:null,mode:request.mode,model:models[0],models,comparison:[],
@@ -329,6 +335,7 @@ async function executeOne(
       label:"Model "+(modelIndex+1)+"/"+modelCount+" ("+settings.model+"): "+label})
   });
   report=result;
+  batchReports.set(settings.model,result);
   saveCaseRecords(mergeCaseRecords(getBrainEvalCaseRecords(),
     gradeReportCases(result,scenarios,BRAIN_EVAL_BUILD)));
   const metrics=brainEvalMetrics(result);
