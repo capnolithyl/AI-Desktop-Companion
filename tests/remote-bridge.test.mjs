@@ -203,7 +203,7 @@ test("browser relay requires a private key and delegates to the desktop, not a s
   const evalState=(phase,controlsBlocked=false)=>({
     conversationId:"same-desktop-conversation",model:"qwen3.5:9b",
     busy:false,controlsBlocked,messages:history,
-    models:["qwen3.5:9b"],provider:"local",brainEvalCatalog:remoteCatalog,
+    models:["qwen3.5:9b","gemma4:12b"],provider:"local",brainEvalCatalog:remoteCatalog,
     brainEval:{phase,done:phase==="running"?1:0,total:6,
       model:"qwen3.5:9b",startedAt:"2026-11-14T22:00:00.000Z",
       results:phase==="complete"?{passRate:83.3,recall:95,webAgreement:80,reviewTurns:2,
@@ -220,14 +220,23 @@ test("browser relay requires a private key and delegates to the desktop, not a s
     {action:"start",mode:"live",repetitions:7,scenarioIds:["branch-a"]})).status,400);
   assert.equal((await request(base + "/api/brain-eval","POST",jsonHeaders,
     {action:"start",mode:"live",repetitions:1,scenarioIds:["unknown-scenario"]})).status,400);
+  for(const models of [["invented:30b"],[],["qwen3.5:9b","qwen3.5:9b"]]){
+    assert.equal((await request(base + "/api/brain-eval","POST",jsonHeaders,
+      {action:"start",mode:"live",repetitions:1,scenarioIds:["branch-a"],models})).status,400);
+  }
   assert.equal((await request(base + "/api/brain-eval","POST",jsonHeaders,
-    {action:"start",mode:"live",repetitions:3,scenarioIds:["branch-a","discovery-bands-wish"]})).status,202);
+    {action:"start",mode:"routing",repetitions:1,scenarioIds:["branch-a"],
+      models:["qwen3.5:9b","gemma4:12b"]})).status,400);
+  assert.equal((await request(base + "/api/brain-eval","POST",jsonHeaders,
+    {action:"start",mode:"live",repetitions:3,scenarioIds:["branch-a","discovery-bands-wish"],
+      models:["qwen3.5:9b","gemma4:12b"]})).status,202);
   assert.equal((await request(base + "/api/brain-eval","POST",jsonHeaders,
     {action:"start",mode:"live",repetitions:3,scenarioIds:["branch-a"]})).status,409);
   const evalJob=(await (await request(agent + "/agent/next","GET",desktopHeaders)).json()).job;
   assert.equal(evalJob.kind,"start_brain_eval");
   assert.deepEqual(evalJob.evalOptions,{
-    mode:"live",repetitions:3,scenarioIds:["branch-a","discovery-bands-wish"]
+    mode:"live",repetitions:3,scenarioIds:["branch-a","discovery-bands-wish"],
+    models:["qwen3.5:9b","gemma4:12b"]
   });
   assert.equal((await request(agent + "/agent/ack","POST",desktopHeaders,{id:evalJob.id})).status,200);
   assert.equal((await request(agent + "/agent/state","POST",desktopHeaders,evalState("running",true))).status,200);
