@@ -742,7 +742,7 @@ export async function runBrainEvaluation(options:EvalOptions):Promise<EvalReport
             messages,selectedMemories:selected,evidence:step.mockEvidence,
             researchPlanned:planned?.search===true || decision.plan.mode==="research",
             researchQuery:options.liveWeb?publicQuery:undefined,
-            researchTask:options.liveWeb && publicQuery ? planned?.task : undefined,
+            researchTask:options.liveWeb && publicQuery ? execution.researchTask : undefined,
             replyEffort:planned?.replyEffort,
             webRequest:options.liveWeb ? {...execution,priorSources:priorResearchSources(previous,step.user)} : undefined,
             scenarioId:scenario.id,stepIndex
