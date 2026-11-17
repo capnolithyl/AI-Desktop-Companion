@@ -326,3 +326,20 @@
   .brain-eval-run-monitor{padding:8px}
   .brain-eval-run-details span:last-child{flex-basis:100%}
 }
+
+/* Live model sweeps stay intentionally compact even with many Ollama models. */
+.brain-eval-model-picker,.brain-eval-comparison{
+  display:grid;gap:8px;padding:11px;border:1px solid #654d60;border-radius:10px;
+  background:#2a222d;color:#e8d9df;font-size:12px;min-width:0;
+}
+.brain-eval-model-heading{display:flex;flex-wrap:wrap;justify-content:space-between;gap:6px}
+.brain-eval-model-heading span,.brain-eval-model-picker small,.brain-eval-comparison small{color:#cbbbc7}
+.brain-eval-model-actions{display:flex;flex-wrap:wrap;gap:6px}
+.brain-eval-model-actions button{border:1px solid #795869;border-radius:7px;background:#453444;color:#ffe8e9;padding:6px 9px}
+.brain-eval-model-list{display:grid;grid-template-columns:repeat(auto-fit,minmax(165px,1fr));gap:5px;max-height:130px;overflow:auto}
+.brain-eval-model-list label{display:flex;gap:7px;align-items:center;min-width:0;overflow-wrap:anywhere;padding:5px;border-radius:6px;background:#352937}
+.brain-eval-model-list input{accent-color:#f5b18f}
+.brain-eval-comparison-scroll{overflow-x:auto}
+.brain-eval-comparison table{width:100%;border-collapse:collapse;text-align:left;font-size:11px}
+.brain-eval-comparison th,.brain-eval-comparison td{padding:7px 9px;border-bottom:1px solid #654d60;white-space:nowrap}
+.brain-eval-comparison th{color:#f4d5c8}
