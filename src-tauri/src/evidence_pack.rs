@@ -76,6 +76,16 @@ pub struct ResearchEvidence {
     pub followup_query: Option<String>,
 }
 
+/// More matching quotations do not mean the user's QUESTION is better answered.
+/// Promote a follow-up only if it actually resolves additional requested detail
+/// slots without losing details established by the earlier evidence pass.
+pub(crate) fn improves_requested_coverage(before:&ResearchAudit, after:&ResearchAudit)->bool {
+    after.unresolved_details.len()<before.unresolved_details.len()
+        && after.unresolved_details.iter()
+            .all(|detail|before.unresolved_details.contains(detail))
+}
+
+
 #[derive(Clone, Deserialize)]
 struct FactCandidate {
     source: usize,
@@ -680,6 +690,26 @@ mod tests {
     }
     fn candidate(source: usize, subject: &str, claim: &str, quote: &str) -> FactCandidate {
         FactCandidate {source, subject:subject.into(), claim:claim.into(), quote:quote.into(),detail:None}
+    }
+
+    #[test]
+    fn more_context_is_not_more_answer_coverage() {
+        let task=ResearchTask{
+            kind:ResearchKind::Lookup,
+            details:vec!["latest official release name".into(),"release date".into()],
+            ..Default::default()
+        };
+        let before=assemble_evidence(None,"latest official release",&task,&[]).audit;
+        let mut same_missing=assemble_evidence(None,"latest official release",&task,&[]).audit;
+        // More source quotes, but they still don't establish the requested answer.
+        same_missing.accepted=7;
+        assert!(!improves_requested_coverage(&before,&same_missing));
+        let mut improved=assemble_evidence(None,"latest official release",&task,&[]).audit;
+        improved.unresolved_details=vec!["release date".into()];
+        assert!(improves_requested_coverage(&before,&improved));
+        let mut swapped=assemble_evidence(None,"latest official release",&task,&[]).audit;
+        swapped.unresolved_details=vec!["unrelated new gap".into()];
+        assert!(!improves_requested_coverage(&before,&swapped));
     }
 
     #[test]
