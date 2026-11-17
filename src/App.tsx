@@ -2296,7 +2296,7 @@ export default function App() {
         }
       );
       if(stopRequested.current)throw new Error("Generation stopped");
-      const webExecution=resolvePublicWebExecution(webPolicy,researchPlan,plannerWeb);
+      const webExecution=resolvePublicWebExecution(webPolicy,researchPlan,plannerWeb,liveFacts);
       const reasoningChoice=localThinkingChoice(settings.reasoningMode,text,settings.model,
         plannerWeb.replyEffort);
       const plannedPublicSearch = canPlanPublicWeb && plannerWeb.search && !!plannerWeb.query;
