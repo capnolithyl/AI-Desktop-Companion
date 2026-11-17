@@ -339,14 +339,24 @@ export function createBridge({
           const mode = body.mode;
           const repetitions = body.repetitions;
           const ids = body.scenarioIds;
+          // Only model IDs reported as installed by the trusted local desktop.
+          // Legacy single-model browser requests still work unchanged.
+          const requestedModels = body.models;
+          const installed = new Set(desktop.models);
+          const validModels = requestedModels === undefined ||
+            (mode === "live" && Array.isArray(requestedModels) &&
+              requestedModels.length >= 1 && requestedModels.length <= 10 &&
+              new Set(requestedModels).size === requestedModels.length &&
+              requestedModels.every(model => typeof model === "string" && installed.has(model)));
           const allowedIds = new Set(desktop.brainEvalCatalog.map(item => item.id));
-          if (!["routing","live"].includes(mode) || ![1,2,3,5].includes(repetitions) ||
+          if (!validModels || !["routing","live"].includes(mode) || ![1,2,3,5].includes(repetitions) ||
             !Array.isArray(ids) || !ids.length || ids.length > allowedIds.size ||
             ids.length !== new Set(ids).size || ids.some(id => !allowedIds.has(id)))
             return fail(response, 400, "Choose a valid test mode, repetition count and scenario selection");
           pending = {
             id: randomBytes(12).toString("hex"),kind:"start_brain_eval",
-            evalOptions:{mode,repetitions,scenarioIds:ids}
+            evalOptions:{mode,repetitions,scenarioIds:ids,
+              ...(requestedModels === undefined ? {} : {models:requestedModels})}
           };
           json(response, 202, {id:pending.id,selected:ids.length});
         } else if (body.action === "stop") {
