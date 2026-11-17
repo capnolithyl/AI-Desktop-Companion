@@ -71,6 +71,7 @@ export function remoteDiagnosticMessages(messages: readonly DiagnosticMessage[])
           status: d.research.status,
           accepted: finite(d.research.accepted),
           rejected: finite(d.research.rejected),
+          followupAttempted: typeof d.research.followupQuery === "string" && d.research.followupQuery.trim().length > 0,
           elapsedMs: finite(d.research.elapsedMs)
         } : null,
         answerVerification: d.answerVerification ? {
