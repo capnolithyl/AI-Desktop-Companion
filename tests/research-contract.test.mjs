@@ -3,7 +3,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {planDesktopWebExecution,resolvePublicWebExecution} from "../src/turn-execution-policy.ts";
 import {planPublicWebTools,publicDocumentUrls,parseWebToolDecision} from "../src/unified-planner.ts";
-import {runBrainEvaluation,brainEvalMetrics} from "../src/brain-eval.ts";
+import {runBrainEvaluation,brainEvalMetrics,brainEvalModels,EVAL_SCENARIOS} from "../src/brain-eval.ts";
 import {reviewResearchCompletion} from "../src/evidence-verification.ts";
 
 const permitted={canPlanPublicWeb:true,blockedReason:null,cloudMaySearch:false};
@@ -85,4 +85,51 @@ test("a failed final draft recovers source-anchored partial facts without invent
   assert.equal(reviewResearchCompletion("A casual reaction",[],undefined),null);
   const malformed={...audit,acceptedDetails:[{...audit.acceptedDetails[0],quote:"Fabricated source passage"}]};
   assert.equal(reviewResearchCompletion("An album released in 2024. [1]",sources,malformed).usable,false);
+});
+
+test("current-release fixture requires live web execution and human review",()=>{
+  const fixture=EVAL_SCENARIOS.find(s=>s.id==="research-current-model");
+  assert.ok(fixture);
+  assert.equal(fixture.steps.length,1);
+  assert.equal(fixture.steps[0].user,"What is the latest officially released Qwen model?");
+  assert.equal(fixture.steps[0].expect.web,true);
+  assert.match(fixture.steps[0].expect.conversationGoal,/released versions from previews/);
+  assert.equal(fixture.steps[0].expect.answerIncludes,undefined,
+    "a current release changes over time and must not be hardcoded into a pass");
+});
+
+test("model sweeps accept only unique installed local models in Live mode",()=>{
+  const installed=["qwen3.5:9b","gemma4:12b","ministral-3:14b"];
+  assert.deepEqual(brainEvalModels(undefined,installed[0],installed,"routing"),[installed[0]]);
+  assert.deepEqual(brainEvalModels([installed[2],installed[0]],installed[0],installed,"live"),[installed[2],installed[0]]);
+  for(const models of [[],["made-up:99b"],[installed[0],installed[0]],
+    Array(11).fill(installed[0]),["openrouter/free"]])
+    assert.throws(()=>brainEvalModels(models,installed[0],installed,"live"));
+  assert.throws(()=>brainEvalModels(installed.slice(0,2),installed[0],installed,"routing"));
+});
+
+test("current-release test keeps per-model run identities and observes actual web misses",async()=>{
+  const scenario=EVAL_SCENARIOS.find(s=>s.id==="research-current-model");
+  const make=async(model,searched)=>runBrainEvaluation({
+    mode:"live",model,repetitions:1,scenarios:[scenario],liveWeb:true,
+    planWeb:async()=>({search:searched,method:searched?"ai-planned":"fallback",
+      query:searched?"latest official Aurora release":undefined,reason:"isolated planner fixture"}),
+    infer:async()=>({text:searched?"I found a release note. [1]":"I cannot search right now.",
+      modelUsed:model,webExecution:{
+        query:searched?"latest official Aurora release":null,
+        results:searched?[{title:"Official bulletin",url:"https://publisher.example/release",
+          content:"The Aurora model was published in 2026.",engine:"fixture"}]:[],
+        sourcesCarriedOver:false
+      }})
+  });
+  const yes=await make("model-a",true);
+  const no=await make("model-b",false);
+  assert.equal(yes.model,"model-a");
+  assert.equal(no.model,"model-b");
+  assert.notEqual(yes.runId,no.runId);
+  assert.equal(yes.cases[0].steps[0].webPass,true);
+  assert.equal(no.cases[0].steps[0].webPass,false);
+  assert.equal(no.cases[0].steps[0].pass,false);
+  assert.ok(no.cases[0].steps[0].answerFailures.some(x=>x.includes("not executed")));
+  assert.equal(yes.cases[0].steps[0].reviewRequired,true);
 });
