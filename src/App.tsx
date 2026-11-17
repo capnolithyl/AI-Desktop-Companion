@@ -2284,7 +2284,7 @@ export default function App() {
       const plannerWeb:WebToolDecision = await planPublicWebTools(text,liveFacts,
         prompt => invoke<string>("condense_local_context",{
           endpoint:settings.endpoint,model:settings.model,prompt,
-          contextWindow:settings.contextWindow,maxOutputTokens:380,timeoutMs:22000
+          contextWindow:settings.contextWindow,maxOutputTokens:380,timeoutMs:45000
         }),{
           automaticWebEnabled:canPlanPublicWeb,
           sourcePreferences:settings.sourcePreferences,
