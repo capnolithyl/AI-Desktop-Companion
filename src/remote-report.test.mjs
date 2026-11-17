@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { remoteDiagnosticMessages, remoteAvatarDiagnostics } from "./remote-report.ts";
+import { safeReportDiagnostics } from "../server/reporting.mjs";
 
 test("remote diagnostic snapshot retains counts, routing and failures without memory text or private queries", () => {
   const log = remoteDiagnosticMessages([
@@ -18,7 +19,7 @@ test("remote diagnostic snapshot retains counts, routing and failures without me
       },
       toolPlan:{method:"web-search",reason:"PRIVATE TOOL CONTEXT",query:"PRIVATE SEARCH QUERY",
         topic:"PRIVATE TOPIC",publicWebAllowed:true,freshSources:2,searchOutcome:"completed"},
-      research:{status:"used",accepted:3,rejected:1,elapsedMs:22,note:"PRIVATE WEB EXCERPT"},
+      research:{status:"partial",accepted:3,rejected:1,elapsedMs:22,note:"PRIVATE WEB EXCERPT"},
       answerVerification:{checked:2,rejected:0,recoveredHeadline:false,
         presentation:"model-voice-preserved"},
       notion:{selectedPage:"PRIVATE CHAPTER NAME",cachedPages:3,excerptCount:8,
@@ -34,6 +35,15 @@ test("remote diagnostic snapshot retains counts, routing and failures without me
   assert.equal(log[1].diagnostics.memory.interestsIncluded,1);
   assert.equal(log[1].diagnostics.toolPlan.freshSources,2);
   assert.equal(log[1].diagnostics.answerVerification.presentation,"model-voice-preserved");
+  const relayed = safeReportDiagnostics({messages:log});
+  assert.equal(relayed.messages[1].diagnostics.research.status,"partial",
+    "a partial research state must survive BOTH desktop and relay sanitizers");
+  assert.equal(relayed.messages[1].diagnostics.answerVerification.presentation,"model-voice-preserved");
+  const poisoned = safeReportDiagnostics({messages:[{id:"x",role:"assistant",diagnostics:{
+    research:{status:"unsafe-injected"},answerVerification:{presentation:"unsupported-claim"}
+  }}]});
+  assert.equal(poisoned.messages[0].diagnostics.research.status,null);
+  assert.equal(poisoned.messages[0].diagnostics.answerVerification.presentation,null);
   assert.equal(log[1].diagnostics.notion.readSucceeded,false);
   assert.equal(log[1].diagnostics.privateDetails.notionReadFailure,"PRIVATE NOTION ERROR");
   const serialized=JSON.stringify(log);
