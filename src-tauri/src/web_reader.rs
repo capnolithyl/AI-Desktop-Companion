@@ -157,7 +157,7 @@ fn github_document_content(kind:GithubDocument,bytes:&[u8],repo:&str)->Option<(S
         GithubDocument::Readme=>{
             if value["encoding"].as_str()? != "base64" {return None}
             use base64::Engine as _;
-            let encoded=value["content"].as_str()?.replace(['\r','\n'],"");
+            let encoded=value["content"].as_str()?.replace('\n',"").replace('\r',"");
             let decoded=base64::engine::general_purpose::STANDARD.decode(encoded).ok()?;
             let text=String::from_utf8(decoded).ok()?;
             if text.trim().is_empty(){return None}
@@ -222,8 +222,9 @@ async fn fetch_public_bytes(url:&reqwest::Url,accept:&str)->Result<(String,Vec<u
     }
     let content_type = response.headers().get(reqwest::header::CONTENT_TYPE)
         .and_then(|v| v.to_str().ok()).unwrap_or("").to_lowercase();
-    if !content_type.contains("text/html") && !content_type.contains("text/plain") {
-        return Err("Only HTML and plaintext pages can be read".into());
+    if !content_type.contains("text/html") && !content_type.contains("text/plain")
+        && !(accept=="application/vnd.github+json" && content_type.contains("application/json")) {
+        return Err("Unsupported public document content type".into());
     }
     if response.content_length().is_some_and(|length| length > MAX_HTML_BYTES as u64) {
         return Err("Page too large for the reader".into());
