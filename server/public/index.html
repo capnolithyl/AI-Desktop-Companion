@@ -82,6 +82,14 @@
     .brain-lab-controls select {min-width:0;width:100%;border:1px solid #76556d;
       background:#30232f;color:#fff3f9;padding:10px;border-radius:9px;}
     .brain-lab-controls .full {grid-column:1/-1;}
+    .brain-lab-presets{display:grid;gap:8px;border:1px solid #76556d;background:#211a25;padding:10px;border-radius:9px;margin:8px 0;}
+    .brain-lab-presets strong{color:#ffdec9;font-size:12px}
+    .brain-lab-presets-row{display:flex;flex-wrap:wrap;align-items:end;gap:6px;min-width:0}
+    .brain-lab-presets-row label{display:grid;flex:1 1 165px;gap:5px;font-size:11px;color:#dbc7d4}
+    .brain-lab-presets-row select,.brain-lab-presets-row input{width:100%;min-width:0;border:1px solid #76556d;border-radius:8px;background:#30232f;padding:9px;color:#fff3f9;font:inherit}
+    .brain-lab-presets-row button{flex:0 0 auto;background:#4a3748;border:1px solid #795869;color:#ffe6d9;border-radius:8px;padding:9px 12px;font:inherit;font-size:12px}
+    .brain-lab-presets-row button:disabled{opacity:.45}
+    .brain-lab-presets small{font-size:11px;color:#cbbbc7;line-height:1.4;overflow-wrap:anywhere}
     .brain-lab-models{display:grid;gap:6px;padding:9px;border:1px solid #76556d;border-radius:9px;background:#211a25;margin:8px 0;}
     .brain-lab-models[hidden]{display:none;}
     .brain-lab-models summary{cursor:pointer;color:#f4d5c8;font-size:12px;font-weight:700}
@@ -254,6 +262,19 @@
     <section class="settings-group" aria-labelledby="brainLabSectionTitle">
       <h3 id="brainLabSectionTitle">Brain Lab · Overnight tests</h3>
       <p class="settings-hint">Runs on your desktop, not your phone. Fast is offline. Live uses Mikan's real public SearXNG search tool and local model, but synthetic private memories. Keep Windows, Mikan, Ollama and SearXNG running. No real memory writes.</p>
+      <section class="brain-lab-presets" aria-label="Saved Brain Lab configurations">
+        <strong>Saved test presets</strong>
+        <div class="brain-lab-presets-row">
+          <label>Saved presets <select id="brainLabPresetSelect"><option value="">Choose a preset…</option></select></label>
+          <button type="button" id="brainLabPresetLoad">Load</button>
+          <button type="button" id="brainLabPresetDelete">Delete</button>
+        </div>
+        <div class="brain-lab-presets-row">
+          <label>Preset name <input id="brainLabPresetName" maxlength="60" placeholder="e.g. Model research shootout" autocomplete="off"></label>
+          <button type="button" id="brainLabPresetSave">Save current</button>
+        </div>
+        <small id="brainLabPresetFeedback" role="status">Presets are saved in this browser. Loading never starts a test.</small>
+      </section>
       <div class="brain-lab-controls">
         <label>Test mode
           <select id="brainLabMode">
@@ -446,6 +467,42 @@
   var brainLabModelPicker = document.getElementById("brainLabModelPicker");
   var brainLabModelList = document.getElementById("brainLabModelList");
   var brainLabModelCount = document.getElementById("brainLabModelCount");
+  var brainLabPresetSelect=document.getElementById("brainLabPresetSelect");
+  var brainLabPresetName=document.getElementById("brainLabPresetName");
+  var brainLabPresetSave=document.getElementById("brainLabPresetSave");
+  var brainLabPresetLoad=document.getElementById("brainLabPresetLoad");
+  var brainLabPresetDelete=document.getElementById("brainLabPresetDelete");
+  var brainLabPresetFeedback=document.getElementById("brainLabPresetFeedback");
+  var brainLabPresetStorageKey="mikan/brain-eval-presets/v1";
+  var brainLabPresetSignature="";
+  var brainLabPresets=(function(){
+    try{
+      var raw=JSON.parse(localStorage.getItem(brainLabPresetStorageKey)||"[]");
+      if(!Array.isArray(raw))return [];
+      var names=new Set();
+      return raw.slice(0,25).filter(function(item){
+        var c=item&&item.config;
+        if(!item||typeof item.name!=="string"||!c)return false;
+        var name=item.name.trim();
+        if(!name||name.length>60||names.has(name.toLowerCase())||
+            !["routing","live"].includes(c.mode)||![1,2,3,5].includes(c.repetitions)||
+            !Array.isArray(c.scenarioIds)||c.scenarioIds.length>300||
+            c.scenarioIds.some(id=>typeof id!=="string"||!id||id.length>160)||
+            !Array.isArray(c.models)||c.models.length>10||
+            c.models.some(id=>typeof id!=="string"||!id||id.length>160)||
+            typeof c.category!=="string"||c.category.length>100||
+            !["all","passed","failed","review","stale","untested","incomplete"].includes(c.statusFilter))
+          return false;
+        names.add(name.toLowerCase());return true;
+      }).map(function(item){return {name:item.name.trim(),config:{
+        mode:item.config.mode,repetitions:item.config.repetitions,
+        scenarioIds:[...new Set(item.config.scenarioIds)],
+        models:[...new Set(item.config.models)],
+        category:item.config.category,statusFilter:item.config.statusFilter,search:""
+      }};});
+    }catch(_){return []}
+  })();
+
   var brainLabModelsSignature = "";
   var brainLabSelectedModels = null;
   var brainLabCatalogSignature = "";
