@@ -138,7 +138,7 @@ test("unresolved recommendation constraints remain tentative, not guaranteed mat
   assert.doesNotMatch(reviewed.text,/definitely meets/);
 });
 
-test("fallback quotes the source instead of presenting an unproved interpretation",()=>{
+test("partial evidence keeps original quotations in metadata without a huge phone or TTS source dump",()=>{
   const docs=[{title:"Preview announced",url:"https://example.org/preview",
     content:"The film Lantern Cove is planned for release in December 2027."}];
   const audit={status:"partial",recommendationTask:false,
@@ -148,14 +148,14 @@ test("fallback quotes the source instead of presenting an unproved interpretatio
     unresolvedDetails:["whether the film actually premiered"]};
   const reviewed=reviewResearchCompletion('Lantern Cove released "Festival Cut" in 2027. [1]',docs,audit);
   assert.equal(reviewed.usable,true);
-  // A partial answer presents a literal, numbered source excerpt rather than
-  // the formerly used raw "Source [1] states" fallback sentence.
+  // The excerpt survives unchanged in structured metadata, not as chat text.
   assert.deepEqual(reviewed.evidence,{
     status:"partial",
     supportedQuotes:[{source:1,subject:"Lantern Cove",quote:docs[0].content}],
     unresolvedDetails:["whether the film actually premiered"]
   });
-  assert.ok(reviewed.text.includes(docs[0].content));
+  assert.ok(!reviewed.text.includes(docs[0].content));
+  assert.match(reviewed.text,/Lantern Cove \[1\]/);
   assert.ok(!reviewed.text.includes("Lantern Cove has already released"));
   assert.ok(!reviewed.text.includes("Festival Cut"));
 });
@@ -177,7 +177,8 @@ test("partially verified release comparisons show literal excerpts rather than d
     supportedQuotes:[{source:1,subject:"Aurora 6 Preview",quote:docs[0].content}],
     unresolvedDetails:["latest officially released version"]
   });
-  assert.ok(review.text.includes(docs[0].content));
+  assert.ok(!review.text.includes(docs[0].content));
+  assert.match(review.text,/Aurora 6 Preview \[1\]/);
   assert.ok(!review.text.includes("definitely the newest official stable release"));
 });
 
@@ -213,8 +214,9 @@ test("partial release evidence is grouped by named subject with source provenanc
   });
   assert.equal(reviewed.checked,3);
   assert.ok(!reviewed.text.includes("definitely the latest official release"));
-  // This is specifically a renderer contract: show the real URL next to its source number.
-  assert.match(reviewed.text,/\[2\] \(\[publisher\.test\]\(https:\/\/publisher\.test\/release\)\)/);
+  // Cite the source without forcing raw Markdown links into the phone chat bubble.
+  assert.match(reviewed.text,/Orchid 5 Stable \[2\] \[3\]/);
+  assert.doesNotMatch(reviewed.text,/https?:\/\//);
 });
 test("partial answer ignores unanchored and malicious markdown-labeled proposed facts",()=>{
   const docs=[{title:"Status bulletin",url:"javascript:alert(1)",
@@ -237,7 +239,7 @@ test("partial answer ignores unanchored and malicious markdown-labeled proposed 
   assert.ok(!reviewed.text.includes("Already released"));
 });
 
-test("Markdown formatting in source quotes is escaped, not executable",()=>{
+test("untrusted quote Markdown stays in metadata, not in a chat or TTS source dump",()=>{
   const docs=[{title:"Untrusted source",url:"https://news.test/x",
     content:"Crystal 7 [draft] is planned for late 2027."}];
   const audit={status:"partial",recommendationTask:false,
@@ -246,7 +248,7 @@ test("Markdown formatting in source quotes is escaped, not executable",()=>{
     unresolvedDetails:["current status"]};
   const result=reviewResearchCompletion("Already out!",docs,audit);
   assert.match(result.text,/Crystal 7/);
-  assert.match(result.text,/\\\[draft\\\]/);
+  assert.ok(!result.text.includes("[draft]"),"untrusted quote stays in evidence metadata");
   assert.doesNotMatch(result.text,/Already out!/);
 });
 
@@ -286,7 +288,8 @@ test("partially supported research keeps a model-authored personality line witho
   assert.equal(result.usable,true);
   assert.equal(result.presentation,"model-voice-preserved");
   assert.ok(result.text.startsWith("Well, sweetheart, this one sent me down a rabbit hole!"));
-  assert.ok(result.text.includes(docs[0].content));
+  assert.ok(!result.text.includes(docs[0].content));
+  assert.match(result.text,/Aurora 5 Preview \[1\]/);
   assert.ok(!result.text.includes("definitely the newest official stable release"));
   assert.deepEqual(result.evidence,{
     status:"partial",
@@ -324,6 +327,7 @@ test("persona framing is not synthesized when the model gives only factual claim
     unresolvedDetails:["current tour dates"]};
   const result=reviewResearchCompletion("Cora Vale tours in 2027. [1]",docs,audit);
   assert.equal(result.presentation,"source-only");
-  assert.ok(result.text.includes(docs[0].content));
+  assert.ok(!result.text.includes(docs[0].content));
+  assert.match(result.text,/Cora Vale \[1\]/);
   assert.ok(!result.text.includes("tours in 2027"));
 });
