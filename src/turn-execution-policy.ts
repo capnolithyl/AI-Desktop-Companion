@@ -1,5 +1,5 @@
 import type { WebPlanningTurn } from "./unified-planner.ts";
-import { parseWebToolDecision } from "./unified-planner.ts";
+import { parseWebToolDecision, publicDocumentUrls } from "./unified-planner.ts";
 import type { RankableMemory } from "./memory-ranking.ts";
 import type { ResearchPlan } from "./research-routing.ts";
 
@@ -29,6 +29,8 @@ export type DesktopWebPolicy = {
   canPlanPublicWeb: boolean;
   cloudMaySearch: boolean;
   blockedReason: string | null;
+  /** A safe locator explicitly supplied in THIS turn, never inferred from memory. */
+  publicDocumentUrl?: string;
 };
 
 export function planDesktopWebExecution(input: DesktopWebInput): DesktopWebPolicy {
@@ -53,7 +55,8 @@ export function planDesktopWebExecution(input: DesktopWebInput): DesktopWebPolic
     // public-search decision. Explicitly routed research already has a public
     // task and still goes through backend URL/query permission checks.
     cloudMaySearch: eligible && input.provider !== "local" && input.planMode !== "chat",
-    blockedReason: reason
+    blockedReason: reason,
+    ...(eligible ? {publicDocumentUrl:publicDocumentUrls([input.question])[0]} : {})
   };
 }
 
@@ -71,9 +74,25 @@ export function resolvePublicWebExecution(
   // route. This cannot bypass an explicit "not-needed" decision, invalid
   // query/privacy rejection, or the deterministic tool-permission boundary.
   const plannerError=decision?.method==="planner-error";
-  const safeRecovery=permitted && plannerError && plan.mode==="research" && plan.query
+  // When the semantic planner times out on an EXPLICIT, user-supplied public
+  // document request, the authorized URL itself is sufficient to attempt a
+  // direct read. Do not construct a search from private chat text, and never
+  // reuse a URL from assistant output or an unrelated earlier message.
+  const document=permitted && plannerError && plan.mode==="research"
+    ? policy.publicDocumentUrl : undefined;
+  const documentParts=document ? new URL(document) : null;
+  const documentTopic=documentParts
+    ? (documentParts.hostname+" "+documentParts.pathname.replace(/[/_.-]+/g," ")).slice(0,180)
+    : undefined;
+  const safeRecovery=permitted && plannerError && plan.mode==="research"
     ? parseWebToolDecision(JSON.stringify({web:{
-        search:true,query:plan.query,reason:"Validated public route after planner error"
+        search:true,
+        query:documentTopic || plan.query || "",
+        reason:document ? "User-authorized public document read after planner error" :
+          "Validated public route after planner error",
+        ...(document ? {task:{kind:"lookup",subject:"",
+          entityType:"public document",details:["requested document contents"],
+          preferences:[],sourceUrl:document,requirements:[],roles:[],exclude:[]}} : {})
       }}),true,[],ownerFacts) : null;
   const recoveredQuery=safeRecovery?.search ? safeRecovery.query : undefined;
   const semantic=decision && decision.method!=="disabled" && !plannerError;
@@ -84,7 +103,7 @@ export function resolvePublicWebExecution(
     autoSearch:!!query || factualFallback,
     researchRoute:query ? "research" : factualFallback ? "factual" : "chat",
     researchQuery:query,
-    researchTask:query && decision?.search ? decision.task : undefined,
+    researchTask:query ? recoveredQuery ? safeRecovery?.task : decision?.search ? decision.task : undefined : undefined,
     researchRecent:!!plan.recent,
     // A failed optional lookup may fall back to general model knowledge.
     // All named verification, hard constraints, discovery, URLs and recent
