@@ -2741,7 +2741,7 @@ export default function App() {
   const remoteStartBrainRef = useRef<(request:BrainEvalRequest)=>void>(()=>{});
   remoteStartBrainRef.current = request => {
     if (busy) throw new Error("Cannot start an evaluation while a chat reply is running");
-    startBrainEvaluation(settings,request);
+    startBrainEvaluation(settings,request,availableModels);
   };
   const remoteStopBrainRef = useRef<()=>void>(()=>{});
   remoteStopBrainRef.current = () => { stopBrainEvaluation(); };
