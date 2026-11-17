@@ -124,6 +124,30 @@ test("model sweeps accept only unique installed local models in Live mode",()=>{
   assert.throws(()=>brainEvalModels(installed.slice(0,2),installed[0],installed,"routing"));
 });
 
+test("Live Brain Lab recovers a safe deterministic public search when the model planner errors",async()=>{
+  const scenario=EVAL_SCENARIOS.find(s=>s.id==="research-current-model");
+  let requested;
+  const report=await runBrainEvaluation({
+    mode:"live",model:"isolated-model",repetitions:1,scenarios:[scenario],liveWeb:true,
+    planWeb:async()=>({search:false,method:"planner-error",reason:"model JSON parsing failed"}),
+    infer:async input=>{
+      requested=input.webRequest;
+      return {text:"The source appears to discuss a release.",webExecution:{
+        query:input.webRequest.researchQuery??null,
+        results:[{title:"Aurora model announcement",url:"https://example.org/release",
+          content:"Aurora 4 Max released in 2026.",engine:"fixture"}],
+        sourcesCarriedOver:false
+      }};
+    }
+  });
+  assert.equal(requested.autoSearch,true);
+  assert.ok(requested.researchQuery);
+  assert.equal(report.cases[0].steps[0].webPass,true);
+  assert.equal(report.cases[0].steps[0].plannedWeb,false,
+    "the broken semantic planner itself did not authorize search");
+  assert.equal(report.cases[0].steps[0].reviewRequired,true);
+});
+
 test("current-release test keeps per-model run identities and observes actual web misses",async()=>{
   const scenario=EVAL_SCENARIOS.find(s=>s.id==="research-current-model");
   const make=async(model,searched)=>runBrainEvaluation({
