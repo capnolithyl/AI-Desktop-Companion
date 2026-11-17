@@ -12,10 +12,38 @@ type DiagnosticMessage = {
   role: "user" | "assistant";
   failed?: boolean;
   diagnostics?: Diagnostics;
+  sources?: readonly {url: string}[];
 };
 
 const finite = (value: number | null | undefined): number | null =>
   typeof value === "number" && Number.isFinite(value) ? value : null;
+// Never export a source path, search query, or page excerpt. Hostnames alone
+// show whether the citations came from a publisher, an aggregator or elsewhere.
+const publicSourceHost = (raw: string): string | null => {
+  try {
+    const url = new URL(raw);
+    const host = url.hostname.toLowerCase();
+    if (!["https:", "http:"].includes(url.protocol) || url.username || url.password ||
+      host.length > 100 || !/^[a-z0-9.-]+$/.test(host) || !host.includes(".") ||
+      /^\d+\.\d+\.\d+\.\d+$/.test(host) ||
+      [".local",".localhost",".internal",".test"].some(suffix => host.endsWith(suffix))) return null;
+    return host;
+  } catch { return null; }
+};
+
+// Reasons are emitted by the native structural validator, not generated prose.
+// A strict vocabulary avoids copying untrusted candidate names into reports.
+const factRejectionReasons = new Set([
+  "invalid_source_index", "invalid_subject_field", "invalid_claim_field",
+  "invalid_quote_field", "quote_not_contiguous_in_cited_source",
+  "subject_not_identified_by_quote", "claim_numbers_missing_from_quote",
+  "claim_number_not_tied_to_subject", "not_the_named_target_subject",
+  "does_not_answer_requested_detail"
+]);
+const rejectCode = (item: string): string | null => {
+  const code = item.match(/:\s*([a-z_]+)$/)?.[1];
+  return code && factRejectionReasons.has(code) ? code : null;
+};
 
 export function remoteDiagnosticMessages(messages: readonly DiagnosticMessage[]) {
   return messages.slice(-8).map(message => {
@@ -73,7 +101,21 @@ export function remoteDiagnosticMessages(messages: readonly DiagnosticMessage[])
           rejected: finite(d.research.rejected),
           followupAttempted: typeof d.research.followupQuery === "string" && d.research.followupQuery.trim().length > 0,
           primaryRecoveryStatus: d.research.primaryRecoveryStatus ?? null,
-          elapsedMs: finite(d.research.elapsedMs)
+          elapsedMs: finite(d.research.elapsedMs),
+          taskKind: d.research.taskKind ?? null,
+          requestedDetailCount: Array.isArray(d.toolPlan?.task?.details)
+            ? d.toolPlan.task.details.length : null,
+          unresolvedDetailCount: d.research.unresolvedDetails?.length ?? 0,
+          contextOnlyCount: finite(d.research.contextualCount),
+          rejectedReasonCodes: [...new Set((d.research.rejectedDetails ?? [])
+            .slice(0, 12).map(rejectCode).filter((code): code is string => !!code))],
+          acceptedFactSlots: (d.research.acceptedDetails ?? []).slice(0, 8).map(fact => ({
+            source: fact.source, detail: fact.detail ?? null
+          })),
+          sourceHosts: (message.sources ?? []).slice(0, 12).flatMap((source,index) => {
+            const host = publicSourceHost(source.url);
+            return host ? [{source:index + 1,host}] : [];
+          })
         } : null,
         answerVerification: d.answerVerification ? {
           checked: finite(d.answerVerification.checked),
