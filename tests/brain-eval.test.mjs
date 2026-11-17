@@ -921,6 +921,7 @@ test("Brain Lab transports a recovered document read to native execution",async(
       }};
     }
   });
+  assert.equal(typeof report.cases[0].steps[0].plannerElapsedMs,"number");
   assert.equal(seen.researchTask?.sourceUrl,target);
   assert.equal(seen.webRequest?.researchTask?.sourceUrl,target);
   assert.equal(seen.webRequest?.researchRoute,"research");
