@@ -11,6 +11,10 @@ import {
 import {
   statusForScenario,summarizeCaseStatuses,type BrainCaseStatus
 } from "./brain-eval-status";
+import {
+  readBrainEvalPresets,persistBrainEvalPresets,upsertBrainEvalPreset,
+  removeBrainEvalPreset,type BrainEvalPresetConfig
+} from "./brain-eval-presets";
 import "./brain-eval.css";
 
 function formatMs(value:number):string{return value>=1000?(value/1000).toFixed(1)+"s":value+"ms"}
@@ -19,6 +23,9 @@ const totalFixtureTurns=EVAL_SCENARIOS.reduce((n,s)=>n+s.steps.length,0);
 
 export function BrainEvalPanel({settings,availableModels}:{settings:Settings;availableModels:readonly string[]}){
   const [mode,setMode]=useState<EvalMode>("routing");
+  const [presets,setPresets]=useState(readBrainEvalPresets);
+  const [presetName,setPresetName]=useState("");
+  const [presetChoice,setPresetChoice]=useState("");
   const [category,setCategory]=useState("All categories");
   const [statusFilter,setStatusFilter]=useState<"all"|BrainCaseStatus>("all");
   const [search,setSearch]=useState("");
@@ -94,6 +101,59 @@ export function BrainEvalPanel({settings,availableModels}:{settings:Settings;ava
     const sample=passed.filter((_,i)=>i%7===0);
     selectOnly(sample.map(s=>s.id));
   };
+  const currentPresetConfig=():BrainEvalPresetConfig=>({
+    mode,repetitions:repeats as BrainEvalPresetConfig["repetitions"],
+    scenarioIds:selected.map(s=>s.id),models:[...selectedModels],
+    category,statusFilter,search
+  });
+  function savePreset(){
+    try{
+      const next=upsertBrainEvalPreset(presets,presetName,currentPresetConfig());
+      persistBrainEvalPresets(next);
+      setPresets(next);
+      const saved=next.find(p=>p.name.toLocaleLowerCase()===presetName.trim().toLocaleLowerCase())!;
+      setPresetChoice(saved.name);
+      setPresetName(saved.name);
+      setMessage("Saved Brain Lab preset: "+saved.name+".");
+    }catch(error){setMessage("Could not save preset: "+String(error))}
+  }
+  function loadPreset(){
+    if(busy)return;
+    const preset=presets.find(item=>item.name===presetChoice);
+    if(!preset){setMessage("Select a saved preset first.");return}
+    const config=preset.config;
+    const allowedIds=new Set(EVAL_SCENARIOS.map(s=>s.id));
+    const knownIds=config.scenarioIds.filter(id=>allowedIds.has(id));
+    const unknownIds=config.scenarioIds.filter(id=>!allowedIds.has(id));
+    if(!knownIds.length){setMessage("This preset has no scenarios in the current catalog; nothing was loaded.");return}
+    const knownModels=config.models.filter(model=>localModels.includes(model));
+    const missingModels=config.models.filter(model=>!localModels.includes(model));
+    setMode(config.mode);
+    setRepeats(config.repetitions);
+    setSelectedIds(new Set(knownIds));
+    setSelectedModels(new Set(knownModels));
+    setCategory(config.category==="All categories"||groups.includes(config.category)
+      ?config.category:"All categories");
+    setStatusFilter(config.statusFilter);
+    setSearch(config.search);
+    setPresetName(preset.name);
+    setCatalogOpen(true);
+    setMessage("Loaded "+preset.name+" ("+knownIds.length+" scenarios, "+
+      (config.mode==="live"?knownModels.length:1)+" model(s))."+
+      (unknownIds.length?" "+unknownIds.length+" unavailable scenario(s) skipped.":"")+
+      (missingModels.length?" Missing Ollama models: "+missingModels.join(", ")+". Select installed models before running.":""));
+  }
+  function deletePreset(){
+    if(busy||!presetChoice)return;
+    if(!window.confirm('Delete Brain Lab preset "'+presetChoice+'"?'))return;
+    try{
+      const next=removeBrainEvalPreset(presets,presetChoice);
+      persistBrainEvalPresets(next);
+      setPresets(next);
+      setMessage("Deleted preset: "+presetChoice+".");
+      setPresetChoice("");
+    }catch(error){setMessage("Could not delete preset: "+String(error))}
+  }
   const metrics=report?brainEvalMetrics(report):null;
   const previousRun=history.find(h=>h.id!==report?.runId)??null;
 
@@ -148,6 +208,38 @@ export function BrainEvalPanel({settings,availableModels}:{settings:Settings;ava
         an empty or broken SearXNG response stops the run before any misleading scores are recorded.
         Conversation quality still needs human review.</p>
     </details>
+    <section className="brain-eval-presets" aria-label="Saved Brain Lab configurations">
+      <div className="brain-eval-presets-header">
+        <strong>Saved test presets</strong>
+        <small>Restore scenarios, models, repetitions and filters · never runs automatically</small>
+      </div>
+      <div className="brain-eval-preset-controls">
+        <label>Saved presets
+          <select value={presetChoice} disabled={busy} onChange={e=>{
+            const name=e.target.value;
+            setPresetChoice(name);
+            const preset=presets.find(p=>p.name===name);
+            if(preset)setPresetName(preset.name);
+          }}>
+            <option value="">Choose a preset…</option>
+            {presets.map(p=><option key={p.name} value={p.name}>{p.name}</option>)}
+          </select>
+        </label>
+        <button type="button" disabled={busy||!presetChoice} onClick={loadPreset}>Load</button>
+        <button type="button" disabled={busy||!presetChoice} onClick={deletePreset}>Delete</button>
+      </div>
+      <div className="brain-eval-preset-controls">
+        <label>Preset name
+          <input type="text" maxLength={60} disabled={busy} value={presetName}
+            placeholder="e.g. Model research shootout"
+            onChange={e=>setPresetName(e.target.value)}
+            onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();savePreset();}}}/>
+        </label>
+        <button type="button" disabled={busy||!presetName.trim()}
+          onClick={savePreset}>Save current</button>
+      </div>
+      <small>Saving with an existing name updates that preset. Presets stay on this device.</small>
+    </section>
     <div className="brain-eval-toolbar">
       <label>Test mode
         <select value={mode} disabled={busy} onChange={e=>setMode(e.target.value as EvalMode)}>
