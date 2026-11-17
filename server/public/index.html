@@ -82,6 +82,11 @@
     .brain-lab-controls select {min-width:0;width:100%;border:1px solid #76556d;
       background:#30232f;color:#fff3f9;padding:10px;border-radius:9px;}
     .brain-lab-controls .full {grid-column:1/-1;}
+    .brain-lab-models{display:grid;gap:6px;padding:9px;border:1px solid #76556d;border-radius:9px;background:#211a25;margin:8px 0;}
+    .brain-lab-models summary{cursor:pointer;color:#f4d5c8;font-size:12px;font-weight:700}
+    .brain-lab-model-list{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:4px;max-height:135px;overflow-y:auto;}
+    .brain-lab-model-list label{display:flex;align-items:center;gap:7px;font-size:12px;padding:5px;background:#362a3a;border-radius:6px;overflow-wrap:anywhere;}
+    .brain-lab-model-list input{accent-color:#ffad7e}
     .brain-lab-actions {display:flex;flex-wrap:wrap;gap:8px;margin-top:9px;}
     .brain-lab-actions button {flex:1;min-width:100px;text-align:center;}
     .brain-lab-number-select{display:grid;gap:6px;margin:12px 0;padding:10px;border-radius:10px;background:#211a25;border:1px solid #624a60;}
@@ -278,6 +283,11 @@
           </select>
         </label>
       </div>
+      <details id="brainLabModelPicker" class="brain-lab-models">
+        <summary>Compare installed local models · <span id="brainLabModelCount">1 selected</span></summary>
+        <p class="settings-hint">Live mode only. Models run sequentially; each gets a separate saved report.</p>
+        <div id="brainLabModelList" class="brain-lab-model-list"></div>
+      </details>
       <p id="brainLabCounts" class="settings-hint"></p>
       <div class="brain-lab-number-select">
         <label for="brainLabNumbers">Select scenario numbers (comma-separated)</label>
@@ -432,6 +442,11 @@
   var brainLabProgress = document.getElementById("brainLabProgress");
   var brainLabJson = document.getElementById("brainLabJson");
   var brainLabMarkdown = document.getElementById("brainLabMarkdown");
+  var brainLabModelPicker = document.getElementById("brainLabModelPicker");
+  var brainLabModelList = document.getElementById("brainLabModelList");
+  var brainLabModelCount = document.getElementById("brainLabModelCount");
+  var brainLabModelsSignature = "";
+  var brainLabSelectedModels = null;
   var brainLabCatalogSignature = "";
   var brainLabCatalog = [];
   var brainLabSelectedIds = null;
@@ -684,6 +699,36 @@
     } catch(error) { brainLabStatus.textContent = error.message; }
     finally { brainLabSubmitting = false; if(current)renderBrainLab(current); }
   }
+  function renderBrainLabModels(data,running){
+    var availableModels=Array.isArray(data.models)?data.models.slice(0,100):[];
+    var allowed=new Set(availableModels);
+    if(brainLabSelectedModels===null)
+      brainLabSelectedModels=new Set(allowed.has(data.model)?[data.model]:availableModels.slice(0,1));
+    brainLabSelectedModels=new Set([...brainLabSelectedModels].filter(model=>allowed.has(model)));
+    brainLabModelPicker.hidden=brainLabMode.value!=="live";
+    brainLabModelCount.textContent=brainLabSelectedModels.size+" selected";
+    var signature=JSON.stringify({availableModels,selected:[...brainLabSelectedModels],running});
+    if(brainLabModelsSignature===signature)return;
+    brainLabModelsSignature=signature;
+    brainLabModelList.replaceChildren();
+    for(var model of availableModels){
+      var label=document.createElement("label");
+      var checkbox=document.createElement("input");
+      checkbox.type="checkbox";
+      checkbox.checked=brainLabSelectedModels.has(model);
+      checkbox.disabled=running||brainLabSubmitting;
+      checkbox.addEventListener("change",function(){
+        if(checkbox.checked)brainLabSelectedModels.add(model);
+        else brainLabSelectedModels.delete(model);
+        brainLabModelsSignature="";
+        if(current)renderBrainLab(current);
+      });
+      var caption=document.createElement("span");
+      caption.textContent=model+(model===data.model?" · current":"");
+      label.append(checkbox,caption);
+      brainLabModelList.append(label);
+    }
+  }
   function renderBrainLab(data) {
     var catalog = Array.isArray(data.brainEvalCatalog) ? data.brainEvalCatalog : [];
     var signature = JSON.stringify(catalog);
@@ -704,15 +749,17 @@
     var run = data.brainEval || {};
     var phase = run.phase || "idle";
     var running = phase === "running";
+    renderBrainLabModels(data,running);
+    var chosenModels=brainLabMode.value==="live" ? [...(brainLabSelectedModels||[])] : [data.model];
     var available = !!data.connected && !data.busy && !data.queued &&
       !data.controlsBlocked && !running && !brainLabSubmitting;
     var chosen = brainLabChosenIds();
     var chosenTurns = brainLabCatalog.filter(function (item) {
       return brainLabSelectedIds?.has(item.id);
     }).reduce(function (sum,item) { return sum + item.turns; },0);
-    brainLabStart.disabled = !available || chosen.length===0;
-    brainLabStart.textContent = "Start " + chosen.length + " selected scenarios (" +
-      (chosenTurns * Number(brainLabRepeats.value)) + " turns)";
+    brainLabStart.disabled = !available || chosen.length===0 || chosenModels.length===0 || chosenModels.length>10;
+    brainLabStart.textContent = "Start " + chosen.length + " scenarios × " +
+      chosenModels.length+" model(s) ("+(chosenTurns * Number(brainLabRepeats.value)*chosenModels.length)+" turns)";
     brainLabStop.disabled = !data.connected || !running || brainLabSubmitting;
     brainLabMode.disabled = running || brainLabSubmitting;
     brainLabRepeats.disabled = running || brainLabSubmitting;
@@ -749,6 +796,13 @@
         " · Screened items: "+(run.results.shortlistedItems??0));
       if (run.savedFolder) lines.push("Detailed JSON + Markdown auto-saved on desktop.");
     } else lines.push("Ready for a manually started test run.");
+    if(Array.isArray(run.comparison)&&run.comparison.length>1){
+      lines.push("Model comparison (detailed reports auto-saved on PC):");
+      for(var item of run.comparison)
+        lines.push("  "+item.model+": "+item.metrics?.passed+"/"+item.metrics?.turns+
+          " automated passes · "+(item.metrics?.verifiedPassed??0)+" verified checks · "+
+          (item.metrics?.missedWeb??0)+" web misses");
+    }
     if (data.reportAvailable) lines.push("Latest downloadable report: "+data.reportRunId);
     else if (phase==="complete" || phase==="stopped")
       lines.push("Download pending: desktop report not yet accepted by the relay. The auto-saved files remain on your PC.");
@@ -806,7 +860,8 @@
         method:"POST",headers:{"Content-Type":"application/json"},
         body:JSON.stringify({
           action:"start",mode:brainLabMode.value,
-          repetitions:Number(brainLabRepeats.value),scenarioIds:brainLabChosenIds()
+          repetitions:Number(brainLabRepeats.value),scenarioIds:brainLabChosenIds(),
+          ...(brainLabMode.value==="live"?{models:[...(brainLabSelectedModels||[])]}:{})
         })
       });
       brainLabStatus.textContent = "Start requested. Mikan is accepting the desktop job…";
