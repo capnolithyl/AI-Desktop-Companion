@@ -118,7 +118,7 @@ test("only optional general lookup tasks can fall back to unsourced conceptual e
   assert.equal(run({...decision,search:false}).researchGeneralFallback,false);
 });
 
-test("planner outage recovers only current authorized public document URLs",()=>{
+test("explicit authorized document reads survive planner errors and wrong model decisions",()=>{
   const url="https://github.com/ggml-org/llama.cpp";
   const request="Check the repository at "+url+" and summarize its implementation";
   const policy=planDesktopWebExecution({...defaults,question:request,planMode:"research"});
@@ -132,10 +132,27 @@ test("planner outage recovers only current authorized public document URLs",()=>
   assert.equal(recovered.researchQuery.includes("https://"),false);
   assert.doesNotMatch(recovered.researchQuery,/summarize its implementation/);
 
+  // A wrong model decision must not turn a specifically requested URL read
+  // into ordinary search or an unsupported local answer.
   const semanticDecline=resolvePublicWebExecution(policy,{mode:"research",query:request,recent:false},
     {search:false,method:"not-needed",reason:"Conversation only"});
-  assert.equal(semanticDecline.researchTask,undefined);
-  assert.equal(semanticDecline.autoSearch,false);
+  assert.equal(semanticDecline.researchTask?.kind,"document");
+  assert.equal(semanticDecline.researchTask?.sourceUrl,url);
+  assert.equal(semanticDecline.autoSearch,true);
+  const semanticSearch=resolvePublicWebExecution(policy,{mode:"research",query:request,recent:false},
+    {search:true,method:"ai-planned",query:"general llama.cpp release notes",
+      task:{kind:"lookup",requirements:[],roles:[],exclude:[]}});
+  assert.equal(semanticSearch.researchTask?.kind,"document");
+  assert.equal(semanticSearch.researchTask?.sourceUrl,url);
+  assert.equal(semanticSearch.researchQuery?.includes("general llama.cpp"),false);
+
+  // A merely incidental link or non-research turn does not become a read.
+  const incidental=planDesktopWebExecution({...defaults,
+    question:"I found https://example.org/docs interesting.",planMode:"chat"});
+  assert.equal(incidental.publicDocumentUrl,undefined);
+  const ordinary=resolvePublicWebExecution(incidental,{mode:"chat",recent:false},
+    {search:false,method:"not-needed",reason:"Just a comment"});
+  assert.equal(ordinary.autoSearch,false);
   const conversational=resolvePublicWebExecution(policy,{mode:"chat",recent:false},outage);
   assert.equal(conversational.autoSearch,false);
   for(const control of [{autoSearch:false},{attachment:true},{personalTurn:true},{roleplay:true}]){

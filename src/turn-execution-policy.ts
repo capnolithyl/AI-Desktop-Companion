@@ -75,11 +75,10 @@ export function resolvePublicWebExecution(
   // route. This cannot bypass an explicit "not-needed" decision, invalid
   // query/privacy rejection, or the deterministic tool-permission boundary.
   const plannerError=decision?.method==="planner-error";
-  // When the semantic planner times out on an EXPLICIT, user-supplied public
-  // document request, the authorized URL itself is sufficient to attempt a
-  // direct read. Do not construct a search from private chat text, and never
-  // reuse a URL from assistant output or an unrelated earlier message.
-  const document=permitted && plannerError && plan.mode==="research"
+  // An explicitly directed, policy-authorized URL read is an execution
+  // contract, not a search topic. Honor it even if the model mistakenly
+  // chooses search or answer. Permissions and the research route still apply.
+  const document=permitted && plan.mode==="research"
     ? policy.publicDocumentUrl : undefined;
   const safeRecovery=document ? documentReadDecision(document) :
     permitted && plannerError && plan.mode==="research"
