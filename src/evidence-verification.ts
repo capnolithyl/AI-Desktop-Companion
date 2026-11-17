@@ -235,6 +235,41 @@ function partialResearchSummary(
   const unresolvedDetails=(audit.unresolvedDetails??[]).filter(s=>s.trim()).slice(0,4);
   const missing=unresolvedDetails[0]?.replace(/\s+/g," ").trim().slice(0,120);
   const voice=safeModelOpening(draft,audit);
+  // A partial audit can still contain a legitimately sourced answer fragment.
+  // Previously we always discarded it and displayed entity names alone.
+  // Reuse only excerpts proven contiguous in the cited source, NOT the
+  // extractor's claim paraphrases or the generator's unscreened conclusion.
+  const anchored=(audit.acceptedDetails??[]).filter(item=>
+    item.detail !== null && item.detail !== undefined && Number.isInteger(item.detail) &&
+    item.detail >= 0 && supportedQuotes.some(quote=>quote.source===item.source &&
+      normalized(quote.quote)===normalized(item.quote)));
+  const mapped=new Set(anchored.map(item=>item.source+"|"+normalized(item.quote)));
+  if(mapped.size){
+    // Lead with the requested detail, followed by at most two corroborating
+    // excerpts. Explicit attribution makes the difference between a report
+    // and independent confirmation visible without losing the useful fact.
+    const selected=[...supportedQuotes]
+      .sort((a,b)=>Number(mapped.has(b.source+"|"+normalized(b.quote)))-
+        Number(mapped.has(a.source+"|"+normalized(a.quote))))
+      .slice(0,3);
+    const excerpts=selected.map(item=>{
+      const flattened=item.quote.replace(/https?:\/\/\S+/gi,"[source link]")
+        .replace(/[\r\n\t]+/g," ").replace(/\s+/g," ").trim();
+      const clipped=[...flattened].slice(0,185).join("");
+      return "["+item.source+"] reports: “"+escaped(clipped,185)+
+        (flattened.length>clipped.length?"…":"")+"”";
+    });
+    const scope=missing ? "I still couldn't independently establish "+
+      escaped(missing,120)+" from those sources." : "";
+    return {
+      text:(voice ? voice+" " : "")+
+        "I found sourced details about "+subjects+": "+excerpts.join(" ")+
+        (scope ? " "+scope : ""),
+      checked:supportedQuotes.length,rejected:0,usable:true,
+      evidence:{status:"partial",supportedQuotes,unresolvedDetails},
+      presentation:voice?"model-voice-preserved":"source-only"
+    };
+  }
   const uncertainty=missing
     ? "I couldn't verify "+escaped(missing,120)+" from those excerpts."
     : "I couldn't confirm the complete answer from those excerpts.";
