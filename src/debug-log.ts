@@ -22,6 +22,7 @@ export type ResearchAudit = {
   taskSubject?: string;
   ignoredRequirements?: ResearchLimit[];
   followupQuery?: string;
+  primaryRecoveryStatus?: string;
   recommendationTask?: boolean;
   recommendationApproved?: string[];
   recommendationRejected?: number;
