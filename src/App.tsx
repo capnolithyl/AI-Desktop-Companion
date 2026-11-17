@@ -2318,7 +2318,7 @@ export default function App() {
         reason:plannedPublicSearch ? plannerWeb.reason :
           turn.allowAutomaticWeb ? "Explicit or factual research routing" :
             (webPolicy.blockedReason ?? plannerWeb.reason),
-        query:plannedPublicSearch ? plannerWeb.query : researchPlan.mode==="research" ? researchPlan.query : undefined,
+        query:webExecution.researchQuery,
         task:webExecution.researchTask,
         topic:preferredTopic,
         publicWebAllowed:effectiveWeb || cloudMaySearch
