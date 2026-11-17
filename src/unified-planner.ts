@@ -38,7 +38,7 @@ export type WebToolDecision = {
   query?: string;
   topic?: string;
   reason: string;
-  method: "ai-planned" | "not-needed" | "fallback" | "disabled";
+  method: "ai-planned" | "not-needed" | "fallback" | "planner-error" | "disabled";
   /** Local model's interpretation of a prior public task, not a rule-based intent guess. */
   intent?: "refine" | "end" | "new" | "chat";
   /** Effort for the reply, independent of whether public search is needed. */
@@ -227,7 +227,7 @@ export function parseWebToolDecision(
     const start=raw.indexOf("{"),end=raw.lastIndexOf("}");
     const parsed=JSON.parse(raw.slice(start,end+1)) as {web?:unknown;intent?:unknown;replyEffort?:unknown};
     if(!parsed.web || typeof parsed.web!=="object" || Array.isArray(parsed.web))
-      return {...defaultWeb,method:"fallback"};
+      return {...defaultWeb,method:"planner-error",reason:"Missing structured planner decision"};
     const web=parsed.web as {search?:unknown;query?:unknown;sourceRequirement?:unknown;topic?:unknown;reason?:unknown;task?:unknown};
     const reason=typeof web.reason==="string" ? web.reason.trim().slice(0,130) : "";
     const intent=["refine","end","new","chat"].includes(String(parsed.intent))
@@ -284,7 +284,7 @@ export function parseWebToolDecision(
       ...(intent?{intent}:{}),...(task?{task}:{}),
       ...(replyEffort?{replyEffort}:{}),sourceRequirement};
   } catch {
-    return {...defaultWeb,method:"fallback",reason:"Tool planner did not return valid JSON"};
+    return {...defaultWeb,method:"planner-error",reason:"Tool planner did not return valid JSON"};
   }
 }
 
@@ -342,7 +342,7 @@ export async function planPublicWebTools(
       return authorize(parseWebToolDecision(raw,true,options.sourcePreferences,ownerFacts));
     }catch{
       return {search:false,reason:"Local active-task planner unavailable",
-        method:"fallback"};
+        method:"planner-error"};
     }
   }
   const selectWithContext=(prompt:string)=>localSelect(
@@ -395,10 +395,10 @@ export async function planMemoriesAndTools<T extends RankableMemory>(
   // Even without saved memories, allow an independent public research decision.
   if((memory.mode==="empty" || memory.mode==="small-talk") && options.automaticWebEnabled) {
     try {await select(buildMemoryRerankPrompt(query,[],maxFacts));}
-    catch {web={search:false,reason:"Local tool planner unavailable",method:"fallback"};}
+    catch {web={search:false,reason:"Local tool planner unavailable",method:"planner-error"};}
   }
   if(memory.mode==="fallback" || (!received && memory.mode!=="small-talk" && memory.mode!=="empty")) {
-    web={search:false,reason:"Local tool planner unavailable",method:"fallback"};
+    web={search:false,reason:"Local tool planner unavailable",method:"planner-error"};
   }
   if(options.automaticWebEnabled && received && web.method==="fallback" &&
      /(?:query|private identity)/i.test(web.reason) && memory.mode!=="fallback") {
