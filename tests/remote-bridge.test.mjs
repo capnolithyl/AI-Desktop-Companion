@@ -90,6 +90,14 @@ test("browser relay requires a private key and delegates to the desktop, not a s
   }
   assert.match(mainView, /id="avatarCanvas"/);
   assert.match(mainView, /id="message"/);
+  assert.match(html, /citation-links/,
+    "cited public sources have a separate readable area, not spoken body text");
+  assert.match(html, /link.rel = "noopener noreferrer"/,
+    "external source links cannot retain the opener");
+  assert.match(html, /url.protocol !== "https:"/,
+    "unsafe URL schemes may not become clickable remote citations");
+  assert.doesNotMatch(html, /citationLinks.innerHTML/,
+    "untrusted research never becomes injected HTML");
   assert.match(html, /mikan-remote-display/);
   assert.match(html, /sessionStorage\.removeItem\("mikan-remote-key"\)/);
   // Catch syntax errors in the lightweight inline browser UI before packaging.
