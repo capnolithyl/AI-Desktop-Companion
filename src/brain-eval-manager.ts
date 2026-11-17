@@ -320,7 +320,7 @@ async function executeOne(
     const decision=await planPublicWebTools(question,selectedFacts,async prompt=>
       invoke<string>("condense_local_context",{
         endpoint:settings.endpoint,model:settings.model,prompt,
-        contextWindow:settings.contextWindow,maxOutputTokens:380,timeoutMs:22000
+        contextWindow:settings.contextWindow,maxOutputTokens:380,timeoutMs:45000
       }),{automaticWebEnabled:true,sourcePreferences:settings.sourcePreferences,
         history:previous,relevantUserFacts:selectedFacts,...context});
     return {search:decision.search,query:decision.query,reason:decision.reason,method:decision.method,
