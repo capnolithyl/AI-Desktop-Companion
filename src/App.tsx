@@ -2803,8 +2803,17 @@ export default function App() {
       reactionSerial: avatarReaction?.serial ?? 0,
       speaking: voiceState === "playing"
     },
-    messages: messages.map(({ id, role, content, createdAt }) => ({
-      id, role, content, createdAt
+    messages: messages.map(({ id, role, content, createdAt, sources }) => ({
+      id, role, content, createdAt,
+      // Only send citation metadata for sources actually used in the reply.
+      // Keep URL links outside the chat body (and therefore outside TTS).
+      ...(role === "assistant" && sources?.length ? {
+        sourceLinks:sources.flatMap((source,index)=>
+          content.includes("["+(index+1)+"]")
+            ? [{index:index+1,title:source.title.slice(0,120),url:source.url}]
+            : []
+        ).slice(0,8)
+      } : {})
     }))
   };
   useEffect(() => {
