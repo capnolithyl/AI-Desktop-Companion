@@ -47,6 +47,21 @@ export type EvalStep = { user: string; expect: EvalExpectation; explanation?: st
 export type EvalScenario = { id: string; label: string; group: string; steps: EvalStep[]; note?: string };
 export type EvalTurn = ResearchTurn & { role:"user"|"assistant"; content:string; sources?:WebResult[] };
 export type EvalMode = "routing" | "live";
+/** Strict model selection prevents the browser relay from injecting arbitrary IDs.
+ * Fast routing contains no model inference, so sweeping it is misleading. */
+export function brainEvalModels(
+  requested:ReadonlyArray<string>|undefined,current:string,
+  installed:ReadonlyArray<string>,mode:EvalMode
+):string[]{
+  if(requested===undefined)return [current];
+  if(mode!=="live")throw new Error("Model comparison requires Live mode");
+  if(!Array.isArray(requested)||!requested.length||requested.length>10 ||
+    requested.some(model=>typeof model!=="string"||!installed.includes(model)) ||
+    new Set(requested).size!==requested.length)
+    throw new Error("Choose 1–10 unique installed Ollama models");
+  return [...requested];
+}
+
 type EvalWebPlan = {search:boolean;query?:string;reason:string;method?:string;intent?:string;task?:ResearchTask;
   replyEffort?:"quick"|"deliberate";sourceRequirement?:"required"|"optional"};
 type EvalWebExecution = {
