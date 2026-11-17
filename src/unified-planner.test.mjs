@@ -61,6 +61,16 @@ test("no stored memories still lets planner decide whether public verification h
  assert.equal(result.memory.mode,"empty");
  assert.equal(result.web.search,true);
 });
+test("planner errors are distinct from a conscious no-search decision and rejected unsafe query",()=>{
+ const unreadable=parseWebToolDecision("{broken JSON",true,prefs,facts);
+ assert.equal(unreadable.method,"planner-error");
+ const malformed=parseWebToolDecision(JSON.stringify({ids:[]}),true,prefs,facts);
+ assert.equal(malformed.method,"planner-error");
+ const declined=parseWebToolDecision(JSON.stringify({web:{search:false,reason:"chat only"}}),true,prefs,facts);
+ assert.equal(declined.method,"not-needed");
+ const unsafe=parseWebToolDecision(JSON.stringify({web:{search:true,query:"my daughter's birthday"}}),true,prefs,facts);
+ assert.equal(unsafe.method,"fallback");
+});
 test("even greetings use local semantic planning, with safe fallback for bad output",async()=>{
  let calls=0;
  const hi=await planMemoriesAndTools(facts,"Hello!",[],10,
