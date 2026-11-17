@@ -83,6 +83,8 @@ export type EvalStepResult = {
   /** Did an actually executed public search yield structurally validated evidence? */
   evidencePass?: boolean | null;
   webPlannerDecision?: EvalWebPlan;
+  /** Measured local planner cost, not Rust search/extraction or answer latency. */
+  plannerElapsedMs?: number;
   /** Observed Rust/SearXNG execution, distinct from an AI decision to search. */
   webExecution?: EvalWebExecution;
   /** Previous validated public query available to this turn's planner. */
@@ -720,6 +722,7 @@ export async function runBrainEvaluation(options:EvalOptions):Promise<EvalReport
         ? memory.ids.filter(id=>!supportingIds.has(id)):[];
       const unexpected=(step.expect.excludeMemory??[]).filter(id=>memory.ids.includes(id));
       let planned:EvalWebPlan|undefined;
+      let plannerElapsedMs:number|undefined;
       const priorPublicQuery=publicContext.activePublicQuery;
       let answer:string|undefined;
       let webExecution:EvalStepResult["webExecution"]|undefined;
@@ -729,12 +732,18 @@ export async function runBrainEvaluation(options:EvalOptions):Promise<EvalReport
       let memoryCapturePreview:MemoryCapturePreview|undefined;
       const messages:EvalTurn[]=[...previous,{role:"user",content:step.user}];
       try {
-        if(options.mode==="live" && webPolicy.canPlanPublicWeb && options.planWeb)
-          // Give the planner a stable snapshot. Brain Lab appends the current
-          // exchange to previous after this callback, but observers and
-          // async adapters must not see the history mutate retroactively.
-          planned=await options.planWeb(step.user,previous.map(turn=>({...turn})),
-            {...publicContext},selectedFacts);
+        if(options.mode==="live" && webPolicy.canPlanPublicWeb && options.planWeb) {
+          const plannerStarted=Date.now();
+          try {
+            // Give the planner a stable snapshot. Brain Lab appends the current
+            // exchange to previous after this callback, but observers and
+            // async adapters must not see the history mutate retroactively.
+            planned=await options.planWeb(step.user,previous.map(turn=>({...turn})),
+              {...publicContext},selectedFacts);
+          } finally {
+            plannerElapsedMs=Date.now()-plannerStarted;
+          }
+        }
         if(options.mode==="live" && options.infer){
           // Never search when the private permission boundary blocks web.
           // The local planner has already validated its proposed public query.
@@ -842,6 +851,7 @@ export async function runBrainEvaluation(options:EvalOptions):Promise<EvalReport
         canPlanPublicWeb:webPolicy.canPlanPublicWeb,cloudMaySearch:webPolicy.cloudMaySearch,
         blockedReason:webPolicy.blockedReason,deterministicWebAllowed:decision.allowAutomaticWeb,
         plannedWeb,webPass,evidencePass,webPlannerDecision:planned,
+        ...(plannerElapsedMs!==undefined?{plannerElapsedMs}:{}),
         ...(webExecution?{webExecution}:{}),
         ...(priorPublicQuery?{activePublicQuery:priorPublicQuery}:{}),
         ...(memoryCapturePreview?{memoryCapturePreview}:{}),
@@ -1021,7 +1031,8 @@ export function brainEvalMarkdown(report:EvalReport):string {
           "; raw missing row IDs "+(s.missingMemoryRecordIds?.join(", ")||"none")+
           "; distractors "+(s.distractorMemoryIds?.join(", ")||"none")+
           "; excluded "+(s.unexpectedMemoryIds.join(", ")||"none"),
-        "- Time: "+s.elapsedMs+" ms");
+        "- Time: "+s.elapsedMs+" ms"+
+          (s.plannerElapsedMs!==undefined?" (local planner "+s.plannerElapsedMs+" ms)":""));
       if(s.answer!==undefined)lines.push("- Response: "+s.answer.replace(/\s+/g," ").slice(0,800));
       if(s.inferenceStats)lines.push("- Inference: "+JSON.stringify({model:s.modelUsed,stats:s.inferenceStats}));
       if(s.error)lines.push("- Error: "+s.error);
