@@ -903,16 +903,17 @@ async fn chat_stream_impl(
                                 let checked=evidence_pack::extract(
                                     &client,&url,&request.model,&user_request,task,&sources,selected_context
                                 ).await;
-                                let fewer_missing=checked.audit.unresolved_details.len() <
-                                    evidence.audit.unresolved_details.len();
-                                let stronger_context=checked.audit.unresolved_details.len() ==
-                                    evidence.audit.unresolved_details.len()
-                                    && checked.audit.accepted > evidence.audit.accepted;
-                                if checked.notes.is_some() && (fewer_missing || stronger_context) {
+                                let improved=checked.notes.is_some() &&
+                                    evidence_pack::improves_requested_coverage(
+                                        &evidence.audit,&checked.audit);
+                                if improved {
                                     evidence=checked;
-                                    primary_recovery_status=if fewer_missing {
-                                        "improved-coverage"
-                                    } else { "more-context" };
+                                    primary_recovery_status="improved-coverage";
+                                } else if checked.audit.accepted > evidence.audit.accepted {
+                                    // Retain earlier verified findings instead of
+                                    // discarding them for a larger but irrelevant
+                                    // batch of contextual quotes.
+                                    primary_recovery_status="more-context-no-coverage";
                                 }
                             }
                         },
