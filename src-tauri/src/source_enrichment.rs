@@ -75,6 +75,19 @@ fn site_identity_hint(host:&str,terms:&[String])->i32 {
 /// Compare the subject and preview with each search result. Institutional
 /// domains are a modest tie-breaker, not a claim that a page is infallible.
 /// A band's .com homepage or an open-source project's site is equally eligible.
+/// URL paths contain useful structured document locators: /releases, /news,
+/// /docs, /readme, etc. Match against the CURRENT QUERY rather than preferring
+/// any fixed website or guessing which source is true. A release index can
+/// outrank a broad article when the request asks for a release.
+fn url_topic_hint(url:&str,terms:&[String])->i32 {
+    let Ok(parsed)=reqwest::Url::parse(url) else {return 0};
+    let path=parsed.path().to_ascii_lowercase();
+    let tokens:Vec<_>=path.split(|ch:char|!ch.is_ascii_alphanumeric())
+        .filter(|token|token.len()>=4).collect();
+    terms.iter().filter(|term|tokens.iter().any(|part|
+        *part==term.as_str() || part.starts_with(term.as_str()) && part.len()<=term.len()+2
+    )).count().min(3) as i32 * 6
+}
 fn source_score(item: &SearchResult, host: &str, terms: &[String]) -> i32 {
     let institutional = if [".gov", ".edu", ".mil"].iter().any(|suffix| host.ends_with(suffix)) {
         8
@@ -83,6 +96,7 @@ fn source_score(item: &SearchResult, host: &str, terms: &[String]) -> i32 {
         + score_text(&item.content, terms, true)
         + institutional
         + site_identity_hint(host,terms)
+        + url_topic_hint(&item.url,terms)
 }
 
 /// Pick relevant passages rather than an arbitrary first 400 characters.
@@ -258,6 +272,18 @@ mod tests {
             > source_score(&unrelated, "agency.gov", &terms));
     }
 
+    #[test]
+    fn requested_release_document_path_competes_with_generic_comparison_articles(){
+        let terms=topic_terms("latest Aurora Engine release version");
+        let release=result("Aurora Engine releases","https://github.com/aurora/engine/releases",
+            "See published build notes and release metadata.");
+        let commentary=result("Aurora Engine general tutorial",
+            "https://writer.example.com/aurora-engine-guide",
+            "I like Aurora Engine and how the engine works.");
+        assert!(url_topic_hint(&release.url,&terms)>url_topic_hint(&commentary.url,&terms));
+        assert!(source_score(&release,"github.com",&terms)>
+            source_score(&commentary,"writer.example.com",&terms));
+    }
     #[test]
     fn preserve_distinct_mission_objectives_from_fetched_page() {
         let page = concat!(
