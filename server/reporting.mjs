@@ -97,7 +97,7 @@ export function safeReportDiagnostics(value) {
             freshSources: positive(d.toolPlan.freshSources)
           } : null,
           research: d.research ? {
-            status: allowed(d.research.status, ["used","fallback"]),
+            status: allowed(d.research.status, ["used","partial","fallback","shortlist","no_supported_matches","unavailable"]),
             accepted: positive(d.research.accepted),
             rejected: positive(d.research.rejected),
             elapsedMs: positive(d.research.elapsedMs)
@@ -105,7 +105,8 @@ export function safeReportDiagnostics(value) {
           answerVerification: d.answerVerification ? {
             checked: positive(d.answerVerification.checked),
             rejected: positive(d.answerVerification.rejected),
-            recoveredHeadline: d.answerVerification.recoveredHeadline === true
+            recoveredHeadline: d.answerVerification.recoveredHeadline === true,
+            presentation: allowed(d.answerVerification.presentation, ["model-voice-preserved","source-only"])
           } : null,
           notion: d.notion ? {
             cachedPages: positive(d.notion.cachedPages),
