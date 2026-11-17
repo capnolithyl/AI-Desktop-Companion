@@ -264,15 +264,6 @@ export const EVAL_SCENARIOS:ReadonlyArray<EvalScenario>=[
     e("And did it change AMD support?",{route:"chat",stubReply:"That needs confirmation from the current release notes."})),
   scenario("search-explicit","Explicit public research","Web search",
     e("Search the web for the latest Qwen releases.",{route:"research",stubReply:"I'd search current Qwen releases."})),
-  // Repeat the same CURRENT public fact question across local inference models.
-  // The correct answer changes over time, so execution/grounding is automated,
-  // while factual accuracy and Mikan's tone require human review.
-  scenario("research-current-model","Latest official AI model: tool execution + grounded response","Web search",
-    e("What is the latest officially released Qwen model?",{
-      route:"research",web:true,
-      conversationGoal:"The model must actually execute a current public web lookup, distinguish released versions from previews and older model cards, and communicate what the retrieved evidence does and does not establish. Review whether its answer cites relevant trustworthy sources, avoids confidently inventing a release, and retains a natural conversational voice.",
-      stubReply:"I'd check the latest official release information before naming a model."
-    })),
   scenario("search-website","Named public website lookup","Web search",
     e("What is python.org?",{route:"research",stubReply:"It's the Python language's official website."})),
   scenario("search-github","Explicit GitHub repository link","Web search",
@@ -610,7 +601,16 @@ export const EVAL_SCENARIOS:ReadonlyArray<EvalScenario>=[
       }),
     e("Could you look for other yuri anime without heavy drinking or smoking themes?",{
       route:"any",web:true,conversationGoal:"Now the user actually asks for alternatives. Public research is authorized; preserve the user's preferences locally, search only public anime titles/content and respond with verified options, not private personal details.",
-      stubReply:"Sure, I'll look for yuri anime that aren't centered on drinking or smoking."}))
+      stubReply:"Sure, I'll look for yuri anime that aren't centered on drinking or smoking."})),
+  // Repeat the same CURRENT public fact question across local inference models.
+  // The correct answer changes over time, so execution/grounding is automated,
+  // while factual accuracy and Mikan's tone require human review.
+  scenario("research-current-model","Latest official AI model: tool execution + grounded response","Web search",
+    e("What is the latest officially released Qwen model?",{
+      route:"research",web:true,
+      conversationGoal:"The model must actually execute a current public web lookup, distinguish released versions from previews and older model cards, and communicate what the retrieved evidence does and does not establish. Review whether its answer cites relevant trustworthy sources, avoids confidently inventing a release, and retains a natural conversational voice.",
+      stubReply:"I'd check the latest official release information before naming a model."
+    }))
 ];
 
 /** Display numbers follow the complete catalog, not filtered or selected positions. */
