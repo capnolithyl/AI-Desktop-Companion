@@ -40,6 +40,8 @@
     .bubble.user { background:#70414f; align-self:flex-end; border-bottom-right-radius:5px; }
     .bubble.assistant { background:#322935; border:1px solid #5a4657; align-self:flex-start; border-bottom-left-radius:5px; }
     .speaker { display:block; font-size:11px; text-transform:uppercase; letter-spacing:1px; color:#ffb88f; margin-bottom:6px; font-weight:700; }
+    .citation-links {display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;font-size:11px;}
+    .citation-links a {color:#ffbd98;text-decoration:underline;text-underline-offset:2px;}
     .composer { border-top:1px solid #65526066; padding:12px max(12px, env(safe-area-inset-right)) calc(12px + env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left)); }
     form.chat { display:flex; align-items:flex-end; gap:9px; }
     textarea { resize:none; min-height:46px; max-height:135px; flex:1; border-radius:14px; border:1px solid #76556d; color:#fff3f9; background:#30232f; outline:0; padding:12px; }
@@ -1124,7 +1126,7 @@
   function render(data) {
     var entries = Array.isArray(data.messages) ? data.messages : [];
     var signature = String(data.conversationId) + "|" +
-      entries.map(function (m) { return m.id + ":" + m.content.length + ":" + m.content.slice(-25); }).join("|");
+      entries.map(function (m) { return m.id + ":" + m.content.length + ":" + m.content.slice(-25) + ":" + (Array.isArray(m.sourceLinks) ? m.sourceLinks.length : 0); }).join("|");
     if (signature !== idSignature) {
       var atBottom = messages.scrollHeight - messages.scrollTop - messages.clientHeight < 160;
       var fragment = document.createDocumentFragment();
@@ -1137,6 +1139,30 @@
         var content = document.createElement("span");
         content.textContent = m.content || (data.busy && m.role === "assistant" ? "Thinking…" : "");
         bubble.append(label, content);
+        // Links are separately supplied for cited public sources, never spoken
+        // by TTS. Build DOM nodes, not HTML from untrusted research snippets.
+        if (m.role === "assistant" && Array.isArray(m.sourceLinks)) {
+          var citationLinks = document.createElement("div");
+          citationLinks.className = "citation-links";
+          m.sourceLinks.slice(0, 8).forEach(function(ref) {
+            var index = Number(ref && ref.index);
+            if (!Number.isInteger(index) || index < 1 || index > 24 ||
+                !String(m.content || "").includes("[" + index + "]")) return;
+            var url;
+            try { url = new URL(String(ref.url || "")); } catch { return; }
+            if (url.protocol !== "https:" || url.username || url.password ||
+                url.hostname === "localhost" || url.hostname.endsWith(".local") ||
+                !url.hostname.includes(".")) return;
+            var link = document.createElement("a");
+            link.href = url.href;
+            link.target = "_blank";
+            link.rel = "noopener noreferrer";
+            link.title = String(ref.title || "").slice(0, 100);
+            link.textContent = "[" + index + "] " + url.hostname;
+            citationLinks.append(link);
+          });
+          if (citationLinks.childNodes.length) bubble.append(citationLinks);
+        }
         fragment.append(bubble);
       });
       messages.replaceChildren(fragment);
