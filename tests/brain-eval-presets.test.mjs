@@ -59,7 +59,7 @@ test("preset capacity, names, and stored metadata are bounded",()=>{
   assert.deepEqual(parseBrainEvalPresets(extras),[{name:"Persisted",config}]);
 });
 
-test("preset load code explicitly filters missing scenarios and models and never runs tests",()=>{
+test("preset load code explicitly filters missing scenarios and models and never runs tests",async()=>{
   const {readFileSync}=await import("node:fs");
   const ui=readFileSync(new URL("../src/BrainEvalPanel.tsx",import.meta.url),"utf8");
   assert.match(ui,/config\.scenarioIds\.filter\(id=>allowedIds\.has\(id\)\)/);
@@ -67,4 +67,20 @@ test("preset load code explicitly filters missing scenarios and models and never
   assert.match(ui,/setSelectedIds\(new Set\(knownIds\)\)/);
   assert.match(ui,/setSelectedModels\(new Set\(knownModels\)\)/);
   assert.match(ui,/Select installed models before running/);
+});
+
+test("desktop and browser relay expose manual named preset controls",async()=>{
+  const {readFileSync}=await import("node:fs");
+  const desktop=readFileSync(new URL("../src/BrainEvalPanel.tsx",import.meta.url),"utf8");
+  const remote=readFileSync(new URL("../server/public/index.html",import.meta.url),"utf8");
+  assert.match(desktop,/Saved test presets/);
+  assert.match(desktop,/persistBrainEvalPresets\(next\)/);
+  assert.match(remote,/id="brainLabPresetSave"/);
+  assert.match(remote,/id="brainLabPresetLoad"/);
+  assert.match(remote,/id="brainLabPresetDelete"/);
+  assert.match(remote,/localStorage\.setItem\(brainLabPresetStorageKey/);
+  assert.match(remote,/brainLabSelectedIds=new Set\(known\)/);
+  assert.match(remote,/brainLabSelectedModels=new Set\(loadedModels\)/);
+  assert.doesNotMatch(remote.slice(remote.indexOf("function loadBrainLabPreset()"),
+    remote.indexOf("function deleteBrainLabPreset()")),/startBrainEvaluation|action:"start"/);
 });
