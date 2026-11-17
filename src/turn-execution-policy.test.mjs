@@ -117,3 +117,34 @@ test("only optional general lookup tasks can fall back to unsourced conceptual e
   assert.equal(run({...decision,task:undefined}).researchGeneralFallback,false);
   assert.equal(run({...decision,search:false}).researchGeneralFallback,false);
 });
+
+test("planner outage recovers only current authorized public document URLs",()=>{
+  const url="https://github.com/ggml-org/llama.cpp";
+  const request="Check the repository at "+url+" and summarize its implementation";
+  const policy=planDesktopWebExecution({...defaults,question:request,planMode:"research"});
+  assert.equal(policy.publicDocumentUrl,url);
+  const outage={search:false,method:"planner-error",reason:"Local tool planner unavailable"};
+  const recovered=resolvePublicWebExecution(policy,{mode:"research",query:request,recent:false},outage);
+  assert.equal(recovered.researchRoute,"research");
+  assert.equal(recovered.autoSearch,true);
+  assert.equal(recovered.researchTask?.sourceUrl,url);
+  assert.ok(recovered.researchQuery);
+  assert.doesNotMatch(recovered.researchQuery,/https?:\\/\\//);
+  assert.doesNotMatch(recovered.researchQuery,/summarize its implementation/);
+
+  const semanticDecline=resolvePublicWebExecution(policy,{mode:"research",query:request,recent:false},
+    {search:false,method:"not-needed",reason:"Conversation only"});
+  assert.equal(semanticDecline.researchTask,undefined);
+  assert.equal(semanticDecline.autoSearch,false);
+  const conversational=resolvePublicWebExecution(policy,{mode:"chat",recent:false},outage);
+  assert.equal(conversational.autoSearch,false);
+  for(const control of [{autoSearch:false},{attachment:true},{personalTurn:true},{roleplay:true}]){
+    const blocked=planDesktopWebExecution({...defaults,...control,question:request,planMode:"research"});
+    assert.equal(blocked.publicDocumentUrl,undefined);
+    const execution=resolvePublicWebExecution(blocked,{mode:"research",query:request,recent:false},outage);
+    assert.equal(execution.autoSearch,false);
+  }
+  const privateUrl=planDesktopWebExecution({...defaults,
+    question:"Read https://localhost/ or https://example.org:8443/secret",planMode:"research"});
+  assert.equal(privateUrl.publicDocumentUrl,undefined);
+});
