@@ -209,6 +209,13 @@ function performanceLines(diagnostics: Diagnostics): string[] {
         "  Context-only excerpts (not proven requested details): " + diagnostics.research.contextualCount
       ] : []),
       "  Rejected candidates: " + diagnostics.research.rejected,
+      ...(diagnostics.research.taskKind ? [
+        "  Task kind: "+diagnostics.research.taskKind] : []),
+      ...(diagnostics.research.unresolvedDetails?.length ? [
+        "  Unresolved requested details: "+diagnostics.research.unresolvedDetails
+          .map((detail,index)=>"["+index+"] "+detail).join("; ")] : []),
+      ...(diagnostics.research.primaryRecoveryStatus ? [
+        "  Primary-source recovery: "+diagnostics.research.primaryRecoveryStatus] : []),
       ...(diagnostics.research.rejectedDetails?.length
         ? ["  Rejection reasons: " + diagnostics.research.rejectedDetails.join("; ")] : []),
       ...(diagnostics.research.candidateLeads?.length
@@ -217,8 +224,9 @@ function performanceLines(diagnostics: Diagnostics): string[] {
         ? diagnostics.research.candidateQueries.map(query=>"  Attempted candidate verification: "+query) : []),
       ...(diagnostics.research.acceptedDetails?.length
         ? diagnostics.research.acceptedDetails.map(fact =>
-            "  Accepted excerpt [" + fact.source + "] " + fact.subject + ": " +
-              fact.claim + " | " + fact.quote) : []),
+            "  Accepted excerpt [" + fact.source + "] " + fact.subject +
+              (fact.detail == null ? " (context only)" : " (requested detail #"+fact.detail+")")+
+              ": " + fact.claim + " | " + fact.quote) : []),
       ...(diagnostics.research.extractionAttempts && diagnostics.research.extractionAttempts>1
         ? ["  Local evidence extraction attempts: " + diagnostics.research.extractionAttempts] : []),
       "  Extraction time: " + duration(diagnostics.research.elapsedMs),
@@ -236,6 +244,13 @@ function performanceLines(diagnostics: Diagnostics): string[] {
       "Tool planning:",
       "  Route: " + diagnostics.toolPlan.method,
       "  Reason: " + diagnostics.toolPlan.reason,
+      ...(diagnostics.toolPlan.task ? [
+        "  Planned research task: "+diagnostics.toolPlan.task.kind,
+        "  Planned subject: "+(diagnostics.toolPlan.task.subject??"(none)"),
+        ...(diagnostics.toolPlan.task.details?.length
+          ? diagnostics.toolPlan.task.details.map((detail,index)=>
+            "  Requested detail #"+index+": "+detail) : [])
+      ] : []),
       ...(diagnostics.toolPlan.sourceRequirement ? [
         "  Source requirement: "+diagnostics.toolPlan.sourceRequirement
       ] : []),
