@@ -53,6 +53,9 @@ pub struct ResearchAudit {
     pub unresolved_details: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub candidate_discovery: Option<String>,
+    /// Bounded diagnostic code: why the public primary-source recovery did/didn't run.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub primary_recovery_status: Option<String>,
 }
 
 #[derive(Clone, Serialize)]
@@ -339,6 +342,7 @@ fn assemble_evidence(
         followup_query: None,
         unresolved_details: task.details.clone(),
         candidate_discovery: None,
+        primary_recovery_status: None,
     };
     let mut notes = None;
     let mut followup_query = None;
