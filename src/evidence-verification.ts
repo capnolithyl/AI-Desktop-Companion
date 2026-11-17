@@ -222,34 +222,26 @@ function partialResearchSummary(
   }
   if(!groups.size)return null;
   const summaries=[...groups.values()];
-  const labels=summaries.map(g=>"**"+escaped(g.name,100)+"**");
-  const subjects=labels.length===1?labels[0]:
-    labels.slice(0,-1).join(", ")+" and "+labels[labels.length-1];
-  const lines=summaries.flatMap(g=>g.quotes.map(({source:index,quote})=>{
-    const result=sources[index-1];
-    let origin="";
-    try{
-      const uri=new URL(result.url);
-      if(["https:","http:"].includes(uri.protocol) && !uri.username && !uri.password)
-        origin=" (["+escaped(uri.hostname,100)+"]("+uri.href.replace(/\(/g,"%28").replace(/\)/g,"%29")+"))";
-    }catch{ /* Source URLs are untrusted; omit malformed destinations. */ }
-    const excerpt=escaped(quote,330);
-    const shortened=[...quote.replace(/\s+/g," ").trim()].length>330?"…":"";
-    return "- **"+escaped(g.name,100)+"** ["+index+"]"+origin+": “"+excerpt+shortened+"”";
-  }));
-  // An extracted date is a reported value, not confirmation of the
-  // official release status or an exhaustive "latest" comparison.
+  // The full exact quotations remain in structured evidence/debug metadata.
+  // The chat bubble should carry a readable answer, not a source dump with
+  // repeated Markdown URLs. Citation indices point to the retained sources.
+  const subjectMentions=summaries.map(group=>{
+    const refs=[...new Set(group.quotes.map(quote=>quote.source))]
+      .map(source=>"["+source+"]").join(" ");
+    return escaped(group.name,100)+" "+refs;
+  });
+  const subjects=subjectMentions.length===1?subjectMentions[0]:
+    subjectMentions.slice(0,-1).join(", ")+" and "+subjectMentions[subjectMentions.length-1];
   const unresolvedDetails=(audit.unresolvedDetails??[]).filter(s=>s.trim()).slice(0,4);
-  const remaining=unresolvedDetails.map(s=>escaped(s,140));
-  const caveat=remaining.length
-    ?"**Not independently established:** "+remaining.join("; ")+". These excerpts alone do not establish the definitive answer."
-    :"**Not independently established:** whether these source reports fully answer the question.";
+  const missing=unresolvedDetails[0]?.replace(/\s+/g," ").trim().slice(0,120);
   const voice=safeModelOpening(draft,audit);
+  const uncertainty=missing
+    ? "I couldn't verify "+escaped(missing,120)+" from those excerpts."
+    : "I couldn't confirm the complete answer from those excerpts.";
   return {
-    text:(voice ? voice+"\n\n" : "")+
-      "I found source reports mentioning "+subjects+
-      ", but I can't confirm a definitive answer from the retrieved excerpts alone.\n\n"+
-      lines.join("\n")+"\n\n"+caveat,
+    text:(voice ? voice+" " : "")+
+      "I found reports mentioning "+subjects+", but that's not enough to establish the answer. "+
+      uncertainty+" I'd rather not guess.",
     checked:supportedQuotes.length,rejected:0,usable:true,
     evidence:{status:"partial",supportedQuotes,unresolvedDetails},
     presentation:voice?"model-voice-preserved":"source-only"
