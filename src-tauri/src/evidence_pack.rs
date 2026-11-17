@@ -232,6 +232,28 @@ fn validate_task_fact(candidate:&FactCandidate,task:&ResearchTask,sources:&[Sear
     validate_with_reason(candidate.clone(),sources)
 }
 
+/// A lookup's requested properties must describe a coherent named entity.
+/// Exact-quote matching alone cannot prove a release/status pair when the
+/// version name came from one product and its status from another.
+/// An explicitly multi-subject task remains allowed when each requested slot
+/// itself names that separate subject.
+fn lookup_subjects_coherent(facts:&[GroundedFact], task:&ResearchTask)->bool {
+    if task.kind!=ResearchKind::Lookup || task.details.len()<2 {return true}
+    let mapped:Vec<_>=facts.iter().filter(|fact| fact.detail.is_some()).collect();
+    if mapped.len()<2 {return true}
+    let key=|name:&str| name.chars().filter(|ch|ch.is_alphanumeric())
+        .flat_map(char::to_lowercase).collect::<String>();
+    let subjects:HashSet<_>=mapped.iter().map(|fact|key(&fact.subject)).collect();
+    if subjects.len()<=1 {return true}
+    // A genuine multi-entity request can explicitly bind each distinct entity
+    // to its own detail; otherwise do not infer a shared target across sources.
+    mapped.iter().all(|fact| {
+        let subject=key(&fact.subject);
+        task.details.get(fact.detail.unwrap()).is_some_and(|detail|
+            !subject.is_empty() && key(detail).contains(&subject))
+    })
+}
+
 fn evidence_notes(facts: &[GroundedFact]) -> String {
     let mut text = String::from(
         "SOURCE-ANCHORED RESEARCH NOTES. These are model-proposed interpretations,\n\
@@ -369,8 +391,14 @@ fn assemble_evidence(
                             fact.subject.chars().take(100).collect::<String>(), fact.source)))
                     .collect();
                 let rejected=facts.iter().filter(|fact|validate_task_fact(fact,task,sources).is_err()).count();
-                let (accepted, _) = collect_valid(facts.into_iter()
+                let (mut accepted, _) = collect_valid(facts.into_iter()
                     .filter(|fact|validate_task_fact(fact,task,sources).is_ok()).collect(), sources);
+                let conflicting_subjects=!lookup_subjects_coherent(&accepted,task);
+                if conflicting_subjects {
+                    // Preserve the exact quotes as context, but prevent
+                    // mutually incompatible subjects from resolving one task.
+                    for fact in &mut accepted { fact.detail=None; }
+                }
                 let covered: HashSet<_> = accepted.iter()
                     .filter_map(|fact|fact.detail.filter(|i|*i<task.details.len())).collect();
                 audit.unresolved_details = task.details.iter().enumerate()
@@ -392,7 +420,9 @@ fn assemble_evidence(
                     } else {
                         "partial".into()
                     };
-                    audit.note = if audit.contextual_count>0 {
+                    audit.note = if conflicting_subjects {
+                        "Conflicting named subjects across requested detail slots; source excerpts are context only.".into()
+                    } else if audit.contextual_count>0 {
                         "Source-anchored contextual excerpts retained without claiming requested details are verified.".into()
                     } else {
                         "Requested fact excerpts matched numbered sources.".into()
@@ -690,6 +720,54 @@ mod tests {
     }
     fn candidate(source: usize, subject: &str, claim: &str, quote: &str) -> FactCandidate {
         FactCandidate {source, subject:subject.into(), claim:claim.into(), quote:quote.into(),detail:None}
+    }
+
+    #[test]
+    fn lookup_does_not_merge_different_entities_into_a_fully_verified_answer() {
+        let task=ResearchTask{
+            kind:ResearchKind::Lookup,subject:Some("Aurora".into()),
+            details:vec!["latest release identity".into(),"official release status".into()],
+            ..Default::default()
+        };
+        let sources=[
+            make_source("Aurora release announcement","Aurora5-Max launched officially on 16 November 2026."),
+            make_source("Older model notes","Aurora4-Max officially launched in July 2026.")
+        ];
+        let facts=json!({"facts":[
+            {"source":1,"subject":"Aurora5-Max","claim":"Aurora5-Max launched officially on 16 November 2026.",
+             "quote":"Aurora5-Max launched officially on 16 November 2026.","detail":0},
+            {"source":2,"subject":"Aurora4-Max","claim":"Aurora4-Max officially launched in July 2026.",
+             "quote":"Aurora4-Max officially launched in July 2026.","detail":1}
+        ]});
+        let result=assemble_evidence(Some(facts),"Latest Aurora release?",&task,&sources);
+        assert_eq!(result.audit.status,"partial");
+        assert_eq!(result.audit.accepted,2);
+        assert_eq!(result.audit.contextual_count,2);
+        assert_eq!(result.audit.unresolved_details,task.details);
+        assert!(result.audit.accepted_details.iter().all(|entry|entry.detail.is_none()));
+        assert!(result.audit.note.contains("Conflicting named subjects"));
+    }
+
+    #[test]
+    fn lookup_keeps_equivalent_entity_spellings_and_explicit_multi_entity_tasks() {
+        let task=ResearchTask{
+            kind:ResearchKind::Lookup,
+            details:vec!["model identity".into(),"release status".into()],
+            ..Default::default()
+        };
+        let make=|subject:&str,index:usize|GroundedFact{
+            source:1,subject:subject.into(),claim:"A sourced statement".into(),
+            quote:"A sourced statement".into(),detail:Some(index)};
+        assert!(lookup_subjects_coherent(&[
+            make("Aurora5-Max",0),make("Aurora 5 Max",1)],&task));
+        assert!(!lookup_subjects_coherent(&[
+            make("Aurora5-Max",0),make("Aurora4-Max",1)],&task));
+        let separate=ResearchTask{
+            details:vec!["Aurora5-Max release".into(),"Aurora4-Max release".into()],
+            ..task
+        };
+        assert!(lookup_subjects_coherent(&[
+            make("Aurora5-Max",0),make("Aurora4-Max",1)],&separate));
     }
 
     #[test]
