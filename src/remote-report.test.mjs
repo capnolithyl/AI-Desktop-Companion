@@ -45,9 +45,11 @@ test("remote diagnostic snapshot retains counts, routing and failures without me
     "a partial research state must survive BOTH desktop and relay sanitizers");
   assert.equal(relayed.messages[1].diagnostics.answerVerification.presentation,"model-voice-preserved");
   const poisoned = safeReportDiagnostics({messages:[{id:"x",role:"assistant",diagnostics:{
-    research:{status:"unsafe-injected"},answerVerification:{presentation:"unsupported-claim"}
+    research:{status:"unsafe-injected",primaryRecoveryStatus:"unsafe-injected"},
+    answerVerification:{presentation:"unsupported-claim"}
   }}]});
   assert.equal(poisoned.messages[0].diagnostics.research.status,null);
+  assert.equal(poisoned.messages[0].diagnostics.research.primaryRecoveryStatus,null);
   assert.equal(poisoned.messages[0].diagnostics.answerVerification.presentation,null);
   assert.equal(log[1].diagnostics.notion.readSucceeded,false);
   assert.equal(log[1].diagnostics.privateDetails.notionReadFailure,"PRIVATE NOTION ERROR");
