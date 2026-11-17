@@ -17,6 +17,22 @@ test("semantic conversation wins over an old research route; permissions still w
   const old={mode:"research",query:"Aurora release"};
   assert.equal(resolvePublicWebExecution(permitted,old,{search:false,method:"not-needed"}).autoSearch,false);
   assert.equal(resolvePublicWebExecution(permitted,old,{search:false,method:"fallback"}).autoSearch,false);
+  assert.equal(resolvePublicWebExecution(permitted,old,{search:false,method:"planner-error"}).autoSearch,true,
+    "real planner errors can recover a separately identified public research query");
+  assert.equal(resolvePublicWebExecution(permitted,old,{search:false,method:"not-needed"}).autoSearch,false,
+    "a deliberate no-search decision must not be overridden");
+  assert.equal(resolvePublicWebExecution(permitted,
+    {mode:"research",query:"my daughter private birthday",recent:true},
+    {search:false,method:"planner-error"}).autoSearch,false,
+    "a sensitive deterministic query is not a safe planner-error fallback");
+  assert.equal(resolvePublicWebExecution(permitted,
+    {mode:"research",query:"Alex Example birthday",recent:true},
+    {search:false,method:"planner-error"},[
+      {id:41,fact:"The user's full name is Alex Example.",category:"profile"}
+    ]).autoSearch,false,
+    "names from owner profile memories cannot enter a fallback public query");
+  assert.equal(resolvePublicWebExecution({...permitted,blockedReason:"private"},old,
+    {search:false,method:"planner-error"}).autoSearch,false);
   assert.equal(resolvePublicWebExecution({...permitted,blockedReason:"private"},old,{search:true,query:"Aurora"}).autoSearch,false);
   assert.equal(resolvePublicWebExecution(permitted,{mode:"factual"}).researchRoute,"factual");
 });
