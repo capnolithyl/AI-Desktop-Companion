@@ -3,7 +3,7 @@
 //! Preserve the source URL and [n] citation indexes used by the UI.
 use crate::{web_reader, web_search::SearchResult};
 use futures_util::future::join_all;
-use std::net::IpAddr;
+use std::{collections::HashSet, net::IpAddr};
 
 const MAX_SOURCE_PAGES: usize = 2;
 const MAX_SOURCE_EXCERPT_CHARS: usize = 2300;
@@ -55,6 +55,23 @@ fn score_text(text: &str, terms: &[String], date_sensitive: bool) -> i32 {
         + if date_sensitive && status_markers.iter().any(|term| lower.contains(term)) { 2 } else { 0 }
 }
 
+/// An exact publisher-like domain match is useful for deciding which page
+/// to READ, never for accepting a statement as true. The registrable-looking
+/// left label must match a query term (or a hyphenated name in the query).
+/// A URL such as subject.example.attacker.org receives no identity hint.
+fn site_identity_hint(host:&str,terms:&[String])->i32 {
+    let without_www=host.strip_prefix("www.").unwrap_or(host);
+    let labels:Vec<_>=without_www.split('.').collect();
+    if labels.len()<2 {return 0}
+    let label=labels[labels.len()-2].to_ascii_lowercase();
+    let parts:Vec<_>=label.split('-').filter(|s|!s.is_empty()).collect();
+    if parts.len()==1 && parts[0].len()>=4 &&
+        terms.iter().any(|term|term==parts[0]) {return 18}
+    if parts.len()>1 && parts.iter().all(|part|
+        part.len()>=3 && terms.iter().any(|term|term==part)) {return 18}
+    0
+}
+
 /// Compare the subject and preview with each search result. Institutional
 /// domains are a modest tie-breaker, not a claim that a page is infallible.
 /// A band's .com homepage or an open-source project's site is equally eligible.
@@ -65,6 +82,7 @@ fn source_score(item: &SearchResult, host: &str, terms: &[String]) -> i32 {
     score_text(&item.title, terms, false) * 2
         + score_text(&item.content, terms, true)
         + institutional
+        + site_identity_hint(host,terms)
 }
 
 /// Pick relevant passages rather than an arbitrary first 400 characters.
@@ -114,6 +132,37 @@ pub(crate) fn focused_page_excerpt(page: &str, topic: &str) -> String {
     output
 }
 
+/// Choose bounded, domain-diverse pages to read using topic relevance
+/// plus a soft subject/domain identity hint. Neither establishes authorship.
+/// The existing HTTPS/DNS checks still apply to every actual fetch.
+fn choose_page_candidates(results:&[SearchResult],query:&str)->Vec<usize>{
+    let terms=topic_terms(query);
+    let mut candidates:Vec<(usize,i32,String)>=results.iter().enumerate()
+        .filter_map(|(index,item)|{
+            let host=candidate_host(&item.url)?;
+            let relevant=terms.is_empty() || terms.iter().any(|term|
+                item.title.to_lowercase().contains(term.as_str())||
+                item.content.to_lowercase().contains(term.as_str()));
+            relevant.then_some((index,source_score(item,&host,&terms),host))
+        }).collect();
+    candidates.sort_by(|a,b|b.1.cmp(&a.1).then_with(||a.0.cmp(&b.0)));
+    let mut selected=Vec::new();
+    let mut hosts=HashSet::new();
+    for (index,_,host) in &candidates {
+        if hosts.insert(host.as_str()) {
+            selected.push(*index);
+            if selected.len()==MAX_SOURCE_PAGES {return selected}
+        }
+    }
+    for (index,_,_) in candidates {
+        if !selected.contains(&index) {
+            selected.push(index);
+            if selected.len()==MAX_SOURCE_PAGES {break}
+        }
+    }
+    selected
+}
+
 /// Read at most two subject-relevant results in parallel while retaining their
 /// original source labels. A failed read leaves its original snippet intact.
 pub async fn enrich_relevant_sources(
@@ -122,19 +171,8 @@ pub async fn enrich_relevant_sources(
     query: &str,
     cache_hours: u64,
 ) -> usize {
-    let terms = topic_terms(query);
-    let mut candidates: Vec<(usize, i32)> = results.iter().enumerate()
-        .filter_map(|(index, item)| {
-            let host = candidate_host(&item.url)?;
-            let relevant = terms.is_empty() || terms.iter().any(|term|
-                item.title.to_lowercase().contains(term.as_str())
-                    || item.content.to_lowercase().contains(term.as_str()));
-            relevant.then_some((index, source_score(item, &host, &terms)))
-        })
-        .collect();
-    candidates.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
-    candidates.truncate(MAX_SOURCE_PAGES);
-    let requests = candidates.into_iter().map(|(index, _)| {
+    let candidates=choose_page_candidates(results,query);
+    let requests = candidates.into_iter().map(|index| {
         let app = app.clone();
         let url = results[index].url.clone();
         async move {
@@ -178,6 +216,36 @@ mod tests {
         assert!(candidate_host("https://user:password@example.com/").is_none());
     }
 
+    #[test]
+    fn publisher_domain_identity_is_only_a_soft_enrichment_hint(){
+        let terms=topic_terms("Latest Aurora Studio release status");
+        let site=result("Aurora Studio new model discussion","https://aurora.dev/blog",
+            "Technical architecture notes and reasoning improvements.");
+        let aggregator=result("Latest Aurora Studio release news",
+            "https://videos.example.com/watch","Latest Aurora Studio model officially released.");
+        let hint=site_identity_hint("aurora.dev",&terms);
+        assert!(hint>0);
+        assert_eq!(site_identity_hint("aurora.dev.attacker.org",&terms),0);
+        assert!(source_score(&site,"aurora.dev",&terms)>
+            source_score(&aggregator,"videos.example.com",&terms));
+        let picked=choose_page_candidates(&[aggregator,site],"Latest Aurora Studio release status");
+        assert!(picked.contains(&1),"directly relevant publisher-like domain should get read");
+    }
+    #[test]
+    fn page_fetch_selection_spreads_two_slots_across_domains(){
+        let candidates=vec![
+            result("Aurora software official new update","https://aurora.dev/a",
+                "Aurora project released a major update."),
+            result("Aurora software official new update","https://aurora.dev/b",
+                "Aurora project released a major update."),
+            result("Aurora software announcement","https://observer.example.org/report",
+                "Aurora software released a new update.")
+        ];
+        let selected=choose_page_candidates(&candidates,"Latest Aurora software update");
+        assert_eq!(selected.len(),2);
+        assert!(selected.contains(&0));
+        assert!(selected.contains(&2),"a second same-host page should not crowd out independent context");
+    }
     #[test]
     fn source_ranking_does_not_require_a_government_site() {
         let terms = topic_terms("Midnight Engine new album announcement");
