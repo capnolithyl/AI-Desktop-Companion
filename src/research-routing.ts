@@ -38,7 +38,12 @@ function publicWebsiteLookup(text: string): boolean {
   const bareDomain = /^(?:https?:\/\/)?(?:www\.)?[a-z0-9-]+(?:\.[a-z0-9-]+)+\/?$/i.test(text.trim());
   const namedDomain = /\b(?:[a-z0-9-]+\.)+(?:com|org|net|gov|edu|io|dev|ai|app|info|us|de|co|uk)\b/i.test(text);
   const compoundBrand = /\b[A-Z][a-z]+[A-Z][A-Za-z0-9]*\b/.test(text);
-  return bareDomain || (asksAboutEntity && (namedDomain || compoundBrand));
+  // A user-directed public URL read is a document request, not an incidental
+  // URL in a conversation. Keep this structural and independent of topic/site.
+  // The native reader still verifies URL provenance, HTTPS and public DNS.
+  const documentRead = /^(?:please\s+)?(?:check|open|read|inspect|review|visit|look\s+(?:up|at))\b/i.test(text)
+    && /https:\/\/[^\s]+/i.test(text);
+  return bareDomain || documentRead || (asksAboutEntity && (namedDomain || compoundBrand));
 }
 
 export function researchRequest(question: string, previous: ResearchTurn[] = []): ResearchRequest | null {
