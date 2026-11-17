@@ -722,6 +722,7 @@ export async function runBrainEvaluation(options:EvalOptions):Promise<EvalReport
         ? memory.ids.filter(id=>!supportingIds.has(id)):[];
       const unexpected=(step.expect.excludeMemory??[]).filter(id=>memory.ids.includes(id));
       let planned:EvalWebPlan|undefined;
+      let executedTask:ResearchTask|undefined;
       let plannerElapsedMs:number|undefined;
       const priorPublicQuery=publicContext.activePublicQuery;
       let answer:string|undefined;
@@ -748,6 +749,7 @@ export async function runBrainEvaluation(options:EvalOptions):Promise<EvalReport
           // Never search when the private permission boundary blocks web.
           // The local planner has already validated its proposed public query.
           const execution=resolvePublicWebExecution(webPolicy,decision.plan,planned,selectedFacts);
+          executedTask=execution.researchTask;
           const publicQuery=execution.researchQuery;
           const response=await options.infer({
             messages,selectedMemories:selected,evidence:step.mockEvidence,
@@ -820,13 +822,17 @@ export async function runBrainEvaluation(options:EvalOptions):Promise<EvalReport
         expectedWeb===true && !observedQuery;
       const evidencePass=missingRequiredWeb ? false : options.liveWeb && observedQuery
         ? webExecution!.results.length===0 ? false
-          : audit ? audit.status==="partial" ? null : (audit.status==="used" || audit.status==="shortlist") : null
+          : audit ? audit.status==="partial"
+              ? audit.unresolvedDetails?.length ? false : null
+              : (audit.status==="used" || audit.status==="shortlist") : null
         : null;
       if(missingRequiredWeb)answerFailures.push(
         "Required public research was not executed; the user's research goal was not fulfilled."
       );
       else if(evidencePass===false)answerFailures.push(
-        "Public search executed but produced no validated evidence; the user's research goal was not fulfilled."
+        audit?.status==="partial" && audit.unresolvedDetails?.length
+          ? "Public search returned only partial context; requested details remain unresolved."
+          : "Public search executed but produced no validated evidence; the user's research goal was not fulfilled."
       );
       // Never present an unobserved search decision as passing a behavioral test.
       // Fast mode deliberately cannot run the optional model planner.
@@ -871,7 +877,7 @@ export async function runBrainEvaluation(options:EvalOptions):Promise<EvalReport
       publicContext=activePublicQuery ? {
         activePublicQuery,
         publicSubjects:webExecution?.researchAudit?.recommendationApproved,
-        activeTask:planned?.task,
+        activeTask:executedTask ?? planned?.task,
         publicAnswer:webExecution?.results.length ? answer : undefined
       } : {};
       previous.push({role:"user",content:step.user});
