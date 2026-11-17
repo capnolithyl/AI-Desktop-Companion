@@ -78,7 +78,8 @@ test("a failed final draft recovers source-anchored partial facts without invent
     supportedQuotes:[{source:1,subject:"Cora Vale",quote}],
     unresolvedDetails:["current tour dates"]
   });
-  assert.ok(recovered.text.includes(quote),"The verified quote must appear in the rendered answer");
+  assert.ok(recovered.text.includes("Cora Vale [1]"),"The readable reply cites the retained source");
+  assert.ok(!recovered.text.includes(quote),"The exact quotation belongs in evidence metadata, not TTS text");
   assert.ok(!recovered.text.includes("Cora Vale was born in 2024"),
     "The generator's fabricated claim must not be repeated");
   assert.equal(reviewResearchCompletion("A casual reaction",[],undefined),null);
