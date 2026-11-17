@@ -736,7 +736,7 @@ export async function runBrainEvaluation(options:EvalOptions):Promise<EvalReport
         if(options.mode==="live" && options.infer){
           // Never search when the private permission boundary blocks web.
           // The local planner has already validated its proposed public query.
-          const execution=resolvePublicWebExecution(webPolicy,decision.plan,planned);
+          const execution=resolvePublicWebExecution(webPolicy,decision.plan,planned,selectedFacts);
           const publicQuery=execution.researchQuery;
           const response=await options.infer({
             messages,selectedMemories:selected,evidence:step.mockEvidence,
