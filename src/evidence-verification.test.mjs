@@ -390,3 +390,19 @@ test("persona framing is not synthesized when the model gives only factual claim
   assert.match(result.text,/Cora Vale \[1\]/);
   assert.ok(!result.text.includes("tours in 2027"));
 });
+
+test("partial research cannot prepend a model's false claim of having no web access",()=>{
+  const docs=[{title:"Public repository",url:"https://github.com/example/demo",
+    content:"Demo's repository README lists its local memory architecture."}];
+  const audit={status:"partial",recommendationTask:false,
+    acceptedDetails:[{source:1,subject:"Demo",claim:"Demo uses a local memory architecture.",
+      quote:docs[0].content,detail:0}],
+    unresolvedDetails:["exact implementation"]};
+  const draft="I'd love to look, but I actually don't have the ability to browse external websites! "+
+    "Demo's repository README lists its local memory architecture. [1]";
+  const reviewed=reviewResearchCompletion(draft,docs,audit);
+  assert.ok(reviewed);
+  assert.equal(reviewed.presentation,"source-only");
+  assert.doesNotMatch(reviewed.text,/don't have the ability to browse/i);
+  assert.match(reviewed.text,/Demo \[1\]/);
+});
