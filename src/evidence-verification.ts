@@ -179,6 +179,10 @@ function safeModelOpening(draft:string,audit:ResearchAudit):string|null{
   // never promote a standalone status declaration as conversational framing.
   if(!/\b(?:I|me|my|we|our)\b/i.test(opening) ||
       /\b(?:it|its|they|them|their|he|she)\b/i.test(opening))return null;
+  // An unsourced claim that the companion cannot browse is a factual
+  // capability denial, not a personality flourish. This is particularly
+  // misleading AFTER native tools successfully fetched the cited document.
+  if(/\b(?:can't|cannot|unable|not able|don't have|do not have|no access|no ability)\b/i.test(opening))return null;
   const anchors=new Set([
     ...(audit.acceptedDetails??[]).flatMap(f=>significant(f.subject+" "+f.claim+" "+f.quote)),
     ...(audit.unresolvedDetails??[]).flatMap(significant)
