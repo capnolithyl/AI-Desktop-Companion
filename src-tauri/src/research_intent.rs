@@ -1,6 +1,34 @@
 use serde_json::Value;
 use crate::web_search::SearchResult;
 
+/// Constrain the operation and its arguments together. The TS resolver still
+/// checks the selected handle, outbound query, consent and private context.
+pub(crate) fn public_plan_schema()->Value {
+    use serde_json::json;
+    let short=json!({"type":"string","maxLength":150});
+    let list=json!({"type":"array","maxItems":4,"items":short});
+    let task=json!({"type":"object","properties":{
+        "kind":{"enum":["lookup","verify","discover"]},"subject":short,"details":list,
+        "entityType":short,"preferences":list,"exclude":list,"roles":list,
+        "resource":{"enum":["latestRelease"]},
+        "requirements":{"type":"array","maxItems":4,"items":{"type":"object","properties":{
+            "quote":short,"relation":{"enum":["lt","lte","eq","gte","gt"]},
+            "limit":{"type":"number"},"unit":short
+        },"required":["quote","relation","limit","unit"],"additionalProperties":false}}
+    },"required":["kind","subject","details"],"additionalProperties":false});
+    let answer=json!({"type":"object","properties":{"operation":{"const":"answer"}},
+        "required":["operation"],"additionalProperties":false});
+    let read=json!({"type":"object","properties":{"operation":{"const":"read"},
+        "document":{"type":"integer","minimum":1,"maximum":7},"focus":short},
+        "required":["operation","document","focus"],"additionalProperties":false});
+    let search=json!({"type":"object","properties":{"operation":{"const":"search"},"query":short,
+        "task":task,"topic":short,"sourceRequirement":{"enum":["required","optional"]}},
+        "required":["operation","query","task"],"additionalProperties":false});
+    json!({"type":"object","properties":{"web":{"oneOf":[answer,read,search]},
+        "intent":{"enum":["new","refine","end","chat"]},"replyEffort":{"enum":["quick","deliberate"]}},
+        "required":["web","replyEffort"],"additionalProperties":false})
+}
+
 /// Only exact locators in authentic user turns may bypass search. DNS and
 /// address safety remain the existing web reader's responsibility.
 pub fn user_supplied_document_url(messages: &[Value], requested: &str) -> bool {

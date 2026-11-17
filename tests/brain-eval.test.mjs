@@ -1,3 +1,4 @@
+import {requiresSearchPreflight} from "../src/brain-eval.ts";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -460,7 +461,8 @@ test("live web evaluation preflight uses real SearXNG, not fake source results o
   const service=readFileSync(new URL("../src-tauri/src/search_service.rs",import.meta.url),"utf8");
   const search=readFileSync(new URL("../src-tauri/src/web_search.rs",import.meta.url),"utf8");
   assert.match(manager,/action:"probe",endpoint:settings\.searxngEndpoint/);
-  assert.match(manager,/step\.expect\.web===true \|\| step\.expect\.route==="research"/);
+  assert.equal(requiresSearchPreflight([byId("search-website"),byId("search-github-followup")]),false);
+  assert.equal(requiresSearchPreflight([byId("search-website"),byId("search-explicit")]),true);
   assert.match(manager,/if\(probe\.state!=="ready"\)throw new Error/);
   assert.match(service,/source_priority::search\(\s*endpoint, "Python programming language"/);
   assert.match(service,/"no-results"/);
@@ -484,7 +486,7 @@ test("a real-source research turn cannot pass merely because planning succeeded"
     }})
   });
   const step=result.cases[0].steps[0];
-  assert.equal(step.webPass,true,"the search decision itself was correct");
+  assert.equal(step.webPass,false,"a search result is not an executed document read");
   assert.equal(step.webExecution.results.length,1,"realistic nonempty search results");
   assert.equal(step.evidencePass,false,"no validated answer");
   assert.equal(step.pass,false,"no more false-green research");
@@ -926,8 +928,8 @@ test("Brain Lab transports a recovered document read to native execution",async(
   assert.equal(seen.webRequest?.researchTask?.sourceUrl,target);
   assert.equal(seen.webRequest?.researchRoute,"research");
   assert.ok(seen.researchQuery);
-  assert.equal(report.cases[0].steps[0].webPass,true,
-    "Only an actual native query will prove that public research executed");
+  assert.equal(report.cases[0].steps[0].webPass,false,
+    "An attempted query cannot prove the requested document was read");
   assert.equal(report.cases[0].steps[0].pass,false,
     "No sources must never count as a useful researched answer");
 });

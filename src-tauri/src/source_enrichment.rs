@@ -102,48 +102,7 @@ fn source_score(item: &SearchResult, host: &str, terms: &[String]) -> i32 {
 /// Pick relevant passages rather than an arbitrary first 400 characters.
 /// Return text in original page order to preserve context and chronology.
 pub(crate) fn focused_page_excerpt(page: &str, topic: &str) -> String {
-    let terms = topic_terms(topic);
-    let paragraphs: Vec<&str> = page.split("\n\n")
-        .map(str::trim)
-        .filter(|paragraph| paragraph.chars().count() >= 45)
-        .take(100).collect();
-    if paragraphs.is_empty() {
-        return page.chars().take(MAX_SOURCE_EXCERPT_CHARS).collect();
-    }
-    let mut priorities: Vec<usize> = (0..paragraphs.len()).collect();
-    priorities.sort_by(|&a, &b| {
-        score_text(paragraphs[b], &terms, true)
-            .cmp(&score_text(paragraphs[a], &terms, true))
-            .then_with(|| a.cmp(&b))
-    });
-    // Include the introduction for context, then the strongest passages.
-    let mut chosen = vec![0usize];
-    for index in priorities {
-        if chosen.len() >= 5 { break }
-        if !chosen.contains(&index) && score_text(paragraphs[index], &terms, true) > 0 {
-            chosen.push(index);
-        }
-    }
-    chosen.sort_unstable();
-    let mut output = String::new();
-    for index in chosen {
-        let paragraph = paragraphs[index];
-        let used = output.chars().count();
-        let available = MAX_SOURCE_EXCERPT_CHARS.saturating_sub(used + 2);
-        if available < 150 { break; }
-        if paragraph.chars().count() > available {
-            if output.is_empty() {
-                let short: String = paragraph.chars().take(available).collect();
-                let safe_end = short.rfind(". ").map(|index| index + 1)
-                    .unwrap_or(short.len());
-                output.push_str(&short[..safe_end]);
-            }
-            continue;
-        }
-        if !output.is_empty() { output.push_str("\n\n"); }
-        output.push_str(paragraph);
-    }
-    output
+    crate::passages::select(page, topic, 18, MAX_SOURCE_EXCERPT_CHARS).join("\n\n")
 }
 
 /// Choose bounded, domain-diverse pages to read using topic relevance
@@ -177,6 +136,19 @@ fn choose_page_candidates(results:&[SearchResult],query:&str)->Vec<usize>{
     selected
 }
 
+pub(crate) fn select_release_resource(results:&[SearchResult],task:Option<&crate::recommendation_gate::ResearchTask>)->Option<usize> {
+    let task=task?;
+    if task.resource.as_deref()!=Some("latestRelease") || task.source_url.is_some() {return None}
+    let subject=task.subject.as_deref()?;
+    // Multiple owners can publish different projects under the same name.
+    let mut matches=results.iter().enumerate().filter_map(|(index,hit)|
+        web_reader::latest_release_url(&hit.url,subject).map(|url|(index,url)));
+    let (index,url)=matches.next()?;
+    if matches.any(|(_,other)|other!=url) {return None}
+    // A requested release may already be a separately ranked result.
+    Some(results.iter().position(|item|item.url==url).unwrap_or(index))
+}
+
 /// Read at most two subject-relevant results in parallel while retaining their
 /// original source labels. A failed read leaves its original snippet intact.
 pub async fn enrich_relevant_sources(
@@ -184,11 +156,20 @@ pub async fn enrich_relevant_sources(
     results: &mut [SearchResult],
     query: &str,
     cache_hours: u64,
+    task: Option<&crate::recommendation_gate::ResearchTask>,
 ) -> usize {
-    let candidates=choose_page_candidates(results,query);
+    let release=select_release_resource(results,task);
+    let mut candidates=choose_page_candidates(results,query);
+    if let Some(index)=release {
+        candidates.retain(|&i|i!=index);
+        candidates.insert(0,index);
+        candidates.truncate(MAX_SOURCE_PAGES);
+    }
     let requests = candidates.into_iter().map(|index| {
         let app = app.clone();
-        let url = results[index].url.clone();
+        let release_url=(release==Some(index)).then(|| task.and_then(|t|t.subject.as_deref())
+            .and_then(|subject|web_reader::latest_release_url(&results[index].url,subject))).flatten();
+        let url=release_url.unwrap_or_else(||results[index].url.clone());
         async move {
             (index, web_reader::read_page_impl(&app, &url, false, cache_hours).await)
         }
@@ -198,9 +179,12 @@ pub async fn enrich_relevant_sources(
         if let Ok(page) = result {
             let excerpt = focused_page_excerpt(&page.content, query);
             if excerpt.chars().count() >= 90 {
-                results[index].content = format!(
-                    "Relevant text from the linked webpage (not just a search snippet):\n{excerpt}"
-                );
+                if page.url!=results[index].url {
+                    results[index].url=page.url;
+                    results[index].title=page.title;
+                    results[index].published_date=None;
+                }
+                results[index].content = excerpt;
                 results[index].engine = "webpage excerpt".into();
                 updated += 1;
             }
@@ -259,6 +243,23 @@ mod tests {
         assert_eq!(selected.len(),2);
         assert!(selected.contains(&0));
         assert!(selected.contains(&2),"a second same-host page should not crowd out independent context");
+    }
+    #[test]
+    fn release_resource_requires_an_unambiguous_named_project_and_never_relabels_a_snippet() {
+        use crate::recommendation_gate::ResearchTask;
+        let hits=vec![
+            result("Mirror","https://github.com.evil.example/lab/oriole","public overview"),
+            result("Project","https://github.com/lab/oriole","README content")];
+        let task=ResearchTask{subject:Some("Oriole".into()),resource:Some("latestRelease".into()),..Default::default()};
+        assert_eq!(select_release_resource(&hits,Some(&task)),Some(1));
+        assert_eq!(hits[1].content,"README content");
+        assert_eq!(web_reader::latest_release_url(&hits[1].url,"Oriole").unwrap(),
+            "https://github.com/lab/oriole/releases/latest");
+        let mut ambiguous=hits.clone();
+        ambiguous.push(result("Another project","https://github.com/other/oriole","different owner"));
+        assert_eq!(select_release_resource(&ambiguous,Some(&task)),None);
+        assert_eq!(select_release_resource(&hits,None),None);
+        assert_eq!(select_release_resource(&hits,Some(&ResearchTask{source_url:Some(hits[1].url.clone()),..task})),None);
     }
     #[test]
     fn source_ranking_does_not_require_a_government_site() {

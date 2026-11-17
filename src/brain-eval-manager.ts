@@ -7,7 +7,7 @@ import { invoke } from "@tauri-apps/api/core";
 import type { Settings } from "./storage";
 import { shouldUseLocalThinking } from "./reasoning-mode";
 import { planPublicWebTools, type PublicResearchContext } from "./unified-planner";
-import type { ResearchAudit } from "./debug-log";
+import type { ResearchAudit, ToolPlanningAudit } from "./debug-log";
 import { responseFocusGuidance } from "./conversation-engine";
 import { PERSONAL_DETAIL_GROUNDING_GUIDANCE } from "./personal-grounding";
 import { personalityGuidance } from "./personality";
@@ -53,7 +53,7 @@ export function reviewBrainEvalScenario(id:string,mode:EvalMode,model:string,dec
   saveCaseRecords(mergeCaseRecords(records,[next]));
 }
 import {
-  EVAL_SCENARIOS, runBrainEvaluation, brainEvalMetrics, brainEvalMarkdown, brainEvalModels,
+  EVAL_SCENARIOS, runBrainEvaluation, brainEvalMetrics, brainEvalMarkdown, brainEvalModels, requiresSearchPreflight,
   type EvalMode, type EvalReport, type EvalTurn, type EvalInference, type EvalMemoryFact,
   type EvalMemoryCapture, type MemoryCapturePreview
 } from "./brain-eval";
@@ -232,9 +232,7 @@ async function executeOne(
 ):Promise<BrainEvalModelResult>{
   // Live evidence tests require real search results, not just a Docker homepage.
   // Skip the network probe for selected scenarios that never expect web research.
-  if(request.mode==="live" && scenarios.some(scenario=>scenario.steps.some(step=>
-    step.expect.web===true || step.expect.route==="research"
-  ))){
+  if(request.mode==="live" && requiresSearchPreflight(scenarios)){
     setStatus({label:"Verifying live SearXNG results with a real public search…"});
     const probe=await invoke<{state:string;message:string}>("search_service",{
       action:"probe",endpoint:settings.searxngEndpoint
@@ -269,7 +267,7 @@ async function executeOne(
       // calendar and source-freshness instructions, ordinary chat stays light.
       researchQuery ? runtimeContext() : chatRuntimeContext(),
       responseFocusGuidance(messages.slice(0,-1),last),
-      "ISOLATED BRAIN LAB: This run uses synthetic owner memories and must never write real memories, contact GitHub/Notion, or use private integrations. Public SearXNG search IS available when the local planner selected it, and the normal Rust search pipeline supplies actual numbered evidence.",
+      "ISOLATED BRAIN LAB: This run uses synthetic owner memories and must never write real memories, use private integrations, or contact owner-connected accounts. Public document reads (including public GitHub pages) and SearXNG are available when authorized. Use the numbered evidence supplied for this turn.",
       "Use the conversation context consistently; do not invent unknown facts about the owner. Resolve ambiguous names from user-established context, never from a guessed interpretation.",
       researchPlanned && !researchQuery
         ? "A public search was planned but not executed in this turn. No web results are available. Do not invent confirmed titles, counts, releases or sourced recommendations."
@@ -282,7 +280,7 @@ async function executeOne(
         searchQuery?:string|null; sources?:Array<{
           title:string;url:string;content:string;engine:string;publishedDate?:string
         }>;sourcesCarriedOver?:boolean;
-        researchAudit?:ResearchAudit|null;stats?:{
+        searchTrace?:ToolPlanningAudit["searchTrace"];researchAudit?:ResearchAudit|null;stats?:{
         promptTokens?:number|null;outputTokens?:number|null;
         evalDurationNs?:number|null;loadDurationNs?:number|null
       }|null}>("chat_stream",{request:{
@@ -301,7 +299,7 @@ async function executeOne(
         stats:result.stats??undefined,
         webExecution:{query:result.searchQuery??null,
           results:result.sources??[],sourcesCarriedOver:result.sourcesCarriedOver===true,
-          researchAudit:result.researchAudit??null}};
+          ...(result.searchTrace ? {searchTrace:result.searchTrace} : {}),researchAudit:result.researchAudit??null}};
     }finally{if(requestId===id)requestId=null}
   };
   // This command uses production extraction instructions/validators, but NO
@@ -320,7 +318,7 @@ async function executeOne(
     const decision=await planPublicWebTools(question,selectedFacts,async prompt=>
       invoke<string>("condense_local_context",{
         endpoint:settings.endpoint,model:settings.model,prompt,
-        contextWindow:settings.contextWindow,maxOutputTokens:380,timeoutMs:45000
+        contextWindow:settings.contextWindow,maxOutputTokens:380,timeoutMs:45000,publicToolPlan:true
       }),{automaticWebEnabled:true,sourcePreferences:settings.sourcePreferences,
         history:previous,relevantUserFacts:selectedFacts,...context});
     return {search:decision.search,query:decision.query,reason:decision.reason,method:decision.method,

@@ -204,7 +204,11 @@ fn rank_for_task(broad:Vec<SearchResult>,focused:Vec<SearchResult>,rule:Option<&
         .filter(|s|seen.insert(s.url.clone()) && relevant(s,query,subject)).collect();
     // Retain original relevance order on ties. Preferred domains gain a modest
     // boost, but nonpreferred sources remain eligible and can still win.
-    candidates.sort_by_key(|s| -priority_score(s,rule,query));
+    candidates.sort_by_cached_key(|hit| {
+        let names_subject=subject.is_some_and(|name| subject_matches(&hit.title,name)
+            || subject_matches(&hit.url,name));
+        (!names_subject, -priority_score(hit,rule,query))
+    });
     let mut candidates=diversify_hosts(candidates);
     candidates.truncate(8);
     candidates
@@ -234,7 +238,11 @@ fn relaxed_subject_query(query:&str,subject:Option<&str>)->Option<String> {
 pub(crate) fn primary_followup_query(query:&str,_subject:Option<&str>)->Option<String> {
     let public_query=query.trim();
     if public_query.is_empty() || public_query.chars().any(char::is_control) { return None }
-    let followup=format!("{public_query} official announcement");
+    let existing=words(public_query);
+    let missing:Vec<_>=["official","announcement"].into_iter()
+        .filter(|word|!existing.iter().any(|term|term==word)).collect();
+    if missing.is_empty() {return None}
+    let followup=format!("{public_query} {}",missing.join(" "));
     (followup.chars().count()<=250).then_some(followup)
 }
 
@@ -264,8 +272,9 @@ fn provisional_score(hit:&SearchResult, query:&str, corpus:&[SearchResult]) -> i
 /// Preserve domain diversity so a single aggregator cannot consume every
 /// provisional slot. This is a selection policy, not a trust designation.
 fn select_provisional(mut hits:Vec<SearchResult>,query:&str)->Vec<SearchResult>{
+    hits.retain(|hit| overlap(query,&format!("{} {} {}",hit.title,hit.content,hit.url))>0);
     let corpus=hits.clone();
-    hits.sort_by_key(|hit|-provisional_score(hit,query,&corpus));
+    hits.sort_by_cached_key(|hit|-provisional_score(hit,query,&corpus));
     let mut unique_urls=HashSet::new();
     hits.retain(|hit|unique_urls.insert(hit.url.clone()));
     let mut distinct=diversify_hosts(hits);
@@ -311,7 +320,7 @@ fn assemble_search(
     }})
 }
 async fn search_once(
-    endpoint:String,query:String,recent:bool,
+    endpoint:String,query:String,goal:&str,recent:bool,
     preferences:&[SourcePreference],selected_topic:Option<&str>,
     subject:Option<&str>,preferred_enabled:bool
 )->Result<SearchBatch,String> {
@@ -328,10 +337,10 @@ async fn search_once(
         let (broad_result,preferred_result)=futures_util::future::join(
             broad,web_search::web_search(endpoint,targeted.clone())
         ).await;
-        return assemble_search(&query,subject,rule,vec![query.clone(),targeted],
+        return assemble_search(goal,subject,rule,vec![query.clone(),targeted],
             vec![broad_result,preferred_result]);
     }
-    assemble_search(&query,subject,rule,vec![query.clone()],vec![broad.await])
+    assemble_search(goal,subject,rule,vec![query.clone()],vec![broad.await])
 }
 /// Promote a bounded, diverse candidate set after *all* strict matches
 /// and bounded retries have failed. This changes retrieval, not verification.
@@ -351,27 +360,47 @@ pub async fn search_with_trace(
     preferences:&[SourcePreference],selected_topic:Option<&str>,
     subject:Option<&str>,retry_empty:bool
 )->Result<SearchBatch,String> {
-    let mut first=search_once(endpoint.clone(),query.clone(),recent,
-        preferences,selected_topic,subject,true).await?;
-    if first.sources.is_empty() && retry_empty {
-        if let Some(retry)=relaxed_subject_query(&query,subject) {
-            let second=search_once(endpoint,retry,false,
+    let initial=search_once(endpoint.clone(),query.clone(),&query,recent,
+        preferences,selected_topic,subject,true).await;
+    let unrestricted=recent && initial.is_ok();
+    let mut first=match initial {
+        Ok(batch)=>batch,
+        Err(error) if recent=>{
+            let mut batch=search_once(endpoint.clone(),query.clone(),&query,false,
                 preferences,selected_topic,subject,false).await?;
-            first.trace.attempted_queries.extend(second.trace.attempted_queries);
-            first.trace.raw_results+=second.trace.raw_results;
-            first.trace.upstream_errors.extend(second.trace.upstream_errors);
-            if !second.sources.is_empty() {
-                first.sources=second.sources;
-            } else {
-                first.provisional_pool.extend(second.provisional_pool);
+            batch.trace.upstream_errors.push(error);
+            batch.trace.attempted_queries.insert(0,query.clone());
+            batch
+        },
+        Err(error)=>return Err(error)
+    };
+    if first.sources.is_empty() {
+        // A time-filtered engine can return nonempty, unrelated front pages.
+        // Retry the same goal without the date filter before stripping terms.
+        let broad=retry_empty.then(||relaxed_subject_query(&query,subject)).flatten();
+        for retry in unrestricted.then(||query.clone()).into_iter().chain(broad) {
+            match search_once(endpoint.clone(),retry.clone(),&query,false,
+                preferences,selected_topic,subject,false).await {
+                Ok(second)=>{
+                    first.trace.attempted_queries.extend(second.trace.attempted_queries);
+                    first.trace.raw_results+=second.trace.raw_results;
+                    first.trace.upstream_errors.extend(second.trace.upstream_errors);
+                    first.trace.rejected_titles.extend(second.trace.rejected_titles);
+                    first.trace.rejected_titles.truncate(4);
+                    if !second.sources.is_empty() {
+                        first.sources=second.sources;
+                        break;
+                    }
+                    first.provisional_pool.extend(second.provisional_pool);
+                },
+                Err(error)=>{
+                    first.trace.attempted_queries.push(retry);
+                    first.trace.upstream_errors.push(error);
+                }
             }
-            if !second.trace.rejected_titles.is_empty() {
-                first.trace.rejected_titles.extend(second.trace.rejected_titles);
-                first.trace.rejected_titles.truncate(4);
-            }
-            first.trace.returned_results=first.sources.len();
         }
-        promote_provisional(&mut first);
+        first.trace.returned_results=first.sources.len();
+        if retry_empty {promote_provisional(&mut first);}
     }
     Ok(first)
 }
@@ -570,6 +599,16 @@ mod search_recovery_tests {
         assert!(!chosen.iter().any(|hit|hit.title=="Qwen4-Max details"),
             "diverse sources outrank a second page from the same host at the six-source cap");
         assert!(chosen.iter().any(|hit|hit.url.starts_with("https://publisher.test/")));
+    }
+    #[test]
+    fn completely_irrelevant_front_pages_do_not_consume_an_extraction_call(){
+        let raw=vec![hit("Global news homepage"),hit("Video streaming service")];
+        let mut batch=assemble_search("Oriole spectrometer calibration",Some("Oriole"),None,
+            vec!["Oriole".into()],vec![Ok(raw)]).unwrap();
+        promote_provisional(&mut batch);
+        assert_eq!(batch.trace.raw_results,2);
+        assert!(batch.sources.is_empty());
+        assert_eq!(primary_followup_query("Oriole official announcement",None),None);
     }
     #[test]
     fn top_eight_keep_relevant_independent_sources_when_one_host_dominates() {

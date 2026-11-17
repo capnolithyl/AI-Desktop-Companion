@@ -110,12 +110,7 @@ pub async fn web_search(endpoint: String, query: String) -> Result<Vec<SearchRes
 /// Rank a bounded pool before exposing the final eight results to the model.
 pub(crate) async fn search_candidates(endpoint:String,query:String,recent:bool,limit:usize)
     -> Result<Vec<SearchResult>,String> {
-    let found=web_search_impl_limited(endpoint.clone(),query.clone(),recent,limit).await;
-    match found {
-        Ok(items) if !items.is_empty() || !recent => Ok(items),
-        Err(error) if !recent => Err(error),
-        _ => web_search_impl_limited(endpoint,query,false,limit).await
-    }
+    web_search_impl_limited(endpoint,query,recent,limit).await
 }
 
 async fn web_search_impl(endpoint: String, query: String, recent: bool) -> Result<Vec<SearchResult>, String> {

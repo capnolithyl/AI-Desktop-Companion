@@ -287,10 +287,44 @@ function partialResearchSummary(
   };
 }
 
+/** Document QA reports what a specific page says. Each sentence of a
+ * synthesis is bound to its own selected passage. If a summary adds
+ * unsupported detail, use that answering passage instead. */
+function reviewedDocument(sources:EvidenceSource[],audit:ResearchAudit):EvidenceReview {
+  const source=sources[0];
+  const exact=(s:string)=>s.replace(/\s+/g," ").trim().toLowerCase();
+  const points=(audit.acceptedDetails??[]).filter(f=>f.source===1 && f.quote.trim() &&
+    source && exact(source.content).includes(exact(f.quote)));
+  if (!points.length) return {text:"I couldn't locate an answering passage in the document.",
+    checked:0,rejected:1,usable:false};
+  let rejected=0;
+  const lines=points.slice(0,3).map(({claim,quote})=>{
+    // For numbers, polarity or qualifiers, preserve the full sentence. For
+    // other summaries require the substantive words to occur in source order.
+    const words=normalize(quote).split(" ");
+    const tokens=normalize(claim).split(" ").filter(t=>t && !stop.has(t));
+    let cursor=-1;
+    const ordered=tokens.length>=3 && tokens.every(token=>{
+      cursor=words.indexOf(token,cursor+1);
+      return cursor>=0;
+    });
+    const qualified=/\d|\b(?:not|never|no|only|without|instead|except|cannot|may|might|could|planned|proposed|if|unless)\b|n['?]t\b/i;
+    const useSummary=claim.trim() && (exact(claim)===exact(quote) || ordered && !qualified.test(claim+" "+quote));
+    if (!useSummary) rejected++;
+    // Render source Markdown as text. Do not turn external text into active links.
+    const plain=(useSummary?claim:quote).replace(/\[([^\]]+)\]\([^)\s]+\)/g,"$1")
+      .replace(/[*\x60]/g,"").replace(/\s+/g," ").trim()
+      .replace(/[\\<>\[\]_]/g,"\\$&");
+    return plain+" [1]";
+  });
+  return {text:lines.join(" "),checked:points.length,rejected,usable:true};
+}
+
 /** Shared desktop/evaluation postprocessing. A rejected draft must not erase
  * useful facts that the native extraction already anchored to exact sources. */
 export function reviewResearchCompletion(answer:string,sources:EvidenceSource[],audit?:ResearchAudit|null):EvidenceReview|null {
   if(!sources.length)return null;
+  if(audit?.status==="attributed")return reviewedDocument(sources,audit);
   if(audit?.recommendationTask)return reviewedRecommendation(sources,audit);
   if(audit && !["used","partial"].includes(audit.status))return null;
   const facts=audit?.acceptedDetails??[];

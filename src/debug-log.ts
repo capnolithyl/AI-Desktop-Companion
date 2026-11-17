@@ -15,6 +15,8 @@ export type ResearchAudit = {
   status: string;
   accepted: number;
   contextualCount?: number;
+  retrievalMs?: number;
+  extractionMs?: number;
   rejected: number;
   elapsedMs: number;
   note: string;

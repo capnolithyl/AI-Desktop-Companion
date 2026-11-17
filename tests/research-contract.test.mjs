@@ -49,7 +49,7 @@ test("document reads are selected semantically and restricted to exact public us
   const task={kind:"lookup",subject:"example/project",entityType:"repository",details:["memory documentation"],
     sourceUrl:url,requirements:[],roles:[],exclude:[]};
   const options={automaticWebEnabled:true,sourcePreferences:[],history:[{role:"user",content:`Look up ${url}`}],
-    activePublicQuery:"example project repository"};
+    activePublicQuery:"example project repository",activeTask:task};
   const ask=sourceUrl=>planPublicWebTools("What does the README say about memory?",[],async()=>
     JSON.stringify({intent:"refine",web:{search:true,query:"example project memory documentation",task:{...task,sourceUrl}}}),options);
   const read=await ask(url);
@@ -172,4 +172,47 @@ test("current-release test keeps per-model run identities and observes actual we
   assert.equal(no.cases[0].steps[0].pass,false);
   assert.ok(no.cases[0].steps[0].answerFailures.some(x=>x.includes("not executed")));
   assert.equal(yes.cases[0].steps[0].reviewRequired,true);
+});
+
+test("document grades require fresh exact provenance and separate usefulness review",async()=>{
+  const url="https://manual.example.org/lenses/";
+  const scenario={id:"isolated-document",label:"Telescope manual",group:"test",
+    steps:[{user:"Read "+url+" and describe the lens.",expect:{route:"research",document:"current"}}]};
+  const run=(engine,locator,carried=false)=>runBrainEvaluation({scenarios:[scenario],
+    mode:"live",liveWeb:true,repetitions:1,model:"fixture-local",
+    planWeb:async()=>({search:true,query:"public telescope manual",reason:"read"}),
+    infer:async()=>({text:"The manual describes a replaceable lens. [1]",webExecution:{
+      query:"public telescope manual",sourcesCarriedOver:carried,
+      results:[{title:"Manual",url:locator,engine,content:"The manual describes a replaceable lens."}],
+      researchAudit:{status:"attributed",accepted:1,rejected:0,elapsedMs:1,note:"source passage"}}})});
+  for(const args of [["search snippet",url],["direct webpage",url+"unrelated"],["direct webpage",url,true]]){
+    const step=(await run(...args)).cases[0].steps[0];
+    assert.equal(step.webPass,false);
+    assert.equal(step.pass,false);
+  }
+  const report=await run("direct webpage",url);
+  const step=report.cases[0].steps[0];
+  assert.equal(step.webPass,true);
+  assert.equal(step.evidencePass,null);
+  assert.equal(step.answerPass,null);
+  assert.equal(step.reviewRequired,true);
+  const metrics=brainEvalMetrics(report);
+  assert.equal(metrics.documentReads,1);
+  assert.equal(metrics.liveSearchesWithSources,0);
+  assert.equal(metrics.evidenceFacts,0);
+  assert.equal(metrics.verifiedPassed,0);
+});
+
+test("document summaries cannot transfer measurements, drop negation, or cite another page",()=>{
+  const source={title:"Field manual",url:"https://manual.example.org",content:
+    "The violet filter passes 12 percent of infrared light. The red filter is not waterproof."};
+  const audit={status:"attributed",accepted:2,acceptedDetails:[
+    {source:1,subject:"Manual",claim:"The red filter passes 12 percent of infrared light.",quote:"The violet filter passes 12 percent of infrared light."},
+    {source:1,subject:"Manual",claim:"The red filter is waterproof.",quote:"The red filter is not waterproof."},
+    {source:2,subject:"Elsewhere",claim:"Capacity is unlimited.",quote:"Capacity is unlimited."}]};
+  const answer=reviewResearchCompletion("Anything goes. [1]",[source],audit);
+  assert.match(answer.text,/violet filter passes 12/);
+  assert.match(answer.text,/not waterproof/);
+  assert.doesNotMatch(answer.text,/red filter passes|is waterproof|unlimited|Anything goes/);
+  assert.equal(answer.rejected,2);
 });

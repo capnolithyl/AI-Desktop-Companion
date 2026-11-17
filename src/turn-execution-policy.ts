@@ -1,7 +1,7 @@
 import type { WebPlanningTurn } from "./unified-planner.ts";
-import { parseWebToolDecision, publicDocumentUrls } from "./unified-planner.ts";
+import { documentReadDecision, parseWebToolDecision, publicDocumentUrls } from "./unified-planner.ts";
 import type { RankableMemory } from "./memory-ranking.ts";
-import type { ResearchPlan } from "./research-routing.ts";
+import { isDirectedDocumentRequest, type ResearchPlan } from "./research-routing.ts";
 
 /**
  * The policy is a permission boundary, not an English-language classifier.
@@ -56,7 +56,8 @@ export function planDesktopWebExecution(input: DesktopWebInput): DesktopWebPolic
     // task and still goes through backend URL/query permission checks.
     cloudMaySearch: eligible && input.provider !== "local" && input.planMode !== "chat",
     blockedReason: reason,
-    ...(eligible ? {publicDocumentUrl:publicDocumentUrls([input.question])[0]} : {})
+    ...(eligible && isDirectedDocumentRequest(input.question)
+      ? {publicDocumentUrl:publicDocumentUrls([input.question])[0]} : {})
   };
 }
 
@@ -66,9 +67,9 @@ export function resolvePublicWebExecution(
   policy: DesktopWebPolicy,
   plan: {mode:string;query?:string;recent?:boolean},
   decision?: {search:boolean;query?:string;method?:string;task?:import("./unified-planner.ts").ResearchTask;sourceRequirement?:"required"|"optional"},
-  ownerFacts:readonly RankableMemory[]=[]
+  ownerFacts:readonly RankableMemory[]=[], plannerElapsedMs=0
 ) {
-  const permitted=policy.blockedReason===null;
+  const permitted=policy.canPlanPublicWeb && policy.blockedReason===null && decision?.method!=="disabled";
   // Local planner transport/JSON failures are not semantic refusals.
   // Reuse only a *freshly validated* query from the independent public-research
   // route. This cannot bypass an explicit "not-needed" decision, invalid
@@ -80,20 +81,11 @@ export function resolvePublicWebExecution(
   // reuse a URL from assistant output or an unrelated earlier message.
   const document=permitted && plannerError && plan.mode==="research"
     ? policy.publicDocumentUrl : undefined;
-  const documentParts=document ? new URL(document) : null;
-  const documentTopic=documentParts
-    ? (documentParts.hostname+" "+documentParts.pathname.replace(/[/_.-]+/g," ")).slice(0,180)
-    : undefined;
-  const safeRecovery=permitted && plannerError && plan.mode==="research"
-    ? parseWebToolDecision(JSON.stringify({web:{
-        search:true,
-        query:documentTopic || plan.query || "",
-        reason:document ? "User-authorized public document read after planner error" :
-          "Validated public route after planner error",
-        ...(document ? {task:{kind:"lookup",subject:"",
-          entityType:"public document",details:["requested document contents"],
-          preferences:[],sourceUrl:document,requirements:[],roles:[],exclude:[]}} : {})
-      }}),true,[],ownerFacts) : null;
+  const safeRecovery=document ? documentReadDecision(document) :
+    permitted && plannerError && plan.mode==="research"
+      ? parseWebToolDecision(JSON.stringify({web:{search:true,query:plan.query ?? "",
+          reason:"Validated public route after planner error"}}),true,[],ownerFacts)
+      : undefined;
   const recoveredQuery=safeRecovery?.search ? safeRecovery.query : undefined;
   const semantic=decision && decision.method!=="disabled" && !plannerError;
   const query=permitted ? recoveredQuery ?? (semantic ? decision.search ? decision.query : undefined
@@ -105,6 +97,9 @@ export function resolvePublicWebExecution(
     researchQuery:query,
     researchTask:query ? recoveredQuery ? safeRecovery?.task : decision?.search ? decision.task : undefined : undefined,
     researchRecent:!!plan.recent,
+    // A slow or cold planner predicts limited time for decoding evidence.
+    // Change the output budget only; tool permissions and evidence gates are identical.
+    researchCompact:!!query && plannerElapsedMs>=10_000,
     // A failed optional lookup may fall back to general model knowledge.
     // All named verification, hard constraints, discovery, URLs and recent
     // research still require actual sources, never an invented sourced answer.

@@ -6,6 +6,7 @@ use std::collections::HashSet;
 #[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub enum ResearchKind {
+    Document,
     Discover,
     Verify,
     #[default]
@@ -26,6 +27,8 @@ pub struct ResearchTask {
     pub preferences: Vec<String>,
     #[serde(default)]
     pub source_url: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub resource: Option<String>,
     #[serde(default)]
     pub requirements: Vec<HardRequirement>,
     #[serde(default)]
@@ -36,7 +39,7 @@ pub struct ResearchTask {
 
 impl ResearchTask {
     pub fn uses_fact_evidence(&self) -> bool {
-        self.kind == ResearchKind::Lookup ||
+        matches!(self.kind, ResearchKind::Lookup | ResearchKind::Document) ||
             (self.kind == ResearchKind::Verify && self.requirements.is_empty() && self.roles.is_empty())
     }
 }

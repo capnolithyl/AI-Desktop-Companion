@@ -11,8 +11,8 @@ import { rankMemories, type RankableMemory } from "./memory-ranking.ts";
 import { isPersonalMemoryQuestion } from "./personal-memory.ts";
 import type { ResearchTurn } from "./research-routing.ts";
 import type { WebResult } from "./web-search.ts";
-import type { ResearchAudit } from "./debug-log.ts";
-import type { PublicResearchContext, ResearchTask } from "./unified-planner.ts";
+import type { ResearchAudit, ToolPlanningAudit } from "./debug-log.ts";
+import { publicDocumentUrls, type PublicResearchContext, type ResearchTask } from "./unified-planner.ts";
 
 export type EvalRoute = "chat" | "research" | "factual" | "non-research" | "any";
 export type MemoryCaptureExpectation = {
@@ -30,6 +30,7 @@ export type EvalExpectation = {
   route?: EvalRoute;
   memoryCapture?: MemoryCaptureExpectation;
   web?: boolean;
+  document?: "current" | "previous";
   memory?: number[];
   excludeMemory?: number[];
   answerIncludes?: string[];
@@ -47,6 +48,15 @@ export type EvalStep = { user: string; expect: EvalExpectation; explanation?: st
 export type EvalScenario = { id: string; label: string; group: string; steps: EvalStep[]; note?: string };
 export type EvalTurn = ResearchTurn & { role:"user"|"assistant"; content:string; sources?:WebResult[] };
 export type EvalMode = "routing" | "live";
+function safeDocumentHref(url:string, targets:string[]):boolean {
+  try {return targets.includes(new URL(url).href)} catch {return false}
+}
+
+export function requiresSearchPreflight(scenarios:ReadonlyArray<EvalScenario>):boolean {
+  return scenarios.some(s=>s.steps.some(step=>!step.expect.document &&
+    (step.expect.web===true || step.expect.route==="research")));
+}
+
 /** Strict model selection prevents the browser relay from injecting arbitrary IDs.
  * Fast routing contains no model inference, so sweeping it is misleading. */
 export function brainEvalModels(
@@ -69,6 +79,7 @@ type EvalWebExecution = {
   results:WebResult[];
   sourcesCarriedOver:boolean;
   researchAudit?:ResearchAudit|null;
+  searchTrace?:ToolPlanningAudit["searchTrace"];
 };
 export type EvalStepResult = {
   user: string;
@@ -272,13 +283,13 @@ export const EVAL_SCENARIOS:ReadonlyArray<EvalScenario>=[
     e("Search the web for the latest Qwen releases.",{route:"research",stubReply:"I'd search current Qwen releases."})),
   scenario("search-website","Named public website lookup","Web search",
     e("Open https://www.python.org/ and tell me what the site is for.",{
-      route:"research",web:true,stubReply:"It's the Python language's official website."
+      route:"research",document:"current",web:true,stubReply:"It's the Python language's official website."
     })),
   scenario("search-github","Explicit GitHub repository link","Web search",
-    e("Check your GitHub repository at https://github.com/capnolithyl/AI-Desktop-Companion and tell me what's implemented.",{route:"research",stubReply:"I'd open the repository before claiming its current state."})),
+    e("Check your GitHub repository at https://github.com/capnolithyl/AI-Desktop-Companion and tell me what's implemented.",{route:"research",document:"current",stubReply:"I'd open the repository before claiming its current state."})),
   scenario("search-github-followup","Repository link then files","Web search",
-    e("Look up https://github.com/capnolithyl/AI-Desktop-Companion", {route:"research",stubReply:"I need to read the repository."}),
-    e("What did the README say about memory?",{route:"research",stubReply:"I should consult the README, not invent a result."})),
+    e("Look up https://github.com/capnolithyl/AI-Desktop-Companion", {route:"research",document:"current",stubReply:"I need to read the repository."}),
+    e("What did the README say about memory?",{route:"research",document:"previous",stubReply:"I should consult the README, not invent a result."})),
   scenario("search-no-context-leak","Research followed by casual update","No unwanted web",
     e("What's the latest Qwen release?",{route:"research",stubReply:"I'd verify that with an official source."}),
     e("I got my second GPU installed!",{route:"chat",stubReply:"Nice, time for benchmarks!"}),
@@ -752,7 +763,7 @@ export async function runBrainEvaluation(options:EvalOptions):Promise<EvalReport
         if(options.mode==="live" && options.infer){
           // Never search when the private permission boundary blocks web.
           // The local planner has already validated its proposed public query.
-          const execution=resolvePublicWebExecution(webPolicy,decision.plan,planned,selectedFacts);
+          const execution=resolvePublicWebExecution(webPolicy,decision.plan,planned,selectedFacts,plannerElapsedMs);
           executedTask=execution.researchTask;
           const publicQuery=execution.researchQuery;
           const response=await options.infer({
@@ -814,8 +825,13 @@ export async function runBrainEvaluation(options:EvalOptions):Promise<EvalReport
       // In Live web mode only native execution proves that a public search
       // happened; neither a route label nor a fallback planner can do so.
       const observedQuery=!!webExecution?.query;
+      const documentTurn=step.expect.document==="previous"
+        ? previous.filter(t=>t.role==="user").at(-1)?.content : step.user;
+      const targetUrls=publicDocumentUrls([documentTurn??""]).map(url=>new URL(url).href);
+      const correctDocument=webExecution?.results.some(source=>source.engine==="direct webpage" &&
+        safeDocumentHref(source.url, targetUrls)) && !webExecution.sourcesCarriedOver;
       const webPass=options.mode==="live" && options.liveWeb && expectedWeb!==null
-        ? expectedWeb===observedQuery
+        ? expectedWeb===observedQuery && (!step.expect.document || !!correctDocument)
         : expectedWeb===null||plannedWeb===null?null:plannedWeb===expectedWeb;
       // Grade executed web behavior, not a preferred chat/research route.
       const routePass=webPass!==false;
@@ -823,14 +839,16 @@ export async function runBrainEvaluation(options:EvalOptions):Promise<EvalReport
       // only the observed Rust source/evidence trace, NEVER Qwen grading itself.
       const audit=webExecution?.researchAudit;
       const missingRequiredWeb=options.mode==="live" && options.liveWeb &&
-        expectedWeb===true && !observedQuery;
+        expectedWeb===true && (!observedQuery || !!step.expect.document && !correctDocument);
       const evidencePass=missingRequiredWeb ? false : options.liveWeb && observedQuery
         ? webExecution!.results.length===0 ? false
+          : audit?.status==="attributed" ? null
           : audit ? audit.status==="partial"
               ? audit.unresolvedDetails?.length ? false : null
               : (audit.status==="used" || audit.status==="shortlist") : null
         : null;
       if(missingRequiredWeb)answerFailures.push(
+        step.expect.document && observedQuery ? "The requested document was not read on this turn." :
         "Required public research was not executed; the user's research goal was not fulfilled."
       );
       else if(evidencePass===false)answerFailures.push(
@@ -842,7 +860,7 @@ export async function runBrainEvaluation(options:EvalOptions):Promise<EvalReport
       // Fast mode deliberately cannot run the optional model planner.
       const reviewRequired=(options.mode==="live" &&
         (!!step.expect.conversationGoal || !hasFactualAnswerCheck || qualityFlags.length>0)) ||
-        (expectedWeb!==null && webPass===null) || audit?.status==="partial";
+        (expectedWeb!==null && webPass===null) || audit?.status==="partial" || audit?.status==="attributed";
       const memoryPass=missing.length===0 && unexpected.length===0;
       // This checks only how many structurally supported new facts the REAL
       // local extractor proposed. Human review must judge their semantics.
@@ -926,7 +944,8 @@ export function brainEvalMetrics(report:EvalReport){
     documentReads:steps.filter(s=>s.webExecution?.results.some(r=>r.engine==="direct webpage")).length,
     focusedFollowups:steps.reduce((n,s)=>n+(s.webExecution?.researchAudit?.candidateQueries?.length??0)+
       (s.webExecution?.researchAudit?.followupQuery?1:0),0),
-    liveSearchesWithSources:steps.filter(s=>(s.webExecution?.results.length??0)>0).length,
+    liveSearchesWithSources:steps.filter(s=>s.webExecution?.query && s.webExecution.results.length &&
+      !s.webExecution.results.some(r=>r.engine==="direct webpage")).length,
     liveSources:steps.reduce((n,s)=>n+(s.webExecution?.results.length??0),0),
     evidencePasses:steps.filter(s=>["used","shortlist"].includes(
       s.webExecution?.researchAudit?.status??"")).length,
@@ -941,12 +960,14 @@ export function brainEvalMetrics(report:EvalReport){
       (s.webExecution?.researchAudit?.relationsChecked??0),0),
     excludedReferences:steps.reduce((n,s)=>n+
       (s.webExecution?.researchAudit?.exclusionsChecked??0),0),
-    evidenceFacts:steps.reduce((n,s)=>n+(s.webExecution?.researchAudit?.accepted??0),0),
+    evidenceFacts:steps.reduce((n,s)=>n+(s.webExecution?.researchAudit?.status==="attributed" ? 0 : s.webExecution?.researchAudit?.accepted??0),0),
     evidenceUnavailable:steps.filter(s=>s.webExecution?.query &&
-      !["used","shortlist"].includes(s.webExecution?.researchAudit?.status??"")).length,
+      !["used","shortlist","attributed"].includes(s.webExecution?.researchAudit?.status??"")).length,
     evidenceFailures:steps.filter(s=>s.evidencePass===false).length,
-    unnecessaryWeb:steps.filter(s=>s.webPass===false&&s.plannedWeb===true).length,
-    missedWeb:steps.filter(s=>s.webPass===false&&s.plannedWeb===false).length,
+    unnecessaryWeb:steps.filter(s=>s.webPass===false &&
+      (s.expected.web===false || s.expected.web===undefined && s.expected.route==="chat")).length,
+    missedWeb:steps.filter(s=>s.webPass===false &&
+      (s.expected.web===true || s.expected.web===undefined && s.expected.route==="research")).length,
     tokensPerSecond:(()=>{
       const samples=steps.map(s=>s.inferenceStats)
         .filter(s=>s && typeof s.outputTokens==="number" &&
@@ -1053,11 +1074,19 @@ export function brainEvalMarkdown(report:EvalReport):string {
         const direct=s.webExecution.results.find(source=>source.engine==="direct webpage");
         lines.push(direct ? "- Read public document: "+direct.url : "- Executed SearXNG query: "+(s.webExecution.query??"not executed"),
           "- Actual source previews: "+s.webExecution.results.length);
+        if(s.webExecution.searchTrace){
+          const trace=s.webExecution.searchTrace;
+          lines.push("- Retrieval: "+trace.rawResults+" raw results, "+trace.returnedResults+" retained, "+
+            (trace.provisionalResults??0)+" provisional candidates.");
+        }
         if(s.webExecution.researchAudit){
           const audit=s.webExecution.researchAudit;
           lines.push("- Structured evidence extraction: "+audit.status+
             "; accepted "+audit.accepted+"; rejected "+audit.rejected+
             "; "+audit.elapsedMs+" ms; "+audit.note);
+          if(audit.retrievalMs!==undefined && audit.extractionMs!==undefined)
+            lines.push("- Initial retrieval "+audit.retrievalMs+" ms; extraction calls "+audit.extractionMs+
+              " ms; evidence stage including recovery "+audit.elapsedMs+" ms.");
           if(audit.taskKind)
             lines.push("- Research task: "+audit.taskKind+(audit.taskSubject ? " | "+audit.taskSubject : ""));
           if(audit.candidateDiscovery)lines.push("- Candidate extraction outcome: "+audit.candidateDiscovery);

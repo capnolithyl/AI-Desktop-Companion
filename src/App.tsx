@@ -2281,10 +2281,11 @@ export default function App() {
         !lastAssistant.failed && !lastAssistant.sourcesCarriedOver &&
         lastAssistant.diagnostics?.toolPlan?.publicWebAllowed
           ? lastAssistant.diagnostics.toolPlan.query : undefined;
+      const plannerStarted=performance.now();
       const plannerWeb:WebToolDecision = await planPublicWebTools(text,liveFacts,
         prompt => invoke<string>("condense_local_context",{
           endpoint:settings.endpoint,model:settings.model,prompt,
-          contextWindow:settings.contextWindow,maxOutputTokens:380,timeoutMs:45000
+          contextWindow:settings.contextWindow,maxOutputTokens:380,timeoutMs:45000,publicToolPlan:true
         }),{
           automaticWebEnabled:canPlanPublicWeb,
           sourcePreferences:settings.sourcePreferences,
@@ -2296,7 +2297,7 @@ export default function App() {
         }
       );
       if(stopRequested.current)throw new Error("Generation stopped");
-      const webExecution=resolvePublicWebExecution(webPolicy,researchPlan,plannerWeb,liveFacts);
+      const webExecution=resolvePublicWebExecution(webPolicy,researchPlan,plannerWeb,liveFacts,performance.now()-plannerStarted);
       const reasoningChoice=localThinkingChoice(settings.reasoningMode,text,settings.model,
         plannerWeb.replyEffort);
       const plannedPublicSearch = canPlanPublicWeb && plannerWeb.search && !!plannerWeb.query;

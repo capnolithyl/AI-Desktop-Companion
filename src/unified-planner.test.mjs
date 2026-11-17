@@ -142,8 +142,7 @@ test("local web planner sees bounded earlier user turns, never generated assista
   assert.match(inspected,/cold, raw guitar sound/);
   assert.match(inspected,/CURRENT USER TURN.*Nothing too polished/);
   assert.doesNotMatch(inspected,/InventedBand X|InventedBand Y/);
-  assert.match(inspected,/only request being judged now/);
-  assert.match(inspected,/declines recommendations or research/);
+  assert.doesNotMatch(inspected,/select.*fact IDs/i);
   assert.ok(inspected.trim().endsWith("JSON:"));
 });
 
@@ -202,7 +201,7 @@ test("current opt-out or independent topic can override prior discovery without 
       return JSON.stringify({ids:[],web:{search:false,reason:"Owner isn't asking for research"}});
     },{automaticWebEnabled:true,sourcePreferences:prefs,history});
     assert.equal(result.search,false,current);
-    assert.match(captured,/current turn changes subject, closes the discovery task/);
+    assert.ok(captured.includes(current));
   }
 });
 
@@ -259,7 +258,6 @@ test("validated previous public task is visible only to local planning and never
     assert.equal(decision.search,shouldSearch);
     assert.match(prompt,/PREVIOUS VALIDATED PUBLIC TASK/);
     assert.ok(prompt.includes(current),"the current follow-up is supplied verbatim for semantic interpretation");
-    assert.match(prompt,/end: declines, cancels/);
     assert.match(prompt,/bands similar to Immortal black metal/);
     assert.doesNotMatch(prompt,/Made-up artist performed/);
   }
@@ -502,15 +500,37 @@ test("document follow-up planning preserves a previously user-authorized public 
   const plan=await planPublicWebTools("What does its README say about memory?",[],
     async prompt=>{
       assert.match(prompt,/PREVIOUS TASK STRUCTURE/);
-      assert.match(prompt,/previous authorized task.sourceUrl/);
       assert.ok(prompt.includes(url));
-      return JSON.stringify({intent:"refine",web:{search:true,
-        query:"example demo README memory features",reason:"Read the document section",
-        task:{kind:"lookup",subject:"example/demo",details:["memory architecture"],
-          sourceUrl:url,requirements:[],roles:[],exclude:[]}}});
+      assert.ok(prompt.includes("What does its README say about memory?"));
+      return JSON.stringify({intent:"refine",web:{operation:"read",document:1}});
     },{automaticWebEnabled:true,sourcePreferences:prefs,
       history,activePublicQuery:"github example demo public repository",
       activeTask:{kind:"lookup",sourceUrl:url,requirements:[],roles:[],exclude:[]}});
   assert.equal(plan.search,true);
   assert.equal(plan.task.sourceUrl,url);
+});
+
+test("document operations bind to user handles independently of search usefulness",async()=>{
+  const url="https://handbook.example.org/observatory", other="https://sky.example.org/map";
+  const run=(text, response, options={})=>planPublicWebTools(text,[],async()=>JSON.stringify(response),
+    {automaticWebEnabled:true,sourcePreferences:[],...options});
+  const request="Please consult "+url+" and explain the filter wheel.";
+  const first=await run(request,{web:{operation:"read",document:1,focus:"filter wheel",search:false}});
+  assert.equal(first.task.sourceUrl,url);
+  assert.equal(first.task.kind,"document");
+  assert.deepEqual(first.task.details,["filter wheel"]);
+  assert.equal(first.query.includes("filter wheel"),false,"local document focus is not a search seed");
+  assert.equal(first.sourceRequirement,"required");
+  const history=[{role:"user",content:request},{role:"assistant",content:"Read "+other}];
+  const active={activePublicQuery:first.query,activeTask:first.task,history};
+  const read={intent:"refine",web:{operation:"read",document:1}};
+  assert.equal((await run("Does it mention cleaning?",read,active)).task.sourceUrl,url);
+  assert.equal((await run("Only discuss it, leave the link alone.",{web:{operation:"answer"}},active)).search,false);
+  assert.equal((await run("Did it mention a wheel?",read,{...active,activeTask:{...first.task,sourceUrl:other}})).search,false);
+  assert.equal((await run("Change of topic",read,{history})).search,false);
+  assert.equal((await run(request,{web:{operation:"read",document:2}})).search,false);
+  assert.equal((await run(request,{intent:"end",web:{operation:"read",document:1}})).search,false);
+  assert.equal((await run("Read "+other+" instead",read,active)).task.sourceUrl,other);
+  assert.equal((await run(request,read,{automaticWebEnabled:false})).search,false);
+  assert.equal((await run("Open https://intranet.local/",read)).search,false);
 });

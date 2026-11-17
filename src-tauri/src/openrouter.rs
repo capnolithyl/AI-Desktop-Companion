@@ -331,7 +331,9 @@ pub(crate) async fn chat(app:&AppHandle,request:&ChatRequest,key:&str,emitted:&A
         if let Some(query)=request.research_query.as_deref().filter(|q|!q.trim().is_empty()) {
             let _=app.emit("mikan://activity",json!({"requestId":request.request_id,
                 "text":format!("Searching: {query}")}));
-            if let Ok(found)=source_priority::search(
+            if let Some(document)=crate::read_requested_document(app,request).await? {
+                sources.push(document);
+            } else if let Ok(found)=source_priority::search(
                 request.searxng_endpoint.clone(),query.to_owned(),request.research_recent,
                 &request.source_preferences,request.source_topic.as_deref()
             ).await {
@@ -347,6 +349,7 @@ pub(crate) async fn chat(app:&AppHandle,request:&ChatRequest,key:&str,emitted:&A
             sources_carried_over=true;
         }
     }
+    let allow_tools=allow_tools && !sources.iter().any(|s|s.engine=="direct webpage");
     append_evidence(&mut messages,&sources);
     let client=reqwest::Client::builder()
         .connect_timeout(Duration::from_secs(8)).build().map_err(|e|e.to_string())?;

@@ -73,9 +73,8 @@ fn cache_path(app: &tauri::AppHandle, url: &str) -> Result<PathBuf, String> {
         .map_err(|e| format!("App storage unavailable: {e}"))?
         .join("web-cache");
     fs::create_dir_all(&folder).map_err(|e| format!("Cannot create web cache: {e}"))?;
-    // Reader v2 adds canonical public document adapters; never reuse stale
-    // HTML-only GitHub page cache entries from earlier builds.
-    let key = format!("{:x}", Sha256::digest(format!("reader-v2:{url}").as_bytes()));
+    // Older cached pages omitted descriptions and later README sections.
+    let key = format!("{:x}", Sha256::digest(format!("reader-v3:{url}").as_bytes()));
     Ok(folder.join(format!("{key}.json")))
 }
 
@@ -90,7 +89,11 @@ fn extracted_text(html: &str) -> (String, String) {
     let fallback = Selector::parse("h1, h2, h3, p, li").expect("selector");
     let first: Vec<_> = document.select(&primary).collect();
     let nodes = if first.is_empty() { document.select(&fallback).collect::<Vec<_>>() } else { first };
-    let mut content = String::new();
+    // First-party descriptions can survive even when the body is mostly menus.
+    let descriptions = Selector::parse("meta[name=description], meta[property='og:description']").expect("selector");
+    let mut content = document.select(&descriptions).filter_map(|n| n.value().attr("content"))
+        .map(str::trim).find(|s| !s.is_empty()).unwrap_or("").chars().take(600).collect::<String>();
+    content.push_str("\n\n");
     for node in nodes {
         let text = node.text().collect::<Vec<_>>().join(" ");
         let cleaned = text.split_whitespace().collect::<Vec<_>>().join(" ");
@@ -153,6 +156,16 @@ fn github_document_endpoint(url:&reqwest::Url)->Option<(GithubDocument,reqwest::
     let endpoint=reqwest::Url::parse(&endpoint).ok()?;
     Some((kind,endpoint))
 }
+/// Adapt a search hit only when it identifies the named repository exactly.
+pub(crate) fn latest_release_url(raw:&str,subject:&str)->Option<String> {
+    let mut url=reqwest::Url::parse(raw).ok()?;
+    let (kind,_)=github_document_endpoint(&url)?;
+    let path=url.path().trim_matches('/');
+    if kind!=GithubDocument::Readme || !(subject.eq_ignore_ascii_case(path) ||
+        path.rsplit('/').next().is_some_and(|name|name.eq_ignore_ascii_case(subject))) {return None}
+    url.set_path(&format!("{path}/releases/latest"));
+    Some(url.to_string())
+}
 fn github_document_content(kind:GithubDocument,bytes:&[u8],repo:&str)->Option<(String,String)> {
     let value:serde_json::Value=serde_json::from_slice(bytes).ok()?;
     match kind {
@@ -165,7 +178,8 @@ fn github_document_content(kind:GithubDocument,bytes:&[u8],repo:&str)->Option<(S
             if text.trim().is_empty(){return None}
             let name=value["name"].as_str().unwrap_or("README");
             let title=format!("{name} · {repo}");
-            let content=format!("{repo} repository README content.\n\n{}",text.chars().take(MAX_DOCUMENT_CHARS).collect::<String>());
+            // Rank across the bounded README, including sections after long changelogs.
+            let content=text.chars().take(96_000).collect();
             Some((title,content))
         }
         GithubDocument::LatestRelease=>{
