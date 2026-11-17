@@ -263,7 +263,11 @@ export const EVAL_SCENARIOS:ReadonlyArray<EvalScenario>=[
     e("I'm so relieved.",{route:"chat",stubReply:"I bet!"})),
   scenario("search-current","Fresh facts need evidence","Web search",
     e("What's the latest Vulkan llama.cpp release?",{route:"research",stubReply:"I'd check current release information."}),
-    e("And did it change AMD support?",{route:"chat",stubReply:"That needs confirmation from the current release notes."})),
+    e("And did it change AMD support?",{
+      route:"research",web:true,
+      conversationGoal:"Use the actual release notes or other credible new evidence to distinguish existing AMD/Vulkan support from changes in the latest release. Do not claim a change merely because Vulkan works on AMD.",
+      stubReply:"That needs confirmation from the current release notes."
+    })),
   scenario("search-explicit","Explicit public research","Web search",
     e("Search the web for the latest Qwen releases.",{route:"research",stubReply:"I'd search current Qwen releases."})),
   scenario("search-website","Named public website lookup","Web search",
