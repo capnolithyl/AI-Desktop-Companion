@@ -233,7 +233,8 @@ test("partial answer ignores unanchored and malicious markdown-labeled proposed 
     supportedQuotes:[{source:1,subject:"Aster 5",quote:docs[0].content}],
     unresolvedDetails:["actual release status"]
   });
-  assert.ok(reviewed.text.includes(docs[0].content));
+  assert.ok(!reviewed.text.includes(docs[0].content));
+  assert.match(reviewed.text,/Aster 5 \[1\]/);
   assert.ok(!reviewed.text.includes("javascript:"));
   assert.ok(!reviewed.text.includes("Aster 6"));
   assert.ok(!reviewed.text.includes("Already released"));
