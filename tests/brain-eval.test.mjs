@@ -931,3 +931,23 @@ test("Brain Lab transports a recovered document read to native execution",async(
   assert.equal(report.cases[0].steps[0].pass,false,
     "No sources must never count as a useful researched answer");
 });
+
+test("source-matched context does not count as research success when requested facts remain unresolved",async()=>{
+  const report=await runBrainEvaluation({
+    scenarios:[byId("research-current-model")],mode:"live",model:"test-only",
+    liveWeb:true,repetitions:1,
+    planWeb:async()=>({search:true,query:"current public release",reason:"Verify current status"}),
+    infer:async({researchQuery})=>({text:"Some releases were discussed.",webExecution:{
+      query:researchQuery,results:[{title:"Public announcement",url:"https://example.org/release",
+        content:"A past model was released in June 2026.",engine:"webpage excerpt"}],
+      sourcesCarriedOver:false,researchAudit:{status:"partial",accepted:1,rejected:0,
+        elapsedMs:5,note:"Context only",recommendationTask:false,acceptedDetails:[
+          {source:1,subject:"A past model",quote:"A past model was released in June 2026."}
+        ],unresolvedDetails:["latest official release name","latest official release date"]}
+    }})
+  });
+  const step=report.cases[0].steps[0];
+  assert.equal(step.evidencePass,false);
+  assert.equal(step.pass,false);
+  assert.ok(step.answerFailures.some(f=>f.includes("partial context")));
+});
