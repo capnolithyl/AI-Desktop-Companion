@@ -100,6 +100,7 @@ export function safeReportDiagnostics(value) {
             status: allowed(d.research.status, ["used","partial","fallback","shortlist","no_supported_matches","unavailable"]),
             accepted: positive(d.research.accepted),
             rejected: positive(d.research.rejected),
+            followupAttempted: d.research.followupAttempted === true,
             elapsedMs: positive(d.research.elapsedMs)
           } : null,
           answerVerification: d.answerVerification ? {
