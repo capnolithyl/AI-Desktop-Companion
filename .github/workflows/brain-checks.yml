@@ -28,6 +28,8 @@ jobs:
         run: npm run test:brain
       - name: Test sanitized remote research report
         run: node --experimental-strip-types --test src/remote-report.test.mjs
+      - name: Test authenticated phone browser and safe source links
+        run: npm run build:remote && node --experimental-strip-types --test tests/remote-bridge.test.mjs
       - name: Typecheck and build frontend
         run: npm run build
 
