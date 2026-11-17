@@ -249,7 +249,12 @@ pub async fn read_page_impl(
     let url = valid_url(raw_url)?;
     let url_str = url.as_str().to_owned();
     let path = cache_path(app, &url_str)?;
-    let ttl = ttl_hours.clamp(1, 720) * 3600;
+    // A request for the latest release must not reuse days-old local metadata.
+    // This changes cache freshness, not which release counts as verified.
+    let ttl = if github_document_endpoint(&url)
+        .is_some_and(|(kind,_)|kind==GithubDocument::LatestRelease) {
+        3600
+    } else { ttl_hours.clamp(1, 720) * 3600 };
 
     if !refresh {
         if let Ok(bytes) = fs::read(&path) {
