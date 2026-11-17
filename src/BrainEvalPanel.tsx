@@ -17,7 +17,7 @@ function formatMs(value:number):string{return value>=1000?(value/1000).toFixed(1
 const groups=Array.from(new Set(EVAL_SCENARIOS.map(s=>s.group)));
 const totalFixtureTurns=EVAL_SCENARIOS.reduce((n,s)=>n+s.steps.length,0);
 
-export function BrainEvalPanel({settings}:{settings:Settings}){
+export function BrainEvalPanel({settings,availableModels}:{settings:Settings;availableModels:readonly string[]}){
   const [mode,setMode]=useState<EvalMode>("routing");
   const [category,setCategory]=useState("All categories");
   const [statusFilter,setStatusFilter]=useState<"all"|BrainCaseStatus>("all");
@@ -26,6 +26,9 @@ export function BrainEvalPanel({settings}:{settings:Settings}){
     ()=>new Set(EVAL_SCENARIOS.map(s=>s.id))
   );
   const [repeats,setRepeats]=useState(1);
+  const [selectedModels,setSelectedModels]=useState<ReadonlySet<string>>(()=>new Set([settings.model]));
+  const localModels=[...new Set([settings.model,...availableModels])];
+  const modelsToRun=mode==="live"?localModels.filter(model=>selectedModels.has(model)): [settings.model];
   const [numberSelection,setNumberSelection]=useState("");
   const [numberFeedback,setNumberFeedback]=useState("Enter scenario numbers such as 20, 21, 83.");
   const [catalogOpen,setCatalogOpen]=useState(true);
@@ -96,8 +99,9 @@ export function BrainEvalPanel({settings}:{settings:Settings}){
   function run(){
     try{
       startBrainEvaluation(settings,{
-        mode,repetitions:repeats,scenarioIds:selected.map(s=>s.id)
-      });
+        mode,repetitions:repeats,scenarioIds:selected.map(s=>s.id),
+        ...(mode==="live"?{models:modelsToRun}:{}),
+      },localModels);
       setMessage("");
       setLastExportFolder(null);
       // The large checklist used to bury progress and completion results.
@@ -178,6 +182,29 @@ export function BrainEvalPanel({settings}:{settings:Settings}){
           placeholder="Search #65, anime, singer…" aria-label="Find Brain Lab scenario" />
       </label>
     </div>
+    {mode==="live"&&<section className="brain-eval-model-picker" aria-label="Models to compare">
+      <div className="brain-eval-model-heading">
+        <strong>Run across installed Ollama models</strong>
+        <span>{modelsToRun.length} selected · sequential, one at a time</span>
+      </div>
+      <div className="brain-eval-model-actions">
+        <button type="button" disabled={busy} onClick={()=>setSelectedModels(new Set([settings.model]))}>Current only</button>
+        <button type="button" disabled={busy} onClick={()=>setSelectedModels(new Set(localModels.slice(0,10)))}>Select up to 10</button>
+      </div>
+      <div className="brain-eval-model-list">
+        {localModels.map(model=><label key={model}>
+          <input type="checkbox" disabled={busy}
+            checked={selectedModels.has(model)}
+            onChange={event=>setSelectedModels(old=>{
+              const next=new Set(old);
+              if(event.target.checked)next.add(model);else next.delete(model);
+              return next;
+            })}/>
+          <span>{model}{model===settings.model?" · current":""}</span>
+        </label>)}
+      </div>
+      <small>Each selected model runs the same scenarios in a fresh isolated conversation with its own report and saved results. Cloud models aren't included yet.</small>
+    </section>}
     <div className="brain-eval-status-summary">
       {(["passed","failed","review","stale","untested","incomplete"] as const).map(status=>
         <span className={"brain-eval-status "+status} key={status}>{status}: {totals[status]}</span>
@@ -206,8 +233,8 @@ export function BrainEvalPanel({settings}:{settings:Settings}){
     </div>
     <div className="brain-eval-actionbar">
       <div className="brain-eval-actions brain-eval-action-buttons">
-        <button type="button" className="save-button" disabled={busy||selected.length===0} onClick={()=>void run()}>
-          <Play size={15}/> Run {selected.length} scenarios ({selected.reduce((n,s)=>n+s.steps.length,0)*repeats} turns)
+        <button type="button" className="save-button" disabled={busy||selected.length===0||modelsToRun.length===0||modelsToRun.length>10} onClick={()=>void run()}>
+          <Play size={15}/> Run {selected.length} scenarios × {modelsToRun.length} model{modelsToRun.length===1?"":"s"} ({selected.reduce((n,s)=>n+s.steps.length,0)*repeats*modelsToRun.length} turns)
         </button>
         {busy&&<button type="button" className="secondary-action" onClick={stop}><Square size={14}/> Stop</button>}
         {report&&!busy&&<button type="button" className="secondary-action"
@@ -295,6 +322,23 @@ export function BrainEvalPanel({settings}:{settings:Settings}){
       Catalog: {EVAL_SCENARIOS.length} scenarios, {totalFixtureTurns} turns. Use the category, status or search filters to narrow the list.
     </p>
     {message&&<p className="brain-eval-message" role="status">{message}</p>}
+    {runtime.comparison && runtime.comparison.length>1&&<section className="brain-eval-comparison">
+      <strong>Model comparison · same scenarios and repetitions</strong>
+      <div className="brain-eval-comparison-scroll">
+        <table>
+          <thead><tr><th>Model</th><th>Detected failures</th><th>Verified checks</th><th>Web misses</th><th>Sources</th><th>Time</th></tr></thead>
+          <tbody>{runtime.comparison.map(entry=><tr key={entry.reportId}>
+            <th scope="row">{entry.model}</th>
+            <td>{entry.metrics.passed}/{entry.metrics.turns}</td>
+            <td>{entry.metrics.verifiedPassed}/{entry.metrics.turns}</td>
+            <td>{entry.metrics.missedWeb}</td>
+            <td>{entry.metrics.liveSources}</td>
+            <td>{formatMs(entry.metrics.elapsedMs)}</td>
+          </tr>)}</tbody>
+        </table>
+      </div>
+      <small>Automated passes are not proof of factual correctness. Review each model's saved JSON/Markdown report for evidence quality and personality.</small>
+    </section>}
     {metrics&&report&&<>
       <div ref={resultsRef} className="settings-section-title brain-eval-results-anchor">
         <Activity size={17}/> Results dashboard
