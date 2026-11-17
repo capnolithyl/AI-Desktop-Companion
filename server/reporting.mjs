@@ -101,6 +101,8 @@ export function safeReportDiagnostics(value) {
             accepted: positive(d.research.accepted),
             rejected: positive(d.research.rejected),
             followupAttempted: d.research.followupAttempted === true,
+            primaryRecoveryStatus: allowed(d.research.primaryRecoveryStatus,
+              ["not-needed","not-eligible","no-approved-query","searched-no-new-sources","new-sources-unresolved","improved-coverage","more-context","search-unavailable"]),
             elapsedMs: positive(d.research.elapsedMs)
           } : null,
           answerVerification: d.answerVerification ? {
