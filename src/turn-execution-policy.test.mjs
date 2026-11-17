@@ -129,7 +129,7 @@ test("planner outage recovers only current authorized public document URLs",()=>
   assert.equal(recovered.autoSearch,true);
   assert.equal(recovered.researchTask?.sourceUrl,url);
   assert.ok(recovered.researchQuery);
-  assert.doesNotMatch(recovered.researchQuery,/https?:\\/\\//);
+  assert.equal(recovered.researchQuery.includes("https://"),false);
   assert.doesNotMatch(recovered.researchQuery,/summarize its implementation/);
 
   const semanticDecline=resolvePublicWebExecution(policy,{mode:"research",query:request,recent:false},
