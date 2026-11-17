@@ -3511,7 +3511,7 @@ export default function App() {
         <div key={settingsTab} className={settingsTab === "brain" ? "settings-body settings-brain"
           : settingsTab === "memory" || settingsTab === "capabilities" ? "settings-body settings-embedded"
           : "settings-body"}>
-        {settingsTab === "brain" && <BrainEvalPanel settings={settings} />}
+        {settingsTab === "brain" && <BrainEvalPanel settings={settings} availableModels={availableModels} />}
         {settingsTab === "memory" && <MemoryPanel embedded key={memoryInitialTab} initialTab={memoryInitialTab}
           conversations={conversations} sessionSummaries={sessionSummaries} facts={userFacts}
           characterFacts={characterFacts} interests={interests} currentId={activeConversationId}
