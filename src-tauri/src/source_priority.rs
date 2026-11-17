@@ -83,12 +83,76 @@ fn overlap(query:&str,text:&str)->usize {
     let actual=terms(text);
     requested.iter().filter(|q|actual.iter().any(|word|matches_term(q,word))).count()
 }
+// Publication metadata is a ranking hint, NEVER the release/event date.
+// Parse only a trustworthy-looking date *format*, not an asserted truth.
+// An undated source remains eligible; old primary publications are valuable
+// historical evidence but cannot monopolize a present-day "latest" search.
+fn civil_day(year:i32,month:u32,day:u32)->i64 {
+    let year=year-if month<=2 {1} else {0};
+    let era=if year>=0 {year} else {year-399}/400;
+    let yo=year-era*400;
+    let shifted=month as i32+if month>2 {-3} else {9};
+    let ordinal=(153*shifted+2)/5+day as i32-1;
+    let days=yo*365+yo/4-yo/100+ordinal;
+    (era*146097+days-719468) as i64
+}
+fn absolute_day(input:&str)->Option<i64> {
+    let bytes=input.trim().as_bytes();
+    if bytes.len()<10||bytes[4]!=b'-'||bytes[7]!=b'-'{return None}
+    let year=std::str::from_utf8(&bytes[..4]).ok()?.parse::<i32>().ok()?;
+    let month=std::str::from_utf8(&bytes[5..7]).ok()?.parse::<u32>().ok()?;
+    let day=std::str::from_utf8(&bytes[8..10]).ok()?.parse::<u32>().ok()?;
+    if !(1990..=2200).contains(&year)||!(1..=12).contains(&month){return None}
+    let leap=year%4==0&&(year%100!=0||year%400==0);
+    let days=[31,if leap {29} else {28},31,30,31,30,31,31,30,31,30,31];
+    if day==0||day>days[(month-1) as usize]{return None}
+    Some(civil_day(year,month,day))
+}
+fn snippet_relative_age(content:&str)->Option<i64>{
+    // SearXNG often has no publishedDate but prefixes snippets with
+    // "1 day ago" or "17 hours ago". Use ONLY the leading metadata-like
+    // prefix; never treat a date deeper in an article as its publication.
+    let mut words=content.split_whitespace();
+    let count=words.next()?.parse::<i64>().ok()?;
+    let unit=words.next()?.trim_matches(|ch:char|!ch.is_ascii_alphabetic()).to_ascii_lowercase();
+    if words.next()?.trim_matches(|ch:char|!ch.is_ascii_alphabetic())!="ago" ||
+        !(0..=3650).contains(&count){return None}
+    match unit.as_str(){
+        "minute"|"minutes"|"hour"|"hours"=>Some(0),
+        "day"|"days"=>Some(count),
+        "week"|"weeks"=>Some(count*7),
+        "month"|"months"=>Some(count*30),
+        "year"|"years"=>Some(count*365),
+        _=>None
+    }
+}
+fn freshness_bonus_at(hit:&SearchResult,query:&str,today:i64)->i32{
+    let temporal=words(query).iter().any(|word|matches!(word.as_str(),
+        "latest"|"newest"|"recent"|"currently"|"current"|"today"|"yesterday"|"thisweek"));
+    if !temporal{return 0}
+    let absolute=hit.published_date.as_deref().and_then(absolute_day)
+        .or_else(||absolute_day(&hit.content));
+    let age=absolute.map(|day|today-day).or_else(||snippet_relative_age(&hit.content));
+    match age {
+        Some(0..=3)=>12,
+        Some(4..=14)=>9,
+        Some(15..=45)=>6,
+        Some(46..=120)=>2,
+        _=>0
+    }
+}
+fn freshness_bonus(hit:&SearchResult,query:&str)->i32{
+    let today=std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs()/86400;
+    freshness_bonus_at(hit,query,today as i64)
+}
+
 fn priority_score(item:&SearchResult, rule:Option<&SourcePreference>, query:&str) -> i32 {
     let relevance=overlap(query,&(item.title.clone()+" "+&item.content)) as i32 * 4;
     let domain_bonus=rule.map_or(0,|r| {
         if relevance>0 && r.domains.iter().any(|d| domain_matches(&item.url,d)) {2} else {0}
     });
-    domain_bonus + relevance
+    domain_bonus + relevance + freshness_bonus(item,query)
 }
 
 fn terms(text:&str)->HashSet<String>{
@@ -336,6 +400,49 @@ mod tests {
         SourcePreference{topic:"music".into(),cues:vec!["album".into()],
             domains:vec!["metal-archives.com".into()]}
     }
+    #[test]
+    fn recency_boost_is_scoped_to_temporal_queries_and_never_claims_a_release_date() {
+        let today=civil_day(2026,11,17);
+        let mut new=entry("public.example");
+        new.published_date=Some("2026-11-16T15:20:00Z".into());
+        let mut old=entry("archive.example");
+        old.published_date=Some("2026-08-02T00:00:00Z".into());
+        assert_eq!(freshness_bonus_at(&new,"latest metal album",today),12);
+        assert_eq!(freshness_bonus_at(&old,"latest metal album",today),2);
+        assert_eq!(freshness_bonus_at(&new,"history of metal",today),0);
+        new.published_date=Some("2026-11-22T00:00:00Z".into());
+        assert_eq!(freshness_bonus_at(&new,"latest metal album",today),0,
+            "future publication dates cannot boost source rank");
+        assert!(absolute_day("2026-02-30").is_none());
+        assert!(absolute_day("2026-13-01").is_none());
+        assert!(absolute_day("2024-02-29").is_some());
+    }
+    #[test]
+    fn undated_search_snippet_prefix_can_supply_a_bounded_recency_hint(){
+        let today=civil_day(2026,11,17);
+        let mut hit=entry("publisher.example");
+        hit.content="1 day ago ... new public software announcement".into();
+        assert_eq!(freshness_bonus_at(&hit,"latest software release",today),12);
+        hit.content="17 hours ago ... event report".into();
+        assert_eq!(freshness_bonus_at(&hit,"latest software release",today),12);
+        hit.content="The release is 1 day old, according to a forum post.".into();
+        assert_eq!(freshness_bonus_at(&hit,"latest software release",today),0);
+        hit.content="13 months ago ... historical press release".into();
+        assert_eq!(freshness_bonus_at(&hit,"latest software release",today),0);
+    }
+    #[test]
+    fn dated_current_hit_can_outrank_equally_relevant_archived_hits(){
+        let mut archived=entry("archive.example");
+        archived.title="Aurora version official update".into();
+        archived.content="Aurora version official update".into();
+        archived.published_date=Some("2021-06-10".into());
+        let mut current=entry("current.example");
+        current.title=archived.title.clone();
+        current.content="1 day ago ... Aurora version official update".into();
+        let query="latest Aurora version";
+        assert!(priority_score(&current,None,query)>priority_score(&archived,None,query));
+    }
+
     #[test]
     fn preferred_sites_receive_soft_ranking_not_exclusive_access() {
         let one=rule();
