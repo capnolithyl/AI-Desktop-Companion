@@ -125,7 +125,7 @@ export function BrainEvalPanel({settings,availableModels}:{settings:Settings;ava
     const allowedIds=new Set(EVAL_SCENARIOS.map(s=>s.id));
     const knownIds=config.scenarioIds.filter(id=>allowedIds.has(id));
     const unknownIds=config.scenarioIds.filter(id=>!allowedIds.has(id));
-    if(!knownIds.length){setMessage("This preset has no scenarios in the current catalog; nothing was loaded.");return}
+    if(config.scenarioIds.length>0&&!knownIds.length){setMessage("This preset has no scenarios in the current catalog; nothing was loaded.");return}
     const knownModels=config.models.filter(model=>localModels.includes(model));
     const missingModels=config.models.filter(model=>!localModels.includes(model));
     setMode(config.mode);
