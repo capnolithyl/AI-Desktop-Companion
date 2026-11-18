@@ -220,6 +220,12 @@ test("browser relay requires a private key and delegates to the desktop, not a s
     {action:"start",mode:"live",repetitions:7,scenarioIds:["branch-a"]})).status,400);
   assert.equal((await request(base + "/api/brain-eval","POST",jsonHeaders,
     {action:"start",mode:"live",repetitions:1,scenarioIds:["unknown-scenario"]})).status,400);
+  for(const researchMode of ["untrusted",""]) {
+    assert.equal((await request(base + "/api/brain-eval","POST",jsonHeaders,
+      {action:"start",mode:"live",researchMode,repetitions:1,scenarioIds:["branch-a"]})).status,400);
+  }
+  assert.equal((await request(base + "/api/brain-eval","POST",jsonHeaders,
+    {action:"start",mode:"routing",researchMode:"simple",repetitions:1,scenarioIds:["branch-a"]})).status,400);
   for(const models of [["invented:30b"],[],["qwen3.5:9b","qwen3.5:9b"]]){
     assert.equal((await request(base + "/api/brain-eval","POST",jsonHeaders,
       {action:"start",mode:"live",repetitions:1,scenarioIds:["branch-a"],models})).status,400);
@@ -228,14 +234,14 @@ test("browser relay requires a private key and delegates to the desktop, not a s
     {action:"start",mode:"routing",repetitions:1,scenarioIds:["branch-a"],
       models:["qwen3.5:9b","gemma4:12b"]})).status,400);
   assert.equal((await request(base + "/api/brain-eval","POST",jsonHeaders,
-    {action:"start",mode:"live",repetitions:3,scenarioIds:["branch-a","discovery-bands-wish"],
+    {action:"start",mode:"live",researchMode:"simple",repetitions:3,scenarioIds:["branch-a","discovery-bands-wish"],
       models:["qwen3.5:9b","gemma4:12b"]})).status,202);
   assert.equal((await request(base + "/api/brain-eval","POST",jsonHeaders,
     {action:"start",mode:"live",repetitions:3,scenarioIds:["branch-a"]})).status,409);
   const evalJob=(await (await request(agent + "/agent/next","GET",desktopHeaders)).json()).job;
   assert.equal(evalJob.kind,"start_brain_eval");
   assert.deepEqual(evalJob.evalOptions,{
-    mode:"live",repetitions:3,scenarioIds:["branch-a","discovery-bands-wish"],
+    mode:"live",researchMode:"simple",repetitions:3,scenarioIds:["branch-a","discovery-bands-wish"],
     models:["qwen3.5:9b","gemma4:12b"]
   });
   assert.equal((await request(agent + "/agent/ack","POST",desktopHeaders,{id:evalJob.id})).status,200);
