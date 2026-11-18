@@ -119,10 +119,110 @@ fn source_score(item: &SearchResult, host: &str, terms: &[String]) -> i32 {
         + if release_ledger {10} else {0}
 }
 
-/// Pick relevant passages rather than an arbitrary first 400 characters.
-/// Return text in original page order to preserve context and chronology.
+const DATED_SOURCE_PREFIX:&str="RECENT DATED SOURCE ENTRIES (verbatim page chronology, not independently verified):";
+
+/// Parse widely used human/ISO calendar headings from a changelog without
+/// depending on an industry, product name, publisher, or particular website.
+fn date_heading_key(line:&str)->Option<u32>{
+    let title=line.trim().trim_start_matches('#').trim();
+    let words:Vec<&str>=title.split(|c:char|!c.is_ascii_alphanumeric())
+        .filter(|w|!w.is_empty()).collect();
+    if words.len()!=3{return None}
+    let month_name=|raw:&str|->Option<u32>{
+        match raw.to_ascii_lowercase().as_str(){
+            "january"|"jan"=>Some(1),"february"|"feb"=>Some(2),
+            "march"|"mar"=>Some(3),"april"|"apr"=>Some(4),
+            "may"=>Some(5),"june"|"jun"=>Some(6),
+            "july"|"jul"=>Some(7),"august"|"aug"=>Some(8),
+            "september"|"sep"|"sept"=>Some(9),
+            "october"|"oct"=>Some(10),"november"|"nov"=>Some(11),
+            "december"|"dec"=>Some(12),_=>None
+        }
+    };
+    let (year,month,day)=if words[0].len()==4 {
+        (words[0].parse::<u32>().ok()?,
+         words[1].parse::<u32>().ok()?,words[2].parse::<u32>().ok()?)
+    }else if let Some(month)=month_name(words[0]){
+        (words[2].parse::<u32>().ok()?,month,words[1].parse::<u32>().ok()?)
+    }else{
+        (words[2].parse::<u32>().ok()?,month_name(words[1])?,
+         words[0].parse::<u32>().ok()?)
+    };
+    (1900..=2100).contains(&year).then_some(())?;
+    if (1..=12).contains(&month)&&(1..=31).contains(&day){
+        Some(year*10000+month*100+day)
+    }else{None}
+}
+fn asks_recent(topic:&str)->bool{
+    topic.to_ascii_lowercase().split(|c:char|!c.is_ascii_alphanumeric())
+        .any(|word|matches!(word,"latest"|"newest"|"recent"|"current"))
+}
+fn dated_source_front(page:&str,topic:&str)->String{
+    if !asks_recent(topic){return String::new()}
+    let mut sections:Vec<(u32,String)>=Vec::new();
+    let mut current:Option<u32>=None;
+    let mut body=String::new();
+    for line in page.lines().map(str::trim).filter(|line|!line.is_empty()){
+        if let Some(date)=date_heading_key(line){
+            if let Some(previous)=current{
+                sections.push((previous,std::mem::take(&mut body)));
+            }
+            current=Some(date);
+            body.push_str(line.trim_start_matches('#').trim());
+        }else if current.is_some() && body.chars().count()<1400{
+            body.push('\n');
+            body.push_str(line);
+        }
+    }
+    if let Some(date)=current{sections.push((date,body))}
+    if sections.is_empty(){return String::new()}
+    // Ignore generic query words when finding the named subject inside
+    // sections. E.g. a publisher-wide model ledger contains unrelated models
+    // on the same day. Versioned family names use shared numeric-prefix rules.
+    let focus:Vec<String>=topic_terms(topic).into_iter().filter(|word|
+        !matches!(word.as_str(),"release"|"releases"|"released"|"model"|"models"|
+            "version"|"versions"|"official"|"officially"|"software"|
+            "update"|"updates"|"published"|"announcement")).collect();
+    let relevant=|body:&str|focus.is_empty()||{
+        let actual:Vec<String>=body.to_ascii_lowercase()
+            .split(|c:char|!c.is_ascii_alphanumeric())
+            .filter(|word|word.len()>=2).map(str::to_owned).collect();
+        focus.iter().any(|expected|actual.iter().any(|word|
+            crate::source_priority::matches_term(expected,word)))
+    };
+    sections.retain(|(_,body)|relevant(body));
+    // Prefer the newest dated source section, even when an older paragraph
+    // contains more query words. This is a ranking choice, not a truth claim.
+    sections.sort_by(|a,b|b.0.cmp(&a.0));
+    let mut front=String::new();
+    for (_,section) in sections.into_iter().take(2){
+        let selection:String=section.chars().take(650).collect();
+        if !front.is_empty(){front.push_str("\n\n")}
+        front.push_str(&selection);
+    }
+    if front.is_empty(){String::new()}else{
+        format!("{DATED_SOURCE_PREFIX}\n{front}")
+    }
+}
+
+/// Preserve the newest dated section on chronological release ledgers, then
+/// supplement it with the strongest topic passages. The source author and
+/// original chronology remain visible instead of flattening all headings.
 pub(crate) fn focused_page_excerpt(page: &str, topic: &str) -> String {
-    crate::passages::select(page, topic, 18, MAX_SOURCE_EXCERPT_CHARS).join("\n\n")
+    let mut front=dated_source_front(page,topic);
+    if front.is_empty(){
+        return crate::passages::select(page,topic,18,MAX_SOURCE_EXCERPT_CHARS).join("\n\n");
+    }
+    let remaining=MAX_SOURCE_EXCERPT_CHARS.saturating_sub(front.chars().count()+2);
+    let ranked=crate::passages::select(page,topic,18,remaining);
+    for part in ranked{
+        if front.contains(part){continue}
+        let cost=part.chars().count()+2;
+        if front.chars().count()+cost>MAX_SOURCE_EXCERPT_CHARS{continue}
+        front.push_str("\n\n");
+        front.push_str(part);
+    }
+    front
 }
 
 /// Choose bounded, domain-diverse pages to read using topic relevance
@@ -358,6 +458,48 @@ mod tests {
         let excerpt = focused_page_excerpt(page, "Aurora Editor release schedule");
         assert!(excerpt.contains("2026 preview build"));
         assert!(excerpt.contains("stable release is targeted for 2027"));
+    }
+
+    #[test]
+    fn latest_release_ledger_preserves_newest_production_and_older_preview_dates(){
+        // This fixture starts in reverse chronology, just like a release
+        // ledger. The older preview must not displace the production entry.
+        let doc=concat!(
+            "# Model releases\n",
+            "## November 16, 2026\n",
+            "### Orion4-Max\n",
+            "Orion4-Max is a production flagship model for coding and vision.\n",
+            "### OtherVendor-Special\n",
+            "A different publisher also released an unrelated service.\n",
+            "## November 11, 2026\n",
+            "### Orion4-Max-Preview\n",
+            "Orion4-Max-Preview is currently only in preview testing.\n",
+            "## August 2, 2026\n",
+            "### Orion3-Max\n",
+            "Orion3-Max is a previous general purpose release.\n"
+        );
+        let excerpt=focused_page_excerpt(doc,"latest officially released Orion model");
+        assert!(excerpt.starts_with(DATED_SOURCE_PREFIX));
+        assert!(excerpt.contains("November 16, 2026"));
+        assert!(excerpt.contains("Orion4-Max is a production flagship"));
+        assert!(excerpt.contains("November 11, 2026"));
+        assert!(excerpt.contains("Orion4-Max-Preview is currently only in preview"));
+        assert!(excerpt.find("November 16").unwrap()<excerpt.find("November 11").unwrap());
+        assert!(excerpt.chars().count()<=MAX_SOURCE_EXCERPT_CHARS);
+    }
+
+    #[test]
+    fn release_ledger_ascending_dates_still_prefers_newest_section(){
+        let doc=concat!(
+            "## 2025-01-02\n### Lynx2\nLynx2 is an old model.\n",
+            "## 2026-11-16\n### Lynx4\nLynx4 is the newly available model.\n",
+            "## 2026-11-11\n### Lynx4-Preview\nLynx4-Preview is a preview model.\n"
+        );
+        let front=dated_source_front(doc,"newest Lynx model");
+        assert!(front.contains("2026-11-16"));
+        assert!(front.find("2026-11-16").unwrap()<front.find("2026-11-11").unwrap());
+        assert!(!front.contains("2025-01-02"));
+        assert!(dated_source_front(doc,"historical Lynx model").is_empty());
     }
 
     #[test]

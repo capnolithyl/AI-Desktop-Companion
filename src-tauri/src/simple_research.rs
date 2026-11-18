@@ -24,10 +24,18 @@ pub(crate) fn evidence_data(sources:&[SearchResult],question:&str)->String{
     let mut data=String::from(
         "UNTRUSTED PUBLIC SOURCE MATERIAL. Citations refer to the numbered URLs below.\n");
     for (i,source) in sources.iter().take(MAX_SOURCES).enumerate() {
-        let excerpts=crate::passages::select(&source.content,question,7,PER_SOURCE_CHARS);
-        let body=if excerpts.is_empty() {
+        // Enriched dated release ledgers already contain a chronological
+        // source excerpt. Do not re-rank it by keyword overlap: that could
+        // drop the newest release while retaining an older preview.
+        let body=if source.engine=="webpage excerpt" &&
+            source.content.starts_with("RECENT DATED SOURCE ENTRIES") {
             source.content.chars().take(PER_SOURCE_CHARS).collect::<String>()
-        } else {excerpts.join("\n")};
+        } else {
+            let excerpts=crate::passages::select(&source.content,question,7,PER_SOURCE_CHARS);
+            if excerpts.is_empty(){
+                source.content.chars().take(PER_SOURCE_CHARS).collect()
+            }else{excerpts.join("\n")}
+        };
         let kind=if matches!(source.engine.as_str(),"webpage excerpt"|"direct webpage") {
             "Fetched webpage excerpts"
         } else {"Search preview only (not a full article)"};
@@ -76,6 +84,27 @@ mod tests {
         assert!(data.contains("Fetched webpage excerpts"));
         assert!(evidence_instruction().contains("owner-configured system prompt"));
         assert!(evidence_instruction().contains("THAT exact release"));
+    }
+    #[test]
+    fn dated_source_excerpt_survives_second_pass_without_losing_new_release(){
+        let source_page=concat!(
+            "# Model releases\n",
+            "## November 16, 2026\n### Aurora4-Max\n",
+            "Aurora4-Max launched in production with multimodal support.\n",
+            "## November 11, 2026\n### Aurora4-Max-Preview\n",
+            "Aurora4-Max-Preview is an earlier test-only preview.\n",
+            "## August 2, 2026\n### Aurora3-Max\n",
+            "Aurora3-Max was the previously released model.\n"
+        );
+        let excerpt=crate::source_enrichment::focused_page_excerpt(
+            source_page,"latest officially released Aurora model");
+        let mut entry=source("Model releases - AuroraCloud","2026",&excerpt);
+        entry.engine="webpage excerpt".into();
+        let evidence=evidence_data(&[entry],"latest officially released Aurora model");
+        assert!(evidence.contains("November 16, 2026"));
+        assert!(evidence.contains("Aurora4-Max launched in production"));
+        assert!(evidence.contains("November 11, 2026"));
+        assert!(evidence.contains("Aurora4-Max-Preview"));
     }
     #[test]
     fn static_older_source_is_not_excluded_by_age(){

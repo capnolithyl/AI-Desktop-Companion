@@ -1057,3 +1057,45 @@ still uses synthetic memory retrieval, its own test conversation, local
 model-only mode, and test-specific tool permissions. Results should be
 compared against regular desktop chats with the same model/provider,
 research settings and actual conversational context.
+
+## v0.9.58 Dated source-section retention (release ledger research)
+
+After the v0.9.57 live Simple + Mikanify run (#20,#21,#84 x2), the
+full research source trace showed an important retrieval defect: both
+#21 and #84 actually READ the publisher's official model-release
+changelog, but the extracted passages started with an older preview
+and omitted the newest dated production entry. That caused Mikan to
+select an outdated flagship while retaining valid citation indexes.
+#20 AMD change attribution improved but still occasionally treated
+absence of a changelog mention as proof support was unchanged.
+All 8 rewrites completed, adding 43.1 seconds over eight turns
+(5.38 seconds each), and one rewrite returned the original text
+unchanged; Mikanify did not cure the underlying research failures.
+
+The fix is DOMAIN-AGNOSTIC and adds NO new model calls, regex intent
+routing, hardcoded model names or extra search requests:
+
+- The shared HTML web reader now preserves h1/h2/h3 markers in the
+  text instead of flattening dates and release headings into prose.
+  The reader cache format changes from v3 to v4 so already cached
+  flattened pages are refreshed on app restart/update.
+- When the *question* asks for latest/newest/recent/current and the
+  webpage contains explicit dated headings, source enrichment retains
+  the two most recent subject-relevant dated sections ahead of
+  keyword-ranked excerpts, preserving their relative dates and status.
+  Accepts human-readable and ISO dates; other non-dated pages still
+  use the existing relevance-based extraction.
+- The Simple answer stage knows that the enriched dated excerpt has
+  already been selected. It copies that bounded source excerpt as
+  evidence instead of running a second keyword selection that could
+  discard the newest heading and leave an older preview. All sources
+  retain their original URLs, source numbering and public-read guards.
+
+Rust regressions verify heading extraction, newest vs preview status
+with both ascending and descending source document chronology, and
+end-to-end preservation through both passage selections. Manual
+verification on Qwen or other live sites still required. Re-test
+Live Simple qwen3.5:9b #20, #21, #84 x2 with Mikanify ON and inspect
+*originalAnswer*, rewritten *answer*, official release log excerpts,
+query planner, and source timestamps independently. An '8/8 pass'
+is structural only; do not label it factually accurate.

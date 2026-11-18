@@ -74,7 +74,7 @@ fn cache_path(app: &tauri::AppHandle, url: &str) -> Result<PathBuf, String> {
         .join("web-cache");
     fs::create_dir_all(&folder).map_err(|e| format!("Cannot create web cache: {e}"))?;
     // Older cached pages omitted descriptions and later README sections.
-    let key = format!("{:x}", Sha256::digest(format!("reader-v3:{url}").as_bytes()));
+    let key = format!("{:x}", Sha256::digest(format!("reader-v4:{url}").as_bytes()));
     Ok(folder.join(format!("{key}.json")))
 }
 
@@ -101,6 +101,13 @@ fn extracted_text(html: &str) -> (String, String) {
         if content.chars().count() + cleaned.chars().count() > MAX_DOCUMENT_CHARS {
             break;
         }
+        // Preserve the page's section hierarchy. Dated release ledgers
+        // often use separate h2 date and h3 model headings. Flattening both
+        // into plain paragraphs hides which model belongs to which date.
+        let heading_prefix=match node.value().name() {
+            "h1"=>"# ", "h2"=>"## ", "h3"=>"### ", _=>""
+        };
+        content.push_str(heading_prefix);
         content.push_str(&cleaned);
         content.push_str("\n\n");
     }
@@ -430,5 +437,20 @@ mod tests {
         assert_eq!(title, "Test");
         assert!(text.contains("Hello from the important article."));
         assert!(!text.contains("IGNORE"));
+    }
+    #[test]
+    fn html_release_changelog_preserves_date_and_entry_headings(){
+        let html=concat!(
+            "<article><h1>Model updates</h1>",
+            "<h2>November 16, 2026</h2><h3>Orion4-Max</h3>",
+            "<p>Orion4-Max launched as a generally available flagship.</p>",
+            "<h2>November 11, 2026</h2><h3>Orion4-Max-Preview</h3>",
+            "<p>Orion4-Max-Preview launched for preview testing.</p></article>"
+        );
+        let (_,body)=extracted_text(html);
+        assert!(body.contains("## November 16, 2026"));
+        assert!(body.contains("### Orion4-Max"));
+        assert!(body.contains("## November 11, 2026"));
+        assert!(body.contains("### Orion4-Max-Preview"));
     }
 }
