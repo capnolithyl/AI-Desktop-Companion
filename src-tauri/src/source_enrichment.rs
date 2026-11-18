@@ -123,36 +123,6 @@ const DATED_SOURCE_PREFIX:&str="RECENT DATED SOURCE ENTRIES (verbatim page chron
 
 /// Parse widely used human/ISO calendar headings from a changelog without
 /// depending on an industry, product name, publisher, or particular website.
-fn date_heading_key(line:&str)->Option<u32>{
-    let title=line.trim().trim_start_matches('#').trim();
-    let words:Vec<&str>=title.split(|c:char|!c.is_ascii_alphanumeric())
-        .filter(|w|!w.is_empty()).collect();
-    if words.len()!=3{return None}
-    let month_name=|raw:&str|->Option<u32>{
-        match raw.to_ascii_lowercase().as_str(){
-            "january"|"jan"=>Some(1),"february"|"feb"=>Some(2),
-            "march"|"mar"=>Some(3),"april"|"apr"=>Some(4),
-            "may"=>Some(5),"june"|"jun"=>Some(6),
-            "july"|"jul"=>Some(7),"august"|"aug"=>Some(8),
-            "september"|"sep"|"sept"=>Some(9),
-            "october"|"oct"=>Some(10),"november"|"nov"=>Some(11),
-            "december"|"dec"=>Some(12),_=>None
-        }
-    };
-    let (year,month,day)=if words[0].len()==4 {
-        (words[0].parse::<u32>().ok()?,
-         words[1].parse::<u32>().ok()?,words[2].parse::<u32>().ok()?)
-    }else if let Some(month)=month_name(words[0]){
-        (words[2].parse::<u32>().ok()?,month,words[1].parse::<u32>().ok()?)
-    }else{
-        (words[2].parse::<u32>().ok()?,month_name(words[1])?,
-         words[0].parse::<u32>().ok()?)
-    };
-    (1900..=2100).contains(&year).then_some(())?;
-    if (1..=12).contains(&month)&&(1..=31).contains(&day){
-        Some(year*10000+month*100+day)
-    }else{None}
-}
 fn asks_recent(topic:&str)->bool{
     topic.to_ascii_lowercase().split(|c:char|!c.is_ascii_alphanumeric())
         .any(|word|matches!(word,"latest"|"newest"|"recent"|"current"))
@@ -163,7 +133,7 @@ fn dated_source_front(page:&str,topic:&str)->String{
     let mut current:Option<u32>=None;
     let mut body=String::new();
     for line in page.lines().map(str::trim).filter(|line|!line.is_empty()){
-        if let Some(date)=date_heading_key(line){
+        if let Some(date)=crate::passages::date_heading_key(line){
             if let Some(previous)=current{
                 sections.push((previous,std::mem::take(&mut body)));
             }

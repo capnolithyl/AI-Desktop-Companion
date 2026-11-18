@@ -74,7 +74,7 @@ fn cache_path(app: &tauri::AppHandle, url: &str) -> Result<PathBuf, String> {
         .join("web-cache");
     fs::create_dir_all(&folder).map_err(|e| format!("Cannot create web cache: {e}"))?;
     // Older cached pages omitted descriptions and later README sections.
-    let key = format!("{:x}", Sha256::digest(format!("reader-v4:{url}").as_bytes()));
+    let key = format!("{:x}", Sha256::digest(format!("reader-v5:{url}").as_bytes()));
     Ok(folder.join(format!("{key}.json")))
 }
 
@@ -85,29 +85,46 @@ fn extracted_text(html: &str) -> (String, String) {
         .map(|node| node.text().collect::<Vec<_>>().join(" ").trim().chars().take(180).collect::<String>())
         .filter(|t| !t.is_empty()).unwrap_or_else(|| "Webpage".into());
 
-    let primary = Selector::parse("article h1, article h2, article h3, article p, article li, main h1, main h2, main h3, main p, main li").expect("selector");
-    let fallback = Selector::parse("h1, h2, h3, p, li").expect("selector");
-    let first: Vec<_> = document.select(&primary).collect();
-    let nodes = if first.is_empty() { document.select(&fallback).collect::<Vec<_>>() } else { first };
-    // First-party descriptions can survive even when the body is mostly menus.
-    let descriptions = Selector::parse("meta[name=description], meta[property='og:description']").expect("selector");
-    let mut content = document.select(&descriptions).filter_map(|n| n.value().attr("content"))
-        .map(str::trim).find(|s| !s.is_empty()).unwrap_or("").chars().take(600).collect::<String>();
+    // Preserve DOM order for headings, paragraphs, and *standalone* calendar
+    // labels rendered as div/span/time. This preserves release chronology on
+    // documentation sites whose dates aren't semantic heading elements.
+    let primary=Selector::parse("article h1,article h2,article h3,article h4,article p,article li,article time,article div,article span,main h1,main h2,main h3,main h4,main p,main li,main time,main div,main span").expect("selector");
+    let fallback=Selector::parse("h1,h2,h3,h4,p,li,time,div,span").expect("selector");
+    let first:Vec<_>=document.select(&primary).collect();
+    let nodes=if first.is_empty(){document.select(&fallback).collect::<Vec<_>>()}else{first};
+    // First-party descriptions can survive when a body is mostly navigation.
+    let descriptions=Selector::parse("meta[name=description], meta[property='og:description']").expect("selector");
+    let mut content=document.select(&descriptions).filter_map(|n|n.value().attr("content"))
+        .map(str::trim).find(|s|!s.is_empty()).unwrap_or("")
+        .chars().take(600).collect::<String>();
     content.push_str("\n\n");
     for node in nodes {
-        let text = node.text().collect::<Vec<_>>().join(" ");
-        let cleaned = text.split_whitespace().collect::<Vec<_>>().join(" ");
-        if cleaned.len() < 12 || content.contains(&cleaned) { continue; }
-        if content.chars().count() + cleaned.chars().count() > MAX_DOCUMENT_CHARS {
+        let tag=node.value().name();
+        let heading=match tag {
+            "h1"=>"# ","h2"=>"## ","h3"=>"### ","h4"=>"#### ",_=>""
+        };
+        let potential_date=matches!(tag,"div"|"span"|"time");
+        let ordinary=!heading.is_empty()||matches!(tag,"p"|"li");
+        if !potential_date&&!ordinary {continue}
+        let cleaned=if potential_date {
+            // Avoid quadratic work on nested full-page div containers.
+            let words:Vec<_>=node.text().take(8).collect();
+            if words.len()>=8 {continue}
+            words.join(" ").split_whitespace().collect::<Vec<_>>().join(" ")
+        }else{
+            node.text().collect::<Vec<_>>().join(" ")
+                .split_whitespace().collect::<Vec<_>>().join(" ")
+        };
+        let is_date=potential_date&&crate::passages::date_heading_key(&cleaned).is_some();
+        if !ordinary&&!is_date {continue}
+        // Short model names ("Orion4", "v1.0") are real headings, not noise.
+        if cleaned.is_empty()||
+            (!is_date&&heading.is_empty()&&cleaned.len()<12)||
+            content.contains(&cleaned) {continue}
+        if content.chars().count()+cleaned.chars().count()+4>MAX_DOCUMENT_CHARS{
             break;
         }
-        // Preserve the page's section hierarchy. Dated release ledgers
-        // often use separate h2 date and h3 model headings. Flattening both
-        // into plain paragraphs hides which model belongs to which date.
-        let heading_prefix=match node.value().name() {
-            "h1"=>"# ", "h2"=>"## ", "h3"=>"### ", _=>""
-        };
-        content.push_str(heading_prefix);
+        content.push_str(if is_date{"## "}else{heading});
         content.push_str(&cleaned);
         content.push_str("\n\n");
     }
@@ -438,6 +455,39 @@ mod tests {
         assert!(text.contains("Hello from the important article."));
         assert!(!text.contains("IGNORE"));
     }
+    #[test]
+    fn html_dates_in_divs_and_short_model_names_reach_final_answer_context(){
+        let html=concat!(
+            "<html><head><title>Model releases</title></head><body>",
+            "<article><h1>Model releases</h1>",
+            "<div class='date'><span>November 16, 2026</span></div>",
+            "<h3>Orion4</h3>",
+            "<p>Orion4 is the newly available production model.</p>",
+            "<div class='date'>November 11, 2026</div>",
+            "<h3>Orion4-Preview</h3>",
+            "<p>Orion4-Preview is an older testing-only model.</p>",
+            "</article></body></html>"
+        );
+        let (_,page)=extracted_text(html);
+        assert!(page.contains("## November 16, 2026"),"{page}");
+        assert!(page.contains("### Orion4"),"{page}");
+        assert!(page.contains("## November 11, 2026"),"{page}");
+        let excerpt=crate::source_enrichment::focused_page_excerpt(
+            &page,"latest officially released Orion model");
+        assert!(excerpt.contains("November 16, 2026"),"{excerpt}");
+        assert!(excerpt.contains("Orion4 is the newly available production"),"{excerpt}");
+        let result=crate::web_search::SearchResult{
+            title:"Publisher models".into(),
+            url:"https://publisher.example/changelog/models".into(),
+            content:excerpt,engine:"webpage excerpt".into(),published_date:None
+        };
+        let evidence=crate::simple_research::evidence_data(&[result],
+            "latest officially released Orion model");
+        assert!(evidence.contains("November 16, 2026"),"{evidence}");
+        assert!(evidence.contains("Orion4 is the newly available production"),"{evidence}");
+        assert!(evidence.contains("Orion4-Preview"),"{evidence}");
+    }
+
     #[test]
     fn html_release_changelog_preserves_date_and_entry_headings(){
         let html=concat!(

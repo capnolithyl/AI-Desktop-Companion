@@ -1099,3 +1099,40 @@ Live Simple qwen3.5:9b #20, #21, #84 x2 with Mikanify ON and inspect
 *originalAnswer*, rewritten *answer*, official release log excerpts,
 query planner, and source timestamps independently. An '8/8 pass'
 is structural only; do not label it factually accurate.
+
+## v0.9.59 HTML date labels and short release names
+
+The 0.9.58 live qwen3.5:9b report (#20/#21/#84 x2) confirmed
+that dated-ledger selection alone did NOT cure research accuracy.
+The official model-release changelog was again fetched but the
+model-bearing evidence excerpt contained unrelated speech-recognition
+feature descriptions. #21 missed the newer Qwen4-Max production
+release twice; #84 did so once and named it once with unsupported
+preview/variant details. #20 correctly identified the upstream llama.cpp
+release, but one AMD follow-up still conflated older ROCm packaging
+changes with the just-shipped version. All 8 structural passes were
+green, but the source-facing correctness was not.
+
+We found two bugs in the ACTUAL HTML reader, ahead of source enrichment:
+- The body selector allowed only h1/h2/h3/p/li, skipping standalone
+  calendar labels rendered as div/span/time instead of heading tags.
+  Consequently, a release entry could lose the date identifying its
+  preview or production status.
+- The generic 12-character minimum discarded short heading/model
+  identifiers such as "Orion4", "v1.0" and "qwen4-max".
+
+The v0.9.59 fix adds date-only div/span/time candidates in original
+DOM order; only exact calendar date strings are included, not arbitrary
+navigation div/span text. Header tags h1-h4 are preserved even when
+short. The shared calendar-heading parser lives in passages.rs and
+continues to serve the dated source-selection stage.
+The page cache key is now reader-v5, invalidating prior flattened
+cached HTML. Native regressions exercise a nested date div/span and
+a short model heading all the way from raw HTML through enriched source
+excerpt and numbered Simple research evidence.
+
+No subject-specific Qwen heuristic, additional LLM/tool pass or changed
+Brain Lab-only instruction; the production desktop uses the same reader.
+CI success is not proof of live source fidelity, so rerun the same
+three scenarios x2 with Mikanify ON and inspect both original/final
+answers, actual source excerpts and citations.

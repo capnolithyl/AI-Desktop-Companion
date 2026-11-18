@@ -3,6 +3,39 @@ use std::collections::{HashMap, HashSet};
 
 const MAX_PASSAGE: usize = 500;
 
+/// Standalone dated section labels. Metadata alone is not release proof.
+pub(crate) fn date_heading_key(line:&str)->Option<u32>{
+    let title=line.trim().trim_start_matches('#').trim();
+    let words:Vec<&str>=title.split(|c:char|!c.is_ascii_alphanumeric())
+        .filter(|w|!w.is_empty()).collect();
+    if words.len()!=3{return None}
+    let month_name=|raw:&str|->Option<u32>{
+        match raw.to_ascii_lowercase().as_str(){
+            "january"|"jan"=>Some(1),"february"|"feb"=>Some(2),
+            "march"|"mar"=>Some(3),"april"|"apr"=>Some(4),
+            "may"=>Some(5),"june"|"jun"=>Some(6),
+            "july"|"jul"=>Some(7),"august"|"aug"=>Some(8),
+            "september"|"sep"|"sept"=>Some(9),
+            "october"|"oct"=>Some(10),"november"|"nov"=>Some(11),
+            "december"|"dec"=>Some(12),_=>None
+        }
+    };
+    let (year,month,day)=if words[0].len()==4 {
+        (words[0].parse::<u32>().ok()?,
+         words[1].parse::<u32>().ok()?,words[2].parse::<u32>().ok()?)
+    }else if let Some(month)=month_name(words[0]){
+        (words[2].parse::<u32>().ok()?,month,words[1].parse::<u32>().ok()?)
+    }else{
+        (words[2].parse::<u32>().ok()?,month_name(words[1])?,
+         words[0].parse::<u32>().ok()?)
+    };
+    (1900..=2100).contains(&year).then_some(())?;
+    if (1..=12).contains(&month)&&(1..=31).contains(&day){
+        Some(year*10000+month*100+day)
+    }else{None}
+}
+
+
 /// Reuse the same numeric-version family matching as web result ranking.
 /// "Qwen" may match "Qwen4", but "Cora" must not match "Coral".
 fn count_matches(expected:&HashSet<String>, actual:&HashSet<String>)->usize {
