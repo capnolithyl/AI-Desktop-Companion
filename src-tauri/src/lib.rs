@@ -1151,7 +1151,11 @@ async fn chat_stream_impl(
                 .find(|message| message.role=="user")
                 .map(|message| message.content.as_str())
                 .unwrap_or_default();
-            simple_research::evidence_data(&sources,focus)
+            // Include the approved public research goal for short follow-ups:
+            // "Did it change AMD support?" otherwise loses the named release.
+            let source_focus=format!("{} {focus}",
+                request.research_query.as_deref().unwrap_or(""));
+            simple_research::evidence_data(&sources,&source_focus)
         };
         // Keep retrieved text at data priority and align citations with the UI.
         let last_user = messages.iter().rposition(|m| m["role"] == "user").unwrap_or(messages.len());

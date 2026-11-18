@@ -204,10 +204,15 @@ fn rank_for_task(broad:Vec<SearchResult>,focused:Vec<SearchResult>,rule:Option<&
         .filter(|s|seen.insert(s.url.clone()) && relevant(s,query,subject)).collect();
     // Retain original relevance order on ties. Preferred domains gain a modest
     // boost, but nonpreferred sources remain eligible and can still win.
+    let asks_about_release=words(query).iter().any(|word|
+        matches!(word.as_str(),"latest"|"newest"|"release"|"releases"));
     candidates.sort_by_cached_key(|hit| {
         let names_subject=subject.is_some_and(|name| subject_matches(&hit.title,name)
             || subject_matches(&hit.url,name));
-        (!names_subject, -priority_score(hit,rule,query))
+        // This is a source-selection hint, not proof that a release claim is true.
+        let exact_upstream_release=asks_about_release && subject.is_some_and(|name|
+            crate::web_reader::latest_release_url(&hit.url,name).is_some());
+        (!names_subject, !exact_upstream_release, -priority_score(hit,rule,query))
     });
     let mut candidates=diversify_hosts(candidates);
     candidates.truncate(8);
@@ -506,6 +511,15 @@ mod relevance_tests {
         hits.push(hit("Aurora Vulkan release v3", "https://aurora.example/releases"));
         let ranked=rank_for_task(hits,vec![],None,"latest Aurora Vulkan release",Some("Aurora"));
         assert_eq!(ranked.len(),1);assert_eq!(ranked[0].url,"https://aurora.example/releases");
+    }
+    #[test]
+    fn named_upstream_release_ranks_ahead_of_similar_forks(){
+        let upstream=hit("llama.cpp releases","https://github.com/ggml-org/llama.cpp/releases");
+        let fork=hit("Latest llama.cpp Windows Vulkan release","https://github.com/Caerleus/llama.cpp-vulkan-win/releases");
+        let news=hit("Latest llama.cpp Vulkan release","https://news.example.com/llama");
+        let ranked=rank_for_task(vec![fork,news,upstream],vec![],None,
+            "latest Vulkan llama.cpp release",Some("llama.cpp"));
+        assert_eq!(ranked[0].url,"https://github.com/ggml-org/llama.cpp/releases");
     }
     #[test]
     fn named_entities_allow_paraphrases_but_not_substring_collisions(){

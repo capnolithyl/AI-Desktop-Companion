@@ -262,6 +262,17 @@ mod tests {
         assert_eq!(select_release_resource(&hits,Some(&ResearchTask{source_url:Some(hits[1].url.clone()),..task})),None);
     }
     #[test]
+    fn named_upstream_release_beats_community_vulkan_fork(){
+        use crate::recommendation_gate::ResearchTask;
+        let hits=vec![
+            result("Community Windows Vulkan build","https://github.com/Caerleus/llama.cpp-vulkan-win/releases","llama.cpp fork"),
+            result("llama.cpp upstream release","https://github.com/ggml-org/llama.cpp/releases","llama.cpp release notes")
+        ];
+        let task=ResearchTask{subject:Some("llama.cpp".into()),
+            resource:Some("latestRelease".into()),..Default::default()};
+        assert_eq!(select_release_resource(&hits,Some(&task)),Some(1));
+    }
+    #[test]
     fn source_ranking_does_not_require_a_government_site() {
         let terms = topic_terms("Midnight Engine new album announcement");
         let project = result("Midnight Engine new album recording update",

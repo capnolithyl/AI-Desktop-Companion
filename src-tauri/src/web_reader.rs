@@ -157,15 +157,21 @@ fn github_document_endpoint(url:&reqwest::Url)->Option<(GithubDocument,reqwest::
     Some((kind,endpoint))
 }
 /// Adapt a search hit only when it identifies the named repository exactly.
+/// Resolve an exact named upstream repository root or release index.
+/// Never redirect a similar community fork to a different project's notes.
 pub(crate) fn latest_release_url(raw:&str,subject:&str)->Option<String> {
     let mut url=reqwest::Url::parse(raw).ok()?;
-    let (kind,_)=github_document_endpoint(&url)?;
-    let path=url.path().trim_matches('/');
-    if kind!=GithubDocument::Readme || !(subject.eq_ignore_ascii_case(path) ||
-        path.rsplit('/').next().is_some_and(|name|name.eq_ignore_ascii_case(subject))) {return None}
-    url.set_path(&format!("{path}/releases/latest"));
+    let (_kind,_)=github_document_endpoint(&url)?;
+    let parts:Vec<_>=url.path_segments()?.filter(|part|!part.is_empty()).collect();
+    let owner=*parts.first()?;
+    let repo=*parts.get(1)?;
+    let repository_path=format!("{owner}/{repo}");
+    if !(subject.eq_ignore_ascii_case(&repository_path) ||
+        subject.eq_ignore_ascii_case(repo)) {return None}
+    url.set_path(&format!("{repository_path}/releases/latest"));
     Some(url.to_string())
 }
+
 fn github_document_content(kind:GithubDocument,bytes:&[u8],repo:&str)->Option<(String,String)> {
     let value:serde_json::Value=serde_json::from_slice(bytes).ok()?;
     match kind {
@@ -386,6 +392,16 @@ mod tests {
             "https://github.com/example/demo/tree/main"] {
             assert!(endpoint(url).is_none(),"{url}");
         }
+    }
+    #[test]
+    fn named_release_indexes_resolve_but_unrelated_forks_do_not(){
+        assert_eq!(latest_release_url("https://github.com/ggml-org/llama.cpp/releases","llama.cpp"),
+            Some("https://github.com/ggml-org/llama.cpp/releases/latest".into()));
+        assert_eq!(latest_release_url("https://github.com/ggml-org/llama.cpp","llama.cpp"),
+            Some("https://github.com/ggml-org/llama.cpp/releases/latest".into()));
+        assert!(latest_release_url("https://github.com/Caerleus/llama.cpp-vulkan-win/releases","llama.cpp").is_none());
+        assert!(latest_release_url("https://github.com/ggml-org/llama.cpp/releases/tag/v1","llama.cpp").is_none());
+        assert!(latest_release_url("https://github.com.evil.example/ggml-org/llama.cpp/releases","llama.cpp").is_none());
     }
     #[test]
     fn github_metadata_is_not_confused_with_unverified_feature_changes(){

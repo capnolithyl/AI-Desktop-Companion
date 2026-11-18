@@ -892,3 +892,23 @@ for shared execution, source selection, direct document reads, extraction,
 memory precision, and the focused Live targets `20,21,24,80,81,82,83`.
 Partial evidence remains review-required; an accepted quotation is not a
 certificate that the user's question was answered correctly.
+
+## v0.9.52 Simple research: stronger release provenance and persona-led answers
+
+Simple remains the default direct-answer mode. For a named upstream software
+release, an exact GitHub release index is preferred over a similarly named
+community fork. The existing read-only GitHub adapter obtains the latest
+published non-prerelease record. A result snippet is labeled separately from
+a fetched webpage excerpt. Short follow-up passage selection retains the
+approved public research goal.
+
+The Simple model instructions emphasize event-versus-publication dates and
+attributing changes to the exact release where they occurred. They also
+preserve the configured assistant persona and encourage a helpful, natural
+prepared response, not a bare list of findings. These are not claim
+validators or a second LLM pass, and do not guarantee correct model behavior.
+
+Manual verification: run Simple with Qwen3.5:9b for Brain Lab 20,21,84 twice,
+then independently review source numbers, dates, release attributions,
+natural style, and end-to-end usefulness. Do not grade factual correctness
+from mechanical pass counters alone.
