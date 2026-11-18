@@ -73,7 +73,7 @@ fn site_identity_hint(host:&str,terms:&[String])->i32 {
     // e.g. samplecloud.com. This is ONLY a reason to read a candidate page,
     // not evidence that the domain really belongs to that publisher.
     if parts.len()==1 && terms.iter().any(|term|term.len()>=4 &&
-        label.strip_prefix(term).is_some_and(|suffix|
+        label.strip_prefix(term.as_str()).is_some_and(|suffix|
             (3..=12).contains(&suffix.len()) && suffix.chars().all(|c|c.is_ascii_alphabetic()))) {
         return 12;
     }
