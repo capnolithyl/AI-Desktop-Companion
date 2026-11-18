@@ -12,6 +12,7 @@ export type BrainCaseGrade="passed"|"failed"|"review"|"incomplete";
 export type BrainCaseStatus=BrainCaseGrade|"untested"|"stale";
 export type BrainCaseRecord={
   id:string;mode:EvalMode;model:string;build:string;fixtureHash:string;
+  researchMode?:"simple"|"strict";
   grade:BrainCaseGrade; reviewed?:"passed"|"failed";
   runId:string;at:string;repetitions:number;executed:number;
   checksPassed:number;checksTotal:number;needsReview:boolean;
@@ -20,7 +21,8 @@ export type BrainCaseView={
   id:string;status:BrainCaseStatus;previous:BrainCaseGrade|null;
   record:BrainCaseRecord|null;
 };
-export type BrainCaseEnvironment={mode:EvalMode;model:string;build:string};
+export type BrainCaseEnvironment={mode:EvalMode;model:string;build:string;
+  researchMode?:"simple"|"strict"};
 
 const MAX_RECORDS=600;
 function isGrade(value:unknown):value is BrainCaseGrade{
@@ -68,6 +70,7 @@ export function gradeReportCases(
     const steps=cases.flatMap(c=>c.steps);
     return [{
       id,model:report.model,mode:report.mode,build,
+      ...(report.researchMode?{researchMode:report.researchMode}:{}),
       fixtureHash:fixtureHash(scenario),grade:caseGrade(cases,scenario.steps.length,report.attempts),
       runId:report.runId,at:report.finishedAt,repetitions:report.attempts,executed:cases.length,
       checksPassed:steps.filter(s=>s.pass).length,checksTotal:steps.length,
@@ -82,6 +85,7 @@ export function parseCaseRecords(input:unknown):BrainCaseRecord[]{
     return !!r&&typeof r==="object" &&
       typeof r.id==="string"&&/^[a-z0-9-]{1,90}$/.test(r.id) &&
       (r.mode==="routing"||r.mode==="live") &&
+      (r.researchMode===undefined||r.researchMode==="simple"||r.researchMode==="strict") &&
       typeof r.model==="string"&&r.model.length<=150 &&
       typeof r.build==="string"&&r.build.length<=150 &&
       typeof r.fixtureHash==="string"&&/^[0-9a-f]{8}$/.test(r.fixtureHash) &&
@@ -101,7 +105,8 @@ export function mergeCaseRecords(
   const items=[...updates,...prior];
   const seen=new Set<string>();
   return items.filter(record=>{
-    const key=record.id+"|"+record.mode+"|"+record.model;
+    const key=record.id+"|"+record.mode+"|"+record.model+"|"+
+      (record.mode==="live"?(record.researchMode??"strict"):"routing");
     if(seen.has(key))return false;
     seen.add(key);
     return true;
@@ -110,7 +115,8 @@ export function mergeCaseRecords(
 export function statusForScenario(
   scenario:EvalScenario,records:ReadonlyArray<BrainCaseRecord>,env:BrainCaseEnvironment
 ):BrainCaseView{
-  const record=records.find(r=>r.id===scenario.id&&r.mode===env.mode&&r.model===env.model)??null;
+  const record=records.find(r=>r.id===scenario.id&&r.mode===env.mode&&r.model===env.model &&
+    (env.mode!=="live" || (r.researchMode??"strict")===(env.researchMode??"strict")))??null;
   if(!record)return {id:scenario.id,status:"untested",previous:null,record:null};
   const prior=record.grade==="review"&&record.reviewed ? record.reviewed:record.grade;
   const stale=record.build!==env.build||record.fixtureHash!==fixtureHash(scenario);

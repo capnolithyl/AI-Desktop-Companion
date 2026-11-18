@@ -37,15 +37,19 @@ function saveCaseRecords(records:BrainCaseRecord[]){
   try{localStorage.setItem(CASE_KEY,JSON.stringify(records))}catch{/* retained in this session */}
   setStatus({});
 }
-export function brainEvalEnvironment(mode:EvalMode,model:string):BrainCaseEnvironment{
-  return {mode,model,build:BRAIN_EVAL_BUILD};
+export function brainEvalEnvironment(mode:EvalMode,model:string,
+  researchMode?:"simple"|"strict"):BrainCaseEnvironment{
+  return {mode,model,build:BRAIN_EVAL_BUILD,
+    ...(mode==="live"&&researchMode?{researchMode}:{})};
 }
-export function reviewBrainEvalScenario(id:string,mode:EvalMode,model:string,decision:"passed"|"failed"){
+export function reviewBrainEvalScenario(id:string,mode:EvalMode,model:string,
+  decision:"passed"|"failed",researchMode?:"simple"|"strict"){
   if(status.phase==="running")throw new Error("Cannot review while a test run is active");
   const scenario=catalog.get(id);
   if(!scenario)throw new Error("Unknown scenario");
   const records=getBrainEvalCaseRecords();
-  const item=statusForScenario(scenario,records,brainEvalEnvironment(mode,model));
+  const item=statusForScenario(scenario,records,brainEvalEnvironment(mode,model,
+    researchMode??report?.researchMode));
   if(item.status==="stale")throw new Error("Rerun this scenario for the current build before reviewing it");
   if(!item.record || item.record.grade!=="review")
     throw new Error("Only pending conversational reviews can be marked by hand");
@@ -60,6 +64,7 @@ import {
 
 export type BrainEvalRequest = {
   mode: EvalMode;
+  researchMode?:"simple"|"strict";
   repetitions: number;
   scenarioIds: string[];
   /** Optional Ollama model sweep. Each model receives independent fresh scenarios. */
@@ -292,9 +297,15 @@ async function executeOne(
         thinkingRequested:
           shouldUseLocalThinking(settings.reasoningMode,last,settings.model,replyEffort),
         searxngEndpoint:settings.searxngEndpoint,contextWindow:settings.contextWindow,
-        structuredResearch:!!webRequest?.autoSearch && settings.structuredResearch
+        researchMode:request.researchMode??settings.researchMode,
+        structuredResearch:!!webRequest?.autoSearch &&
+          (request.researchMode??settings.researchMode)==="strict"
       }});
-      const review=reviewResearchCompletion(result.content.trim(),result.sources??[],result.researchAudit);
+      // The Simple experiment exposes the model's sourced answer to the
+      // reviewer; Strict retains the existing lexical post-generation gate.
+      const review=(request.researchMode??settings.researchMode)==="strict"
+        ? reviewResearchCompletion(result.content.trim(),result.sources??[],result.researchAudit)
+        : null;
       return {text:review?.text??result.content.trim(),modelUsed:result.modelUsed??settings.model,
         stats:result.stats??undefined,
         webExecution:{query:result.searchQuery??null,
@@ -327,6 +338,7 @@ async function executeOne(
   };
   const result=await runBrainEvaluation({
     mode:request.mode,model:settings.model,build:BRAIN_EVAL_BUILD,buildInfo:BUILD_INFO,
+    researchMode:request.researchMode??settings.researchMode,
     scenarios,repetitions:request.repetitions,
     signal:controller.signal,...(request.mode==="live"?{infer,planWeb,previewMemory,liveWeb:true}:{}),
     onProgress:(done,_total,label)=>setStatus({done:progressOffset+done,

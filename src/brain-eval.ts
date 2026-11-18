@@ -137,6 +137,7 @@ export type EvalCaseResult = {
 import type { BuildInfo } from "./build-info";
 export type EvalReport = {
   version:1; runId:string; startedAt:string; finishedAt:string;
+  researchMode?:"simple"|"strict";
   mode:EvalMode; model:string; attempts:number; scenarios:string[];
   // Recording simulated vs actual conditions prevents misleading scoreboards.
   environment:"isolated-synthetic"|"isolated-synthetic+live-public-web";
@@ -172,6 +173,7 @@ export type EvalOptions = {
   mode:EvalMode;
   repetitions:number;
   model:string;
+  researchMode?:"simple"|"strict";
   build?:string;
   buildInfo?:BuildInfo;
   scenarios:ReadonlyArray<EvalScenario>;
@@ -692,6 +694,7 @@ export async function runBrainEvaluation(options:EvalOptions):Promise<EvalReport
   const report:EvalReport={
     version:1,runId:"eval-"+Date.now()+"-"+Math.random().toString(36).slice(2,7),
     startedAt:new Date().toISOString(),finishedAt:"",mode:options.mode,model:options.model,
+    ...(options.researchMode?{researchMode:options.researchMode}:{}),
     attempts:Math.max(1,Math.min(5,Math.trunc(options.repetitions))),
     scenarios:options.scenarios.map(s=>s.id),
     environment:options.mode==="live"&&options.liveWeb
@@ -859,7 +862,8 @@ export async function runBrainEvaluation(options:EvalOptions):Promise<EvalReport
       // Never present an unobserved search decision as passing a behavioral test.
       // Fast mode deliberately cannot run the optional model planner.
       const reviewRequired=(options.mode==="live" &&
-        (!!step.expect.conversationGoal || !hasFactualAnswerCheck || qualityFlags.length>0)) ||
+        (!!step.expect.conversationGoal || !hasFactualAnswerCheck || qualityFlags.length>0 ||
+          (options.researchMode==="simple" && observedQuery))) ||
         (expectedWeb!==null && webPass===null) || audit?.status==="partial" || audit?.status==="attributed";
       const memoryPass=missing.length===0 && unexpected.length===0;
       // This checks only how many structurally supported new facts the REAL
@@ -991,6 +995,7 @@ export function brainEvalMarkdown(report:EvalReport):string {
     "",
     "Run: "+report.runId+" • "+report.finishedAt,
     "Mode: "+report.mode+" • Model: "+report.model+" • Attempts: "+report.attempts,
+    ...(report.researchMode?["Web interpretation: "+report.researchMode+" (requires human review)"]:[]),
     ...(report.build ? ["App build: "+report.build] : []),
     ...(report.buildInfo ? [
       "Desktop version: "+report.buildInfo.version,
