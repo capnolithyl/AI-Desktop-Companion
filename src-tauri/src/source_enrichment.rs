@@ -69,6 +69,14 @@ fn site_identity_hint(host:&str,terms:&[String])->i32 {
         terms.iter().any(|term|term==parts[0]) {return 18}
     if parts.len()>1 && parts.iter().all(|part|
         part.len()>=3 && terms.iter().any(|term|term==part)) {return 18}
+    // A publisher sometimes joins its name with another word in the domain,
+    // e.g. samplecloud.com. This is ONLY a reason to read a candidate page,
+    // not evidence that the domain really belongs to that publisher.
+    if parts.len()==1 && terms.iter().any(|term|term.len()>=4 &&
+        label.strip_prefix(term).is_some_and(|suffix|
+            (3..=12).contains(&suffix.len()) && suffix.chars().all(|c|c.is_ascii_alphabetic()))) {
+        return 12;
+    }
     0
 }
 
@@ -92,11 +100,23 @@ fn source_score(item: &SearchResult, host: &str, terms: &[String]) -> i32 {
     let institutional = if [".gov", ".edu", ".mil"].iter().any(|suffix| host.ends_with(suffix)) {
         8
     } else { 0 };
+    // Prefer actually reading a release ledger over yet another historical
+    // summary when a release/version question is being investigated.
+    // The URL shape is a discovery hint, not a claim-verification rule.
+    let about_releases=terms.iter().any(|term|matches!(term.as_str(),
+        "release"|"releases"|"released"|"version"|"versions"|"update"|"updates"));
+    let release_ledger=if about_releases {
+        reqwest::Url::parse(&item.url).ok().is_some_and(|url|
+            url.path_segments().is_some_and(|mut parts|
+                parts.any(|part|matches!(part.to_ascii_lowercase().as_str(),
+                    "changelog"|"releases"|"release-notes"|"announcements"))))
+    } else {false};
     score_text(&item.title, terms, false) * 2
         + score_text(&item.content, terms, true)
         + institutional
         + site_identity_hint(host,terms)
         + url_topic_hint(&item.url,terms)
+        + if release_ledger {10} else {0}
 }
 
 /// Pick relevant passages rather than an arbitrary first 400 characters.
@@ -228,6 +248,21 @@ mod tests {
             source_score(&aggregator,"videos.example.com",&terms));
         let picked=choose_page_candidates(&[aggregator,site],"Latest Aurora Studio release status");
         assert!(picked.contains(&1),"directly relevant publisher-like domain should get read");
+    }
+    #[test]
+    fn fetches_recent_publisher_release_ledger_before_generic_timeline() {
+        let general=result("Aurora Timeline and Model Releases",
+            "https://archive.example.net/aurora/timeline",
+            "Aurora models, releases and updates from 2021 through 2026.");
+        let software=result("Aurora Code SDK release",
+            "https://github.com/Aurora/code/releases",
+            "Aurora SDK update from November 2026.");
+        let official=result("Model releases - AuroraCloud",
+            "https://docs.auroracloud.example/changelog/models",
+            "Recently updated Aurora models in November 2026.");
+        assert_eq!(site_identity_hint("docs.auroracloud.example",&topic_terms("latest Aurora releases")),12);
+        let chosen=choose_page_candidates(&[general,software,official],"latest Aurora releases");
+        assert!(chosen.contains(&2),"read the timely publisher ledger, not just third-party summaries");
     }
     #[test]
     fn page_fetch_selection_spreads_two_slots_across_domains(){

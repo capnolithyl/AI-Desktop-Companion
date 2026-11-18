@@ -59,7 +59,7 @@ fn match_topic<'a>(
 
 // A family name can have a numeric model suffix without a word boundary
 // (e.g. Qwen3.5 versus Qwen). Do not accept alphabetic partial names.
-fn matches_term(wanted:&str, actual:&str)->bool {
+pub(crate) fn matches_term(wanted:&str, actual:&str)->bool {
     wanted==actual || (wanted.chars().last().is_some_and(|c|c.is_alphabetic())
         && actual.starts_with(wanted)
         && actual[wanted.len()..].chars().next().is_some_and(|c|c.is_ascii_digit()))

@@ -3,6 +3,13 @@ use std::collections::{HashMap, HashSet};
 
 const MAX_PASSAGE: usize = 500;
 
+/// Reuse the same numeric-version family matching as web result ranking.
+/// "Qwen" may match "Qwen4", but "Cora" must not match "Coral".
+fn count_matches(expected:&HashSet<String>, actual:&HashSet<String>)->usize {
+    expected.iter().filter(|term|actual.iter().any(|word|
+        crate::source_priority::matches_term(term,word))).count()
+}
+
 fn terms(text: &str) -> HashSet<String> {
     let prose=text.split_whitespace().filter(|word| !word.contains("://") && !word.contains("]("))
         .collect::<Vec<_>>().join(" ").to_lowercase();
@@ -57,9 +64,10 @@ pub(crate) fn select<'a>(text: &'a str, question: &str, max_items: usize, max_ch
         for part in units(line) {
             if seen.insert(part) {
                 let actual = terms(part);
-                let hits: Vec<_> = wanted.intersection(&actual).cloned().collect();
-                let salience=title.intersection(&actual).count();
-                candidates.push((part, hits, heading.intersection(&wanted).count(), salience));
+                let hits: Vec<_> = wanted.iter().filter(|term|actual.iter().any(|word|
+                    crate::source_priority::matches_term(term,word))).cloned().collect();
+                let salience=count_matches(&title,&actual);
+                candidates.push((part, hits, count_matches(&wanted,&heading), salience));
             }
         }
     }
@@ -110,6 +118,21 @@ mod tests {
         assert_eq!(select(&text,"calibration",1,120),["A removable resistor sets the offset."]);
         let line=format!("{} The gasket seals the optical tube.", "Introductory details. ".repeat(400));
         assert_eq!(select(&line,"gasket",1,120),["The gasket seals the optical tube."]);
+    }
+
+    #[test]
+    fn versioned_model_name_matches_family_without_alphabetic_prefix_collision() {
+        let document=concat!(
+            "August 2, 2026: Orion3 is the previous model family.\n",
+            "November 16, 2026: Orion4-Max is the newly released Orion model.\n",
+            "Another old article mentions Coralline, not Cora.\n");
+        let selected=select(document,"latest released Orion model",1,160);
+        assert_eq!(selected.len(),1);
+        assert!(selected[0].contains("Orion4-Max"));
+        let unrelated=select("Coralline reefs cover the region.","Cora",1,120);
+        assert_eq!(unrelated,["Coralline reefs cover the region."],
+            "with no matching passage, retain source text rather than invent evidence");
+        assert_eq!(count_matches(&terms("Cora"),&terms("Coralline")),0);
     }
 
     #[test]

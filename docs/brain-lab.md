@@ -912,3 +912,31 @@ Manual verification: run Simple with Qwen3.5:9b for Brain Lab 20,21,84 twice,
 then independently review source numbers, dates, release attributions,
 natural style, and end-to-end usefulness. Do not grade factual correctness
 from mechanical pass counters alone.
+
+## v0.9.53 Simple source selection: versioned terms and primary release ledgers
+
+From the v0.9.52 Live Qwen3.5:9b run of scenarios 20,21,84 x2, all 8
+turns executed search and passed mechanically, but manual review found
+that #20 AMD follow-ups still attributed historical features to the
+latest llama.cpp release; #21 missed the newer flagship release; and
+#84 gave a wrong latest model in one of its two repeats. The primary
+upstream GitHub release selection in #20 was consistently improved.
+
+The passage selector now shares generic numeric-family term matching
+with the web search ranker: a query for an alphabetic family such as
+Orion can match a numeric release such as Orion4, but not alphabetic
+substring collisions. This improves passage selection in long official
+version histories without new model calls.
+
+When deciding which two public webpages to read, a brand-compound
+publisher-like domain label and release-ledger URL paths receive
+*bounded soft priority*. This is only a decision about which public
+page to READ, not an assertion of official authorship, recency, or
+truth. Source URL security, two-page budget, model-generated final
+answer and Simple/Strict separation are unchanged.
+
+Next independently reviewed Live comparison: Qwen3.5:9b, Simple,
+scenarios 20,21,84, two repeats each. Watch specifically for current
+release ledger evidence, citation accuracy and contamination of
+version-specific changes by historical timelines. Do not declare the
+mechanical passes to be factual validation.
