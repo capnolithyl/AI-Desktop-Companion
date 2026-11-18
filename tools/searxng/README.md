@@ -4,43 +4,54 @@ Mikan uses **your own local SearXNG container**, with no paid search API account
 
 All incoming traffic is bound to **127.0.0.1:8888**. Do not forward this port on your router or expose it publicly.
 
-## Search engine health after repeated Live tests (November 2026)
+## Search engine health and controlled Yahoo test (November 17, 2026)
 
-A successful local search request proves the Docker endpoint is reachable,
-but upstream engines can independently block or rate-limit repeated queries.
-For example, a manual query returned 46 results, with Brave supplying 26 and
-Google CSE 20, even while the logs showed repeated DuckDuckGo CAPTCHAs,
-Wikidata timeouts, and intermittent Brave / Google CSE rate limiting.
+The local Docker service can be healthy even when the upstream search engines
+are not. The Nov 17 live Brain Lab runs revealed repeatable provider failures:
+Brave and Google CSE returned `too many requests`, Qwant and Google returned
+`access denied`, Yep returned an HTTP error, and Bing silently returned
+unrelated news/football homepages for Qwen-release queries.
 
-The version-controlled config/settings.yml keeps these two proven providers,
-removes DuckDuckGo and Wikidata from the default engine list, and enables Bing
-and Qwant as **unverified alternatives**. Those alternatives can also be
-rate-limited on individual networks. Mikan's Rust search client additionally
-reserves outgoing local SearXNG request starts at least three seconds apart
-per desktop process to reduce public-provider bursts. That does not circumvent
-CAPTCHAs or guarantee unlimited free searches.
+The owner tested Yahoo in isolation using `!yh` on three topics: Qwen releases,
+llama.cpp releases, and latest official Qwen model. It returned relevant pages,
+including the official llama.cpp GitHub releases page, without engine errors.
 
-**Applying configuration after a GitHub or remote-browser code update:**
-the config directory is volume-mounted into Docker, but the browser
-"Update & restart" action only rebuilds/restarts Mikan, **not** SearXNG.
-After the update completes, run from any Windows PowerShell:
+**Current controlled experiment:** `config/settings.yml` uses
+`use_default_settings.engines.keep_only: [yahoo]`, with Yahoo enabled. This
+removes noisy/failing engines for a reproducible Brain Lab comparison, but
+it also creates a single point of failure. The goal is to measure retrieval
+quality independently of the LLM before choosing a durable multi-provider
+strategy. Yahoo search results are not themselves proof of a latest release.
+
+**Applying configuration after the browser's GitHub "Update & restart":**
+the config directory is bind-mounted into Docker. That button updates Mikan
+but **does not restart SearXNG**. After updating, run in Windows PowerShell:
 
 ```powershell
 docker restart mikan-searxng
-$r = Invoke-RestMethod 'http://127.0.0.1:8888/search?q=Python%20programming&format=json'
-"Results: $($r.results.Count)"
-$r.results | Group-Object engine | Sort-Object Count -Descending | Select-Object Count, Name
-$r.unresponsive_engines | Format-List
-docker logs --tail 40 mikan-searxng
+Start-Sleep -Seconds 3
+
+foreach ($query in @('latest llama.cpp release', 'latest officially released Qwen model')) {
+    $q = [uri]::EscapeDataString($query)
+    $r = Invoke-RestMethod "http://127.0.0.1:8888/search?q=$q&format=json"
+    Write-Host "`n=== $query ==="
+    $r.results | Select-Object -First 5 title, engine, url | Format-Table -AutoSize
+    $r.unresponsive_engines
+    Start-Sleep -Seconds 4
+}
 ```
 
-Restart the **existing** container only, without recreating it or modifying
-the secret/environment. Allow a normal restart before sending test queries.
-A nonzero result count is evidence the search itself worked; engine names
-and errors identify which providers contributed or failed. Retry a handful
-of different queries with some spacing, not a full 81-scenario Brain Lab run,
-until real results persist across requests. If Bing/Qwant are unreliable,
-remove or disable them after inspecting the actual engine errors.
+Verify the returned results have `engine=yahoo` and are actually relevant,
+not merely nonempty. Then run a **focused** Qwen Live Brain Lab #20, #21
+and #84 twice, rather than immediately running all models/scenarios.
+The #20 planner currently calls the entity `Vulkan llama.cpp`; this separate
+entity-identification issue may still make that scenario fail even with Yahoo.
+
+If the engine stops returning meaningful results, inspect
+`docker logs --tail 60 mikan-searxng`. Do not interpret zero upstream results
+as a model reasoning regression. The Rust search client reserves request
+starts at least three seconds apart per desktop process, which reduces bursts
+but cannot guarantee a search engine will remain accessible.
 
 ## First-time setup
 

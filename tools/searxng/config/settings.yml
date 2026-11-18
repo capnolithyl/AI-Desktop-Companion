@@ -1,17 +1,14 @@
-# Private single-PC instance; retain upstream defaults except consistently failing engines.
-# The Nov 15-16 live tests saw repeated CAPTCHA from DuckDuckGo and timeouts
-# from Wikidata. Keep Brave + Google CSE, the two confirmed working providers.
-# Bing and Qwant are fallback engines to evaluate on the user's own connection.
+# Temporary single-provider isolation for live Brain Lab research testing.
+# Yahoo was the only verified relevant engine for all three Nov 17 release probes.
+# Other upstream engines returned unrelated pages or rate-limit/access errors.
+# This is not a permanent redundancy strategy; reassess after live testing.
 use_default_settings:
   engines:
-    remove:
-      - duckduckgo
-      - wikidata
+    keep_only:
+      - yahoo
 
 engines:
-  - name: bing
-    disabled: false
-  - name: qwant
+  - name: yahoo
     disabled: false
 
 general:
