@@ -127,72 +127,86 @@ fn asks_recent(topic:&str)->bool{
     topic.to_ascii_lowercase().split(|c:char|!c.is_ascii_alphanumeric())
         .any(|word|matches!(word,"latest"|"newest"|"recent"|"current"))
 }
+/// Keep event descriptions attached to their own headings within each date.
+/// This prevents an unrelated release under the same day from donating its
+/// features to the requested subject.
+fn subject_in_entry(entry:&str, focus:&[String])->bool{
+    if focus.is_empty(){return true}
+    let lower=entry.to_ascii_lowercase();
+    let actual:Vec<String>=lower.split(|c:char|!c.is_ascii_alphanumeric())
+        .filter(|word|word.len()>=2).map(str::to_owned).collect();
+    focus.iter().any(|expected|actual.iter().any(|word|
+        crate::source_priority::matches_term(expected,word)))
+}
 fn dated_source_front(page:&str,topic:&str)->String{
     if !asks_recent(topic){return String::new()}
-    let mut sections:Vec<(u32,String)>=Vec::new();
-    let mut current:Option<u32>=None;
-    let mut body=String::new();
+    // Capture actual date-group boundaries rather than treating an entire
+    // changelog as one bag of terms. This works for any dated topic, not only
+    // model releases.
+    let mut sections:Vec<(u32,String,String)>=Vec::new();
+    let mut current:Option<(u32,String,String)>=None;
     for line in page.lines().map(str::trim).filter(|line|!line.is_empty()){
         if let Some(date)=crate::passages::date_heading_key(line){
-            if let Some(previous)=current{
-                sections.push((previous,std::mem::take(&mut body)));
+            if let Some(old)=current.take(){sections.push(old)}
+            current=Some((date,line.trim_start_matches('#').trim().to_owned(),String::new()));
+        }else if let Some((_,_,body))=current.as_mut(){
+            if body.chars().count()<10_000{
+                if !body.is_empty(){body.push('\n')}
+                body.push_str(line);
             }
-            current=Some(date);
-            body.push_str(line.trim_start_matches('#').trim());
-        }else if current.is_some() && body.chars().count()<1400{
-            body.push('\n');
-            body.push_str(line);
         }
     }
-    if let Some(date)=current{sections.push((date,body))}
+    if let Some(last)=current{sections.push(last)}
     if sections.is_empty(){return String::new()}
-    // Ignore generic query words when finding the named subject inside
-    // sections. E.g. a publisher-wide model ledger contains unrelated models
-    // on the same day. Versioned family names use shared numeric-prefix rules.
     let focus:Vec<String>=topic_terms(topic).into_iter().filter(|word|
         !matches!(word.as_str(),"release"|"releases"|"released"|"model"|"models"|
             "version"|"versions"|"official"|"officially"|"software"|
             "update"|"updates"|"published"|"announcement")).collect();
-    let relevant=|body:&str|focus.is_empty()||{
-        let actual:Vec<String>=body.to_ascii_lowercase()
-            .split(|c:char|!c.is_ascii_alphanumeric())
-            .filter(|word|word.len()>=2).map(str::to_owned).collect();
-        focus.iter().any(|expected|actual.iter().any(|word|
-            crate::source_priority::matches_term(expected,word)))
-    };
-    sections.retain(|(_,body)|relevant(body));
-    // Prefer the newest dated source section, even when an older paragraph
-    // contains more query words. This is a ranking choice, not a truth claim.
+    // Date ordering is an evidence-presentation hint, not certification of
+    // the source's identity or a claim that this is the globally latest item.
     sections.sort_by(|a,b|b.0.cmp(&a.0));
     let mut front=String::new();
-    for (_,section) in sections.into_iter().take(2){
-        let selection:String=section.chars().take(650).collect();
+    let mut selected_dates=0usize;
+    for (_, date_label, body) in sections {
+        // Each ###/#### heading owns the following text until the next
+        // sibling heading or date. Separate products must not share features.
+        let mut entries=Vec::new();
+        let mut entry=String::new();
+        for line in body.lines(){
+            if (line.starts_with("### ")||line.starts_with("#### "))&&!entry.is_empty(){
+                entries.push(std::mem::take(&mut entry));
+            }
+            if !entry.is_empty(){entry.push('\n')}
+            entry.push_str(line);
+        }
+        if !entry.is_empty(){entries.push(entry)}
+        let mut group=String::new();
+        for part in entries.into_iter().filter(|item|subject_in_entry(item,&focus)){
+            let snippet:String=part.chars().take(690).collect();
+            if group.chars().count()+snippet.chars().count()+2>820 {break}
+            if !group.is_empty(){group.push_str("\n\n")}
+            group.push_str(&snippet);
+        }
+        if group.is_empty(){continue}
+        let proposed=format!("{date_label}\n{group}");
+        if front.chars().count()+proposed.chars().count()+2>1650 {break}
         if !front.is_empty(){front.push_str("\n\n")}
-        front.push_str(&selection);
+        front.push_str(&proposed);
+        selected_dates+=1;
+        if selected_dates==2 {break}
     }
     if front.is_empty(){String::new()}else{
         format!("{DATED_SOURCE_PREFIX}\n{front}")
     }
 }
 
-/// Preserve the newest dated section on chronological release ledgers, then
-/// supplement it with the strongest topic passages. The source author and
-/// original chronology remain visible instead of flattening all headings.
-pub(crate) fn focused_page_excerpt(page: &str, topic: &str) -> String {
-    let mut front=dated_source_front(page,topic);
-    if front.is_empty(){
-        return crate::passages::select(page,topic,18,MAX_SOURCE_EXCERPT_CHARS).join("\n\n");
-    }
-    let remaining=MAX_SOURCE_EXCERPT_CHARS.saturating_sub(front.chars().count()+2);
-    let ranked=crate::passages::select(page,topic,18,remaining);
-    for part in ranked{
-        if front.contains(part){continue}
-        let cost=part.chars().count()+2;
-        if front.chars().count()+cost>MAX_SOURCE_EXCERPT_CHARS{continue}
-        front.push_str("\n\n");
-        front.push_str(part);
-    }
-    front
+/// For dated source entries, their own section boundaries and chronology
+/// ARE the relevant excerpt. Appending high-scoring fragments from unrelated
+/// sections would falsely attribute capabilities to the neighboring release.
+pub(crate) fn focused_page_excerpt(page:&str,topic:&str)->String{
+    let front=dated_source_front(page,topic);
+    if !front.is_empty(){return front}
+    crate::passages::select(page,topic,18,MAX_SOURCE_EXCERPT_CHARS).join("\n\n")
 }
 
 /// Choose bounded, domain-diverse pages to read using topic relevance

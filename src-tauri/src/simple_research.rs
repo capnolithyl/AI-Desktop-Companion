@@ -23,8 +23,23 @@ VOICE AND USEFULNESS: Follow the owner-configured system prompt, personality and
 /// Short, relevant excerpts fit a 9B model context without passing huge HTML.
 pub(crate) fn evidence_data(sources:&[SearchResult],question:&str)->String{
     let mut data=String::from(
-        "UNTRUSTED PUBLIC SOURCE MATERIAL. Citations refer to the numbered URLs below.\n");
-    for (i,source) in sources.iter().take(MAX_SOURCES).enumerate() {
+        "UNTRUSTED PUBLIC SOURCE MATERIAL. Citations refer to the original numbered URLs below, even when dated evidence is presented first.\n");
+    // The bounded source list shown by the app is the citation authority.
+    // Present newly dated release entries first so a smaller local model does
+    // not anchor on an older aggregator's 'latest' claim. DO NOT renumber
+    // sources: UI citations remain tied to their original source indexes.
+    let mut order:Vec<usize>=(0..sources.len().min(MAX_SOURCES)).collect();
+    order.sort_by_cached_key(|&index|{
+        let item=&sources[index];
+        let newest=if item.engine=="webpage excerpt" &&
+            item.content.starts_with("RECENT DATED SOURCE ENTRIES"){
+            item.content.lines().find_map(crate::passages::date_heading_key)
+                .unwrap_or(0)
+        }else{0};
+        (std::cmp::Reverse(newest),index)
+    });
+    for i in order {
+        let source=&sources[i];
         // Enriched dated release ledgers already contain a chronological
         // source excerpt. Do not re-rank it by keyword overlap: that could
         // drop the newest release while retaining an older preview.
@@ -117,6 +132,21 @@ mod tests {
         assert!(rules.contains("never cite a source for a claim it does not actually support"));
         assert!(rules.contains("Do not invent additional variants"));
         assert!(rules.contains("owner-configured system prompt"));
+    }
+    #[test]
+    fn current_dated_page_is_read_before_old_search_snippets_without_renumbering(){
+        let old=source("Old summary","2026",
+            "The older Orion3 model was latest according to an earlier article.");
+        let mut dated=source("Official dated releases","2026",
+            "RECENT DATED SOURCE ENTRIES (verbatim page chronology, not independently verified):\nNovember 16, 2026\n### Orion4\nOrion4 is the newly released general purpose model.\n\nNovember 11, 2026\n### Orion4-Preview\nOrion4-Preview is the earlier experimental build.");
+        dated.engine="webpage excerpt".into();
+        let evidence=evidence_data(&[old,dated],"latest officially released Orion model");
+        assert!(evidence.find("[2] Official dated releases").unwrap()
+            <evidence.find("[1] Old summary").unwrap(),"{evidence}");
+        assert!(evidence.contains("[2] Official dated releases"));
+        assert!(evidence.contains("[1] Old summary"));
+        assert!(evidence.contains("November 16, 2026"));
+        assert!(evidence.contains("Orion4 is the newly released"));
     }
     #[test]
     fn static_older_source_is_not_excluded_by_age(){

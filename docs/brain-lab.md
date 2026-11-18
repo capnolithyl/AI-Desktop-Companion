@@ -1163,3 +1163,48 @@ Run qwen3.5:9b Live Simple cases 20,21,84 twice, optionally
 with Mikanify on to compare original vs final. Verify current
 first-party evidence reaches both production and Brain Lab before
 changing anything else.
+
+## v0.9.61 Source chronology, attribution, and reading order
+
+The v0.9.60 Qwen3.5:9b Live Simple + Mikanify run (#20/#21/#84 x2)
+confirms the v0.9.59 reader fix succeeded: the official model
+changelog now reaches Mikan with the November 16 production
+qwen4-max entry and November 11 qwen4-max-preview. Yet Qwen
+still twice labels the newer release as a preview in #84 and treats
+the older Qwen3.8 generation as the answer. #21 also incorrectly
+attributes unrelated dialect/poetry features to Qwen4 entries.
+
+The remaining defect is in the general SOURCE PRESENTATION:
+the HTML reader accepted only p/li and short date headings from
+div/span, losing prose inside paragraph-like leaf div/span tags.
+The dated excerpt then combined multiple distinct ### releases
+under a date and appended unrelated highly ranked paragraphs.
+The answer model additionally saw older aggregator snapshots BEFORE
+the primary, newer dated changelog, despite the citations being
+correctly numbered.
+
+v0.9.61 makes targeted SHARED PRODUCTION + BRAIN LAB repairs:
+- The HTML reader retains bounded, paragraph-like leaf div/span
+  descriptions inside article/main without copying nested layout
+  containers or nav, while preserving date and short model headings.
+  Reader cache key advances to v6 to refresh old extracts.
+- Dated passage extraction groups headings and their own descriptive
+  text under each date, selects the two most recent relevant date
+  groups, and excludes unrelated sibling products. It no longer
+  appends disconnected paragraphs from other sections and claims
+  they belong to the preceding release.
+- Simple research evidence presents dated page evidence before older
+  search snippets, but NEVER renumbers source labels. Existing [n]
+  references still index the original result list, keeping the
+  desktop citation UI correct.
+
+This uses no Qwen-specific matching, web-search change, additional
+model pass, regex intent routing, or private data. Mikanify is
+unchanged and stays optional. Added Rust regression tests with
+fictional names/dates, including raw HTML leaf-div descriptions
+through enrichment and numbered evidence, plus preservation of
+original numeric citation IDs when evidence is presented by date.
+The 8/8 suite route result is insufficient for factual correctness.
+After green CI, rerun the 3 cases x2 with original/final answers
+and source excerpts to verify that the latest release is named
+without attributing unrelated sibling features or older fixes.

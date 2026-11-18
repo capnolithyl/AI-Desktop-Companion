@@ -74,7 +74,7 @@ fn cache_path(app: &tauri::AppHandle, url: &str) -> Result<PathBuf, String> {
         .join("web-cache");
     fs::create_dir_all(&folder).map_err(|e| format!("Cannot create web cache: {e}"))?;
     // Older cached pages omitted descriptions and later README sections.
-    let key = format!("{:x}", Sha256::digest(format!("reader-v5:{url}").as_bytes()));
+    let key = format!("{:x}", Sha256::digest(format!("reader-v6:{url}").as_bytes()));
     Ok(folder.join(format!("{key}.json")))
 }
 
@@ -107,16 +107,25 @@ fn extracted_text(html: &str) -> (String, String) {
         let ordinary=!heading.is_empty()||matches!(tag,"p"|"li");
         if !potential_date&&!ordinary {continue}
         let cleaned=if potential_date {
-            // Avoid quadratic work on nested full-page div containers.
-            let words:Vec<_>=node.text().take(8).collect();
-            if words.len()>=8 {continue}
+            // Bound nested wrappers before considering text-bearing elements.
+            let words:Vec<_>=node.text().take(24).collect();
+            if words.len()>=24 {continue}
             words.join(" ").split_whitespace().collect::<Vec<_>>().join(" ")
         }else{
             node.text().collect::<Vec<_>>().join(" ")
                 .split_whitespace().collect::<Vec<_>>().join(" ")
         };
         let is_date=potential_date&&crate::passages::date_heading_key(&cleaned).is_some();
-        if !ordinary&&!is_date {continue}
+        // Some documentation renderers use a leaf div/span for release prose
+        // without a <p>. Accept only bounded prose inside the selected
+        // article/main, not arbitrary ancestor containers or navigation.
+        let leaf_prose=potential_date && !is_date &&
+            (40..=750).contains(&cleaned.chars().count()) &&
+            !node.children().filter_map(scraper::ElementRef::wrap)
+                .any(|child|matches!(child.value().name(),
+                    "div"|"p"|"li"|"ul"|"ol"|"section"|"article"|"table"|
+                    "h1"|"h2"|"h3"|"h4"|"nav"|"main"));
+        if !ordinary&&!is_date&&!leaf_prose {continue}
         // Short model names ("Orion4", "v1.0") are real headings, not noise.
         if cleaned.is_empty()||
             (!is_date&&heading.is_empty()&&cleaned.len()<12)||
@@ -455,6 +464,41 @@ mod tests {
         assert!(text.contains("Hello from the important article."));
         assert!(!text.contains("IGNORE"));
     }
+    #[test]
+    fn html_reader_includes_leaf_div_release_descriptions_but_not_section_wrappers(){
+        let html=concat!(
+            "<html><head><title>Models</title></head><body><article>",
+            "<h1>Latest models</h1>",
+            "<div class='date'>November 16, 2026</div>",
+            "<h3>Orion4</h3>",
+            "<div class='description'>Orion4 is the newest officially launched production model with native image and video understanding.</div>",
+            "<h3>OtherLabs-Speech</h3>",
+            "<div class='description'>An unrelated speech model supports seven dialects and poetry recognition with expanded accents.</div>",
+            "<div class='outer'><div>Other nested container description that should not be copied twice.</div></div>",
+            "<div class='date'>November 11, 2026</div>",
+            "<h3>Orion4-Preview</h3>",
+            "<span class='description'>Orion4-Preview was a preliminary experimental release before the full production launch.</span>",
+            "</article></body></html>");
+        let (_,page)=extracted_text(html);
+        assert!(page.contains("Orion4 is the newest officially launched production"),"{page}");
+        assert!(page.contains("Orion4-Preview was a preliminary experimental"),"{page}");
+        assert_eq!(page.matches("Other nested container description").count(),1,"{page}");
+        let excerpt=crate::source_enrichment::focused_page_excerpt(
+            &page,"latest officially released Orion model");
+        assert!(excerpt.contains("Orion4 is the newest officially launched production"),"{excerpt}");
+        assert!(excerpt.contains("Orion4-Preview was a preliminary experimental"),"{excerpt}");
+        assert!(!excerpt.contains("seven dialects"),"{excerpt}");
+        let result=crate::web_search::SearchResult{
+            title:"Publisher model releases".into(),
+            url:"https://publisher.example/changelog/models".into(),
+            content:excerpt,engine:"webpage excerpt".into(),published_date:None
+        };
+        let evidence=crate::simple_research::evidence_data(
+            &[result],"latest officially released Orion model");
+        assert!(evidence.contains("Orion4 is the newest officially launched production"),"{evidence}");
+        assert!(!evidence.contains("seven dialects"),"{evidence}");
+    }
+
     #[test]
     fn html_dates_in_divs_and_short_model_names_reach_final_answer_context(){
         let html=concat!(
