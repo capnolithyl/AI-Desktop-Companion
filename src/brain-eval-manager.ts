@@ -301,6 +301,9 @@ async function executeOne(
         thinkingRequested:
           shouldUseLocalThinking(settings.reasoningMode,last,settings.model,replyEffort),
         searxngEndpoint:settings.searxngEndpoint,contextWindow:settings.contextWindow,
+        // Budget covers visible and internal thinking tokens; one slow local
+        // inference must never hold an entire benchmark run hostage.
+        maxOutputTokens:1200,generationTimeoutMs:45_000,
         researchMode:request.researchMode??settings.researchMode,
         structuredResearch:!!webRequest?.autoSearch &&
           (request.researchMode??settings.researchMode)==="strict"
@@ -372,7 +375,7 @@ async function executeOne(
     const decision=await planPublicWebTools(question,selectedFacts,async prompt=>
       invoke<string>("condense_local_context",{
         endpoint:settings.endpoint,model:settings.model,prompt,
-        contextWindow:settings.contextWindow,maxOutputTokens:380,timeoutMs:45000,publicToolPlan:true
+        contextWindow:settings.contextWindow,maxOutputTokens:320,timeoutMs:18_000,publicToolPlan:true
       }),{automaticWebEnabled:true,sourcePreferences:settings.sourcePreferences,
         history:previous,relevantUserFacts:selectedFacts,...context});
     return {search:decision.search,query:decision.query,reason:decision.reason,method:decision.method,

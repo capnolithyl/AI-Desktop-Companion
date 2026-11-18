@@ -953,3 +953,17 @@ test("source-matched context does not count as research success when requested f
   assert.equal(step.pass,false);
   assert.ok(step.answerFailures.some(f=>f.includes("partial context")));
 });
+
+test("Brain Lab and desktop send bounded native Ollama generation budgets",()=>{
+  const native=readFileSync(new URL("../src-tauri/src/lib.rs",import.meta.url),"utf8");
+  const desktop=readFileSync(new URL("../src/App.tsx",import.meta.url),"utf8");
+  const manager=readFileSync(new URL("../src/brain-eval-manager.ts",import.meta.url),"utf8");
+  assert.match(native,/fn local_generation_limits\(/);
+  assert.match(native,/options\["num_predict"\]=json!\(limit\)/);
+  assert.match(native,/tokio::time::timeout_at\(deadline,stream\.next\(\)\)/);
+  assert.match(native,/visible_generation_result\(&content,&stats\)\?/);
+  assert.match(desktop,/maxOutputTokens: groundedChapterTurn \? 8192/);
+  assert.match(desktop,/generationTimeoutMs: groundedChapterTurn \? 180_000/);
+  assert.match(manager,/maxOutputTokens:1200,generationTimeoutMs:45_000/);
+  assert.match(manager,/timeoutMs:18_000,publicToolPlan:true/);
+});

@@ -1208,3 +1208,43 @@ The 8/8 suite route result is insufficient for factual correctness.
 After green CI, rerun the 3 cases x2 with original/final answers
 and source excerpts to verify that the latest release is named
 without attributing unrelated sibling features or older fixes.
+
+## v0.9.62 Native Ollama generation budget and Brain Lab watchdog
+
+Live multi-model Brain Lab tests on v0.9.61 found a reproducible
+responsiveness failure despite `ollama ps` reporting 100% GPU model
+placement: one Qwen3.5:9b GitHub followup generated 12,648 tokens with
+no visible answer (197 seconds); Ministral-3:14b ran around 3 tok/s
+for roughly 39 minutes over six repeated scenarios, and some initial
+Gemma4:12b turns also decoded unusually slowly. Full GPU placement
+does not establish optimal throughput; do not assume CPU offloading.
+
+The native local Ollama chat_stream now accepts optional
+`maxOutputTokens` and `generationTimeoutMs` request fields. Both are
+bounded (128..8192 tokens, 10..180 seconds). For compatibility, older
+callers which do not supply them retain their original behavior.
+Ollama `num_predict` counts both visible output and hidden reasoning,
+and an ABSOLUTE generation wall clock deadline covers both the initial
+HTTP response and all streamed chunks. A model streaming internal
+reasoning forever therefore cannot bypass the deadline. A completed
+stream with only empty/whitespace visible content is now an explicit
+error with its generated-token count instead of a falsely successful
+answer. Expiration drops the in-flight request and reports a clear
+error, not an invented partial answer.
+
+Normal desktop chat supplies a 2048 token / 90 second budget with
+higher allowances for deep thinking (3200 / 150s) and long manuscript
+review (8192 / 180s). Brain Lab Live intentionally uses stricter
+1200 token / 45 second per-inference budgets, and its public tool
+planner now has an 18s timeout and 320 output-token maximum instead
+of a 45s/380 ceiling. These are operational safeguards, not new
+intent-routing regexes, extra LLM passes, or semantic correctness
+judgments. Mikanify stays opt-in and unchanged.
+
+Native tests cover upper/lower generation budget clamping and
+rejecting a completed 12000-token thinking-only answer. JS checks
+verify the owner desktop and Brain Lab actually pass their native
+budgets. Next Live Simple Qwen3.5:9b regression should complete much
+faster or surface an explicit failed turn with actionable stats.
+Watch still for empty answers, timeouts and source citations; 8/8
+structural passes are not factual judgments.

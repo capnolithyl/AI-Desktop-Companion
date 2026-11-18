@@ -87,6 +87,12 @@ struct ChatRequest {
     research_general_fallback: bool,
     #[serde(default)]
     thinking_requested: bool,
+    /// Optional native limits on Ollama's entire answer generation (visible
+    /// text AND internal thinking tokens). Old clients remain compatible.
+    #[serde(default)]
+    max_output_tokens: Option<u32>,
+    #[serde(default)]
+    generation_timeout_ms: Option<u64>,
     #[serde(default)]
     searxng_endpoint: String,
     #[serde(default = "default_cache_hours")]
@@ -112,6 +118,19 @@ fn general_knowledge_fallback_allowed(
             item.source_url.is_none() && item.requirements.is_empty() &&
             item.roles.is_empty())
 }
+/// These limits apply to the actual local Ollama response, not web retrieval
+/// or document acquisition. Callers choose stricter limits for Brain Lab.
+fn local_generation_limits(
+    output_tokens:Option<u32>, timeout_ms:Option<u64>
+)->(Option<u32>,Option<Duration>){
+    (output_tokens.map(|count|count.clamp(128,8192)),
+     timeout_ms.map(|ms|Duration::from_millis(ms.clamp(10_000,180_000))))
+}
+fn visible_generation_result(text:&str,stats:&Option<ChatStats>)->Result<(),String>{
+    if !text.trim().is_empty(){return Ok(())}
+    let generated=stats.as_ref().and_then(|s|s.output_tokens).unwrap_or(0);
+    Err(format!("Ollama completed without visible answer text after generating {generated} tokens (possibly internal reasoning). Try Fast reasoning or a larger output budget."))
+}
 fn default_cache_hours() -> u64 { 24 }
 fn default_structured_research() -> bool { true }
 fn strict_research_mode(mode:Option<&str>, legacy_structured:bool)->bool {
@@ -124,6 +143,25 @@ fn strict_research_mode(mode:Option<&str>, legacy_structured:bool)->bool {
 #[cfg(test)]
 mod research_mode_tests {
     use super::*;
+    #[test]
+    fn local_generation_limits_bound_tokens_and_wall_time(){
+        let (tokens,timeout)=local_generation_limits(Some(1200),Some(60_000));
+        assert_eq!(tokens,Some(1200));
+        assert_eq!(timeout,Some(Duration::from_secs(60)));
+        assert_eq!(local_generation_limits(Some(99_999),Some(9_999_999)),
+            (Some(8192),Some(Duration::from_secs(180))));
+        assert_eq!(local_generation_limits(None,None),(None,None));
+    }
+    #[test]
+    fn thought_only_completion_is_an_error_instead_of_a_passing_empty_answer(){
+        assert!(visible_generation_result("answer",&None).is_ok());
+        let stats=Some(ChatStats{output_tokens:Some(12000),
+            prompt_tokens:None,total_duration_ns:None,load_duration_ns:None,
+            prompt_eval_duration_ns:None,eval_duration_ns:None});
+        let error=visible_generation_result("  ",&stats).unwrap_err();
+        assert!(error.contains("12000 tokens"));
+        assert!(error.contains("without visible answer"));
+    }
     #[test]
     fn simple_and_strict_modes_are_explicit_with_backward_compatibility() {
         assert!(!strict_research_mode(Some("simple"),true));
@@ -1219,10 +1257,14 @@ async fn chat_stream_impl(
         "think": request.thinking_requested,
         "keep_alive": "10m"
     });
+    let (output_budget,generation_timeout)=local_generation_limits(
+        request.max_output_tokens,request.generation_timeout_ms);
     let mut options = json!({});
     if let Some(num_ctx) = selected_context {
         options["num_ctx"] = json!(num_ctx);
     }
+    // An Ollama prediction budget counts generated reasoning tokens too.
+    if let Some(limit)=output_budget {options["num_predict"]=json!(limit);}
     // Preserve natural chat, but lower randomness when a visual/spatial
     // observation must be grounded in an image rather than guessed from text.
     if !sources.is_empty() {
@@ -1235,9 +1277,16 @@ async fn chat_stream_impl(
     if options.as_object().is_some_and(|items| !items.is_empty()) {
         payload["options"] = options;
     }
-    let response = client.post(url)
-        .json(&payload)
-        .send().await.map_err(|e| format!("Ollama connection failed: {e}"))?;
+    // One absolute deadline, not an idle/read timeout: a model that streams
+    // thousands of invisible thinking tokens must still stop promptly.
+    let generation_deadline=generation_timeout
+        .map(|limit|tokio::time::Instant::now()+limit);
+    let pending=client.post(url).json(&payload).send();
+    let response=if let Some(deadline)=generation_deadline{
+        tokio::time::timeout_at(deadline,pending).await.map_err(|_|
+            "Ollama generation deadline exceeded before the first response.".to_owned())?
+    }else{pending.await}
+        .map_err(|e|format!("Ollama connection failed: {e}"))?;
 
     if !response.status().is_success() {
         let status = response.status();
@@ -1256,7 +1305,11 @@ async fn chat_stream_impl(
     let mut stats = None;
     let mut finished = false;
 
-    while let Some(result) = stream.next().await {
+    while let Some(result) = if let Some(deadline)=generation_deadline{
+        tokio::time::timeout_at(deadline,stream.next()).await.map_err(|_|
+            format!("Ollama generation exceeded the {}s time limit; response discarded to avoid a stalled or runaway answer.",
+                generation_timeout.expect("deadline has limit").as_secs()))?
+    }else{stream.next().await}{
         let bytes = result.map_err(|e| format!("Ollama stream interrupted: {e}"))?;
         buffer.extend_from_slice(&bytes);
         while let Some(index) = buffer.iter().position(|byte| *byte == b'\n') {
@@ -1284,6 +1337,7 @@ async fn chat_stream_impl(
     if !finished {
         return Err("Ollama closed the stream without a completion response".into());
     }
+    visible_generation_result(&content,&stats)?;
     // The final text is returned as well as streamed so that no event-ordering
     // race can lose the last characters when the frontend removes its listener.
     Ok(ChatCompletion { content, stats, sources, search_query, search_trace, sources_carried_over, research_audit, model_used: request.model.clone(), fallback_reason })

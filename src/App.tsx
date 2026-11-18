@@ -2286,7 +2286,7 @@ export default function App() {
       const plannerWeb:WebToolDecision = await planPublicWebTools(text,liveFacts,
         prompt => invoke<string>("condense_local_context",{
           endpoint:settings.endpoint,model:settings.model,prompt,
-          contextWindow:settings.contextWindow,maxOutputTokens:380,timeoutMs:45000,publicToolPlan:true
+          contextWindow:settings.contextWindow,maxOutputTokens:320,timeoutMs:18_000,publicToolPlan:true
         }),{
           automaticWebEnabled:canPlanPublicWeb,
           sourcePreferences:settings.sourcePreferences,
@@ -2576,6 +2576,13 @@ export default function App() {
           cacheHours: settings.cacheHours,
           contextWindow: settings.contextWindow,
           thinkingRequested: reasoningChoice.enabled,
+          // Normal chat gets a generous guard, with extra room for explicit
+          // deep thinking and longer manuscript replies. These bound Ollama's
+          // full generation, including thinking tokens, not web-tool latency.
+          maxOutputTokens: groundedChapterTurn ? 8192
+            : reasoningChoice.enabled ? 3200 : 2048,
+          generationTimeoutMs: groundedChapterTurn ? 180_000
+            : reasoningChoice.enabled ? 150_000 : 90_000,
           priorSources,
           messages: [
             { role: "system", content: joinAssistantInstructionParts(sharedTurnInstructions, [  selfContext, screenNotes, attachmentNotes, groundedChapterTurn ? "" : remembered.text,
