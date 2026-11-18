@@ -315,7 +315,7 @@ mod tests {
             assert_eq!(current,response);
         }
         let verify=ResearchTask{kind:ResearchKind::Verify,
-            subject:Some("Aurora5-Max".into()),..task};
+            subject:Some("Aurora5-Max".into()),..task.clone()};
         assert!(subject_repair_targets(&response,&verify,&sources,&passages).is_empty());
 
         let mut accurate=response.clone();
