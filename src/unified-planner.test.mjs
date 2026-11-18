@@ -489,6 +489,8 @@ test("research planner instructions ask for the actual comparison goal, not mere
   assert.match(prompt,/actual answer sought/);
   assert.match(prompt,/NOT merely a supporting attribute/);
   assert.match(prompt,/official release/);
+  assert.match(prompt,/GPU backend/);
+  assert.match(prompt,/plural release-list/);
 });
 
 test("document follow-up planning preserves a previously user-authorized public source",async()=>{
