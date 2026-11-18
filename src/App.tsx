@@ -2754,9 +2754,10 @@ export default function App() {
   };
   const remoteStopBrainRef = useRef<()=>void>(()=>{});
   remoteStopBrainRef.current = () => { stopBrainEvaluation(); };
-  const remoteReviewBrainRef = useRef<(id:string,mode:"routing"|"live",decision:"passed"|"failed")=>void>(()=>{});
-  remoteReviewBrainRef.current = (id,mode,decision) =>
-    reviewBrainEvalScenario(id,mode,settings.model,decision);
+  const remoteReviewBrainRef = useRef<(id:string,mode:"routing"|"live",decision:"passed"|"failed",
+    researchMode?:Settings["researchMode"])=>void>(()=>{});
+  remoteReviewBrainRef.current = (id,mode,decision,researchMode) =>
+    reviewBrainEvalScenario(id,mode,settings.model,decision,researchMode);
   const remoteRigRef = useRef<{id: string; revision: number; file: Blob} | null>(null);
   remoteRigRef.current = ikiRig?.file
     ? { id: ikiRig.id, revision: ikiRig.savedAt, file: ikiRig.file } : null;
@@ -2771,7 +2772,9 @@ export default function App() {
   const remoteModelStatus = modelSwitcherStatus(settings, remoteModelReply?.diagnostics, busy, activity);
   const brainCaseRecords=getBrainEvalCaseRecords();
   const routingEnv=brainEvalEnvironment("routing",settings.model);
-  const liveEnv=brainEvalEnvironment("live",settings.model);
+  const liveEnv=brainEvalEnvironment("live",settings.model,settings.researchMode);
+  const liveSimpleEnv=brainEvalEnvironment("live",settings.model,"simple");
+  const liveStrictEnv=brainEvalEnvironment("live",settings.model,"strict");
   remoteSnapshotRef.current = {
     conversationId: activeConversationId,
     model: settings.model,
@@ -2787,10 +2790,14 @@ export default function App() {
     brainEvalCatalog: EVAL_SCENARIOS.map((s,index)=>{
       const routing=statusForScenario(s,brainCaseRecords,routingEnv);
       const live=statusForScenario(s,brainCaseRecords,liveEnv);
+      const liveSimple=statusForScenario(s,brainCaseRecords,liveSimpleEnv);
+      const liveStrict=statusForScenario(s,brainCaseRecords,liveStrictEnv);
       return {id:s.id,number:index+1,label:s.label,group:s.group,turns:s.steps.length,
         states:{
           routing:{status:routing.status,previous:routing.previous,at:routing.record?.at??null},
-          live:{status:live.status,previous:live.previous,at:live.record?.at??null}
+          live:{status:live.status,previous:live.previous,at:live.record?.at??null},
+          liveSimple:{status:liveSimple.status,previous:liveSimple.previous,at:liveSimple.record?.at??null},
+          liveStrict:{status:liveStrict.status,previous:liveStrict.previous,at:liveStrict.record?.at??null}
         }
       };
     }),
@@ -2878,7 +2885,8 @@ export default function App() {
         const data = await response.json() as {
           job?: { id: string; kind?: "send" | "new_chat" | "open_chat" | "switch_model" | "refresh_models" | "start_brain_eval" | "stop_brain_eval" | "review_brain_eval";
             text?: string; conversationId?: string | null; modelChoice?: string;
-            evalOptions?: BrainEvalRequest;evalScenarioId?:string;evalMode?:"live"|"routing";evalDecision?:"passed"|"failed" } | null
+            evalOptions?: BrainEvalRequest;evalScenarioId?:string;evalMode?:"live"|"routing";evalDecision?:"passed"|"failed";
+            evalResearchMode?:Settings["researchMode"] } | null
         };
         if (data.job && !dispatching &&
           (!remoteBusyRef.current || data.job.kind === "stop_brain_eval")) {
@@ -2909,7 +2917,7 @@ export default function App() {
                 remoteStopBrainRef.current();
               else if (job.kind === "review_brain_eval" &&
                 job.evalScenarioId && job.evalMode && job.evalDecision)
-                remoteReviewBrainRef.current(job.evalScenarioId,job.evalMode,job.evalDecision);
+                remoteReviewBrainRef.current(job.evalScenarioId,job.evalMode,job.evalDecision,job.evalResearchMode);
             } catch (error) {
               console.warn("Remote conversation action failed:", error);
             } finally {
