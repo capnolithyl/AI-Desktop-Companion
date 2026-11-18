@@ -1021,3 +1021,39 @@ identical: they still have different authorized memories, test isolation,
 conversation context and model input. It DOES remove unintentional
 differences in their configurable voice source. Mikanify stays opt-in,
 off by default, and its two-pass A/B reports retain both drafts.
+
+## v0.9.57 Brain Lab and production: shared response operational instructions
+
+A new `assistantTurnInstructionParts` builder is used by both desktop chat
+and Brain Lab on every inference turn. It composes the same configured voice
+(including editable system prompt, owner communication preferences, adjustable
+personality and roleplay-aware formatting), personal fact grounding, local
+clock and source freshness instructions, conversational context, reply focus
+and factual-uncertainty guidance. Each caller injects **environment DATA**
+between the same core instruction sections: production's real memories and
+approved documents/images, or Brain Lab's synthetic fixture memories.
+
+Brain Lab no longer adds its own redundant general answer instructions
+("Use the conversation context consistently" and unexecuted-search reminders).
+The latter guidance was moved to the shared builder, so that it also applies
+to production when a planned search has not actually executed. Test-only
+isolation remains: no production memory writes or private integrations.
+
+The existing native `chat_stream` command and shared `simple_research`
+source-selection / numbered evidence rules are used by BOTH runtimes;
+research-mode choices remain independent Brain Lab experiment settings.
+The source-response instruction now explicitly defers tone to the owner's
+custom settings instead of injecting a generic cheerful character.
+
+The existing shared reply-focus guidance was also made persona-neutral:
+it no longer mandates a hardcoded "Mikan" identity, mandatory affection or
+a universal 1-3 sentence length. The adjustable personality prompt now
+defers address, length and follow-ups to the owner's separate, editable
+communication preferences, so a neutral/first-name choice is not overwritten
+by a hidden first-name ban.
+
+This improves instruction parity, not full environment parity. Brain Lab
+still uses synthetic memory retrieval, its own test conversation, local
+model-only mode, and test-specific tool permissions. Results should be
+compared against regular desktop chats with the same model/provider,
+research settings and actual conversational context.

@@ -8,13 +8,11 @@ import type { Settings } from "./storage";
 import { shouldUseLocalThinking } from "./reasoning-mode";
 import { planPublicWebTools, type PublicResearchContext } from "./unified-planner";
 import type { ResearchAudit, ToolPlanningAudit } from "./debug-log";
-import { responseFocusGuidance } from "./conversation-engine";
-import { PERSONAL_DETAIL_GROUNDING_GUIDANCE } from "./personal-grounding";
+import { assistantTurnInstructionParts, joinAssistantInstructionParts } from "./assistant-instructions";
 import { assistantVoiceGuidance } from "./assistant-voice";
 import { roleplayActive } from "./narration-filter";
 import { shouldMikanifyAnswer, type MikanifyResult } from "./mikanify";
 import { reviewResearchCompletion } from "./evidence-verification";
-import { chatRuntimeContext, runtimeContext } from "./runtime-context";
 import { version as APP_VERSION } from "../package.json";
 import { BUILD_INFO } from "./build-info";
 import {
@@ -269,21 +267,23 @@ async function executeOne(
     // Test memories remain synthetic; public sources come from the exact
     // production Rust/SearXNG research flow only when the planner authorizes it.
     const roleplayAllowed=roleplayActive(last,messages.slice(0,-1));
-    const system=[
-      assistantVoiceGuidance(settings,roleplayAllowed),
-      PERSONAL_DETAIL_GROUNDING_GUIDANCE,
-      // Match desktop production: researched answers get the complete live
-      // calendar and source-freshness instructions, ordinary chat stays light.
-      researchQuery ? runtimeContext() : chatRuntimeContext(),
-      responseFocusGuidance(messages.slice(0,-1),last),
-      "ISOLATED BRAIN LAB: This run uses synthetic owner memories and must never write real memories, use private integrations, or contact owner-connected accounts. Public document reads (including public GitHub pages) and SearXNG are available when authorized. Use the numbered evidence supplied for this turn.",
-      "Use the conversation context consistently; do not invent unknown facts about the owner. Resolve ambiguous names from user-established context, never from a guessed interpretation.",
-      researchPlanned && !researchQuery
-        ? "A public search was planned but not executed in this turn. No web results are available. Do not invent confirmed titles, counts, releases or sourced recommendations."
-        : "",
+    // Use the SAME owner-configured voice and operational instructions as
+    // actual desktop chat. Fixture isolation is the only Brain Lab-specific
+    // instruction; real web evidence is still handled by native chat_stream.
+    const sharedTurnInstructions=assistantTurnInstructionParts({
+      settings:{...settings,researchMode:request.researchMode??settings.researchMode},
+      question:last,history:messages.slice(0,-1),
+      allowRoleplay:roleplayAllowed,
+      researchActive:researchPlanned||webRequest?.autoSearch===true,
+      publicWebRequested:webRequest?.autoSearch===true,
+      plannedPublicSearch:!!researchQuery,
+      plannedButNotExecuted:researchPlanned&&!webRequest?.autoSearch
+    });
+    const system=joinAssistantInstructionParts(sharedTurnInstructions,[
+      "ISOLATED BRAIN LAB FIXTURES: User memories in this test are synthetic data. Never write production memories, use private integrations or contact owner-connected accounts. Public tool permissions are enforced by the normal application backend.",
       memory,
       evidence?"Fixture-only, NOT live web evidence: "+evidence:""
-    ].filter(Boolean).join("\n\n");
+    ]);
     try{
       const result=await invoke<{content:string;modelUsed?:string;
         searchQuery?:string|null; sources?:Array<{

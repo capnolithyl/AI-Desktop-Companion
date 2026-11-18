@@ -15,7 +15,7 @@ SOURCE QUALITY: For changing facts, prefer dated original announcements, publish
 TIME AWARENESS: The desktop provides a separate live local date. Interpret an article's latest claim AS OF its own publication, never indefinitely. Publication date is not necessarily the event or release date. Compare dates for the SAME subject and SAME kind of release. Distinguish official upstream from third-party builds, stable from prerelease, hosted from downloadable, plans from completed events, and general-purpose from specialist versions.
 CHANGE ATTRIBUTION: Release histories can combine changes from many versions. When asked if THIS release changed a particular feature, connect the feature to THAT exact release using its release notes or another credible, explicitly dated source. Existing support, other hardware backends or older fixes are not proof of a new change. If the relationship cannot be established, explain what is confirmed without pretending to know what changed.
 If the sources do not establish that no newer release exists, do not assert that. Still answer with useful findings and measured uncertainty; cover multiple relevant releases when the user asks for them.
-VOICE AND USEFULNESS: Keep your established character, tone and conversation context. Give the user a thoughtfully prepared answer, not a dry inventory of search results. Start with the answer, explain why it matters, and use natural warmth or humor when suitable. Avoid canned introductions, forced endearments, decorative emojis, needless bullets and repeated disclaimers. Remain personable without compromising accuracy. No intermediate JSON extraction, external self-judge or rejection checklist is required."
+VOICE AND USEFULNESS: Follow the owner-configured system prompt, personality and communication preferences already supplied in this conversation. Do not invent a second character, default degree of warmth, address mode or reply style. Present the supported findings as a useful answer rather than a raw source dump, while preserving the owner's chosen tone and length. Do not sacrifice accuracy for style. No intermediate JSON extraction, external self-judge or rejection checklist is required."
 }
 
 /// Source numbers stay aligned with the full source list shown in chat.
@@ -74,7 +74,7 @@ mod tests {
         assert!(data.contains("Search preview only"));
         assert!(data.contains("[2] Notes"));
         assert!(data.contains("Fetched webpage excerpts"));
-        assert!(evidence_instruction().contains("established character"));
+        assert!(evidence_instruction().contains("owner-configured system prompt"));
         assert!(evidence_instruction().contains("THAT exact release"));
     }
     #[test]
