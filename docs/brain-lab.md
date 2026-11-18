@@ -1136,3 +1136,30 @@ Brain Lab-only instruction; the production desktop uses the same reader.
 CI success is not proof of live source fidelity, so rerun the same
 three scenarios x2 with Mikanify ON and inspect both original/final
 answers, actual source excerpts and citations.
+
+## v0.9.60 Shared evidence-resolution guidance, not more Mikanify
+
+Mikanify remains opt-in, persona-configured and unchanged. In the
+v0.9.58 baseline (prior to the v0.9.59 HTML fix), two #21 turns
+missed a new official release, and #84 mixed old preview notes,
+third-party trackers and unsupported speculative variants.
+The optional style rewrite did not cure the wrong facts, and several
+answers lacked numbered citations.
+
+The actual production Simple research engine also powers Brain Lab.
+Its single shared evidence-instruction contract now explains how
+to weigh a directly dated first-party release against older articles'
+"latest" snapshots, distinguish earlier previews from later
+production releases and hosted API vs open-weight releases, and
+cite the evidence behind each central changing fact. It explicitly
+forbids treating unrelated SDK releases as newer model releases
+or inventing model variants and capabilities not supported by the
+sources. No added per-model rule, regex route, extra model call or
+web request. Because this is still model instruction, it is
+not proof of factual accuracy; use real reports to validate.
+
+The v0.9.59 HTML reader fix was already committed and passed CI.
+Run qwen3.5:9b Live Simple cases 20,21,84 twice, optionally
+with Mikanify on to compare original vs final. Verify current
+first-party evidence reaches both production and Brain Lab before
+changing anything else.
