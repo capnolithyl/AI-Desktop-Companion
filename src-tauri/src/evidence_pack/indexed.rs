@@ -208,7 +208,7 @@ pub(super) async fn extract(client: &Client, url: &str, model: &str, user_reques
                     "format":{"type":"object","properties":{"corrections":{
                         "type":"array","maxItems":cases.len(),"items":{
                             "type":"object","properties":{
-                                "factIndex":{"type":"integer","enum":repair_targets},
+                                "factIndex":{"type":"integer","enum":repair_targets.clone()},
                                 "subject":{"type":"string","minLength":2,"maxLength":80}
                             },"required":["factIndex","subject"],"additionalProperties":false
                         }
@@ -221,11 +221,15 @@ pub(super) async fn extract(client: &Client, url: &str, model: &str, user_reques
                     ]
                 });
                 if let Some(size)=context {fix_payload["options"]["num_ctx"]=json!(size);}
-                if let Ok(fixes)=propose_source_facts(client,url,&fix_payload,Duration::from_secs(18)).await {
-                    if apply_subject_repairs(&mut response,&fixes,&repair_targets,task,sources,&entries)>0 {
-                        evidence=assemble(response,task,sources,&entries);
-                    }
-                }
+                let repaired=if let Ok(fixes)=propose_source_facts(client,url,&fix_payload,Duration::from_secs(18)).await {
+                    let count=apply_subject_repairs(&mut response,&fixes,&repair_targets,task,sources,&entries);
+                    if count>0 {evidence=assemble(response,task,sources,&entries);}
+                    count
+                } else {0};
+                // Observability: an accepted entity label is still not an
+                // independently validated answer to the original question.
+                evidence.audit.note=format!("{} Subject-only repair: {} validated of {} candidate(s).",
+                    evidence.audit.note,repaired,repair_targets.len());
                 evidence.audit.extraction_attempts=2;
             }
         },
@@ -317,9 +321,14 @@ mod tests {
         let mut accurate=response.clone();
         accurate["facts"][0]["claim"]=json!("Aurora5-Max launched in 2026.");
         let targets=subject_repair_targets(&accurate,&task,&sources,&passages);
-        assert_eq!(apply_subject_repairs(&mut accurate,
-            &json!({"corrections":[{"factIndex":0,"subject":"Invented Product"}]}),
-            &targets,&task,&sources,&passages),0);
+        for invented_or_other_work in ["Invented Product","Aurora4-Max"] {
+            let mut unchanged=accurate.clone();
+            assert_eq!(apply_subject_repairs(&mut unchanged,
+                &json!({"corrections":[{"factIndex":0,"subject":invented_or_other_work}]}),
+                &targets,&task,&sources,&passages),0,
+                "a corrected identity cannot borrow release dates from a neighboring work");
+            assert_eq!(unchanged,accurate);
+        }
     }
 
     #[test]
