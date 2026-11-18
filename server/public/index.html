@@ -282,6 +282,12 @@
             <option value="routing">Fast · routing only</option>
           </select>
         </label>
+        <label>Research interpreter
+          <select id="brainLabResearchMode">
+            <option value="simple">Simple · read sources</option>
+            <option value="strict">Strict · old evidence pipeline</option>
+          </select>
+        </label>
         <label>Repeat
           <select id="brainLabRepeats">
             <option value="1">1 ×</option>
@@ -442,6 +448,7 @@
   var brainLabApplyNumbers = document.getElementById("brainLabApplyNumbers");
   var brainLabNumberFeedback = document.getElementById("brainLabNumberFeedback");
   var brainLabMode = document.getElementById("brainLabMode");
+  var brainLabResearchMode = document.getElementById("brainLabResearchMode");
   var brainLabRepeats = document.getElementById("brainLabRepeats");
   var brainLabCategory = document.getElementById("brainLabCategory");
   var brainLabStatusFilter = document.getElementById("brainLabStatusFilter");
@@ -496,6 +503,7 @@
         names.add(name.toLowerCase());return true;
       }).map(function(item){return {name:item.name.trim(),config:{
         mode:item.config.mode,repetitions:item.config.repetitions,
+        researchMode:["simple","strict"].includes(item.config.researchMode)?item.config.researchMode:"simple",
         scenarioIds:[...new Set(item.config.scenarioIds)],
         models:[...new Set(item.config.models)],
         category:item.config.category,statusFilter:item.config.statusFilter,search:""
@@ -559,7 +567,10 @@
     }).map(function (item) { return item.id; });
   }
   function brainLabStatusFor(item) {
-    var entry = item.states && item.states[brainLabMode.value];
+    var key=brainLabMode.value==="live"
+      ? "live"+(brainLabResearchMode.value==="simple"?"Simple":"Strict")
+      : "routing";
+    var entry = item.states && (item.states[key]||item.states[brainLabMode.value]);
     return entry || {status:"untested",previous:null,at:null};
   }
   function brainLabVisible() {
@@ -750,7 +761,8 @@
     try {
       await api("/api/brain-eval",{
         method:"POST",headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({action:"review",scenarioId:id,mode:brainLabMode.value,decision:decision})
+        body:JSON.stringify({action:"review",scenarioId:id,mode:brainLabMode.value,decision:decision,
+          ...(brainLabMode.value==="live"?{researchMode:brainLabResearchMode.value}:{})})
       });
       brainLabStatus.textContent = "Review submitted. Waiting for desktop confirmation…";
       await refresh();
@@ -785,6 +797,7 @@
     if(!brainLabCatalog.length){brainLabPresetFeedback.textContent="Connect to Mikan and load the scenarios first.";return}
     var config={
       mode:brainLabMode.value,repetitions:Number(brainLabRepeats.value),
+      researchMode:brainLabResearchMode.value,
       scenarioIds:brainLabChosenIds(),models:[...(brainLabSelectedModels||[])],
       category:brainLabCategory.value,statusFilter:brainLabStatusFilter.value,search:""
     };
@@ -814,6 +827,7 @@
     var loadedModels=config.models.filter(function(model){return available.has(model)});
     var missing=config.models.filter(function(model){return !available.has(model)});
     brainLabMode.value=config.mode;
+    brainLabResearchMode.value=config.researchMode||"simple";
     brainLabRepeats.value=String(config.repetitions);
     brainLabSelectedIds=new Set(known);
     brainLabSelectedModels=new Set(loadedModels);
@@ -913,6 +927,7 @@
       chosenModels.length+" model(s) ("+(chosenTurns * Number(brainLabRepeats.value)*chosenModels.length)+" turns)";
     brainLabStop.disabled = !data.connected || !running || brainLabSubmitting;
     brainLabMode.disabled = running || brainLabSubmitting;
+    brainLabResearchMode.disabled = running || brainLabSubmitting || brainLabMode.value!=="live";
     brainLabRepeats.disabled = running || brainLabSubmitting;
     brainLabNumbers.disabled = running || brainLabSubmitting;
     brainLabApplyNumbers.disabled = running || brainLabSubmitting;
@@ -985,6 +1000,10 @@
   brainLabCategory.addEventListener("change",function(){if(current)renderBrainLab(current);});
   brainLabStatusFilter.addEventListener("change",function(){if(current)renderBrainLab(current);});
   brainLabMode.addEventListener("change",function(){if(current)renderBrainLab(current);});
+  brainLabResearchMode.addEventListener("change",function(){
+    brainLabRowsSignature="";
+    if(current)renderBrainLab(current);
+  });
   brainLabRepeats.addEventListener("change",function(){if(current)renderBrainLab(current);});
   brainLabSelectVisible.addEventListener("click",function(){
     selectBrainLab(brainLabVisible().map(function (item) {return item.id;}));
@@ -1012,6 +1031,7 @@
         body:JSON.stringify({
           action:"start",mode:brainLabMode.value,
           repetitions:Number(brainLabRepeats.value),scenarioIds:brainLabChosenIds(),
+          ...(brainLabMode.value==="live"?{researchMode:brainLabResearchMode.value}:{}),
           ...(brainLabMode.value==="live"?{models:[...(brainLabSelectedModels||[])]}:{})
         })
       });
