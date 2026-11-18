@@ -24,6 +24,7 @@ const totalFixtureTurns=EVAL_SCENARIOS.reduce((n,s)=>n+s.steps.length,0);
 export function BrainEvalPanel({settings,availableModels}:{settings:Settings;availableModels:readonly string[]}){
   const [mode,setMode]=useState<EvalMode>("routing");
   const [researchMode,setResearchMode]=useState<Settings["researchMode"]>(settings.researchMode);
+  const [mikanifyAnswer,setMikanifyAnswer]=useState(settings.mikanifyAnswer);
   const [presets,setPresets]=useState(readBrainEvalPresets);
   const [presetName,setPresetName]=useState("");
   const [presetChoice,setPresetChoice]=useState("");
@@ -53,10 +54,10 @@ export function BrainEvalPanel({settings,availableModels}:{settings:Settings;ava
   const progressPercent=progress.total>0
     ?Math.round(Math.min(progress.done,progress.total)/progress.total*100):0;
   const records=getBrainEvalCaseRecords();
-  const environment=brainEvalEnvironment(mode,viewModel||settings.model,researchMode);
+  const environment=brainEvalEnvironment(mode,viewModel||settings.model,researchMode,mikanifyAnswer);
   const statuses=useMemo(()=>
     new Map(EVAL_SCENARIOS.map(s=>[s.id,statusForScenario(s,records,environment)])),
-    [records,mode,settings.model,viewModel,researchMode]
+    [records,mode,settings.model,viewModel,researchMode,mikanifyAnswer]
   );
   const totals=summarizeCaseStatuses(EVAL_SCENARIOS,records,environment);
   const searchTerm=search.trim().toLocaleLowerCase();
@@ -103,7 +104,7 @@ export function BrainEvalPanel({settings,availableModels}:{settings:Settings;ava
     selectOnly(sample.map(s=>s.id));
   };
   const currentPresetConfig=():BrainEvalPresetConfig=>({
-    mode,researchMode,repetitions:repeats as BrainEvalPresetConfig["repetitions"],
+    mode,researchMode,mikanifyAnswer,repetitions:repeats as BrainEvalPresetConfig["repetitions"],
     scenarioIds:selected.map(s=>s.id),models:[...selectedModels],
     category,statusFilter,search
   });
@@ -131,6 +132,7 @@ export function BrainEvalPanel({settings,availableModels}:{settings:Settings;ava
     const missingModels=config.models.filter(model=>!localModels.includes(model));
     setMode(config.mode);
     setResearchMode(config.researchMode??settings.researchMode);
+    setMikanifyAnswer(config.mikanifyAnswer===true);
     setRepeats(config.repetitions);
     setSelectedIds(new Set(knownIds));
     setSelectedModels(new Set(knownModels));
@@ -162,7 +164,7 @@ export function BrainEvalPanel({settings,availableModels}:{settings:Settings;ava
   function run(){
     try{
       startBrainEvaluation(settings,{
-        mode,researchMode,repetitions:repeats,scenarioIds:selected.map(s=>s.id),
+        mode,researchMode,mikanifyAnswer,repetitions:repeats,scenarioIds:selected.map(s=>s.id),
         ...(mode==="live"?{models:modelsToRun}:{}),
       },localModels);
       setMessage("");
@@ -256,6 +258,14 @@ export function BrainEvalPanel({settings,availableModels}:{settings:Settings;ava
           <option value="simple">Simple · read sources directly</option>
           <option value="strict">Strict · parked evidence pipeline</option>
         </select>
+      </label>
+      <label className="brain-eval-mikanify">
+        <span>Mikanify answer 🐈</span>
+        <input type="checkbox" checked={mikanifyAnswer}
+          disabled={busy||mode!=="live"||researchMode!=="simple"}
+          aria-label="Mikanify answer (experimental second local pass)"
+          onChange={e=>setMikanifyAnswer(e.target.checked)}/>
+        <small>Optional local restyle; the report saves both original and rewritten research answers.</small>
       </label>
       <label>Category
         <select value={category} disabled={busy} onChange={e=>setCategory(e.target.value)}>
@@ -412,10 +422,10 @@ export function BrainEvalPanel({settings,availableModels}:{settings:Settings;ava
             {view.status==="stale"&&view.previous?" ("+view.previous+")":""}</span>
           {view.status==="review"&&<div className="brain-eval-review-actions">
             <button type="button" disabled={busy}
-              onClick={()=>{try{reviewBrainEvalScenario(s.id,mode,viewModel||settings.model,"passed",researchMode)}
+              onClick={()=>{try{reviewBrainEvalScenario(s.id,mode,viewModel||settings.model,"passed",researchMode,mikanifyAnswer)}
                 catch(error){setMessage(String(error))}}}>Approve</button>
             <button type="button" disabled={busy}
-              onClick={()=>{try{reviewBrainEvalScenario(s.id,mode,viewModel||settings.model,"failed",researchMode)}
+              onClick={()=>{try{reviewBrainEvalScenario(s.id,mode,viewModel||settings.model,"failed",researchMode,mikanifyAnswer)}
                 catch(error){setMessage(String(error))}}}>Fail</button>
           </div>}
         </div>;
@@ -590,6 +600,16 @@ export function BrainEvalPanel({settings,availableModels}:{settings:Settings;ava
             {!!step.memoryEvidence?.length &&<small>Evidence: {step.memoryEvidence
               .map(e=>"#"+e.expectedId+" supplied by "+(e.supportingIds.join(", ")||"nothing"))
               .join("; ")}</small>}
+            {step.originalAnswer!==undefined&&<div className="brain-eval-comparison">
+              <strong>Original researched answer (before Mikanify)</strong>
+              <p className="brain-eval-answer">{step.originalAnswer}</p>
+              <small>Mikanify {step.mikanifyApplied?"applied":"not applied, original retained"}
+                {step.mikanifyElapsedMs!==undefined?" · "+formatMs(step.mikanifyElapsedMs):""}
+              </small>
+              {step.mikanifyError&&<small className="field-error">
+                Style pass error: {step.mikanifyError}</small>}
+              <strong>Final answer {step.mikanifyApplied?"after Mikanify":"(original)"}</strong>
+            </div>}
             {step.answer&&<p className="brain-eval-answer">{step.answer}</p>}
             {step.inferenceStats&&<small>Model: {step.modelUsed??"local"} · output {step.inferenceStats.outputTokens??"?"} tokens ·
               generation {(step.inferenceStats.evalDurationNs??0)>0?

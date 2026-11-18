@@ -75,6 +75,7 @@ test("browser relay requires a private key and delegates to the desktop, not a s
   assert.match(mainView, /class="remote-build"[^>]*aria-label="Browser relay version/);
   assert.match(settingsView, /role="dialog" aria-modal="true"/);
   assert.match(settingsView,/id="devRestartDesktop"/);
+  assert.match(settingsView,/id="brainLabMikanifyAnswer"/);
   assert.match(settingsView,/id="buildIdentityStatus"/);
   assert.match(mainView,/data-relay-commit="/);
   assert.match(html,/Desktop and browser relay are running different commits/);
@@ -226,6 +227,11 @@ test("browser relay requires a private key and delegates to the desktop, not a s
   }
   assert.equal((await request(base + "/api/brain-eval","POST",jsonHeaders,
     {action:"start",mode:"routing",researchMode:"simple",repetitions:1,scenarioIds:["branch-a"]})).status,400);
+  for(const invalid of [{researchMode:"strict",mikanifyAnswer:true},
+    {researchMode:"simple",mikanifyAnswer:"yes"}]){
+    assert.equal((await request(base + "/api/brain-eval","POST",jsonHeaders,
+      {action:"start",mode:"live",repetitions:1,scenarioIds:["branch-a"],...invalid})).status,400);
+  }
   for(const models of [["invented:30b"],[],["qwen3.5:9b","qwen3.5:9b"]]){
     assert.equal((await request(base + "/api/brain-eval","POST",jsonHeaders,
       {action:"start",mode:"live",repetitions:1,scenarioIds:["branch-a"],models})).status,400);
@@ -234,14 +240,14 @@ test("browser relay requires a private key and delegates to the desktop, not a s
     {action:"start",mode:"routing",repetitions:1,scenarioIds:["branch-a"],
       models:["qwen3.5:9b","gemma4:12b"]})).status,400);
   assert.equal((await request(base + "/api/brain-eval","POST",jsonHeaders,
-    {action:"start",mode:"live",researchMode:"simple",repetitions:3,scenarioIds:["branch-a","discovery-bands-wish"],
+    {action:"start",mode:"live",researchMode:"simple",mikanifyAnswer:true,repetitions:3,scenarioIds:["branch-a","discovery-bands-wish"],
       models:["qwen3.5:9b","gemma4:12b"]})).status,202);
   assert.equal((await request(base + "/api/brain-eval","POST",jsonHeaders,
     {action:"start",mode:"live",repetitions:3,scenarioIds:["branch-a"]})).status,409);
   const evalJob=(await (await request(agent + "/agent/next","GET",desktopHeaders)).json()).job;
   assert.equal(evalJob.kind,"start_brain_eval");
   assert.deepEqual(evalJob.evalOptions,{
-    mode:"live",researchMode:"simple",repetitions:3,scenarioIds:["branch-a","discovery-bands-wish"],
+    mode:"live",researchMode:"simple",mikanifyAnswer:true,repetitions:3,scenarioIds:["branch-a","discovery-bands-wish"],
     models:["qwen3.5:9b","gemma4:12b"]
   });
   assert.equal((await request(agent + "/agent/ack","POST",desktopHeaders,{id:evalJob.id})).status,200);
@@ -350,7 +356,8 @@ test("browser relay requires a private key and delegates to the desktop, not a s
   reviewState.brainEvalCatalog=[
     {id:"branch-a",number:1,label:"Favorite band branch",group:"Branching context",turns:3,
       states:{routing:{status:"passed",at:"2026-11-14T22:00:00Z"},
-        live:{status:"review",previous:"review",at:"2026-11-14T22:00:00Z"}}},
+        live:{status:"review",previous:"review",at:"2026-11-14T22:00:00Z"},
+        liveSimpleMikanified:{status:"review",previous:"review",at:"2026-11-14T22:00:00Z"}}},
     {id:"discovery-bands-wish",number:54,label:"Implicit recommendations",group:"Conversational discovery",turns:2,
       states:{live:{status:"stale",previous:"passed",at:"2026-11-12T22:00:00Z"}}}
   ];
@@ -360,6 +367,7 @@ test("browser relay requires a private key and delegates to the desktop, not a s
   assert.equal(remoteCases[1].number,54);
   assert.equal(remoteCases[0].states.routing.status,"passed");
   assert.equal(remoteCases[0].states.live.status,"review");
+  assert.equal(remoteCases[0].states.liveSimpleMikanified.status,"review");
   assert.equal(remoteCases[1].states.live.status,"stale");
   assert.equal(remoteCases[1].states.live.previous,"passed");
   assert.equal((await request(base + "/api/brain-eval","POST",jsonHeaders,
@@ -367,12 +375,15 @@ test("browser relay requires a private key and delegates to the desktop, not a s
   assert.equal((await request(base + "/api/brain-eval","POST",jsonHeaders,
     {action:"review",scenarioId:"branch-a",mode:"live",decision:"make_it_green"})).status,400);
   assert.equal((await request(base + "/api/brain-eval","POST",jsonHeaders,
-    {action:"review",scenarioId:"branch-a",mode:"live",decision:"passed"})).status,202);
+    {action:"review",scenarioId:"branch-a",mode:"live",researchMode:"simple",
+      mikanifyAnswer:true,decision:"passed"})).status,202);
   const reviewJob=(await (await request(agent + "/agent/next","GET",desktopHeaders)).json()).job;
   assert.equal(reviewJob.kind,"review_brain_eval");
   assert.equal(reviewJob.evalScenarioId,"branch-a");
   assert.equal(reviewJob.evalMode,"live");
   assert.equal(reviewJob.evalDecision,"passed");
+  assert.equal(reviewJob.evalResearchMode,"simple");
+  assert.equal(reviewJob.evalMikanifyAnswer,true);
   assert.equal((await request(agent + "/agent/ack","POST",desktopHeaders,{id:reviewJob.id})).status,200);
   // Resume the rest of the legacy relay tests after a detached run finishes.
   assert.equal((await request(agent + "/agent/state","POST",desktopHeaders,{

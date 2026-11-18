@@ -11,6 +11,8 @@ import type { ResearchAudit, ToolPlanningAudit } from "./debug-log";
 import { responseFocusGuidance } from "./conversation-engine";
 import { PERSONAL_DETAIL_GROUNDING_GUIDANCE } from "./personal-grounding";
 import { personalityGuidance } from "./personality";
+import { communicationGuidance } from "./communication-preferences";
+import { shouldMikanifyAnswer, type MikanifyResult } from "./mikanify";
 import { reviewResearchCompletion } from "./evidence-verification";
 import { chatRuntimeContext, runtimeContext } from "./runtime-context";
 import { version as APP_VERSION } from "../package.json";
@@ -38,18 +40,19 @@ function saveCaseRecords(records:BrainCaseRecord[]){
   setStatus({});
 }
 export function brainEvalEnvironment(mode:EvalMode,model:string,
-  researchMode?:"simple"|"strict"):BrainCaseEnvironment{
+  researchMode?:"simple"|"strict",mikanifyAnswer=false):BrainCaseEnvironment{
   return {mode,model,build:BRAIN_EVAL_BUILD,
-    ...(mode==="live"&&researchMode?{researchMode}:{})};
+    ...(mode==="live"&&researchMode?{researchMode}:{}),
+    ...(mode==="live"&&researchMode==="simple"&&mikanifyAnswer?{mikanifyAnswer:true}:{})};
 }
 export function reviewBrainEvalScenario(id:string,mode:EvalMode,model:string,
-  decision:"passed"|"failed",researchMode?:"simple"|"strict"){
+  decision:"passed"|"failed",researchMode?:"simple"|"strict",mikanifyAnswer=false){
   if(status.phase==="running")throw new Error("Cannot review while a test run is active");
   const scenario=catalog.get(id);
   if(!scenario)throw new Error("Unknown scenario");
   const records=getBrainEvalCaseRecords();
   const item=statusForScenario(scenario,records,brainEvalEnvironment(mode,model,
-    researchMode??report?.researchMode));
+    researchMode??report?.researchMode,mikanifyAnswer));
   if(item.status==="stale")throw new Error("Rerun this scenario for the current build before reviewing it");
   if(!item.record || item.record.grade!=="review")
     throw new Error("Only pending conversational reviews can be marked by hand");
@@ -65,6 +68,7 @@ import {
 export type BrainEvalRequest = {
   mode: EvalMode;
   researchMode?:"simple"|"strict";
+  mikanifyAnswer?:boolean;
   repetitions: number;
   scenarioIds: string[];
   /** Optional Ollama model sweep. Each model receives independent fresh scenarios. */
@@ -301,12 +305,52 @@ async function executeOne(
         structuredResearch:!!webRequest?.autoSearch &&
           (request.researchMode??settings.researchMode)==="strict"
       }});
+      // Keep BOTH versions in the same Brain Lab report. This post-answer
+      // presentation pass receives only the draft and established persona,
+      // never tools or fresh web sources. Rewriting errors preserve the draft.
+      const researchMode=request.researchMode??settings.researchMode;
+      const canMikanify=shouldMikanifyAnswer({
+        enabled:request.mikanifyAnswer??settings.mikanifyAnswer,
+        researchMode,searchQuery:result.searchQuery,
+        sourceCount:result.sources?.length,
+        sourcesCarriedOver:result.sourcesCarriedOver,
+        hasResearchAudit:!!result.researchAudit,
+        modelUsed:result.modelUsed??settings.model,localModel:settings.model
+      });
+      let rewritten=result.content.trim();
+      let mikanifyApplied=false;
+      let mikanifyElapsedMs:number|undefined;
+      let mikanifyError:string|undefined;
+      if(canMikanify && !controller.signal.aborted){
+        const started=performance.now();
+        try{
+          const styled=await invoke<MikanifyResult>("mikanify_answer",{request:{
+            requestId:id,endpoint:settings.endpoint,model:settings.model,
+            persona:[settings.systemPrompt.trim(),communicationGuidance(settings.communication),
+              personalityGuidance(settings.personality)].join("\n\n"),
+            question:last,draft:rewritten,contextWindow:settings.contextWindow
+          }});
+          if(controller.signal.aborted)throw new Error("Stopped by owner");
+          rewritten=styled.content;
+          mikanifyApplied=true;
+          mikanifyElapsedMs=styled.elapsedMs;
+        }catch(error){
+          if(controller.signal.aborted)throw error;
+          mikanifyElapsedMs=performance.now()-started;
+          mikanifyError=error instanceof Error?error.message:String(error);
+        }
+      }
       // The Simple experiment exposes the model's sourced answer to the
       // reviewer; Strict retains the existing lexical post-generation gate.
       const review=(request.researchMode??settings.researchMode)==="strict"
         ? reviewResearchCompletion(result.content.trim(),result.sources??[],result.researchAudit)
         : null;
-      return {text:review?.text??result.content.trim(),modelUsed:result.modelUsed??settings.model,
+      return {text:review?.text??rewritten,modelUsed:result.modelUsed??settings.model,
+        ...(canMikanify?{
+          originalAnswer:result.content.trim(),mikanifyApplied,
+          ...(mikanifyElapsedMs!==undefined?{mikanifyElapsedMs}:{}),
+          ...(mikanifyError?{mikanifyError}:{})
+        }:{}),
         stats:result.stats??undefined,
         webExecution:{query:result.searchQuery??null,
           results:result.sources??[],sourcesCarriedOver:result.sourcesCarriedOver===true,
@@ -339,6 +383,7 @@ async function executeOne(
   const result=await runBrainEvaluation({
     mode:request.mode,model:settings.model,build:BRAIN_EVAL_BUILD,buildInfo:BUILD_INFO,
     researchMode:request.researchMode??settings.researchMode,
+    mikanifyAnswer:request.mikanifyAnswer??settings.mikanifyAnswer,
     scenarios,repetitions:request.repetitions,
     signal:controller.signal,...(request.mode==="live"?{infer,planWeb,previewMemory,liveWeb:true}:{}),
     onProgress:(done,_total,label)=>setStatus({done:progressOffset+done,

@@ -12,6 +12,7 @@ mod source_enrichment;
 mod passages;
 mod evidence_pack;
 mod simple_research;
+mod mikanify;
 mod recommendation_gate;
 mod quantities;
 mod attribution;
@@ -520,6 +521,56 @@ fn brain_eval_load_latest(app: tauri::AppHandle) -> Result<Option<SavedBrainEval
         markdown_report,
         folder: path.parent().unwrap_or(path.as_path()).to_string_lossy().to_string(),
     }))
+}
+
+/// Request the presentation pass only after a completed, public researched
+/// answer. It has no research tools and never modifies the original evidence.
+#[derive(Deserialize)]
+#[serde(rename_all="camelCase")]
+struct MikanifyRequest {
+    request_id:String,
+    endpoint:String,
+    model:String,
+    persona:String,
+    question:String,
+    draft:String,
+    #[serde(default)]
+    context_window:Option<u32>,
+}
+#[derive(Serialize)]
+#[serde(rename_all="camelCase")]
+struct MikanifyResult {
+    content:String,
+    elapsed_ms:u64,
+}
+#[tauri::command]
+async fn mikanify_answer(app:tauri::AppHandle,request:MikanifyRequest)
+    ->Result<MikanifyResult,String>{
+    let url=format!("{}/api/chat",local_origin(&request.endpoint)?);
+    let client=client()?;
+    let started=std::time::Instant::now();
+    let id=request.request_id.clone();
+    let (handle,registration)=AbortHandle::new_pair();
+    {
+        let state=app.state::<ChatCancellation>();
+        let mut handles=state.0.lock().map_err(|_|"Cancellation state unavailable")?;
+        // Prevent two same-ID jobs from hiding each other's Stop handle.
+        if handles.contains_key(&id){return Err("This request is already generating".into())}
+        handles.insert(id.clone(),handle);
+    }
+    let result=Abortable::new(mikanify::rewrite(
+        &client,&url,&request.model,&request.persona,&request.question,
+        &request.draft,request.context_window
+    ),registration).await;
+    {
+        let state=app.state::<ChatCancellation>();
+        state.0.lock().map_err(|_|"Cancellation state unavailable")?.remove(&id);
+    }
+    let content=match result {
+        Ok(response)=>response?,
+        Err(_)=>return Err("Generation stopped".into())
+    };
+    Ok(MikanifyResult{content,elapsed_ms:started.elapsed().as_millis() as u64})
 }
 
 #[tauri::command]
@@ -1285,6 +1336,7 @@ pub fn run() {
             web_reader::web_cache_info,
             web_reader::clear_web_cache,
             chat_stream,
+            mikanify_answer,
             condense_local_context,
             cancel_chat,
             brain_eval_export,

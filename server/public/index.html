@@ -288,6 +288,10 @@
             <option value="strict">Strict · old evidence pipeline</option>
           </select>
         </label>
+        <label class="full">Mikanify answer 🐈 · experimental
+          <input type="checkbox" id="brainLabMikanifyAnswer">
+          <small>Extra local Ollama rewrite after Simple research. Reports retain both original and final answers.</small>
+        </label>
         <label>Repeat
           <select id="brainLabRepeats">
             <option value="1">1 ×</option>
@@ -449,6 +453,7 @@
   var brainLabNumberFeedback = document.getElementById("brainLabNumberFeedback");
   var brainLabMode = document.getElementById("brainLabMode");
   var brainLabResearchMode = document.getElementById("brainLabResearchMode");
+  var brainLabMikanifyAnswer = document.getElementById("brainLabMikanifyAnswer");
   var brainLabRepeats = document.getElementById("brainLabRepeats");
   var brainLabCategory = document.getElementById("brainLabCategory");
   var brainLabStatusFilter = document.getElementById("brainLabStatusFilter");
@@ -504,6 +509,7 @@
       }).map(function(item){return {name:item.name.trim(),config:{
         mode:item.config.mode,repetitions:item.config.repetitions,
         researchMode:["simple","strict"].includes(item.config.researchMode)?item.config.researchMode:"simple",
+        mikanifyAnswer:item.config.mikanifyAnswer===true,
         scenarioIds:[...new Set(item.config.scenarioIds)],
         models:[...new Set(item.config.models)],
         category:item.config.category,statusFilter:item.config.statusFilter,search:""
@@ -568,7 +574,9 @@
   }
   function brainLabStatusFor(item) {
     var key=brainLabMode.value==="live"
-      ? "live"+(brainLabResearchMode.value==="simple"?"Simple":"Strict")
+      ? brainLabResearchMode.value==="simple" && brainLabMikanifyAnswer.checked
+        ? "liveSimpleMikanified"
+        : "live"+(brainLabResearchMode.value==="simple"?"Simple":"Strict")
       : "routing";
     var entry = item.states && (item.states[key]||item.states[brainLabMode.value]);
     return entry || {status:"untested",previous:null,at:null};
@@ -747,8 +755,19 @@
             flags.textContent="Review warnings: "+step.qualityFlags.join("; ");
             section.append(flags);
           }
+          if(typeof step.originalAnswer==="string"){
+            var draft=document.createElement("pre");
+            draft.textContent="Original researched answer:\n"+step.originalAnswer;
+            section.append(draft);
+            var rewriteNote=document.createElement("small");
+            rewriteNote.textContent="Mikanify "+(step.mikanifyApplied?"applied":"not applied; original retained")+
+              (Number.isFinite(step.mikanifyElapsedMs)?" · "+Math.round(step.mikanifyElapsedMs)+" ms":"")+
+              (step.mikanifyError?" · "+step.mikanifyError:"");
+            section.append(rewriteNote);
+          }
           var answer=document.createElement("pre");
-          answer.textContent="Mikan: "+String(step.answer??"(No model answer in Fast mode)");
+          answer.textContent=(typeof step.originalAnswer==="string"?"Final Mikan reply: ":"Mikan: ")+
+            String(step.answer??"(No model answer in Fast mode)");
           section.append(answer);
           brainLabPreviewTurns.append(section);
         }
@@ -762,7 +781,8 @@
       await api("/api/brain-eval",{
         method:"POST",headers:{"Content-Type":"application/json"},
         body:JSON.stringify({action:"review",scenarioId:id,mode:brainLabMode.value,decision:decision,
-          ...(brainLabMode.value==="live"?{researchMode:brainLabResearchMode.value}:{})})
+          ...(brainLabMode.value==="live"?{researchMode:brainLabResearchMode.value,
+            mikanifyAnswer:brainLabResearchMode.value==="simple"&&brainLabMikanifyAnswer.checked}:{})})
       });
       brainLabStatus.textContent = "Review submitted. Waiting for desktop confirmation…";
       await refresh();
@@ -798,6 +818,7 @@
     var config={
       mode:brainLabMode.value,repetitions:Number(brainLabRepeats.value),
       researchMode:brainLabResearchMode.value,
+      mikanifyAnswer:brainLabResearchMode.value==="simple"&&brainLabMikanifyAnswer.checked,
       scenarioIds:brainLabChosenIds(),models:[...(brainLabSelectedModels||[])],
       category:brainLabCategory.value,statusFilter:brainLabStatusFilter.value,search:""
     };
@@ -828,6 +849,7 @@
     var missing=config.models.filter(function(model){return !available.has(model)});
     brainLabMode.value=config.mode;
     brainLabResearchMode.value=config.researchMode||"simple";
+    brainLabMikanifyAnswer.checked=config.mikanifyAnswer===true;
     brainLabRepeats.value=String(config.repetitions);
     brainLabSelectedIds=new Set(known);
     brainLabSelectedModels=new Set(loadedModels);
@@ -928,6 +950,8 @@
     brainLabStop.disabled = !data.connected || !running || brainLabSubmitting;
     brainLabMode.disabled = running || brainLabSubmitting;
     brainLabResearchMode.disabled = running || brainLabSubmitting || brainLabMode.value!=="live";
+    brainLabMikanifyAnswer.disabled = running || brainLabSubmitting ||
+      brainLabMode.value!=="live" || brainLabResearchMode.value!=="simple";
     brainLabRepeats.disabled = running || brainLabSubmitting;
     brainLabNumbers.disabled = running || brainLabSubmitting;
     brainLabApplyNumbers.disabled = running || brainLabSubmitting;
@@ -1004,6 +1028,10 @@
     brainLabRowsSignature="";
     if(current)renderBrainLab(current);
   });
+  brainLabMikanifyAnswer.addEventListener("change",function(){
+    brainLabRowsSignature="";
+    if(current)renderBrainLab(current);
+  });
   brainLabRepeats.addEventListener("change",function(){if(current)renderBrainLab(current);});
   brainLabSelectVisible.addEventListener("click",function(){
     selectBrainLab(brainLabVisible().map(function (item) {return item.id;}));
@@ -1031,7 +1059,8 @@
         body:JSON.stringify({
           action:"start",mode:brainLabMode.value,
           repetitions:Number(brainLabRepeats.value),scenarioIds:brainLabChosenIds(),
-          ...(brainLabMode.value==="live"?{researchMode:brainLabResearchMode.value}:{}),
+          ...(brainLabMode.value==="live"?{researchMode:brainLabResearchMode.value,
+            mikanifyAnswer:brainLabResearchMode.value==="simple"&&brainLabMikanifyAnswer.checked}:{}),
           ...(brainLabMode.value==="live"?{models:[...(brainLabSelectedModels||[])]}:{})
         })
       });

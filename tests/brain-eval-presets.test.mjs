@@ -91,3 +91,10 @@ test("presets keep the chosen interpreter but legacy presets remain valid",()=>{
   assert.equal(parseBrainEvalPresets([{name:"Legacy",config}])[0].config.researchMode,undefined);
   assert.equal(parseBrainEvalPresets([{name:"Unexpected",config:{...config,researchMode:"unsafe"}}])[0].config.researchMode,undefined);
 });
+
+test("Mikanify toggle survives named presets; older presets default to the unmodified draft",()=>{
+  const styled={...config,researchMode:"simple",mikanifyAnswer:true};
+  assert.deepEqual(parseBrainEvalPresets([{name:"Mikanified",config:styled}])[0].config,styled);
+  assert.equal(parseBrainEvalPresets([{name:"Legacy",config}])[0].config.mikanifyAnswer,undefined);
+  assert.equal(parseBrainEvalPresets([{name:"Invalid",config:{...styled,mikanifyAnswer:"yes"}}])[0].config.mikanifyAnswer,undefined);
+});

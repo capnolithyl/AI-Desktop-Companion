@@ -124,6 +124,11 @@ export type EvalStepResult = {
   /** Transparent review-only heuristics, not an automatic semantic judgment. */
   qualityFlags: string[];
   answer?: string;
+  /** Exact first-pass answer before optional persona restyling (same sources). */
+  originalAnswer?:string;
+  mikanifyApplied?:boolean;
+  mikanifyElapsedMs?:number;
+  mikanifyError?:string;
   inferenceStats?: {promptTokens?:number|null;outputTokens?:number|null;evalDurationNs?:number|null;loadDurationNs?:number|null};
   modelUsed?:string;
   error?: string;
@@ -138,6 +143,8 @@ import type { BuildInfo } from "./build-info";
 export type EvalReport = {
   version:1; runId:string; startedAt:string; finishedAt:string;
   researchMode?:"simple"|"strict";
+  /** Presentation-only second local pass; false/omitted for older reports. */
+  mikanifyAnswer?:boolean;
   mode:EvalMode; model:string; attempts:number; scenarios:string[];
   // Recording simulated vs actual conditions prevents misleading scoreboards.
   environment:"isolated-synthetic"|"isolated-synthetic+live-public-web";
@@ -148,6 +155,10 @@ export type EvalReport = {
 };
 export type EvalInferenceResult = string | {
   text:string;
+  originalAnswer?:string;
+  mikanifyApplied?:boolean;
+  mikanifyElapsedMs?:number;
+  mikanifyError?:string;
   stats?: {promptTokens?:number|null;outputTokens?:number|null;evalDurationNs?:number|null;loadDurationNs?:number|null};
   modelUsed?:string;
   webExecution?:EvalWebExecution;
@@ -174,6 +185,7 @@ export type EvalOptions = {
   repetitions:number;
   model:string;
   researchMode?:"simple"|"strict";
+  mikanifyAnswer?:boolean;
   build?:string;
   buildInfo?:BuildInfo;
   scenarios:ReadonlyArray<EvalScenario>;
@@ -695,6 +707,8 @@ export async function runBrainEvaluation(options:EvalOptions):Promise<EvalReport
     version:1,runId:"eval-"+Date.now()+"-"+Math.random().toString(36).slice(2,7),
     startedAt:new Date().toISOString(),finishedAt:"",mode:options.mode,model:options.model,
     ...(options.researchMode?{researchMode:options.researchMode}:{}),
+    ...(options.mode==="live"&&options.researchMode==="simple"
+      ?{mikanifyAnswer:options.mikanifyAnswer===true}:{}),
     attempts:Math.max(1,Math.min(5,Math.trunc(options.repetitions))),
     scenarios:options.scenarios.map(s=>s.id),
     environment:options.mode==="live"&&options.liveWeb
@@ -744,6 +758,10 @@ export async function runBrainEvaluation(options:EvalOptions):Promise<EvalReport
       let plannerElapsedMs:number|undefined;
       const priorPublicQuery=publicContext.activePublicQuery;
       let answer:string|undefined;
+      let originalAnswer:string|undefined;
+      let mikanifyApplied:boolean|undefined;
+      let mikanifyElapsedMs:number|undefined;
+      let mikanifyError:string|undefined;
       let webExecution:EvalStepResult["webExecution"]|undefined;
       let inferenceStats:EvalStepResult["inferenceStats"]|undefined;
       let modelUsed:string|undefined;
@@ -780,7 +798,11 @@ export async function runBrainEvaluation(options:EvalOptions):Promise<EvalReport
           });
           if(typeof response==="string")answer=response;
           else {answer=response.text;inferenceStats=response.stats;modelUsed=response.modelUsed;
-            webExecution=response.webExecution;}
+            webExecution=response.webExecution;
+            originalAnswer=response.originalAnswer;
+            mikanifyApplied=response.mikanifyApplied;
+            mikanifyElapsedMs=response.mikanifyElapsedMs;
+            mikanifyError=response.mikanifyError;}
         }
         if(options.mode==="live" && answer!==undefined &&
           step.expect.memoryCapture && options.previewMemory){
@@ -892,7 +914,12 @@ export async function runBrainEvaluation(options:EvalOptions):Promise<EvalReport
         missingMemoryIds:missing,missingMemoryRecordIds:missingRecordIds,
         memoryEvidence,distractorMemoryIds:distractors,unexpectedMemoryIds:unexpected,
         routeLabelMatch,routePass,memoryPass,answerPass,reviewRequired,
-        answerFailures,qualityFlags,answer,inferenceStats,modelUsed,error,
+        answerFailures,qualityFlags,answer,
+        ...(originalAnswer!==undefined?{originalAnswer}:{}),
+        ...(mikanifyApplied!==undefined?{mikanifyApplied}:{}),
+        ...(mikanifyElapsedMs!==undefined?{mikanifyElapsedMs}:{}),
+        ...(mikanifyError?{mikanifyError}:{}),
+        inferenceStats,modelUsed,error,
         elapsedMs:Date.now()-began,
         pass:routePass&&memoryPass&&memoryCapturePass!==false&&plannerFailures.length===0&&answerPass!==false&&evidencePass!==false&&
           (options.mode!=="live" || !!answer)&&!error
@@ -996,6 +1023,9 @@ export function brainEvalMarkdown(report:EvalReport):string {
     "Run: "+report.runId+" • "+report.finishedAt,
     "Mode: "+report.mode+" • Model: "+report.model+" • Attempts: "+report.attempts,
     ...(report.researchMode?["Web interpretation: "+report.researchMode+" (requires human review)"]:[]),
+    ...(report.researchMode==="simple"?
+      ["Mikanify answer (second local rewrite): "+(report.mikanifyAnswer?"ON":"OFF")+
+      " (compare both drafts for factual drift)"]:[]),
     ...(report.build ? ["App build: "+report.build] : []),
     ...(report.buildInfo ? [
       "Desktop version: "+report.buildInfo.version,
@@ -1069,7 +1099,19 @@ export function brainEvalMarkdown(report:EvalReport):string {
           "; excluded "+(s.unexpectedMemoryIds.join(", ")||"none"),
         "- Time: "+s.elapsedMs+" ms"+
           (s.plannerElapsedMs!==undefined?" (local planner "+s.plannerElapsedMs+" ms)":""));
-      if(s.answer!==undefined)lines.push("- Response: "+s.answer.replace(/\s+/g," ").slice(0,800));
+      if(s.originalAnswer!==undefined) {
+        lines.push("- Mikanify applied: "+(s.mikanifyApplied?"yes":"no; original retained")+
+          (s.mikanifyElapsedMs!==undefined?" ("+Math.round(s.mikanifyElapsedMs)+" ms)":""));
+        if(s.mikanifyError)lines.push("- Mikanify error: "+s.mikanifyError);
+        lines.push("","**Research draft before Mikanify:**","",
+          "> "+s.originalAnswer.replace(/\r?\n/g,"\n> "),"");
+      }
+      if(s.answer!==undefined) {
+        if(s.originalAnswer!==undefined)
+          lines.push("**Final answer after Mikanify:**","",
+            "> "+s.answer.replace(/\r?\n/g,"\n> "),"");
+        else lines.push("- Response: "+s.answer.replace(/\s+/g," ").slice(0,800));
+      }
       if(s.inferenceStats)lines.push("- Inference: "+JSON.stringify({model:s.modelUsed,stats:s.inferenceStats}));
       if(s.error)lines.push("- Error: "+s.error);
       if(s.answerFailures.length)lines.push("- Checks: "+s.answerFailures.join("; "));

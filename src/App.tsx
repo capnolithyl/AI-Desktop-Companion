@@ -6,6 +6,7 @@ import { webContext, pageContext, type PageDocument, type WebResult } from "./we
 import { priorResearchSources } from "./research-context";
 import { planResearch, stripUnsupportedCitations } from "./research-routing";
 import { reviewResearchCompletion, groundedResearchFallback } from "./evidence-verification";
+import { shouldMikanifyAnswer, type MikanifyResult } from "./mikanify";
 import { resolveConversationQuestion, needsContextResolution, contextGuidance, responseFocusGuidance } from "./conversation-engine";
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
@@ -2595,6 +2596,45 @@ export default function App() {
           ]
         }
       });
+      // Optional second local pass, AFTER source retrieval and the initial
+      // model's complete researched answer. It only restyles the draft.
+      // Keep it out of Strict, cloud providers, and ordinary chat.
+      const originalResearchAnswer=completion.content || accumulated;
+      const mikanifyEligible=shouldMikanifyAnswer({
+        enabled:settings.mikanifyAnswer,researchMode:settings.researchMode,
+        searchQuery:completion.searchQuery,sourceCount:completion.sources?.length,
+        sourcesCarriedOver:completion.sourcesCarriedOver,
+        hasResearchAudit:!!completion.researchAudit,
+        modelUsed:completion.modelUsed,localModel:settings.model
+      });
+      let mikanifiedText:string|undefined;
+      let mikanifyAudit:Diagnostics["mikanify"]|undefined;
+      if(mikanifyEligible && !stopRequested.current) {
+        const rewriteStarted=performance.now();
+        setActivity("Mikanifying researched answer…");
+        try {
+          const result=await invoke<MikanifyResult>("mikanify_answer",{request:{
+            requestId,endpoint:settings.endpoint,model:settings.model,
+            persona:[settings.systemPrompt,communicationGuidance(settings.communication),
+              personalityGuidance(settings.personality)].join("\n\n"),
+            question:text,draft:originalResearchAnswer,
+            contextWindow:settings.contextWindow
+          }});
+          if(stopRequested.current)throw new Error("Generation stopped");
+          mikanifiedText=result.content;
+          mikanifyAudit={applied:true,elapsedMs:result.elapsedMs,
+            draftCharacters:originalResearchAnswer.length,
+            finalCharacters:result.content.length};
+        } catch(error) {
+          if(stopRequested.current || errorText(error)==="Generation stopped")throw error;
+          mikanifyAudit={applied:false,elapsedMs:performance.now()-rewriteStarted,
+            draftCharacters:originalResearchAnswer.length,
+            finalCharacters:originalResearchAnswer.length,
+            error:errorText(error)};
+          // No style pass may destroy a useful researched answer.
+          setActivity("Mikanify unavailable; keeping the researched draft");
+        }
+      }
       const duration = performance.now() - started;
       if(toolAudit){
         const fresh=completion.sourcesCarriedOver !== true ? (completion.sources?.length ?? 0) : 0;
@@ -2614,6 +2654,7 @@ export default function App() {
         fallbackReason: completion.fallbackReason,
         stats: completion.stats,
         research: completion.researchAudit ?? undefined,
+        mikanify:mikanifyAudit,
         memory: memoryAudit,
         toolPlan:toolAudit,
         reasoning:{mode:settings.reasoningMode,...reasoningChoice},
@@ -2627,7 +2668,7 @@ export default function App() {
       const verifiedSources = (turn.verifyWebEvidence || plannedPublicSearch || cloudResearched)
         ? (completion.sources?.length ? completion.sources : withSearch?.results)
         : undefined;
-      const rawText = completion.content || accumulated || "(The model returned no visible text.)";
+      const rawText = mikanifiedText || completion.content || accumulated || "(The model returned no visible text.)";
       // Structured candidate answers already use the native evidence notes.
       // The older headline fallback can reintroduce an unrelated result.
       // Simple mode is an intentional A/B experiment: keep the model's actual
@@ -2755,9 +2796,9 @@ export default function App() {
   const remoteStopBrainRef = useRef<()=>void>(()=>{});
   remoteStopBrainRef.current = () => { stopBrainEvaluation(); };
   const remoteReviewBrainRef = useRef<(id:string,mode:"routing"|"live",decision:"passed"|"failed",
-    researchMode?:Settings["researchMode"])=>void>(()=>{});
-  remoteReviewBrainRef.current = (id,mode,decision,researchMode) =>
-    reviewBrainEvalScenario(id,mode,settings.model,decision,researchMode);
+    researchMode?:Settings["researchMode"],mikanifyAnswer?:boolean)=>void>(()=>{});
+  remoteReviewBrainRef.current = (id,mode,decision,researchMode,mikanifyAnswer) =>
+    reviewBrainEvalScenario(id,mode,settings.model,decision,researchMode,mikanifyAnswer);
   const remoteRigRef = useRef<{id: string; revision: number; file: Blob} | null>(null);
   remoteRigRef.current = ikiRig?.file
     ? { id: ikiRig.id, revision: ikiRig.savedAt, file: ikiRig.file } : null;
@@ -2772,8 +2813,9 @@ export default function App() {
   const remoteModelStatus = modelSwitcherStatus(settings, remoteModelReply?.diagnostics, busy, activity);
   const brainCaseRecords=getBrainEvalCaseRecords();
   const routingEnv=brainEvalEnvironment("routing",settings.model);
-  const liveEnv=brainEvalEnvironment("live",settings.model,settings.researchMode);
+  const liveEnv=brainEvalEnvironment("live",settings.model,settings.researchMode,settings.mikanifyAnswer);
   const liveSimpleEnv=brainEvalEnvironment("live",settings.model,"simple");
+  const liveSimpleMikanifiedEnv=brainEvalEnvironment("live",settings.model,"simple",true);
   const liveStrictEnv=brainEvalEnvironment("live",settings.model,"strict");
   remoteSnapshotRef.current = {
     conversationId: activeConversationId,
@@ -2791,12 +2833,14 @@ export default function App() {
       const routing=statusForScenario(s,brainCaseRecords,routingEnv);
       const live=statusForScenario(s,brainCaseRecords,liveEnv);
       const liveSimple=statusForScenario(s,brainCaseRecords,liveSimpleEnv);
+      const liveSimpleMikanified=statusForScenario(s,brainCaseRecords,liveSimpleMikanifiedEnv);
       const liveStrict=statusForScenario(s,brainCaseRecords,liveStrictEnv);
       return {id:s.id,number:index+1,label:s.label,group:s.group,turns:s.steps.length,
         states:{
           routing:{status:routing.status,previous:routing.previous,at:routing.record?.at??null},
           live:{status:live.status,previous:live.previous,at:live.record?.at??null},
           liveSimple:{status:liveSimple.status,previous:liveSimple.previous,at:liveSimple.record?.at??null},
+          liveSimpleMikanified:{status:liveSimpleMikanified.status,previous:liveSimpleMikanified.previous,at:liveSimpleMikanified.record?.at??null},
           liveStrict:{status:liveStrict.status,previous:liveStrict.previous,at:liveStrict.record?.at??null}
         }
       };
@@ -2886,7 +2930,7 @@ export default function App() {
           job?: { id: string; kind?: "send" | "new_chat" | "open_chat" | "switch_model" | "refresh_models" | "start_brain_eval" | "stop_brain_eval" | "review_brain_eval";
             text?: string; conversationId?: string | null; modelChoice?: string;
             evalOptions?: BrainEvalRequest;evalScenarioId?:string;evalMode?:"live"|"routing";evalDecision?:"passed"|"failed";
-            evalResearchMode?:Settings["researchMode"] } | null
+            evalResearchMode?:Settings["researchMode"];evalMikanifyAnswer?:boolean } | null
         };
         if (data.job && !dispatching &&
           (!remoteBusyRef.current || data.job.kind === "stop_brain_eval")) {
@@ -2917,7 +2961,7 @@ export default function App() {
                 remoteStopBrainRef.current();
               else if (job.kind === "review_brain_eval" &&
                 job.evalScenarioId && job.evalMode && job.evalDecision)
-                remoteReviewBrainRef.current(job.evalScenarioId,job.evalMode,job.evalDecision,job.evalResearchMode);
+                remoteReviewBrainRef.current(job.evalScenarioId,job.evalMode,job.evalDecision,job.evalResearchMode,job.evalMikanifyAnswer);
             } catch (error) {
               console.warn("Remote conversation action failed:", error);
             } finally {
@@ -3829,6 +3873,14 @@ export default function App() {
             </select>
             <small>Simple reads retrieved excerpts directly and compares dates for changing facts. Strict preserves the previous JSON evidence pipeline for testing. Both use the live desktop clock and real SearXNG sources.</small>
           </div>
+          <label className="settings-toggle">
+            <input type="checkbox" checked={draft.mikanifyAnswer}
+              disabled={draft.researchMode!=="simple"}
+              onChange={event=>setDraft(current=>({...current,mikanifyAnswer:event.target.checked}))}/>
+            <span><strong>Mikanify answer 🐈 · experimental</strong>
+              <small>After Simple web research, use one additional local Ollama pass to rewrite the completed answer in Mikan's own voice. It must retain the original facts and citations, but may still change them. Off by default. Brain Lab records both versions for comparison. No extra web searches.</small>
+            </span>
+          </label>
           <details className="service-panel">
             <summary><strong>Preferred sources by topic</strong> (optional)</summary>
             <small>These sites receive a ranking boost; other websites remain searchable. Domain names only, separated by commas. You can edit the topics or add your own.</small>

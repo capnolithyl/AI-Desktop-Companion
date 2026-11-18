@@ -104,3 +104,17 @@ test("Simple and Strict live web runs retain separate scenario grades",()=>{
   assert.equal(statusForScenario(scenario,both,{...env("v2"),researchMode:"simple"}).status,"failed");
   assert.equal(statusForScenario(scenario,both,{...env("v2"),researchMode:"strict"}).status,"review");
 });
+
+test("Mikanified and untouched Simple research have independent human review grades",()=>{
+  const old=gradeReportCases({...report([single(true,true)]),researchMode:"simple",
+    mikanifyAnswer:false},[scenario],"v3");
+  const restyled=gradeReportCases({...report([single(false,true)]),researchMode:"simple",
+    mikanifyAnswer:true},[scenario],"v3");
+  const both=mergeCaseRecords(old,restyled);
+  assert.equal(both.length,2);
+  assert.equal(statusForScenario(scenario,both,{...env("v3"),researchMode:"simple",
+    mikanifyAnswer:false}).status,"review");
+  assert.equal(statusForScenario(scenario,both,{...env("v3"),researchMode:"simple",
+    mikanifyAnswer:true}).status,"failed");
+  assert.equal(parseCaseRecords([{...restyled[0],mikanifyAnswer:"yes"}]).length,0);
+});

@@ -10,7 +10,7 @@ import { DEFAULT_AVATAR_VERTICAL_OFFSET, readAvatarVerticalOffset } from "./avat
 export type ResearchMode = "simple" | "strict";
 export type ChatRole = "user" | "assistant";
 export type Message = { id: string; role: ChatRole; content: string };
-export type Settings = { voice: VoiceSettings; endpoint: string; model: string; provider: "local" | "auto" | "gemini" | "openrouter"; geminiModel: string; openrouterModel: string; systemPrompt: string; communication: CommunicationPreferences; appearance: Appearance; personality: Personality; searxngEndpoint: string; autoSearch: boolean; researchMode: ResearchMode; autoManageSearch: boolean; sourcePreferences: SourcePreference[]; cacheHours: number; contextWindow: number | null; reasoningMode: ReasoningMode; autoRememberUser: boolean; autoRememberMikan: boolean; visionCaptureIntervalSeconds:number; visionRegion:RegionChoice|null };
+export type Settings = { voice: VoiceSettings; endpoint: string; model: string; provider: "local" | "auto" | "gemini" | "openrouter"; geminiModel: string; openrouterModel: string; systemPrompt: string; communication: CommunicationPreferences; appearance: Appearance; personality: Personality; searxngEndpoint: string; autoSearch: boolean; researchMode: ResearchMode; mikanifyAnswer: boolean; autoManageSearch: boolean; sourcePreferences: SourcePreference[]; cacheHours: number; contextWindow: number | null; reasoningMode: ReasoningMode; autoRememberUser: boolean; autoRememberMikan: boolean; visionCaptureIntervalSeconds:number; visionRegion:RegionChoice|null };
 
 export type VoiceSettings = {
   engine: "qwen" | "pocket";
@@ -94,6 +94,7 @@ export const DEFAULT_SETTINGS: Settings = {
   autoSearch: false,
   sourcePreferences: readSourcePreferences(DEFAULT_SOURCE_PREFERENCES),
   researchMode: "simple",
+  mikanifyAnswer: false,
   autoManageSearch: false,
   cacheHours: 24,
   contextWindow: 16384,
@@ -129,6 +130,7 @@ export function loadSettings(): Settings {
       autoSearch: data.autoSearch === true,
       sourcePreferences: readSourcePreferences(data.sourcePreferences),
       researchMode: data.researchMode === "strict" ? "strict" : "simple",
+      mikanifyAnswer: data.mikanifyAnswer === true,
       autoManageSearch: typeof data.autoManageSearch === "boolean" ? data.autoManageSearch : data.autoSearch === true,
       cacheHours: typeof data.cacheHours === "number" && Number.isFinite(data.cacheHours) ? Math.max(1, Math.min(720, data.cacheHours)) : DEFAULT_SETTINGS.cacheHours,
       // A deliberate "Ollama default" (null) must survive a restart.

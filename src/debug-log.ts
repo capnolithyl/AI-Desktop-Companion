@@ -131,6 +131,7 @@ export type Diagnostics = {
   fallbackReason?: string | null;
   stats: OllamaStats | null;
   research?: ResearchAudit;
+  mikanify?: {applied:boolean;elapsedMs:number;draftCharacters:number;finalCharacters:number;error?:string};
   answerVerification?: {
     checked:number;rejected:number;recoveredHeadline:boolean;
     presentation?:"model-voice-preserved"|"source-only"
@@ -204,6 +205,13 @@ function performanceLines(diagnostics: Diagnostics): string[] {
       " ("+diagnostics.reasoning.reason+")"
     ] : []),
     ...(diagnostics.fallbackReason ? ["  Cloud fallback: " + diagnostics.fallbackReason] : []),
+    ...(diagnostics.mikanify ? [
+      "  Mikanify answer: " + (diagnostics.mikanify.applied?"applied":"original draft retained"),
+      "  Mikanify latency: " + duration(diagnostics.mikanify.elapsedMs),
+      "  Draft / final characters: " + diagnostics.mikanify.draftCharacters+
+        " / "+diagnostics.mikanify.finalCharacters,
+      ...(diagnostics.mikanify.error?["  Mikanify failure: "+diagnostics.mikanify.error]:[])
+    ] : []),
     ...(diagnostics.research ? [
       "  Research evidence: " + diagnostics.research.status,
       "  Accepted source-anchored facts: " + diagnostics.research.accepted,

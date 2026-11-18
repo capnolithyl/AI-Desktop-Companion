@@ -12,6 +12,7 @@ const MAX_TESTS=300;
 export type BrainEvalPresetConfig={
   mode:EvalMode;
   researchMode?:"simple"|"strict";
+  mikanifyAnswer?:boolean;
   repetitions:1|2|3|5;
   scenarioIds:string[];
   models:string[];
@@ -41,6 +42,7 @@ function validConfig(input:unknown):BrainEvalPresetConfig|null{
   return {
     mode:c.mode as EvalMode,
     ...(c.researchMode==="simple"||c.researchMode==="strict" ? {researchMode:c.researchMode} : {}),
+    ...(c.mikanifyAnswer===true?{mikanifyAnswer:true}:{}),
     repetitions:c.repetitions as BrainEvalPresetConfig["repetitions"],
     scenarioIds,models,category:c.category,
     statusFilter:c.statusFilter as BrainEvalPresetConfig["statusFilter"],search:c.search

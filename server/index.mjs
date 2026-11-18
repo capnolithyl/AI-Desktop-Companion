@@ -153,7 +153,7 @@ const safeEvalCatalog = entries => Array.isArray(entries)
       number: Number.isSafeInteger(item.number) && item.number>=1 && item.number<=180 ? item.number : null,
       group: String(item.group || "").slice(0, 80),
       turns: Number.isSafeInteger(item.turns) ? Math.min(12, Math.max(1, item.turns)) : 1,
-      states: Object.fromEntries(["routing","live","liveSimple","liveStrict"].map(mode => {
+      states: Object.fromEntries(["routing","live","liveSimple","liveSimpleMikanified","liveStrict"].map(mode => {
         const entry=item.states?.[mode];
         const allowed=["passed","failed","review","stale","incomplete","untested"];
         return [mode,{
@@ -343,6 +343,7 @@ export function createBridge({
           // Legacy single-model browser requests still work unchanged.
           const requestedModels = body.models;
           const researchMode = body.researchMode;
+          const mikanifyAnswer=body.mikanifyAnswer;
           const installed = new Set(desktop.models);
           const validModels = requestedModels === undefined ||
             (mode === "live" && Array.isArray(requestedModels) &&
@@ -352,6 +353,8 @@ export function createBridge({
           const allowedIds = new Set(desktop.brainEvalCatalog.map(item => item.id));
           if (!validModels || !["routing","live"].includes(mode) || ![1,2,3,5].includes(repetitions) ||
             (researchMode!==undefined && (mode!=="live" || !["simple","strict"].includes(researchMode))) ||
+            (mikanifyAnswer!==undefined && (typeof mikanifyAnswer!=="boolean" ||
+              (mikanifyAnswer && (mode!=="live"||researchMode!=="simple")))) ||
             !Array.isArray(ids) || !ids.length || ids.length > allowedIds.size ||
             ids.length !== new Set(ids).size || ids.some(id => !allowedIds.has(id)))
             return fail(response, 400, "Choose a valid test mode, repetition count and scenario selection");
@@ -359,6 +362,7 @@ export function createBridge({
             id: randomBytes(12).toString("hex"),kind:"start_brain_eval",
             evalOptions:{mode,repetitions,scenarioIds:ids,
               ...(researchMode === undefined ? {} : {researchMode}),
+              ...(mikanifyAnswer === undefined ? {} : {mikanifyAnswer}),
               ...(requestedModels === undefined ? {} : {models:requestedModels})}
           };
           json(response, 202, {id:pending.id,selected:ids.length});
@@ -379,11 +383,16 @@ export function createBridge({
           const mode=body.mode;
           const decision=body.decision;
           const researchMode=body.researchMode;
+          const mikanifyAnswer=body.mikanifyAnswer;
           const known=desktop.brainEvalCatalog.find(item=>item.id===id);
           const stateKey=mode==="live" && ["simple","strict"].includes(researchMode)
-            ? "live"+(researchMode==="simple"?"Simple":"Strict") : mode;
+            ? researchMode==="simple" && mikanifyAnswer===true
+              ? "liveSimpleMikanified" : "live"+(researchMode==="simple"?"Simple":"Strict")
+            : mode;
           if (!known || !["live","routing"].includes(mode) ||
               (researchMode!==undefined && (mode!=="live" || !["simple","strict"].includes(researchMode))) ||
+              (mikanifyAnswer!==undefined && (typeof mikanifyAnswer!=="boolean" ||
+                (mikanifyAnswer && (mode!=="live"||researchMode!=="simple")))) ||
               !["passed","failed"].includes(decision))
             return fail(response, 400, "Unknown test or review decision");
           if (known.states?.[stateKey]?.status!=="review")
@@ -391,7 +400,8 @@ export function createBridge({
           pending={
             id:randomBytes(12).toString("hex"),kind:"review_brain_eval",
             evalScenarioId:id,evalMode:mode,evalDecision:decision,
-            ...(researchMode===undefined?{}:{evalResearchMode:researchMode})
+            ...(researchMode===undefined?{}:{evalResearchMode:researchMode}),
+            ...(mikanifyAnswer===undefined?{}:{evalMikanifyAnswer:mikanifyAnswer})
           };
           json(response, 202, {id:pending.id});
         } else fail(response, 400, "Unsupported Brain Lab action");

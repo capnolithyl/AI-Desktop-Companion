@@ -940,3 +940,37 @@ scenarios 20,21,84, two repeats each. Watch specifically for current
 release ledger evidence, citation accuracy and contamination of
 version-specific changes by historical timelines. Do not declare the
 mechanical passes to be factual validation.
+
+## v0.9.54 Mikanify Answer (opt-in presentation experiment)
+
+Settings → Internet → **Mikanify answer** adds a second LOCAL, tool-free
+Ollama generation after a freshly sourced Simple web research answer. The
+first source-reading pass and its retrieval behavior are identical with
+the toggle on or off. Strict research, unrelated chat, reused-source
+follow-ups and cloud responses are not restyled. The second pass receives
+the original draft, the current user question, and configured Mikan
+personality/communication settings, but no web tools, additional search
+or verification prompts. It is instructed to preserve claims, names,
+version numbers, statuses, dates, uncertainty and [n] citations.
+
+Because LLM rewrites can still distort facts, this is **off by default**
+and explicitly experimental. The desktop falls back to the untouched
+draft on an empty answer, error or timeout, and records a style-pass
+diagnostic. Brain Lab has an independent **Mikanify answer** switch.
+Live Simple reports store BOTH the full original researched answer and
+the final rewritten answer, timing, whether restyling ran, and failures.
+Review both manually for citation drift, added/omitted claims and
+factual errors already present in the original. An unchanged original
+error is NOT a Mikanify regression.
+
+Brain Lab manual grades and presets distinguish Simple original from
+Simple Mikanified as well as the parked Strict mode, across desktop and
+authenticated remote browser UI. Remote test requests are validated
+and handled on the desktop; no extra external model or account is used.
+The second pass adds latency; no claims of improved correctness are
+made without live Qwen testing.
+
+Suggested A/B: Qwen3.5:9b, Live, Simple, Mikanify on, scenarios
+20,21,84 x2. Inspect each step's original/final answer pair and cited
+sources. Then compare against Simple without rewriting on the same build.
+Human review is essential; structural passes alone don't validate facts.
