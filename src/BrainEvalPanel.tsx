@@ -23,6 +23,7 @@ const totalFixtureTurns=EVAL_SCENARIOS.reduce((n,s)=>n+s.steps.length,0);
 
 export function BrainEvalPanel({settings,availableModels}:{settings:Settings;availableModels:readonly string[]}){
   const [mode,setMode]=useState<EvalMode>("routing");
+  const [researchMode,setResearchMode]=useState<Settings["researchMode"]>(settings.researchMode);
   const [presets,setPresets]=useState(readBrainEvalPresets);
   const [presetName,setPresetName]=useState("");
   const [presetChoice,setPresetChoice]=useState("");
@@ -52,10 +53,10 @@ export function BrainEvalPanel({settings,availableModels}:{settings:Settings;ava
   const progressPercent=progress.total>0
     ?Math.round(Math.min(progress.done,progress.total)/progress.total*100):0;
   const records=getBrainEvalCaseRecords();
-  const environment=brainEvalEnvironment(mode,viewModel||settings.model);
+  const environment=brainEvalEnvironment(mode,viewModel||settings.model,researchMode);
   const statuses=useMemo(()=>
     new Map(EVAL_SCENARIOS.map(s=>[s.id,statusForScenario(s,records,environment)])),
-    [records,mode,settings.model,viewModel]
+    [records,mode,settings.model,viewModel,researchMode]
   );
   const totals=summarizeCaseStatuses(EVAL_SCENARIOS,records,environment);
   const searchTerm=search.trim().toLocaleLowerCase();
@@ -102,7 +103,7 @@ export function BrainEvalPanel({settings,availableModels}:{settings:Settings;ava
     selectOnly(sample.map(s=>s.id));
   };
   const currentPresetConfig=():BrainEvalPresetConfig=>({
-    mode,repetitions:repeats as BrainEvalPresetConfig["repetitions"],
+    mode,researchMode,repetitions:repeats as BrainEvalPresetConfig["repetitions"],
     scenarioIds:selected.map(s=>s.id),models:[...selectedModels],
     category,statusFilter,search
   });
@@ -129,6 +130,7 @@ export function BrainEvalPanel({settings,availableModels}:{settings:Settings;ava
     const knownModels=config.models.filter(model=>localModels.includes(model));
     const missingModels=config.models.filter(model=>!localModels.includes(model));
     setMode(config.mode);
+    setResearchMode(config.researchMode??settings.researchMode);
     setRepeats(config.repetitions);
     setSelectedIds(new Set(knownIds));
     setSelectedModels(new Set(knownModels));
@@ -160,7 +162,7 @@ export function BrainEvalPanel({settings,availableModels}:{settings:Settings;ava
   function run(){
     try{
       startBrainEvaluation(settings,{
-        mode,repetitions:repeats,scenarioIds:selected.map(s=>s.id),
+        mode,researchMode,repetitions:repeats,scenarioIds:selected.map(s=>s.id),
         ...(mode==="live"?{models:modelsToRun}:{}),
       },localModels);
       setMessage("");
@@ -206,7 +208,8 @@ export function BrainEvalPanel({settings,availableModels}:{settings:Settings;ava
         Neither mode writes to saved memories or private connected apps.
         Live runs containing web scenarios first verify a real public search returns actual sources;
         an empty or broken SearXNG response stops the run before any misleading scores are recorded.
-        Conversation quality still needs human review.</p>
+        Conversation quality still needs human review. Simple uses source-reading without the JSON fact extractor;
+        Strict keeps the previous experimental extraction path. Each gets separate scenario grades.</p>
     </details>
     <section className="brain-eval-presets" aria-label="Saved Brain Lab configurations">
       <div className="brain-eval-presets-header">
@@ -245,6 +248,13 @@ export function BrainEvalPanel({settings,availableModels}:{settings:Settings;ava
         <select value={mode} disabled={busy} onChange={e=>setMode(e.target.value as EvalMode)}>
           <option value="routing">Fast · production routing and lexical recall</option>
           <option value="live">Live · local model + actual public SearXNG</option>
+        </select>
+      </label>
+      <label>Research interpreter
+        <select value={researchMode} disabled={busy||mode!=="live"}
+          onChange={e=>setResearchMode(e.target.value as Settings["researchMode"])}>
+          <option value="simple">Simple · read sources directly</option>
+          <option value="strict">Strict · parked evidence pipeline</option>
         </select>
       </label>
       <label>Category
@@ -402,10 +412,10 @@ export function BrainEvalPanel({settings,availableModels}:{settings:Settings;ava
             {view.status==="stale"&&view.previous?" ("+view.previous+")":""}</span>
           {view.status==="review"&&<div className="brain-eval-review-actions">
             <button type="button" disabled={busy}
-              onClick={()=>{try{reviewBrainEvalScenario(s.id,mode,viewModel||settings.model,"passed")}
+              onClick={()=>{try{reviewBrainEvalScenario(s.id,mode,viewModel||settings.model,"passed",researchMode)}
                 catch(error){setMessage(String(error))}}}>Approve</button>
             <button type="button" disabled={busy}
-              onClick={()=>{try{reviewBrainEvalScenario(s.id,mode,viewModel||settings.model,"failed")}
+              onClick={()=>{try{reviewBrainEvalScenario(s.id,mode,viewModel||settings.model,"failed",researchMode)}
                 catch(error){setMessage(String(error))}}}>Fail</button>
           </div>}
         </div>;

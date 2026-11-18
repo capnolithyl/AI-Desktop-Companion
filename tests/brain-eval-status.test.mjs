@@ -95,3 +95,12 @@ test("dashboard summary separates passed, failed, review, stale, untested",()=>{
     passed:1,failed:1,review:1,incomplete:0,untested:1,stale:1
   });
 });
+
+test("Simple and Strict live web runs retain separate scenario grades",()=>{
+  const strict=gradeReportCases({...report([single(true,true)]),researchMode:"strict"},[scenario],"v2");
+  const simple=gradeReportCases({...report([single(false,true)]),researchMode:"simple"},[scenario],"v2");
+  const both=mergeCaseRecords(strict,simple);
+  assert.equal(both.length,2);
+  assert.equal(statusForScenario(scenario,both,{...env("v2"),researchMode:"simple"}).status,"failed");
+  assert.equal(statusForScenario(scenario,both,{...env("v2"),researchMode:"strict"}).status,"review");
+});

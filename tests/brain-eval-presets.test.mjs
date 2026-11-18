@@ -84,3 +84,10 @@ test("desktop and browser relay expose manual named preset controls",async()=>{
   assert.doesNotMatch(remote.slice(remote.indexOf("function loadBrainLabPreset()"),
     remote.indexOf("function deleteBrainLabPreset()")),/startBrainEvaluation|action:"start"/);
 });
+
+test("presets keep the chosen interpreter but legacy presets remain valid",()=>{
+  const strict={...config,researchMode:"strict"};
+  assert.deepEqual(parseBrainEvalPresets([{name:"Strict comparison",config:strict}])[0].config,strict);
+  assert.equal(parseBrainEvalPresets([{name:"Legacy",config}])[0].config.researchMode,undefined);
+  assert.equal(parseBrainEvalPresets([{name:"Unexpected",config:{...config,researchMode:"unsafe"}}])[0].config.researchMode,undefined);
+});

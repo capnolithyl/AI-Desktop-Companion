@@ -11,6 +11,7 @@ const MAX_TESTS=300;
 
 export type BrainEvalPresetConfig={
   mode:EvalMode;
+  researchMode?:"simple"|"strict";
   repetitions:1|2|3|5;
   scenarioIds:string[];
   models:string[];
@@ -39,6 +40,7 @@ function validConfig(input:unknown):BrainEvalPresetConfig|null{
       typeof c.search!=="string"||c.search.length>180)return null;
   return {
     mode:c.mode as EvalMode,
+    ...(c.researchMode==="simple"||c.researchMode==="strict" ? {researchMode:c.researchMode} : {}),
     repetitions:c.repetitions as BrainEvalPresetConfig["repetitions"],
     scenarioIds,models,category:c.category,
     statusFilter:c.statusFilter as BrainEvalPresetConfig["statusFilter"],search:c.search
