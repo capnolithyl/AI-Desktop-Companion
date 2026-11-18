@@ -974,3 +974,25 @@ Suggested A/B: Qwen3.5:9b, Live, Simple, Mikanify on, scenarios
 20,21,84 x2. Inspect each step's original/final answer pair and cited
 sources. Then compare against Simple without rewriting on the same build.
 Human review is essential; structural passes alone don't validate facts.
+
+## v0.9.55 Mikanify style fidelity refinement
+
+Live Simple Qwen3.5:9b #20,#21,#84 x2 on v0.9.54: all 8/8 local style passes
+completed and all citation index sequences were retained, with 27.9 seconds
+combined added rewrite time (3.49s/turn; full scenario set 96.3s).
+The rewrite caused no conspicuous new numerical/version invention, but
+sometimes **increased epistemic certainty without new evidence**, for example
+"does include" → "absolutely did" and "appears to be" → "is".
+Some rewrites added canned greetings and some barely changed the draft.
+Preexisting research errors persisted: AMD version-specific attribution in #20,
+Qwen4-Max omission in #21, and preview/release chronology confusion in #84.
+
+The v0.9.55 second-pass prompt now makes epistemic strength the top priority
+and natural character the second priority. It directly discourages artificial
+introductions, excessive excitement and boilerplate questions. No changes to
+research retrieval, planner, source selection, first answer, extra tools,
+number of model calls or postprocessing gates. No new regex.
+
+Compare Live Simple Qwen3.5:9b #20,#21,#84 x2 with Mikanify ON and manually
+review saved originalAnswer versus answer. Correctness still needs human
+inspection; preserving citation indices alone does not verify claims.
