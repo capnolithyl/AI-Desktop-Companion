@@ -996,3 +996,28 @@ number of model calls or postprocessing gates. No new regex.
 Compare Live Simple Qwen3.5:9b #20,#21,#84 x2 with Mikanify ON and manually
 review saved originalAnswer versus answer. Correctness still needs human
 inspection; preserving citation indices alone does not verify claims.
+
+## v0.9.56 Shared configured voice across desktop, Brain Lab, and Mikanify
+
+The voice instructions now come from ONE TypeScript helper shared by
+production desktop chat, isolated Brain Lab, and the optional Mikanify
+presentation pass. Every path receives the same settings-derived:
+(1) editable main system prompt, (2) owner communication preferences
+including custom guidance, and (3) personality slider guidance.
+The same non-roleplay reply-format guidance is applied to desktop and
+Brain Lab using the same roleplay detection.
+
+Previously Brain Lab omitted communication preferences and non-roleplay
+formatting, and Mikanify imposed an additional hardcoded personality
+description. Both discrepancies are corrected. Mikanify's remaining
+fixed prompt is a **task/fidelity contract only**: preserve findings,
+uncertainty, release dates and citations, and rewrite in the supplied
+configured voice, never a default character. Other operational context
+(synthetic Brain Lab fixtures and no private memory writes, research source
+handling, date awareness) remains distinct for its legitimate purpose.
+
+This is not a guarantee that Brain Lab and production answers are
+identical: they still have different authorized memories, test isolation,
+conversation context and model input. It DOES remove unintentional
+differences in their configurable voice source. Mikanify stays opt-in,
+off by default, and its two-pass A/B reports retain both drafts.

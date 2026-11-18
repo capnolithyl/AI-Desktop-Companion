@@ -10,8 +10,8 @@ import { planPublicWebTools, type PublicResearchContext } from "./unified-planne
 import type { ResearchAudit, ToolPlanningAudit } from "./debug-log";
 import { responseFocusGuidance } from "./conversation-engine";
 import { PERSONAL_DETAIL_GROUNDING_GUIDANCE } from "./personal-grounding";
-import { personalityGuidance } from "./personality";
-import { communicationGuidance } from "./communication-preferences";
+import { assistantVoiceGuidance } from "./assistant-voice";
+import { roleplayActive } from "./narration-filter";
 import { shouldMikanifyAnswer, type MikanifyResult } from "./mikanify";
 import { reviewResearchCompletion } from "./evidence-verification";
 import { chatRuntimeContext, runtimeContext } from "./runtime-context";
@@ -268,10 +268,10 @@ async function executeOne(
     // made its reply-quality observations less representative of production.
     // Test memories remain synthetic; public sources come from the exact
     // production Rust/SearXNG research flow only when the planner authorizes it.
+    const roleplayAllowed=roleplayActive(last,messages.slice(0,-1));
     const system=[
-      settings.systemPrompt.trim(),
+      assistantVoiceGuidance(settings,roleplayAllowed),
       PERSONAL_DETAIL_GROUNDING_GUIDANCE,
-      personalityGuidance(settings.personality),
       // Match desktop production: researched answers get the complete live
       // calendar and source-freshness instructions, ordinary chat stays light.
       researchQuery ? runtimeContext() : chatRuntimeContext(),
@@ -326,8 +326,7 @@ async function executeOne(
         try{
           const styled=await invoke<MikanifyResult>("mikanify_answer",{request:{
             requestId:id,endpoint:settings.endpoint,model:settings.model,
-            persona:[settings.systemPrompt.trim(),communicationGuidance(settings.communication),
-              personalityGuidance(settings.personality)].join("\n\n"),
+            persona:assistantVoiceGuidance(settings,roleplayAllowed),
             question:last,draft:rewritten,contextWindow:settings.contextWindow
           }});
           if(controller.signal.aborted)throw new Error("Stopped by owner");
