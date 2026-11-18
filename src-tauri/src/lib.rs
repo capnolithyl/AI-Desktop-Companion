@@ -11,6 +11,7 @@ mod research_intent;
 mod source_enrichment;
 mod passages;
 mod evidence_pack;
+mod simple_research;
 mod recommendation_gate;
 mod quantities;
 mod attribution;
@@ -66,6 +67,9 @@ struct ChatRequest {
     auto_search: bool,
     #[serde(default = "default_structured_research")]
     structured_research: bool,
+    /// Explicit experimental selector; old callers can still send structured_research.
+    #[serde(default)]
+    research_mode: Option<String>,
     #[serde(default)]
     research_compact: bool,
     // The same TypeScript intent policy is used by Android and desktop.
@@ -109,6 +113,25 @@ fn general_knowledge_fallback_allowed(
 }
 fn default_cache_hours() -> u64 { 24 }
 fn default_structured_research() -> bool { true }
+fn strict_research_mode(mode:Option<&str>, legacy_structured:bool)->bool {
+    match mode {
+        Some("strict")=>true,
+        Some("simple")=>false,
+        _=>legacy_structured
+    }
+}
+#[cfg(test)]
+mod research_mode_tests {
+    use super::*;
+    #[test]
+    fn simple_and_strict_modes_are_explicit_with_backward_compatibility() {
+        assert!(!strict_research_mode(Some("simple"),true));
+        assert!(strict_research_mode(Some("strict"),false));
+        assert!(strict_research_mode(None,true));
+        assert!(!strict_research_mode(None,false));
+        assert!(strict_research_mode(Some("unknown"),true));
+    }
+}
 fn web_tools_allowed(auto_search: bool, research_route: Option<&str>) -> bool {
     // Backward-compatible with clients that omit research_route; a known
     // local-chat route has priority even when auto_search was left enabled.
@@ -655,6 +678,8 @@ async fn chat_stream_impl(
     let mut research_audit = None;
     let mut optional_search_error: Option<String> = None;
     let selected_context = valid_context_window(request.context_window);
+    let strict_research = strict_research_mode(
+        request.research_mode.as_deref(),request.structured_research);
     // The chat route is authoritative. Even old clients that accidentally
     // leave auto_search enabled must not invoke web tools or carry unrelated
     // source excerpts into personal, persona or self-capability replies.
@@ -784,7 +809,7 @@ async fn chat_stream_impl(
             // Read at most two safely validated HTTPS pages in parallel; a
             // failed page read leaves the original excerpt intact. The normal
             // lighter path remains for conversations without this setting.
-            if task.and_then(|t|t.source_url.as_ref()).is_none() && (request.structured_research
+            if task.and_then(|t|t.source_url.as_ref()).is_none() && (!strict_research
                 || research_intent::needs_primary_source_verification(&messages)) {
                 let _ = app.emit("mikan://activity", json!({
                     "requestId": request.request_id,
@@ -855,7 +880,7 @@ async fn chat_stream_impl(
         sources_carried_over = true;
     }
     if newly_researched {
-        if explicit_search || request.structured_research {
+        if explicit_search || strict_research {
             // A prior reply can resolve a reference in the local plan, but it
             // cannot supply facts to a newly sourced answer.
             messages = ollama_messages(&request.messages);
@@ -863,9 +888,13 @@ async fn chat_stream_impl(
             messages.insert(0, identity_message);
         }
         messages.insert(1, json!({
-            "role": "system", "content": research_intent::evidence_instruction()
+            "role": "system", "content": if strict_research {
+                research_intent::evidence_instruction()
+            } else {
+                simple_research::evidence_instruction().to_owned()
+            }
         }));
-        let evidence = if request.structured_research {
+        let evidence = if strict_research {
             let default_task = recommendation_gate::ResearchTask::default();
             let task = task.unwrap_or(&default_task);
             let mut user_turns: Vec<String> = request.messages.iter().rev()
@@ -1118,7 +1147,11 @@ async fn chat_stream_impl(
             }));
             notes
         } else {
-            research_intent::evidence_data(&sources)
+            let focus=request.messages.iter().rev()
+                .find(|message| message.role=="user")
+                .map(|message| message.content.as_str())
+                .unwrap_or_default();
+            simple_research::evidence_data(&sources,focus)
         };
         // Keep retrieved text at data priority and align citations with the UI.
         let last_user = messages.iter().rposition(|m| m["role"] == "user").unwrap_or(messages.len());
