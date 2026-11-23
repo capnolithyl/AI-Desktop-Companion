@@ -21,7 +21,13 @@ test("communication settings validate stored values and support alternate modes"
 test("communication preferences are wired into the desktop UI and chat", async()=>{
   const {readFileSync} = await import("node:fs");
   const app=readFileSync(new URL("./App.tsx",import.meta.url),"utf8");
-  assert.match(app,/communicationGuidance\(settings\.communication\)/);
+  // Personality/communication prompt assembly was deliberately centralized.
+  // Check the actual shared prompt path rather than requiring an App.tsx literal.
+  const instruction=readFileSync(new URL("./assistant-instructions.ts",import.meta.url),"utf8");
+  const voice=readFileSync(new URL("./assistant-voice.ts",import.meta.url),"utf8");
+  assert.match(app,/assistantTurnInstructionParts\(/);
+  assert.match(instruction,/assistantVoiceGuidance\(settings,allowRoleplay\)/);
+  assert.match(voice,/communicationGuidance\(settings\.communication\)/);
   assert.match(app,/Communication preferences/);
   assert.match(app,/draft\.communication\.addressMode/);
   assert.match(app,/draft\.communication\.customGuidance/);

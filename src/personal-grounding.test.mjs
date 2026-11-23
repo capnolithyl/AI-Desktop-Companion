@@ -10,6 +10,10 @@ test("personal grounding protects preferences and possessions without banning pl
 });
 test("all desktop model providers receive the same owner detail rule",()=>{
   const app=readFileSync(new URL("./App.tsx",import.meta.url),"utf8");
-  assert.match(app,/PERSONAL_DETAIL_GROUNDING_GUIDANCE/);
-  assert.match(app,/communicationGuidance\(settings\.communication\), PERSONAL_DETAIL_GROUNDING_GUIDANCE/);
+  const instructions=readFileSync(new URL("./assistant-instructions.ts",import.meta.url),"utf8");
+  const voice=readFileSync(new URL("./assistant-voice.ts",import.meta.url),"utf8");
+  assert.match(app,/assistantTurnInstructionParts\(/);
+  assert.match(instructions,/PERSONAL_DETAIL_GROUNDING_GUIDANCE/);
+  assert.match(instructions,/assistantVoiceGuidance\(settings,allowRoleplay\)/);
+  assert.match(voice,/communicationGuidance\(settings\.communication\)/);
 });

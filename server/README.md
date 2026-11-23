@@ -89,13 +89,13 @@ Only checked cases run, preserving all other historical results.
 
 ## Remote developer updates (opt-in)
 
-This is for one personal Windows PC and one **pinned** GitHub development branch.
+This is for one personal Windows PC and one **pinned** GitHub branch (`main`).
 The browser does not get a command prompt, filesystem access, an SSH token or
 arbitrary Git branch selection.
 
 **One-time setup on the PC**, in the branch checkout:
 
-1. `git switch feature/p0-brain-evaluation-harness`
+1. `git switch main`
 2. `git pull --ff-only`
 3. `npm install`
 4. Stop the old `npm run server` process with Ctrl+C, since it owns port 3847.
@@ -125,7 +125,7 @@ need the MSVC toolchain for the first relay-only setup.
 2. Go to **☰ → Settings → Developer updates**.
 3. Tap **Check GitHub**. The local supervisor checks for a clean working
    tree, correct checked-out branch and approved GitHub origin; it fetches
-   only `feature/p0-brain-evaluation-harness`.
+   only `main`.
 4. If newer commits are available, tap **Update & restart**, read the
    confirmation (number of commits and managed components), then approve.
 5. The supervisor fast-forwards the checkout and checks whether the actual
@@ -161,6 +161,8 @@ commits before updating and protect the remote browser access key.
   to work. It does not update the installed NSIS executable either.
 - An installed desktop .exe still needs a new **Windows installer from CI**
   for its own code changes. That is separate from this dev-source updater.
+- The v0.9.63 consolidation changes the supervisor's pinned branch from the old Brain Lab feature branch to `main`. Stop the existing supervisor (Ctrl+C) and restart it after switching to the up-to-date `main` checkout. Do not use a feature-branch supervisor process to update `main`.
+
 - The supervisor does **not** self-update/restart its own process.
   Changes to `scripts/remote-dev-supervisor.mjs` require one manual restart
   of `npm run remote:dev` on Windows. This matters for the v0.9.9
