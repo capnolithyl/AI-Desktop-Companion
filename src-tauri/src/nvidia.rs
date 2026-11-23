@@ -348,8 +348,14 @@ pub(crate) async fn chat(app:&AppHandle,request:&ChatRequest,key:&str,emitted:&A
         // A plain conversational reply with no tools may be spoken immediately.
         let live_text = !allow_tools && request.research_route.as_deref()==Some("chat")
             && request.research_query.is_none();
-        let result=stream_completion(&client,key,model,&messages,allow_tools,60,3500,
-            app,&request.request_id,live_text,emitted).await?;
+        // NVIDIA's benchmarked tool path used non-stream completions. Keep
+        // tool arguments private and buffer verified answers until tools finish.
+        let result=if allow_tools {
+            request_completion(&client,key,model,&messages,true,60,3500).await?
+        } else {
+            stream_completion(&client,key,model,&messages,false,60,3500,
+                app,&request.request_id,live_text,emitted).await?
+        };
         let reply=&result["choices"][0]["message"];
         if !reply.is_object() { return Err(missing_reply_reason(&result)); }
         let calls=reply["tool_calls"].as_array().filter(|items|!items.is_empty());
