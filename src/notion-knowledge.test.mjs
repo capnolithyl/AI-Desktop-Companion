@@ -243,3 +243,12 @@ test("rereads that request feedback still generate a critique instead of a bare 
   assert.equal(plan.reread,true);
   assert.equal(plan.fullRead,true);
 });
+
+test("plain reading request loads full Notion prose but analysis still uses response model",async()=>{
+  const {asksOnlyToLoadNotionPage}=await import("./notion-knowledge.ts");
+  const p={id:"one",title:"Chapter 01 · Boxes",url:"https://www.notion.so/one",chunkCount:20,characters:57000};
+  assert.equal(asksOnlyToLoadNotionPage("Can you read the first chapter of my book Adikameg?",p),true);
+  assert.equal(asksOnlyToLoadNotionPage("Read chapter 1 and summarize each scene",p),false);
+  assert.equal(asksOnlyToLoadNotionPage("Tell me what you think of chapter 1",p),false);
+  assert.equal(asksOnlyToLoadNotionPage("Read chapter 1 again",p),true);
+});
