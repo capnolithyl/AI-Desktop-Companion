@@ -63,10 +63,10 @@ test("preset load code explicitly filters missing scenarios and models and never
   const {readFileSync}=await import("node:fs");
   const ui=readFileSync(new URL("../src/BrainEvalPanel.tsx",import.meta.url),"utf8");
   assert.match(ui,/config\.scenarioIds\.filter\(id=>allowedIds\.has\(id\)\)/);
-  assert.match(ui,/config\.models\.filter\(model=>localModels\.includes\(model\)\)/);
+  assert.match(ui,/config\.models\.filter\(model=>availableChoices\.includes\(model\)\)/);
   assert.match(ui,/setSelectedIds\(new Set\(knownIds\)\)/);
   assert.match(ui,/setSelectedModels\(new Set\(knownModels\)\)/);
-  assert.match(ui,/Select installed models before running/);
+  assert.match(ui,/Check your installed and configured models/);
 });
 
 test("desktop and browser relay expose manual named preset controls",async()=>{
