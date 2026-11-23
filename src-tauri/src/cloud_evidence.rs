@@ -121,8 +121,19 @@ fn verified_span(value:&Option<String>,quote:&str,max_len:usize)->Option<String>
     }
     Some(span.to_owned())
 }
+/// Remove Markdown heading markers for presentation only. Provenance is always
+/// checked against the unmodified source before reaching this function.
+fn remove_heading_markup(text:&str)->&str{
+    let trimmed=text.trim();
+    let count=trimmed.bytes().take_while(|byte|*byte==b'#').count();
+    if (1..=6).contains(&count)
+        && trimmed[count..].chars().next().is_some_and(char::is_whitespace){
+        trimmed[count..].trim_start()
+    }else{trimmed}
+}
+
 fn plain(text:&str,max_chars:usize)->String{
-    let short=text.chars().take(max_chars).collect::<String>();
+    let short=remove_heading_markup(text).chars().take(max_chars).collect::<String>();
     short.split_whitespace().collect::<Vec<_>>().join(" ")
         .replace('\\', "\\\\").replace('[', "\\[").replace(']', "\\]")
         .replace('*', "\\*")
@@ -196,6 +207,39 @@ fn line_for_passage(passage:&VerifiedPassage)->String{
     format!("{sentence} {citation}")
 }
 
+/// A source heading is not an event or independent factual result. Keep it
+/// available in diagnostics as a verified quote, but do not display it beside
+/// actual named facts simply because the model filled a "subject" field.
+fn standalone_heading_without_details(passage:&VerifiedPassage)->bool{
+    if passage.when.is_some() || passage.where_at.is_some() || passage.detail.is_some(){
+        return false;
+    }
+    let Some(subject)=passage.subject.as_deref() else {return false;};
+    let trimmed=passage.quote.trim();
+    let count=trimmed.bytes().take_while(|byte|*byte==b'#').count();
+    (1..=6).contains(&count)
+        && trimmed[count..].chars().next().is_some_and(char::is_whitespace)
+        && normalized(trimmed[count..].trim())==normalized(subject)
+}
+
+/// Select display candidates by structural evidence, not keyword rules about
+/// concerts, weekends, bands or cities. Preserve the original source IDs.
+pub(crate) fn displayable_passages<'a>(
+    passages:&'a [VerifiedPassage],sources:&[SearchResult]
+)->Vec<&'a VerifiedPassage>{
+    let has_named=passages.iter().any(|passage|passage.subject.is_some());
+    let candidates=passages.iter()
+        .filter(|passage|!has_named || passage.subject.is_some())
+        .filter(|passage|passage.source.checked_sub(1)
+            .and_then(|index|sources.get(index)).is_some())
+        .collect::<Vec<_>>();
+    let has_substantive_item=candidates.iter().any(|passage|
+        passage.when.is_some() || passage.where_at.is_some() || passage.detail.is_some());
+    candidates.into_iter()
+        .filter(|passage|!has_substantive_item || !standalone_heading_without_details(passage))
+        .collect()
+}
+
 pub(crate) fn render_grounded(passages:&[VerifiedPassage],sources:&[SearchResult])->String{
     render_grounded_with_tone(passages,sources,None)
 }
@@ -212,13 +256,9 @@ pub(crate) fn render_grounded_with_tone(
             format!("I found relevant pages {refs}, but the retrieved evidence didn't establish the specific details. I'd rather not make up dates, places, or other facts.")
         };
     }
-    // If the model selected genuine named facts, omit generic unstructured
-    // snippets (typically search-engine boilerplate) from the final answer.
-    // Retain plain quotes if no named facts are available.
-    let structured=passages.iter().any(|item|item.subject.is_some());
-    let chosen=passages.iter().filter(|item|!structured || item.subject.is_some())
-        .filter(|item|item.source.checked_sub(1).and_then(|index|sources.get(index)).is_some())
-        .map(line_for_passage)
+    // Model-requested passages still require presentation filtering.
+    let chosen=displayable_passages(passages,sources)
+        .into_iter().map(line_for_passage)
         .collect::<Vec<_>>();
     if chosen.is_empty(){
         return "I found sources, but couldn't substantiate the requested details without guessing.".into();
@@ -403,6 +443,77 @@ mod tests {
         assert!(!answer.contains("Discover live shows"));
         assert!(!answer.contains("only upcoming"));
     }
+    #[test]
+    fn standalone_navigation_heading_is_not_presented_as_an_event(){
+        let heading="### Events this weekend in Bay City";
+        let santa="### 2026 Santa's Arrival & Tree Lighting in Wenonah Park! Date and Time Fri, 27 Nov, 2026 - 07:00 PM Location Wenonah Park, 801 N Water St, Bay City, MI";
+        let comedy="### The Future of Comedy Show at The Skyroom (Bay City, MI) Date and Time Sat, 28 Nov, 2026 - 08:00 PM Location The Skyroom at Washington Lanes";
+        let vintage="### Rebel Vintage Shopping Event Date and Time Fri, 27 Nov, 2026 - 09:00 AM Location Liberty Harbor Event Center";
+        let film="### Polar Express - Sundays In The City Free Movie Date and Time Sun, 29 Nov, 2026 - 01:00 PM Location 913 Washington Ave, Bay City";
+        let sources=vec![SearchResult{
+            title:"Bay City events".into(),url:"https://allevents.in/bay-city/this-weekend".into(),
+            content:[heading,santa,comedy,vintage,film].join("\n"),
+            engine:"webpage".into(),published_date:None
+        }];
+        let plan=vec![
+            ProposedPassage{source:1,quote:heading.into(),
+                subject:Some("Events this weekend in Bay City".into()),..Default::default()},
+            ProposedPassage{source:1,quote:santa.into(),
+                subject:Some("2026 Santa's Arrival & Tree Lighting in Wenonah Park!".into()),
+                when:Some("Fri, 27 Nov, 2026 - 07:00 PM".into()),
+                where_at:Some("Wenonah Park, 801 N Water St, Bay City, MI".into()),
+                ..Default::default()},
+            ProposedPassage{source:1,quote:comedy.into(),
+                subject:Some("The Future of Comedy Show at The Skyroom (Bay City, MI)".into()),
+                when:Some("Sat, 28 Nov, 2026 - 08:00 PM".into()),
+                ..Default::default()},
+            ProposedPassage{source:1,quote:vintage.into(),
+                subject:Some("Rebel Vintage Shopping Event".into()),
+                when:Some("Fri, 27 Nov, 2026 - 09:00 AM".into()),
+                ..Default::default()},
+            ProposedPassage{source:1,quote:film.into(),
+                subject:Some("Polar Express - Sundays In The City Free Movie".into()),
+                when:Some("Sun, 29 Nov, 2026 - 01:00 PM".into()),
+                ..Default::default()}
+        ];
+        let (verified,rejected)=verified_passages(&plan,&sources);
+        assert_eq!(rejected,0);
+        assert_eq!(verified.len(),5);
+        let shown=displayable_passages(&verified,&sources);
+        assert_eq!(shown.len(),4);
+        let answer=render_grounded(&verified,&sources);
+        assert!(!answer.contains("Events this weekend in Bay City"));
+        assert!(!answer.contains("###"));
+        for title in ["Santa's Arrival","Future of Comedy","Rebel Vintage","Polar Express"] {
+            assert!(answer.contains(title),"{title} should remain");
+        }
+        assert_eq!(answer.matches("[1]").count(),4);
+    }
+    #[test]
+    fn markdown_heading_cleanup_does_not_damage_literals(){
+        assert_eq!(plain("### Events this weekend in Bay City",260),
+            "Events this weekend in Bay City");
+        assert_eq!(plain("C# and F# are programming languages",260),
+            "C# and F# are programming languages");
+        assert_eq!(plain("#1 fan of metal",260),"#1 fan of metal");
+        // A fallback without structured date/location still strips markup
+        // while preserving the underlying verified quote and citation.
+        let sources=vec![SearchResult{
+            title:"Headline".into(),url:"https://example.org".into(),
+            content:"### Something factual and substantive".into(),
+            engine:"webpage".into(),published_date:None
+        }];
+        let (verified,_)=verified_passages(&[
+            ProposedPassage{source:1,
+                quote:"### Something factual and substantive".into(),
+                ..Default::default()}
+        ],&sources);
+        let answer=render_grounded(&verified,&sources);
+        assert!(answer.contains("Something factual and substantive"));
+        assert!(!answer.contains("###"));
+        assert!(answer.contains("[1]"));
+    }
+
     #[test]
     fn source_quotes_are_deduplicated_and_literal_not_model_paraphrases(){
         let sources=docs();
