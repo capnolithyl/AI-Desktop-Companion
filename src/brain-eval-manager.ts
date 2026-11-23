@@ -1,7 +1,8 @@
 /**
  * Process-lifetime Brain Lab controller. Neither desktop Settings nor the remote
  * browser owns the running Promise, so closing either panel cannot cancel a run.
- * Runs intentionally use synthetic fixtures and local Ollama only.
+ * Runs use synthetic fixtures and optionally local Ollama or owner-approved cloud models.
+ * Cloud calls are sent through existing native providers; no API keys enter JS.
  */
 import { invoke } from "@tauri-apps/api/core";
 import type { Settings } from "./storage";
@@ -15,6 +16,12 @@ import { shouldMikanifyAnswer, type MikanifyResult } from "./mikanify";
 import { reviewResearchCompletion } from "./evidence-verification";
 import { version as APP_VERSION } from "../package.json";
 import { BUILD_INFO } from "./build-info";
+import {
+  brainCloudChoices,brainModelSelection,validateCloudTurnBudget,
+  paceCloudBrainTurn,cloudRateLimitFailure,cloudKeyStatusCommand,
+  reserveOpenRouterFreeTurn,
+  type BrainEvalModelChoice
+} from "./brain-eval-cloud";
 import {
   gradeReportCases,mergeCaseRecords,parseCaseRecords,statusForScenario,
   type BrainCaseRecord,type BrainCaseEnvironment
@@ -69,7 +76,7 @@ export type BrainEvalRequest = {
   mikanifyAnswer?:boolean;
   repetitions: number;
   scenarioIds: string[];
-  /** Optional Ollama model sweep. Each model receives independent fresh scenarios. */
+  /** Installed local models or approved provider-prefixed cloud models. */
   models?: string[];
 };
 export type BrainEvalModelResult = {
@@ -189,7 +196,14 @@ export function startBrainEvaluation(
   settings:Settings,request:BrainEvalRequest,installedModels:ReadonlyArray<string>=[settings.model]
 ):BrainEvalStatus{
   const scenarios=validateRequest(request);
-  const models=brainEvalModels(request.models,settings.model,installedModels,request.mode);
+  const choices=[
+    ...new Set([settings.model,...installedModels]),
+    ...brainCloudChoices(settings).map(choice=>choice.id)
+  ];
+  const models=brainEvalModels(request.models,settings.model,choices,request.mode);
+  const selected=models.map(id=>brainModelSelection(id,settings,installedModels));
+  const turnsPerModel=scenarios.reduce((sum,s)=>sum+s.steps.length,0)*request.repetitions;
+  validateCloudTurnBudget(selected,turnsPerModel);
   const controller=new AbortController();
   abort=controller;
   report=null;
@@ -201,7 +215,7 @@ export function startBrainEvaluation(
     label:"Preparing first scenario",error:null,savedFolder:null,results:null
   });
   // A rejection must update status; never let an unhandled Promise break the bridge.
-  void executeBatch(settings,request,scenarios,models,controller).catch(error=>{
+  void executeBatch(settings,request,scenarios,selected,controller).catch(error=>{
     setStatus({
       phase:"failed",finishedAt:new Date().toISOString(),
       error:String(error),label:"Evaluation failed"
@@ -211,16 +225,25 @@ export function startBrainEvaluation(
 }
 async function executeBatch(
   settings:Settings,request:BrainEvalRequest,scenarios:typeof EVAL_SCENARIOS,
-  models:ReadonlyArray<string>,controller:AbortController
+  models:ReadonlyArray<BrainEvalModelChoice>,controller:AbortController
 ){
   const eachTotal=scenarios.reduce((sum,s)=>sum+s.steps.length,0)*request.repetitions;
   const comparison:BrainEvalModelResult[]=[];
-  for(const [index,model] of models.entries()){
+  for(const [index,selection] of models.entries()){
     if(controller.signal.aborted)break;
-    // One model loads at a time: avoids VRAM contention and makes runs comparable.
-    setStatus({model,label:"Model "+(index+1)+"/"+models.length+": "+model,
+    // One model at a time, never parallel cloud sends or overlapping GPU loads.
+    setStatus({model:selection.id,label:"Model "+(index+1)+"/"+models.length+": "+selection.label,
       done:index*eachTotal,comparison:[...comparison]});
-    const run=await executeOne({...settings,model},request,scenarios,controller,
+    const runSettings:Settings={
+      ...settings,provider:selection.provider,
+      // The configured local Ollama model remains the safe auxiliary planner,
+      // isolated memory-preview extractor and fallback for LOCAL runs only.
+      model:selection.provider==="local"?selection.model:settings.model,
+      ...(selection.provider==="nvidia"?{nvidiaModel:selection.model}:{}),
+      ...(selection.provider==="openrouter"?{openrouterModel:selection.model}:{}),
+      ...(selection.provider==="gemini"?{geminiModel:selection.model}:{})
+    };
+    const run=await executeOne(runSettings,selection,request,scenarios,controller,
       index*eachTotal,models.length,index);
     comparison.push(run);
     setStatus({comparison:[...comparison],done:(index+1)*eachTotal,
@@ -233,10 +256,16 @@ async function executeBatch(
 }
 
 async function executeOne(
-  settings:Settings,request:BrainEvalRequest,
+  settings:Settings,selection:BrainEvalModelChoice,request:BrainEvalRequest,
   scenarios:typeof EVAL_SCENARIOS, controller:AbortController,
   progressOffset:number,modelCount:number,modelIndex:number
 ):Promise<BrainEvalModelResult>{
+  if(selection.provider!=="local" && request.mode==="live"){
+    const ready=await invoke<boolean>(cloudKeyStatusCommand(selection.provider));
+    if(!ready)throw new Error(
+      "Brain Lab: "+selection.provider+" API key is missing. Add it under Settings → AI & Models."
+    );
+  }
   // Live evidence tests require real search results, not just a Docker homepage.
   // Skip the network probe for selected scenarios that never expect web research.
   if(request.mode==="live" && requiresSearchPreflight(scenarios)){
@@ -254,6 +283,17 @@ async function executeOne(
     messages,selectedMemories,evidence,researchPlanned,researchQuery,replyEffort,webRequest
   })=>{
     if(controller.signal.aborted)throw new Error("Stopped by owner");
+    if(selection.provider!=="local"){
+      if(selection.provider==="openrouter"){
+        // Reserve worst-case API tool rounds rather than assuming one turn is
+        // one request. The provider's actual remaining quota may be lower.
+        reserveOpenRouterFreeTurn(localStorage);
+      }
+      await paceCloudBrainTurn(selection.provider,controller.signal,delay=>{
+        setStatus({label:selection.label+": pacing free API requests ("+
+          Math.ceil(delay/1000)+"s before next turn)…"});
+      });
+    }
     const id="mikan-brain-eval-"+crypto.randomUUID();
     requestId=id;
     const last=messages[messages.length-1]?.content??"";
@@ -293,7 +333,15 @@ async function executeOne(
         promptTokens?:number|null;outputTokens?:number|null;
         evalDurationNs?:number|null;loadDurationNs?:number|null
       }|null}>("chat_stream",{request:{
-        requestId:id,endpoint:settings.endpoint,model:settings.model,provider:"local",
+        requestId:id,endpoint:settings.endpoint,model:settings.model,
+        provider:selection.provider,
+        ...(selection.provider==="nvidia"?{nvidiaModel:selection.model}:{}),
+        ...(selection.provider==="openrouter"?{openrouterModel:selection.model}:{}),
+        ...(selection.provider==="gemini"?{geminiModel:selection.model}:{}),
+        // Synthetic fixture data was explicitly supplied in the system
+        // message. Never open production personal-memory/Notion tools in lab.
+        cloudAllowMemory:false,
+        cloudAllowWeb:selection.provider!=="local"&&webRequest?.autoSearch===true,
         messages:[{role:"system",content:system},...messages.map(m=>({role:m.role,content:m.content}))],
         ...(webRequest??{autoSearch:false,researchRoute:"chat"}),
         sourcePreferences:settings.sourcePreferences,
@@ -301,8 +349,8 @@ async function executeOne(
         thinkingRequested:
           shouldUseLocalThinking(settings.reasoningMode,last,settings.model,replyEffort),
         searxngEndpoint:settings.searxngEndpoint,contextWindow:settings.contextWindow,
-        // Budget covers visible and internal thinking tokens; one slow local
-        // inference must never hold an entire benchmark run hostage.
+        // Local only: cloud providers enforce their own request deadlines and
+        // bound tool rounds. Never spend extra paid/free API calls on retries.
         maxOutputTokens:1200,generationTimeoutMs:45_000,
         researchMode:request.researchMode??settings.researchMode,
         structuredResearch:!!webRequest?.autoSearch &&
@@ -344,7 +392,7 @@ async function executeOne(
       }
       // The Simple experiment exposes the model's sourced answer to the
       // reviewer; Strict retains the existing lexical post-generation gate.
-      const review=(request.researchMode??settings.researchMode)==="strict"
+      const review=selection.provider==="local" && (request.researchMode??settings.researchMode)==="strict"
         ? reviewResearchCompletion(result.content.trim(),result.sources??[],result.researchAudit)
         : null;
       return {text:review?.text??rewritten,modelUsed:result.modelUsed??settings.model,
@@ -357,6 +405,12 @@ async function executeOne(
         webExecution:{query:result.searchQuery??null,
           results:result.sources??[],sourcesCarriedOver:result.sourcesCarriedOver===true,
           ...(result.searchTrace ? {searchTrace:result.searchTrace} : {}),researchAudit:result.researchAudit??null}};
+    }catch(error){
+      if(selection.provider!=="local" && cloudRateLimitFailure(error)){
+        controller.abort();
+        setStatus({error:"Cloud provider quota or RPM limit reached; Brain Lab stopped to protect free usage: "+String(error)});
+      }
+      throw error;
     }finally{if(requestId===id)requestId=null}
   };
   // This command uses production extraction instructions/validators, but NO
@@ -383,16 +437,16 @@ async function executeOne(
       sourceRequirement:decision.sourceRequirement};
   };
   const result=await runBrainEvaluation({
-    mode:request.mode,model:settings.model,build:BRAIN_EVAL_BUILD,buildInfo:BUILD_INFO,
+    mode:request.mode,model:selection.id,build:BRAIN_EVAL_BUILD,buildInfo:BUILD_INFO,
     researchMode:request.researchMode??settings.researchMode,
     mikanifyAnswer:request.mikanifyAnswer??settings.mikanifyAnswer,
     scenarios,repetitions:request.repetitions,
     signal:controller.signal,...(request.mode==="live"?{infer,planWeb,previewMemory,liveWeb:true}:{}),
     onProgress:(done,_total,label)=>setStatus({done:progressOffset+done,
-      label:"Model "+(modelIndex+1)+"/"+modelCount+" ("+settings.model+"): "+label})
+      label:"Model "+(modelIndex+1)+"/"+modelCount+" ("+selection.id+"): "+label})
   });
   report=result;
-  batchReports.set(settings.model,result);
+  batchReports.set(selection.id,result);
   saveCaseRecords(mergeCaseRecords(getBrainEvalCaseRecords(),
     gradeReportCases(result,scenarios,BRAIN_EVAL_BUILD)));
   const metrics=brainEvalMetrics(result);
@@ -415,5 +469,5 @@ async function executeOne(
     });
   }catch(error){saveError="Automatic export failed: "+String(error)}
   if(saveError)setStatus({error:saveError});
-  return {model:settings.model,reportId:result.runId,savedFolder:folder,metrics};
+  return {model:selection.id,reportId:result.runId,savedFolder:folder,metrics};
 }
