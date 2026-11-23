@@ -224,7 +224,12 @@ pub(crate) fn render_grounded_with_tone(
         return "I found sources, but couldn't substantiate the requested details without guessing.".into();
     }
     if chosen.len()==1 {
-        return format!("I found one useful lead: {}",
+        let intro=match tone {
+            Some("careful")=>"I could substantiate this detail:",
+            Some("neutral")=>"One useful detail from the sources:",
+            _=>"I found one promising lead! 😺"
+        };
+        return format!("{intro} {}",
             chosen[0].trim_start_matches("- "));
     }
     let intro=match tone {
@@ -377,6 +382,8 @@ mod tests {
         assert!(warm.contains("[2]"));
         assert!(careful.contains("[2]"));
         assert!(!careful.contains("😺"));
+        assert!(warm.contains("😺"));
+        assert_ne!(warm,careful);
     }
     #[test]
     fn useful_named_facts_take_priority_over_generic_marketing_quotes(){
