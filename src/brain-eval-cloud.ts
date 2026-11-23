@@ -119,3 +119,28 @@ export function cloudRateLimitFailure(error:unknown):boolean{
 export function cloudKeyStatusCommand(provider:CloudEvalProvider):string{
   return provider+"_key_status";
 }
+
+const OPENROUTER_DAY_KEY="mikan/brain-cloud-openrouter-free-budget/v1";
+const OPENROUTER_DAILY_RESERVED_LIMIT=30;
+/** Reserve a worst-case 3 API calls per tested turn, across Brain Lab sessions.
+ * Ordinary desktop chat may also consume free quota, so a provider 429 still
+ * stops testing and never attempts automatic retry.
+ */
+export function reserveOpenRouterFreeTurn(
+  storage:Pick<Storage,"getItem"|"setItem">,day=new Date().toISOString().slice(0,10)
+):number{
+  let used=0;
+  try{
+    const saved=JSON.parse(storage.getItem(OPENROUTER_DAY_KEY)??"null");
+    if(saved?.day===day && Number.isSafeInteger(saved.calls) && saved.calls>=0){
+      used=saved.calls;
+    }
+  }catch{/* malformed record is reset to fail-safe budget */}
+  const next=used+CLOUD_EVAL_BUDGETS.openrouter.estimatedCallsPerTurn;
+  if(next>OPENROUTER_DAILY_RESERVED_LIMIT)throw new Error(
+    "Brain Lab has reserved its conservative OpenRouter free daily allowance "+
+    "("+OPENROUTER_DAILY_RESERVED_LIMIT+" of the default 50 requests). Try another provider or the next UTC day."
+  );
+  storage.setItem(OPENROUTER_DAY_KEY,JSON.stringify({day,calls:next}));
+  return OPENROUTER_DAILY_RESERVED_LIMIT-next;
+}
