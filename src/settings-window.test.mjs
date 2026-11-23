@@ -1,14 +1,20 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { fitSettingsX, CHAT_WIDTH, SETTINGS_WIDTH } from "./settings-window.ts";
-test("preserves Mikan's left-edge position if the expanded panel fits", () => {
-  assert.equal(fitSettingsX(300, 0, 1920, SETTINGS_WIDTH), 300);
+import {
+  initialSettingsTab, initialMemoryTab, isStandaloneSettingsWindow,
+  validSettingsTab, validMemoryTab
+} from "./settings-window.ts";
+
+test("standalone settings route is opt-in and does not affect the compact chat window", () => {
+  assert.equal(isStandaloneSettingsWindow(""), false);
+  assert.equal(isStandaloneSettingsWindow("?settings=1&tab=brain"), true);
+  assert.equal(isStandaloneSettingsWindow("?settings=0"), false);
 });
-test("moves the expanded window left when the panel would clip offscreen", () => {
-  assert.equal(fitSettingsX(1500, 0, 1920, SETTINGS_WIDTH), 840);
-  assert.equal(fitSettingsX(-700, -1280, 1280, SETTINGS_WIDTH), -1080);
-});
-test("does not change the compact width", () => {
-  assert.equal(CHAT_WIDTH, 520);
-  assert.ok(SETTINGS_WIDTH > CHAT_WIDTH);
+test("deep-link and reopen targets are validated", () => {
+  assert.equal(initialSettingsTab("?settings=1&tab=brain"), "brain");
+  assert.equal(initialSettingsTab("?tab=garbage"), "appearance");
+  assert.equal(initialMemoryTab("?memoryTab=chats"), "chats");
+  assert.equal(validSettingsTab("memory"), "memory");
+  assert.equal(validSettingsTab(""), "appearance");
+  assert.equal(validMemoryTab("../../foo"), "facts");
 });
