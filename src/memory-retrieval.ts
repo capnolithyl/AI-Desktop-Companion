@@ -21,6 +21,29 @@ const MAX_CANDIDATES = 60;
 const MAX_PROMPT_CHARS = 12500;
 const smallTalk = /^(?:hi|hey|hello|good (?:morning|afternoon|evening|night)|thanks|thank you|cool|nice|okay|ok|lol|haha|how are you|how's it going)[.!?\s]*$/i;
 
+/**
+ * Resolve an owner's current home location for relative-location questions.
+ * This is a generic context requirement, not a concert-specific rule. Location
+ * is read exclusively from existing owner-editable SQLite facts; we never infer
+ * a city from a model, a network lookup, or an unrelated family memory.
+ */
+function needsCurrentHomeLocation(query: string): boolean {
+  return /\b(?:near me|nearby|close to me|around (?:me|here)|in my (?:area|city|town|neighbou?rhood)|my (?:city|town|location|area|neighbou?rhood|state)|where (?:do|did) i live|where am i (?:based|located)|(?:what|which) (?:city|town|state) do i live in)\b/i.test(query);
+}
+
+function currentHomeLocation<T extends RankableMemory>(facts: T[]): T | undefined {
+  return facts.filter(f => {
+    const locationMetadata = f.category === "profile" ||
+      (f.tags ?? []).some(tag => /\b(?:location|residence|home|city|town)\b/i.test(tag));
+    if (!locationMetadata) return false;
+    const current = /\b(?:currently|now)\s+(?:lives?|living|resides?|residing|based|located)\s+in\b|\b(?:lives?|resides?|is based|is located)\s+in\b|\bhome (?:city|town|address|location)\s*(?:is|:)\b/i.test(f.fact);
+    const historicalOnly = /\b(?:used to|previously|formerly|was born|grew up|hometown|moved away)\b/i.test(f.fact) &&
+      !/\b(?:currently|now)\b/i.test(f.fact);
+    return current && !historicalOnly;
+  }).sort((a,b) => b.updatedAt - a.updatedAt)[0];
+}
+
+
 function pinnedIds<T extends RankableMemory>(facts: T[], query: string, maxFacts: number): number[] {
   return rankMemories(facts, query).filter(f => (f.importance ?? 50) >= 90)
     .slice(0, maxFacts <= 3 ? 1 : 2).map(f => f.id);
@@ -152,6 +175,8 @@ export function selectDeterministicMemoryIds<T extends RankableMemory>(
   if(smallTalk.test(query.trim()))
     return {ids:[],mode:"small-talk",candidateCount:0,elapsedMs:0};
 
+  const locationNeeded=needsCurrentHomeLocation(query);
+  const location=locationNeeded ? currentHomeLocation(eligible) : undefined;
   const byId=new Map(eligible.map(f=>[f.id,f]));
   const terms=new Set(meaningfulTerms(query));
   // Broad domains are useful for direct user-memory questions ("favorite
@@ -169,13 +194,18 @@ export function selectDeterministicMemoryIds<T extends RankableMemory>(
   const lexical=[...new Set(lexicalIds.length
     ? lexicalIds.filter(id=>byId.has(id)&&topical(byId.get(id)!))
     : rankMemories(eligible,query).filter(topical).map(f=>f.id))].slice(0,32);
-  const semantic=strongSemanticIds(neighbors,query).filter(id=>byId.has(id));
+  // For relative-place requests, don't send unrelated semantic neighbors to a
+  // cloud provider just because the embedding engine assigned a high score.
+  const semantic=strongSemanticIds(neighbors,query).filter(id=>byId.has(id) &&
+    (!locationNeeded || topical(byId.get(id)!)));
   const scores=new Map<number,number>();
   const fuse=(ids:number[])=>ids.forEach((id,index)=>{
     scores.set(id,(scores.get(id)??0)+1/(60+index+1));
   });
   fuse(lexical);
   fuse(semantic);
+  // A saved current residence is a required context slot, not a fuzzy search hit.
+  if (location) scores.set(location.id, 1);
   // Owner-pinned facts should not interrupt unrelated questions.
   if(/\b(?:my|mine|me|our|ours|recommend|suggest|personal|based on|what should i)\b/i.test(query)){
     for(const fact of rankMemories(eligible,query)
