@@ -63,6 +63,8 @@ export type MemoryRecallAudit = {
   selectionNote?: string;
   semanticScores?: {id:number;score:number|null}[];
   maxFacts: number;
+  /** On-demand native tool returns only the IDs it disclosed to the model. */
+  onDemand?: {query:string;ids:number[];error?:string|null}[];
   facts: {
     id: number;
     fact: string;
@@ -346,7 +348,14 @@ function performanceLines(diagnostics: Diagnostics): string[] {
             (fact.tags.length ? " | tags: " + fact.tags.join(", ") : ""),
           "    " + fact.fact
         ])
-        : ["  No user facts were included in this model prompt."])
+        : ["  No saved SQLite facts were automatically added to this prompt."]),
+      ...(memory.onDemand?.length ? [
+        "On-demand local memory tools (facts returned to selected model):",
+        ...memory.onDemand.map(call=>
+          "  Request: "+call.query+" | IDs: "+
+          (call.ids.length ? call.ids.map(id=>"#"+id).join(", ") : "(none)")+
+          (call.error ? " | Error: "+call.error : ""))
+      ] : [])
     ] : []),
     ...(memory?.interests ? [
       "Structured interest recall (SQLite collection, separate from personal facts):",

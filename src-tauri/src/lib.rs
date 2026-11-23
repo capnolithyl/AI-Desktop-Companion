@@ -5,6 +5,7 @@ mod search_service;
 mod agent_tools;
 mod gemini;
 mod cloud_web_tools;
+mod cloud_memory_tools;
 mod openrouter;
 mod nvidia;
 mod openrouter_stream;
@@ -66,6 +67,8 @@ struct ChatRequest {
     nvidia_model: Option<String>,
     #[serde(default)]
     cloud_allow_web: bool,
+    #[serde(default)]
+    cloud_allow_memory: bool,
     messages: Vec<ChatMessage>,
     #[serde(default)]
     auto_search: bool,

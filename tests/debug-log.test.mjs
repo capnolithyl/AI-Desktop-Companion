@@ -123,9 +123,22 @@ test("distinguishes empty recall from successful recall", () => {
         strongSemanticMatches:0,maxFacts:10,facts:[]}}
   }],{conversationId:null,model:"qwen3.5:9b",contextWindow:16384});
   assert.ok(result.includes("Selected facts: 0 / 10 maximum"));
-  assert.ok(result.includes("No user facts were included in this model prompt."));
+  assert.ok(result.includes("No saved SQLite facts were automatically added to this prompt."));
 });
 
+
+test("exports on-demand private memory lookups separately from automatic recall",()=>{
+  const result=formatDebugLog([{
+    id:"answer",role:"assistant",createdAt:0,content:"Looking for shows around Bay City.",
+    diagnostics:{elapsedMs:1500,firstTokenMs:null,model:"NVIDIA example",stats:null,
+      memory:{storedFacts:96,semanticService:"unknown",semanticCandidates:0,
+        strongSemanticMatches:0,maxFacts:10,facts:[],
+        onDemand:[{query:"current home city",ids:[45]}]}}
+  }],{conversationId:null,model:"gemma4:12b",contextWindow:16384});
+  assert.match(result,/On-demand local memory tools/);
+  assert.match(result,/current home city \| IDs: #45/);
+  assert.doesNotMatch(result,/Jigglypuff/);
+});
 
 test("exports Gemini HTTP failure and actual fallback model without leaking key", () => {
   const result=formatDebugLog([{

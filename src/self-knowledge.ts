@@ -4,7 +4,7 @@
  * The CI checker detects unmapped Tauri commands, missing files and stale versions.
  * Add a feature here when adding capability, and update the matching source/docs.
  */
-export const CAPABILITY_RELEASE = "0.9.67";
+export const CAPABILITY_RELEASE = "0.9.68";
 
 export type CapabilityStage = "implemented" | "experimental" | "planned";
 export type RuntimeDependency = "none" | "ollama" | "search" | "mem0" | "voice" | "vision" | "pocket";
@@ -61,9 +61,9 @@ export const CAPABILITIES: readonly Capability[] = [
   },
   {
     id:"nvidia-cloud",label:"NVIDIA hosted LLMs and optional model-led conversation (experimental)",category:"AI",
-    description:"Optional NVIDIA developer-prototype inference with selectable Nemotron 3 Ultra (default), GLM-5.3 Flash, and Mistral Large 4. Uses existing Mikan conversation, local memory, Notion and read-only web tools. The opt-in Model-led mode skips the local Qwen semantic web-intent planner for NVIDIA and lets the selected model choose public read-only tools within explicit permission and private-context restrictions; the Guided route and Simple/Strict research interpretation remain available. Developer API key stays in Windows Credential Manager. Cloud models receive prompt, selected memories and approved attachments. Developer service use may be limited or temporarily unavailable; no guaranteed free production hosting. NVIDIA settings, connection test and dock/remote model selection are available.",
+    description:"Optional NVIDIA developer-prototype inference with selectable Nemotron 3 Ultra (default), GLM-5.3 Flash, and Mistral Large 4. Uses existing Mikan conversation, local memory, Notion and read-only web tools. The opt-in Model-led mode skips local Qwen web-intent planning and can request a small, relevant set of owner-edited local SQLite facts using an explicit memory-search tool, without eagerly injecting loosely matching personal memories. It may independently choose read-only public tools, subject to web permissions and private-context restrictions; the Guided route and Simple/Strict research interpretation remain available. Developer API key stays in Windows Credential Manager. Cloud models receive prompt, selected memories and approved attachments. Developer service use may be limited or temporarily unavailable; no guaranteed free production hosting. NVIDIA settings, connection test and dock/remote model selection are available.",
     stage:"experimental",runtime:"none",keywords:["nvidia","nemotron","glm","mistral","model-led","cloud","hosted","api key","prototype"],
-    sources:["src-tauri/src/nvidia.rs","src/App.tsx","src/storage.ts","src/model-switcher.ts","server/index.mjs"],
+    sources:["src-tauri/src/nvidia.rs","src-tauri/src/cloud_memory_tools.rs","src/App.tsx","src/storage.ts","src/model-switcher.ts","server/index.mjs"],
     docs:["README.md"],
     commands:["nvidia_key_status","nvidia_save_key","nvidia_remove_key","nvidia_test_connection"]
   },
