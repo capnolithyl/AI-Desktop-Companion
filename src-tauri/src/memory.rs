@@ -382,10 +382,10 @@ pub struct UserMemory {
     pub(crate) fact: String,
     pub(crate) category: String,
     pub(crate) tags: Vec<String>,
-    created_at: i64,
-    updated_at: i64,
-    importance: i64,
-    reference_count: i64,
+    pub(crate) created_at: i64,
+    pub(crate) updated_at: i64,
+    pub(crate) importance: i64,
+    pub(crate) reference_count: i64,
 }
 
 #[derive(Deserialize)]
