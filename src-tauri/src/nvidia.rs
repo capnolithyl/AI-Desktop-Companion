@@ -1,6 +1,6 @@
 //! Free-only NVIDIA inference with optional public web tools and vision.
 //! Credentials are kept in Windows Credential Manager; never in JS/localStorage.
-use crate::{cloud_memory_tools, cloud_web_tools, gemini, openrouter_stream::{CompletionAssembler, SseDecoder}, research_intent, source_priority, web_search,
+use crate::{cloud_evidence, cloud_memory_tools, cloud_web_tools, gemini, openrouter_stream::{CompletionAssembler, SseDecoder}, research_intent, source_priority, web_search,
     ChatChunk, ChatCompletion, ChatMessage, ChatRequest, ChatStats};
 use serde_json::{json, Value};
 use std::sync::{atomic::{AtomicBool, AtomicU64, Ordering}, Mutex};
@@ -404,6 +404,93 @@ async fn stream_completion(
     result.to_response(model)
 }
 
+/// NVIDIA proposes excerpts, never verdicts about its own answer.
+/// A second model result is only a selection of literal passage offsets;
+/// native code checks those passages against the actual retrieved source.
+async fn request_evidence_plan(
+    client:&reqwest::Client,key:&str,model:&str,question:&str,
+    sources:&[web_search::SearchResult],allow_read:bool
+)->Result<cloud_evidence::EvidencePlan,String>{
+    let mut payload=json!({
+        "model":model,
+        "messages":cloud_evidence::evidence_messages(question,sources,allow_read),
+        "max_tokens":1800,"stream":false,
+        "tools":cloud_evidence::evidence_tool(),
+        "tool_choice":"required"
+    });
+    if model==DEFAULT_MODEL {
+        payload["chat_template_kwargs"]=json!({
+            "enable_thinking":false,"force_nonempty_content":true
+        });
+    }
+    let response=client.post("https://integrate.api.nvidia.com/v1/chat/completions")
+        .header("Authorization",format!("Bearer {key}"))
+        .timeout(Duration::from_secs(35))
+        .json(&payload).send().await
+        .map_err(|e|if e.is_timeout(){
+            "Source evidence selection timed out".to_owned()
+        }else{"Source evidence selection unavailable".to_owned()})?;
+    if !response.status().is_success(){
+        return Err(format!("Source evidence HTTP {}",response.status().as_u16()));
+    }
+    let body:Value=response.json().await
+        .map_err(|_|"Invalid source evidence response".to_owned())?;
+    cloud_evidence::parse_evidence_plan(&body)
+}
+
+/// Only verified source-owned quotations are presented as researched facts.
+/// Read at most two URLs selected by the model from existing search results,
+/// retaining webpage-reader SSRF/HTTPS protections and stable citation IDs.
+async fn grounded_public_reply(
+    client:&reqwest::Client,key:&str,model:&str,app:&AppHandle,
+    request:&ChatRequest,sources:&mut Vec<web_search::SearchResult>
+)->String{
+    let question=request.messages.iter().rev().find(|m|m.role=="user")
+        .map(|m|m.content.as_str()).unwrap_or("");
+    let initial=match request_evidence_plan(client,key,model,question,sources,true).await{
+        Ok(plan)=>plan,
+        Err(reason)=>{
+            let _=app.emit("mikan://evidence-tool",json!({
+                "requestId":request.request_id,"status":"unavailable",
+                "accepted":0,"rejected":0,"pagesRead":0,
+                "sourceIds":[],"error":reason
+            }));
+            return cloud_evidence::render_grounded(&[],sources);
+        }
+    };
+    let mut pages_read=0;
+    if request.cloud_allow_web {
+        for (_source_id,url) in cloud_evidence::requested_pages(&initial,sources){
+            let response=cloud_web_tools::execute_tool(
+                app,request,"read_webpage",&json!({"url":url}),sources,"NVIDIA evidence"
+            ).await;
+            if response.get("error").is_none(){pages_read+=1;}
+        }
+    }
+    let final_plan=if pages_read>0 {
+        match request_evidence_plan(client,key,model,question,sources,false).await{
+            Ok(plan)=>plan,
+            Err(reason)=>{
+                let _=app.emit("mikan://evidence-tool",json!({
+                    "requestId":request.request_id,"status":"page-evidence-failed",
+                    "accepted":0,"rejected":0,"pagesRead":pages_read,
+                    "sourceIds":[],"error":reason
+                }));
+                initial
+            }
+        }
+    }else{initial};
+    let (verified,rejected)=cloud_evidence::verified_passages(&final_plan.passages,sources);
+    let source_ids=verified.iter().map(|item|item.source).collect::<Vec<_>>();
+    let _=app.emit("mikan://evidence-tool",json!({
+        "requestId":request.request_id,
+        "status":if verified.is_empty(){"insufficient"}else{"grounded"},
+        "accepted":verified.len(),"rejected":rejected,
+        "pagesRead":pages_read,"sourceIds":source_ids
+    }));
+    cloud_evidence::render_grounded(&verified,sources)
+}
+
 pub(crate) async fn chat(app:&AppHandle,request:&ChatRequest,key:&str,emitted:&AtomicBool)
     -> Result<ChatCompletion,String>
 {
@@ -589,11 +676,26 @@ pub(crate) async fn chat(app:&AppHandle,request:&ChatRequest,key:&str,emitted:&A
             append_evidence(&mut messages,&sources);
             continue;
         }
-        let content=if let Some(s)=reply["content"].as_str(){s.to_string()}
+        let draft=if let Some(s)=reply["content"].as_str(){s.to_string()}
         else if let Some(parts)=reply["content"].as_array(){
             parts.iter().filter_map(|part|part["text"].as_str()).collect::<Vec<_>>().join("")
         } else {String::new()};
-        if content.trim().is_empty() {return Err(missing_reply_reason(&result));}
+        if draft.trim().is_empty() {return Err(missing_reply_reason(&result));}
+        // This model may have drafted unsupported facts even with accurate source
+        // snippets. Do not stream or store that draft as a verified answer.
+        let content=if !sources.is_empty() && public_tool_used {
+            let _=app.emit("mikan://activity",json!({
+                "requestId":request.request_id,
+                "text":"Checking factual claims against source passages…"
+            }));
+            grounded_public_reply(&client,key,model,app,request,&mut sources).await
+        }else if public_tool_used {
+            let _=app.emit("mikan://evidence-tool",json!({
+                "requestId":request.request_id,"status":"no-sources",
+                "accepted":0,"rejected":0,"pagesRead":0,"sourceIds":[]
+            }));
+            "I tried to look that up, but no usable public sources came back. I don't want to invent details.".into()
+        }else{draft};
         let actual=result["model"].as_str().filter(|s|!s.is_empty()).unwrap_or(model);
         // Buffered evidence/tool rounds deliver the entire final answer only
         // after tool resolution. Plain chats already emitted token deltas.

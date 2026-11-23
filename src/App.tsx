@@ -2138,8 +2138,10 @@ export default function App() {
     let unlisten: UnlistenFn | null = null;
     let unlistenActivity: UnlistenFn | null = null;
     let unlistenMemory: UnlistenFn | null = null;
+    let unlistenEvidence: UnlistenFn | null = null;
     let progressiveFeed: ProgressiveSpeechFeed | null = null;
     let memoryAudit: MemoryRecallAudit | undefined;
+    let sourceGroundingAudit: Diagnostics["sourceGrounding"] | undefined;
     let toolAudit: Diagnostics["toolPlan"] | undefined;
     let notionAudit: Diagnostics["notion"] | undefined;
     // Pocket runs on CPU. Wake its service while the local GPU plans, without
@@ -2573,6 +2575,17 @@ export default function App() {
           query:event.payload.query,ids:event.payload.ids,error:event.payload.error
         });
       });
+      if(modelLed) unlistenEvidence=await listen<{
+        requestId:string;status:string;accepted:number;rejected:number;
+        pagesRead:number;sourceIds:number[];error?:string|null
+      }>("mikan://evidence-tool",event=>{
+        if(event.payload.requestId!==requestId) return;
+        sourceGroundingAudit={
+          status:event.payload.status,accepted:event.payload.accepted,
+          rejected:event.payload.rejected,pagesRead:event.payload.pagesRead,
+          sourceIds:event.payload.sourceIds,error:event.payload.error
+        };
+      });
       if (!groundedChapterTurn && maySpeakProgressively({
           autoSpeak:settings.voice.autoSpeak && !voiceMutedRef.current,
           progressiveSpeak:settings.voice.progressiveSpeak,
@@ -2729,6 +2742,7 @@ export default function App() {
         fallbackReason: completion.fallbackReason,
         stats: completion.stats,
         research: completion.researchAudit ?? undefined,
+        sourceGrounding:sourceGroundingAudit,
         mikanify:mikanifyAudit,
         memory: memoryAudit,
         toolPlan:toolAudit,
@@ -2835,7 +2849,7 @@ export default function App() {
           ? (accumulated ? `${allowRoleplay ? accumulated : stripNarratedActions(accumulated)}\n\n[Stopped]` : "[Generation stopped]")
           : (accumulated ? `${allowRoleplay ? accumulated : stripNarratedActions(accumulated)}\n\n[Interrupted: ${message}]` : `Error: ${message}`),
         failed: !stopped,
-        diagnostics: { elapsedMs: performance.now() - started, firstTokenMs, model: unsuccessfulInferenceLabel(settings), stats: null, memory: memoryAudit, toolPlan:toolAudit, notion:notionAudit, parallelTasks:parallelTimings },
+        diagnostics: { elapsedMs: performance.now() - started, firstTokenMs, model: unsuccessfulInferenceLabel(settings), stats: null, memory: memoryAudit, sourceGrounding:sourceGroundingAudit, toolPlan:toolAudit, notion:notionAudit, parallelTasks:parallelTimings },
         sources: withSearch?.results, searchQuery: withSearch?.query
       };
       setMessages(current => current.map(m => m.id === assistantId ? assistant : m));
@@ -2843,6 +2857,7 @@ export default function App() {
     } finally {
       unlistenActivity?.();
       unlistenMemory?.();
+      unlistenEvidence?.();
       unlisten?.();
       activeRequestId.current = null;
       stopRequested.current = false;

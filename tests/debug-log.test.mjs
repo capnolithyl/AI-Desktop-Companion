@@ -201,3 +201,17 @@ test("interest lookup failures and character suppression are visible",()=>{
   assert.match(result,/Owner interests suppressed/);
   assert.match(result,/No structured interest lines were supplied/);
 });
+
+
+test("exports native source-grounding results without claiming semantic verification",()=>{
+  const log=formatDebugLog([{
+    id:"answer",role:"assistant",createdAt:0,content:"Only the quoted passages are included.",
+    diagnostics:{elapsedMs:2200,firstTokenMs:2000,model:"NVIDIA test",stats:null,
+      sourceGrounding:{status:"grounded",accepted:2,rejected:3,pagesRead:1,sourceIds:[7,4]}}
+  }],{conversationId:"source-test",model:"gemma4:12b",contextWindow:16384});
+  assert.match(log,/NVIDIA source grounding/);
+  assert.match(log,/Accepted source passages: 2/);
+  assert.match(log,/Rejected unsupported passages: 3/);
+  assert.match(log,/Full public pages read: 1/);
+  assert.match(log,/Accepted source IDs: \[7\], \[4\]/);
+});

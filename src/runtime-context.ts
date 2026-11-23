@@ -6,6 +6,22 @@
  */
 export const COMPANION_TIME_ZONE = "America/Detroit";
 
+export function localWeekendWindow(now: Date = new Date()): {friday:string;sunday:string} {
+  const parts=new Intl.DateTimeFormat("en-US",{
+    timeZone:COMPANION_TIME_ZONE,year:"numeric",month:"numeric",day:"numeric"
+  }).formatToParts(now);
+  const value=(key:string)=>Number(parts.find(part=>part.type===key)?.value);
+  const midnight=new Date(Date.UTC(value("year"),value("month")-1,value("day")));
+  const day=midnight.getUTCDay();
+  // During a weekend, "this weekend" includes the preceding Friday.
+  const untilFriday=day===0?-2:day===6?-1:5-day;
+  const friday=new Date(midnight.getTime()+untilFriday*86_400_000);
+  const sunday=new Date(friday.getTime()+2*86_400_000);
+  return {friday:friday.toISOString().slice(0,10),
+          sunday:sunday.toISOString().slice(0,10)};
+}
+
+
 export function runtimeContext(now: Date = new Date()): string {
   const eastern = new Intl.DateTimeFormat("en-US", {
     timeZone: COMPANION_TIME_ZONE,
@@ -36,6 +52,7 @@ export function runtimeContext(now: Date = new Date()): string {
     `Current local calendar date (YYYY-MM-DD): ${today}.`,
     `Current UTC time: ${now.toISOString()}.`,
     "This clock is supplied by the host computer for this response. It updates each turn.",
+    `Current/coming Friday–Sunday weekend in local calendar dates: ${localWeekendWindow(now).friday} to ${localWeekendWindow(now).sunday}.`,
     "Use the local date above to interpret today, yesterday, latest, new, and upcoming. Eastern Time is EST in winter and EDT during daylight saving time. Do not use an assumed model training date.",
     "Before describing any event as upcoming, completed, ongoing, or scheduled, compare its event date with the local calendar date. A past scheduled date is NOT evidence the event actually happened; confirm the outcome from a source or describe it as a past plan with unconfirmed status.",
     "Watch for outdated future-tense descriptions in old articles (e.g., 'later this year'). Do not repeat them as current. Prefer newer dated official updates when timelines conflict, and state uncertainty if the evidence cannot resolve the status.",
@@ -63,6 +80,7 @@ export function chatRuntimeContext(now: Date = new Date()): string {
   return [
     "LIVE LOCAL CONTEXT:",
     "Current date and time: "+time+" (America/Detroit).",
+    `This Friday–Sunday weekend: ${localWeekendWindow(now).friday} to ${localWeekendWindow(now).sunday} (local dates).`,
     "This is a conversational turn, not a web-research report.",
     "Answer the user's actual question naturally in your established personality.",
     "Do not invent tool capabilities, personal memories or visual observations."
