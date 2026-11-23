@@ -64,9 +64,9 @@ import { statusForScenario } from "./brain-eval-status";
 import type { IncomingCanon, IncomingInterest } from "./interest-import";
 import type {ImportMemory,MemoryCategory} from "./memory-import";
 import { NotionPanel } from "./NotionPanel";
-import { isNotionTopic, notionContext, planNotionRetrieval, asksToReadFullNotionPage, asksOnlyToRereadNotionPage, hasNamedNotionMatch, unavailableChapterResponse,
+import { isNotionTopic, notionContext, planNotionRetrieval, asksToReadFullNotionPage, asksOnlyToRereadNotionPage, asksOnlyToLoadNotionPage, hasNamedNotionMatch, unavailableChapterResponse,
   type NotionHit, type NotionCachedPage } from "./notion-knowledge";
-import { readNotionChapter, buildNotionChapterEvidence, notionManuscriptCharacterCount, auditNotionReview, unverifiedNotionReviewResponse, notionRereadReceipt, manuscriptReviewProvider, groundedManuscriptHistory, deniesLoadedNotionAccess, unavailableNotionModelResponse, shouldRefetchNotionDocument, notionSceneLinksNeedRefresh, describeNotionSceneLinks, type NotionDocument, type NotionChapterEvidence, type NotionChapterSession } from "./notion-reading";
+import { readNotionChapter, notionReadingProfile, notionChapterLoadedReceipt, buildNotionChapterEvidence, notionManuscriptCharacterCount, auditNotionReview, unverifiedNotionReviewResponse, notionRereadReceipt, manuscriptReviewProvider, groundedManuscriptHistory, deniesLoadedNotionAccess, unavailableNotionModelResponse, shouldRefetchNotionDocument, notionSceneLinksNeedRefresh, describeNotionSceneLinks, type NotionDocument, type NotionChapterEvidence, type NotionChapterSession } from "./notion-reading";
 import { splitSpeechText, toSpeechText, VOICE_TEST_LINE, ProgressiveSpeechFeed, FIRST_SPEECH_CHARS, POCKET_FINAL_SPEECH_CHARS, voiceEndpoint, POCKET_VOICE_ENDPOINT, canSaveVoiceReference, voicePlaybackGain, maySpeakProgressively } from "./speech";
 import { NarrationFilter, roleplayActive, stripNarratedActions } from "./narration-filter";
 import { memoryBudget, sessionMemoryContext, type SessionSummary } from "./memory-budget";
@@ -2231,9 +2231,11 @@ export default function App() {
             const progress = (part:number,total:number) =>
               setActivity(`Reading Notion chapter: section ${part} of ${total}…`);
             const interrupted = () => stopRequested.current;
+            const readingProfile=notionReadingProfile(settings.provider,settings.contextWindow);
             try {
               readChapterContext = await readNotionChapter(
-                document,summarizeSection,progress,interrupted,settings.contextWindow ?? 16384
+                document,summarizeSection,progress,interrupted,
+                  readingProfile.contextWindow,readingProfile.processing
               );
             } catch (error) {
               if (!shouldRefetchNotionDocument(error) || interrupted()) throw error;
@@ -2251,7 +2253,8 @@ export default function App() {
                   errorText(liveError));
               }
               readChapterContext = await readNotionChapter(
-                document,summarizeSection,progress,interrupted,settings.contextWindow ?? 16384
+                document,summarizeSection,progress,interrupted,
+                  readingProfile.contextWindow,readingProfile.processing
               );
             }
             chapterEvidence = buildNotionChapterEvidence(document);
@@ -2435,6 +2438,8 @@ export default function App() {
         : settings.provider;
       const readOnlyReread=groundedChapterTurn &&
         asksOnlyToRereadNotionPage(text,notionPlan.selectedPage);
+      const loadOnlyChapter=groundedChapterTurn &&
+        asksOnlyToLoadNotionPage(text,notionPlan.selectedPage);
       notionAudit=useNotion ? {
         selectedPage:notionPlan.selectedPage?.title,
         cachedPages:cachedNotionPages.length,
@@ -2465,7 +2470,7 @@ export default function App() {
         const assistant:LogMessage={
           id:assistantId,role:"assistant",content:unavailableChapter,createdAt:Date.now(),
           diagnostics:{elapsedMs:performance.now()-started,firstTokenMs:null,
-            model:settings.model,stats:null,memory:memoryAudit,toolPlan:toolAudit,
+            model:"Notion chapter preparation (no response model)",stats:null,memory:memoryAudit,toolPlan:toolAudit,
             notion:notionAudit,parallelTasks:parallelTimings}
         };
         setMessages(current=>current.map(m=>m.id===assistantId?assistant:m));
@@ -2473,11 +2478,11 @@ export default function App() {
         await persistMessage(assistant);
         return;
       }
-      if (readOnlyReread && chapterEvidence) {
+      if (loadOnlyChapter && chapterEvidence) {
         // The application has already loaded the approved scenes. A pure
         // reread request is a confirmed cache operation, not a prompt for a
         // random free model to invent what integrations are available.
-        const response=notionRereadReceipt(chapterEvidence,chapterSyncedAt);
+        const response=notionChapterLoadedReceipt(chapterEvidence,chapterSyncedAt,notionPlan.reread);
         const assistant:LogMessage={
           id:assistantId,role:"assistant",content:response,createdAt:Date.now(),
           diagnostics:{elapsedMs:performance.now()-started,firstTokenMs:null,
