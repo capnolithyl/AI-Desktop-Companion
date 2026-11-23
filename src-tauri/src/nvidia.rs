@@ -106,7 +106,7 @@ fn functions(allow_web:bool,allow_memory:bool)->Value {
     if allow_web {
         options.push(json!({"type":"function","function":{
             "name":"search_web",
-            "description":"Search live public web using Mikan's SearXNG. If the answer depends on personal context (location, preferences, constraints), consult the local memory tool first when available. Never include private names, saved facts or other personal data in a public search query unless the owner explicitly requested their disclosure.",
+            "description":"Search live public web using Mikan's SearXNG. If the answer depends on personal context (location, preferences, constraints), consult the local memory tool first when available. Never include private names, exact addresses, family details or confidential memories in public search queries. A coarse city/region is permitted when needed to fulfill the owner's local search request.",
             "parameters":{"type":"object","properties":{"query":{"type":"string"}},"required":["query"]}
         }}));
         options.push(json!({"type":"function","function":{
@@ -418,6 +418,9 @@ pub(crate) async fn chat(app:&AppHandle,request:&ChatRequest,key:&str,emitted:&A
                             json!({"error":"Private memory lookup unavailable at this stage"})
                         } else {
                             memory_calls+=1;
+                            let _=app.emit("mikan://activity",json!({
+                                "requestId":request.request_id,"text":"Checking relevant saved memories…"
+                            }));
                             let result=cloud_memory_tools::search(app,&args).await;
                             let ids=result["matches"].as_array().map(|items|items.iter()
                                 .filter_map(|item|item["id"].as_i64()).collect::<Vec<_>>())
