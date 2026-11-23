@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { joinNotionChunks, splitNotionSections, readNotionChapter, shouldRefetchNotionDocument, orderedNotionScenes, notionSceneLinksNeedRefresh, describeNotionSceneLinks, extractApprovedManuscriptProse, buildNotionChapterEvidence, auditNotionReview, unverifiedNotionReviewResponse, directManuscriptLimit, notionManuscriptCharacterCount, notionRereadReceipt, manuscriptReviewProvider, groundedManuscriptHistory, deniesLoadedNotionAccess, unavailableNotionModelResponse } from "./notion-reading.ts";
+import { joinNotionChunks, splitNotionSections, readNotionChapter, shouldRefetchNotionDocument, orderedNotionScenes, notionSceneLinksNeedRefresh, describeNotionSceneLinks, extractApprovedManuscriptProse, buildNotionChapterEvidence, auditNotionReview, unverifiedNotionReviewResponse, directManuscriptLimit, notionManuscriptCharacterCount, notionRereadReceipt, manuscriptReviewProvider, groundedManuscriptHistory, deniesLoadedNotionAccess, unavailableNotionModelResponse, notionReadingProfile, notionChapterLoadedReceipt } from "./notion-reading.ts";
 
 const doc=(text)=>({
   id:"abc",title:"Chapter Three",url:"https://www.notion.so/chapter3",syncedAt:1794000000,
@@ -307,4 +307,36 @@ test("verified local Notion access cannot be denied by the response model",()=>{
   assert.match(response,/I have Chapter 02 · North loaded/);
   assert.match(response,/model failed to use that context reliably/);
   assert.doesNotMatch(response,/paste the text|share the Notion page/);
+});
+
+test("four linked Notion scenes totaling over 50K chars go straight to NVIDIA",async()=>{
+  const chapter=doc("Editorial outline only.");
+  chapter.title="Chapter 01 · Boxes";
+  chapter.relatedPages=Array.from({length:4},(_,i)=>({
+    title:"1."+(i+1)+" · Scene "+(i+1),
+    url:"https://www.notion.so/scene"+(i+1),
+    chunks:chunk("## Approved manuscript prose\n"+
+      ("The family experiences scene "+(i+1)+". ").repeat(450))
+  }));
+  const profile=notionReadingProfile("nvidia",16384);
+  assert.equal(profile.processing,"direct-only");
+  assert.ok(directManuscriptLimit(profile.contextWindow)>57000);
+  let localCalls=0;
+  const full=await readNotionChapter(chapter,async()=>{localCalls++;return "";},
+    ()=>{},()=>false,profile.contextWindow,profile.processing);
+  assert.equal(localCalls,0,"not even a single Gemma/Qwen preprocessing request");
+  assert.match(full,/COMPLETE TEXT OF THE CACHED PAGE/);
+  for(let i=1;i<=4;i++)assert.match(full,new RegExp("The family experiences scene "+i));
+  assert.ok(full.indexOf("1.1 · Scene 1")<full.indexOf("1.4 · Scene 4"));
+  assert.match(notionChapterLoadedReceipt(buildNotionChapterEvidence(chapter),chapter.syncedAt),
+    /I loaded Chapter 01 · Boxes/);
+});
+test("overlong NVIDIA chapter fails immediately instead of running local section passes",async()=>{
+  const tooBig=doc("Very long prose sentence. ".repeat(6000));
+  const profile=notionReadingProfile("nvidia",16384);
+  let localCalls=0;
+  await assert.rejects(()=>readNotionChapter(tooBig,async()=>{localCalls++;return "unused";},
+    ()=>{},()=>false,profile.contextWindow,profile.processing),/single-model reading budget/);
+  assert.equal(localCalls,0);
+  assert.equal(notionReadingProfile("local",16384).processing,"local-notes");
 });
