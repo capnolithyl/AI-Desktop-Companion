@@ -3718,7 +3718,7 @@ export default function App() {
             <input type="checkbox" checked={draft.modelLed} disabled={draft.provider!=="nvidia"}
               onChange={e=>setDraft(current=>({...current,modelLed:e.target.checked}))}/>
             <span><strong>Model-led conversation · experimental</strong>
-              <small>With NVIDIA selected, skip local Qwen's web-intent planning. Let NVIDIA decide if read-only public web tools are useful, while preserving web permissions, private-context restrictions and source checks for research requests. Compare with the guided pipeline by toggling this off. Tool-enabled conversations may not stream immediately.</small></span>
+              <small>With NVIDIA selected, skip local Qwen's web-intent planning. NVIDIA may request relevant saved facts from a bounded local memory tool before public searches; it still decides when public read-only web tools are useful, within web permissions and private-context restrictions and source checks for research requests. Compare with the guided pipeline by toggling this off. Tool-enabled conversations may not stream immediately.</small></span>
           </label>
           <div className="settings-section-title">OpenRouter · Free models only</div>
           <label className="setting-field">OpenRouter model ID
