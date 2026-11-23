@@ -402,7 +402,7 @@ mod tests {
         let quote=sources[1].content.clone();
         let proposed=vec![
             ProposedPassage{source:2,quote:quote.clone(),..Default::default()},
-            ProposedPassage{source:2,quote},
+            ProposedPassage{source:2,quote,..Default::default()},
             ProposedPassage{source:2,quote:"Shadows Fall has only one show this year.".into(),..Default::default()}
         ];
         let (valid,rejected)=verified_passages(&proposed,&sources);
