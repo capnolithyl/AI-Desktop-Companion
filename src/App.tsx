@@ -1991,15 +1991,20 @@ export default function App() {
     // Independent local I/O begins together. Do not serialize SQLite, Mem0,
     // Notion page listing and history retrieval behind a chapter read.
     const parallelStarted = performance.now();
+    const modelLed = isModelLedConversation(settings);
     const factsPromise = memoryApi.listFacts().catch(() => userFacts);
-    const semanticPromise = invoke<Array<{id:number;fact:string;score:number|null}>>(
-      "memory_semantic_recall",{query:text}
-    ).catch(() => []);
-    const lexicalPromise = invoke<number[]>("memory_search_fact_ids",{query:text})
-      .catch(() => []);
-    const semanticStatusPromise = invoke<{ready:boolean;reason?:string}>(
-      "memory_semantic_status"
-    ).catch(() => null);
+    // On model-led NVIDIA turns, the model requests specific needed facts
+    // through the local tool. Do not front-load a fuzzy list of personal facts.
+    const semanticPromise = modelLed
+      ? Promise.resolve([] as Array<{id:number;fact:string;score:number|null}>)
+      : invoke<Array<{id:number;fact:string;score:number|null}>>(
+          "memory_semantic_recall",{query:text}).catch(() => []);
+    const lexicalPromise = modelLed ? Promise.resolve([] as number[])
+      : invoke<number[]>("memory_search_fact_ids",{query:text}).catch(() => []);
+    const semanticStatusPromise = modelLed
+      ? Promise.resolve(null as {ready:boolean;reason?:string}|null)
+      : invoke<{ready:boolean;reason?:string}>(
+          "memory_semantic_status").catch(() => null);
     const sessionsPromise = memoryApi.listSessionSummaries().catch(() => sessionSummaries);
     const cachedNotionPages = !withSearch
       ? await invoke<NotionCachedPage[]>("notion_cached_pages").catch(() => [])
@@ -2131,6 +2136,7 @@ export default function App() {
     const narrationFilter = new NarrationFilter(!allowRoleplay);
     let unlisten: UnlistenFn | null = null;
     let unlistenActivity: UnlistenFn | null = null;
+    let unlistenMemory: UnlistenFn | null = null;
     let progressiveFeed: ProgressiveSpeechFeed | null = null;
     let memoryAudit: MemoryRecallAudit | undefined;
     let toolAudit: Diagnostics["toolPlan"] | undefined;
@@ -2298,9 +2304,12 @@ export default function App() {
         screenshot:!!screenshot, liveFrame:!!liveFrame, roleplay:allowRoleplay
       });
       const canPlanPublicWeb = webPolicy.canPlanPublicWeb;
-      const selection = selectDeterministicMemoryIds(
-        liveFacts,text,semanticMatches,lexicalIds,budget.maxFacts
-      );
+      const selection = modelLed
+        ? {ids:[] as number[],mode:"empty" as const,candidateCount:0,elapsedMs:0,
+           note:"Model-requested local memory; no automatic personal fact injection"}
+        : selectDeterministicMemoryIds(
+            liveFacts,text,semanticMatches,lexicalIds,budget.maxFacts
+          );
       const lastAssistant=messages.at(-1);
       // A previous public reply can identify what "it" refers to for the local
       // planner. The new answer gets evidence from the new sources.
@@ -2312,7 +2321,6 @@ export default function App() {
       // Experimental NVIDIA route: preserve permission checks but let the
       // selected larger model decide whether to use public read-only tools.
       // Do not call local Qwen just to interpret ordinary conversation.
-      const modelLed = isModelLedConversation(settings);
       const plannerWeb:WebToolDecision = modelLed
         ? {search:false,method:"not-needed",reason:"NVIDIA model-led: no local semantic web planner"}
         : await planPublicWebTools(text,liveFacts,
@@ -2364,7 +2372,9 @@ export default function App() {
         topic:preferredTopic,
         publicWebAllowed:effectiveWeb || cloudMaySearch
       };
-      const remembered = prepareMemoryContext(liveFacts,text,semanticIds,budget,selection.ids);
+      const remembered = modelLed
+        ? {text:"",ids:[] as number[]}
+        : prepareMemoryContext(liveFacts,text,semanticIds,budget,selection.ids);
       // SQLite FTS5 searches the collection on demand; only a few matching
       // titles are added to the LLM context, never the full imported library.
       let interestSearchError: string | undefined;
@@ -2396,6 +2406,7 @@ export default function App() {
           suppressedForCharacter: preparedInterests.suppressedForCharacter,
           searchError: interestSearchError
         },
+        onDemand:[],
         facts: remembered.ids.flatMap(id => {
           const fact = factsById.get(id);
           return fact ? [{
@@ -2553,6 +2564,14 @@ export default function App() {
       unlistenActivity = await listen<Activity>("mikan://activity", event => {
         if (event.payload.requestId === requestId) setActivity(event.payload.text);
       });
+      if(modelLed) unlistenMemory=await listen<{
+        requestId:string;query:string;ids:number[];error?:string|null
+      }>("mikan://memory-tool",event=>{
+        if(event.payload.requestId!==requestId || !memoryAudit) return;
+        memoryAudit.onDemand?.push({
+          query:event.payload.query,ids:event.payload.ids,error:event.payload.error
+        });
+      });
       if (!groundedChapterTurn && maySpeakProgressively({
           autoSpeak:settings.voice.autoSpeak && !voiceMutedRef.current,
           progressiveSpeak:settings.voice.progressiveSpeak,
@@ -2606,6 +2625,7 @@ export default function App() {
           openrouterModel: settings.openrouterModel,
           nvidiaModel: settings.nvidiaModel,
           cloudAllowWeb: cloudMaySearch,
+          cloudAllowMemory: modelLed && !groundedChapterTurn,
           researchMode:settings.researchMode,
           // Backward compatibility for native builds that lack researchMode.
           structuredResearch:settings.researchMode==="strict" && effectiveWeb,
@@ -2820,6 +2840,7 @@ export default function App() {
       await persistMessage(assistant);
     } finally {
       unlistenActivity?.();
+      unlistenMemory?.();
       unlisten?.();
       activeRequestId.current = null;
       stopRequested.current = false;
