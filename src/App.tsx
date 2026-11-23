@@ -37,6 +37,7 @@ import { decideDesktopTurn } from "./desktop-turn-routing";
 import { planDesktopWebExecution, resolvePublicWebExecution } from "./turn-execution-policy";
 import { isModelStatusQuestion, modelStatusAnswer } from "./model-status";
 import { modelSwitcherStatus, modelSwitcherChoice, NVIDIA_MODELS } from "./model-switcher";
+import { isModelLedConversation, modelLedWebToolsAllowed, preserveModelLedChatAnswer } from "./model-led-routing";
 import { formatDebugLog, type Diagnostics, type MemoryRecallAudit, type OllamaStats, type ResearchAudit } from "./debug-log";
 import { remoteDiagnosticMessages, remoteAvatarDiagnostics } from "./remote-report";
 import { strongSemanticIds } from "./memory-ranking";
@@ -2308,7 +2309,7 @@ export default function App() {
       // Experimental NVIDIA route: preserve permission checks but let the
       // selected larger model decide whether to use public read-only tools.
       // Do not call local Qwen just to interpret ordinary conversation.
-      const modelLed = settings.provider === "nvidia" && settings.modelLed;
+      const modelLed = isModelLedConversation(settings);
       const plannerWeb:WebToolDecision = modelLed
         ? {search:false,method:"not-needed",reason:"NVIDIA model-led: no local semantic web planner"}
         : await planPublicWebTools(text,liveFacts,
@@ -2340,7 +2341,7 @@ export default function App() {
       }
       // On the experimental path the model decides, but only if the owner enabled
       // automatic web tools and the same private-content permission gate allows it.
-      const cloudMaySearch = modelLed ? webPolicy.canPlanPublicWeb
+      const cloudMaySearch = modelLed ? modelLedWebToolsAllowed(modelLed,webPolicy)
         : webPolicy.cloudMaySearch && webExecution.autoSearch;
       // Cloud providers independently decide when read-only web tools are useful.
       // Local Qwen still respects the existing deterministic/planned routes.
@@ -2649,7 +2650,7 @@ export default function App() {
       // Keep it out of Strict, cloud providers, and ordinary chat.
       const originalResearchAnswer=completion.content || accumulated;
       const mikanifyEligible=shouldMikanifyAnswer({
-        enabled:settings.mikanifyAnswer,researchMode:settings.researchMode,
+        enabled:settings.mikanifyAnswer && !modelLed,researchMode:settings.researchMode,
         searchQuery:completion.searchQuery,sourceCount:completion.sources?.length,
         sourcesCarriedOver:completion.sourcesCarriedOver,
         hasResearchAudit:!!completion.researchAudit,
@@ -2727,7 +2728,7 @@ export default function App() {
       // Never convert a model-led conversational reply into a source headline
       // merely because the model chose to browse. Actual research requests
       // retain their normal evidence checks.
-      const modelLedConversation = modelLed && researchPlan.mode === "chat" && !withSearch;
+      const modelLedConversation = preserveModelLedChatAnswer(modelLed,researchPlan.mode,!!withSearch);
       const answerReview = verifiedSources?.length && !simpleSourcedAnswer && !modelLedConversation
         ? reviewResearchCompletion(rawText,verifiedSources,completion.researchAudit) : null;
       if(answerReview){
