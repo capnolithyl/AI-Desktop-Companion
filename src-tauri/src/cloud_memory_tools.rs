@@ -35,7 +35,7 @@ fn terms(query:&str)->Vec<String>{
 // without any per-topic trigger phrases. Database text never enters the query.
 fn lexical_ids(db:&rusqlite::Connection,query:&str)->Vec<i64>{
     let query=terms(query).iter()
-        .map(|term|format!("\\"{term}\\"*")).collect::<Vec<_>>().join(" OR ");
+        .map(|term|format!(r#""{term}"*"#)).collect::<Vec<_>>().join(" OR ");
     if query.is_empty(){return vec![];}
     let Ok(mut stmt)=db.prepare(
         "SELECT rowid FROM user_memory_search WHERE user_memory_search MATCH ?1
