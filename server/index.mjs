@@ -225,7 +225,7 @@ export function createBridge({
   let desktop = {
     conversationId: null, model: "", busy: false,
     messages: [], conversations: [], avatar: null,
-    provider: "local", models: [], openrouterModel: "", geminiModel: "", nvidiaModel: "",
+    provider: "local", models: [], nvidiaModels: NVIDIA_MODELS, openrouterModel: "", geminiModel: "", nvidiaModel: "",
     modelStatus: null, controlsBlocked: true,
     reportDiagnostics: null,
     brainEval: null,brainEvalCatalog: []
@@ -620,6 +620,9 @@ export function createBridge({
           geminiModel: String(body.geminiModel || "").slice(0, 120),
            nvidiaModel: NVIDIA_MODELS.includes(body.nvidiaModel) ? body.nvidiaModel : NVIDIA_MODELS[0],
           models: safeModels(body.models),
+          // The relay publishes its own fixed allowlist; the browser never
+          // trusts arbitrary model identifiers from a remote snapshot.
+          nvidiaModels: NVIDIA_MODELS,
           modelStatus: body.modelStatus && typeof body.modelStatus === "object"
             ? {
                 label: String(body.modelStatus.label || "").slice(0, 200),
