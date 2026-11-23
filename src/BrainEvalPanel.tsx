@@ -340,7 +340,6 @@ export function BrainEvalPanel({settings,availableModels}:{settings:Settings;ava
       <small>Cloud models use the saved API keys in Windows Credential Manager, never the browser. Live runs stay sequential and use conservative pacing; actual provider quotas may be lower. A quota/429 error stops further cloud testing rather than retrying.</small>
       {cloudSelected.length>0&&<div className="brain-eval-muted-note">
         {Array.from(new Set(cloudSelected.map(choice=>choice.provider))).map(provider=>{
-          if(provider==="local")return null;
           const limit=CLOUD_EVAL_BUDGETS[provider];
           return <small key={provider}>{provider}: at most {limit.maxTurns} turns per model in a run; {Math.round(limit.minimumIntervalMs/1000)}s minimum between starts. {limit.description}</small>;
         })}
