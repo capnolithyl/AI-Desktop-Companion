@@ -36,7 +36,7 @@ import { parseSlashCommand, SLASH_HELP } from "./slash-commands";
 import { decideDesktopTurn } from "./desktop-turn-routing";
 import { planDesktopWebExecution, resolvePublicWebExecution } from "./turn-execution-policy";
 import { isModelStatusQuestion, modelStatusAnswer } from "./model-status";
-import { modelSwitcherStatus, modelSwitcherChoice, NVIDIA_MODELS } from "./model-switcher";
+import { modelSwitcherStatus, modelSwitcherChoice, NVIDIA_MODELS , unsuccessfulInferenceLabel } from "./model-switcher";
 import { isModelLedConversation, modelLedWebToolsAllowed, preserveModelLedChatAnswer } from "./model-led-routing";
 import { formatDebugLog, type Diagnostics, type MemoryRecallAudit, type OllamaStats, type ResearchAudit } from "./debug-log";
 import { remoteDiagnosticMessages, remoteAvatarDiagnostics } from "./remote-report";
@@ -2813,7 +2813,7 @@ export default function App() {
           ? (accumulated ? `${allowRoleplay ? accumulated : stripNarratedActions(accumulated)}\n\n[Stopped]` : "[Generation stopped]")
           : (accumulated ? `${allowRoleplay ? accumulated : stripNarratedActions(accumulated)}\n\n[Interrupted: ${message}]` : `Error: ${message}`),
         failed: !stopped,
-        diagnostics: { elapsedMs: performance.now() - started, firstTokenMs, model: settings.model, stats: null, memory: memoryAudit, toolPlan:toolAudit, notion:notionAudit, parallelTasks:parallelTimings },
+        diagnostics: { elapsedMs: performance.now() - started, firstTokenMs, model: unsuccessfulInferenceLabel(settings), stats: null, memory: memoryAudit, toolPlan:toolAudit, notion:notionAudit, parallelTasks:parallelTimings },
         sources: withSearch?.results, searchQuery: withSearch?.query
       };
       setMessages(current => current.map(m => m.id === assistantId ? assistant : m));

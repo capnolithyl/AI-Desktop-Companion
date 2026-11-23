@@ -24,6 +24,18 @@ export type ModelSwitcherStatus = {
   cloudActive: boolean;
 };
 
+/** On failed turns no provider returned a completion. Report only what was
+ * configured, never mislabel an NVIDIA error as the standby Ollama model. */
+export function unsuccessfulInferenceLabel(settings:ModelSwitcherSettings):string {
+  switch (settings.provider) {
+    case "nvidia": return `NVIDIA ${settings.nvidiaModel} (selected, no completion)`;
+    case "gemini": return `Gemini ${settings.geminiModel} (selected, no completion)`;
+    case "openrouter": return `OpenRouter ${settings.openrouterModel} (selected, no completion)`;
+    case "auto": return "Auto (provider not confirmed)";
+    case "local": return settings.model;
+  }
+}
+
 export function modelSwitcherStatus(
   settings: ModelSwitcherSettings,
   lastReply?: RoutedReply,
