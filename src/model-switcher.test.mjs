@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {modelSwitcherStatus,modelSwitcherChoice} from "./model-switcher.ts";
+import {modelSwitcherStatus,modelSwitcherChoice,unsuccessfulInferenceLabel} from "./model-switcher.ts";
 
 const settings={provider:"auto",model:"qwen3.5:9b",openrouterModel:"openrouter/free",geminiModel:"gemini-3.8-flash"};
 
@@ -72,4 +72,12 @@ test("NVIDIA selector preserves three supported cloud model IDs",()=>{
     {provider:"nvidia",model:"NVIDIA "+model});
   assert.match(state.label,/NVIDIA.*nemotron-3-ultra/);
   assert.equal(state.cloudActive,true);
+});
+
+test("a failed NVIDIA request is not reported as the configured local Gemma model",()=>{
+  const configured={...settings,provider:"nvidia",nvidiaModel:"nvidia/nemotron-3-ultra-550b-a55b",model:"gemma4:12b"};
+  assert.match(unsuccessfulInferenceLabel(configured),/NVIDIA nvidia\/nemotron-3-ultra-550b-a55b/);
+  assert.doesNotMatch(unsuccessfulInferenceLabel(configured),/gemma4/);
+  assert.match(unsuccessfulInferenceLabel({...configured,provider:"auto"}),/provider not confirmed/);
+  assert.equal(unsuccessfulInferenceLabel({...configured,provider:"local"}),"gemma4:12b");
 });

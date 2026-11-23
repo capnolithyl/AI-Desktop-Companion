@@ -149,3 +149,17 @@ NVIDIA endpoints are intended for developer prototyping, subject to account
 limits, model availability, and applicable developer-use restrictions. Sending
 chat through a hosted model transmits the prompt and selected local context to
 the provider; keep local Ollama selected for private conversations.
+
+
+### NVIDIA model-led public web search (v0.9.66)
+
+The NVIDIA provider has a bounded read-only tool phase: at most **three**
+web-search/page-reading rounds, followed by a **reserved final answer request**
+with tools disabled. Mikan no longer throws away a model's whole answer simply
+because it requested another search at the old three-request cutoff. The
+maximum is four NVIDIA completions per tool-using turn, not a claim about
+NVIDIA's API quota. If sources are insufficient to verify a future event or
+local concert schedule, Mikan should acknowledge the missing evidence or ask
+for the owner's city rather than invent events or cite unrelated articles.
+Existing owner permissions, private-context restrictions, public URL safety,
+and per-response tool-count limits remain in place.
