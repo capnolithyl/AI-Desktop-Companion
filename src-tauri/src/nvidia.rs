@@ -167,7 +167,7 @@ fn memory_plan_messages(history:&[ChatMessage])->Vec<Value>{
 async fn choose_needed_memory(
     client:&reqwest::Client,key:&str,model:&str,request:&ChatRequest
 )->Result<Vec<String>,String>{
-    let payload=json!({
+    let mut payload=json!({
         "model":model,
         "messages":memory_plan_messages(&request.messages),
         "max_tokens":1200,
@@ -175,6 +175,13 @@ async fn choose_needed_memory(
         "tools":memory_plan_tool(),
         "tool_choice":"required"
     });
+    // NVIDIA documents a no-thinking mode for reliable constrained tool
+    // selection with Nemotron 3 Ultra. Other hosted models use their defaults.
+    if model==DEFAULT_MODEL {
+        payload["chat_template_kwargs"]=json!({
+            "enable_thinking":false,"force_nonempty_content":true
+        });
+    }
     let response=client.post("https://integrate.api.nvidia.com/v1/chat/completions")
         .header("Authorization",format!("Bearer {key}"))
         .timeout(Duration::from_secs(25))
