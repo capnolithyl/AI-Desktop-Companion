@@ -3,12 +3,14 @@
  * It is also a provider/model switcher; the Ollama fallback setting is kept
  * separately from whatever free model OpenRouter happened to route to.
  */
-export type ChatProvider = "local" | "auto" | "openrouter" | "gemini";
+export type ChatProvider = "local" | "auto" | "openrouter" | "gemini" | "nvidia";
+export const NVIDIA_MODELS = ["nvidia/nemotron-3-ultra-550b-a55b","z-ai/glm-5.3-flash","mistralai/mistral-large-4-1t-a52b"] as const;
 export type ModelSwitcherSettings = {
   provider: ChatProvider;
   model: string;
   openrouterModel: string;
   geminiModel: string;
+  nvidiaModel: string;
 };
 export type RoutedReply = {
   model: string;
@@ -44,6 +46,7 @@ export function modelSwitcherStatus(
         title:"OpenRouter is attempting this chat turn. The final model may differ from the configured free router.",
         cloudActive:false};
     }
+    if (settings.provider === "nvidia") return {label:"☁ NVIDIA · responding…",title:`NVIDIA API: ${settings.nvidiaModel}`,cloudActive:false};
     if (settings.provider === "gemini") {
       return {label:"☁ Gemini · responding…",
         title:`Gemini request using ${settings.geminiModel}`,cloudActive:false};
@@ -57,6 +60,7 @@ export function modelSwitcherStatus(
       settings.provider === "auto" && (lastReply.model.startsWith("OpenRouter ") || !!lastReply.fallbackReason) ||
       settings.provider === "openrouter" && lastReply.model.startsWith("OpenRouter ") ||
       settings.provider === "gemini" && lastReply.model.startsWith("Gemini ") ||
+      settings.provider === "nvidia" && lastReply.model.startsWith("NVIDIA ") ||
       settings.provider === "local" && lastReply.model === local
     )));
   if (matches && lastReply) {
@@ -70,6 +74,10 @@ export function modelSwitcherStatus(
       return {label:`☁ OpenRouter · ${routed}`,
         title:`Last reply used OpenRouter model: ${routed}. This may change on the next request.`,
         cloudActive:true};
+    }
+    if (lastReply.model.startsWith("NVIDIA ")) {
+      const routed=lastReply.model.slice("NVIDIA ".length);
+      return {label:`☁ NVIDIA · ${routed}`,title:`Last reply used NVIDIA ${routed}`,cloudActive:true};
     }
     if (lastReply.model.startsWith("Gemini ")) {
       const routed = lastReply.model.slice("Gemini ".length);
@@ -91,6 +99,7 @@ export function modelSwitcherStatus(
       title:"OpenRouter cloud-only mode. The model shown is the configured route until a response identifies the actual model.",
       cloudActive:false};
   }
+  if (settings.provider === "nvidia") return {label:`☁ NVIDIA · ${settings.nvidiaModel}`,title:"NVIDIA selected. No reply from this model yet.",cloudActive:false};
   if (settings.provider === "gemini") {
     return {label:`☁ Gemini · ${settings.geminiModel}`,
       title:"Gemini cloud-only mode. No reply from this mode yet.",cloudActive:false};
@@ -101,8 +110,13 @@ export function modelSwitcherStatus(
 /** User-selected dock option; status items are display-only. */
 export function modelSwitcherChoice(value: string, installed: readonly string[]):
   | {provider:"local";model:string}
+  | {provider:"nvidia";nvidiaModel:string}
   | {provider:"auto"|"openrouter"|"gemini"}
   | null {
+  if (value.startsWith("nvidia:")) {
+    const nvidiaModel=value.slice("nvidia:".length);
+    return NVIDIA_MODELS.some(model=>model===nvidiaModel) ? {provider:"nvidia",nvidiaModel} : null;
+  }
   if (value === "auto" || value === "openrouter" || value === "gemini") {
     return {provider:value};
   }

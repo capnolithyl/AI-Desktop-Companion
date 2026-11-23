@@ -8,7 +8,7 @@ import type { ResearchPlan } from "./research-routing.ts";
 export type DesktopWebInput = {
   question: string;
   autoSearch: boolean;
-  provider: "local" | "auto" | "gemini" | "openrouter";
+  provider: "local" | "auto" | "gemini" | "openrouter" | "nvidia";
   planMode: ResearchPlan["mode"];
   notion: boolean;
   personalTurn: boolean;

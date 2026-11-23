@@ -35,7 +35,7 @@ import { runtimeContext, chatRuntimeContext } from "./runtime-context";
 import { decideDesktopTurn } from "./desktop-turn-routing";
 import { planDesktopWebExecution } from "./turn-execution-policy";
 import { isModelStatusQuestion, modelStatusAnswer } from "./model-status";
-import { modelSwitcherStatus, modelSwitcherChoice } from "./model-switcher";
+import { modelSwitcherStatus, modelSwitcherChoice, NVIDIA_MODELS } from "./model-switcher";
 import { formatDebugLog, type Diagnostics, type MemoryRecallAudit, type OllamaStats, type ResearchAudit } from "./debug-log";
 import { remoteDiagnosticMessages, remoteAvatarDiagnostics } from "./remote-report";
 import { strongSemanticIds } from "./memory-ranking";
@@ -303,6 +303,27 @@ export default function App() {
   };
   const [availableModels, setAvailableModels] = useState<string[]>([]);
   // Secret remains exclusively in Windows Credential Manager, never Settings/localStorage.
+  const [nvidiaKeyInput,setNvidiaKeyInput] = useState("");
+  const [nvidiaKeyReady,setNvidiaKeyReady] = useState(false);
+  const [nvidiaKeyBusy,setNvidiaKeyBusy] = useState(false);
+  const [nvidiaKeyError,setNvidiaKeyError] = useState<string|null>(null);
+  const [nvidiaTestResult,setNvidiaTestResult] = useState<string|null>(null);
+  useEffect(()=>{void invoke<boolean>("nvidia_key_status").then(setNvidiaKeyReady).catch(e=>setNvidiaKeyError(errorText(e)));},[]);
+  const saveNvidiaKey=async()=>{
+    setNvidiaKeyBusy(true);setNvidiaKeyError(null);
+    try {await invoke("nvidia_save_key",{apiKey:nvidiaKeyInput.trim()});setNvidiaKeyReady(true);setNvidiaKeyInput("");setNvidiaTestResult(null);}
+    catch(e){setNvidiaKeyError(errorText(e));}finally{setNvidiaKeyBusy(false);}
+  };
+  const removeNvidiaKey=async()=>{
+    setNvidiaKeyBusy(true);setNvidiaKeyError(null);
+    try {await invoke("nvidia_remove_key");setNvidiaKeyReady(false);setNvidiaTestResult(null);}
+    catch(e){setNvidiaKeyError(errorText(e));}finally{setNvidiaKeyBusy(false);}
+  };
+  const testNvidiaKey=async()=>{
+    setNvidiaKeyBusy(true);setNvidiaTestResult(null);
+    try {setNvidiaTestResult(await invoke<string>("nvidia_test_connection",{model:draft.nvidiaModel}));}
+    catch(e){setNvidiaTestResult("Connection failed: "+errorText(e));}finally{setNvidiaKeyBusy(false);}
+  };
   const [geminiKeyInput,setGeminiKeyInput] = useState("");
   const [geminiKeyReady,setGeminiKeyReady] = useState(false);
   const [geminiKeyBusy,setGeminiKeyBusy] = useState(false);
@@ -1591,6 +1612,7 @@ export default function App() {
     const choice = modelSwitcherChoice(selected, availableModels);
     if (!choice) return;
     if (choice.provider === "local") switchModel(choice.model);
+    else if(choice.provider==="nvidia")applySetting({provider:"nvidia",nvidiaModel:choice.nvidiaModel});
     else applySetting({ provider: choice.provider });
   };
 
@@ -2523,6 +2545,7 @@ export default function App() {
           provider: chapterModelProvider,
           geminiModel: settings.geminiModel,
           openrouterModel: settings.openrouterModel,
+          nvidiaModel: settings.nvidiaModel,
           cloudAllowWeb: cloudMaySearch,
           autoSearch: effectiveWeb,
           structuredResearch: settings.structuredResearch && effectiveWeb,
@@ -2586,7 +2609,7 @@ export default function App() {
       };
       // The source-verification filter applies to actual researched answers,
       // NEVER to local conversational or capability answers.
-      const cloudResearched = cloudMaySearch && (completion.modelUsed?.startsWith("Gemini ") || completion.modelUsed?.startsWith("OpenRouter ")) &&
+      const cloudResearched = cloudMaySearch && (completion.modelUsed?.startsWith("Gemini ") || completion.modelUsed?.startsWith("OpenRouter ") || completion.modelUsed?.startsWith("NVIDIA ")) &&
         !!completion.sources?.length;
       const verifiedSources = (turn.verifyWebEvidence || plannedPublicSearch || cloudResearched)
         ? (completion.sources?.length ? completion.sources : withSearch?.results)
@@ -2853,7 +2876,8 @@ export default function App() {
     m.role === "assistant" && !m.failed && !!m.diagnostics?.model
   );
   const dockModel = modelSwitcherStatus(settings,lastModelReply?.diagnostics,busy,activity);
-  const dockOption = settings.provider === "local" && availableModels.includes(settings.model) && !busy
+  const dockOption = !busy && settings.provider==="nvidia" ? `nvidia:${settings.nvidiaModel}`
+    : settings.provider === "local" && availableModels.includes(settings.model) && !busy
     ? `local:${settings.model}` : "__status__";
   const dockDot = dockModel.cloudActive ? "online"
     : settings.provider !== "local" && !dockModel.label.includes("Local")
@@ -3162,6 +3186,9 @@ export default function App() {
               <option value="openrouter">☁ OpenRouter · free only</option>
               <option value="gemini">☁ Gemini · cloud only</option>
             </optgroup>
+            <optgroup label="NVIDIA · prototype models">
+              {NVIDIA_MODELS.map(name=><option key={name} value={`nvidia:${name}`}>☁ NVIDIA · {name.split("/").pop()}</option>)}
+            </optgroup>
             <optgroup label="Local Ollama models">
               {availableModels.map(name =>
                 <option key={name} value={`local:${name}`}>● Local · {name}</option>
@@ -3358,7 +3385,7 @@ export default function App() {
             ...current,
             ...(settingsTab === "ai" ? {
               endpoint: DEFAULT_SETTINGS.endpoint, model: DEFAULT_SETTINGS.model,
-              provider: DEFAULT_SETTINGS.provider, geminiModel: DEFAULT_SETTINGS.geminiModel,
+              provider: DEFAULT_SETTINGS.provider, nvidiaModel: DEFAULT_SETTINGS.nvidiaModel, geminiModel: DEFAULT_SETTINGS.geminiModel,
               openrouterModel: DEFAULT_SETTINGS.openrouterModel,
               systemPrompt: DEFAULT_SETTINGS.systemPrompt,
               contextWindow: DEFAULT_SETTINGS.contextWindow,
@@ -3443,9 +3470,32 @@ export default function App() {
               <option value="auto">Auto · OpenRouter free → Ollama fallback</option>
               <option value="openrouter">OpenRouter free only · show cloud errors</option>
               <option value="gemini">Gemini only · show cloud errors</option>
+              <option value="nvidia">NVIDIA · selected prototype model</option>
             </select>
             <small>Auto uses free OpenRouter first, switching to local Qwen when its quota or network fails. Gemini remains selectable separately. Memory, SearXNG, and Pocket TTS stay unchanged.</small>
           </label>
+          <div className="settings-section-title">NVIDIA · Developer prototyping</div>
+          <label className="setting-field">NVIDIA model
+            <select value={draft.nvidiaModel} onChange={event=>setDraft(current=>({...current,nvidiaModel:event.target.value}))}>
+              {NVIDIA_MODELS.map(name=><option key={name} value={name}>{name}</option>)}
+            </select>
+            <small>Default: Nemotron 3 Ultra. Hosted inference; prompts and approved attachments are sent to NVIDIA. Free developer access has usage restrictions.</small>
+          </label>
+          <label className="setting-field">NVIDIA API key
+            <input type="password" autoComplete="off" spellCheck={false} value={nvidiaKeyInput}
+              placeholder={nvidiaKeyReady?"Saved securely · replace key":"Paste your NVIDIA Build API key"}
+              onChange={e=>setNvidiaKeyInput(e.target.value)}/>
+            <small>{nvidiaKeyReady?"Saved in Windows Credential Manager.":"No NVIDIA key configured."} Key never enters app settings or chat history.</small>
+          </label>
+          <div className="service-buttons">
+            <button type="button" className="secondary-action" disabled={nvidiaKeyBusy||!nvidiaKeyInput.trim()} onClick={()=>void saveNvidiaKey()}>Save NVIDIA key</button>
+            {nvidiaKeyReady && <>
+              <button type="button" className="secondary-action" disabled={nvidiaKeyBusy} onClick={()=>void testNvidiaKey()}>Test NVIDIA</button>
+              <button type="button" className="secondary-action" disabled={nvidiaKeyBusy} onClick={()=>void removeNvidiaKey()}>Remove key</button>
+            </>}
+          </div>
+          {nvidiaKeyError && <small className="field-error" role="alert">{nvidiaKeyError}</small>}
+          {nvidiaTestResult && <small className={nvidiaTestResult.startsWith("Connection failed:")?"field-error":"settings-note"} role="status">{nvidiaTestResult}</small>}
           <div className="settings-section-title">OpenRouter · Free models only</div>
           <label className="setting-field">OpenRouter model ID
             <input spellCheck={false} value={draft.openrouterModel}

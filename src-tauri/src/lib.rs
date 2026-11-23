@@ -6,6 +6,7 @@ mod agent_tools;
 mod gemini;
 mod cloud_web_tools;
 mod openrouter;
+mod nvidia;
 mod openrouter_stream;
 mod research_intent;
 mod source_enrichment;
@@ -55,6 +56,8 @@ struct ChatRequest {
     gemini_model: Option<String>,
     #[serde(default)]
     openrouter_model: Option<String>,
+    #[serde(default)]
+    nvidia_model: Option<String>,
     #[serde(default)]
     cloud_allow_web: bool,
     messages: Vec<ChatMessage>,
@@ -376,6 +379,11 @@ async fn chat_stream_impl(
                 Err(reason) => fallback_reason=Some(reason)
             }
         }
+    }
+    if provider=="nvidia" {
+        let key = nvidia::key()?.ok_or("Add an NVIDIA API key under Settings → AI & Models")?;
+        return tokio::time::timeout(Duration::from_secs(120),nvidia::chat(&app,&request,&key,&std::sync::atomic::AtomicBool::new(false)))
+            .await.map_err(|_|"NVIDIA request timed out after 120 seconds".to_string())?;
     }
     if provider=="gemini" {
         // Only read-only web calls may be repeated after a failed cloud attempt.
@@ -750,6 +758,10 @@ pub fn run() {
             gemini::gemini_save_key,
             gemini::gemini_remove_key,
             gemini::gemini_test_connection,
+            nvidia::nvidia_key_status,
+            nvidia::nvidia_save_key,
+            nvidia::nvidia_remove_key,
+            nvidia::nvidia_test_connection,
             openrouter::openrouter_key_status,
             openrouter::openrouter_save_key,
             openrouter::openrouter_remove_key,
