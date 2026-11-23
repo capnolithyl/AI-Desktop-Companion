@@ -9,9 +9,9 @@ import { reviewResearchCompletion, groundedResearchFallback } from "./evidence-v
 import { shouldMikanifyAnswer, type MikanifyResult } from "./mikanify";
 import { resolveConversationQuestion, needsContextResolution } from "./conversation-engine";
 import { invoke } from "@tauri-apps/api/core";
-import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import { emit, listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { setSettingsWindowMode } from "./settings-window";
+import { initialSettingsTab, initialMemoryTab, isStandaloneSettingsWindow, validSettingsTab, validMemoryTab } from "./settings-window";
 import { register, unregister } from "@tauri-apps/plugin-global-shortcut";
 import {
   ArrowLeft, ArrowUp, Brain, Camera, Cat, Check, ChevronLeft, ChevronRight, Clock3, Copy, Crop, Eye, EyeOff, FileText, Heart, History, Paperclip,
@@ -250,13 +250,23 @@ function ReplyMetrics({ diagnostics }: { diagnostics?: Diagnostics }) {
 }
 
 export default function App() {
+  const standaloneSettings = isStandaloneSettingsWindow();
   const brainEvalStatus = useSyncExternalStore(subscribeBrainEval, getBrainEvalStatus, getBrainEvalStatus);
   useEffect(()=>{void restoreBrainEvalReport()},[]);
-  const [screen, setScreen] = useState<Screen>("compact");
+  const [screen, setScreen] = useState<Screen>(standaloneSettings ? "settings" : "compact");
   const [settings, setSettings] = useState<Settings>(loadSettings);
   const [draft, setDraft] = useState<Settings>(settings);
-  const [settingsTab, setSettingsTab] = useState<SettingsTab>("appearance");
-  const [settingsLayoutReady, setSettingsLayoutReady] = useState(false);
+  const [settingsTab, setSettingsTab] = useState<SettingsTab>(initialSettingsTab);
+  useEffect(() => {
+    if (typeof window === "undefined" || !("__TAURI_INTERNALS__" in window)) return;
+    let disposed = false;
+    let unlisten: UnlistenFn | undefined;
+    void listen<Settings>("mikan://settings-changed", event => {
+      setSettings(event.payload);
+      if (!standaloneSettings) setDraft(event.payload);
+    }).then(stop => { if (disposed) stop(); else unlisten = stop; });
+    return () => { disposed = true; unlisten?.(); };
+  }, [standaloneSettings]);
   const [service, setService] = useState<SearchService | null>(null);
   const [serviceBusy, setServiceBusy] = useState(false);
   const [serviceError, setServiceError] = useState<string | null>(null);
@@ -281,7 +291,7 @@ export default function App() {
   const [memoryError, setMemoryError] = useState<string | null>(null);
   const [automaticMemoryError, setAutomaticMemoryError] = useState<string | null>(null);
   const [memoryToast, setMemoryToast] = useState<{ key: number; message: string } | null>(null);
-  const [memoryInitialTab, setMemoryInitialTab] = useState<"facts" | "chats" | "character" | "collections">("facts");
+  const [memoryInitialTab, setMemoryInitialTab] = useState<"facts" | "chats" | "character" | "collections">(initialMemoryTab);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [stopping, setStopping] = useState(false);
@@ -878,7 +888,7 @@ export default function App() {
     void invoke<LiveVisionStatus>("vision_live_status").then(setLiveVision).catch(()=>{});
   },[]);
   useEffect(()=>{
-    if(!liveVision.enabled)return;
+    if(standaloneSettings || !liveVision.enabled)return;
     const handle = window.setInterval(()=>{
       void invoke<LiveVisionStatus>("vision_live_status")
         .then(status=>{
@@ -891,7 +901,7 @@ export default function App() {
   // Updating capture frequency never starts extra worker threads. The
   // existing native watcher adjusts its own interval within ~100ms.
   useEffect(()=>{
-    if(!liveVision.enabled)return;
+    if(standaloneSettings || !liveVision.enabled)return;
     const region=settings.visionRegion?.monitorIndex===liveVision.monitorIndex
       ? settings.visionRegion.region:null;
     const timer=window.setTimeout(()=>{
@@ -903,6 +913,7 @@ export default function App() {
   },[liveVision.enabled,liveVision.monitorIndex,
      settings.visionCaptureIntervalSeconds,settings.visionRegion]);
   useEffect(()=>{
+    if (standaloneSettings) return;
     let active=true;
     let remove:(()=>void)|undefined;
     void listen<RegionChoice>("mikan://region-selected",event=>{
@@ -945,26 +956,15 @@ export default function App() {
   }, []);
 
   const goCompact = useCallback(() => {
-    setScreen("compact");
     setPreviewOutfitId(undefined);
+    if (standaloneSettings) {
+      // Keep the webview (and an active Brain Lab run) alive while hidden.
+      void invoke("hide_settings_window").catch(console.warn);
+      return;
+    }
+    setScreen("compact");
     focusInput();
-  }, [focusInput]);
-
-  // A settings-only wider native window leaves the whole animated avatar visible
-  // beside the navigation. Closing settings restores the original compact size.
-  useEffect(() => {
-    let active = true;
-    const expanded = screen === "settings";
-    if (!expanded) setSettingsLayoutReady(false);
-    void setSettingsWindowMode(expanded).then(() => {
-      if (active) setSettingsLayoutReady(expanded && typeof window !== "undefined" &&
-        "__TAURI_INTERNALS__" in window);
-    }).catch(error => {
-      console.warn("Could not resize Mikan for side-by-side settings:", error);
-      if (active) setSettingsLayoutReady(false);
-    });
-    return () => { active = false; };
-  }, [screen]);
+  }, [focusInput, standaloneSettings]);
 
   const showPortrait = useCallback((blob: Blob | null) => {
     if (portraitUrl.current) URL.revokeObjectURL(portraitUrl.current);
@@ -1000,7 +1000,7 @@ export default function App() {
   // No scheduler service: check the local calendar on startup and once a minute
   // while Mikan is running. Never override a manual outfit change today or a pin.
   useEffect(() => {
-    if (!ikiReady || !wardrobeConfig.auto || wardrobeConfig.pinned) return;
+    if (standaloneSettings || !ikiReady || !wardrobeConfig.auto || wardrobeConfig.pinned) return;
     let disposed = false;
     let applying = false;
     const checkDay = async () => {
@@ -1035,6 +1035,7 @@ export default function App() {
   }, [ikiReady, ikiOutfits, ikiBusy, wardrobeConfig.auto, wardrobeConfig.pinned]);
 
   useEffect(() => {
+    if (standaloneSettings) return;
     let hotkeyRegistered = false;
     let unlisten: UnlistenFn | null = null;
     let disposed = false;
@@ -1076,6 +1077,7 @@ export default function App() {
   // Check the real HTTP endpoint, not just Docker's container flag. Polling
   // uses a one-shot timer so slow starts can't overlap or spin in the tray.
   useEffect(() => {
+    if (standaloneSettings) return; // Only main manages the optional search service.
     let disposed = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const check = async () => {
@@ -1148,20 +1150,30 @@ export default function App() {
     return () => { disposed = true; };
   }, []);
 
+  const broadcastMemoryChange = () => {
+    if (typeof window !== "undefined" && "__TAURI_INTERNALS__" in window) {
+      void emit("mikan://memory-changed", null).catch(console.warn);
+    }
+  };
   const refreshArchive = async () => {
     setConversations(await memoryApi.listConversations());
+    broadcastMemoryChange();
   };
   const refreshFacts = async () => {
     setUserFacts(await memoryApi.listFacts());
+    broadcastMemoryChange();
   };
   const refreshSummaries = async () => {
     setSessionSummaries(await memoryApi.listSessionSummaries());
+    broadcastMemoryChange();
   };
   const refreshCharacter = async () => {
     setCharacterFacts(await memoryApi.listCharacterFacts());
+    broadcastMemoryChange();
   };
   const refreshInterests = async () => {
     setInterests(await memoryApi.listInterests());
+    broadcastMemoryChange();
   };
   const importInterests = async (rows:IncomingInterest[]) => {
     const result=await memoryApi.importInterests(rows);
@@ -1245,7 +1257,7 @@ export default function App() {
   // Recover interrupted jobs after Mikan starts, and retry transient Ollama
   // failures while idle. No active GPU polling or LLM work occurs when empty.
   useEffect(() => {
-    if (!memoryReady || busy || (!settings.autoRememberUser && !settings.autoRememberMikan)) return;
+    if (standaloneSettings || !memoryReady || busy || (!settings.autoRememberUser && !settings.autoRememberMikan)) return;
     let cancelled = false;
     const recover = async () => {
       try {
@@ -1304,6 +1316,16 @@ export default function App() {
     setInterests(collection);
     setMemoryError(null);
   };
+  useEffect(() => {
+    if (typeof window === "undefined" || !("__TAURI_INTERNALS__" in window)) return;
+    let disposed = false;
+    let unlisten: UnlistenFn | undefined;
+    void listen("mikan://memory-changed", () => {
+      void refreshMemory().catch(error => console.warn("Memory refresh unavailable:", error));
+    }).then(stop => { if (disposed) stop(); else unlisten = stop; });
+    return () => { disposed = true; unlisten?.(); };
+  }, []);
+
   const addUserFact = async (fact: string) => {
     await memoryApi.addFact(fact);
     confirmMemorySaved("Memory saved");
@@ -1376,6 +1398,10 @@ export default function App() {
     await refreshArchive();
   };
   const openMemory = (tab: "chats" | "facts" | "character" | "collections" = "facts") => {
+    if (!standaloneSettings && typeof window !== "undefined" && "__TAURI_INTERNALS__" in window) {
+      void invoke("open_settings_window", { tab: "memory", memoryTab: tab }).catch(console.warn);
+      return;
+    }
     setMemoryInitialTab(tab);
     setPreviewOutfitId(undefined);
     setSettingsTab("memory");
@@ -1435,6 +1461,10 @@ export default function App() {
     catch (error) { console.warn("Web cache unavailable:", error); }
   };
   const openSettingsTab = (tab: SettingsTab) => {
+    if (!standaloneSettings && typeof window !== "undefined" && "__TAURI_INTERNALS__" in window) {
+      void invoke("open_settings_window", { tab }).catch(console.warn);
+      return;
+    }
     setPreviewOutfitId(tab === "appearance" ? ikiRig?.id ?? null : undefined);
     setSettingsTab(tab);
     setDraft(settings);
@@ -1446,6 +1476,26 @@ export default function App() {
     setScreen("settings");
   };
   const openSettings = () => openSettingsTab("appearance");
+
+  useEffect(() => {
+    if (!standaloneSettings) return;
+    let disposed = false;
+    let unlisten: UnlistenFn | undefined;
+    void listen<{tab: string; memoryTab?: string}>("mikan://settings-tab", event => {
+      const tab = validSettingsTab(event.payload.tab);
+      setSettingsTab(tab);
+      setScreen("settings");
+      setMemoryInitialTab(validMemoryTab(event.payload.memoryTab ?? null));
+      setDraft(loadSettings());
+      setPreviewOutfitId(tab === "appearance" ? ikiRig?.id ?? null : undefined);
+      if (tab === "memory") void refreshMemory().catch(console.warn);
+      if (tab === "internet") { void refreshService(); void refreshCache(); }
+      if (tab === "ai") void refreshModels(settings.endpoint);
+      if (tab === "capabilities") void checkCapabilities();
+      if (tab === "voice") void checkVoice(voiceEndpoint(settings.voice));
+    }).then(stop => { if (disposed) stop(); else unlisten = stop; });
+    return () => { disposed = true; unlisten?.(); };
+  }, [standaloneSettings]);
 
   const choosePortrait = async (file?: File) => {
     if (!file) return;
@@ -1464,10 +1514,31 @@ export default function App() {
     }
   };
 
+  const broadcastWardrobeChange = () => {
+    if (typeof window !== "undefined" && "__TAURI_INTERNALS__" in window) {
+      void emit("mikan://wardrobe-changed", null).catch(console.warn);
+    }
+  };
+  useEffect(() => {
+    if (typeof window === "undefined" || !("__TAURI_INTERNALS__" in window)) return;
+    let disposed = false;
+    let unlisten: UnlistenFn | undefined;
+    void listen("mikan://wardrobe-changed", () => {
+      void loadIkiWardrobe().then(wardrobe => {
+        setIkiOutfits(wardrobe.outfits);
+        setIkiRig(wardrobe.active);
+      }).catch(console.warn);
+      setWardrobeConfig(loadWardrobeConfig());
+      setAvatarDisplay(loadAvatarDisplay());
+    }).then(stop => { if (disposed) stop(); else unlisten = stop; });
+    return () => { disposed = true; unlisten?.(); };
+  }, []);
+
   const updateWardrobeConfig = (change: (previous: WardrobeConfig) => WardrobeConfig) => {
     setWardrobeConfig(previous => {
       const updated = change(previous);
       saveWardrobeConfig(updated);
+      broadcastWardrobeChange();
       return updated;
     });
   };
@@ -1490,6 +1561,7 @@ export default function App() {
     setIkiError(null);
     setAvatarDisplay("animated");
     saveAvatarDisplay("animated");
+    broadcastWardrobeChange();
   };
 
   const chooseIkiRig = async (file?: File, sourceFolder?: string) => {
@@ -1652,6 +1724,33 @@ export default function App() {
     setVoiceHealth(null);
     goCompact();
   };
+
+  const settingsChatRef = useRef({
+    newChat: () => {},
+    openChat: async (_id: string) => {},
+    prefill: (_text: string) => {}
+  });
+  settingsChatRef.current = {
+    newChat: clearChat,
+    openChat: openConversation,
+    prefill: (text: string) => { setScreen("compact"); setInput(text); focusInput(); }
+  };
+  useEffect(() => {
+    if (standaloneSettings) return;
+    let disposed = false;
+    let unlisten: UnlistenFn | undefined;
+    void listen<{ action: "new" | "open" | "prefill"; conversationId?: string; text?: string }>(
+      "mikan://settings-chat", event => {
+        void invoke("show_companion").catch(console.warn);
+        const request = event.payload;
+        if (request.action === "new") settingsChatRef.current.newChat();
+        else if (request.action === "open" && request.conversationId)
+          void settingsChatRef.current.openChat(request.conversationId);
+        else if (request.action === "prefill" && request.text)
+          settingsChatRef.current.prefill(request.text);
+      }).then(stop => { if (disposed) stop(); else unlisten = stop; });
+    return () => { disposed = true; unlisten?.(); };
+  }, [standaloneSettings]);
 
   const performSearch = async (query: string) => {
     const trimmed = query.trim();
@@ -2974,6 +3073,7 @@ export default function App() {
     }))
   };
   useEffect(() => {
+    if (standaloneSettings) return; // Do not start a second remote relay.
     let disposed = false;
     let timer: ReturnType<typeof setTimeout>;
     let lastSnapshot = "";
@@ -3159,8 +3259,8 @@ export default function App() {
       .finally(() => setAvatarDragging(false));
   };
 
-  return <main className={screen === "settings" && settingsLayoutReady ? "companion settings-mode" : "companion"} style={theme}>
-    <div className="portrait-space" title="Drag Mikan to move the window" onMouseDown={dragPortrait}
+  return <main className={standaloneSettings ? "companion settings-standalone" : "companion"} style={theme}>
+    {!standaloneSettings && <div className="portrait-space" title="Drag Mikan to move the window" onMouseDown={dragPortrait}
       onContextMenu={event => { event.preventDefault(); setPortraitMenuAt({ x: event.clientX, y: event.clientY }); }}>
       {avatarDisplay === "animated" && ikiReady ? (
         <IkiAvatar customRig={displayedIkiRig.customRig} rigUrl={displayedIkiRig.rigUrl} speaking={voiceState === "playing"}
@@ -3216,12 +3316,12 @@ export default function App() {
         <span>Cursor: {avatarDebug?.gazeX?.toFixed(2) ?? "n/a"} / {avatarDebug?.gazeY?.toFixed(2) ?? "n/a"}</span>
         <span>Hair momentum: {avatarDebug?.dragMomentum?.toFixed(2) ?? "n/a"}</span>
       </div>}
-    </div>
+    </div>}
 
     {portraitMenuAt && <PortraitContextMenu position={portraitMenuAt} items={portraitMenuItems}
       onClose={() => setPortraitMenuAt(null)}/>}
 
-    <section className="dock" aria-label="Chat with Mikan">
+    {!standaloneSettings && <section className="dock" aria-label="Chat with Mikan">
       {memoryToast && <div key={memoryToast.key} className="desktop-memory-toast"
         role="status" aria-live="polite" aria-atomic="true">
         <Check size={15} aria-hidden="true"/>
@@ -3433,7 +3533,7 @@ export default function App() {
         </div>
         <span title={memoryError || "Memory ready"}>{memoryError ? "Memory unavailable" : !memoryReady ? "Loading memory…" : "Ctrl + Alt + M"}</span>
       </div>
-    </section>
+    </section>}
 
     {screen !== "compact" && screen !== "settings" && <div className="panel-scrim" onMouseDown={goCompact} />}
 
@@ -3685,7 +3785,12 @@ export default function App() {
           onAutoRememberMikanChange={enabled => applySetting({autoRememberMikan: enabled})}
           automaticError={automaticMemoryError}
           busy={busy} error={memoryError} onClose={() => setSettingsTab("appearance")}
-          onNew={clearChat} onOpen={openConversation} onDeleteChat={deleteConversation}
+          onNew={standaloneSettings
+              ? () => { void emit("mikan://settings-chat", { action: "new" }); goCompact(); }
+              : clearChat}
+            onOpen={standaloneSettings
+              ? async id => { await emit("mikan://settings-chat", { action: "open", conversationId: id }); goCompact(); }
+              : openConversation} onDeleteChat={deleteConversation}
           onDeleteSessionSummary={deleteSessionNotes}
           onAddFact={addUserFact} onEditFact={editUserFact} onDeleteFact={deleteUserFact}
           onPinFact={pinUserFact} onImportFacts={importUserFacts} onExportFacts={exportUserFacts}
@@ -3695,7 +3800,10 @@ export default function App() {
         {settingsTab === "capabilities" && <CapabilitiesPanel embedded health={capabilityHealth}
           checking={capabilitiesChecking} onClose={() => setSettingsTab("appearance")}
           onRefresh={() => void checkCapabilities()}
-          onAsk={question => {setInput(question);goCompact();focusInput();}}/>}
+          onAsk={question => {
+              if (standaloneSettings) void emit("mikan://settings-chat", { action: "prefill", text: question });
+              else { setInput(question); goCompact(); focusInput(); }
+            }}/>} 
         {settingsTab === "ai" && <>
           <div className="settings-section-title">Inference provider</div>
           <label className="setting-field">Primary model
