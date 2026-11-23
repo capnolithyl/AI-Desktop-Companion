@@ -13,7 +13,7 @@ export type DesktopWebInput = {
   question: string;
   previous?: readonly WebPlanningTurn[];
   autoSearch: boolean;
-  provider: "local" | "auto" | "gemini" | "openrouter";
+  provider: "local" | "auto" | "gemini" | "openrouter" | "nvidia";
   planMode: ResearchPlan["mode"];
   notion: boolean;
   personalTurn: boolean;

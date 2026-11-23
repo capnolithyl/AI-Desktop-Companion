@@ -10,7 +10,7 @@ import { DEFAULT_AVATAR_VERTICAL_OFFSET, readAvatarVerticalOffset } from "./avat
 export type ResearchMode = "simple" | "strict";
 export type ChatRole = "user" | "assistant";
 export type Message = { id: string; role: ChatRole; content: string };
-export type Settings = { voice: VoiceSettings; endpoint: string; model: string; provider: "local" | "auto" | "gemini" | "openrouter"; geminiModel: string; openrouterModel: string; systemPrompt: string; communication: CommunicationPreferences; appearance: Appearance; personality: Personality; searxngEndpoint: string; autoSearch: boolean; researchMode: ResearchMode; mikanifyAnswer: boolean; autoManageSearch: boolean; sourcePreferences: SourcePreference[]; cacheHours: number; contextWindow: number | null; reasoningMode: ReasoningMode; autoRememberUser: boolean; autoRememberMikan: boolean; visionCaptureIntervalSeconds:number; visionRegion:RegionChoice|null };
+export type Settings = { voice: VoiceSettings; endpoint: string; model: string; provider: "local" | "auto" | "gemini" | "openrouter" | "nvidia"; nvidiaModel: string; modelLed: boolean; geminiModel: string; openrouterModel: string; systemPrompt: string; communication: CommunicationPreferences; appearance: Appearance; personality: Personality; searxngEndpoint: string; autoSearch: boolean; researchMode: ResearchMode; mikanifyAnswer: boolean; autoManageSearch: boolean; sourcePreferences: SourcePreference[]; cacheHours: number; contextWindow: number | null; reasoningMode: ReasoningMode; autoRememberUser: boolean; autoRememberMikan: boolean; visionCaptureIntervalSeconds:number; visionRegion:RegionChoice|null };
 
 export type VoiceSettings = {
   engine: "qwen" | "pocket";
@@ -86,7 +86,9 @@ function readAppearance(value: unknown): Appearance {
 
 export const DEFAULT_SETTINGS: Settings = {
   endpoint: "http://127.0.0.1:11434",
-  provider: "local",
+  provider: "nvidia",
+  nvidiaModel: "nvidia/nemotron-3-ultra-550b-a55b",
+  modelLed: false,
   geminiModel: "gemini-3.8-flash",
   openrouterModel: "openrouter/free",
   voice: { ...DEFAULT_VOICE },
@@ -122,7 +124,9 @@ export function loadSettings(): Settings {
     const data = JSON.parse(localStorage.getItem(SETTINGS_KEY) ?? "{}") as Partial<Settings>;
     return {
       endpoint: typeof data.endpoint === "string" ? data.endpoint : DEFAULT_SETTINGS.endpoint,
-      provider: data.provider === "auto" || data.provider === "gemini" || data.provider === "openrouter" ? data.provider : "local",
+      provider: data.provider === "nvidia" ? "nvidia" : data.provider === "auto" || data.provider === "gemini" || data.provider === "openrouter" || data.provider === "local" ? data.provider : DEFAULT_SETTINGS.provider,
+      nvidiaModel: typeof data.nvidiaModel === "string" && ["nvidia/nemotron-3-ultra-550b-a55b","z-ai/glm-5.3-flash","mistralai/mistral-large-4-1t-a52b"].includes(data.nvidiaModel) ? data.nvidiaModel : DEFAULT_SETTINGS.nvidiaModel,
+      modelLed: data.modelLed === true,
       openrouterModel: typeof data.openrouterModel === "string" && (data.openrouterModel === "openrouter/free" || /^[a-zA-Z0-9_./-]+:free$/.test(data.openrouterModel)) ? data.openrouterModel : DEFAULT_SETTINGS.openrouterModel,
       geminiModel: typeof data.geminiModel === "string" && /^gemini-[a-zA-Z0-9.-]{1,90}$/.test(data.geminiModel) ? data.geminiModel : DEFAULT_SETTINGS.geminiModel,
       voice: readVoice(data.voice),
