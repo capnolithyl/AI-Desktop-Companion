@@ -437,7 +437,7 @@ async function executeOne(
       sourceRequirement:decision.sourceRequirement};
   };
   const result=await runBrainEvaluation({
-    mode:request.mode,model:selection.id,build:BRAIN_EVAL_BUILD,buildInfo:BUILD_INFO,
+    mode:request.mode,provider:selection.provider,model:selection.id,build:BRAIN_EVAL_BUILD,buildInfo:BUILD_INFO,
     researchMode:request.researchMode??settings.researchMode,
     mikanifyAnswer:request.mikanifyAnswer??settings.mikanifyAnswer,
     scenarios,repetitions:request.repetitions,
