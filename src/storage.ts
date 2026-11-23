@@ -1,6 +1,7 @@
 import { DEFAULT_PERSONALITY, readPersonality, type Personality } from "./personality";
 import { DEFAULT_COMMUNICATION, readCommunicationPreferences, type CommunicationPreferences } from "./communication-preferences";
 import type { ReasoningMode } from "./reasoning-mode";
+import { NVIDIA_MODELS } from "./model-switcher";
 import { captureInterval, restoreRegion, type RegionChoice } from "./capture-region";
 import { DEFAULT_SOURCE_PREFERENCES, readSourcePreferences, type SourcePreference } from "./preferred-sources";
 import { DEFAULT_VOICE_VOLUME, readVoiceVolume } from "./speech";
@@ -126,7 +127,7 @@ export function loadSettings(): Settings {
     return {
       endpoint: typeof data.endpoint === "string" ? data.endpoint : DEFAULT_SETTINGS.endpoint,
       provider: data.provider === "nvidia" ? "nvidia" : data.provider === "auto" || data.provider === "gemini" || data.provider === "openrouter" || data.provider === "local" ? data.provider : DEFAULT_SETTINGS.provider,
-      nvidiaModel: typeof data.nvidiaModel === "string" && ["nvidia/nemotron-3-ultra-550b-a55b","z-ai/glm-5.3-flash","mistralai/mistral-large-4-1t-a52b"].includes(data.nvidiaModel) ? data.nvidiaModel : DEFAULT_SETTINGS.nvidiaModel,
+      nvidiaModel: typeof data.nvidiaModel === "string" && NVIDIA_MODELS.some(model=>model===data.nvidiaModel) ? data.nvidiaModel : DEFAULT_SETTINGS.nvidiaModel,
       modelLed: data.modelLed === true,
       openrouterModel: typeof data.openrouterModel === "string" && (data.openrouterModel === "openrouter/free" || /^[a-zA-Z0-9_./-]+:free$/.test(data.openrouterModel)) ? data.openrouterModel : DEFAULT_SETTINGS.openrouterModel,
       geminiModel: typeof data.geminiModel === "string" && /^gemini-[a-zA-Z0-9.-]{1,90}$/.test(data.geminiModel) ? data.geminiModel : DEFAULT_SETTINGS.geminiModel,
