@@ -482,7 +482,10 @@ async fn grounded_public_reply(
     }else{initial};
     let (verified,rejected)=cloud_evidence::verified_passages(&final_plan.passages,sources);
     let source_ids=verified.iter().map(|item|item.source).collect::<Vec<_>>();
-    let structured=verified.iter().filter(|item|item.subject.is_some()).count();
+    // Accepted source text can include a verified but nonfactual page heading.
+    // Count actual displayable items, not all model-proposed subject labels.
+    let structured=cloud_evidence::displayable_passages(&verified,sources)
+        .iter().filter(|item|item.subject.is_some()).count();
     let _=app.emit("mikan://evidence-tool",json!({
         "requestId":request.request_id,
         "status":if verified.is_empty(){"insufficient"}else{"grounded"},
