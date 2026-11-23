@@ -85,6 +85,7 @@ import { CAPTURE_INTERVAL_MIN,CAPTURE_INTERVAL_MAX,ANALYSIS_POLICY,type RegionCh
 import { attachmentQuestion, attachmentPromptText, loadChatAttachment, type PendingAttachment, type ExtractedDocument } from "./chat-attachments";
 import { parseIkiModel } from "@ikijs/format";
 import { IkiAvatar } from "./IkiAvatar";
+import { resolveDisplayedIkiRig } from "./iki-avatar-selection";
 import { PortraitContextMenu, type PortraitMenuItem } from "./PortraitContextMenu";
 import type { MenuPoint } from "./portrait-context-menu";
 import { DEFAULT_AVATAR_VERTICAL_OFFSET, MIN_AVATAR_VERTICAL_OFFSET, MAX_AVATAR_VERTICAL_OFFSET } from "./avatar-viewport";
@@ -3109,6 +3110,7 @@ export default function App() {
   const previewMetadata = outfitMetadata(wardrobeConfig, previewChoice);
   const previewRig = ikiOutfits.find(outfit => outfit.id === previewChoice.id) ?? null;
   const wardrobePreviewVisible = screen === "settings" && settingsTab === "appearance" && previewOutfitId !== undefined;
+  const displayedIkiRig = resolveDisplayedIkiRig(ikiRig, previewRig, wardrobePreviewVisible, defaultOutfitName);
 
   const theme = {
     "--accent": settings.appearance.accent,
@@ -3145,9 +3147,9 @@ export default function App() {
     <div className="portrait-space" title="Drag Mikan to move the window" onMouseDown={dragPortrait}
       onContextMenu={event => { event.preventDefault(); setPortraitMenuAt({ x: event.clientX, y: event.clientY }); }}>
       {avatarDisplay === "animated" && ikiReady ? (
-        <IkiAvatar customRig={wardrobePreviewVisible ? previewRig?.file ?? null : ikiRig?.file ?? null} speaking={voiceState === "playing"}
+        <IkiAvatar customRig={displayedIkiRig.customRig} rigUrl={displayedIkiRig.rigUrl} speaking={voiceState === "playing"}
           reaction={avatarReaction}
-          rigLabel={wardrobePreviewVisible ? previewRig?.name ?? "Mikan v3 (bundled)" : ikiRig?.name ?? "Mikan v3 (bundled)"}
+          rigLabel={displayedIkiRig.rigLabel}
           debugVisible={showAvatarDebug || (screen === "settings" && settingsTab === "appearance")}
           presencePreferences={avatarPresence}
           dragging={avatarDragging}

@@ -8,7 +8,7 @@
     "build": "npm run wardrobe:check && tsc --noEmit && vite build",
     "eval:local": "node scripts/eval-local.mjs",
     "test:brain": "node --experimental-strip-types --test tests/mikanify.test.mjs tests/assistant-voice.test.mjs tests/assistant-instructions.test.mjs tests/brain-eval.test.mjs tests/brain-eval-status.test.mjs src/unified-planner.test.mjs src/turn-execution-policy.test.mjs tests/research-contract.test.mjs src/research-routing.test.mjs src/memory-retrieval.test.mjs src/evidence-verification.test.mjs tests/brain-eval-presets.test.mjs src/model-led-routing.test.mjs",
-    "test:debug": "node --experimental-strip-types --test src/model-switcher.test.mjs tests/debug-log.test.mjs tests/speech.test.mjs tests/emoji-reactions.test.mjs tests/avatar-reactions.test.mjs tests/avatar-debug.test.mjs tests/avatar-presence.test.mjs src/portrait-context-menu.test.mjs src/avatar-viewport.test.mjs src/iki-wardrobe.test.mjs tests/wardrobe-manifest.test.mjs src/settings-window.test.mjs",
+    "test:debug": "node --experimental-strip-types --test src/model-switcher.test.mjs tests/debug-log.test.mjs tests/speech.test.mjs tests/emoji-reactions.test.mjs tests/avatar-reactions.test.mjs tests/avatar-debug.test.mjs tests/avatar-presence.test.mjs src/portrait-context-menu.test.mjs src/avatar-viewport.test.mjs src/iki-wardrobe.test.mjs tests/iki-avatar-selection.test.mjs tests/wardrobe-manifest.test.mjs src/settings-window.test.mjs",
     "test:server": "npm run build:remote && node --experimental-strip-types --test tests/remote-bridge.test.mjs tests/dev-supervisor.test.mjs src/remote-report.test.mjs",
     "server": "npm run build:remote && node server/index.mjs",
     "remote:dev": "node scripts/remote-dev-supervisor.mjs",
@@ -20,7 +20,7 @@
     "build:mobile": "npm run wardrobe:check && tsc --noEmit && vite build --mode mobile --outDir android/app/src/main/assets --base ./",
     "wardrobe:check": "node scripts/wardrobe-manifest.mjs check",
     "wardrobe:sync": "node scripts/wardrobe-manifest.mjs sync",
-    "test:wardrobe": "node --test tests/wardrobe-manifest.test.mjs",
+    "test:wardrobe": "node --experimental-strip-types --test tests/wardrobe-manifest.test.mjs tests/iki-avatar-selection.test.mjs",
     "build:remote": "vite build --config server/avatar.vite.config.ts"
   },
   "dependencies": {
