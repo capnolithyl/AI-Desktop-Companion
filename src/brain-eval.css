@@ -206,6 +206,17 @@
   gap:9px;
 }
 .brain-eval-action-buttons{min-width:0}
+.brain-eval-cloud-budget{
+  display:flex;flex-wrap:wrap;gap:8px;align-items:center;
+  padding:9px 11px;border:1px solid #83635d;border-radius:9px;
+  background:#33252c;color:#ffe0c9;font-size:12px;line-height:1.45;
+}
+.brain-eval-cloud-budget strong{font-size:12px}
+.brain-eval-cloud-budget span{flex:1 1 230px}
+.brain-eval-cloud-budget button{margin-left:auto}
+.brain-eval-actionbar .brain-eval-message{
+  margin:0;border:1px solid #a56d6d;color:#ffe2d7;
+}
 .brain-eval-run-monitor{
   min-width:0;
   display:grid;
