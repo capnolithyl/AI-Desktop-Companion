@@ -696,7 +696,7 @@ mod tests {
         ];
         let prepared=memory_plan_messages(&history);
         assert_eq!(prepared.len(),3);
-        assert!(!prepared.to_string().contains("PRIVATE SAVED FACTS"));
+        assert!(!json!(prepared).to_string().contains("PRIVATE SAVED FACTS"));
         assert_eq!(prepared[2]["content"].as_str().unwrap().len(),1000);
         assert_eq!(prepared[1]["role"],"assistant");
         assert_eq!(prepared[2]["role"],"user");
