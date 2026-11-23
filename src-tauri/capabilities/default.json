@@ -3,7 +3,8 @@
   "identifier": "main-capability",
   "description": "Local companion controls: window dragging, tray, and the global hotkey.",
   "windows": [
-    "main"
+    "main",
+    "settings"
   ],
   "permissions": [
     "core:default",
