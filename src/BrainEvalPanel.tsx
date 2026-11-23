@@ -16,7 +16,7 @@ import {
   removeBrainEvalPreset,type BrainEvalPresetConfig
 } from "./brain-eval-presets";
 import "./brain-eval.css";
-import { brainCloudChoices,CLOUD_EVAL_BUDGETS } from "./brain-eval-cloud";
+import { brainCloudChoices,CLOUD_EVAL_BUDGETS,cloudTurnLimit,fitCloudScenarios } from "./brain-eval-cloud";
 
 function formatMs(value:number):string{return value>=1000?(value/1000).toFixed(1)+"s":value+"ms"}
 const groups=Array.from(new Set(EVAL_SCENARIOS.map(s=>s.group)));
@@ -75,6 +75,10 @@ export function BrainEvalPanel({settings,availableModels}:{settings:Settings;ava
       .some(value=>value.toLocaleLowerCase().includes(searchTerm)))
   );
   const selected=EVAL_SCENARIOS.filter(s=>selectedIds.has(s.id));
+  const turnsPerModel=selected.reduce((total,scenario)=>total+scenario.steps.length,0)*repeats;
+  const cloudLimit=cloudTurnLimit(cloudSelected);
+  const overCloudLimit=cloudLimit!==null && turnsPerModel>cloudLimit;
+  const overModelLimit=mode==="live" && modelsToRun.length>10;
   const toggle=(id:string,checked:boolean)=>setSelectedIds(previous=>{
     const next=new Set(previous);
     if(checked)next.add(id);else next.delete(id);
@@ -169,6 +173,16 @@ export function BrainEvalPanel({settings,availableModels}:{settings:Settings;ava
   const previousRun=history.find(h=>h.id!==report?.runId)??null;
 
   function run(){
+    if(overModelLimit){
+      setMessage("Select at most 10 models. You currently have "+modelsToRun.length+" selected.");
+      return;
+    }
+    if(overCloudLimit){
+      setMessage("Cloud run not started: "+turnsPerModel+" turns per model exceeds the "+
+        cloudLimit+"-turn free API safety limit. Use Fit cloud selection below, "+
+        "or choose fewer scenarios/repetitions.");
+      return;
+    }
     try{
       startBrainEvaluation(settings,{
         mode,researchMode,mikanifyAnswer,repetitions:repeats,scenarioIds:selected.map(s=>s.id),
@@ -374,7 +388,7 @@ export function BrainEvalPanel({settings,availableModels}:{settings:Settings;ava
     </div>
     <div className="brain-eval-actionbar">
       <div className="brain-eval-actions brain-eval-action-buttons">
-        <button type="button" className="save-button" disabled={busy||selected.length===0||modelsToRun.length===0||modelsToRun.length>10} onClick={()=>void run()}>
+        <button type="button" className="save-button" disabled={busy||selected.length===0||modelsToRun.length===0} onClick={run}>
           <Play size={15}/> Run {selected.length} scenarios × {modelsToRun.length} model{modelsToRun.length===1?"":"s"} ({selected.reduce((n,s)=>n+s.steps.length,0)*repeats*modelsToRun.length} turns)
         </button>
         {busy&&<button type="button" className="secondary-action" onClick={stop}><Square size={14}/> Stop</button>}
@@ -387,6 +401,26 @@ export function BrainEvalPanel({settings,availableModels}:{settings:Settings;ava
         </button>}
         {report&&<button type="button" className="secondary-action" onClick={()=>void copyMarkdown()}>Copy readable report</button>}
       </div>
+      {cloudLimit!==null&&<div className="brain-eval-cloud-budget" role="status">
+        <strong>Cloud safety budget: {turnsPerModel} / {cloudLimit} turns per model</strong>
+        {overCloudLimit&&<span>Too many turns for the selected cloud provider. The full run will not start until you reduce the selection. No API requests have been sent.</span>}
+        {overCloudLimit&&<button type="button" className="secondary-action" disabled={busy}
+          onClick={()=>{
+            const fitted=fitCloudScenarios(selected,cloudLimit,repeats);
+            if(!fitted.length){
+              setMessage("Even one selected scenario exceeds this budget with "+repeats+
+                " repetitions. Reduce repetitions or pick a shorter scenario.");
+              return;
+            }
+            selectOnly(fitted);
+            setMessage("Selected "+fitted.length+" complete scenarios within the "+
+              cloudLimit+"-turn cloud limit. No tests were run yet.");
+          }}>Fit cloud selection</button>}
+      </div>}
+      {overModelLimit&&<p className="brain-eval-message" role="alert">
+        {modelsToRun.length} models selected. Choose at most 10 before running.
+      </p>}
+      {message&&<p className="brain-eval-message" role="alert" aria-live="assertive">{message}</p>}
       <section className={"brain-eval-run-monitor "+runtime.phase} aria-label="Brain Lab run progress">
         <div className="brain-eval-run-heading" role="status" aria-live="polite">
           <strong>
@@ -462,7 +496,6 @@ export function BrainEvalPanel({settings,availableModels}:{settings:Settings;ava
     <p className="brain-eval-muted-note">
       Catalog: {EVAL_SCENARIOS.length} scenarios, {totalFixtureTurns} turns. Use the category, status or search filters to narrow the list.
     </p>
-    {message&&<p className="brain-eval-message" role="status">{message}</p>}
     {runtime.comparison && runtime.comparison.length>1&&<section className="brain-eval-comparison">
       <strong>Model comparison · same scenarios and repetitions</strong>
       <label className="brain-eval-model-trace-picker">Inspect a model's full run
