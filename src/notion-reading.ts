@@ -179,8 +179,22 @@ export function notionManuscriptCharacterCount(evidence:NotionChapterEvidence):n
 /** Available original-prose budget is conservative even when Ollama's context
  * is 16K; normal system text, personal memories and chat history need space.
  */
-export function directManuscriptLimit(contextWindow:number=16384):number {
-  return Math.min(24000,Math.max(4000,Math.floor((contextWindow-4500)*2.4)));
+export function directManuscriptLimit(
+  contextWindow:number=16384,processing:"direct-only"|"local-notes"="local-notes"
+):number {
+  // Preserve Ollama's existing 24K-character cap regardless of its context
+  // setting. Only the explicit NVIDIA single-model reading path gets more.
+  const estimate=Math.max(4000,Math.floor((contextWindow-4500)*2.4));
+  return Math.min(processing==="direct-only" ? 96000 : 24000,estimate);
+}
+export type NotionReadingProfile={contextWindow:number;processing:"direct-only"|"local-notes"};
+export function notionReadingProfile(
+  provider:"local"|"auto"|"openrouter"|"gemini"|"nvidia",
+  localContextWindow:number|null
+):NotionReadingProfile {
+  return provider==="nvidia"
+    ? {contextWindow:48000,processing:"direct-only"}
+    : {contextWindow:localContextWindow??16384,processing:"local-notes"};
 }
 
 /** Read the actual approved narrative, not the chapter's editorial history.
@@ -193,7 +207,8 @@ export async function readNotionChapter(
   summarize:ChapterSummarizer,
   progress:(current:number,total:number)=>void=()=>{},
   interrupted:()=>boolean=()=>false,
-  contextWindow:number=16384
+  contextWindow:number=16384,
+  processing:"direct-only"|"local-notes"="local-notes"
 ):Promise<string> {
   const evidence=buildNotionChapterEvidence(document);
   const text=evidence.scenes.map(scene=>
@@ -212,9 +227,16 @@ export async function readNotionChapter(
     "For a chapter-wide critique, cover EVERY scene, including major events in the middle. "+
     "If uncertain about a concrete fact, don't claim it happened.\n"+
     "READ STATUS: "+evidence.scenes.length+" linked scenes included; original manuscript is authoritative.\n";
-  if(Array.from(text).length<=directManuscriptLimit(contextWindow)) {
+  if(Array.from(text).length<=directManuscriptLimit(contextWindow,processing)) {
     return header+safety+"COMPLETE TEXT OF THE CACHED PAGE (APPROVED MANUSCRIPT ONLY):\n"+text;
   }
+  // The selected NVIDIA model reads the original prose directly. If the
+  // chapter truly exceeds its safety budget, report that immediately instead
+  // of silently calling local Gemma/Qwen many times for section notes.
+  if(processing==="direct-only")
+    throw new Error("Manuscript exceeds the single-model reading budget ("+
+      directManuscriptLimit(contextWindow,processing).toLocaleString()+" characters). "+
+      "Choose an individual scene or shorter section; the Notion cache is fine.");
   const partitions=evidence.scenes.map(scene=>splitNotionSections(scene.prose));
   const total=partitions.reduce((n,parts)=>n+parts.length,0);
   const sectionNotes=async (content:string,part:number,totalParts:number,reduction=false):Promise<string>=>{
@@ -378,6 +400,20 @@ export function unverifiedNotionReviewResponse(evidence:NotionChapterEvidence):s
  * loaded. A reread refreshes the in-conversation material, not the offline
  * SQLite index or the remote Notion workspace.
  */
+export function notionChapterLoadedReceipt(evidence:NotionChapterEvidence,
+  syncedAt:number,reread=false):string {
+  const date=Number.isFinite(syncedAt) && syncedAt>0
+    ? new Date(syncedAt*1000).toLocaleString() : "unknown";
+  return "I "+(reread?"reloaded":"loaded")+" "+evidence.title+
+    " from your locally synced Notion library, including all "+
+    evidence.scenes.length+" approved "+(evidence.scenes.length===1?"scene":"scenes")+
+    " ("+evidence.scenes.map(scene=>scene.title).join(", ")+"). "+
+    "The original manuscript is available for this conversation ("+
+    notionManuscriptCharacterCount(evidence).toLocaleString()+
+    " characters). I haven't analyzed or summarized the prose yet. "+
+    "The cache was last synced: "+date+".";
+}
+
 export function notionRereadReceipt(evidence:NotionChapterEvidence, syncedAt:number):string {
   const sceneCount=evidence.scenes.length;
   const date=Number.isFinite(syncedAt) && syncedAt>0

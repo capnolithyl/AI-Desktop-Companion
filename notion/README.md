@@ -59,3 +59,21 @@ With the usual 16K context window, original scene prose is sent to the final mod
 A request to *read it again*, *reread*, *reload*, *re-cache*, or *read Chapter N again* creates a new in-conversation reading from the locally synced chapter and approved linked scenes. A bare reread request receives a deterministic receipt with the real scene titles, source-character count and cached-sync timestamp; no language model is asked to decide whether Mikan has Notion access. This is **not a Notion server resync**: use **Settings → Notion → Sync** after changing actual source pages.
 
 When asked to critique or summarize the chapter, Mikan receives the approved manuscript with only the **current user message** as conversational input. Earlier generated critiques, personal-memory facts, old session summaries and character lore are not treated as evidence of manuscript events. The source-grounding audit also detects replies denying an active Notion connection. With Auto + the generic `openrouter/free` model, manuscript analysis uses the owner's configured local Ollama model instead of OpenRouter's unpredictable 1–3B free picks. Explicit cloud provider/model selections continue to work unchanged; those can send the approved prose to the cloud. This routing affects manuscript reviews only, not unrelated chat, internet research, memory or avatar features. See the debug log for model-policy and reread status.
+
+
+### Long linked chapters (v0.9.65)
+
+A plain request to **read** a chapter loads the approved scene manuscripts from
+Mikan's SQLite Notion cache, confirms the loaded scene list and character count,
+and keeps the source material available for follow-up questions. It does **not**
+automatically generate a critique when none was requested.
+
+When **NVIDIA** is selected, a longer chapter (up to a conservative 96,000-character
+source budget) is presented as original approved prose to the chosen cloud model,
+not pre-summarized by the local Ollama model. This avoids serial local Gemma/Qwen
+section-note processing and keeps source provenance per scene. The cloud model's
+actual token limits and provider availability still apply. If the manuscript
+exceeds the reading budget, Mikan reports it immediately and asks for a specific
+scene instead of waiting minutes and misdiagnosing a successful Notion cache.
+Local Ollama's original safe source budget and optional section-note path remain
+unchanged. No live Notion request is necessary for already-cached chapters.
