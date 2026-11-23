@@ -2741,6 +2741,7 @@ export default function App() {
     provider: settings.provider,
     openrouterModel: settings.openrouterModel,
     geminiModel: settings.geminiModel,
+    nvidiaModel: settings.nvidiaModel,
     models: availableModels,
     modelStatus: remoteModelStatus,
     controlsBlocked: remoteBusyRef.current,

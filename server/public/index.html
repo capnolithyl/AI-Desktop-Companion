@@ -402,7 +402,8 @@
   function renderModels(data) {
     var models = Array.isArray(data.models) ? data.models : [];
     var provider = data.provider || "local";
-    var selected = provider === "local" ? "local:" + (data.model || "") : provider;
+    var selected = provider === "local" ? "local:" + (data.model || "") :
+      provider === "nvidia" ? "nvidia:" + (data.nvidiaModel || "nvidia/nemotron-3-ultra-550b-a55b") : provider;
     var known = provider !== "local" || models.includes(data.model);
     var signature = models.join("|") + ":" + (known ? "" : selected);
     if (signature !== modelListSignature) {
@@ -425,6 +426,19 @@
         cloud.append(option);
       });
       options.append(cloud);
+      var nvidia = document.createElement("optgroup");
+      nvidia.label = "NVIDIA developer models";
+      [
+        "nvidia/nemotron-3-ultra-550b-a55b",
+        "z-ai/glm-5.3-flash",
+        "mistralai/mistral-large-4-1t-a52b"
+      ].forEach(function(name){
+        var option = document.createElement("option");
+        option.value = "nvidia:" + name;
+        option.textContent = "☁ NVIDIA · " + name.split("/").pop();
+        nvidia.append(option);
+      });
+      options.append(nvidia);
       var local = document.createElement("optgroup");
       local.label = "Local Ollama models";
       models.forEach(function (name) {
@@ -549,7 +563,8 @@
   }
   modelSelect.addEventListener("change", function () {
     var selected = modelSelect.value;
-    var active = current && (current.provider === "local" ? "local:" + current.model : current.provider);
+    var active = current && (current.provider === "local" ? "local:" + current.model :
+      current.provider === "nvidia" ? "nvidia:" + current.nvidiaModel : current.provider);
     if (selected === active) return;
     void changeModel("switch", selected);
   });

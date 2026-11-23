@@ -104,7 +104,8 @@ const agentOrigins = new Set([
   "http://127.0.0.1:1420",
   "http://localhost:1420",
 ]);
-const CLOUD_PROVIDERS = ["auto", "openrouter", "gemini"];
+const CLOUD_PROVIDERS = ["auto", "openrouter", "gemini", "nvidia"];
+const NVIDIA_MODELS = ["nvidia/nemotron-3-ultra-550b-a55b","z-ai/glm-5.3-flash","mistralai/mistral-large-4-1t-a52b"];
 const safeModels = (models) => Array.isArray(models)
   ? [...new Set(models.filter(name => typeof name === "string" && name.length > 0 && name.length <= 120))].slice(0, 100)
   : [];
@@ -132,7 +133,7 @@ export function createBridge({
   let desktop = {
     conversationId: null, model: "", busy: false,
     messages: [], conversations: [], avatar: null,
-    provider: "local", models: [], openrouterModel: "", geminiModel: "",
+    provider: "local", models: [], openrouterModel: "", geminiModel: "", nvidiaModel: "",
     modelStatus: null, controlsBlocked: true,
     reportDiagnostics: null
   };
@@ -242,7 +243,8 @@ export function createBridge({
           const choice = body.choice;
           if (typeof choice !== "string" || choice.length > 140)
             return fail(response, 400, "Invalid model selection");
-          const permitted = CLOUD_PROVIDERS.includes(choice) ||
+          const permitted = (CLOUD_PROVIDERS.includes(choice) && choice !== "nvidia") ||
+            (choice.startsWith("nvidia:") && NVIDIA_MODELS.includes(choice.slice(7))) ||
             (choice.startsWith("local:") && desktop.models.includes(choice.slice(6)));
           if (!permitted)
             return fail(response, 400, "Model is not available on Mikan's desktop");
@@ -389,6 +391,7 @@ export function createBridge({
           provider: ["local", ...CLOUD_PROVIDERS].includes(body.provider) ? body.provider : "local",
           openrouterModel: String(body.openrouterModel || "").slice(0, 120),
           geminiModel: String(body.geminiModel || "").slice(0, 120),
+           nvidiaModel: NVIDIA_MODELS.includes(body.nvidiaModel) ? body.nvidiaModel : NVIDIA_MODELS[0],
           models: safeModels(body.models),
           modelStatus: body.modelStatus && typeof body.modelStatus === "object"
             ? {

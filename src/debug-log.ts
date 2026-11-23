@@ -89,7 +89,7 @@ export type Diagnostics = {
   firstAudioMs?: number;
   model: string;
   /** Provider configured for the turn, not necessarily the backend that replied. */
-  provider?: "local" | "auto" | "openrouter" | "gemini";
+  provider?: "local" | "auto" | "openrouter" | "gemini" | "nvidia";
   fallbackReason?: string | null;
   stats: OllamaStats | null;
   research?: ResearchAudit;
@@ -115,7 +115,7 @@ export type DebugLogMessage = {
 export type DebugLogOptions = {
   conversationId: string | null;
   model: string;
-  provider?: "local" | "auto" | "gemini" | "openrouter";
+  provider?: "local" | "auto" | "gemini" | "openrouter" | "nvidia";
   geminiModel?: string;
   openrouterModel?: string;
   contextWindow: number | null;
