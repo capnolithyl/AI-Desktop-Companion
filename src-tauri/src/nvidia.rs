@@ -360,7 +360,9 @@ pub(crate) async fn chat(app:&AppHandle,request:&ChatRequest,key:&str,emitted:&A
                 "requestId":request.request_id,
                 "text":"Finishing answer from retrieved sources…"
             }));
-            messages.push(json!({"role":"system","content":FINAL_TOOL_GUIDANCE}));
+            // Keep system guidance at the front of the chat payload; some providers
+            // reject system messages interleaved with tool-call transcripts.
+            messages.insert(0,json!({"role":"system","content":FINAL_TOOL_GUIDANCE}));
         }
         // Never stream tool arguments or unscreened web research drafts.
         // Plain conversations without tools may still stream directly.
