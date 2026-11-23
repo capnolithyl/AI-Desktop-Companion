@@ -58,7 +58,7 @@ fn cool_down(seconds:u64,reason:&str) {
     if let Ok(mut last)=LAST_ERROR.lock(){*last=Some(reason.to_owned());}
 }
 pub(crate) fn note_slow_request() {
-    cool_down(90,"NVIDIA exceeded Mikan's 45-second cloud deadline");
+    cool_down(90,"NVIDIA request exceeded its time budget");
 }
 
 /// Explicit allowlist keeps Mikan on the three models the owner chose.
@@ -122,17 +122,17 @@ fn missing_reply_reason(response:&Value) -> String {
     } else if choices==0 {
         format!("NVIDIA returned no completion choices ({context}). This may be an upstream provider error.")
     } else {
-        format!("NVIDIA returned no visible assistant message ({context}). Try another :free model or retry the connection test.")
+        format!("NVIDIA returned no visible assistant message ({context}). Try another of the configured models or retry the connection test.")
     }
 }
 fn api_failure(status:u16, reason:&str, api_key:&str) -> String {
     let hint=match status {
         400 => "Invalid request or unsupported model setting",
         401 => "Invalid NVIDIA API key",
-        402 => "NVIDIA account requires credits; free-only mode will not charge anything",
+        402 => "NVIDIA account may require a different access tier",
         403 => "NVIDIA key or account is not permitted",
-        404 => "Free model unavailable or it does not support the requested tools/vision",
-        429 => "Free request quota or rate limit reached",
+        404 => "Selected NVIDIA model unavailable or incompatible with requested tools/vision",
+        429 => "NVIDIA developer rate limit or request quota reached",
         500..=599 => "Provider temporarily unavailable",
         _ => "Provider rejected request"
     };
@@ -209,8 +209,7 @@ async fn stream_completion(
         "model":model,
         "messages":messages,
         "max_tokens":max_tokens,
-        "stream":true,
-        "stream_options":{"include_usage":true}
+        "stream":true
     });
     if offer_tools {
         payload["tools"]=functions();
@@ -435,7 +434,7 @@ pub(crate) async fn nvidia_test_connection(model:String)->Result<String,String>{
     NEXT_TRY_EPOCH.store(0,Ordering::Relaxed);
     if let Ok(mut last)=LAST_ERROR.lock(){*last=None;}
     let actual=response["model"].as_str().unwrap_or(model);
-    Ok(format!("NVIDIA connected. Free model: {actual}."))
+    Ok(format!("NVIDIA connected. Model: {actual}."))
 }
 
 #[cfg(test)]

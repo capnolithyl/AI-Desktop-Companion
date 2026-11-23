@@ -115,3 +115,29 @@ A local-first, personal Windows AI desktop companion powered by Tauri 2, React, 
 4. Open Mikan with Ctrl+Alt+M, or use the tray icon. Change model, appearance, and search settings under Settings.
 
 See [SETUP.md](SETUP.md) for shortcuts, slash commands, automatic search and cache limitations. Roadmap: [Trello](https://trello.com/b/bLO0mXJM/ai-desktop-companion).
+
+
+### NVIDIA developer-model testing (experimental)
+
+Mikan can route desktop and remote-browser conversations through NVIDIA's hosted
+API while preserving its normal personality context, local memory retrieval,
+read-only SearXNG tools, citations, and existing optional voice path.
+This sends the chat prompt, retrieved context and any explicitly approved images
+to NVIDIA, so choose local Ollama when cloud transmission is inappropriate.
+
+Open **Settings → AI & models → NVIDIA** and save a NVIDIA Build API key.
+The key is stored in Windows Credential Manager (not localStorage, logs or Git).
+Use **Test NVIDIA** to check the current model. Select one of:
+
+- `nvidia/nemotron-3-ultra-550b-a55b` (new default)
+- `z-ai/glm-5.3-flash`
+- `mistralai/mistral-large-4-1t-a52b`
+
+The same options appear in the desktop dock and remote-browser model picker.
+NVIDIA mode is cloud-only: errors are shown, not silently attributed to Ollama.
+The pre-existing Auto (OpenRouter → local) mode remains available separately.
+These endpoints are for developer experimentation and are subject to account,
+model availability, rate limits, and NVIDIA's usage policies. They are not
+presented as guaranteed unlimited free production hosting. NVIDIA models may
+differ in vision/function-calling support; incompatibilities surface as provider
+errors rather than altering the owner's tool permissions.
