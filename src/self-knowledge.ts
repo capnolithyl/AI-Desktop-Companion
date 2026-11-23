@@ -4,7 +4,7 @@
  * The CI checker detects unmapped Tauri commands, missing files and stale versions.
  * Add a feature here when adding capability, and update the matching source/docs.
  */
-export const CAPABILITY_RELEASE = "0.9.63";
+export const CAPABILITY_RELEASE = "0.9.64";
 
 export type CapabilityStage = "implemented" | "experimental" | "planned";
 export type RuntimeDependency = "none" | "ollama" | "search" | "mem0" | "voice" | "vision" | "pocket";
@@ -48,8 +48,8 @@ export const CAPABILITIES: readonly Capability[] = [
     id:"local-chat",label:"Local LLM chat",category:"AI",
     description:"Text chat streams replies from local Ollama, supports model switching, cancellation and conversation-aware follow-ups. Model quality and availability depend on Ollama.",
     stage:"implemented",runtime:"ollama",keywords:["chat","model","ollama","qwen","llm","coding","stream","context"],
-    sources:["src/App.tsx","src-tauri/src/lib.rs","src/conversation-engine.ts"],docs:["README.md","SETUP.md"],
-    commands:["list_models","chat_stream","condense_local_context","cancel_chat"],
+    sources:["src/App.tsx","src-tauri/src/lib.rs","src/conversation-engine.ts","src/mikanify.ts"],docs:["README.md","SETUP.md"],
+    commands:["list_models","chat_stream","condense_local_context","cancel_chat","mikanify_answer"],
     slashCommands:["model","models","ollama","prompt"]
   },
   {
@@ -191,7 +191,7 @@ export const CAPABILITIES: readonly Capability[] = [
     stage:"experimental",runtime:"none",
     keywords:["brain","evaluation","test","regression","debug","diagnostics","benchmark","routing","memory","dashboard","manual","brain lab"],
     sources:["src/brain-eval.ts","src/brain-eval-manager.ts","src/BrainEvalPanel.tsx","src/App.tsx","src-tauri/src/lib.rs","server/index.mjs","server/public/index.html"],
-    docs:["docs/brain-lab.md"],commands:["brain_eval_export","brain_eval_load_latest","brain_eval_preview_memory"]
+    docs:["docs/brain-lab.md"],commands:["brain_eval_export","brain_eval_load_latest","brain_eval_preview_memory","brain_eval_open_folder"]
   },
   {
     id:"self-knowledge",label:"Self-knowledge of features, docs and source",category:"AI",

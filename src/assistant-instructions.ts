@@ -1,4 +1,4 @@
-import { assistantVoiceGuidance } from "./assistant-voice.ts";
+import { assistantVoiceGuidance, CHARACTER_VOICE_REMINDER } from "./assistant-voice.ts";
 import { PERSONAL_DETAIL_GROUNDING_GUIDANCE } from "./personal-grounding.ts";
 import { runtimeContext, chatRuntimeContext } from "./runtime-context.ts";
 import { contextGuidance, responseFocusGuidance } from "./conversation-engine.ts";
@@ -46,7 +46,8 @@ export function assistantTurnInstructionParts(input:AssistantTurnInstructionOpti
     ...(plannedButNotExecuted?[
       "A public search was planned but NOT executed for this turn. No new source results were returned. Do not present unverified titles, credits, dates, counts, releases or named recommendations as confirmed."
     ]:[]),
-    responseFocusGuidance([...history],question)
+    responseFocusGuidance([...history],question),
+    CHARACTER_VOICE_REMINDER
   ];
   return {beforeContext,afterContext};
 }

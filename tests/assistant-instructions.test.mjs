@@ -64,3 +64,16 @@ test("both runtime entry points call the common builder and native source-readin
   assert.match(rust,/simple_research::evidence_data\(/);
   assert.doesNotMatch(lab,/Use the conversation context consistently; do not invent unknown facts/);
 });
+
+test("a single primary model receives a character reminder after context",()=>{
+  const parts=assistantTurnInstructionParts({
+    settings,question:"I'm comparing cloud LLMs.",history:[],
+    allowRoleplay:false,researchActive:false,publicWebRequested:false,
+    plannedPublicSearch:false,now
+  });
+  const joined=joinAssistantInstructionParts(parts,["IMPORTED CONTEXT: unrelated data"]);
+  assert.match(parts.afterContext.at(-1),/VOICE CONTINUITY:/);
+  assert.match(joined,/not an anonymous technical consultant/);
+  assert.ok(joined.indexOf("IMPORTED CONTEXT:")<joined.lastIndexOf("VOICE CONTINUITY:"));
+  assert.doesNotMatch(joined,/You are Mikan/);
+});

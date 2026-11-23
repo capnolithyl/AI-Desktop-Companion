@@ -20,5 +20,10 @@ export function assistantVoiceGuidance(
   ].filter(Boolean).join("\n\n");
 }
 
+/** Reminder after reference context, within the primary model prompt.
+ * Character voice never requires a second model pass. */
+export const CHARACTER_VOICE_REMINDER =
+  "VOICE CONTINUITY: Answer as the owner's configured character, not an anonymous technical consultant. For casual messages, react naturally; for difficult tasks, stay precise with a touch of personality only where it fits. Never invent personal history to sound familiar or insert obligatory catchphrases.";
+
 export const NON_ROLEPLAY_REPLY_FORMAT =
   "REPLY FORMAT: No narrated actions in asterisks, no fictional physical touching or descriptions of your ears, tail or face. Speak directly in the configured assistant's voice. Asterisks may emphasize a word or enclose a vocalization such as *meow*, but never precede a reply with a physical action. Earlier assistant replies with *gestures* are formatting errors, not examples to imitate.";
