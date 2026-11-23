@@ -1,6 +1,48 @@
 use serde_json::Value;
 use crate::web_search::SearchResult;
 
+/// Constrain the operation and its arguments together. The TS resolver still
+/// checks the selected handle, outbound query, consent and private context.
+pub(crate) fn public_plan_schema()->Value {
+    use serde_json::json;
+    let short=json!({"type":"string","maxLength":150});
+    let list=json!({"type":"array","maxItems":4,"items":short});
+    let task=json!({"type":"object","properties":{
+        "kind":{"enum":["lookup","verify","discover"]},"subject":short,"details":list,
+        "entityType":short,"preferences":list,"exclude":list,"roles":list,
+        "resource":{"enum":["latestRelease"]},
+        "requirements":{"type":"array","maxItems":4,"items":{"type":"object","properties":{
+            "quote":short,"relation":{"enum":["lt","lte","eq","gte","gt"]},
+            "limit":{"type":"number"},"unit":short
+        },"required":["quote","relation","limit","unit"],"additionalProperties":false}}
+    },"required":["kind","subject","details"],"additionalProperties":false});
+    let answer=json!({"type":"object","properties":{"operation":{"const":"answer"}},
+        "required":["operation"],"additionalProperties":false});
+    let read=json!({"type":"object","properties":{"operation":{"const":"read"},
+        "document":{"type":"integer","minimum":1,"maximum":7},"focus":short},
+        "required":["operation","document","focus"],"additionalProperties":false});
+    let search=json!({"type":"object","properties":{"operation":{"const":"search"},"query":short,
+        "task":task,"topic":short,"sourceRequirement":{"enum":["required","optional"]}},
+        "required":["operation","query","task"],"additionalProperties":false});
+    json!({"type":"object","properties":{"web":{"oneOf":[answer,read,search]},
+        "intent":{"enum":["new","refine","end","chat"]},"replyEffort":{"enum":["quick","deliberate"]}},
+        "required":["web","replyEffort"],"additionalProperties":false})
+}
+
+/// Only exact locators in authentic user turns may bypass search. DNS and
+/// address safety remain the existing web reader's responsibility.
+pub fn user_supplied_document_url(messages: &[Value], requested: &str) -> bool {
+    let Ok(url)=reqwest::Url::parse(requested) else {return false};
+    if url.scheme()!="https" || !url.username().is_empty() || url.password().is_some()
+        || url.query().is_some() || url.fragment().is_some() || requested.len()>2048 {return false}
+    messages.iter().filter(|m|m["role"]=="user")
+        .filter_map(|m|m["content"].as_str()).any(|text|
+            text.match_indices("https://").any(|(start,_)| {
+                let part=text[start..].split(|c:char|c.is_whitespace() || matches!(c,'<'|'>'|'"'|'\'')).next().unwrap_or("");
+                part.trim_end_matches([')',',','.',';'])==requested
+            }))
+}
+
 /// Deterministic routing for explicit factual/research requests. We do not
 /// rely on the model choosing whether to browse when the user requests facts.
 pub fn explicit_research_query(messages: &[Value]) -> Option<String> {
@@ -277,6 +319,8 @@ FACTS AND CITATIONS
 - Old snippets may say "later this year" or describe plans that have since changed. Do not copy their future tense uncritically. Prefer recent, dated first-hand updates when possible; acknowledge unresolved timeline discrepancies. An older announcement or release appearing in current search results is not necessarily new.
 - Do not invent specific names, dates, participants, product specifications, outcomes or announcements. If the evidence is insufficient or contradictory, say what you could and could not confirm.
 - RECOMMENDATION ENTITY CHECK: For any named album, song, game, film, product or release, the retrieved source must mention that exact work and the correct creator/publisher. A generic review list or encyclopedia page is not proof that an unmentioned work exists. Check dates, platforms and release status against the same item; if a requested platform or date is contradicted by the source, choose another item or state the mismatch. Never cite a different work as support.
+- CONSTRAINT-AWARE ANSWERS: Before recommending an item, check every explicit user exclusion and constraint against evidence tied to THAT SAME named item. A number, date, label or availability statement on a neighboring search-result card is not evidence for the item. If a user requests a strict upper or lower limit, equal-to-the-limit does not satisfy it. If evidence cannot establish the requirement, offer fewer suggestions and say what remains unverified, rather than inventing a matching detail or recommending a known mismatch.
+- USE EVIDENCE AS A FILTER, NOT A DECORATION: Do not invent extra releases or creators from internal recall just to fill a list. A source discussing a broad genre is not proof of a specific work's metadata. If the fetched results don't support a trustworthy match, say so naturally and avoid adding a citation that doesn't actually establish the claim.
 - FRESHNESS CHECK: When asked for recent news, give actual dates when supported. An undated news category page does not establish when the event happened. Do not describe a year-old article as recent solely because it appears in today's search results.
 - You have retrieved summaries and excerpts, not necessarily read whole webpages; don't imply otherwise.
 
@@ -555,5 +599,22 @@ mod tests {
         assert!(rules.contains("clear base-case prediction"));
         assert!(rules.contains("ENTITY / EVENT CONSISTENCY"));
         assert!(rules.contains("a preparatory step, announcement, prototype"));
+    }
+}
+
+#[cfg(test)]
+mod document_locator_tests {
+    use super::*;
+    use serde_json::json;
+    #[test]
+    fn explicit_user_url_can_be_read_but_source_or_model_urls_cannot(){
+        let url="https://github.com/example/project";
+        assert!(user_supplied_document_url(&[json!({"role":"user","content":format!("Read {url}")})],url));
+        assert!(user_supplied_document_url(&[json!({"role":"user","content":format!("Read [this repository]({url}).")})],url));
+        assert!(!user_supplied_document_url(&[json!({"role":"assistant","content":url})],url));
+        assert!(!user_supplied_document_url(&[json!({"role":"user","content":format!("Read {url}/other")})],url));
+        for bad in ["http://example.org/a","https://u:p@example.org/a","https://example.org/a?token=secret"] {
+            assert!(!user_supplied_document_url(&[json!({"role":"user","content":bad})],bad));
+        }
     }
 }

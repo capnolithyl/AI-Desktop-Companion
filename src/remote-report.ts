@@ -12,10 +12,38 @@ type DiagnosticMessage = {
   role: "user" | "assistant";
   failed?: boolean;
   diagnostics?: Diagnostics;
+  sources?: readonly {url: string}[];
 };
 
 const finite = (value: number | null | undefined): number | null =>
   typeof value === "number" && Number.isFinite(value) ? value : null;
+// Never export a source path, search query, or page excerpt. Hostnames alone
+// show whether the citations came from a publisher, an aggregator or elsewhere.
+const publicSourceHost = (raw: string): string | null => {
+  try {
+    const url = new URL(raw);
+    const host = url.hostname.toLowerCase();
+    if (!["https:", "http:"].includes(url.protocol) || url.username || url.password ||
+      host.length > 100 || !/^[a-z0-9.-]+$/.test(host) || !host.includes(".") ||
+      /^\d+\.\d+\.\d+\.\d+$/.test(host) ||
+      [".local",".localhost",".internal",".test"].some(suffix => host.endsWith(suffix))) return null;
+    return host;
+  } catch { return null; }
+};
+
+// Reasons are emitted by the native structural validator, not generated prose.
+// A strict vocabulary avoids copying untrusted candidate names into reports.
+const factRejectionReasons = new Set([
+  "invalid_source_index", "invalid_subject_field", "invalid_claim_field",
+  "invalid_quote_field", "quote_not_contiguous_in_cited_source",
+  "subject_not_identified_by_quote", "claim_numbers_missing_from_quote",
+  "claim_number_not_tied_to_subject", "not_the_named_target_subject",
+  "does_not_answer_requested_detail"
+]);
+const rejectCode = (item: string): string | null => {
+  const code = item.match(/:\s*([a-z_]+)$/)?.[1];
+  return code && factRejectionReasons.has(code) ? code : null;
+};
 
 export function remoteDiagnosticMessages(messages: readonly DiagnosticMessage[]) {
   return messages.slice(-8).map(message => {
@@ -52,6 +80,11 @@ export function remoteDiagnosticMessages(messages: readonly DiagnosticMessage[])
           semanticCandidates: finite(d.memory.semanticCandidates),
           strongSemanticMatches: finite(d.memory.strongSemanticMatches),
           selectionMethod: d.memory.selectionMethod ?? null,
+          selectionCandidates: finite(d.memory.selectionCandidates),
+          selectionTimeMs: finite(d.memory.selectionTimeMs),
+          selectedIds: d.memory.facts.slice(0, 12).map(fact => fact.id),
+          semanticScores: (d.memory.semanticScores ?? []).slice(0, 12)
+            .map(hit => ({ id:hit.id, score:finite(hit.score) })),
           selectedFacts: d.memory.facts.length,
           interestsReturned: d.memory.interests?.returned.length ?? 0,
           interestsIncluded: d.memory.interests?.included.length ?? 0
@@ -66,12 +99,31 @@ export function remoteDiagnosticMessages(messages: readonly DiagnosticMessage[])
           status: d.research.status,
           accepted: finite(d.research.accepted),
           rejected: finite(d.research.rejected),
-          elapsedMs: finite(d.research.elapsedMs)
+          followupAttempted: typeof d.research.followupQuery === "string" && d.research.followupQuery.trim().length > 0,
+          primaryRecoveryStatus: d.research.primaryRecoveryStatus ?? null,
+          elapsedMs: finite(d.research.elapsedMs),
+          taskKind: d.research.taskKind ?? null,
+          requestedDetailCount: Array.isArray(d.toolPlan?.task?.details)
+            ? d.toolPlan.task.details.length : null,
+          unresolvedDetailCount: d.research.unresolvedDetails?.length ?? 0,
+          contextOnlyCount: finite(d.research.contextualCount),
+          rejectedReasonCodes: [...new Set((d.research.rejectedDetails ?? [])
+            .slice(0, 12).map(rejectCode).filter((code): code is string => !!code))],
+          acceptedFactSlots: (d.research.acceptedDetails ?? []).slice(0, 8).map(fact => ({
+            source: fact.source, detail: fact.detail ?? null
+          })),
+          sourceHosts: (message.sources ?? []).slice(0, 12).flatMap((source,index) => {
+            const host = publicSourceHost(source.url);
+            return host ? [{source:index + 1,host}] : [];
+          })
         } : null,
         answerVerification: d.answerVerification ? {
           checked: finite(d.answerVerification.checked),
           rejected: finite(d.answerVerification.rejected),
-          recoveredHeadline: d.answerVerification.recoveredHeadline
+          recoveredHeadline: d.answerVerification.recoveredHeadline,
+          presentation: d.answerVerification.presentation === "model-voice-preserved"
+            ? "model-voice-preserved"
+            : d.answerVerification.presentation === "source-only" ? "source-only" : null
         } : null,
         notion: d.notion ? {
           cachedPages: finite(d.notion.cachedPages),

@@ -17,8 +17,14 @@ const generic = new Set([
   "any","was","were","are","been","being","did","does","do","is","its",
   "just","got","get","say","said","let","lets","thinking","think",
   "something","things","kind","kinds","again","still","then","also",
-  "called","favorite","favourite","favorites","favourites","album","albums",
-  "song","songs","track","tracks","date"
+  // Artist/song/album/track are meaningful *domains*. Stopping them made
+  // "What's my favorite song?" entirely termless in lexical fallback.
+  "called","favorite","favourite","favorites","favourites","date",
+  // Preference predicates describe a relationship, not the subject of recall.
+  "like","love","hate","enjoy","dislike","prefer",
+  "your","mine","our","user","owner","mikan","not","another","their",
+  "they","them","rather","asking","really","only","more","than","way",
+  "should","will","tell"
 ]);
 
 /** Match whole normalized words, not substrings like any in Germany. */
@@ -27,7 +33,7 @@ export function memoryTerms(value: string): string[] {
     .map(word => word.length > 4 && word.endsWith("s") && !word.endsWith("ss")
       ? word.slice(0,-1) : word);
 }
-function meaningfulTerms(value: string): string[] {
+export function meaningfulTerms(value: string): string[] {
   return [...new Set(memoryTerms(value).filter(word => word.length >= 3 && !generic.has(word)))];
 }
 export function rankMemories<T extends RankableMemory>(

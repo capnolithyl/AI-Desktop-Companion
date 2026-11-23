@@ -17,6 +17,21 @@ const positive = value => {
   const v = finite(value);
   return v != null && v >= 0 ? v : null;
 };
+const boundedCount = (value, max = 24) =>
+  Number.isSafeInteger(value) && value >= 0 && value <= max ? value : null;
+const factReasons = [
+  "invalid_source_index", "invalid_subject_field", "invalid_claim_field",
+  "invalid_quote_field", "quote_not_contiguous_in_cited_source",
+  "subject_not_identified_by_quote", "claim_numbers_missing_from_quote",
+  "claim_number_not_tied_to_subject", "not_the_named_target_subject",
+  "does_not_answer_requested_detail"
+];
+const safePublicHost = value => typeof value === "string" && value.length <= 100
+  && /^[a-z0-9.-]+$/.test(value) && value.includes(".")
+  && !/^\d+\.\d+\.\d+\.\d+$/.test(value)
+  && ![".local",".localhost",".internal",".test"].some(suffix => value.endsWith(suffix))
+  ? value : null;
+
 
 /**
  * Validate the desktop's optional support summary again on the Node side.
@@ -26,6 +41,14 @@ export function safeReportDiagnostics(value) {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   return {
     desktopVersion: summary(value.desktopVersion, 32),
+    buildInfo:value.buildInfo && typeof value.buildInfo==="object" ? {
+      version:/^\d+\.\d+\.\d+(?:[-+][\w.-]+)?$/.test(value.buildInfo.version)
+        ? value.buildInfo.version : "unknown",
+      commit:/^[0-9a-f]{40}$/.test(value.buildInfo.commit) ? value.buildInfo.commit : "nogit",
+      builtAt:/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/.test(value.buildInfo.builtAt)
+        ? summary(value.buildInfo.builtAt,35) : "unknown",
+      kind:allowed(value.buildInfo.kind,["development","release","unknown"])
+    } : null,
     contextWindow: positive(value.contextWindow),
     avatar: value.avatar && typeof value.avatar === "object" ? {
       status: allowed(value.avatar.status, ["ready","loading","error","offline"]),
@@ -68,6 +91,15 @@ export function safeReportDiagnostics(value) {
             semanticCandidates: positive(d.memory.semanticCandidates),
             strongSemanticMatches: positive(d.memory.strongSemanticMatches),
             selectedFacts: positive(d.memory.selectedFacts),
+            selectionCandidates: positive(d.memory.selectionCandidates),
+            selectionTimeMs: positive(d.memory.selectionTimeMs),
+            selectedIds: Array.isArray(d.memory.selectedIds)
+              ? d.memory.selectedIds.slice(0, 12)
+                .filter(id => Number.isSafeInteger(id) && id > 0) : [],
+            semanticScores: Array.isArray(d.memory.semanticScores)
+              ? d.memory.semanticScores.slice(0, 12)
+                .filter(hit => Number.isSafeInteger(hit?.id) && hit.id > 0)
+                .map(hit => ({id:hit.id,score:positive(hit.score)})) : [],
             interestsReturned: positive(d.memory.interestsReturned),
             interestsIncluded: positive(d.memory.interestsIncluded),
             selectionMethod: allowed(d.memory.selectionMethod,
@@ -80,15 +112,39 @@ export function safeReportDiagnostics(value) {
             freshSources: positive(d.toolPlan.freshSources)
           } : null,
           research: d.research ? {
-            status: allowed(d.research.status, ["used","fallback"]),
+            status: allowed(d.research.status, ["used","partial","fallback","shortlist","no_supported_matches","unavailable"]),
             accepted: positive(d.research.accepted),
             rejected: positive(d.research.rejected),
-            elapsedMs: positive(d.research.elapsedMs)
+            followupAttempted: d.research.followupAttempted === true,
+            primaryRecoveryStatus: allowed(d.research.primaryRecoveryStatus,
+              ["not-needed","not-eligible","no-approved-query","searched-no-new-sources","new-sources-unresolved","improved-coverage","more-context-no-coverage","search-unavailable"]),
+            elapsedMs: positive(d.research.elapsedMs),
+            taskKind: allowed(d.research.taskKind,["lookup","verify","discover"]),
+            requestedDetailCount: boundedCount(d.research.requestedDetailCount,4),
+            unresolvedDetailCount: boundedCount(d.research.unresolvedDetailCount,4),
+            contextOnlyCount: boundedCount(d.research.contextOnlyCount,20),
+            rejectedReasonCodes: Array.isArray(d.research.rejectedReasonCodes)
+              ? [...new Set(d.research.rejectedReasonCodes.slice(0,12)
+                .filter(code => factReasons.includes(code)))].slice(0,8) : [],
+            acceptedFactSlots: Array.isArray(d.research.acceptedFactSlots)
+              ? d.research.acceptedFactSlots.slice(0,8).flatMap(fact => {
+                const source=boundedCount(fact?.source,24);
+                const detail=fact?.detail===null?null:boundedCount(fact?.detail,3);
+                return source && detail !== undefined && (detail !== null || fact?.detail === null)
+                  ? [{source,detail}] : [];
+              }) : [],
+            sourceHosts: Array.isArray(d.research.sourceHosts)
+              ? d.research.sourceHosts.slice(0,12).flatMap(entry => {
+                const source=boundedCount(entry?.source,24);
+                const host=safePublicHost(entry?.host);
+                return source && host ? [{source,host}] : [];
+              }) : []
           } : null,
           answerVerification: d.answerVerification ? {
             checked: positive(d.answerVerification.checked),
             rejected: positive(d.answerVerification.rejected),
-            recoveredHeadline: d.answerVerification.recoveredHeadline === true
+            recoveredHeadline: d.answerVerification.recoveredHeadline === true,
+            presentation: allowed(d.answerVerification.presentation, ["model-voice-preserved","source-only"])
           } : null,
           notion: d.notion ? {
             cachedPages: positive(d.notion.cachedPages),
@@ -138,6 +194,8 @@ export function publicIssuePreview(report) {
     "",
     "## Sanitized diagnostics",
     "- Desktop version: " + formatted(d?.desktopVersion),
+    "- Desktop compiled commit: " + formatted(d?.buildInfo?.commit),
+    "- Desktop build type: " + formatted(d?.buildInfo?.kind),
     "- Inference provider: " + textLine(report.runtime.provider),
     "- Configured model: " + textLine(report.runtime.model),
     "- Context window: " + formatted(d?.contextWindow),

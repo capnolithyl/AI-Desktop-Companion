@@ -1,0 +1,409 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { createDevSupervisor, isExpectedOrigin, formatSupervisorError,
+  needsDependencyInstall, UPDATE_BRANCH } from "../scripts/remote-dev-supervisor.mjs";
+import { createDevSupervisorClient } from "../server/dev-supervisor-client.mjs";
+
+const SHA_A="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+const SHA_B="bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+const token="local-test-secret-with-more-than-thirty-two-characters";
+function fixture({dirty=false,diverged=false,failBuild=false,failInstall=false,
+  failCargoCheck=false,rustChanged=false,
+  packageChange="none",manageDesktop=false,desktopReadyOutcome=true,
+  desktopReadyProbe=null}={}){
+  let head=SHA_A,remote=SHA_B;
+  const seen=[],started=[],stopped=[];
+  const oldManifest={name:"mikan-desktop-companion",version:"0.9.8",
+    dependencies:{"existing-package":"^1.0.0"}};
+  const newManifest={...oldManifest,version:"0.9.9"};
+  if(packageChange==="dependencies")
+    newManifest.dependencies={...oldManifest.dependencies,"new-package":"^2.0.0"};
+  const oldLock={name:"mikan-desktop-companion",version:"0.9.8",lockfileVersion:3,
+    packages:{"":{name:"mikan-desktop-companion",version:"0.9.8",
+      dependencies:{...oldManifest.dependencies}},
+      "node_modules/existing-package":{version:"1.0.0"}}};
+  const newLock=structuredClone(oldLock);
+  newLock.version="0.9.9";
+  newLock.packages[""].version="0.9.9";
+  if(packageChange==="dependencies"){
+    newLock.packages[""].dependencies={...newManifest.dependencies};
+    newLock.packages["node_modules/new-package"]={version:"2.0.0"};
+  }
+  const blobs={
+    [SHA_A+":package.json"]:JSON.stringify(oldManifest),
+    [SHA_B+":package.json"]:JSON.stringify(newManifest),
+    [SHA_A+":package-lock.json"]:JSON.stringify(oldLock),
+    [SHA_B+":package-lock.json"]:JSON.stringify(newLock)
+  };
+  const git=async(...args)=>{
+    seen.push("git "+args.join(" "));
+    const op=args.join(" ");
+    if(op==="branch --show-current")return UPDATE_BRANCH;
+    if(op==="remote get-url origin")return "https://github.com/capnolithyl/AI-Desktop-Companion.git";
+    if(op==="rev-parse --show-toplevel")return "/repo";
+    if(op==="status --porcelain --untracked-files=no")return dirty?" M tracked-file.ts":"";
+    if(op==="rev-parse HEAD")return head;
+    if(op==="rev-parse refs/remotes/origin/"+UPDATE_BRANCH)return remote;
+    if(op.startsWith("fetch --quiet origin"))return "";
+    if(op.startsWith("rev-list --count "))return head===remote?"0":"1";
+    if(op.startsWith("merge-base --is-ancestor ")){
+      if(diverged)throw new Error("not a fast-forward");
+      return "";
+    }
+    if(op.startsWith("diff --name-only ") && op.endsWith(" -- src-tauri"))
+      return rustChanged?"src-tauri/src/recommendation_gate.rs":"";
+    if(op.startsWith("diff --name-only "))return packageChange==="none"
+      ?"":"package.json\npackage-lock.json";
+    if(op.startsWith("show ")){
+      const key=op.slice("show ".length);
+      if(!(key in blobs))throw new Error("Unexpected show target "+key);
+      return blobs[key];
+    }
+    if(op==="merge --ff-only "+remote){head=remote;return ""}
+    if(op==="reset --keep "+SHA_A){head=SHA_A;return ""}
+    throw new Error("Unexpected git command: "+op);
+  };
+  const npm=async(...args)=>{
+    const op=args.join(" ");
+    seen.push("npm "+op);
+    if(failBuild && op==="run test:brain")throw new Error("synthetic test failed");
+    if(failInstall && op.startsWith("ci "))throw new Error("dependency install failed");
+  };
+  const supervisor=createDevSupervisor({
+    cwd:"/repo",token,git,npm,port:0,manageDesktop,
+    cargoCheck:async()=>{seen.push("cargo check");
+      if(failCargoCheck)throw new Error("synthetic Rust compile error")},
+    startChild:(name)=>{started.push(name);return {pid:7,exitCode:null,name}},
+    stopChild:async(child)=>{stopped.push(child.name)},
+    relayReady:async()=>{},desktopReady:desktopReadyProbe??(async()=>desktopReadyOutcome),
+    desktopReadyAttempts:3,desktopRetryMs:0
+  });
+  return {supervisor,seen,started,stopped,getHead:()=>head};
+}
+test("only dependency-graph edits require npm ci, not version-only metadata",()=>{
+  const manifest=v=>JSON.stringify({name:"mikan-desktop-companion",version:v,
+    dependencies:{"lightningcss":"^1.0.0"},scripts:{build:"vite build"}});
+  const lock=v=>JSON.stringify({name:"mikan-desktop-companion",version:v,
+    lockfileVersion:3,packages:{
+      "":{name:"mikan-desktop-companion",version:v,
+        dependencies:{"lightningcss":"^1.0.0"}},
+      "node_modules/lightningcss":{version:"1.0.0"}
+    }});
+  assert.equal(needsDependencyInstall(manifest("0.9.8"),manifest("0.9.9"),
+    lock("0.9.8"),lock("0.9.9")),false,
+    "a version-only bump must not reinstall locked Lightning CSS native modules");
+  const next=JSON.parse(manifest("0.9.9"));
+  next.dependencies["new-package"]="^2.0.0";
+  assert.equal(needsDependencyInstall(manifest("0.9.8"),JSON.stringify(next),
+    lock("0.9.8"),lock("0.9.9")),true);
+  const changedLock=JSON.parse(lock("0.9.9"));
+  changedLock.packages["node_modules/lightningcss"].version="1.1.0";
+  assert.equal(needsDependencyInstall(manifest("0.9.8"),manifest("0.9.9"),
+    lock("0.9.8"),JSON.stringify(changedLock)),true);
+  assert.equal(needsDependencyInstall("{bad json",manifest("0.9.9"),
+    lock("0.9.8"),lock("0.9.9")),true);
+});
+test("updating version only runs validation but leaves native node_modules untouched",async()=>{
+  const {supervisor,seen,started}=fixture({packageChange:"version"});
+  await supervisor.inspect();
+  await supervisor.apply();
+  assert.equal(supervisor.getState().phase,"updated");
+  assert.ok(seen.some(x=>x.startsWith("git show ")));
+  assert.ok(seen.includes("npm run test:brain"));
+  assert.ok(seen.includes("npm run test:server"));
+  assert.ok(!seen.some(x=>x.startsWith("npm ci ")),
+    "npm ci is prohibited for version-only updates");
+  assert.deepEqual(started,["server"]);
+});
+test("a real dependency upgrade stops managed dev processes BEFORE npm ci",async()=>{
+  const {supervisor,seen,started,stopped}=fixture({
+    packageChange:"dependencies",manageDesktop:true
+  });
+  await supervisor.start();
+  try{
+    assert.deepEqual(started,["server","desktop"]);
+    await supervisor.inspect();
+    await supervisor.apply();
+    assert.equal(supervisor.getState().phase,"updated");
+    assert.deepEqual(stopped,["desktop","server"]);
+    const ciIndex=seen.findIndex(x=>x.startsWith("npm ci "));
+    assert.ok(ciIndex>=0);
+    assert.deepEqual(started,["server","desktop","server","desktop"]);
+  }finally{await supervisor.close()}
+});
+test("a failed dependency install restores Git and attempts to restore node_modules",async()=>{
+  const {supervisor,seen,started,getHead}=fixture({
+    packageChange:"dependencies",failInstall:true
+  });
+  await supervisor.start();
+  try{
+    await supervisor.inspect();
+    await supervisor.apply();
+    assert.equal(supervisor.getState().phase,"error");
+    assert.equal(getHead(),SHA_A);
+    assert.equal(seen.filter(x=>x.startsWith("npm ci ")).length,2);
+    assert.match(supervisor.getState().step,/node_modules requires repair/);
+    assert.deepEqual(started,["server"],
+      "must not relaunch a broken relay when restored dependencies failed");
+  }finally{await supervisor.close()}
+});
+
+test("remote origin is pinned; no arbitrary repository or URL can be passed",()=>{
+  assert.equal(isExpectedOrigin("https://github.com/capnolithyl/AI-Desktop-Companion.git"),true);
+  assert.equal(isExpectedOrigin("git@github.com:capnolithyl/AI-Desktop-Companion.git"),true);
+  assert.equal(isExpectedOrigin("https://evil.example/capnolithyl/AI-Desktop-Companion"),false);
+  assert.equal(isExpectedOrigin("https://github.com/attacker/AI-Desktop-Companion.git"),false);
+  assert.equal(isExpectedOrigin("file:///tmp/my-repository"),false);
+  assert.equal(createDevSupervisorClient({token:"too-short"}),null);
+});
+test("the approved fast-forward passes checks and restarts only managed relay by default",async()=>{
+  const {supervisor,seen,started,getHead}=fixture();
+  await supervisor.inspect();
+  assert.equal(supervisor.getState().phase,"ready");
+  assert.equal(supervisor.getState().commits,1);
+  assert.equal(supervisor.getState().mode,"relay-only");
+  await supervisor.apply();
+  assert.equal(supervisor.getState().phase,"updated");
+  assert.equal(supervisor.getState().current,SHA_B.slice(0,12));
+  assert.equal(getHead(),SHA_B);
+  assert.deepEqual(started,["server"]);
+  assert.ok(seen.includes("npm run test:brain"));
+  assert.ok(seen.includes("npm run test:server"));
+  assert.ok(!seen.some(s=>/npm run desktop/.test(s)));
+});
+test("failed validation rolls back without restarting the already running relay",async()=>{
+  const {supervisor,seen,getHead,started}=fixture({failBuild:true});
+  // Real phone-triggered updates always run in a supervisor that has already
+  // started its relay. The old fixture never started it, accidentally
+  // exercising the legitimate "recover a missing relay" fallback instead.
+  await supervisor.start();
+  try{
+    assert.deepEqual(started,["server"]);
+    await supervisor.inspect();
+    await supervisor.apply();
+    assert.equal(supervisor.getState().phase,"error");
+    assert.match(supervisor.getState().error,/synthetic test failed/);
+    assert.equal(getHead(),SHA_A);
+    assert.ok(seen.some(x=>x.startsWith("git reset --keep "+SHA_A)));
+    assert.ok(seen.includes("npm run build:remote"),"rollback restores prior relay build");
+    assert.deepEqual(started,["server"],
+      "validation failed before restart, so original managed relay stays alive");
+  }finally{
+    await supervisor.close();
+  }
+});
+
+test("rollback restores the relay when no managed relay exists",async()=>{
+  const {supervisor,getHead,started}=fixture({failBuild:true});
+  // Deliberately model the missing-child recovery case separately.
+  await supervisor.inspect();
+  await supervisor.apply();
+  assert.equal(supervisor.getState().phase,"error");
+  assert.equal(getHead(),SHA_A);
+  assert.deepEqual(started,["server"],
+    "supervisor may launch the restored relay when its child was missing");
+});
+test("dirty or diverged branches do not execute merge, npm or restart",async()=>{
+  for(const options of [{dirty:true},{diverged:true}]){
+    const {supervisor,seen}=fixture(options);
+    await supervisor.inspect();
+    assert.equal(supervisor.getState().phase,"error");
+    await assert.rejects(supervisor.apply(),/Check for updates first/);
+    assert.ok(!seen.some(x=>x.startsWith("git merge ")));
+    assert.ok(!seen.some(x=>x.startsWith("npm ")));
+  }
+});
+test("loopback supervisor denies requests lacking its separate private token",async()=>{
+  const {supervisor}=fixture();
+  const {server}=supervisor;
+  await new Promise(resolve=>server.listen(0,"127.0.0.1",resolve));
+  try{
+    const url="http://127.0.0.1:"+server.address().port;
+    assert.equal((await fetch(url+"/status")).status,403);
+    assert.equal((await fetch(url+"/status",{headers:{"X-Mikan-Supervisor":"wrong"}})).status,403);
+    const status=await fetch(url+"/status",{headers:{"X-Mikan-Supervisor":token}});
+    assert.equal(status.status,200);
+    assert.equal((await status.json()).mode,"relay-only");
+    assert.equal((await fetch(url+"/run",{method:"POST",
+      headers:{"X-Mikan-Supervisor":token}})).status,404);
+    const check=await fetch(url+"/check",{method:"POST",
+      headers:{"X-Mikan-Supervisor":token}});
+    assert.equal(check.status,202);
+    // Poll until fake local git check has settled.
+    for(let i=0;i<25&&supervisor.getState().phase==="checking";i++)
+      await new Promise(resolve=>setTimeout(resolve,10));
+    assert.equal(supervisor.getState().phase,"ready");
+  }finally{
+    await new Promise(resolve=>server.close(resolve));
+  }
+});
+test("proxy client forwards only fixed method and endpoint with private header",async()=>{
+  const observed=[];
+  const client=createDevSupervisorClient({
+    token,base:"http://127.0.0.1:3849",
+    transport:async(url,options)=>{
+      observed.push({url,...options});
+      return {ok:true,json:async()=>({available:true,phase:"ready"})};
+    }
+  });
+  assert.equal((await client.status()).phase,"ready");
+  await client.check();
+  await client.apply();
+  await client.restartDesktop();
+  assert.deepEqual(observed.map(x=>x.url.split("/").at(-1)),["status","check","apply","restart-desktop"]);
+  assert.deepEqual(observed.map(x=>x.method),["GET","POST","POST","POST"]);
+  assert.ok(observed.every(x=>x.headers["X-Mikan-Supervisor"]===token));
+});
+
+test("updater reports the failing TAP assertion rather than a generic npm command",()=>{
+  const error=new Error("Command failed: node.exe npm-cli.js run test:server");
+  error.stdout=[
+    "> mikan-desktop-companion@0.9.8 test:server",
+    "# Subtest: public relay test",
+    "not ok 3 - public relay test",
+    "  ---",
+    "  error: expected status 200 but received 409",
+    "  ..."
+  ].join("\n");
+  error.stderr="";
+  const message=formatSupervisorError(error);
+  assert.match(message,/not ok 3 - public relay test/);
+  assert.match(message,/expected status 200 but received 409/);
+  assert.doesNotMatch(message,/Command failed: node.exe/);
+});
+
+test("managed desktop can be restarted without a Git update or relay interruption",async()=>{
+  const {supervisor,started,stopped}=fixture({manageDesktop:true});
+  await supervisor.start();
+  try{
+    assert.deepEqual(started,["server","desktop"]);
+    await supervisor.inspect();
+    assert.equal(supervisor.getState().phase,"ready");
+    await supervisor.restartDesktop();
+    assert.equal(supervisor.getState().phase,"updated");
+    assert.equal(supervisor.getState().desktopConnected,true);
+    assert.equal(supervisor.getState().desktopState,"online");
+    assert.deepEqual(stopped,["desktop"]);
+    assert.deepEqual(started,["server","desktop","desktop"],
+      "Only supervisor-owned desktop may restart; never stop browser relay");
+  }finally{await supervisor.close()}
+});
+
+test("desktop restart that cannot connect reports failure while preserving the relay",async()=>{
+  const {supervisor,started,stopped}=fixture({
+    manageDesktop:true,desktopReadyOutcome:false
+  });
+  await supervisor.start();
+  try{
+    await supervisor.restartDesktop();
+    assert.equal(supervisor.getState().phase,"error");
+    assert.equal(supervisor.getState().desktopConnected,false);
+    assert.match(supervisor.getState().error,/did not reconnect/);
+    assert.deepEqual(stopped,["desktop"]);
+    assert.deepEqual(started,["server","desktop","desktop"]);
+  }finally{await supervisor.close()}
+});
+
+test("source update that passes tests but fails desktop startup keeps phone recovery controls",async()=>{
+  const {supervisor,seen,getHead,started}=fixture({
+    manageDesktop:true,desktopReadyOutcome:false
+  });
+  await supervisor.start();
+  try{
+    await supervisor.inspect();
+    await supervisor.apply();
+    assert.equal(getHead(),SHA_B,
+      "Code passed build/tests; keep installed recovery UI instead of reverting");
+    assert.equal(supervisor.getState().phase,"error");
+    assert.equal(supervisor.getState().desktopConnected,false);
+    assert.match(supervisor.getState().step,/Use Restart desktop on your phone/);
+    assert.ok(seen.includes("npm run test:server"));
+    assert.ok(!seen.some(x=>x.startsWith("git reset --keep")));
+    assert.deepEqual(started,["server","desktop","server","desktop"]);
+  }finally{await supervisor.close()}
+});
+
+test("relay-only supervisor refuses desktop restart without touching processes",async()=>{
+  const {supervisor,started}=fixture();
+  await supervisor.start();
+  try{
+    await assert.rejects(supervisor.restartDesktop(),/only manages the browser relay/);
+    const {server}=supervisor;
+    const response=await fetch("http://127.0.0.1:"+server.address().port+
+      "/restart-desktop",{method:"POST",headers:{"X-Mikan-Supervisor":token}});
+    assert.equal(response.status,409);
+    assert.deepEqual(started,["server"]);
+  }finally{await supervisor.close()}
+});
+
+test("developer status follows actual relay heartbeat while restart readiness stays launch-scoped",async()=>{
+  const checked=[];
+  const {supervisor}=fixture({
+    manageDesktop:true,
+    desktopReadyProbe:async after=>{
+      checked.push(after);
+      // Simulate a desktop visible to the relay whose heartbeat predates
+      // the last supervisor-managed launch. Status should still say Online.
+      return after===0;
+    }
+  });
+  await supervisor.start();
+  try {
+    const {server}=supervisor;
+    const get=()=>fetch("http://127.0.0.1:"+server.address().port+
+      "/status",{headers:{"X-Mikan-Supervisor":token}});
+    const state=await (await get()).json();
+    assert.equal(state.desktopConnected,true);
+    assert.equal(state.desktopState,"online");
+    assert.equal(state.managedDesktopRunning,true);
+    assert.deepEqual(checked,[0],"status reads relay health without launch-time gate");
+    await supervisor.restartDesktop();
+    assert.equal(supervisor.getState().phase,"error",
+      "restart still requires a fresh post-launch heartbeat");
+    assert.ok(checked.some(after=>after>0));
+    const recovered=await (await get()).json();
+    assert.equal(recovered.desktopConnected,true,
+      "the existing online agent remains online even when a managed restart failed");
+  }finally{await supervisor.close()}
+});
+
+test("native Rust edits are compiled before a managed desktop restart",async()=>{
+  const {supervisor,seen,started}=fixture({
+    manageDesktop:true,rustChanged:true
+  });
+  await supervisor.start();
+  try{
+    await supervisor.inspect();
+    await supervisor.apply();
+    assert.equal(supervisor.getState().phase,"updated");
+    assert.ok(seen.includes("cargo check"));
+    assert.deepEqual(started,["server","desktop","server","desktop"]);
+  }finally{await supervisor.close()}
+});
+
+test("native compile failure rolls source back before starting a broken desktop",async()=>{
+  const {supervisor,seen,getHead,started}=fixture({
+    manageDesktop:true,rustChanged:true,failCargoCheck:true
+  });
+  await supervisor.start();
+  try{
+    await supervisor.inspect();
+    await supervisor.apply();
+    assert.equal(supervisor.getState().phase,"error");
+    assert.equal(getHead(),SHA_A);
+    assert.ok(seen.includes("cargo check"));
+    assert.match(supervisor.getState().error,/synthetic Rust compile error/);
+    assert.deepEqual(started,["server","desktop"],
+      "No restart into uncompiled Rust source");
+  }finally{await supervisor.close()}
+});
+
+test("frontend-only updates do not waste time rebuilding unchanged Rust",async()=>{
+  const {supervisor,seen}=fixture({manageDesktop:true,rustChanged:false});
+  await supervisor.start();
+  try{
+    await supervisor.inspect();
+    await supervisor.apply();
+    assert.ok(!seen.includes("cargo check"));
+  }finally{await supervisor.close()}
+});

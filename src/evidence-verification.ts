@@ -6,17 +6,30 @@
  * when the retrieved snippet cannot support a concrete claim. It is not a
  * full semantic entailment model and cannot guarantee that a source is true.
  */
+import type { ResearchAudit } from "./debug-log.ts";
+
 export type EvidenceSource = {
   title: string;
   url: string;
   content: string;
   publishedDate?: string;
 };
+/** Machine-checkable support behind a partial answer, never a claim of
+ * semantic entailment or independent source authenticity. */
+export type PartialEvidence = {
+  status: "partial";
+  supportedQuotes: {source:number;subject:string;quote:string}[];
+  unresolvedDetails: string[];
+};
 export type EvidenceReview = {
   text: string;
   rejected: number;
   checked: number;
   usable: boolean;
+  /** Optional for answers assembled from validated quotations. */
+  evidence?: PartialEvidence;
+  /** Whether the original model supplied safe conversational framing. */
+  presentation?: "model-voice-preserved" | "source-only";
 };
 const stop = new Set(("the a an and or but if to in on at from for into of their its it they them that this " +
   "is are was were have has had been be did do does will would can could with about who what when " +
@@ -106,6 +119,235 @@ export function verifyResearchAnswer(
   // Removing unsafe claims is enough: avoid appending a robotic disclaimer
   // that derails an otherwise warm, accurate companion response.
   return {text,rejected,checked,usable:true};
+}
+
+/**
+ * A generated recommendation cannot enlarge the approved Rust shortlist.
+ * Quotes retain their source attribution: a reviewer's first-person story
+ * must never be presented as a memory about the owner.
+ * Passing this gate proves excerpt provenance, not full semantic entailment.
+ */
+function reviewedRecommendation(
+  sources:readonly EvidenceSource[], audit:ResearchAudit
+):EvidenceReview {
+  const same=(s:string)=>s.toLowerCase().replace(/\s+/g," ").trim();
+  const clean=(s:string)=>s.replace(/[\r\n\t]+/g," ").replace(/[\\*_`\[\]<>]/g,"").trim();
+  const seen=new Set<string>();
+  const approved=(audit.recommendationDetails??[]).filter(item=>{
+    const source=sources[item.source-1];
+    const identity=same(item.title);
+    const quote=same(item.fitQuote);
+    if(!source || !identity || !quote || seen.has(identity) ||
+       !same(source.content).includes(quote) || !quote.includes(identity))return false;
+    seen.add(identity);
+    return true;
+  });
+  if(!approved.length)return {
+    text:"I searched, but I couldn't verify a recommendation that meets the request. I don't want to invent options.",
+    rejected:1,checked:0,usable:false
+  };
+  const unresolved=approved.some(item=>item.missingDetails?.length) ||
+    !!audit.unresolvedDetails?.length || !!audit.ignoredRequirements?.length;
+  const lines=approved.map(item=>{
+    const excerpt=clean(item.fitQuote).slice(0,250);
+    return "- **"+clean(item.title)+"** ["+item.source+"]: Source excerpt: “"+excerpt+
+      (clean(item.fitQuote).length>250?"…":"")+"”";
+  });
+  const intro=unresolved
+    ?"I found these source-backed leads, but I haven't verified that they satisfy every requested requirement:"
+    :"Here are the recommendations I could support with the retrieved sources:";
+  return {text:intro+"\n\n"+lines.join("\n"),
+    rejected:0,checked:approved.length,usable:true};
+}
+
+/**
+ * Recover the MODEL'S conversational voice, never its unsupported facts.
+ * This only selects a short opening sentence for presentation. It does not
+ * classify user intent, judge source trust, or change any factual coverage.
+ *
+ * When an opening contains a number, citation, named source subject, term
+ * from an unresolved fact, or other concrete research claim, leave it out.
+ * The attributed source excerpts remain the sole factual payload.
+ */
+function safeModelOpening(draft:string,audit:ResearchAudit):string|null{
+  const opening=segments(draft)[0]?.trim();
+  if(!opening || opening.length>165 || opening.includes("\n") ||
+      /^[-#>|]/.test(opening) || /[\d\[\]<>\x60]|https?:\/\//i.test(opening) ||
+      factualClaim(opening))return null;
+  // A bare exclamation ("Already out!") can assert a fact without using a
+  // recognizable factual noun. Only lift first-person *tone* out of the draft;
+  // never promote a standalone status declaration as conversational framing.
+  if(!/\b(?:I|me|my|we|our)\b/i.test(opening) ||
+      /\b(?:it|its|they|them|their|he|she)\b/i.test(opening))return null;
+  // An unsourced claim that the companion cannot browse is a factual
+  // capability denial, not a personality flourish. This is particularly
+  // misleading AFTER native tools successfully fetched the cited document.
+  if(/\b(?:can't|cannot|unable|not able|don't have|do not have|no access|no ability)\b/i.test(opening))return null;
+  const anchors=new Set([
+    ...(audit.acceptedDetails??[]).flatMap(f=>significant(f.subject+" "+f.claim+" "+f.quote)),
+    ...(audit.unresolvedDetails??[]).flatMap(significant)
+  ]);
+  if(significant(opening).some(token=>anchors.has(token)))return null;
+  return opening;
+}
+
+/**
+ * Render a bounded partial answer from SOURCE QUOTES, not the generator's
+ * proposed paraphrases. Source URLs identify provenance, but neither their
+ * domains nor matching quotations establish the official/latest answer.
+ */
+function partialResearchSummary(
+  draft:string,
+  sources:readonly EvidenceSource[],
+  audit:ResearchAudit
+):EvidenceReview|null {
+  const normalized=(s:string)=>s.toLowerCase().replace(/\s+/g," ").trim();
+  const escaped=(s:string,max:number)=>[...s.replace(/\s+/g," ").trim()].slice(0,max)
+    .join("").replace(/[\\\`*_\[\]<>]/g,"\\$&");
+  const groups=new Map<string,{name:string;quotes:{source:number;quote:string}[]}>();
+  const seen=new Set<string>();
+  const supportedQuotes:PartialEvidence["supportedQuotes"]=[];
+  for(const item of audit.acceptedDetails??[]){
+    const source=sources[item.source-1];
+    if(!source||!item.quote.trim()||!item.subject.trim())continue;
+    if(!normalized(source.content).includes(normalized(item.quote)) &&
+        !normalized(source.title).includes(normalized(item.quote)))continue;
+    const subject=normalized(item.subject);
+    const key=subject+"|"+item.source+"|"+normalized(item.quote);
+    if(seen.has(key))continue;
+    seen.add(key);
+    if(!groups.has(subject) && groups.size>=4)continue;
+    if(!groups.has(subject))groups.set(subject,{name:item.subject,quotes:[]});
+    const group=groups.get(subject)!;
+    if(group.quotes.length<2){
+      group.quotes.push({source:item.source,quote:item.quote});
+      supportedQuotes.push({source:item.source,subject:item.subject,quote:item.quote});
+    }
+  }
+  if(!groups.size)return null;
+  const summaries=[...groups.values()];
+  // The full exact quotations remain in structured evidence/debug metadata.
+  // The chat bubble should carry a readable answer, not a source dump with
+  // repeated Markdown URLs. Citation indices point to the retained sources.
+  const subjectMentions=summaries.map(group=>{
+    const refs=[...new Set(group.quotes.map(quote=>quote.source))]
+      .map(source=>"["+source+"]").join(" ");
+    return escaped(group.name,100)+" "+refs;
+  });
+  const subjects=subjectMentions.length===1?subjectMentions[0]:
+    subjectMentions.slice(0,-1).join(", ")+" and "+subjectMentions[subjectMentions.length-1];
+  const unresolvedDetails=(audit.unresolvedDetails??[]).filter(s=>s.trim()).slice(0,4);
+  const missing=unresolvedDetails[0]?.replace(/\s+/g," ").trim().slice(0,120);
+  const voice=safeModelOpening(draft,audit);
+  // A partial audit can still contain a legitimately sourced answer fragment.
+  // Previously we always discarded it and displayed entity names alone.
+  // Reuse only excerpts proven contiguous in the cited source, NOT the
+  // extractor's claim paraphrases or the generator's unscreened conclusion.
+  const anchored=(audit.acceptedDetails??[]).filter(item=>
+    item.detail !== null && item.detail !== undefined && Number.isInteger(item.detail) &&
+    item.detail >= 0 && supportedQuotes.some(quote=>quote.source===item.source &&
+      normalized(quote.quote)===normalized(item.quote)));
+  const mapped=new Set(anchored.map(item=>item.source+"|"+normalized(item.quote)));
+  if(mapped.size){
+    // Lead with the requested detail, followed by at most two corroborating
+    // excerpts. Explicit attribution makes the difference between a report
+    // and independent confirmation visible without losing the useful fact.
+    const selected=[...supportedQuotes]
+      .sort((a,b)=>Number(mapped.has(b.source+"|"+normalized(b.quote)))-
+        Number(mapped.has(a.source+"|"+normalized(a.quote))))
+      .slice(0,3);
+    const excerpts=selected.map(item=>{
+      const flattened=item.quote.replace(/https?:\/\/\S+/gi,"[source link]")
+        .replace(/[\r\n\t]+/g," ").replace(/\s+/g," ").trim();
+      const clipped=[...flattened].slice(0,185).join("");
+      return "["+item.source+"] reports: “"+escaped(clipped,185)+
+        (flattened.length>clipped.length?"…":"")+"”";
+    });
+    const scope=missing ? "I still couldn't independently establish "+
+      escaped(missing,120)+" from those sources." : "";
+    return {
+      text:(voice ? voice+" " : "")+
+        "I found sourced details about "+subjects+": "+excerpts.join(" ")+
+        (scope ? " "+scope : ""),
+      checked:supportedQuotes.length,rejected:0,usable:true,
+      evidence:{status:"partial",supportedQuotes,unresolvedDetails},
+      presentation:voice?"model-voice-preserved":"source-only"
+    };
+  }
+  const uncertainty=missing
+    ? "I couldn't verify "+escaped(missing,120)+" from those excerpts."
+    : "I couldn't confirm the complete answer from those excerpts.";
+  return {
+    text:(voice ? voice+" " : "")+
+      "I found reports mentioning "+subjects+", but that's not enough to establish the answer. "+
+      uncertainty+" I'd rather not guess.",
+    checked:supportedQuotes.length,rejected:0,usable:true,
+    evidence:{status:"partial",supportedQuotes,unresolvedDetails},
+    presentation:voice?"model-voice-preserved":"source-only"
+  };
+}
+
+/** Document QA reports what a specific page says. Each sentence of a
+ * synthesis is bound to its own selected passage. If a summary adds
+ * unsupported detail, use that answering passage instead. */
+function reviewedDocument(sources:EvidenceSource[],audit:ResearchAudit):EvidenceReview {
+  const source=sources[0];
+  const exact=(s:string)=>s.replace(/\s+/g," ").trim().toLowerCase();
+  const points=(audit.acceptedDetails??[]).filter(f=>f.source===1 && f.quote.trim() &&
+    source && exact(source.content).includes(exact(f.quote)));
+  if (!points.length) return {text:"I couldn't locate an answering passage in the document.",
+    checked:0,rejected:1,usable:false};
+  let rejected=0;
+  const lines=points.slice(0,3).map(({claim,quote})=>{
+    // For numbers, polarity or qualifiers, preserve the full sentence. For
+    // other summaries require the substantive words to occur in source order.
+    const words=normalize(quote).split(" ");
+    const tokens=normalize(claim).split(" ").filter(t=>t && !stop.has(t));
+    let cursor=-1;
+    const ordered=tokens.length>=3 && tokens.every(token=>{
+      cursor=words.indexOf(token,cursor+1);
+      return cursor>=0;
+    });
+    const qualified=/\d|\b(?:not|never|no|only|without|instead|except|cannot|may|might|could|planned|proposed|if|unless)\b|n['?]t\b/i;
+    const useSummary=claim.trim() && (exact(claim)===exact(quote) || ordered && !qualified.test(claim+" "+quote));
+    if (!useSummary) rejected++;
+    // Render source Markdown as text. Do not turn external text into active links.
+    const plain=(useSummary?claim:quote).replace(/\[([^\]]+)\]\([^)\s]+\)/g,"$1")
+      .replace(/[*\x60]/g,"").replace(/\s+/g," ").trim()
+      .replace(/[\\<>\[\]_]/g,"\\$&");
+    return plain+" [1]";
+  });
+  return {text:lines.join(" "),checked:points.length,rejected,usable:true};
+}
+
+/** Shared desktop/evaluation postprocessing. A rejected draft must not erase
+ * useful facts that the native extraction already anchored to exact sources. */
+export function reviewResearchCompletion(answer:string,sources:EvidenceSource[],audit?:ResearchAudit|null):EvidenceReview|null {
+  if(!sources.length)return null;
+  if(audit?.status==="attributed")return reviewedDocument(sources,audit);
+  if(audit?.recommendationTask)return reviewedRecommendation(sources,audit);
+  if(audit && !["used","partial"].includes(audit.status))return null;
+  const facts=audit?.acceptedDetails??[];
+  const grounded=facts.length ? sources.map((source,i)=>({...source,title:"",
+    content:facts.filter(f=>f.source===i+1).map(f=>f.quote).join("\n")})) : sources;
+  // A partially answered task is not a license to turn one dated source
+  // into a definitive "latest", "first", "best" or exact-status conclusion.
+  // Use only the original quoted excerpts, not a model-inferred ranking.
+  if(audit?.status==="partial" && facts.length){
+    const partial=partialResearchSummary(answer,sources,audit);
+    if(partial)return partial;
+  }
+  const review=verifyResearchAnswer(answer,grounded);
+  if(review.usable || !facts.length)return review;
+  const recover=facts.filter(f=>{
+    const source=sources[f.source-1];
+    const exact=(s:string)=>s.toLowerCase().replace(/\s+/g," ").trim();
+    return source && !!f.quote.trim() &&
+      (exact(source.title).includes(exact(f.quote)) || exact(source.content).includes(exact(f.quote)));
+  }).map(f=>`Source [${f.source}] states: “${f.quote}”`);
+  if(!recover.length)return review;
+  return {...review,usable:true,text:[...new Set(recover),
+    ...(audit?.unresolvedDetails?.length ? ["Still unconfirmed: "+audit.unresolvedDetails.join("; ")+"."] : [])].join("\n\n")};
 }
 
 

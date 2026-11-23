@@ -211,11 +211,12 @@ pub(crate) async fn chat(
         let _ = app.emit("mikan://activity", json!({
             "requestId":request.request_id,"text":format!("Searching: {query}")
         }));
-        let found = source_priority::search(
+        if let Some(document)=crate::read_requested_document(app,request).await? {
+            sources.push(document);
+        } else if let Ok(found)=source_priority::search(
             request.searxng_endpoint.clone(),query.to_owned(),request.research_recent,
             &request.source_preferences,request.source_topic.as_deref()
-        ).await;
-        if let Ok(found) = found { cloud_web_tools::add_sources(&mut sources,&found); }
+        ).await { cloud_web_tools::add_sources(&mut sources,&found); }
         search_query = Some(query.to_owned());
     }
     if sources.is_empty() && request.research_route.as_deref() != Some("chat") {
@@ -232,6 +233,7 @@ pub(crate) async fn chat(
             system.push_str(&research_intent::evidence_instruction());
         }
     }
+    let allow_tools=allow_tools && !sources.iter().any(|s|s.engine=="direct webpage");
     append_evidence(&mut contents,&sources);
     let client = reqwest::Client::builder().connect_timeout(Duration::from_secs(8))
         .build().map_err(|e|e.to_string())?;
@@ -263,7 +265,8 @@ pub(crate) async fn chat(
                     total_duration_ns:None,load_duration_ns:None,
                     prompt_eval_duration_ns:None,eval_duration_ns:None
                 }),
-                sources,search_query,sources_carried_over,
+                // Cloud tool calls do not use native SearXNG candidate ranking.
+                search_trace:None,sources,search_query,sources_carried_over,
                 research_audit:None,model_used:format!("Gemini {model}"),fallback_reason:None
             });
         }

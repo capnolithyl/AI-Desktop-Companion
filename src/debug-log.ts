@@ -1,4 +1,6 @@
 import type { WebResult } from "./web-search";
+import type { BuildInfo } from "./build-info";
+import type { ResearchLimit, ResearchTask } from "./unified-planner.ts";
 
 export type OllamaStats = {
   outputTokens: number | null;
@@ -10,11 +12,43 @@ export type OllamaStats = {
 };
 
 export type ResearchAudit = {
-  status: "used" | "fallback";
+  status: string;
   accepted: number;
+  contextualCount?: number;
+  retrievalMs?: number;
+  extractionMs?: number;
   rejected: number;
   elapsedMs: number;
   note: string;
+  taskKind?: ResearchTask["kind"];
+  taskSubject?: string;
+  ignoredRequirements?: ResearchLimit[];
+  followupQuery?: string;
+  primaryRecoveryStatus?: string;
+  recommendationTask?: boolean;
+  recommendationApproved?: string[];
+  recommendationRejected?: number;
+  rejectedDetails?: string[];
+  acceptedDetails?: {source:number;subject:string;claim:string;quote:string;detail?:number|null}[];
+  extractionAttempts?: number;
+  candidateLeads?: string[];
+  candidateQueries?: string[];
+  candidateDiscovery?: string;
+  unresolvedDetails?: string[];
+  constraintsChecked?: number;
+  featuresChecked?: number;
+  exclusionsChecked?: number;
+  relationsChecked?: number;
+  recommendationDetails?: {
+    source: number;
+    title: string;
+    creator: string;
+    identityQuote: string;
+    fitQuote: string;
+    measurements: {source:number;value:number;unit:string;quote:string}[];
+    relations: {role:string;name:string;source:number;quote:string}[];
+    missingDetails?: string[];
+  }[];
 };
 
 export type MemoryRecallAudit = {
@@ -49,11 +83,15 @@ export type MemoryRecallAudit = {
 export type ToolPlanningAudit = {
   method: string;
   reason: string;
+  sourceRequirement?: "required" | "optional";
   query?: string;
+  task?: ResearchTask;
   topic?: string;
   publicWebAllowed: boolean;
   searchOutcome?: string;
   freshSources?: number;
+  searchTrace?: {attemptedQueries:string[];rawResults:number;returnedResults:number;
+    provisionalResults?:number;rejectedTitles?:string[];upstreamErrors:string[]};
 };
 export type NotionRetrievalAudit = {
   selectedPage?: string;
@@ -89,13 +127,18 @@ export type Diagnostics = {
   firstAudioMs?: number;
   model: string;
   /** Provider configured for the turn, not necessarily the backend that replied. */
-  provider?: "local" | "auto" | "openrouter" | "gemini";
+  provider?: "local" | "auto" | "openrouter" | "gemini" | "nvidia";
   fallbackReason?: string | null;
   stats: OllamaStats | null;
   research?: ResearchAudit;
-  answerVerification?: {checked:number;rejected:number;recoveredHeadline:boolean};
+  mikanify?: {applied:boolean;elapsedMs:number;draftCharacters:number;finalCharacters:number;error?:string};
+  answerVerification?: {
+    checked:number;rejected:number;recoveredHeadline:boolean;
+    presentation?:"model-voice-preserved"|"source-only"
+  };
   memory?: MemoryRecallAudit;
   toolPlan?: ToolPlanningAudit;
+  reasoning?: {mode:"fast"|"auto"|"deep";enabled:boolean;reason:string};
   notion?: NotionRetrievalAudit;
   parallelTasks?: PreparationTaskAudit[];
 };
@@ -115,11 +158,12 @@ export type DebugLogMessage = {
 export type DebugLogOptions = {
   conversationId: string | null;
   model: string;
-  provider?: "local" | "auto" | "gemini" | "openrouter";
+  provider?: "local" | "auto" | "gemini" | "openrouter" | "nvidia";
   geminiModel?: string;
   openrouterModel?: string;
   contextWindow: number | null;
   avatarAnimation?: string;
+  buildInfo?: BuildInfo;
   exportedAt?: Date;
 };
 
@@ -155,11 +199,46 @@ function performanceLines(diagnostics: Diagnostics): string[] {
     "  Load time: " + fromNanoseconds(s?.loadDurationNs),
     "  Prompt eval: " + fromNanoseconds(s?.promptEvalDurationNs),
     "  Model: " + diagnostics.model,
+    ...(diagnostics.reasoning ? [
+      "  Local reasoning: "+diagnostics.reasoning.mode+
+      " / "+(diagnostics.reasoning.enabled?"thinking":"quick")+
+      " ("+diagnostics.reasoning.reason+")"
+    ] : []),
     ...(diagnostics.fallbackReason ? ["  Cloud fallback: " + diagnostics.fallbackReason] : []),
+    ...(diagnostics.mikanify ? [
+      "  Mikanify answer: " + (diagnostics.mikanify.applied?"applied":"original draft retained"),
+      "  Mikanify latency: " + duration(diagnostics.mikanify.elapsedMs),
+      "  Draft / final characters: " + diagnostics.mikanify.draftCharacters+
+        " / "+diagnostics.mikanify.finalCharacters,
+      ...(diagnostics.mikanify.error?["  Mikanify failure: "+diagnostics.mikanify.error]:[])
+    ] : []),
     ...(diagnostics.research ? [
       "  Research evidence: " + diagnostics.research.status,
       "  Accepted source-anchored facts: " + diagnostics.research.accepted,
+      ...(diagnostics.research.contextualCount ? [
+        "  Context-only excerpts (not proven requested details): " + diagnostics.research.contextualCount
+      ] : []),
       "  Rejected candidates: " + diagnostics.research.rejected,
+      ...(diagnostics.research.taskKind ? [
+        "  Task kind: "+diagnostics.research.taskKind] : []),
+      ...(diagnostics.research.unresolvedDetails?.length ? [
+        "  Unresolved requested details: "+diagnostics.research.unresolvedDetails
+          .map((detail,index)=>"["+index+"] "+detail).join("; ")] : []),
+      ...(diagnostics.research.primaryRecoveryStatus ? [
+        "  Primary-source recovery: "+diagnostics.research.primaryRecoveryStatus] : []),
+      ...(diagnostics.research.rejectedDetails?.length
+        ? ["  Rejection reasons: " + diagnostics.research.rejectedDetails.join("; ")] : []),
+      ...(diagnostics.research.candidateLeads?.length
+        ? ["  Individually identified candidates: " + diagnostics.research.candidateLeads.join(", ")] : []),
+      ...(diagnostics.research.candidateQueries?.length
+        ? diagnostics.research.candidateQueries.map(query=>"  Attempted candidate verification: "+query) : []),
+      ...(diagnostics.research.acceptedDetails?.length
+        ? diagnostics.research.acceptedDetails.map(fact =>
+            "  Accepted excerpt [" + fact.source + "] " + fact.subject +
+              (fact.detail == null ? " (context only)" : " (requested detail #"+fact.detail+")")+
+              ": " + fact.claim + " | " + fact.quote) : []),
+      ...(diagnostics.research.extractionAttempts && diagnostics.research.extractionAttempts>1
+        ? ["  Local evidence extraction attempts: " + diagnostics.research.extractionAttempts] : []),
       "  Extraction time: " + duration(diagnostics.research.elapsedMs),
       "  Evidence note: " + diagnostics.research.note
     ] : []),
@@ -167,16 +246,41 @@ function performanceLines(diagnostics: Diagnostics): string[] {
       "Final answer evidence check:",
       "  Model claims checked: " + diagnostics.answerVerification.checked,
       "  Model claims rejected: " + diagnostics.answerVerification.rejected,
-      "  Source-headline fallback: " + (diagnostics.answerVerification.recoveredHeadline ? "yes" : "no")
+      "  Source-headline fallback: " + (diagnostics.answerVerification.recoveredHeadline ? "yes" : "no"),
+      ...(diagnostics.answerVerification.presentation
+        ? ["  Research presentation: "+diagnostics.answerVerification.presentation] : [])
     ] : []),
     ...(diagnostics.toolPlan ? [
       "Tool planning:",
       "  Route: " + diagnostics.toolPlan.method,
       "  Reason: " + diagnostics.toolPlan.reason,
+      ...(diagnostics.toolPlan.task ? [
+        "  Planned research task: "+diagnostics.toolPlan.task.kind,
+        "  Planned subject: "+(diagnostics.toolPlan.task.subject??"(none)"),
+        ...(diagnostics.toolPlan.task.details?.length
+          ? diagnostics.toolPlan.task.details.map((detail,index)=>
+            "  Requested detail #"+index+": "+detail) : [])
+      ] : []),
+      ...(diagnostics.toolPlan.sourceRequirement ? [
+        "  Source requirement: "+diagnostics.toolPlan.sourceRequirement
+      ] : []),
       "  Public web allowed: " + (diagnostics.toolPlan.publicWebAllowed ? "yes" : "no"),
       ...(diagnostics.toolPlan.searchOutcome ? [
         "  Web outcome: " + diagnostics.toolPlan.searchOutcome,
         "  Fresh sources returned: " + (diagnostics.toolPlan.freshSources ?? 0)
+      ] : []),
+      ...(diagnostics.toolPlan.searchTrace ? [
+        "  Search engine returned raw candidates: "+diagnostics.toolPlan.searchTrace.rawResults,
+        "  Sources retained after ranking: "+diagnostics.toolPlan.searchTrace.returnedResults,
+        ...(diagnostics.toolPlan.searchTrace.provisionalResults ? [
+          "  Provisional candidates awaiting source validation: "+diagnostics.toolPlan.searchTrace.provisionalResults
+        ] : []),
+        ...(diagnostics.toolPlan.searchTrace.rejectedTitles??[]).map(title=>
+          "  Lexically rejected result title (untrusted): "+title),
+        ...diagnostics.toolPlan.searchTrace.attemptedQueries.map((query,index)=>
+          "  Executed search "+(index+1)+": "+query),
+        ...diagnostics.toolPlan.searchTrace.upstreamErrors.map(error=>
+          "  Upstream search issue: "+error)
       ] : []),
       ...(diagnostics.toolPlan.query ? ["  Public search query: " + diagnostics.toolPlan.query] : []),
       ...(diagnostics.toolPlan.topic ? ["  Preferred source topic: " + diagnostics.toolPlan.topic] : [])
@@ -275,6 +379,10 @@ export function formatDebugLog(messages: readonly DebugLogMessage[], options: De
   const lines = [
     "MIKAN DEBUG LOG",
     "Exported: " + (options.exportedAt ?? new Date()).toISOString(),
+    "Desktop version: " + (options.buildInfo?.version ?? "unknown"),
+    "Desktop commit (compiled): " + (options.buildInfo?.commit ?? "unknown"),
+    "Desktop built at: " + (options.buildInfo?.builtAt ?? "unknown"),
+    "Desktop build type: " + (options.buildInfo?.kind ?? "unknown"),
     "Conversation ID: " + (options.conversationId ?? "none"),
     "Current selected model: " + options.model,
     ...(options.provider ? ["Inference provider setting: " + options.provider] : []),

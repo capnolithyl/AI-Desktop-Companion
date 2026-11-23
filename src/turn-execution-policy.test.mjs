@@ -1,50 +1,167 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { planDesktopWebExecution } from "./turn-execution-policy.ts";
+import { planDesktopWebExecution, resolvePublicWebExecution } from "./turn-execution-policy.ts";
+import { planPublicWebTools } from "./unified-planner.ts";
+import { DEFAULT_SOURCE_PREFERENCES } from "./preferred-sources.ts";
 
 const defaults = {
-  question:"What's new with NASA Artemis?", autoSearch:true, provider:"auto",
-  planMode:"chat", notion:false,personalTurn:false,capabilityQuestion:false,
+  question:"What's new with NASA Artemis?",autoSearch:true,provider:"local",
+  planMode:"chat",notion:false,personalTurn:false,capabilityQuestion:false,
   existingSearch:false,attachment:false,screenshot:false,liveFrame:false,roleplay:false
 };
-test("local model planner only runs for eligible ordinary chats",()=>{
-  const local = planDesktopWebExecution({...defaults,provider:"local"});
+
+test("policy only decides permissions and tool routing, not language intent",()=>{
+  const local=planDesktopWebExecution(defaults);
   assert.equal(local.canPlanPublicWeb,true);
   assert.equal(local.cloudMaySearch,false);
   const explicit=planDesktopWebExecution({...defaults,planMode:"research"});
-  assert.equal(explicit.canPlanPublicWeb,false);
-  assert.equal(explicit.cloudMaySearch,true);
+  assert.equal(explicit.canPlanPublicWeb,true);
+  const cloudChat=planDesktopWebExecution({...defaults,provider:"openrouter"});
+  assert.equal(cloudChat.cloudMaySearch,false,
+    "A cloud model must not receive arbitrary chat web tools before local public planning");
+  assert.equal(cloudChat.canPlanPublicWeb,true);
+  const cloudResearch=planDesktopWebExecution({...defaults,provider:"openrouter",planMode:"research"});
+  assert.equal(cloudResearch.cloudMaySearch,true);
 });
-test("sensitive data and personal questions never activate automatic public tools",()=>{
+
+test("privacy and user-configured capability restrictions remain deterministic",()=>{
   for(const option of ["notion","personalTurn","capabilityQuestion","existingSearch",
-                      "attachment","screenshot","liveFrame","roleplay"]){
+                       "attachment","screenshot","liveFrame","roleplay"]){
     const policy=planDesktopWebExecution({...defaults,[option]:true});
     assert.equal(policy.canPlanPublicWeb,false,option);
     assert.equal(policy.cloudMaySearch,false,option);
     assert.ok(policy.blockedReason,option);
   }
-  assert.equal(planDesktopWebExecution({...defaults,autoSearch:false}).cloudMaySearch,false);
-});
-test("cloud small talk stays tool-free and real public questions still can search",()=>{
-  const hi=planDesktopWebExecution({...defaults,question:"Hello Mikan"});
-  assert.equal(hi.cloudMaySearch,false);
-  assert.equal(hi.canPlanPublicWeb,false); // no extra local planning call for greetings
-  const news=planDesktopWebExecution({...defaults,question:"Search the web for NASA news"});
-  assert.equal(news.cloudMaySearch,true);
-  assert.equal(news.canPlanPublicWeb,true);
+  const off=planDesktopWebExecution({...defaults,autoSearch:false});
+  assert.equal(off.canPlanPublicWeb,false);
+  assert.equal(off.cloudMaySearch,false);
 });
 
-test("new personal preferences remain local chat rather than automatic research",()=>{
-  for(const question of [
-    "One of my favorite Cattle Decapitation songs is Gristle Licker",
-    "I think Terrasite is even better than Death Atlas",
-    "My favorite album is The Art of Balance",
-    "so have i told you about my latest obsession? Cattle Decapitation. the band"
-  ]){
+test("conversation semantics are never classified by a regex permission gate",()=>{
+  const examples=[
+    "Hello Mikan",
+    "I think Terrasite is even better than Death Atlas.",
+    "I'm running out of short horror anime to watch.",
+    "Ideally under six episodes.",
+    "Not another giant open world, please.",
+    "Just venting, no recommendations.",
+    "I don't want suggestions, but search for current tour dates instead.",
+    "I love Immortal's sound so much.",
+    "No thanks, I only wanted to chat.",
+    "That's a bad joke lol"
+  ];
+  for(const question of examples){
     const policy=planDesktopWebExecution({...defaults,question});
-    assert.equal(policy.canPlanPublicWeb,false,question);
-    assert.equal(policy.cloudMaySearch,false,question);
+    assert.equal(policy.canPlanPublicWeb,true,question);
+    assert.equal(policy.blockedReason,null,question);
   }
-  const lookup=planDesktopWebExecution({...defaults,question:"Search the web for Cattle Decapitation reviews"});
-  assert.equal(lookup.canPlanPublicWeb,true);
+  // A current explicit opt-out still requires the model to decline research;
+  // permitting private planning never authorizes public search by itself.
+});
+
+test("an opt-out and unrelated personal opinion stay local when semantic planner declines",async()=>{
+  const history=[{role:"user",content:"I wish there were more bands like Immortal."}];
+  for(const question of [
+    "Not asking for recommendations, by the way. Just venting.",
+    "I don't want suggestions.",
+    "No thanks, I only wanted to chat.",
+    "My favorite band is Immortal."
+  ]){
+    const policy=planDesktopWebExecution({...defaults,question,previous:history});
+    assert.equal(policy.canPlanPublicWeb,true);
+    let invoked=0;
+    const choice=await planPublicWebTools(question,[],async prompt=>{
+      invoked++;
+      assert.ok(prompt.includes(question));
+      return JSON.stringify({ids:[],web:{search:false,reason:"The user is chatting or opted out"}});
+    },{automaticWebEnabled:policy.canPlanPublicWeb,
+      sourcePreferences:DEFAULT_SOURCE_PREFERENCES,history});
+    assert.equal(choice.search,false,question);
+    assert.equal(invoked,1,question);
+  }
+});
+
+test("model may plan a refinement across domains after policy permits it",async()=>{
+  const cases=[
+    ["Man, I wish there were more bands like Immortal.","Especially the cold guitars.","bands similar to Immortal"],
+    ["I'm craving another tactical RPG like Fire Emblem.","Not another giant open world.","tactical games without open worlds"],
+    ["I'm running out of short horror anime.","Under six episodes.","horror anime OVAs under six episodes"]
+  ];
+  for(const [prior,current,query] of cases){
+    const history=[{role:"user",content:prior},{role:"assistant",content:"Some possibilities."}];
+    const policy=planDesktopWebExecution({...defaults,question:current,previous:history});
+    assert.equal(policy.canPlanPublicWeb,true);
+    const selected=await planPublicWebTools(current,[],async prompt=>{
+      assert.ok(prompt.includes(prior));
+      return JSON.stringify({ids:[],web:{search:true,query,reason:"Continues earlier public discovery"}});
+    },{automaticWebEnabled:policy.canPlanPublicWeb,
+      sourcePreferences:DEFAULT_SOURCE_PREFERENCES,history});
+    assert.equal(selected.search,true,current);
+  }
+});
+
+test("only optional general lookup tasks can fall back to unsourced conceptual explanation",()=>{
+  const policy=planDesktopWebExecution({...defaults,planMode:"research"});
+  const task={kind:"lookup",requirements:[],roles:[],exclude:[]};
+  const decision={search:true,query:"SQLite FTS5 vector embeddings design",method:"ai-planned",
+    sourceRequirement:"optional",task};
+  const run=(selected,plan={mode:"research",recent:false})=>
+    resolvePublicWebExecution(policy,plan,selected);
+  assert.equal(run(decision).researchGeneralFallback,true);
+  assert.equal(run({...decision,sourceRequirement:"required"}).researchGeneralFallback,false);
+  assert.equal(run({...decision,task:{...task,kind:"verify"}}).researchGeneralFallback,false);
+  assert.equal(run({...decision,task:{...task,kind:"discover"}}).researchGeneralFallback,false);
+  assert.equal(run({...decision,task:{...task,sourceUrl:"https://example.org/docs"}}).researchGeneralFallback,false);
+  assert.equal(run({...decision,task:{...task,requirements:[{quote:"under 6",relation:"lt",limit:6,unit:"episodes"}]}}).researchGeneralFallback,false);
+  assert.equal(run(decision,{mode:"research",recent:true}).researchGeneralFallback,false);
+  assert.equal(run({...decision,task:undefined}).researchGeneralFallback,false);
+  assert.equal(run({...decision,search:false}).researchGeneralFallback,false);
+});
+
+test("explicit authorized document reads survive planner errors and wrong model decisions",()=>{
+  const url="https://github.com/ggml-org/llama.cpp";
+  const request="Check the repository at "+url+" and summarize its implementation";
+  const policy=planDesktopWebExecution({...defaults,question:request,planMode:"research"});
+  assert.equal(policy.publicDocumentUrl,url);
+  const outage={search:false,method:"planner-error",reason:"Local tool planner unavailable"};
+  const recovered=resolvePublicWebExecution(policy,{mode:"research",query:request,recent:false},outage);
+  assert.equal(recovered.researchRoute,"research");
+  assert.equal(recovered.autoSearch,true);
+  assert.equal(recovered.researchTask?.sourceUrl,url);
+  assert.ok(recovered.researchQuery);
+  assert.equal(recovered.researchQuery.includes("https://"),false);
+  assert.doesNotMatch(recovered.researchQuery,/summarize its implementation/);
+
+  // A wrong model decision must not turn a specifically requested URL read
+  // into ordinary search or an unsupported local answer.
+  const semanticDecline=resolvePublicWebExecution(policy,{mode:"research",query:request,recent:false},
+    {search:false,method:"not-needed",reason:"Conversation only"});
+  assert.equal(semanticDecline.researchTask?.kind,"document");
+  assert.equal(semanticDecline.researchTask?.sourceUrl,url);
+  assert.equal(semanticDecline.autoSearch,true);
+  const semanticSearch=resolvePublicWebExecution(policy,{mode:"research",query:request,recent:false},
+    {search:true,method:"ai-planned",query:"general llama.cpp release notes",
+      task:{kind:"lookup",requirements:[],roles:[],exclude:[]}});
+  assert.equal(semanticSearch.researchTask?.kind,"document");
+  assert.equal(semanticSearch.researchTask?.sourceUrl,url);
+  assert.equal(semanticSearch.researchQuery?.includes("general llama.cpp"),false);
+
+  // A merely incidental link or non-research turn does not become a read.
+  const incidental=planDesktopWebExecution({...defaults,
+    question:"I found https://example.org/docs interesting.",planMode:"chat"});
+  assert.equal(incidental.publicDocumentUrl,undefined);
+  const ordinary=resolvePublicWebExecution(incidental,{mode:"chat",recent:false},
+    {search:false,method:"not-needed",reason:"Just a comment"});
+  assert.equal(ordinary.autoSearch,false);
+  const conversational=resolvePublicWebExecution(policy,{mode:"chat",recent:false},outage);
+  assert.equal(conversational.autoSearch,false);
+  for(const control of [{autoSearch:false},{attachment:true},{personalTurn:true},{roleplay:true}]){
+    const blocked=planDesktopWebExecution({...defaults,...control,question:request,planMode:"research"});
+    assert.equal(blocked.publicDocumentUrl,undefined);
+    const execution=resolvePublicWebExecution(blocked,{mode:"research",query:request,recent:false},outage);
+    assert.equal(execution.autoSearch,false);
+  }
+  const privateUrl=planDesktopWebExecution({...defaults,
+    question:"Read https://localhost/ or https://example.org:8443/secret",planMode:"research"});
+  assert.equal(privateUrl.publicDocumentUrl,undefined);
 });

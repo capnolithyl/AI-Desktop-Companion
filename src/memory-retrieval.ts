@@ -4,7 +4,7 @@
  * A small local Ollama JSON pass judges relevance, not factual truth.
  */
 import {
-  filterStaleActivities, prioritizeCoreMemories, rankMemories, strongSemanticIds, memoryTerms,
+  filterStaleActivities, prioritizeCoreMemories, rankMemories, strongSemanticIds, memoryTerms, meaningfulTerms,
   type RankableMemory, type SemanticRecallMatch
 } from "./memory-ranking.ts";
 import { dialogueEligibleMemories } from "./identity-memory.ts";
@@ -153,15 +153,18 @@ export function selectDeterministicMemoryIds<T extends RankableMemory>(
     return {ids:[],mode:"small-talk",candidateCount:0,elapsedMs:0};
 
   const byId=new Map(eligible.map(f=>[f.id,f]));
-  const stop=new Set(["what","when","where","which","could","would","should",
-    "please","about","with","this","that","from","your","mine","our",
-    "have","just","some","there","how","any","tell","said","user","owner",
-    "favorite","favourite","favorites","favourites","album","albums","song","songs","track","tracks","date",
-    "mikan","remember","does","were","will","can","the","and","for","are"]);
-  const terms=new Set(memoryTerms(query).filter(t=>t.length>=3&&!stop.has(t)));
+  const terms=new Set(meaningfulTerms(query));
+  // Broad domains are useful for direct user-memory questions ("favorite
+  // song?"), but must not make a different named band/game automatically
+  // relevant merely because both are songs, bands or RPGs.
+  const broadDomain=new Set(["band","song","album","track","game","movie","show",
+    "anime","music","rpg","artist","book"]);
+  const distinctive=[...terms].filter(t=>!broadDomain.has(t));
   const topical=(f:T)=>{
     const words=new Set(memoryTerms([f.fact,...(f.tags??[]),f.category??""].join(" ")));
-    return [...terms].some(t=>words.has(t));
+    const matched=[...terms].filter(t=>words.has(t));
+    return matched.length>0 &&
+      (!distinctive.length || matched.some(t=>!broadDomain.has(t)));
   };
   const lexical=[...new Set(lexicalIds.length
     ? lexicalIds.filter(id=>byId.has(id)&&topical(byId.get(id)!))

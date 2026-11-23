@@ -219,6 +219,12 @@ button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px
 .settings-note { background: #3a303d; border: 1px solid #634c5d; border-radius: 11px; color: #d5bfce; padding: 13px; display: flex; gap: 10px; align-items: start; font-size: 12px; line-height: 1.6; }
 .settings-note svg { color: #ffb887; flex: 0 0 auto; }
 .settings-footer { padding: 14px 19px; border-top: 1px solid #55424f; }
+.settings-build-footer{
+  padding:7px 19px 12px;border-top:1px solid #55424f;
+  display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;
+  color:#bba9b5;font-size:10px;font-family:ui-monospace,Consolas,monospace;
+}
+.settings-build-footer .inline-action{font-size:10px;display:inline-flex;align-items:center;gap:4px}
 .save-button { border: 0; border-radius: 11px; display: flex; align-items: center; gap: 7px; padding: 12px 18px; background: #ffac7f; color: #38232d; font-size: 13px; font-weight: 800; }
 .save-button:hover { background: #ffceab; }
 
@@ -1256,3 +1262,33 @@ button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px
   .settings-layout .settings-tab { padding: 9px 6px; gap: 6px; font-size: 10px; }
   .settings-layout > .settings-body { padding: 16px 11px; }
 }
+
+/* Brain Lab uses one real, keyboard/wheel-scrollable page rather than the
+   memory/capabilities embedded-pane layout that clips its long catalog. */
+.settings-layout > .settings-body.settings-brain {
+  overflow-y: auto;
+  overflow-x: hidden;
+  min-height: 0;
+  min-width: 0;
+  overscroll-behavior-y: contain;
+  scrollbar-gutter: stable;
+}
+
+/* Brain Lab is a workspace, not a regular 2-field settings page.
+   Collapse the permanent Settings navigation to accessible icon buttons,
+   reclaiming ~110px for the results and checklists beside Mikan. */
+.settings-layout.brain-lab-layout .settings-tabs {
+  width: 56px;
+  min-width: 56px;
+  gap: 12px;
+  padding: 12px 5px;
+}
+.settings-layout.brain-lab-layout .settings-nav-group { gap: 3px; }
+.settings-layout.brain-lab-layout .settings-nav-heading { display: none; }
+.settings-layout.brain-lab-layout .settings-tab {
+  justify-content: center;
+  padding: 10px 5px;
+  min-height: 38px;
+}
+.settings-layout.brain-lab-layout .settings-tab span { display: none; }
+.settings-layout.brain-lab-layout .settings-tab svg { width: 17px; height: 17px; }

@@ -3,7 +3,7 @@
 //! Preserve the source URL and [n] citation indexes used by the UI.
 use crate::{web_reader, web_search::SearchResult};
 use futures_util::future::join_all;
-use std::net::IpAddr;
+use std::{collections::HashSet, net::IpAddr};
 
 const MAX_SOURCE_PAGES: usize = 2;
 const MAX_SOURCE_EXCERPT_CHARS: usize = 2300;
@@ -55,63 +55,202 @@ fn score_text(text: &str, terms: &[String], date_sensitive: bool) -> i32 {
         + if date_sensitive && status_markers.iter().any(|term| lower.contains(term)) { 2 } else { 0 }
 }
 
+/// An exact publisher-like domain match is useful for deciding which page
+/// to READ, never for accepting a statement as true. The registrable-looking
+/// left label must match a query term (or a hyphenated name in the query).
+/// A URL such as subject.example.attacker.org receives no identity hint.
+fn site_identity_hint(host:&str,terms:&[String])->i32 {
+    let without_www=host.strip_prefix("www.").unwrap_or(host);
+    let labels:Vec<_>=without_www.split('.').collect();
+    if labels.len()<2 {return 0}
+    let label=labels[labels.len()-2].to_ascii_lowercase();
+    let parts:Vec<_>=label.split('-').filter(|s|!s.is_empty()).collect();
+    if parts.len()==1 && parts[0].len()>=4 &&
+        terms.iter().any(|term|term==parts[0]) {return 18}
+    if parts.len()>1 && parts.iter().all(|part|
+        part.len()>=3 && terms.iter().any(|term|term==part)) {return 18}
+    // A publisher sometimes joins its name with another word in the domain,
+    // e.g. samplecloud.com. This is ONLY a reason to read a candidate page,
+    // not evidence that the domain really belongs to that publisher.
+    if parts.len()==1 && terms.iter().any(|term|term.len()>=4 &&
+        label.strip_prefix(term.as_str()).is_some_and(|suffix|
+            (3..=12).contains(&suffix.len()) && suffix.chars().all(|c|c.is_ascii_alphabetic()))) {
+        return 12;
+    }
+    0
+}
+
 /// Compare the subject and preview with each search result. Institutional
 /// domains are a modest tie-breaker, not a claim that a page is infallible.
 /// A band's .com homepage or an open-source project's site is equally eligible.
+/// URL paths contain useful structured document locators: /releases, /news,
+/// /docs, /readme, etc. Match against the CURRENT QUERY rather than preferring
+/// any fixed website or guessing which source is true. A release index can
+/// outrank a broad article when the request asks for a release.
+fn url_topic_hint(url:&str,terms:&[String])->i32 {
+    let Ok(parsed)=reqwest::Url::parse(url) else {return 0};
+    let path=parsed.path().to_ascii_lowercase();
+    let tokens:Vec<_>=path.split(|ch:char|!ch.is_ascii_alphanumeric())
+        .filter(|token|token.len()>=4).collect();
+    terms.iter().filter(|term|tokens.iter().any(|part|
+        *part==term.as_str() || part.starts_with(term.as_str()) && part.len()<=term.len()+2
+    )).count().min(3) as i32 * 6
+}
 fn source_score(item: &SearchResult, host: &str, terms: &[String]) -> i32 {
     let institutional = if [".gov", ".edu", ".mil"].iter().any(|suffix| host.ends_with(suffix)) {
         8
     } else { 0 };
+    // Prefer actually reading a release ledger over yet another historical
+    // summary when a release/version question is being investigated.
+    // The URL shape is a discovery hint, not a claim-verification rule.
+    let about_releases=terms.iter().any(|term|matches!(term.as_str(),
+        "release"|"releases"|"released"|"version"|"versions"|"update"|"updates"));
+    let release_ledger=if about_releases {
+        reqwest::Url::parse(&item.url).ok().is_some_and(|url|
+            url.path_segments().is_some_and(|mut parts|
+                parts.any(|part|matches!(part.to_ascii_lowercase().as_str(),
+                    "changelog"|"releases"|"release-notes"|"announcements"))))
+    } else {false};
     score_text(&item.title, terms, false) * 2
         + score_text(&item.content, terms, true)
         + institutional
+        + site_identity_hint(host,terms)
+        + url_topic_hint(&item.url,terms)
+        + if release_ledger {10} else {0}
 }
 
-/// Pick relevant passages rather than an arbitrary first 400 characters.
-/// Return text in original page order to preserve context and chronology.
-fn focused_page_excerpt(page: &str, topic: &str) -> String {
-    let terms = topic_terms(topic);
-    let paragraphs: Vec<&str> = page.split("\n\n")
-        .map(str::trim)
-        .filter(|paragraph| paragraph.chars().count() >= 45)
-        .take(100).collect();
-    if paragraphs.is_empty() {
-        return page.chars().take(MAX_SOURCE_EXCERPT_CHARS).collect();
-    }
-    let mut priorities: Vec<usize> = (0..paragraphs.len()).collect();
-    priorities.sort_by(|&a, &b| {
-        score_text(paragraphs[b], &terms, true)
-            .cmp(&score_text(paragraphs[a], &terms, true))
-            .then_with(|| a.cmp(&b))
-    });
-    // Include the introduction for context, then the strongest passages.
-    let mut chosen = vec![0usize];
-    for index in priorities {
-        if chosen.len() >= 5 { break }
-        if !chosen.contains(&index) && score_text(paragraphs[index], &terms, true) > 0 {
-            chosen.push(index);
-        }
-    }
-    chosen.sort_unstable();
-    let mut output = String::new();
-    for index in chosen {
-        let paragraph = paragraphs[index];
-        let used = output.chars().count();
-        let available = MAX_SOURCE_EXCERPT_CHARS.saturating_sub(used + 2);
-        if available < 150 { break; }
-        if paragraph.chars().count() > available {
-            if output.is_empty() {
-                let short: String = paragraph.chars().take(available).collect();
-                let safe_end = short.rfind(". ").map(|index| index + 1)
-                    .unwrap_or(short.len());
-                output.push_str(&short[..safe_end]);
+const DATED_SOURCE_PREFIX:&str="RECENT DATED SOURCE ENTRIES (verbatim page chronology, not independently verified):";
+
+/// Parse widely used human/ISO calendar headings from a changelog without
+/// depending on an industry, product name, publisher, or particular website.
+fn asks_recent(topic:&str)->bool{
+    topic.to_ascii_lowercase().split(|c:char|!c.is_ascii_alphanumeric())
+        .any(|word|matches!(word,"latest"|"newest"|"recent"|"current"))
+}
+/// Keep event descriptions attached to their own headings within each date.
+/// This prevents an unrelated release under the same day from donating its
+/// features to the requested subject.
+fn subject_in_entry(entry:&str, focus:&[String])->bool{
+    if focus.is_empty(){return true}
+    let lower=entry.to_ascii_lowercase();
+    let actual:Vec<String>=lower.split(|c:char|!c.is_ascii_alphanumeric())
+        .filter(|word|word.len()>=2).map(str::to_owned).collect();
+    focus.iter().any(|expected|actual.iter().any(|word|
+        crate::source_priority::matches_term(expected,word)))
+}
+fn dated_source_front(page:&str,topic:&str)->String{
+    if !asks_recent(topic){return String::new()}
+    // Capture actual date-group boundaries rather than treating an entire
+    // changelog as one bag of terms. This works for any dated topic, not only
+    // model releases.
+    let mut sections:Vec<(u32,String,String)>=Vec::new();
+    let mut current:Option<(u32,String,String)>=None;
+    for line in page.lines().map(str::trim).filter(|line|!line.is_empty()){
+        if let Some(date)=crate::passages::date_heading_key(line){
+            if let Some(old)=current.take(){sections.push(old)}
+            current=Some((date,line.trim_start_matches('#').trim().to_owned(),String::new()));
+        }else if let Some((_,_,body))=current.as_mut(){
+            if body.chars().count()<10_000{
+                if !body.is_empty(){body.push('\n')}
+                body.push_str(line);
             }
-            continue;
         }
-        if !output.is_empty() { output.push_str("\n\n"); }
-        output.push_str(paragraph);
     }
-    output
+    if let Some(last)=current{sections.push(last)}
+    if sections.is_empty(){return String::new()}
+    let focus:Vec<String>=topic_terms(topic).into_iter().filter(|word|
+        !matches!(word.as_str(),"release"|"releases"|"released"|"model"|"models"|
+            "version"|"versions"|"official"|"officially"|"software"|
+            "update"|"updates"|"published"|"announcement")).collect();
+    // Date ordering is an evidence-presentation hint, not certification of
+    // the source's identity or a claim that this is the globally latest item.
+    sections.sort_by(|a,b|b.0.cmp(&a.0));
+    let mut front=String::new();
+    let mut selected_dates=0usize;
+    for (_, date_label, body) in sections {
+        // Each ###/#### heading owns the following text until the next
+        // sibling heading or date. Separate products must not share features.
+        let mut entries=Vec::new();
+        let mut entry=String::new();
+        for line in body.lines(){
+            if (line.starts_with("### ")||line.starts_with("#### "))&&!entry.is_empty(){
+                entries.push(std::mem::take(&mut entry));
+            }
+            if !entry.is_empty(){entry.push('\n')}
+            entry.push_str(line);
+        }
+        if !entry.is_empty(){entries.push(entry)}
+        let mut group=String::new();
+        for part in entries.into_iter().filter(|item|subject_in_entry(item,&focus)){
+            let snippet:String=part.chars().take(690).collect();
+            if group.chars().count()+snippet.chars().count()+2>820 {break}
+            if !group.is_empty(){group.push_str("\n\n")}
+            group.push_str(&snippet);
+        }
+        if group.is_empty(){continue}
+        let proposed=format!("{date_label}\n{group}");
+        if front.chars().count()+proposed.chars().count()+2>1650 {break}
+        if !front.is_empty(){front.push_str("\n\n")}
+        front.push_str(&proposed);
+        selected_dates+=1;
+        if selected_dates==2 {break}
+    }
+    if front.is_empty(){String::new()}else{
+        format!("{DATED_SOURCE_PREFIX}\n{front}")
+    }
+}
+
+/// For dated source entries, their own section boundaries and chronology
+/// ARE the relevant excerpt. Appending high-scoring fragments from unrelated
+/// sections would falsely attribute capabilities to the neighboring release.
+pub(crate) fn focused_page_excerpt(page:&str,topic:&str)->String{
+    let front=dated_source_front(page,topic);
+    if !front.is_empty(){return front}
+    crate::passages::select(page,topic,18,MAX_SOURCE_EXCERPT_CHARS).join("\n\n")
+}
+
+/// Choose bounded, domain-diverse pages to read using topic relevance
+/// plus a soft subject/domain identity hint. Neither establishes authorship.
+/// The existing HTTPS/DNS checks still apply to every actual fetch.
+fn choose_page_candidates(results:&[SearchResult],query:&str)->Vec<usize>{
+    let terms=topic_terms(query);
+    let mut candidates:Vec<(usize,i32,String)>=results.iter().enumerate()
+        .filter_map(|(index,item)|{
+            let host=candidate_host(&item.url)?;
+            let relevant=terms.is_empty() || terms.iter().any(|term|
+                item.title.to_lowercase().contains(term.as_str())||
+                item.content.to_lowercase().contains(term.as_str()));
+            relevant.then_some((index,source_score(item,&host,&terms),host))
+        }).collect();
+    candidates.sort_by(|a,b|b.1.cmp(&a.1).then_with(||a.0.cmp(&b.0)));
+    let mut selected=Vec::new();
+    let mut hosts=HashSet::new();
+    for (index,_,host) in &candidates {
+        if hosts.insert(host.as_str()) {
+            selected.push(*index);
+            if selected.len()==MAX_SOURCE_PAGES {return selected}
+        }
+    }
+    for (index,_,_) in candidates {
+        if !selected.contains(&index) {
+            selected.push(index);
+            if selected.len()==MAX_SOURCE_PAGES {break}
+        }
+    }
+    selected
+}
+
+pub(crate) fn select_release_resource(results:&[SearchResult],task:Option<&crate::recommendation_gate::ResearchTask>)->Option<usize> {
+    let task=task?;
+    if task.resource.as_deref()!=Some("latestRelease") || task.source_url.is_some() {return None}
+    let subject=task.subject.as_deref()?;
+    // Multiple owners can publish different projects under the same name.
+    let mut matches=results.iter().enumerate().filter_map(|(index,hit)|
+        web_reader::latest_release_url(&hit.url,subject).map(|url|(index,url)));
+    let (index,url)=matches.next()?;
+    if matches.any(|(_,other)|other!=url) {return None}
+    // A requested release may already be a separately ranked result.
+    Some(results.iter().position(|item|item.url==url).unwrap_or(index))
 }
 
 /// Read at most two subject-relevant results in parallel while retaining their
@@ -121,22 +260,20 @@ pub async fn enrich_relevant_sources(
     results: &mut [SearchResult],
     query: &str,
     cache_hours: u64,
+    task: Option<&crate::recommendation_gate::ResearchTask>,
 ) -> usize {
-    let terms = topic_terms(query);
-    let mut candidates: Vec<(usize, i32)> = results.iter().enumerate()
-        .filter_map(|(index, item)| {
-            let host = candidate_host(&item.url)?;
-            let relevant = terms.is_empty() || terms.iter().any(|term|
-                item.title.to_lowercase().contains(term.as_str())
-                    || item.content.to_lowercase().contains(term.as_str()));
-            relevant.then_some((index, source_score(item, &host, &terms)))
-        })
-        .collect();
-    candidates.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
-    candidates.truncate(MAX_SOURCE_PAGES);
-    let requests = candidates.into_iter().map(|(index, _)| {
+    let release=select_release_resource(results,task);
+    let mut candidates=choose_page_candidates(results,query);
+    if let Some(index)=release {
+        candidates.retain(|&i|i!=index);
+        candidates.insert(0,index);
+        candidates.truncate(MAX_SOURCE_PAGES);
+    }
+    let requests = candidates.into_iter().map(|index| {
         let app = app.clone();
-        let url = results[index].url.clone();
+        let release_url=(release==Some(index)).then(|| task.and_then(|t|t.subject.as_deref())
+            .and_then(|subject|web_reader::latest_release_url(&results[index].url,subject))).flatten();
+        let url=release_url.unwrap_or_else(||results[index].url.clone());
         async move {
             (index, web_reader::read_page_impl(&app, &url, false, cache_hours).await)
         }
@@ -146,9 +283,12 @@ pub async fn enrich_relevant_sources(
         if let Ok(page) = result {
             let excerpt = focused_page_excerpt(&page.content, query);
             if excerpt.chars().count() >= 90 {
-                results[index].content = format!(
-                    "Relevant text from the linked webpage (not just a search snippet):\n{excerpt}"
-                );
+                if page.url!=results[index].url {
+                    results[index].url=page.url;
+                    results[index].title=page.title;
+                    results[index].published_date=None;
+                }
+                results[index].content = excerpt;
                 results[index].engine = "webpage excerpt".into();
                 updated += 1;
             }
@@ -179,6 +319,79 @@ mod tests {
     }
 
     #[test]
+    fn publisher_domain_identity_is_only_a_soft_enrichment_hint(){
+        let terms=topic_terms("Latest Aurora Studio release status");
+        let site=result("Aurora Studio new model discussion","https://aurora.dev/blog",
+            "Technical architecture notes and reasoning improvements.");
+        let aggregator=result("Latest Aurora Studio release news",
+            "https://videos.example.com/watch","Latest Aurora Studio model officially released.");
+        let hint=site_identity_hint("aurora.dev",&terms);
+        assert!(hint>0);
+        assert_eq!(site_identity_hint("aurora.dev.attacker.org",&terms),0);
+        assert!(source_score(&site,"aurora.dev",&terms)>
+            source_score(&aggregator,"videos.example.com",&terms));
+        let picked=choose_page_candidates(&[aggregator,site],"Latest Aurora Studio release status");
+        assert!(picked.contains(&1),"directly relevant publisher-like domain should get read");
+    }
+    #[test]
+    fn fetches_recent_publisher_release_ledger_before_generic_timeline() {
+        let general=result("Aurora Timeline and Model Releases",
+            "https://archive.example.net/aurora/timeline",
+            "Aurora models, releases and updates from 2021 through 2026.");
+        let software=result("Aurora Code SDK release",
+            "https://github.com/Aurora/code/releases",
+            "Aurora SDK update from November 2026.");
+        let official=result("Model releases - AuroraCloud",
+            "https://docs.auroracloud.example/changelog/models",
+            "Recently updated Aurora models in November 2026.");
+        assert_eq!(site_identity_hint("docs.auroracloud.example",&topic_terms("latest Aurora releases")),12);
+        let chosen=choose_page_candidates(&[general,software,official],"latest Aurora releases");
+        assert!(chosen.contains(&2),"read the timely publisher ledger, not just third-party summaries");
+    }
+    #[test]
+    fn page_fetch_selection_spreads_two_slots_across_domains(){
+        let candidates=vec![
+            result("Aurora software official new update","https://aurora.dev/a",
+                "Aurora project released a major update."),
+            result("Aurora software official new update","https://aurora.dev/b",
+                "Aurora project released a major update."),
+            result("Aurora software announcement","https://observer.example.org/report",
+                "Aurora software released a new update.")
+        ];
+        let selected=choose_page_candidates(&candidates,"Latest Aurora software update");
+        assert_eq!(selected.len(),2);
+        assert!(selected.contains(&0));
+        assert!(selected.contains(&2),"a second same-host page should not crowd out independent context");
+    }
+    #[test]
+    fn release_resource_requires_an_unambiguous_named_project_and_never_relabels_a_snippet() {
+        use crate::recommendation_gate::ResearchTask;
+        let hits=vec![
+            result("Mirror","https://github.com.evil.example/lab/oriole","public overview"),
+            result("Project","https://github.com/lab/oriole","README content")];
+        let task=ResearchTask{subject:Some("Oriole".into()),resource:Some("latestRelease".into()),..Default::default()};
+        assert_eq!(select_release_resource(&hits,Some(&task)),Some(1));
+        assert_eq!(hits[1].content,"README content");
+        assert_eq!(web_reader::latest_release_url(&hits[1].url,"Oriole").unwrap(),
+            "https://github.com/lab/oriole/releases/latest");
+        let mut ambiguous=hits.clone();
+        ambiguous.push(result("Another project","https://github.com/other/oriole","different owner"));
+        assert_eq!(select_release_resource(&ambiguous,Some(&task)),None);
+        assert_eq!(select_release_resource(&hits,None),None);
+        assert_eq!(select_release_resource(&hits,Some(&ResearchTask{source_url:Some(hits[1].url.clone()),..task})),None);
+    }
+    #[test]
+    fn named_upstream_release_beats_community_vulkan_fork(){
+        use crate::recommendation_gate::ResearchTask;
+        let hits=vec![
+            result("Community Windows Vulkan build","https://github.com/Caerleus/llama.cpp-vulkan-win/releases","llama.cpp fork"),
+            result("llama.cpp upstream release","https://github.com/ggml-org/llama.cpp/releases","llama.cpp release notes")
+        ];
+        let task=ResearchTask{subject:Some("llama.cpp".into()),
+            resource:Some("latestRelease".into()),..Default::default()};
+        assert_eq!(select_release_resource(&hits,Some(&task)),Some(1));
+    }
+    #[test]
     fn source_ranking_does_not_require_a_government_site() {
         let terms = topic_terms("Midnight Engine new album announcement");
         let project = result("Midnight Engine new album recording update",
@@ -190,6 +403,18 @@ mod tests {
             > source_score(&unrelated, "agency.gov", &terms));
     }
 
+    #[test]
+    fn requested_release_document_path_competes_with_generic_comparison_articles(){
+        let terms=topic_terms("latest Aurora Engine release version");
+        let release=result("Aurora Engine releases","https://github.com/aurora/engine/releases",
+            "See published build notes and release metadata.");
+        let commentary=result("Aurora Engine general tutorial",
+            "https://writer.example.com/aurora-engine-guide",
+            "I like Aurora Engine and how the engine works.");
+        assert!(url_topic_hint(&release.url,&terms)>url_topic_hint(&commentary.url,&terms));
+        assert!(source_score(&release,"github.com",&terms)>
+            source_score(&commentary,"writer.example.com",&terms));
+    }
     #[test]
     fn preserve_distinct_mission_objectives_from_fetched_page() {
         let page = concat!(
@@ -217,6 +442,48 @@ mod tests {
         let excerpt = focused_page_excerpt(page, "Aurora Editor release schedule");
         assert!(excerpt.contains("2026 preview build"));
         assert!(excerpt.contains("stable release is targeted for 2027"));
+    }
+
+    #[test]
+    fn latest_release_ledger_preserves_newest_production_and_older_preview_dates(){
+        // This fixture starts in reverse chronology, just like a release
+        // ledger. The older preview must not displace the production entry.
+        let doc=concat!(
+            "# Model releases\n",
+            "## November 16, 2026\n",
+            "### Orion4-Max\n",
+            "Orion4-Max is a production flagship model for coding and vision.\n",
+            "### OtherVendor-Special\n",
+            "A different publisher also released an unrelated service.\n",
+            "## November 11, 2026\n",
+            "### Orion4-Max-Preview\n",
+            "Orion4-Max-Preview is currently only in preview testing.\n",
+            "## August 2, 2026\n",
+            "### Orion3-Max\n",
+            "Orion3-Max is a previous general purpose release.\n"
+        );
+        let excerpt=focused_page_excerpt(doc,"latest officially released Orion model");
+        assert!(excerpt.starts_with(DATED_SOURCE_PREFIX));
+        assert!(excerpt.contains("November 16, 2026"));
+        assert!(excerpt.contains("Orion4-Max is a production flagship"));
+        assert!(excerpt.contains("November 11, 2026"));
+        assert!(excerpt.contains("Orion4-Max-Preview is currently only in preview"));
+        assert!(excerpt.find("November 16").unwrap()<excerpt.find("November 11").unwrap());
+        assert!(excerpt.chars().count()<=MAX_SOURCE_EXCERPT_CHARS);
+    }
+
+    #[test]
+    fn release_ledger_ascending_dates_still_prefers_newest_section(){
+        let doc=concat!(
+            "## 2025-01-02\n### Lynx2\nLynx2 is an old model.\n",
+            "## 2026-11-16\n### Lynx4\nLynx4 is the newly available model.\n",
+            "## 2026-11-11\n### Lynx4-Preview\nLynx4-Preview is a preview model.\n"
+        );
+        let front=dated_source_front(doc,"newest Lynx model");
+        assert!(front.contains("2026-11-16"));
+        assert!(front.find("2026-11-16").unwrap()<front.find("2026-11-11").unwrap());
+        assert!(!front.contains("2025-01-02"));
+        assert!(dated_source_front(doc,"historical Lynx model").is_empty());
     }
 
     #[test]

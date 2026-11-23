@@ -16,6 +16,12 @@ test("copies all message text, source details and response timings", () => {
       }],
       diagnostics: {
         elapsedMs: 5000, firstTokenMs: 1200, model: "qwen3.5:9b",
+        reasoning:{mode:"auto",enabled:false,reason:"planner-quick"},
+        toolPlan:{method:"ai-planned",reason:"Current public source required",
+          publicWebAllowed:true,searchOutcome:"search attempted; no sources",freshSources:0,
+          searchTrace:{attemptedQueries:["Qwen latest release","Qwen"],
+            rawResults:9,returnedResults:3,provisionalResults:3,
+            rejectedTitles:["Model release bulletin"],upstreamErrors:[]}},
         research: {status: "used", accepted: 3, rejected: 2, elapsedMs: 2100,
           note: "Quoted text matched sources; candidate claims still require semantic judgment."},
         stats: {
@@ -33,10 +39,15 @@ test("copies all message text, source details and response timings", () => {
     }
   ], {
     conversationId: "conversation-1", model: "qwen3.5:9b", contextWindow: 16384,
+    buildInfo:{version:"0.9.33",commit:"a".repeat(40),builtAt:"2026-11-16T19:40:00.000Z",kind:"development"},
     exportedAt: new Date("2026-11-06T21:40:00Z")
   });
 
   assert.match(result, /MIKAN DEBUG LOG/);
+  assert.match(result, /Desktop version: 0\.9\.33/);
+  assert.ok(result.includes("Desktop commit (compiled): "+"a".repeat(40)));
+  assert.match(result, /Desktop built at: 2026-11-16T19:40:00\.000Z/);
+  assert.match(result, /Desktop build type: development/);
   assert.match(result, /Conversation ID: conversation-1/);
   assert.match(result, /Context window: 16384 tokens/);
   assert.match(result, /What happened with Artemis\?/);
@@ -52,7 +63,13 @@ test("copies all message text, source details and response timings", () => {
   assert.match(result, /Speed: 50\.0 tok\/s/);
   assert.match(result, /Prompt: 2500 tokens/);
   assert.match(result, /Model: qwen3\.5:9b/);
+  assert.match(result, /Local reasoning: auto \/ quick \(planner-quick\)/);
   assert.match(result, /Research evidence: used/);
+  assert.match(result, /Search engine returned raw candidates: 9/);
+  assert.match(result, /Sources retained after ranking: 3/);
+  assert.match(result, /Provisional candidates awaiting source validation: 3/);
+  assert.match(result, /Lexically rejected result title \(untrusted\): Model release bulletin/);
+  assert.match(result, /Executed search 2: Qwen/);
   assert.match(result, /Accepted source-anchored facts: 3/);
   assert.match(result, /Rejected candidates: 2/);
   assert.match(result, /Extraction time: 2\.10 s/);

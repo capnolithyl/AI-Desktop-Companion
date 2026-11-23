@@ -6,13 +6,23 @@ import { join } from "node:path";
 import { Script } from "node:vm";
 import { request as httpRequest } from "node:http";
 import { createBridge } from "../server/index.mjs";
+import { brainEvalFileStem } from "../server/brain-eval-filename.mjs";
 
 test("browser relay requires a private key and delegates to the desktop, not a second model", async (t) => {
   const directory = mkdtempSync(join(tmpdir(), "mikan-remote-"));
   const reportsPath = join(directory, "issues.jsonl");
   const key = "this-is-a-test-only-key-with-at-least-32-characters";
   const published = [];
-  const bridge = createBridge({ key, reportsPath, issuePublisher: async issue => {
+  let checkCalls=0,applyCalls=0,restartCalls=0;
+  const updater={
+    status:async()=>({available:true,phase:"ready",branch:"feature/p0-brain-evaluation-harness",
+      current:"abc123456789",remote:"def123456789",commits:2,
+      mode:"desktop-and-relay",desktopState:"offline",desktopConnected:false}),
+    check:async()=>{checkCalls++;return {accepted:true}},
+    apply:async()=>{applyCalls++;return {accepted:true}},
+    restartDesktop:async()=>{restartCalls++;return {accepted:true}}
+  };
+  const bridge = createBridge({ key, reportsPath, updater, issuePublisher: async issue => {
     published.push(issue);
     return "https://github.com/capnolithyl/AI-Desktop-Companion/issues/999";
   }});
@@ -52,15 +62,43 @@ test("browser relay requires a private key and delegates to the desktop, not a s
     ?.split('<div id="reportPanel" role="dialog"')[0];
   assert.ok(mainView && settingsView, "Remote app and settings drawer exist");
   assert.match(mainView, /id="menuToggle"[^>]+aria-controls="settingsSheet"/);
+  // The phone must show the *serving relay's* version next to the hamburger,
+  // not a fixed label that would conceal an outdated server after an update.
+  const expectedVersion = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")).version;
+  assert.ok(mainView.includes('id="remoteBuild"'), "Relay version badge exists in the header");
+  assert.ok(mainView.indexOf('id="remoteBuild"') < mainView.indexOf('id="menuToggle"'),
+    "Version is immediately before the hamburger menu");
+  assert.ok(mainView.includes("<span>v" + expectedVersion + "</span>"),
+    "Version comes from package.json, not an old hardcoded number");
+  assert.doesNotMatch(mainView, /__MIKAN_REMOTE_(?:VERSION|COMMIT)__/,
+    "Server replaces both version/revision placeholders at runtime");
+  assert.match(mainView, /class="remote-build"[^>]*aria-label="Browser relay version/);
   assert.match(settingsView, /role="dialog" aria-modal="true"/);
+  assert.match(settingsView,/id="devRestartDesktop"/);
+  assert.match(settingsView,/id="brainLabMikanifyAnswer"/);
+  assert.match(settingsView,/id="buildIdentityStatus"/);
+  assert.match(mainView,/data-relay-commit="/);
+  assert.match(html,/Desktop and browser relay are running different commits/);
+  assert.match(html,/Desktop compiled build:/);
+  assert.match(html,/devUpdateAction\("restart-desktop"\)/);
   for (const control of ["conversationSelect", "newChat", "modelSelect",
     "refreshModels", "enlargeAvatar", "lock", "report", "showModelName",
-    "showAvatarLabel"]) {
+    "showAvatarLabel","brainLabMode","brainLabStatusFilter","brainLabRows",
+    "brainLabSelectVisible","brainLabSelectUnresolved","brainLabSelectRegression","brainLabSelectClear",
+    "brainLabPreview","brainLabPreviewTitle","brainLabPreviewClose","brainLabPreviewTurns"]) {
     assert.match(settingsView, new RegExp('id="' + control + '"'), control + " belongs in settings");
     assert.doesNotMatch(mainView, new RegExp('id="' + control + '"'), control + " is hidden from chat");
   }
   assert.match(mainView, /id="avatarCanvas"/);
   assert.match(mainView, /id="message"/);
+  assert.match(html, /citation-links/,
+    "cited public sources have a separate readable area, not spoken body text");
+  assert.match(html, /link.rel = "noopener noreferrer"/,
+    "external source links cannot retain the opener");
+  assert.match(html, /url.protocol !== "https:"/,
+    "unsafe URL schemes may not become clickable remote citations");
+  assert.doesNotMatch(html, /citationLinks.innerHTML/,
+    "untrusted research never becomes injected HTML");
   assert.match(html, /mikan-remote-display/);
   assert.match(html, /sessionStorage\.removeItem\("mikan-remote-key"\)/);
   // Catch syntax errors in the lightweight inline browser UI before packaging.
@@ -73,9 +111,41 @@ test("browser relay requires a private key and delegates to the desktop, not a s
   assert.equal((await request(base + "/api/state")).status, 401);
   assert.equal((await request(base + "/api/state", "GET", {Authorization:"Bearer wrong"})).status, 401);
   assert.equal((await request(base + "/api/state", "GET", authorized)).status, 200);
+  assert.equal((await request(base + "/api/dev-update","GET")).status,401);
+  assert.equal((await request(base + "/api/dev-update","GET",authorized)).status,200);
+  const initialDevStatus=await (await request(base + "/api/dev-update","GET",authorized)).json();
+  assert.equal(initialDevStatus.commits,2);
+  assert.equal(initialDevStatus.relayDesktopConnected,false,
+    "Developer status is based on the relay, not a possibly stale supervisor report");
+  assert.equal((await request(base + "/api/dev-update","POST",{"Content-Type":"application/json"},
+    {action:"apply"})).status,401);
+  assert.equal((await request(base + "/api/dev-update","POST",
+    {...authorized,"Content-Type":"application/json"},{action:"arbitrary-shell"})).status,400);
+  assert.equal((await request(base + "/api/dev-update","POST",
+    {...authorized,"Content-Type":"application/json"},{action:"check",branch:"main"})).status,202);
+  assert.equal(checkCalls,1);
+  assert.equal((await request(base + "/api/dev-update","POST",
+    {...authorized,"Content-Type":"application/json"},{action:"apply"})).status,202);
+  assert.equal(applyCalls,1);
+  assert.equal((await request(base + "/api/dev-update","POST",
+    {...authorized,"Content-Type":"application/json"},{action:"restart-desktop"})).status,202);
+  assert.equal(restartCalls,1);
+  assert.equal((await request(base + "/api/dev-update","POST",
+    {"Content-Type":"application/json"},{action:"restart-desktop"})).status,401);
+
   assert.equal((await request(base + "/api/send", "POST", {...authorized,"Content-Type":"application/json"}, {text:"hi"})).status, 409);
 
   assert.equal((await request(agent + "/agent/next", "GET", {"X-Mikan-Agent":"desktop", Origin:"https://evil.example"})).status, 403);
+  // A supervisor probe must NOT make a missing desktop appear connected.
+  assert.equal((await request(agent + "/agent/health","GET")).status,403);
+  const offlineProbe=await request(agent + "/agent/health","GET",{"X-Mikan-Agent":"desktop"});
+  assert.equal(offlineProbe.status,200);
+  assert.equal((await offlineProbe.json()).connected,false);
+  const probeAgain=await request(agent + "/agent/health","GET",{"X-Mikan-Agent":"desktop"});
+  const probeAgainData=await probeAgain.json();
+  assert.equal(probeAgainData.connected,false);
+  assert.equal(probeAgainData.lastSeen,0,
+    "Supervisor checks must not manufacture an agent heartbeat");
   assert.equal((await request(agent + "/agent/next", "GET", {"X-Mikan-Agent":"desktop"})).status, 200);
   const history = [{id:"one",role:"user",content:"Hello from the desktop",createdAt:100}];
   assert.equal((await request(agent + "/agent/state", "POST", desktopHeaders, {
@@ -92,6 +162,12 @@ test("browser relay requires a private key and delegates to the desktop, not a s
   })).status, 200);
   const state = await (await request(base + "/api/state", "GET", authorized)).json();
   assert.equal(state.connected, true);
+  // Supervisor fixture deliberately reports OFFLINE. The relay is ONLINE.
+  // The developer view must reflect the latter and expose the discrepancy.
+  const devWithDesktop=await (await request(base+"/api/dev-update","GET",authorized)).json();
+  assert.equal(devWithDesktop.desktopConnected,false);
+  assert.equal(devWithDesktop.relayDesktopConnected,true);
+  assert.equal(state.connected,devWithDesktop.relayDesktopConnected);
   assert.equal(state.conversationId, "same-desktop-conversation");
   assert.deepEqual(state.messages, history);
   assert.equal(state.conversations[1].title, "Old conversation");
@@ -118,6 +194,207 @@ test("browser relay requires a private key and delegates to the desktop, not a s
   assert.equal(rejectedHostStatus, 403);
 
   const jsonHeaders = {...authorized,"Content-Type":"application/json"};
+
+  // Brain Lab is controlled by the authenticated phone but runs only on desktop.
+  // The relay never executes Ollama or stores the owner's real memory.
+  const remoteCatalog=[
+    {id:"branch-a",number:1,label:"Favorite band branch",group:"Branching context",turns:3},
+    {id:"discovery-bands-wish",number:54,label:"Implicit recommendations",group:"Conversational discovery",turns:2}
+  ];
+  const evalState=(phase,controlsBlocked=false)=>({
+    conversationId:"same-desktop-conversation",model:"qwen3.5:9b",
+    busy:false,controlsBlocked,messages:history,
+    models:["qwen3.5:9b","gemma4:12b"],provider:"local",brainEvalCatalog:remoteCatalog,
+    brainEval:{phase,done:phase==="running"?1:0,total:6,
+      model:"qwen3.5:9b",startedAt:"2026-11-14T22:00:00.000Z",
+      results:phase==="complete"?{passRate:83.3,recall:95,webAgreement:80,reviewTurns:2,
+        liveSearches:3,liveSearchesWithSources:2,liveSources:6,
+        evidencePasses:1,evidenceFacts:3,evidenceUnavailable:2,
+        shortlistTurns:1,shortlistedItems:2,rejectedItems:3,noSupportedMatches:1,
+        attributedRoles:2,excludedReferences:1}:null}
+  });
+  assert.equal((await request(agent + "/agent/state","POST",desktopHeaders,evalState("idle"))).status,200);
+  assert.equal((await request(base + "/api/brain-eval/result?format=json","GET",authorized)).status,404);
+  assert.equal((await request(base + "/api/brain-eval","POST",{"Content-Type":"application/json"},
+    {action:"start",mode:"live",repetitions:1,scenarioIds:["branch-a"]})).status,401);
+  assert.equal((await request(base + "/api/brain-eval","POST",jsonHeaders,
+    {action:"start",mode:"live",repetitions:7,scenarioIds:["branch-a"]})).status,400);
+  assert.equal((await request(base + "/api/brain-eval","POST",jsonHeaders,
+    {action:"start",mode:"live",repetitions:1,scenarioIds:["unknown-scenario"]})).status,400);
+  for(const researchMode of ["untrusted",""]) {
+    assert.equal((await request(base + "/api/brain-eval","POST",jsonHeaders,
+      {action:"start",mode:"live",researchMode,repetitions:1,scenarioIds:["branch-a"]})).status,400);
+  }
+  assert.equal((await request(base + "/api/brain-eval","POST",jsonHeaders,
+    {action:"start",mode:"routing",researchMode:"simple",repetitions:1,scenarioIds:["branch-a"]})).status,400);
+  for(const invalid of [{researchMode:"strict",mikanifyAnswer:true},
+    {researchMode:"simple",mikanifyAnswer:"yes"}]){
+    assert.equal((await request(base + "/api/brain-eval","POST",jsonHeaders,
+      {action:"start",mode:"live",repetitions:1,scenarioIds:["branch-a"],...invalid})).status,400);
+  }
+  for(const models of [["invented:30b"],[],["qwen3.5:9b","qwen3.5:9b"]]){
+    assert.equal((await request(base + "/api/brain-eval","POST",jsonHeaders,
+      {action:"start",mode:"live",repetitions:1,scenarioIds:["branch-a"],models})).status,400);
+  }
+  assert.equal((await request(base + "/api/brain-eval","POST",jsonHeaders,
+    {action:"start",mode:"routing",repetitions:1,scenarioIds:["branch-a"],
+      models:["qwen3.5:9b","gemma4:12b"]})).status,400);
+  assert.equal((await request(base + "/api/brain-eval","POST",jsonHeaders,
+    {action:"start",mode:"live",researchMode:"simple",mikanifyAnswer:true,repetitions:3,scenarioIds:["branch-a","discovery-bands-wish"],
+      models:["qwen3.5:9b","gemma4:12b"]})).status,202);
+  assert.equal((await request(base + "/api/brain-eval","POST",jsonHeaders,
+    {action:"start",mode:"live",repetitions:3,scenarioIds:["branch-a"]})).status,409);
+  const evalJob=(await (await request(agent + "/agent/next","GET",desktopHeaders)).json()).job;
+  assert.equal(evalJob.kind,"start_brain_eval");
+  assert.deepEqual(evalJob.evalOptions,{
+    mode:"live",researchMode:"simple",mikanifyAnswer:true,repetitions:3,scenarioIds:["branch-a","discovery-bands-wish"],
+    models:["qwen3.5:9b","gemma4:12b"]
+  });
+  assert.equal((await request(agent + "/agent/ack","POST",desktopHeaders,{id:evalJob.id})).status,200);
+  assert.equal((await request(agent + "/agent/state","POST",desktopHeaders,evalState("running",true))).status,200);
+  // The private restart must not interrupt an active Brain Lab run.
+  assert.equal((await request(base + "/api/dev-update","POST",
+    {...authorized,"Content-Type":"application/json"},{action:"restart-desktop"})).status,409);
+  assert.equal(restartCalls,1);
+  const runningEval=await (await request(base + "/api/state","GET",authorized)).json();
+  assert.equal(runningEval.brainEval.phase,"running");
+  assert.equal((await request(base + "/api/dev-update","POST",jsonHeaders,
+    {action:"apply"})).status,409);
+  assert.equal(applyCalls,1);
+
+  assert.equal(runningEval.brainEval.done,1);
+  assert.equal((await request(base + "/api/send","POST",jsonHeaders,{text:"interrupt the GPU"})).status,409);
+  assert.equal((await request(base + "/api/brain-eval","POST",jsonHeaders,
+    {action:"start",mode:"routing",repetitions:1,scenarioIds:["branch-a"]})).status,409);
+  assert.equal((await request(base + "/api/brain-eval","POST",jsonHeaders,{action:"stop"})).status,202);
+  const stopEvalJob=(await (await request(agent + "/agent/next","GET",desktopHeaders)).json()).job;
+  assert.equal(stopEvalJob.kind,"stop_brain_eval");
+  assert.equal((await request(agent + "/agent/ack","POST",desktopHeaders,{id:stopEvalJob.id})).status,200);
+  assert.equal((await request(agent + "/agent/brain-eval/report","POST",desktopHeaders,{
+    report:{runId:"eval-bad",version:1,environment:"production",cases:[]},markdown:"# test"
+  })).status,400);
+  const sampleEval={runId:"eval-1234567890-abcde",version:1,environment:"isolated-synthetic",
+    startedAt:"2026-11-14T20:39:31.558Z",mode:"live",model:"qwen3.5:9b",
+    scenarios:["a","b"],attempts:1,
+    liveWebEnabled:false,writesToRealMemories:false,cases:[]};
+  assert.equal((await request(agent + "/agent/brain-eval/report","POST",desktopHeaders,{
+    report:sampleEval,markdown:"# Synthetic test results"
+  })).status,200);
+  assert.equal((await request(base + "/api/brain-eval/result?format=json")).status,401);
+  assert.equal((await request(base + "/api/brain-eval/result?format=anything","GET",authorized)).status,400);
+  const downloadedEval=await request(base + "/api/brain-eval/result?format=json","GET",authorized);
+  assert.equal(downloadedEval.status,200);
+  assert.equal(downloadedEval.headers.get("content-disposition"),
+    'attachment; filename="mikan-brain_2026-11-14_203931Z_live_qwen3.5-9b_s02_r1_abcde.json"');
+  assert.equal((await downloadedEval.json()).runId,sampleEval.runId);
+  const downloadedMd=await request(base + "/api/brain-eval/result?format=markdown","GET",authorized);
+  assert.equal(downloadedMd.status,200);
+  assert.equal(await downloadedMd.text(),"# Synthetic test results");
+  const completeReply=await request(agent + "/agent/state","POST",desktopHeaders,evalState("complete"));
+  assert.equal(completeReply.status,200);
+  assert.equal((await completeReply.json()).reportId,sampleEval.runId);
+  const completeStatus=await (await request(base + "/api/state","GET",authorized)).json();
+  assert.equal(completeStatus.reportAvailable,true);
+  assert.equal(completeStatus.brainEval.results.liveSearches,3);
+  assert.equal(completeStatus.brainEval.results.liveSearchesWithSources,2);
+  assert.equal(completeStatus.brainEval.results.liveSources,6);
+  assert.equal(completeStatus.brainEval.results.evidencePasses,1);
+  assert.equal(completeStatus.brainEval.results.evidenceFacts,3);
+  assert.equal(completeStatus.brainEval.results.evidenceUnavailable,2);
+  assert.equal(completeStatus.brainEval.results.shortlistTurns,1);
+  assert.equal(completeStatus.brainEval.results.shortlistedItems,2);
+  assert.equal(completeStatus.brainEval.results.rejectedItems,3);
+  assert.equal(completeStatus.brainEval.results.noSupportedMatches,1);
+  assert.equal(completeStatus.brainEval.results.attributedRoles,2);
+  assert.equal(completeStatus.brainEval.results.excludedReferences,1);
+  // New Live reports with actual public SearXNG results MUST be downloadable.
+  // Old offline reports must remain valid, while mismatched metadata is rejected.
+  const liveEval={...sampleEval,runId:"eval-1234567890-web12",
+    environment:"isolated-synthetic+live-public-web",liveWebEnabled:true,
+    cases:[{id:"discovery-bands-wish",steps:[{webExecution:{
+      query:"bands similar to Immortal black metal",
+      results:[{title:"Immortal band",url:"https://example.org/band",
+        content:"Public evidence",engine:"SearXNG"}],sourcesCarriedOver:false,
+      researchAudit:{status:"shortlist",accepted:1,rejected:1,elapsedMs:400,
+        note:"Source-screened candidates, not fact verified.",
+        recommendationTask:true,recommendationApproved:["Pet Shop of Horrors"],
+        recommendationRejected:2,constraintsChecked:1,featuresChecked:0,
+        exclusionsChecked:1,relationsChecked:1,recommendationDetails:[{
+          source:1,title:"Pet Shop of Horrors",creator:"Director A",
+          identityQuote:"Pet Shop of Horrors was directed by Director A.",
+          fitQuote:"Pet Shop of Horrors is a horror miniseries.",
+          measurements:[{source:1,value:4,unit:"episodes",
+            quote:"Pet Shop of Horrors has 4 episodes."}],
+          relations:[{role:"director",name:"Director A",source:1,
+            quote:"Pet Shop of Horrors was directed by Director A."}]
+        }]}
+    }}]}]};
+  assert.equal((await request(agent+"/agent/brain-eval/report","POST",desktopHeaders,{
+    report:{...liveEval,environment:"isolated-synthetic"},markdown:"# Invalid"
+  })).status,400);
+  assert.equal((await request(agent+"/agent/brain-eval/report","POST",desktopHeaders,{
+    report:{...liveEval,mode:"routing"},markdown:"# Invalid"
+  })).status,400);
+  assert.equal((await request(agent+"/agent/brain-eval/report","POST",desktopHeaders,{
+    report:liveEval,markdown:"# Actual public research"
+  })).status,200);
+  const liveDownload=await request(base+"/api/brain-eval/result?format=json","GET",authorized);
+  assert.equal(liveDownload.status,200);
+  const retrieved=await liveDownload.json();
+  assert.equal(retrieved.liveWebEnabled,true);
+  assert.equal(retrieved.cases[0].steps[0].webExecution.results[0].url,"https://example.org/band");
+  assert.equal(retrieved.cases[0].steps[0].webExecution.researchAudit.accepted,1);
+  assert.deepEqual(retrieved.cases[0].steps[0].webExecution.researchAudit.recommendationApproved,
+    ["Pet Shop of Horrors"]);
+  assert.equal(retrieved.cases[0].steps[0].webExecution.researchAudit.recommendationDetails[0]
+    .relations[0].role,"director");
+  assert.equal(retrieved.cases[0].steps[0].webExecution.researchAudit.recommendationDetails[0]
+    .measurements[0].value,4);
+  assert.equal((await (await request(base+"/api/state","GET",authorized)).json()).reportRunId,liveEval.runId);
+  // Browser receives only whitelisted test statuses, not a writable report.
+  const reviewState=evalState("complete");
+  reviewState.brainEvalCatalog=[
+    {id:"branch-a",number:1,label:"Favorite band branch",group:"Branching context",turns:3,
+      states:{routing:{status:"passed",at:"2026-11-14T22:00:00Z"},
+        live:{status:"review",previous:"review",at:"2026-11-14T22:00:00Z"},
+        liveSimpleMikanified:{status:"review",previous:"review",at:"2026-11-14T22:00:00Z"}}},
+    {id:"discovery-bands-wish",number:54,label:"Implicit recommendations",group:"Conversational discovery",turns:2,
+      states:{live:{status:"stale",previous:"passed",at:"2026-11-12T22:00:00Z"}}}
+  ];
+  assert.equal((await request(agent + "/agent/state","POST",desktopHeaders,reviewState)).status,200);
+  const remoteCases=(await (await request(base + "/api/state","GET",authorized)).json()).brainEvalCatalog;
+  assert.equal(remoteCases[0].number,1);
+  assert.equal(remoteCases[1].number,54);
+  assert.equal(remoteCases[0].states.routing.status,"passed");
+  assert.equal(remoteCases[0].states.live.status,"review");
+  assert.equal(remoteCases[0].states.liveSimpleMikanified.status,"review");
+  assert.equal(remoteCases[1].states.live.status,"stale");
+  assert.equal(remoteCases[1].states.live.previous,"passed");
+  assert.equal((await request(base + "/api/brain-eval","POST",jsonHeaders,
+    {action:"review",scenarioId:"discovery-bands-wish",mode:"live",decision:"passed"})).status,409);
+  assert.equal((await request(base + "/api/brain-eval","POST",jsonHeaders,
+    {action:"review",scenarioId:"branch-a",mode:"live",decision:"make_it_green"})).status,400);
+  assert.equal((await request(base + "/api/brain-eval","POST",jsonHeaders,
+    {action:"review",scenarioId:"branch-a",mode:"live",researchMode:"simple",
+      mikanifyAnswer:true,decision:"passed"})).status,202);
+  const reviewJob=(await (await request(agent + "/agent/next","GET",desktopHeaders)).json()).job;
+  assert.equal(reviewJob.kind,"review_brain_eval");
+  assert.equal(reviewJob.evalScenarioId,"branch-a");
+  assert.equal(reviewJob.evalMode,"live");
+  assert.equal(reviewJob.evalDecision,"passed");
+  assert.equal(reviewJob.evalResearchMode,"simple");
+  assert.equal(reviewJob.evalMikanifyAnswer,true);
+  assert.equal((await request(agent + "/agent/ack","POST",desktopHeaders,{id:reviewJob.id})).status,200);
+  // Resume the rest of the legacy relay tests after a detached run finishes.
+  assert.equal((await request(agent + "/agent/state","POST",desktopHeaders,{
+    conversationId:"same-desktop-conversation",model:"qwen3.5:9b",
+    busy:false,controlsBlocked:false,messages:history,
+    models:["qwen3.5:9b","gpt-oss:20b"],provider:"local",
+    conversations:[{id:"same-desktop-conversation",title:"Our first chat",updatedAt:200},
+      {id:"older-chat",title:"Old conversation",updatedAt:100}],
+    avatar:{id:"default",name:"Original Mikan",custom:false}
+  })).status,200);
+
   assert.equal((await request(base + "/api/send", "POST", jsonHeaders, {text:"/search my files"})).status, 400);
   assert.equal((await request(base + "/api/send", "POST", jsonHeaders, {text:"What do you remember about me?"})).status, 202);
   assert.equal((await request(base + "/api/send", "POST", jsonHeaders, {text:"second turn"})).status, 409);
@@ -255,4 +532,34 @@ test("browser relay requires a private key and delegates to the desktop, not a s
   assert.equal((await request(base + "/api/report","POST",jsonHeaders,
     {note:"irrelevant",destination:"delete_repo"})).status,400);
   assert.equal(published.length,1);
+});
+
+test("Brain Lab filenames use report metadata, never private content or unsafe path characters",()=>{
+  assert.equal(brainEvalFileStem({
+    runId:"eval-1794688771558-of3xx",startedAt:"2026-11-14T20:39:31.558Z",
+    model:"qwen3.5:9b",mode:"live",attempts:1,scenarios:[1,2,3,4,5],
+    cases:[{answer:"PRIVATE CHAT"}]
+  }),"mikan-brain_2026-11-14_203931Z_live_qwen3.5-9b_s05_r1_of3xx");
+  const bad=brainEvalFileStem({runId:"eval-12345-abcde",
+    startedAt:"bad/time",model:"../unsafe/name:sushi",mode:"live",
+    attempts:2,scenarios:[1]});
+  assert.ok(!bad.includes("PRIVATE CHAT"));
+  assert.ok(!bad.includes("/"));
+  assert.ok(!bad.includes(String.fromCharCode(92)));
+});
+
+test("phone Brain Lab accepts exact numeric scenario selection without disabling the existing list",()=>{
+  const html=readFileSync(new URL("../server/public/index.html",import.meta.url),"utf8");
+  assert.match(html,/id="brainLabNumbers"/);
+  assert.match(html,/id="brainLabApplyNumbers"/);
+  assert.match(html,/id="brainLabNumberFeedback"/);
+  assert.match(html,/function applyBrainLabNumbers\(\)/);
+  assert.match(html,/Unknown scenario number\(s\)/);
+  assert.match(html,/selectBrainLab\(requested\.map/);
+  assert.match(html,/brainLabApplyNumbers\.disabled = running/);
+  // This checks that the inline script is parseable. The full browser UI
+  // interactions remain covered by the existing native relay integration test.
+  const inline=html.match(/<script>([\s\S]*?)<\/script>/);
+  assert.ok(inline);
+  assert.doesNotThrow(()=>new Script(inline[1]));
 });

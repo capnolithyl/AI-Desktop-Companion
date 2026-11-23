@@ -23,6 +23,11 @@ pipeline and mirrors the currently active desktop conversation.
   The active rig is loaded on demand; custom imported outfits are passed
   to the relay in RAM, not copied to a new database.
 - Local model, personalities, facts, history, and search remain on the PC.
+- **Settings → Brain Lab** can start the isolated synthetic test suite on the Windows
+  desktop from a phone, watch progress, stop it, and download the latest completed
+  JSON or Markdown report. The browser tab can be closed during the run.
+  The desktop auto-saves the report, so results are available on the PC even
+  if the phone or browser relay disconnects.
 - Settings → Report an issue can save detailed private diagnostics locally,
   publish an explicitly reviewed GitHub issue, or do both. The Windows
   report file is `%USERPROFILE%\\.mikan\\remote-issues.jsonl`.
@@ -30,7 +35,7 @@ pipeline and mirrors the currently active desktop conversation.
   alongside private Tailscale access (or Cloudflare Access for public deployment).
 
 **Not yet:** voice playback on the phone, file attachments, browser screen
-capture, changing advanced settings, remote native Tauri commands, or
+capture, changing advanced settings, arbitrary remote native Tauri commands, or
 automatic startup of the Node relay. Iki rendering needs browser WebGL and may take
 a moment to load its ~5–6 MB selected outfit on first use.
 
@@ -47,6 +52,8 @@ on larger screens). It contains:
 - Model/provider picker and installed-model refresh (desktop v0.9.7+).
 - **Enlarge/Shrink portrait**, **Show model name under Mikan** and
   **Show outfit & animation labels** toggles.
+- **Brain Lab** manual run controls (Fast/Live, category, scenario, repetitions),
+  progress, stop, and latest report download.
 - Issue reporting and **Lock this browser**.
 
 The two label toggles are independent, default to visible, and save only
@@ -58,6 +65,145 @@ Use the close button, backdrop, or Escape key to exit settings.
 The hamburger menu is a browser-relay-only update: once the desktop is
 already at v0.9.7 or newer, a git pull and Node relay restart are sufficient.
 It does not require reinstalling Mikan or changing Tailscale configuration.
+
+## Locating and reviewing numbered scenarios
+
+Every test displays a global catalog number (#01–#73) regardless of active
+filters. The underlying scenario ID stays the same so status history survives.
+For the latest completed run, choose **Inspect** beside a failed or review
+scenario to see user turns, Mikan's actual responses, conversation review
+goals, planned web decisions, and missing fact evidence on your phone.
+Historical runs remain in the saved Windows JSON/Markdown report files.
+
+## Selective tests and historical statuses
+
+Each Brain Lab scenario has a checkbox and one of these states:
+**Passed, Failed, Review, Stale, Untested, Incomplete**. Filter by category
+and status, choose individual tests, or use **Select visible**,
+**Select unresolved**, **Passed sample**, and **Clear**.
+
+The desktop persists test status per model/mode/build/fixture; a newer build
+makes older results **Stale** rather than silently passing. A subjective
+conversation can only be marked Passed after its response is reviewed.
+Only checked cases run, preserving all other historical results.
+
+## Remote developer updates (opt-in)
+
+This is for one personal Windows PC and one **pinned** GitHub development branch.
+The browser does not get a command prompt, filesystem access, an SSH token or
+arbitrary Git branch selection.
+
+**One-time setup on the PC**, in the branch checkout:
+
+1. `git switch feature/p0-brain-evaluation-harness`
+2. `git pull --ff-only`
+3. `npm install`
+4. Stop the old `npm run server` process with Ctrl+C, since it owns port 3847.
+5. Start the new **managed relay**:
+
+   ```powershell
+   npm run remote:dev
+   ```
+
+   Keep this PowerShell window open. Your *installed* desktop Mikan can stay
+   running separately, but a Git pull cannot update that installed executable.
+
+Once `npm run desktop` works locally with MSVC C++ Build Tools, you can
+instead quit the installed Mikan and launch the **managed dev desktop + relay**:
+
+```powershell
+npm run remote:dev -- --desktop
+```
+
+That process starts **both** `npm run server` and `npm run desktop`. These
+are the only services it is allowed to terminate/restart. You do **not**
+need the MSVC toolchain for the first relay-only setup.
+
+**Phone steps:**
+
+1. Open the existing authenticated Mikan browser URL.
+2. Go to **☰ → Settings → Developer updates**.
+3. Tap **Check GitHub**. The local supervisor checks for a clean working
+   tree, correct checked-out branch and approved GitHub origin; it fetches
+   only `feature/p0-brain-evaluation-harness`.
+4. If newer commits are available, tap **Update & restart**, read the
+   confirmation (number of commits and managed components), then approve.
+5. The supervisor fast-forwards the checkout and checks whether the actual
+   npm **dependency graph** changed. A package version-only change does not
+   reinstall anything in node_modules. Real dependency changes first stop
+   the supervisor-managed desktop and relay, then install dependencies, run
+   the frontend build, Brain Lab tests and remote authentication tests.
+   Only after successful validation does it restart the *managed* relay
+   and optionally the dev desktop.
+6. The phone may disconnect briefly during relay restart. It automatically
+   reconnects and reloads after success. Brain Lab can then run again.
+
+If a test/build fails, the supervisor tries to restore the old checkout
+without discarding tracked edits. Updates are blocked during an active
+desktop chat response or Brain Lab run. All status and errors appear in
+the phone Settings panel. This is **manual** updating, not an unattended
+GitHub watcher.
+
+**Security:** Only browser requests authenticated with the existing Mikan
+remote key can initiate updates. The relay speaks to a separate localhost
+supervisor on port **3849** using an ephemeral, random supervisor token
+that is never sent to the phone. Do NOT expose/tunnel 3848 or 3849. The
+supervisor accepts only fixed check/apply commands and one pinned origin
+and branch. It refuses dirty or diverged repositories. Treat changes to
+the approved repository branch as trusted executable code; review those
+commits before updating and protect the remote browser access key.
+
+**Limits:**
+
+- Relay-only mode can update phone UI/backend without a working Tauri Rust
+  toolchain. A standalone desktop app is **not** restarted or modified.
+- `--desktop` mode requires the Windows C++ linker and local Tauri tools
+  to work. It does not update the installed NSIS executable either.
+- An installed desktop .exe still needs a new **Windows installer from CI**
+  for its own code changes. That is separate from this dev-source updater.
+- The supervisor does **not** self-update/restart its own process.
+  Changes to `scripts/remote-dev-supervisor.mjs` require one manual restart
+  of `npm run remote:dev` on Windows. This matters for the v0.9.9
+  dependency-lock fix: an *already running old supervisor* still uses its old
+  logic even after GitHub receives the fix. Stop the managed dev supervisor
+  with Ctrl+C, `git pull --ff-only`, and if a failed `npm ci` may have left
+  dependencies incomplete, run `npm ci` while managed processes are stopped,
+  then `npm run remote:dev -- --desktop`. Subsequent version-only bumps can
+  be applied normally from the phone.
+- Leave the PC awake; no updates are applied if the supervisor is offline.
+
+## Overnight Brain Lab runs
+
+The browser is **only a remote controller**; desktop Mikan performs the
+synthetic evaluation and owns its process-lifetime state. To run tests overnight:
+
+1. On Windows, start the desktop companion (hidden in tray is fine), local
+   Ollama, and the existing Node browser relay (`npm run server`).
+2. Keep Windows awake. Sleep, logoff, restart, quitting desktop Mikan, or
+   stopping the relay can interrupt progress or prevent status updates.
+3. In the authenticated remote browser, open **Settings → Brain Lab**, select
+   Live or Fast mode, the whole catalog/category/scenario and 1–5 repeats.
+4. Tap **Start** once. The browser shows progress in turns and can be closed.
+   The local runner continues while Mikan's desktop process stays alive.
+5. In the morning, reopen the browser to see the progress/result summary and
+   **Download JSON** or **Download Markdown**. Results are also automatically
+   stored under `Documents/Mikan/Brain-Evaluations` (AppData fallback).
+
+The browser relay holds only the latest completed **synthetic** evaluation
+report in RAM. If the relay restarts, the desktop automatically re-uploads that
+report when it reconnects, as long as desktop Mikan hasn't restarted.
+The auto-saved local files remain the durable copy on Windows.
+
+The remote key and same-origin controls also protect these endpoints. The
+browser cannot send arbitrary prompts or shell commands to this runner:
+requested scenarios must match the catalog published by the desktop, and all
+model inference runs locally with public web tools disabled.
+
+**Scope:** the available Live mode tests local Ollama behavior, deterministic
+routing, and a simulated AI web decision. It does not make real SearXNG,
+GitHub, Notion or Qdrant calls. Actual integrations remain a P0 follow-up.
+A completed run may still contain conversations marked **REVIEW**; a high
+automatic pass rate is not the same as human-verified conversational quality.
 
 ## Report diagnostics and optional GitHub issues
 

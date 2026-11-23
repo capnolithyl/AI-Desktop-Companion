@@ -1,5 +1,15 @@
-# Inherit SearXNG engine defaults; this is a private, single-PC instance.
-use_default_settings: true
+# Temporary single-provider isolation for live Brain Lab research testing.
+# Yahoo was the only verified relevant engine for all three Nov 17 release probes.
+# Other upstream engines returned unrelated pages or rate-limit/access errors.
+# This is not a permanent redundancy strategy; reassess after live testing.
+use_default_settings:
+  engines:
+    keep_only:
+      - yahoo
+
+engines:
+  - name: yahoo
+    disabled: false
 
 general:
   instance_name: "Mikan Search"

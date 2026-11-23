@@ -4,7 +4,7 @@
  * The CI checker detects unmapped Tauri commands, missing files and stale versions.
  * Add a feature here when adding capability, and update the matching source/docs.
  */
-export const CAPABILITY_RELEASE = "0.9.8";
+export const CAPABILITY_RELEASE = "0.9.63";
 
 export type CapabilityStage = "implemented" | "experimental" | "planned";
 export type RuntimeDependency = "none" | "ollama" | "search" | "mem0" | "voice" | "vision" | "pocket";
@@ -39,9 +39,9 @@ export const CAPABILITIES: readonly Capability[] = [
   },
   {
     id:"remote-browser",label:"Remote browser companion (experimental)",category:"Platforms",
-    description:"Private, key-protected remote browser chat over Tailscale Serve (or a separately configured Cloudflare Tunnel). Uses the running desktop UI and its actual SQLite conversation archive, including selecting and creating chats from the phone; the desktop and browser share one active chat, model, persona, memories and web tools. The browser renders the selected Iki rig locally with idle animation and expressions, including imported outfits relayed in RAM. Requires awake PC, updated desktop app, separately running Node relay, and WebGL-capable browser. The phone's model dropdown switches installed local Ollama models, OpenRouter, Gemini or Auto using desktop settings, and can refresh installed models; it never receives cloud API keys. Remote Report an Issue saves recent chat excerpts plus sanitized inference, memory, tool, research and avatar diagnostics on the PC, or can optionally publish a reviewed conversation-free GitHub issue through the owner's authenticated gh CLI. Requires explicit approval and reveals only the previewed issue text. No remote phone voice, attachments, screen capture or independent simultaneous desktop/phone chat sessions yet.",
+    description:"Private, key-protected remote browser chat over Tailscale Serve (or a separately configured Cloudflare Tunnel). Uses the running desktop UI and its actual SQLite conversation archive, including selecting and creating chats from the phone; the desktop and browser share one active chat, model, persona, memories and web tools. The browser renders the selected Iki rig locally with idle animation and expressions, including imported outfits relayed in RAM. Requires awake PC, updated desktop app, separately running Node relay, and WebGL-capable browser. An opt-in Windows development supervisor can be launched with npm run remote:dev to allow authenticated phone Check GitHub and Update & restart for the fixed feature branch after clean-tree, fast-forward, build and test checks. In default mode it manages only the browser relay; adding --desktop manages a Tauri dev process if MSVC works. Installed desktop executables are never updated by Git pull. Port 3849 is private loopback-only with a separate random token and must not be exposed. The phone's model dropdown switches installed local Ollama models, NVIDIA's three developer models, OpenRouter, Gemini or Auto using desktop settings, and can refresh installed models; it never receives cloud API keys. Remote Report an Issue saves recent chat excerpts plus sanitized inference, memory, tool, research and avatar diagnostics on the PC, or can optionally publish a reviewed conversation-free GitHub issue through the owner's authenticated gh CLI. Requires explicit approval and reveals only the previewed issue text. No remote phone voice, attachments, screen capture or independent simultaneous desktop/phone chat sessions yet.",
     stage:"experimental",runtime:"none",keywords:["server","remote","browser","tailscale","cloudflare","tunnel","phone","web app","access","avatar","outfit","multiple chats"],
-    sources:["server/index.mjs","server/public/index.html","src/App.tsx"],docs:["server/README.md"],
+    sources:["server/index.mjs","server/public/index.html","scripts/remote-dev-supervisor.mjs","server/dev-supervisor-client.mjs","src/App.tsx"],docs:["server/README.md"],
     commands:[]
   },
   {
@@ -60,6 +60,14 @@ export const CAPABILITIES: readonly Capability[] = [
     commands:["openrouter_key_status","openrouter_save_key","openrouter_remove_key","openrouter_test_connection"]
   },
   {
+    id:"nvidia-cloud",label:"NVIDIA hosted LLMs and optional model-led conversation (experimental)",category:"AI",
+    description:"Optional NVIDIA developer-prototype inference with selectable Nemotron 3 Ultra (default), GLM-5.3 Flash, and Mistral Large 4. Uses existing Mikan conversation, local memory, Notion and read-only web tools. The opt-in Model-led mode skips the local Qwen semantic web-intent planner for NVIDIA and lets the selected model choose public read-only tools within explicit permission and private-context restrictions; the Guided route and Simple/Strict research interpretation remain available. Developer API key stays in Windows Credential Manager. Cloud models receive prompt, selected memories and approved attachments. Developer service use may be limited or temporarily unavailable; no guaranteed free production hosting. NVIDIA settings, connection test and dock/remote model selection are available.",
+    stage:"experimental",runtime:"none",keywords:["nvidia","nemotron","glm","mistral","model-led","cloud","hosted","api key","prototype"],
+    sources:["src-tauri/src/nvidia.rs","src/App.tsx","src/storage.ts","src/model-switcher.ts","server/index.mjs"],
+    docs:["README.md"],
+    commands:["nvidia_key_status","nvidia_save_key","nvidia_remove_key","nvidia_test_connection"]
+  },
+  {
     id:"gemini-cloud",label:"Optional Gemini cloud inference (experimental)",category:"AI",
     description:"Optional Gemini API inference supports vision and native SearXNG search/read_webpage function calls. Choose Gemini-only to use the Google API directly; Auto now uses OpenRouter free instead. Google API key is stored in Windows Credential Manager, not chat or localStorage. Cloud final text is delivered after generation rather than token-streamed. Model-identity questions are answered from runtime settings and actual last reply without web search. Gemini requests have a 35-second total deadline. Cloud failures are recorded in chat diagnostics; Settings includes a direct API connection test. Local Ollama is still used for memory planning and some auxiliary tasks.",
     stage:"experimental",runtime:"none",keywords:["gemini","google","cloud","fallback","api key","tool calls","tool calling","provider","quota","vision"],
@@ -68,7 +76,7 @@ export const CAPABILITIES: readonly Capability[] = [
   },
   {
     id:"web-search",label:"On-demand web search",category:"Research",
-    description:"SearXNG search with local AI memory+tool planning, optional owner-editable topic-aware preferred sources (soft ranking boosts, never an allowlist), a Docker service monitor, source citations and experimental evidence verification. Automatic search requires opt-in; cannot search when SearXNG is unavailable.",
+    description:"SearXNG search with local AI memory+tool planning, bounded user-only conversation context for follow-up research constraints, optional owner-editable topic-aware preferred sources (soft ranking boosts, never an allowlist), a Docker service monitor, source citations and experimental evidence verification. Public query privacy checks remain enforced; automatic search requires opt-in and cannot search when SearXNG is unavailable.",
     stage:"implemented",runtime:"search",keywords:["internet","web","search","latest","news","searxng","docker","browse"],
     sources:["src-tauri/src/web_search.rs","src-tauri/src/search_service.rs","src-tauri/src/research_intent.rs","src-tauri/src/source_priority.rs","src/unified-planner.ts","src/preferred-sources.ts","src/desktop-turn-routing.ts"],docs:["tools/searxng/README.md","RESEARCH-EVAL.md"],
     commands:["web_search","search_service"],
@@ -176,6 +184,14 @@ export const CAPABILITIES: readonly Capability[] = [
     stage:"experimental",runtime:"voice",keywords:["speak","voice","tts","talk","speech","audio","clone","sound","hear"],
     sources:["src-tauri/src/voice.rs","tools/tts/server.py","src/speech.ts","scripts/setup-pocket-tts.ps1"],docs:["tools/tts/README.md"],
     commands:["voice_health","voice_synthesize","voice_reference_status","voice_save_reference","voice_delete_reference"]
+  },
+  {
+    id:"brain-evaluation",label:"Brain Lab manual evaluation runner",category:"AI",
+    description:"Experimental Settings Brain Lab runs synthetic multi-turn routing tests and optional local Ollama conversations. Can start, monitor, cancel and download overnight test reports through the authenticated browser relay while desktop Mikan stays running. Includes stable numbered scenario labels, per-turn response review on phone, repeated trials, a dashboard, version-aware per-test Passed/Failed/Review/Stale statuses, individual scenario checkboxes and focused reruns, local run-history summaries, automatic JSON and Markdown exports, and browser diagnostic copying. Full production SQLite, Qdrant, Notion and live web-service integration is not yet covered by this test harness.",
+    stage:"experimental",runtime:"none",
+    keywords:["brain","evaluation","test","regression","debug","diagnostics","benchmark","routing","memory","dashboard","manual","brain lab"],
+    sources:["src/brain-eval.ts","src/brain-eval-manager.ts","src/BrainEvalPanel.tsx","src/App.tsx","src-tauri/src/lib.rs","server/index.mjs","server/public/index.html"],
+    docs:["docs/brain-lab.md"],commands:["brain_eval_export","brain_eval_load_latest","brain_eval_preview_memory"]
   },
   {
     id:"self-knowledge",label:"Self-knowledge of features, docs and source",category:"AI",

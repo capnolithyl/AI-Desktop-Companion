@@ -4,6 +4,55 @@ Mikan uses **your own local SearXNG container**, with no paid search API account
 
 All incoming traffic is bound to **127.0.0.1:8888**. Do not forward this port on your router or expose it publicly.
 
+## Search engine health and controlled Yahoo test (November 17, 2026)
+
+The local Docker service can be healthy even when the upstream search engines
+are not. The Nov 17 live Brain Lab runs revealed repeatable provider failures:
+Brave and Google CSE returned `too many requests`, Qwant and Google returned
+`access denied`, Yep returned an HTTP error, and Bing silently returned
+unrelated news/football homepages for Qwen-release queries.
+
+The owner tested Yahoo in isolation using `!yh` on three topics: Qwen releases,
+llama.cpp releases, and latest official Qwen model. It returned relevant pages,
+including the official llama.cpp GitHub releases page, without engine errors.
+
+**Current controlled experiment:** `config/settings.yml` uses
+`use_default_settings.engines.keep_only: [yahoo]`, with Yahoo enabled. This
+removes noisy/failing engines for a reproducible Brain Lab comparison, but
+it also creates a single point of failure. The goal is to measure retrieval
+quality independently of the LLM before choosing a durable multi-provider
+strategy. Yahoo search results are not themselves proof of a latest release.
+
+**Applying configuration after the browser's GitHub "Update & restart":**
+the config directory is bind-mounted into Docker. That button updates Mikan
+but **does not restart SearXNG**. After updating, run in Windows PowerShell:
+
+```powershell
+docker restart mikan-searxng
+Start-Sleep -Seconds 3
+
+foreach ($query in @('latest llama.cpp release', 'latest officially released Qwen model')) {
+    $q = [uri]::EscapeDataString($query)
+    $r = Invoke-RestMethod "http://127.0.0.1:8888/search?q=$q&format=json"
+    Write-Host "`n=== $query ==="
+    $r.results | Select-Object -First 5 title, engine, url | Format-Table -AutoSize
+    $r.unresponsive_engines
+    Start-Sleep -Seconds 4
+}
+```
+
+Verify the returned results have `engine=yahoo` and are actually relevant,
+not merely nonempty. Then run a **focused** Qwen Live Brain Lab #20, #21
+and #84 twice, rather than immediately running all models/scenarios.
+The #20 planner currently calls the entity `Vulkan llama.cpp`; this separate
+entity-identification issue may still make that scenario fail even with Yahoo.
+
+If the engine stops returning meaningful results, inspect
+`docker logs --tail 60 mikan-searxng`. Do not interpret zero upstream results
+as a model reasoning regression. The Rust search client reserves request
+starts at least three seconds apart per desktop process, which reduces bursts
+but cannot guarantee a search engine will remain accessible.
+
 ## First-time setup
 
 1. Install [Docker Desktop for Windows](https://docs.docker.com/desktop/setup/install/windows-install/). Docker Desktop is free for personal use. Choose the Linux/WSL2 backend. If it asks for WSL2 or a restart, complete those steps and launch Docker Desktop.

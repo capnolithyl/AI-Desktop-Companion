@@ -1,0 +1,359 @@
+/* Isolated brain-evaluation Settings workspace. Uses Mikan's existing tokens. */
+.brain-eval-panel{display:flex;flex-direction:column;gap:14px;min-width:0;padding-bottom:16px}
+.brain-eval-panel .settings-note{line-height:1.55}
+.brain-eval-toolbar{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.brain-eval-toolbar label{display:flex;flex-direction:column;gap:6px;min-width:0;font-size:12px;color:#dfcbd4}
+.brain-eval-toolbar select{min-width:0;width:100%;border:1px solid #785969;background:#271f2b;color:#fff0f4;border-radius:9px;padding:9px}
+.brain-eval-actions{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.brain-eval-actions button{display:flex;gap:6px;align-items:center}
+.brain-eval-subtitle,.brain-eval-message{font-size:12px;line-height:1.45;overflow-wrap:anywhere;color:#cbbbc7}
+.brain-eval-message{padding:8px 10px;background:#382e3a;border-radius:8px}
+.brain-eval-progress{display:grid;gap:7px;font-size:12px}
+.brain-eval-progress progress{width:100%;accent-color:#f5b18f}
+.brain-eval-metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px}
+.brain-eval-metric{padding:10px;border:1px solid #654d60;border-radius:10px;background:#2a222d;display:flex;gap:4px;flex-direction:column}
+.brain-eval-metric>span{font-size:11px;color:#cbbbc7}
+.brain-eval-metric>strong{font-size:21px;line-height:1.2;color:#fff0e7;font-variant-numeric:tabular-nums}
+.brain-eval-metric>small{font-size:10px;color:#bba7b5}
+.brain-eval-groups{display:grid;gap:8px}
+.brain-eval-group{display:grid;grid-template-columns:minmax(90px,1fr) minmax(60px,2fr) 52px;gap:9px;align-items:center;font-size:12px}
+.brain-eval-group strong{text-align:right;font-variant-numeric:tabular-nums}
+.brain-eval-bar{height:7px;background:#433540;border-radius:50px;overflow:hidden}
+.brain-eval-bar span{display:block;height:100%;background:#d39b7b;border-radius:50px}
+.brain-eval-traces{display:grid;gap:6px}
+.brain-eval-traces details.service-panel{margin:0;display:block;min-width:0}
+.brain-eval-summary{display:flex;gap:8px;align-items:center;cursor:pointer}
+.brain-eval-summary strong{flex:1;font-size:12px}
+.brain-eval-summary span{font-size:11px;color:#c5b2bf;font-variant-numeric:tabular-nums}
+.brain-eval-step{border-top:1px solid #594656;padding:9px 0;display:grid;gap:5px;font-size:12px}
+.brain-eval-step>div:first-child{display:flex;align-items:flex-start;justify-content:space-between;gap:8px}
+.brain-eval-step>div:first-child strong{font-size:12px}
+.brain-eval-step small{font-size:11px;color:#cbbac6;display:block;overflow-wrap:anywhere}
+.brain-eval-ok{color:#9cdbb1}.brain-eval-bad{color:#ffbaa9}
+.brain-eval-answer{padding:7px;background:#201921;border-radius:7px;white-space:pre-wrap;overflow-wrap:anywhere;margin:2px 0}
+.brain-eval-history{padding:6px 0;display:flex;gap:10px;justify-content:space-between;font-size:11px}
+.brain-eval-history strong{font-variant-numeric:tabular-nums}
+@media(max-width:550px){.brain-eval-toolbar{grid-template-columns:1fr}.brain-eval-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+/* Semantic dialogue checks remain explicitly ungraded until a person reviews them. */
+.brain-eval-review{color:#eed1a0}
+.brain-eval-step small.brain-eval-goal{color:#f5cfb4;font-weight:600;line-height:1.5}
+
+/* Per-scenario selective reruns and retained status. */
+.brain-eval-status-summary,.brain-eval-select-actions{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.brain-eval-select-actions button,.brain-eval-review-actions button{padding:6px 9px;border:1px solid #795869;background:#453444;color:#ffe8e9;border-radius:7px;font-size:11px}
+.brain-eval-select-actions button:disabled,.brain-eval-review-actions button:disabled{opacity:.45}
+.brain-eval-catalog{display:grid;grid-template-columns:minmax(0,1fr);align-content:start;gap:5px;padding:6px;border:1px solid #654d60;border-radius:10px;background:#221c27;min-width:0}
+.brain-eval-test-row{display:flex;align-items:center;flex-wrap:wrap;gap:7px;padding:7px 9px;border-radius:7px;background:#352937}
+.brain-eval-test-row>label{display:flex;align-items:center;gap:8px;flex:1 1 160px;min-width:0;cursor:pointer}
+.brain-eval-test-row input[type="checkbox"]{accent-color:#f5b18f;flex-shrink:0;width:16px;height:16px}
+.brain-eval-test-row label span{min-width:0;overflow-wrap:anywhere;font-size:12px}
+.brain-eval-test-row label strong{display:block;font-weight:600}
+.brain-eval-test-row label small{display:block;color:#cdbac8;font-size:10px;margin-top:2px}
+.brain-eval-status{font-size:10px;font-weight:700;border-radius:6px;padding:4px 7px;text-transform:uppercase;letter-spacing:.25px;background:#49394a;color:#ded1de;white-space:nowrap}
+.brain-eval-status.passed{background:#284b3d;color:#b1edd0}
+.brain-eval-status.failed{background:#613840;color:#ffd0ca}
+.brain-eval-status.review{background:#574428;color:#ffdaa1}
+.brain-eval-status.stale{background:#3d4062;color:#cad5ff}
+.brain-eval-status.incomplete{background:#563c53;color:#f6c6ea}
+.brain-eval-status.untested{background:#403d44;color:#d0c9d0}
+.brain-eval-review-actions{display:flex;gap:5px}
+@media(max-width:550px){.brain-eval-test-row{align-items:flex-start}.brain-eval-review-actions{width:100%}}
+
+/* A single vertical scrolling surface is owned by .settings-brain in
+   styles.css. Nested scrollbars had made the list almost inaccessible. */
+.brain-eval-panel{
+  gap:12px;
+  min-width:0;
+  width:100%;
+  padding-bottom:28px;
+}
+.brain-eval-panel .settings-note{display:block}
+.brain-eval-explainer{
+  border:1px solid #634c5d;
+  border-radius:10px;
+  background:#352b39;
+  color:#d5c4ce;
+  font-size:12px;
+  line-height:1.55;
+  padding:10px 12px;
+}
+.brain-eval-explainer summary{
+  display:flex;
+  flex-wrap:wrap;
+  gap:5px 9px;
+  justify-content:space-between;
+  cursor:pointer;
+  font-weight:700;
+  color:#ffdecb;
+  line-height:1.5;
+}
+.brain-eval-explainer summary::before{
+  content:"▸";
+  color:#ffbd91;
+  flex:0 0 auto;
+}
+.brain-eval-explainer[open] summary::before{content:"▾"}
+.brain-eval-explainer summary span{
+  font-size:11px;
+  font-weight:400;
+  color:#c9b3c1;
+}
+.brain-eval-explainer p{margin:9px 0 0;line-height:1.6}
+.brain-eval-explainer strong{color:#ffe0c8}
+.brain-eval-find{grid-column:1/-1}
+.brain-eval-find input{
+  min-width:0;
+  width:100%;
+  border:1px solid #785969;
+  background:#271f2b;
+  color:#fff0f4;
+  border-radius:9px;
+  padding:10px 11px;
+  font:inherit;
+  font-size:12px;
+}
+.brain-eval-find input::placeholder{color:#bea9b8}
+.brain-eval-find input:focus-visible,
+.brain-eval-toolbar select:focus-visible,
+.brain-eval-catalog input:focus-visible,
+.brain-eval-panel button:focus-visible{
+  outline:2px solid #ffc99f;
+  outline-offset:2px;
+}
+.brain-eval-muted-note{
+  margin:0;
+  font-size:11px;
+  line-height:1.5;
+  color:#beacb9;
+}
+.brain-eval-catalog-header{
+  display:flex;
+  gap:10px;
+  flex-wrap:wrap;
+  align-items:baseline;
+  justify-content:space-between;
+  font-size:12px;
+  color:#ffe0cb;
+}
+.brain-eval-catalog-header span{color:#d1bbc9;font-size:11px}
+.brain-eval-actionbar{
+  position:sticky;
+  top:0;
+  z-index:3;
+  background:#2b2230;
+  border:1px solid #695065;
+  box-shadow:0 5px 15px #130d1899;
+  border-radius:11px;
+  padding:9px;
+  margin:0 -2px;
+}
+.brain-eval-actionbar .save-button{
+  justify-content:center;
+  flex:1 1 auto;
+  min-width:190px;
+  text-align:center;
+}
+.brain-eval-test-row{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) auto;
+  column-gap:10px;
+  row-gap:7px;
+  padding:10px;
+  align-items:center;
+}
+.brain-eval-test-row>label{
+  display:flex;
+  flex:initial;
+  min-width:0;
+  align-items:flex-start;
+}
+.brain-eval-test-row label strong{
+  font-size:12px;
+  line-height:1.4;
+  color:#ffe8dc;
+}
+.brain-eval-test-row label small{
+  margin-top:3px;
+  font-size:11px;
+  line-height:1.4;
+}
+.brain-eval-test-row>.brain-eval-status{
+  justify-self:end;
+  align-self:start;
+}
+.brain-eval-review-actions{
+  grid-column:1/-1;
+  justify-self:end;
+}
+.brain-eval-traces,.brain-eval-metrics{min-width:0}
+.brain-eval-step>div:first-child{flex-wrap:wrap}
+.brain-eval-summary{flex-wrap:wrap;min-width:0}
+.brain-eval-summary strong{min-width:140px}
+@media(max-width:760px){
+  .brain-eval-toolbar{grid-template-columns:1fr}
+  .brain-eval-actionbar .save-button{width:100%}
+}
+
+
+/* Keep the same run status visible on desktop that the remote browser shows.
+   This is one sticky panel within the existing Settings scroller, NOT a
+   second nested scrolling region for the long scenario catalog. */
+.brain-eval-actionbar{
+  display:flex;
+  flex-direction:column;
+  align-items:stretch;
+  gap:9px;
+}
+.brain-eval-action-buttons{min-width:0}
+.brain-eval-run-monitor{
+  min-width:0;
+  display:grid;
+  gap:6px;
+  border:1px solid #67505f;
+  border-radius:9px;
+  padding:10px;
+  background:#261f2b;
+  color:#ead8e0;
+  font-size:11px;
+  line-height:1.45;
+}
+.brain-eval-run-monitor.running{border-color:#9b7566}
+.brain-eval-run-monitor.complete{border-color:#60866e}
+.brain-eval-run-monitor.failed{border-color:#ac656b}
+.brain-eval-run-monitor.stopped{border-color:#b19065}
+.brain-eval-run-heading,
+.brain-eval-run-details{
+  display:flex;
+  flex-wrap:wrap;
+  justify-content:space-between;
+  align-items:center;
+  gap:5px 10px;
+  min-width:0;
+}
+.brain-eval-run-heading strong{
+  display:flex;
+  align-items:center;
+  gap:7px;
+  font-size:12px;
+  color:#ffe7d8;
+}
+.brain-eval-run-monitor.complete .brain-eval-run-heading strong{color:#aedec2}
+.brain-eval-run-monitor.failed .brain-eval-run-heading strong{color:#ffd0c9}
+.brain-eval-run-monitor.stopped .brain-eval-run-heading strong{color:#f8d6a0}
+.brain-eval-run-heading>span{
+  font-weight:700;
+  font-variant-numeric:tabular-nums;
+  color:#fff0e6;
+}
+.brain-eval-run-monitor progress{
+  width:100%;
+  height:11px;
+  accent-color:var(--accent,#ffad7e);
+}
+.brain-eval-run-monitor.complete progress{accent-color:#8dcba6}
+.brain-eval-run-details{color:#d2bbc9;overflow-wrap:anywhere}
+.brain-eval-run-details span:first-child{
+  color:#ffdfc9;
+  font-variant-numeric:tabular-nums;
+  white-space:nowrap;
+}
+.brain-eval-run-details span:last-child{flex:1 1 180px}
+.brain-eval-run-monitor small{font-size:11px;overflow-wrap:anywhere;line-height:1.45}
+.brain-eval-run-summary{color:#c0d8c8}
+.brain-eval-run-error{color:#ffbeb5}
+.brain-eval-run-saved{color:#baa6b5}
+.brain-eval-folder-link{
+  display:inline-flex;align-items:center;gap:5px;max-width:100%;
+  border:0;background:none;padding:0;color:#f4c4a5;
+  text-decoration:underline;cursor:pointer;overflow-wrap:anywhere;
+  white-space:normal;text-align:left;font:inherit;
+}
+.brain-eval-folder-link:hover,.brain-eval-folder-link:focus-visible{color:#ffe5ce}
+.brain-eval-number-select{
+  display:grid;
+  gap:6px;
+  padding:10px;
+  border:1px solid #624a60;
+  border-radius:10px;
+  background:#211a25;
+}
+.brain-eval-number-select label{font-size:12px;font-weight:700;color:#f4d5c8}
+.brain-eval-number-row{display:flex;gap:6px;min-width:0}
+.brain-eval-number-row input{
+  min-width:0;
+  flex:1;
+  padding:9px 10px;
+  border:1px solid #785969;
+  border-radius:8px;
+  background:#30232f;
+  color:#fff3f9;
+  font:inherit;
+  font-size:12px;
+}
+.brain-eval-number-row button{
+  flex:0 0 auto;
+  border:1px solid #795869;
+  border-radius:8px;
+  padding:9px 12px;
+  background:#4a3748;
+  color:#ffe6d9;
+}
+.brain-eval-number-select small{font-size:11px;color:#d8c3d1;line-height:1.4}
+.brain-eval-number-row input:focus-visible,
+.brain-eval-number-row button:focus-visible{
+  outline:2px solid #ffc99f;
+  outline-offset:2px;
+}
+.brain-eval-catalog-disclosure{
+  display:grid;
+  gap:8px;
+  min-width:0;
+}
+.brain-eval-catalog-disclosure:not([open]){display:block}
+.brain-eval-catalog-disclosure:not([open]) > .brain-eval-catalog{display:none}
+.brain-eval-catalog-disclosure>summary{
+  list-style:none;
+  cursor:pointer;
+  border-radius:7px;
+  padding:7px 5px;
+}
+.brain-eval-catalog-disclosure>summary::-webkit-details-marker{display:none}
+.brain-eval-catalog-disclosure>summary:hover{background:#3c2d3c}
+.brain-eval-results-anchor{scroll-margin-top:185px}
+@media(max-width:760px){
+  .brain-eval-actionbar{gap:6px}
+  .brain-eval-run-monitor{padding:8px}
+  .brain-eval-run-details span:last-child{flex-basis:100%}
+}
+
+/* Live model sweeps stay intentionally compact even with many Ollama models. */
+.brain-eval-model-picker,.brain-eval-comparison{
+  display:grid;gap:8px;padding:11px;border:1px solid #654d60;border-radius:10px;
+  background:#2a222d;color:#e8d9df;font-size:12px;min-width:0;
+}
+.brain-eval-model-heading{display:flex;flex-wrap:wrap;justify-content:space-between;gap:6px}
+.brain-eval-model-heading span,.brain-eval-model-picker small,.brain-eval-comparison small{color:#cbbbc7}
+.brain-eval-model-actions{display:flex;flex-wrap:wrap;gap:6px}
+.brain-eval-model-actions button{border:1px solid #795869;border-radius:7px;background:#453444;color:#ffe8e9;padding:6px 9px}
+.brain-eval-model-list{display:grid;grid-template-columns:repeat(auto-fit,minmax(165px,1fr));gap:5px;max-height:130px;overflow:auto}
+.brain-eval-model-list label{display:flex;gap:7px;align-items:center;min-width:0;overflow-wrap:anywhere;padding:5px;border-radius:6px;background:#352937}
+.brain-eval-model-list input{accent-color:#f5b18f}
+.brain-eval-comparison-scroll{overflow-x:auto}
+.brain-eval-comparison table{width:100%;border-collapse:collapse;text-align:left;font-size:11px}
+.brain-eval-comparison th,.brain-eval-comparison td{padding:7px 9px;border-bottom:1px solid #654d60;white-space:nowrap}
+.brain-eval-comparison th{color:#f4d5c8}
+
+.brain-eval-model-trace-picker{display:flex;flex-wrap:wrap;align-items:center;gap:8px;font-size:12px}
+.brain-eval-model-trace-picker select{max-width:100%;background:#30232f;color:#fff3f9;border:1px solid #76556d;border-radius:8px;padding:7px}
+
+/* Preset controls share the Brain Lab color palette and stay compact. */
+.brain-eval-presets{display:grid;gap:8px;padding:11px;border:1px solid #654d60;border-radius:10px;background:#2a222d;color:#e8d9df;min-width:0}
+.brain-eval-presets-header{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:6px;font-size:12px}
+.brain-eval-presets small{font-size:11px;color:#cbbbc7;line-height:1.4}
+.brain-eval-preset-controls{display:flex;flex-wrap:wrap;align-items:end;gap:7px;min-width:0}
+.brain-eval-preset-controls label{flex:1 1 190px;display:grid;gap:5px;font-size:11px;color:#dfcbd4;min-width:0}
+.brain-eval-preset-controls input,.brain-eval-preset-controls select{width:100%;min-width:0;background:#30232f;color:#fff3f9;border:1px solid #76556d;border-radius:8px;padding:8px;font:inherit}
+.brain-eval-preset-controls button{padding:8px 11px;background:#4a3748;color:#ffe6d9;border:1px solid #795869;border-radius:8px;font-size:12px}
+.brain-eval-preset-controls button:disabled{opacity:.45}
+.brain-eval-preset-controls input:focus-visible,.brain-eval-preset-controls select:focus-visible,.brain-eval-preset-controls button:focus-visible{outline:2px solid #ffc99f;outline-offset:2px}

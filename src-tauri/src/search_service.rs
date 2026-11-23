@@ -207,14 +207,31 @@ fn ensure_service() -> Result<SearchServiceStatus, String> {
 #[tauri::command]
 pub async fn search_service(action: String, endpoint: Option<String>) -> Result<SearchServiceStatus, String> {
     let endpoint = crate::web_search::local_searxng_url(endpoint.as_deref().unwrap_or(DEFAULT_ENDPOINT))?;
-    if !matches!(action.as_str(), "status" | "ensure" | "start" | "stop") {
+    if !matches!(action.as_str(), "status" | "ensure" | "start" | "stop" | "probe") {
         return Err("Unsupported SearXNG action".into());
+    }
+
+    if action == "probe" {
+        // An explicit, real public query through the production search pipeline.
+        // No canned source data or LLM verdicts: verify that source discovery works.
+        return match crate::source_priority::search(
+            endpoint, "Python programming language".into(), false, &[], None
+        ).await {
+            Ok(results) if !results.is_empty() => Ok(state(
+                "ready", &format!("Live SearXNG search verified: {} real source(s) returned.", results.len())
+            )),
+            Ok(_) => Ok(state(
+                "no-results",
+                "SearXNG responds but returned zero results for a common public query. Check its search engines, Docker logs and outbound internet connection."
+            )),
+            Err(error) => Ok(state("unavailable", &format!("Live SearXNG search failed: {error}"))),
+        };
     }
 
     if matches!(action.as_str(), "status" | "ensure") {
         if endpoint_healthy(&endpoint).await {
             clear_unhealthy();
-            return Ok(state("ready", "Search ready. SearXNG is responding."));
+            return Ok(state("ready", "SearXNG HTTP responding; real search results not yet verified."));
         }
         if !manages_endpoint(&endpoint) {
             return Ok(state("unavailable", "Custom SearXNG endpoint is not responding; automatic recovery only manages local port 8888."));

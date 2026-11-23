@@ -398,9 +398,9 @@ export function notionRereadReceipt(evidence:NotionChapterEvidence, syncedAt:num
  * An explicit cloud-provider selection remains the owner's decision.
  */
 export function manuscriptReviewProvider(
-  provider:"local"|"auto"|"openrouter"|"gemini",
+  provider:"local"|"auto"|"openrouter"|"gemini"|"nvidia",
   openrouterModel:string
-):"local"|"auto"|"openrouter"|"gemini" {
+):"local"|"auto"|"openrouter"|"gemini"|"nvidia" {
   return provider==="auto" && openrouterModel.trim().toLowerCase()==="openrouter/free"
     ? "local" : provider;
 }

@@ -128,3 +128,68 @@ test("generic favorite references cannot recall unrelated favorite anime",()=>{
   const selected=selectDeterministicMemoryIds(examples,"My favorite band is Shadows Fall",[],[],10);
   assert.deepEqual(selected.ids,[201]);
 });
+
+test("domain words retain favorite-song and album facts without an embedding model",()=>{
+  const samples=[
+    {id:1,fact:"The user's favorite band is Cobalt Harbor.",updatedAt:9,tags:["favorite band"]},
+    {id:2,fact:"The user's favorite song is Winterglass by Cobalt Harbor.",updatedAt:9,tags:["favorite song"],importance:80},
+    {id:3,fact:"The user's favorite album is Glass Atlas.",updatedAt:9,tags:["favorite album"],importance:70},
+    {id:4,fact:"The user's favorite color is moss green.",updatedAt:9,tags:["favorite color"],importance:85},
+    {id:5,fact:"The user likes strategy games.",updatedAt:9,tags:["games"]}
+  ];
+  const song=selectDeterministicMemoryIds(samples,"What's my favorite song?",[],[],8);
+  const album=selectDeterministicMemoryIds(samples,"What's my favorite album?",[],[],8);
+  assert.ok(song.ids.includes(2),"song facts should not be lost to generic stopwords");
+  assert.ok(album.ids.includes(3),"album facts should not be lost to generic stopwords");
+  assert.ok(!song.ids.includes(4),"a color preference is not a song preference");
+  assert.ok(!album.ids.includes(5),"game preferences should not pollute album queries");
+});
+
+test("generic pronouns and negation do not retrieve fictional hometowns or unrelated facts",()=>{
+  const now=Date.now()/1000;
+  const synthetic=[
+    {id:116,fact:"The user's hometown was Alderwick; their current town is Brookmere.",
+      category:"profile",tags:["hometown","town"],updatedAt:now},
+    {id:110,fact:"The user's fictional spouse is Rowan, not Theo.",
+      category:"family",tags:["spouse","family"],updatedAt:now},
+    {id:108,fact:"Lantern Desk uses React, not Electron.",
+      category:"projects",tags:["software"],updatedAt:now},
+    {id:114,fact:"Chapter three is not stored in these memories.",
+      category:"projects",tags:["chapter","novel"],updatedAt:now},
+    {id:119,fact:"The user dislikes sprawling open-world strategy games.",
+      category:"preferences",tags:["strategy","open world"],updatedAt:now}
+  ];
+  const ids=synthetic.map(x=>x.id);
+  const selected=query=>selectDeterministicMemoryIds(synthetic,query,[],ids,8).ids;
+  assert.deepEqual(selected("Especially their raw, cold guitar atmosphere."),[]);
+  assert.deepEqual(selected("Not asking for recommendations, just venting."),[]);
+  assert.deepEqual(selected("Not another giant open world, please."),[119]);
+});
+
+test("a fictional favorite band or game is not topical to a different named artist or RPG",()=>{
+  const examples=[
+    {id:101,fact:"The user's favorite band is Cobalt Harbor (fictional).",
+      category:"preferences",tags:["music","favorite band"],updatedAt:Date.now()/1000},
+    {id:111,fact:"The user's favorite game is Ember Tactics (fictional RPG).",
+      category:"preferences",tags:["games","RPG"],updatedAt:Date.now()/1000},
+    {id:119,fact:"The user dislikes sprawling open-world strategy games.",
+      category:"preferences",tags:["strategy","open world"],updatedAt:Date.now()/1000}
+  ];
+  const allIds=examples.map(f=>f.id);
+  const picked=query=>selectDeterministicMemoryIds(examples,query,[],allIds,8).ids;
+  assert.deepEqual(picked("Man, I wish there were more bands that sound like Immortal."),[]);
+  assert.deepEqual(picked("I'm craving another tactical RPG like Fire Emblem."),[]);
+  assert.deepEqual(picked("Not another giant open world, please."),[119]);
+  assert.deepEqual(picked("What's my favorite band?"),[101]);
+});
+
+test("sentiment and grammatical overlap cannot inject unrelated memories; topic and semantic recall remain",()=>{
+  const facts=[
+    {id:1,fact:"The user loves tactical games.",tags:["games"],category:"preferences",updatedAt:1},
+    {id:2,fact:"The user's hometown was Cedar Bay.",tags:["hometown"],category:"profile",updatedAt:1},
+    {id:3,fact:"The user prefers mystery novels.",tags:["mystery","novels"],category:"preferences",updatedAt:1}
+  ];
+  assert.deepEqual(selectDeterministicMemoryIds(facts,"I love watercolor. It was relaxing.",[],[1,2,3],8).ids,[]);
+  assert.deepEqual(selectDeterministicMemoryIds(facts,"Recommend mystery novels",[],[1,2,3],8).ids,[3]);
+  assert.ok(selectDeterministicMemoryIds(facts,"Something to read",[{id:3,score:0.94}],[],8).ids.includes(3));
+});

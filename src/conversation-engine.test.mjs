@@ -87,11 +87,12 @@ test("normal conversation instructions discourage stage direction narration with
 
 test("ordinary replies prefer short direct answers without endless self-correction", () => {
   const guidance = responseFocusGuidance([], "What next?");
-  assert.match(guidance, /1-3 short sentences/);
+  assert.match(guidance, /REPLY SCOPE: Follow the owner/);
+  assert.match(guidance, /Keep ordinary replies efficient without padding/);
   assert.match(guidance, /WHEN CORRECTED/);
   assert.match(guidance, /Never argue from an earlier guess/i);
   assert.match(guidance, /request a tighter crop/i);
-  assert.match(guidance, /Elaborate when the owner asks for details/);
+  assert.match(guidance, /Elaborate when asked for details/);
 });
 
 test("beginner tutoring gets a simple next step", () => {
@@ -105,4 +106,14 @@ test("multi-part research questions request every component and avoid discograph
   assert.match(detailed,/MULTI-PART REQUEST/);
   assert.match(detailed,/MUSIC DISCOGRAPHY/);
   assert.doesNotMatch(responseFocusGuidance([], "I love this album"),/MULTI-PART REQUEST/);
+});
+
+test("shared reply contract resolves ambiguous media names and avoids fake recommendations",()=>{
+  const guidance=responseFocusGuidance([],"I've been playing something all morning.");
+  assert.match(guidance,/ENTITY RESOLUTION/);
+  assert.match(guidance,/Do not infer what it is from ordinary verbs/);
+  assert.match(guidance,/RECOMMENDATION GROUNDEDNESS/);
+  assert.match(guidance,/When the source search was only PLANNED but never executed/);
+  assert.match(guidance,/NATURAL CONTINUITY/);
+  assert.match(guidance,/without searching or trying to sell/);
 });

@@ -1,5 +1,8 @@
 # Mikan Desktop Companion
 
+**v0.9.51 (Simple vs Strict web research, experimental):** Under Settings → Internet, choose **Simple** (new default) to have Mikan read the retrieved SearXNG results and relevant HTTPS page excerpts directly, then answer using numbered source citations. The prior structured JSON evidence pipeline remains available as **Strict** for comparison; it is not removed or silently mixed into Simple mode. Simple deliberately bypasses the old extractor and post-generation lexical rejection gate, so source accuracy and temporal comparisons must be reviewed in live tests. Both modes receive the current Detroit desktop date and preserve search result publication metadata; changing facts should be judged against relevant event dates, while historical/static facts need not be treated as stale solely due to source age. Brain Lab and the connected browser relay expose a separate interpreter selector, and live reports record which mode generated the answer. No change to stored memories or tool permissions. Tests were added but live Windows/Ollama validation is still required.
+
+
 **v0.9.5 (songs and memory quality):** Adds `song` as a first-class Interest kind in the SQLite database, all desktop selectors and imports, FTS search and local extraction. Older databases get a one-time constraint migration preserving record IDs, tags, notes, ratings, sources, search and correction references. Clearly song-labeled conversation entries previously misfiled as albums are conservatively repaired. Extracted status and type now respect explicitly quoted owner language, including tentative favorites. Structured Interest recall deduplicates matches and prefers named titles; generic "favorite/album/date" terms no longer drag unrelated personal facts into every music chat. Explicit spontaneous Mikan favorites may be saved when owner-enabled, but existing canon is protected from redundant new likes. Chat grounding covers multi-part answers and unsupported song-to-album associations. Regression tests added; local-model accuracy still needs hands-on evaluation.
 
 **v0.9.4 (named interest update notices and Mikan-canon continuity):** Automatic memory jobs report actual SQLite interest status transitions (entry name, old and new status), allowing the desktop toast to say `Updated Shadows Fall: like → favorite` rather than merely `Remembered 1 interest`. Queued job recovery also surfaces notices. During user-interest conversations Mikan receives a small, topical slice of her existing self-canon so she can remain consistent without confusing her tastes with the owner's. New general media-accuracy guidance discourages invented album/song titles. Regression tests cover the event payload, toast and bounded character-canon retrieval. No existing character preferences are overwritten or invented preferences automatically saved from offhand replies.
@@ -115,3 +118,34 @@ A local-first, personal Windows AI desktop companion powered by Tauri 2, React, 
 4. Open Mikan with Ctrl+Alt+M, or use the tray icon. Change model, appearance, and search settings under Settings.
 
 See [SETUP.md](SETUP.md) for shortcuts, slash commands, automatic search and cache limitations. Roadmap: [Trello](https://trello.com/b/bLO0mXJM/ai-desktop-companion).
+
+
+### NVIDIA cloud models and Model-led experiment (v0.9.63)
+
+The NVIDIA developer API can be selected in **Settings → AI & models**. Save
+an NVIDIA Build API key there. The key is stored in Windows Credential Manager,
+not application settings or debug exports. Three choices are available in Settings,
+the desktop dock, and the authenticated remote browser:
+
+- `nvidia/nemotron-3-ultra-550b-a55b` (new default for fresh settings)
+- `z-ai/glm-5.3-flash`
+- `mistralai/mistral-large-4-1t-a52b`
+
+Existing installations preserve their explicitly saved model/provider choice.
+NVIDIA mode is cloud-only and reports provider errors. Local Ollama and Auto
+(OpenRouter/free then local fallback) remain independently selectable.
+
+The opt-in **Model-led conversation** toggle, only active with NVIDIA selected,
+skips local Qwen's semantic research pre-planning and allows NVIDIA to decide
+when its existing read-only public tools are useful. Web tools still require
+the owner's enabled automatic-web setting and the same privacy/content gates.
+The existing Guided pipeline and Simple/Strict research options remain intact
+for side-by-side tests. Conversational replies won't be replaced with a source
+headline merely because optional browsing was offered. Explicit researched
+answers still use evidence checks. Brain Lab, report history, and the remote
+browser evaluator are preserved from the P0 feature branch.
+
+NVIDIA endpoints are intended for developer prototyping, subject to account
+limits, model availability, and applicable developer-use restrictions. Sending
+chat through a hosted model transmits the prompt and selected local context to
+the provider; keep local Ollama selected for private conversations.
