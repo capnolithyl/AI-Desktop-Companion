@@ -118,3 +118,34 @@ A local-first, personal Windows AI desktop companion powered by Tauri 2, React, 
 4. Open Mikan with Ctrl+Alt+M, or use the tray icon. Change model, appearance, and search settings under Settings.
 
 See [SETUP.md](SETUP.md) for shortcuts, slash commands, automatic search and cache limitations. Roadmap: [Trello](https://trello.com/b/bLO0mXJM/ai-desktop-companion).
+
+
+### NVIDIA cloud models and Model-led experiment (v0.9.63)
+
+The NVIDIA developer API can be selected in **Settings → AI & models**. Save
+an NVIDIA Build API key there. The key is stored in Windows Credential Manager,
+not application settings or debug exports. Three choices are available in Settings,
+the desktop dock, and the authenticated remote browser:
+
+- `nvidia/nemotron-3-ultra-550b-a55b` (new default for fresh settings)
+- `z-ai/glm-5.3-flash`
+- `mistralai/mistral-large-4-1t-a52b`
+
+Existing installations preserve their explicitly saved model/provider choice.
+NVIDIA mode is cloud-only and reports provider errors. Local Ollama and Auto
+(OpenRouter/free then local fallback) remain independently selectable.
+
+The opt-in **Model-led conversation** toggle, only active with NVIDIA selected,
+skips local Qwen's semantic research pre-planning and allows NVIDIA to decide
+when its existing read-only public tools are useful. Web tools still require
+the owner's enabled automatic-web setting and the same privacy/content gates.
+The existing Guided pipeline and Simple/Strict research options remain intact
+for side-by-side tests. Conversational replies won't be replaced with a source
+headline merely because optional browsing was offered. Explicit researched
+answers still use evidence checks. Brain Lab, report history, and the remote
+browser evaluator are preserved from the P0 feature branch.
+
+NVIDIA endpoints are intended for developer prototyping, subject to account
+limits, model availability, and applicable developer-use restrictions. Sending
+chat through a hosted model transmits the prompt and selected local context to
+the provider; keep local Ollama selected for private conversations.

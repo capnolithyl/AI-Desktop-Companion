@@ -4,7 +4,7 @@
  * The CI checker detects unmapped Tauri commands, missing files and stale versions.
  * Add a feature here when adding capability, and update the matching source/docs.
  */
-export const CAPABILITY_RELEASE = "0.9.24";
+export const CAPABILITY_RELEASE = "0.9.63";
 
 export type CapabilityStage = "implemented" | "experimental" | "planned";
 export type RuntimeDependency = "none" | "ollama" | "search" | "mem0" | "voice" | "vision" | "pocket";
@@ -39,7 +39,7 @@ export const CAPABILITIES: readonly Capability[] = [
   },
   {
     id:"remote-browser",label:"Remote browser companion (experimental)",category:"Platforms",
-    description:"Private, key-protected remote browser chat over Tailscale Serve (or a separately configured Cloudflare Tunnel). Uses the running desktop UI and its actual SQLite conversation archive, including selecting and creating chats from the phone; the desktop and browser share one active chat, model, persona, memories and web tools. The browser renders the selected Iki rig locally with idle animation and expressions, including imported outfits relayed in RAM. Requires awake PC, updated desktop app, separately running Node relay, and WebGL-capable browser. An opt-in Windows development supervisor can be launched with npm run remote:dev to allow authenticated phone Check GitHub and Update & restart for the fixed feature branch after clean-tree, fast-forward, build and test checks. In default mode it manages only the browser relay; adding --desktop manages a Tauri dev process if MSVC works. Installed desktop executables are never updated by Git pull. Port 3849 is private loopback-only with a separate random token and must not be exposed. The phone's model dropdown switches installed local Ollama models, OpenRouter, Gemini or Auto using desktop settings, and can refresh installed models; it never receives cloud API keys. Remote Report an Issue saves recent chat excerpts plus sanitized inference, memory, tool, research and avatar diagnostics on the PC, or can optionally publish a reviewed conversation-free GitHub issue through the owner's authenticated gh CLI. Requires explicit approval and reveals only the previewed issue text. No remote phone voice, attachments, screen capture or independent simultaneous desktop/phone chat sessions yet.",
+    description:"Private, key-protected remote browser chat over Tailscale Serve (or a separately configured Cloudflare Tunnel). Uses the running desktop UI and its actual SQLite conversation archive, including selecting and creating chats from the phone; the desktop and browser share one active chat, model, persona, memories and web tools. The browser renders the selected Iki rig locally with idle animation and expressions, including imported outfits relayed in RAM. Requires awake PC, updated desktop app, separately running Node relay, and WebGL-capable browser. An opt-in Windows development supervisor can be launched with npm run remote:dev to allow authenticated phone Check GitHub and Update & restart for the fixed feature branch after clean-tree, fast-forward, build and test checks. In default mode it manages only the browser relay; adding --desktop manages a Tauri dev process if MSVC works. Installed desktop executables are never updated by Git pull. Port 3849 is private loopback-only with a separate random token and must not be exposed. The phone's model dropdown switches installed local Ollama models, NVIDIA's three developer models, OpenRouter, Gemini or Auto using desktop settings, and can refresh installed models; it never receives cloud API keys. Remote Report an Issue saves recent chat excerpts plus sanitized inference, memory, tool, research and avatar diagnostics on the PC, or can optionally publish a reviewed conversation-free GitHub issue through the owner's authenticated gh CLI. Requires explicit approval and reveals only the previewed issue text. No remote phone voice, attachments, screen capture or independent simultaneous desktop/phone chat sessions yet.",
     stage:"experimental",runtime:"none",keywords:["server","remote","browser","tailscale","cloudflare","tunnel","phone","web app","access","avatar","outfit","multiple chats"],
     sources:["server/index.mjs","server/public/index.html","scripts/remote-dev-supervisor.mjs","server/dev-supervisor-client.mjs","src/App.tsx"],docs:["server/README.md"],
     commands:[]
@@ -58,6 +58,14 @@ export const CAPABILITIES: readonly Capability[] = [
     stage:"experimental",runtime:"none",keywords:["openrouter","free","free tier","cloud","fallback","rate limit","quota","llm","inference","function calling","vision","api"],
     sources:["src-tauri/src/openrouter.rs","src-tauri/src/cloud_web_tools.rs","src/App.tsx","src/storage.ts"],docs:["README.md"],
     commands:["openrouter_key_status","openrouter_save_key","openrouter_remove_key","openrouter_test_connection"]
+  },
+  {
+    id:"nvidia-cloud",label:"NVIDIA hosted LLMs and optional model-led conversation (experimental)",category:"AI",
+    description:"Optional NVIDIA developer-prototype inference with selectable Nemotron 3 Ultra (default), GLM-5.3 Flash, and Mistral Large 4. Uses existing Mikan conversation, local memory, Notion and read-only web tools. The opt-in Model-led mode skips the local Qwen semantic web-intent planner for NVIDIA and lets the selected model choose public read-only tools within explicit permission and private-context restrictions; the Guided route and Simple/Strict research interpretation remain available. Developer API key stays in Windows Credential Manager. Cloud models receive prompt, selected memories and approved attachments. Developer service use may be limited or temporarily unavailable; no guaranteed free production hosting. NVIDIA settings, connection test and dock/remote model selection are available.",
+    stage:"experimental",runtime:"none",keywords:["nvidia","nemotron","glm","mistral","model-led","cloud","hosted","api key","prototype"],
+    sources:["src-tauri/src/nvidia.rs","src/App.tsx","src/storage.ts","src/model-switcher.ts","server/index.mjs"],
+    docs:["README.md"],
+    commands:["nvidia_key_status","nvidia_save_key","nvidia_remove_key","nvidia_test_connection"]
   },
   {
     id:"gemini-cloud",label:"Optional Gemini cloud inference (experimental)",category:"AI",
