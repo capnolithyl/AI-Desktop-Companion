@@ -39,7 +39,7 @@ export const CAPABILITIES: readonly Capability[] = [
   },
   {
     id:"remote-browser",label:"Remote browser companion (experimental)",category:"Platforms",
-    description:"Private, key-protected remote browser chat over Tailscale Serve (or a separately configured Cloudflare Tunnel). Uses the running desktop UI and its actual SQLite conversation archive, including selecting and creating chats from the phone; the desktop and browser share one active chat, model, persona, memories and web tools. The browser renders the selected Iki rig locally with idle animation and expressions, including imported outfits relayed in RAM. Requires awake PC, updated desktop app, separately running Node relay, and WebGL-capable browser. The phone's model dropdown switches installed local Ollama models, OpenRouter, Gemini or Auto using desktop settings, and can refresh installed models; it never receives cloud API keys. Remote Report an Issue saves recent chat excerpts plus sanitized inference, memory, tool, research and avatar diagnostics on the PC, or can optionally publish a reviewed conversation-free GitHub issue through the owner's authenticated gh CLI. Requires explicit approval and reveals only the previewed issue text. No remote phone voice, attachments, screen capture or independent simultaneous desktop/phone chat sessions yet.",
+    description:"Private, key-protected remote browser chat over Tailscale Serve (or a separately configured Cloudflare Tunnel). Uses the running desktop UI and its actual SQLite conversation archive, including selecting and creating chats from the phone; the desktop and browser share one active chat, model, persona, memories and web tools. The browser renders the selected Iki rig locally with idle animation and expressions, including imported outfits relayed in RAM. Requires awake PC, updated desktop app, separately running Node relay, and WebGL-capable browser. The phone's model dropdown switches installed local Ollama models, NVIDIA's three selected hosted models, OpenRouter, Gemini or Auto using desktop settings, and can refresh installed models; it never receives cloud API keys. Remote Report an Issue saves recent chat excerpts plus sanitized inference, memory, tool, research and avatar diagnostics on the PC, or can optionally publish a reviewed conversation-free GitHub issue through the owner's authenticated gh CLI. Requires explicit approval and reveals only the previewed issue text. No remote phone voice, attachments, screen capture or independent simultaneous desktop/phone chat sessions yet.",
     stage:"experimental",runtime:"none",keywords:["server","remote","browser","tailscale","cloudflare","tunnel","phone","web app","access","avatar","outfit","multiple chats"],
     sources:["server/index.mjs","server/public/index.html","src/App.tsx"],docs:["server/README.md"],
     commands:[]
@@ -58,6 +58,14 @@ export const CAPABILITIES: readonly Capability[] = [
     stage:"experimental",runtime:"none",keywords:["openrouter","free","free tier","cloud","fallback","rate limit","quota","llm","inference","function calling","vision","api"],
     sources:["src-tauri/src/openrouter.rs","src-tauri/src/cloud_web_tools.rs","src/App.tsx","src/storage.ts"],docs:["README.md"],
     commands:["openrouter_key_status","openrouter_save_key","openrouter_remove_key","openrouter_test_connection"]
+  },
+  {
+    id:"nvidia-cloud",label:"NVIDIA hosted developer models (experimental)",category:"AI",
+    description:"Optional NVIDIA hosted inference offers three manually selectable models: Nemotron 3 Ultra (default), GLM-5.3 Flash and Mistral Large 4. Model selections use Mikan's existing persona, chat archive, locally retrieved memory, citations, and approved optional SearXNG/webpage tools. The NVIDIA key lives in Windows Credential Manager. Settings supports saving, removing and testing it. The desktop dock and remote browser allow model changes. Requests, memory excerpts, and approved images may be transmitted to the provider. Availability, vision/function compatibility, quotas and allowed usage depend on NVIDIA's developer-prototyping terms; these endpoints are not guaranteed as unlimited free production hosting. The existing local Ollama option remains independently selectable.",
+    stage:"experimental",runtime:"none",keywords:["nvidia","nemotron","mistral","glm","cloud","hosted model","api key","developer","prototype"],
+    sources:["src-tauri/src/nvidia.rs","src/App.tsx","src/storage.ts","src/model-switcher.ts","server/index.mjs"],
+    docs:["README.md"],
+    commands:["nvidia_key_status","nvidia_save_key","nvidia_remove_key","nvidia_test_connection"]
   },
   {
     id:"gemini-cloud",label:"Optional Gemini cloud inference (experimental)",category:"AI",
