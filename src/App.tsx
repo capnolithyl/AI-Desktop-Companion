@@ -2626,7 +2626,8 @@ export default function App() {
           openrouterModel: settings.openrouterModel,
           nvidiaModel: settings.nvidiaModel,
           cloudAllowWeb: cloudMaySearch,
-          cloudAllowMemory: modelLed && !groundedChapterTurn && !withSearch,
+          cloudAllowMemory: modelLed && !groundedChapterTurn && !withSearch &&
+            !useNotion && !attachment && !screenshot && !liveFrame && !allowRoleplay,
           researchMode:settings.researchMode,
           // Backward compatibility for native builds that lack researchMode.
           structuredResearch:settings.researchMode==="strict" && effectiveWeb,
