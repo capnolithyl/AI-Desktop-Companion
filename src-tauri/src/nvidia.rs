@@ -361,6 +361,8 @@ pub(crate) async fn chat(app:&AppHandle,request:&ChatRequest,key:&str,emitted:&A
         }
     }
     append_evidence(&mut messages,&sources);
+    // Preloaded untrusted web evidence also closes the private-memory phase.
+    if !sources.is_empty() { public_tool_used=true; }
     let client=reqwest::Client::builder()
         .connect_timeout(Duration::from_secs(8)).build().map_err(|e|e.to_string())?;
     // Tool rounds are bounded, but they must not consume the entire response
