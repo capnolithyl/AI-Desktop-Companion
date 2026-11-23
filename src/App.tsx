@@ -36,7 +36,7 @@ import { parseSlashCommand, SLASH_HELP } from "./slash-commands";
 import { decideDesktopTurn } from "./desktop-turn-routing";
 import { planDesktopWebExecution, resolvePublicWebExecution } from "./turn-execution-policy";
 import { isModelStatusQuestion, modelStatusAnswer } from "./model-status";
-import { modelSwitcherStatus, modelSwitcherChoice } from "./model-switcher";
+import { modelSwitcherStatus, modelSwitcherChoice, NVIDIA_MODELS } from "./model-switcher";
 import { formatDebugLog, type Diagnostics, type MemoryRecallAudit, type OllamaStats, type ResearchAudit } from "./debug-log";
 import { remoteDiagnosticMessages, remoteAvatarDiagnostics } from "./remote-report";
 import { strongSemanticIds } from "./memory-ranking";
@@ -319,6 +319,27 @@ export default function App() {
   };
   const [availableModels, setAvailableModels] = useState<string[]>([]);
   // Secret remains exclusively in Windows Credential Manager, never Settings/localStorage.
+  const [nvidiaKeyInput,setNvidiaKeyInput] = useState("");
+  const [nvidiaKeyReady,setNvidiaKeyReady] = useState(false);
+  const [nvidiaKeyBusy,setNvidiaKeyBusy] = useState(false);
+  const [nvidiaKeyError,setNvidiaKeyError] = useState<string|null>(null);
+  const [nvidiaTestResult,setNvidiaTestResult] = useState<string|null>(null);
+  useEffect(()=>{void invoke<boolean>("nvidia_key_status").then(setNvidiaKeyReady).catch(e=>setNvidiaKeyError(errorText(e)));},[]);
+  const saveNvidiaKey=async()=>{
+    setNvidiaKeyBusy(true);setNvidiaKeyError(null);
+    try {await invoke("nvidia_save_key",{apiKey:nvidiaKeyInput.trim()});setNvidiaKeyReady(true);setNvidiaKeyInput("");setNvidiaTestResult(null);}
+    catch(e){setNvidiaKeyError(errorText(e));}finally{setNvidiaKeyBusy(false);}
+  };
+  const removeNvidiaKey=async()=>{
+    setNvidiaKeyBusy(true);setNvidiaKeyError(null);
+    try {await invoke("nvidia_remove_key");setNvidiaKeyReady(false);setNvidiaTestResult(null);}
+    catch(e){setNvidiaKeyError(errorText(e));}finally{setNvidiaKeyBusy(false);}
+  };
+  const testNvidiaKey=async()=>{
+    setNvidiaKeyBusy(true);setNvidiaTestResult(null);
+    try {setNvidiaTestResult(await invoke<string>("nvidia_test_connection",{model:draft.nvidiaModel}));}
+    catch(e){setNvidiaTestResult("Connection failed: "+errorText(e));}finally{setNvidiaKeyBusy(false);}
+  };
   const [geminiKeyInput,setGeminiKeyInput] = useState("");
   const [geminiKeyReady,setGeminiKeyReady] = useState(false);
   const [geminiKeyBusy,setGeminiKeyBusy] = useState(false);
@@ -1607,6 +1628,7 @@ export default function App() {
     const choice = modelSwitcherChoice(selected, availableModels);
     if (!choice) return;
     if (choice.provider === "local") switchModel(choice.model);
+    else if(choice.provider==="nvidia")applySetting({provider:"nvidia",nvidiaModel:choice.nvidiaModel});
     else applySetting({ provider: choice.provider });
   };
 
@@ -2283,7 +2305,13 @@ export default function App() {
         lastAssistant.diagnostics?.toolPlan?.publicWebAllowed
           ? lastAssistant.diagnostics.toolPlan.query : undefined;
       const plannerStarted=performance.now();
-      const plannerWeb:WebToolDecision = await planPublicWebTools(text,liveFacts,
+      // Experimental NVIDIA route: preserve permission checks but let the
+      // selected larger model decide whether to use public read-only tools.
+      // Do not call local Qwen just to interpret ordinary conversation.
+      const modelLed = settings.provider === "nvidia" && settings.modelLed;
+      const plannerWeb:WebToolDecision = modelLed
+        ? {search:false,method:"not-needed",reason:"NVIDIA model-led: no local semantic web planner"}
+        : await planPublicWebTools(text,liveFacts,
         prompt => invoke<string>("condense_local_context",{
           endpoint:settings.endpoint,model:settings.model,prompt,
           contextWindow:settings.contextWindow,maxOutputTokens:320,timeoutMs:18_000,publicToolPlan:true
@@ -2298,7 +2326,11 @@ export default function App() {
         }
       );
       if(stopRequested.current)throw new Error("Generation stopped");
-      const webExecution=resolvePublicWebExecution(webPolicy,researchPlan,plannerWeb,liveFacts,performance.now()-plannerStarted);
+      const webExecution = modelLed
+        ? {autoSearch:false,researchRoute:"chat",researchQuery:undefined,
+           researchTask:undefined,researchRecent:false,researchCompact:false,
+           researchGeneralFallback:false}
+        : resolvePublicWebExecution(webPolicy,researchPlan,plannerWeb,liveFacts,performance.now()-plannerStarted);
       const reasoningChoice=localThinkingChoice(settings.reasoningMode,text,settings.model,
         plannerWeb.replyEffort);
       const plannedPublicSearch = canPlanPublicWeb && plannerWeb.search && !!plannerWeb.query;
@@ -2306,7 +2338,10 @@ export default function App() {
         researchPlan = {...researchPlan,mode:"research",query:plannerWeb.query};
         setActivity("Preparing evidence-backed answer…");
       }
-      const cloudMaySearch = webPolicy.cloudMaySearch && webExecution.autoSearch;
+      // On the experimental path the model decides, but only if the owner enabled
+      // automatic web tools and the same private-content permission gate allows it.
+      const cloudMaySearch = modelLed ? webPolicy.canPlanPublicWeb
+        : webPolicy.cloudMaySearch && webExecution.autoSearch;
       // Cloud providers independently decide when read-only web tools are useful.
       // Local Qwen still respects the existing deterministic/planned routes.
       const effectiveWeb = webExecution.autoSearch;
@@ -2315,9 +2350,9 @@ export default function App() {
         : undefined;
       toolAudit = {
         sourceRequirement:plannedPublicSearch ? plannerWeb.sourceRequirement : undefined,
-        method: plannedPublicSearch ? "ai-web" : turn.allowAutomaticWeb ? "deterministic-web"
+        method: modelLed ? "model-led" : plannedPublicSearch ? "ai-web" : turn.allowAutomaticWeb ? "deterministic-web"
           : plannerWeb.method,
-        reason:plannedPublicSearch ? plannerWeb.reason :
+        reason:modelLed ? "Selected NVIDIA model owns public tool decisions; no local semantic pre-planning" : plannedPublicSearch ? plannerWeb.reason :
           turn.allowAutomaticWeb ? "Explicit or factual research routing" :
             (webPolicy.blockedReason ?? plannerWeb.reason),
         query:webExecution.researchQuery,
@@ -2563,6 +2598,7 @@ export default function App() {
           provider: chapterModelProvider,
           geminiModel: settings.geminiModel,
           openrouterModel: settings.openrouterModel,
+          nvidiaModel: settings.nvidiaModel,
           cloudAllowWeb: cloudMaySearch,
           researchMode:settings.researchMode,
           // Backward compatibility for native builds that lack researchMode.
@@ -2674,7 +2710,7 @@ export default function App() {
       };
       // The source-verification filter applies to actual researched answers,
       // NEVER to local conversational or capability answers.
-      const cloudResearched = cloudMaySearch && (completion.modelUsed?.startsWith("Gemini ") || completion.modelUsed?.startsWith("OpenRouter ")) &&
+      const cloudResearched = cloudMaySearch && (completion.modelUsed?.startsWith("Gemini ") || completion.modelUsed?.startsWith("OpenRouter ") || completion.modelUsed?.startsWith("NVIDIA ")) &&
         !!completion.sources?.length;
       const verifiedSources = (turn.verifyWebEvidence || plannedPublicSearch || cloudResearched)
         ? (completion.sources?.length ? completion.sources : withSearch?.results)
@@ -2688,7 +2724,11 @@ export default function App() {
       const simpleSourcedAnswer=settings.researchMode==="simple" &&
         !!completion.searchQuery && !!completion.sources?.length &&
         !completion.sourcesCarriedOver && !completion.researchAudit && !cloudResearched;
-      const answerReview = verifiedSources?.length && !simpleSourcedAnswer
+      // Never convert a model-led conversational reply into a source headline
+      // merely because the model chose to browse. Actual research requests
+      // retain their normal evidence checks.
+      const modelLedConversation = modelLed && researchPlan.mode === "chat" && !withSearch;
+      const answerReview = verifiedSources?.length && !simpleSourcedAnswer && !modelLedConversation
         ? reviewResearchCompletion(rawText,verifiedSources,completion.researchAudit) : null;
       if(answerReview){
         diagnostics.answerVerification={
@@ -2834,6 +2874,7 @@ export default function App() {
     provider: settings.provider,
     openrouterModel: settings.openrouterModel,
     geminiModel: settings.geminiModel,
+    nvidiaModel: settings.nvidiaModel,
     models: availableModels,
     modelStatus: remoteModelStatus,
     controlsBlocked: remoteBusyRef.current,
@@ -3021,7 +3062,8 @@ export default function App() {
     m.role === "assistant" && !m.failed && !!m.diagnostics?.model
   );
   const dockModel = modelSwitcherStatus(settings,lastModelReply?.diagnostics,busy,activity);
-  const dockOption = settings.provider === "local" && availableModels.includes(settings.model) && !busy
+  const dockOption = !busy && settings.provider==="nvidia" ? `nvidia:${settings.nvidiaModel}`
+    : settings.provider === "local" && availableModels.includes(settings.model) && !busy
     ? `local:${settings.model}` : "__status__";
   const dockDot = dockModel.cloudActive ? "online"
     : settings.provider !== "local" && !dockModel.label.includes("Local")
@@ -3330,6 +3372,9 @@ export default function App() {
               <option value="openrouter">☁ OpenRouter · free only</option>
               <option value="gemini">☁ Gemini · cloud only</option>
             </optgroup>
+            <optgroup label="NVIDIA · developer models">
+              {NVIDIA_MODELS.map(name=><option key={name} value={`nvidia:${name}`}>☁ NVIDIA · {name.split("/").pop()}</option>)}
+            </optgroup>
             <optgroup label="Local Ollama models">
               {availableModels.map(name =>
                 <option key={name} value={`local:${name}`}>● Local · {name}</option>
@@ -3520,13 +3565,13 @@ export default function App() {
     {screen === "settings" && <section className="drawer" role="dialog" aria-label="Mikan settings">
       <header className="drawer-header">
         <button className="back-button" title="Back to companion" onClick={goCompact}><ArrowLeft size={19}/></button>
-        <div className="drawer-title"><strong>Settings</strong><span>Mikan Desktop · Local first</span></div>
+        <div className="drawer-title"><strong>Settings</strong><span>Mikan Desktop v{DESKTOP_VERSION} · Local first</span></div>
         {(["ai", "internet", "voice", "appearance", "interface"] as SettingsTab[]).includes(settingsTab) &&
           <button className="secondary-action" onClick={() => setDraft(current => ({
             ...current,
             ...(settingsTab === "ai" ? {
               endpoint: DEFAULT_SETTINGS.endpoint, model: DEFAULT_SETTINGS.model,
-              provider: DEFAULT_SETTINGS.provider, geminiModel: DEFAULT_SETTINGS.geminiModel,
+              provider: DEFAULT_SETTINGS.provider, nvidiaModel: DEFAULT_SETTINGS.nvidiaModel, modelLed: DEFAULT_SETTINGS.modelLed, geminiModel: DEFAULT_SETTINGS.geminiModel,
               openrouterModel: DEFAULT_SETTINGS.openrouterModel,
               systemPrompt: DEFAULT_SETTINGS.systemPrompt,
               contextWindow: DEFAULT_SETTINGS.contextWindow,
@@ -3616,8 +3661,37 @@ export default function App() {
               <option value="auto">Auto · OpenRouter free → Ollama fallback</option>
               <option value="openrouter">OpenRouter free only · show cloud errors</option>
               <option value="gemini">Gemini only · show cloud errors</option>
+              <option value="nvidia">NVIDIA · selected developer model</option>
             </select>
             <small>Auto uses free OpenRouter first, switching to local Qwen when its quota or network fails. Gemini remains selectable separately. Memory, SearXNG, and Pocket TTS stay unchanged.</small>
+          </label>
+          <div className="settings-section-title">NVIDIA · Developer prototyping</div>
+          <label className="setting-field">NVIDIA model
+            <select value={draft.nvidiaModel} onChange={event=>setDraft(current=>({...current,nvidiaModel:event.target.value}))}>
+              {NVIDIA_MODELS.map(name=><option key={name} value={name}>{name}</option>)}
+            </select>
+            <small>Default: Nemotron 3 Ultra. NVIDIA's experimental hosted service is subject to rate limits and developer-use terms.</small>
+          </label>
+          <label className="setting-field">NVIDIA API key
+            <input type="password" autoComplete="off" spellCheck={false} value={nvidiaKeyInput}
+              placeholder={nvidiaKeyReady?"Saved securely · replace key":"Paste your NVIDIA Build API key"}
+              onChange={e=>setNvidiaKeyInput(e.target.value)}/>
+            <small>{nvidiaKeyReady?"Saved in Windows Credential Manager.":"No NVIDIA key configured."} Never put your API key in chat or Git.</small>
+          </label>
+          <div className="service-buttons">
+            <button type="button" className="secondary-action" disabled={nvidiaKeyBusy||!nvidiaKeyInput.trim()} onClick={()=>void saveNvidiaKey()}>Save NVIDIA key</button>
+            {nvidiaKeyReady && <>
+              <button type="button" className="secondary-action" disabled={nvidiaKeyBusy} onClick={()=>void testNvidiaKey()}>Test NVIDIA</button>
+              <button type="button" className="secondary-action" disabled={nvidiaKeyBusy} onClick={()=>void removeNvidiaKey()}>Remove key</button>
+            </>}
+          </div>
+          {nvidiaKeyError && <small className="field-error" role="alert">{nvidiaKeyError}</small>}
+          {nvidiaTestResult && <small className={nvidiaTestResult.startsWith("Connection failed:")?"field-error":"settings-note"} role="status">{nvidiaTestResult}</small>}
+          <label className="settings-toggle">
+            <input type="checkbox" checked={draft.modelLed} disabled={draft.provider!=="nvidia"}
+              onChange={e=>setDraft(current=>({...current,modelLed:e.target.checked}))}/>
+            <span><strong>Model-led conversation · experimental</strong>
+              <small>With NVIDIA selected, skip local Qwen's web-intent planning. Let NVIDIA decide if read-only public web tools are useful, while preserving web permissions, private-context restrictions and source checks for research requests. Compare with the guided pipeline by toggling this off. Tool-enabled conversations may not stream immediately.</small></span>
           </label>
           <div className="settings-section-title">OpenRouter · Free models only</div>
           <label className="setting-field">OpenRouter model ID
