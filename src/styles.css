@@ -1292,3 +1292,58 @@ button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px
 }
 .settings-layout.brain-lab-layout .settings-tab span { display: none; }
 .settings-layout.brain-lab-layout .settings-tab svg { width: 17px; height: 17px; }
+
+
+/* Standalone native Control Center. The compact companion never changes size. */
+.companion.settings-standalone {
+  background: #251f2b;
+}
+.companion.settings-standalone > .drawer {
+  inset: 0;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  background: linear-gradient(155deg, #312631 0%, #231d28 75%);
+}
+.companion.settings-standalone .drawer-header {
+  background: rgb(var(--accent-rgb, 255 173 126) / .07);
+}
+.companion.settings-standalone .panel-scrim { display: none; }
+.settings-standalone .settings-layout > .settings-tabs {
+  width: 200px;
+  min-width: 200px;
+  padding: 18px 12px;
+}
+.settings-standalone .settings-layout > .settings-body {
+  padding: 26px 28px;
+}
+/* Full-width Brain Lab has room for both the sidebar labels and results. */
+.settings-standalone .settings-layout.brain-lab-layout .settings-tabs {
+  width: 200px;
+  min-width: 200px;
+  padding: 18px 12px;
+}
+.settings-standalone .settings-layout.brain-lab-layout .settings-nav-group { gap: 4px; }
+.settings-standalone .settings-layout.brain-lab-layout .settings-nav-heading { display: block; }
+.settings-standalone .settings-layout.brain-lab-layout .settings-tab {
+  justify-content: flex-start;
+  padding: 10px 9px;
+  min-height: 38px;
+}
+.settings-standalone .settings-layout.brain-lab-layout .settings-tab span { display: inline; }
+.settings-standalone .settings-layout.brain-lab-layout .settings-tab svg { width: 16px; height: 16px; }
+.settings-standalone .settings-layout > .settings-body.settings-brain {
+  padding: 20px 24px;
+}
+@media (max-width: 800px) {
+  .settings-standalone .settings-layout > .settings-tabs,
+  .settings-standalone .settings-layout.brain-lab-layout .settings-tabs {
+    width: 156px;
+    min-width: 156px;
+    padding: 12px 7px;
+  }
+  .settings-standalone .settings-layout > .settings-body,
+  .settings-standalone .settings-layout > .settings-body.settings-brain {
+    padding: 16px;
+  }
+}
