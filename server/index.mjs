@@ -126,7 +126,25 @@ const agentOrigins = new Set([
   "http://localhost:1420",
 ]);
 const CLOUD_PROVIDERS = ["auto", "openrouter", "gemini", "nvidia"];
-const NVIDIA_MODELS = ["nvidia/nemotron-3-ultra-550b-a55b","z-ai/glm-5.3-flash","mistralai/mistral-large-4-1t-a52b"];
+const NVIDIA_MODELS = [
+  "nvidia/nemotron-3-ultra-550b-a55b",
+  "nvidia/nemotron-3.5-lightning-30b-a3b",
+  "nvidia/nemotron-3.5-bolt-e4b",
+  "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
+  "poolside/laguna-xs-2.1",
+  "moonshotai/kimi-k3.1-pro",
+  "z-ai/glm-5.3-flash",
+  "mistralai/mistral-large-4-1t-a52b"
+];
+const allowedEvalModels = (desktop) => new Set([
+  ...desktop.models,
+  ...NVIDIA_MODELS.map(model => "nvidia:"+model),
+  ...((desktop.openrouterModel==="openrouter/free" ||
+       /^[a-zA-Z0-9_./-]+:free$/.test(desktop.openrouterModel))
+    ? ["openrouter:"+desktop.openrouterModel] : []),
+  ...(/^gemini-[a-zA-Z0-9.-]{1,90}$/.test(desktop.geminiModel)
+    ? ["gemini:"+desktop.geminiModel] : [])
+]);
 const safeModels = (models) => Array.isArray(models)
   ? [...new Set(models.filter(name => typeof name === "string" && name.length > 0 && name.length <= 120))].slice(0, 100)
   : [];
@@ -207,7 +225,7 @@ export function createBridge({
   let desktop = {
     conversationId: null, model: "", busy: false,
     messages: [], conversations: [], avatar: null,
-    provider: "local", models: [], openrouterModel: "", geminiModel: "", nvidiaModel: "",
+    provider: "local", models: [], nvidiaModels: NVIDIA_MODELS, openrouterModel: "", geminiModel: "", nvidiaModel: "",
     modelStatus: null, controlsBlocked: true,
     reportDiagnostics: null,
     brainEval: null,brainEvalCatalog: []
@@ -340,12 +358,12 @@ export function createBridge({
           const mode = body.mode;
           const repetitions = body.repetitions;
           const ids = body.scenarioIds;
-          // Only model IDs reported as installed by the trusted local desktop.
-          // Legacy single-model browser requests still work unchanged.
+          // Only installed Ollama IDs or currently configured free-cloud IDs.
+          // Desktop and native providers independently revalidate every ID.
           const requestedModels = body.models;
           const researchMode = body.researchMode;
           const mikanifyAnswer=body.mikanifyAnswer;
-          const installed = new Set(desktop.models);
+          const installed = allowedEvalModels(desktop);
           const validModels = requestedModels === undefined ||
             (mode === "live" && Array.isArray(requestedModels) &&
               requestedModels.length >= 1 && requestedModels.length <= 10 &&
@@ -602,6 +620,9 @@ export function createBridge({
           geminiModel: String(body.geminiModel || "").slice(0, 120),
            nvidiaModel: NVIDIA_MODELS.includes(body.nvidiaModel) ? body.nvidiaModel : NVIDIA_MODELS[0],
           models: safeModels(body.models),
+          // The relay publishes its own fixed allowlist; the browser never
+          // trusts arbitrary model identifiers from a remote snapshot.
+          nvidiaModels: NVIDIA_MODELS,
           modelStatus: body.modelStatus && typeof body.modelStatus === "object"
             ? {
                 label: String(body.modelStatus.label || "").slice(0, 200),

@@ -261,7 +261,7 @@
     </section>
     <section class="settings-group" aria-labelledby="brainLabSectionTitle">
       <h3 id="brainLabSectionTitle">Brain Lab · Overnight tests</h3>
-      <p class="settings-hint">Runs on your desktop, not your phone. Fast is offline. Live uses Mikan's real public SearXNG search tool and local model, but synthetic private memories. Keep Windows, Mikan, Ollama and SearXNG running. No real memory writes.</p>
+      <p class="settings-hint">Runs on your desktop, not your phone. Fast is offline. Live uses local or configured free cloud models and real SearXNG; private fixture memories are synthetic. Keep Windows, Mikan, Ollama and SearXNG running. No real memory writes.</p>
       <section class="brain-lab-presets" aria-label="Saved Brain Lab configurations">
         <strong>Saved test presets</strong>
         <div class="brain-lab-presets-row">
@@ -316,8 +316,8 @@
         </label>
       </div>
       <details id="brainLabModelPicker" class="brain-lab-models">
-        <summary>Compare installed local models · <span id="brainLabModelCount">1 selected</span></summary>
-        <p class="settings-hint">Live mode only. Models run sequentially; each gets a separate saved report.</p>
+        <summary>Compare local + free cloud models · <span id="brainLabModelCount">1 selected</span></summary>
+        <p class="settings-hint">Live mode only. Models run sequentially. Cloud requests are conservatively paced, with short-run caps and a reserved OpenRouter daily allowance. Requires saved keys on desktop.</p>
         <div id="brainLabModelList" class="brain-lab-model-list"></div>
       </details>
       <p id="brainLabCounts" class="settings-hint"></p>
@@ -843,7 +843,7 @@
     var allowed=new Set(brainLabCatalog.map(function(item){return item.id}));
     var known=config.scenarioIds.filter(function(id){return allowed.has(id)});
     if(config.scenarioIds.length>0&&!known.length){brainLabPresetFeedback.textContent="Preset has no scenarios in this build; selection unchanged.";return}
-    var models=Array.isArray(current?.models)?current.models:[];
+    var models=brainLabAvailableModels(current||{});
     var available=new Set(models);
     var loadedModels=config.models.filter(function(model){return available.has(model)});
     var missing=config.models.filter(function(model){return !available.has(model)});
@@ -860,7 +860,7 @@
     brainLabModelsSignature="";
     brainLabPresetFeedback.textContent="Loaded "+preset.name+": "+known.length+" scenarios."+
       (known.length!==config.scenarioIds.length?" "+(config.scenarioIds.length-known.length)+" missing scenarios ignored.":"")+
-      (missing.length?" Missing Ollama models: "+missing.join(", ")+". Select installed models before running.":"");
+      (missing.length?" Unavailable local/cloud models: "+missing.join(", ")+". Select installed models before running.":"");
     if(current)renderBrainLab(current);
   }
   function deleteBrainLabPreset(){
@@ -885,11 +885,31 @@
   brainLabPresetName.addEventListener("keydown",function(event){
     if(event.key==="Enter"){event.preventDefault();saveBrainLabPreset()}
   });
+  function brainLabAvailableModels(data){
+    var local=Array.isArray(data.models)?data.models.slice(0,100):[];
+    var allowed=[...local];
+    var nvidia=Array.isArray(data.nvidiaModels)?data.nvidiaModels:[];
+    for(var name of nvidia){
+      if(typeof name==="string")allowed.push("nvidia:"+name);
+    }
+    if(data.openrouterModel==="openrouter/free" ||
+      (typeof data.openrouterModel==="string"&&/^[a-zA-Z0-9_./-]+:free$/.test(data.openrouterModel))){
+      allowed.push("openrouter:"+data.openrouterModel);
+    }
+    if(typeof data.geminiModel==="string"&&/^gemini-[a-zA-Z0-9.-]{1,90}$/.test(data.geminiModel))
+      allowed.push("gemini:"+data.geminiModel);
+    return [...new Set(allowed)];
+  }
   function renderBrainLabModels(data,running){
-    var availableModels=Array.isArray(data.models)?data.models.slice(0,100):[];
+    var availableModels=brainLabAvailableModels(data);
     var allowed=new Set(availableModels);
-    if(brainLabSelectedModels===null)
-      brainLabSelectedModels=new Set(allowed.has(data.model)?[data.model]:availableModels.slice(0,1));
+    if(brainLabSelectedModels===null){
+      var selected=data.provider==="nvidia"?"nvidia:"+data.nvidiaModel:
+        data.provider==="gemini"?"gemini:"+data.geminiModel:
+        data.provider==="openrouter"?"openrouter:"+data.openrouterModel:data.model;
+      brainLabSelectedModels=new Set(allowed.has(selected)?[selected]:
+        allowed.has(data.model)?[data.model]:availableModels.slice(0,1));
+    }
     brainLabSelectedModels=new Set([...brainLabSelectedModels].filter(model=>allowed.has(model)));
     brainLabModelPicker.hidden=brainLabMode.value!=="live";
     brainLabModelCount.textContent=brainLabSelectedModels.size+" selected";
@@ -910,7 +930,10 @@
         if(current)renderBrainLab(current);
       });
       var caption=document.createElement("span");
-      caption.textContent=model+(model===data.model?" · current":"");
+      caption.textContent=(model.startsWith("nvidia:")?"NVIDIA · "+model.slice(7):
+        model.startsWith("openrouter:")?"OpenRouter · "+model.slice(11):
+        model.startsWith("gemini:")?"Gemini · "+model.slice(7):
+        "Local · "+model)+(model===data.model?" · configured local":"");
       label.append(checkbox,caption);
       brainLabModelList.append(label);
     }
@@ -1363,7 +1386,7 @@
       options.append(cloud);
       var nvidia = document.createElement("optgroup");
       nvidia.label = "NVIDIA developer models";
-      ["nvidia/nemotron-3-ultra-550b-a55b","z-ai/glm-5.3-flash","mistralai/mistral-large-4-1t-a52b"]
+      (Array.isArray(data.nvidiaModels)?data.nvidiaModels:[])
         .forEach(function(name){var option=document.createElement("option");option.value="nvidia:"+name;
           option.textContent="☁ NVIDIA · "+name.split("/").pop();nvidia.append(option);});
       options.append(nvidia);

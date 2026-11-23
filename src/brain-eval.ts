@@ -68,7 +68,7 @@ export function brainEvalModels(
   if(!Array.isArray(requested)||!requested.length||requested.length>10 ||
     requested.some(model=>typeof model!=="string"||!installed.includes(model)) ||
     new Set(requested).size!==requested.length)
-    throw new Error("Choose 1–10 unique installed Ollama models");
+    throw new Error("Choose 1–10 unique approved local or cloud models");
   return [...requested];
 }
 
@@ -182,6 +182,8 @@ export type EvalPlanner = (input:string,previous:EvalTurn[],
   context?:PublicResearchContext,selectedFacts?:ReadonlyArray<EvalMemoryFact>)=>Promise<EvalWebPlan>;
 export type EvalOptions = {
   mode:EvalMode;
+  /** The reply provider. Auxiliary planning and memory previews remain local. */
+  provider?:"local"|"openrouter"|"gemini"|"nvidia";
   repetitions:number;
   model:string;
   researchMode?:"simple"|"strict";
@@ -732,7 +734,7 @@ export async function runBrainEvaluation(options:EvalOptions):Promise<EvalReport
       const began=Date.now();
       const decision=decideDesktopTurn(step.user,previous,{automaticWebEnabled:true});
       const webPolicy=planDesktopWebExecution({
-        question:step.user,previous,autoSearch:true,provider:"local",planMode:decision.plan.mode,
+        question:step.user,previous,autoSearch:true,provider:options.provider??"local",planMode:decision.plan.mode,
         notion:scenario.id==="notion-without-web",
         personalTurn:isPersonalMemoryQuestion(step.user),capabilityQuestion:decision.capabilityQuestion,
         existingSearch:false,attachment:false,screenshot:false,liveFrame:false,roleplay:scenario.id==="search-in-roleplay"

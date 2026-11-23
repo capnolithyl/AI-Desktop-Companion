@@ -16,6 +16,7 @@ import {
   removeBrainEvalPreset,type BrainEvalPresetConfig
 } from "./brain-eval-presets";
 import "./brain-eval.css";
+import { brainCloudChoices,CLOUD_EVAL_BUDGETS } from "./brain-eval-cloud";
 
 function formatMs(value:number):string{return value>=1000?(value/1000).toFixed(1)+"s":value+"ms"}
 const groups=Array.from(new Set(EVAL_SCENARIOS.map(s=>s.group)));
@@ -36,9 +37,15 @@ export function BrainEvalPanel({settings,availableModels}:{settings:Settings;ava
   );
   const [repeats,setRepeats]=useState(1);
   const [viewModel,setViewModel]=useState("");
-  const [selectedModels,setSelectedModels]=useState<ReadonlySet<string>>(()=>new Set([settings.model]));
+  const currentChoice=settings.provider==="nvidia"?"nvidia:"+settings.nvidiaModel:
+    settings.provider==="openrouter"?"openrouter:"+settings.openrouterModel:
+    settings.provider==="gemini"?"gemini:"+settings.geminiModel:settings.model;
+  const [selectedModels,setSelectedModels]=useState<ReadonlySet<string>>(()=>new Set([currentChoice]));
   const localModels=[...new Set([settings.model,...availableModels])];
-  const modelsToRun=mode==="live"?localModels.filter(model=>selectedModels.has(model)): [settings.model];
+  const cloudModels=brainCloudChoices(settings);
+  const availableChoices=[...localModels,...cloudModels.map(choice=>choice.id)];
+  const modelsToRun=mode==="live"?availableChoices.filter(model=>selectedModels.has(model)): [settings.model];
+  const cloudSelected=cloudModels.filter(choice=>modelsToRun.includes(choice.id));
   const [numberSelection,setNumberSelection]=useState("");
   const [numberFeedback,setNumberFeedback]=useState("Enter scenario numbers such as 20, 21, 83.");
   const [catalogOpen,setCatalogOpen]=useState(true);
@@ -54,10 +61,10 @@ export function BrainEvalPanel({settings,availableModels}:{settings:Settings;ava
   const progressPercent=progress.total>0
     ?Math.round(Math.min(progress.done,progress.total)/progress.total*100):0;
   const records=getBrainEvalCaseRecords();
-  const environment=brainEvalEnvironment(mode,viewModel||settings.model,researchMode,mikanifyAnswer);
+  const environment=brainEvalEnvironment(mode,viewModel||modelsToRun[0]||settings.model,researchMode,mikanifyAnswer);
   const statuses=useMemo(()=>
     new Map(EVAL_SCENARIOS.map(s=>[s.id,statusForScenario(s,records,environment)])),
-    [records,mode,settings.model,viewModel,researchMode,mikanifyAnswer]
+    [records,mode,settings.model,modelsToRun[0],viewModel,researchMode,mikanifyAnswer]
   );
   const totals=summarizeCaseStatuses(EVAL_SCENARIOS,records,environment);
   const searchTerm=search.trim().toLocaleLowerCase();
@@ -128,8 +135,8 @@ export function BrainEvalPanel({settings,availableModels}:{settings:Settings;ava
     const knownIds=config.scenarioIds.filter(id=>allowedIds.has(id));
     const unknownIds=config.scenarioIds.filter(id=>!allowedIds.has(id));
     if(config.scenarioIds.length>0&&!knownIds.length){setMessage("This preset has no scenarios in the current catalog; nothing was loaded.");return}
-    const knownModels=config.models.filter(model=>localModels.includes(model));
-    const missingModels=config.models.filter(model=>!localModels.includes(model));
+    const knownModels=config.models.filter(model=>availableChoices.includes(model));
+    const missingModels=config.models.filter(model=>!availableChoices.includes(model));
     setMode(config.mode);
     setResearchMode(config.researchMode??settings.researchMode);
     setMikanifyAnswer(config.mikanifyAnswer===true);
@@ -145,7 +152,7 @@ export function BrainEvalPanel({settings,availableModels}:{settings:Settings;ava
     setMessage("Loaded "+preset.name+" ("+knownIds.length+" scenarios, "+
       (config.mode==="live"?knownModels.length:1)+" model(s))."+
       (unknownIds.length?" "+unknownIds.length+" unavailable scenario(s) skipped.":"")+
-      (missingModels.length?" Missing Ollama models: "+missingModels.join(", ")+". Select installed models before running.":""));
+      (missingModels.length?" Unavailable local/cloud models: "+missingModels.join(", ")+". Check your installed and configured models.":""));
   }
   function deletePreset(){
     if(busy||!presetChoice)return;
@@ -203,9 +210,12 @@ export function BrainEvalPanel({settings,availableModels}:{settings:Settings;ava
     <div className="settings-section-title"><BrainCircuit size={17}/> Brain lab · P0 reliability</div>
     <details className="brain-eval-explainer">
       <summary>What Brain Lab tests <span>Isolated memories · Live uses real SearXNG</span></summary>
-      <p>Brain Lab tests Mikan's routing and local model using synthetic facts.
-        Fast mode stays offline. Live mode calls the configured local model and
-        runs approved public searches through the same Rust/SearXNG path as desktop chat.
+      <p>Brain Lab tests Mikan's routing and model responses using synthetic facts.
+        Fast mode stays offline. Live mode runs selected local Ollama or configured
+        free cloud models through Mikan's existing native providers and approved
+        public SearXNG path. The local model still handles shared auxiliary planning
+        and isolated memory-capture previews, so provider comparisons measure the
+        selected answer model rather than pure end-to-end cloud processing.
         Real search snippets are returned to the model and recorded with their URLs.
         Neither mode writes to saved memories or private connected apps.
         Live runs containing web scenarios first verify a real public search returns actual sources;
@@ -249,7 +259,7 @@ export function BrainEvalPanel({settings,availableModels}:{settings:Settings;ava
       <label>Test mode
         <select value={mode} disabled={busy} onChange={e=>setMode(e.target.value as EvalMode)}>
           <option value="routing">Fast · production routing and lexical recall</option>
-          <option value="live">Live · local model + actual public SearXNG</option>
+          <option value="live">Live · local or cloud models + actual public SearXNG</option>
         </select>
       </label>
       <label>Research interpreter
@@ -298,12 +308,12 @@ export function BrainEvalPanel({settings,availableModels}:{settings:Settings;ava
     </div>
     {mode==="live"&&<section className="brain-eval-model-picker" aria-label="Models to compare">
       <div className="brain-eval-model-heading">
-        <strong>Run across installed Ollama models</strong>
-        <span>{modelsToRun.length} selected · sequential, one at a time</span>
+        <strong>Compare local and free cloud models</strong>
+        <span>{modelsToRun.length} selected · sequential only</span>
       </div>
       <div className="brain-eval-model-actions">
-        <button type="button" disabled={busy} onClick={()=>setSelectedModels(new Set([settings.model]))}>Current only</button>
-        <button type="button" disabled={busy} onClick={()=>setSelectedModels(new Set(localModels.slice(0,10)))}>Select up to 10</button>
+        <button type="button" disabled={busy} onClick={()=>setSelectedModels(new Set([currentChoice]))}>Current only</button>
+        <button type="button" disabled={busy} onClick={()=>setSelectedModels(new Set(localModels.slice(0,10)))}>All local (up to 10)</button>
       </div>
       <div className="brain-eval-model-list">
         {localModels.map(model=><label key={model}>
@@ -314,10 +324,27 @@ export function BrainEvalPanel({settings,availableModels}:{settings:Settings;ava
               if(event.target.checked)next.add(model);else next.delete(model);
               return next;
             })}/>
-          <span>{model}{model===settings.model?" · current":""}</span>
+          <span>Local · {model}{model===settings.model?" · configured local":""}</span>
+        </label>)}
+        {cloudModels.map(choice=><label key={choice.id}>
+          <input type="checkbox" disabled={busy}
+            checked={selectedModels.has(choice.id)}
+            onChange={event=>setSelectedModels(old=>{
+              const next=new Set(old);
+              if(event.target.checked)next.add(choice.id);else next.delete(choice.id);
+              return next;
+            })}/>
+          <span>{choice.label}</span>
         </label>)}
       </div>
-      <small>Each selected model runs the same scenarios in a fresh isolated conversation with its own report and saved results. Cloud models aren't included yet.</small>
+      <small>Cloud models use the saved API keys in Windows Credential Manager, never the browser. Live runs stay sequential and use conservative pacing; actual provider quotas may be lower. A quota/429 error stops further cloud testing rather than retrying.</small>
+      {cloudSelected.length>0&&<div className="brain-eval-muted-note">
+        {Array.from(new Set(cloudSelected.map(choice=>choice.provider))).map(provider=>{
+          if(provider==="local")return null;
+          const limit=CLOUD_EVAL_BUDGETS[provider];
+          return <small key={provider}>{provider}: at most {limit.maxTurns} turns per model in a run; {Math.round(limit.minimumIntervalMs/1000)}s minimum between starts. {limit.description}</small>;
+        })}
+      </div>}
     </section>}
     <div className="brain-eval-status-summary">
       {(["passed","failed","review","stale","untested","incomplete"] as const).map(status=>

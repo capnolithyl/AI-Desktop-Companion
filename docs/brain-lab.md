@@ -1,5 +1,51 @@
 # Mikan Brain Lab (P0)
 
+## v0.9.73: Free cloud models in Live Brain Lab
+
+**Fast** remains routing-only. **Live** can now compare installed local Ollama
+models with the eight allowlisted NVIDIA Build prototypes, the currently
+configured free-only OpenRouter model/route, and the configured Gemini model.
+Both desktop Settings and authenticated remote browser expose these options.
+Each selected model/provider receives independent synthetic scenarios, report,
+status and saved file. Cloud model IDs are provider-prefixed so results cannot
+collide with local model IDs.
+
+Credentials remain in Windows Credential Manager and only existing native
+Rust chat_stream providers make cloud HTTP requests. cloudAllowMemory is
+forced false: only explicitly supplied synthetic fixture facts are passed.
+Real owner SQLite memory, Notion, and connected accounts are not opened.
+The *local Ollama model* still performs shared web planning and isolated
+memory-capture previews. Thus this benchmarks the selected answer model,
+not a completely cloud-only autonomous processing stack.
+
+### Conservative request pacing
+
+Provider | Minimum turn-start spacing | Estimated maximum calls per turn | Max turns per model/run
+--- | --- | --- | ---
+NVIDIA prototype | 15 seconds | 6 | 24
+OpenRouter :free | 20 seconds | 3 | 8
+Gemini | 60 seconds | 5 | 8
+
+Provider requests are strictly sequential across a single Brain Lab run;
+pacing applies across successive Brain Lab runs in the same desktop process.
+A model turn may spend several requests on tool rounds or evidence verification.
+NVIDIA prototypes often allow around 40 RPM but exact limits vary by
+model/account. OpenRouter normally allows 20 RPM and 50 free requests/day.
+Brain Lab conservatively reserves at most 30 estimated OpenRouter free API
+requests per UTC day across runs, leaving headroom for normal conversations.
+This is local safety accounting, not the provider's authoritative balance;
+normal desktop chats can still use the same quota. Gemini's RPM/TPM/daily
+limits vary by project and model and may be lower than this conservative pace.
+
+An HTTP 429/quota/rate-limit error stops the remaining cloud evaluation,
+instead of retrying into a daily quota or causing a huge batch of failures.
+Cloud batches are intentionally capped. For the free tier, prefer a small
+1x subset of scenarios first, e.g. #20, #21, #74, #76, #77.
+Some cloud prototypes may reject tool_choice or multimodal prompts. Such
+incompatibility is reported, not silently replaced by a local fallback.
+
+---
+
 **Status:** Experimental manual diagnostic harness. Not a production conversational reliability certificate.
 
 Open **Desktop Mikan → Settings → Brain lab** or the authenticated remote browser
