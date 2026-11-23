@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import {
   initialSettingsTab, initialMemoryTab, isStandaloneSettingsWindow,
   validSettingsTab, validMemoryTab
@@ -17,4 +18,10 @@ test("deep-link and reopen targets are validated", () => {
   assert.equal(validSettingsTab("memory"), "memory");
   assert.equal(validSettingsTab(""), "appearance");
   assert.equal(validMemoryTab("../../foo"), "facts");
+});
+
+// Tauri/WebView2 can deadlock on Windows if native windows are created by a synchronous command.
+test("native Settings creation runs from an async Tauri command", () => {
+  const nativeSource = readFileSync(new URL("../src-tauri/src/lib.rs", import.meta.url), "utf8");
+  assert.match(nativeSource, /#\[tauri::command\]\s+async fn open_settings_window\(/);
 });
