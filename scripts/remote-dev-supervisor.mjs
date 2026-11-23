@@ -15,7 +15,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 export const UPDATE_PORT=3849;
-export const UPDATE_BRANCH="feature/p0-brain-evaluation-harness";
+export const UPDATE_BRANCH="main";
 export const UPDATE_REPO="capnolithyl/AI-Desktop-Companion";
 const ROOT=resolve(dirname(fileURLToPath(import.meta.url)),"..");
 const exec=promisify(execFile);
