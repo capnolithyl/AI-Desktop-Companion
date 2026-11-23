@@ -169,6 +169,17 @@ export function asksOnlyToRereadNotionPage(text:string, selectedPage:NotionCache
   return !/\b(?:summari[sz]e|summary|synopsis|recap|review|critique|analy[sz]e|feedback|opinion|impressions?|thoughts|explain|compare|contrast|breakdown|discuss|evaluate|what happens?|what happened|tell me (?:what|how|why)|give me (?:your|a|the) (?:thoughts|opinion|summary|critique)|how (?:is|does|do|did|well))\b/i.test(text);
 }
 
+/** A bare request to read a chapter loads its already-synced manuscript.
+ * Critique and summary requests still use the selected response model.
+ */
+export function asksOnlyToLoadNotionPage(text:string,
+  selectedPage:NotionCachedPage|null=null):boolean {
+  if(asksOnlyToRereadNotionPage(text,selectedPage))return true;
+  if(!asksToReadFullNotionPage(text,selectedPage))return false;
+  if(!/\b(?:read|go through|look through|take a look at)\b/i.test(text))return false;
+  return !/\b(?:summari[sz]e|summary|synopsis|recap|review|critique|analy[sz]e|feedback|opinion|impressions?|thoughts|explain|compare|contrast|breakdown|discuss|evaluate|what happens?|what happened|tell me (?:what|how|why)|give me (?:your|a|the) (?:thoughts|opinion|summary|critique))\b/i.test(text);
+}
+
 /** Listing the scenes linked to a chapter is a metadata lookup, not a
  * request to run the full local prose summarizer. A subsequent "read these"
  * still uses the regular complete-chapter path.
@@ -281,6 +292,8 @@ export function unavailableChapterResponse(
       "This is a chapter-note processing problem, not a Notion sync problem. "+
       "I haven't completed a trustworthy summary, so I won't invent one.";
   }
+  if(matchedPage && /single-model reading budget/.test(readContext))
+    return "I found "+matchedPage.title+" and its linked scenes, but the complete prose exceeds the selected model's reading budget. The Notion cache is fine. Please choose a specific scene or shorter section.";
   if(matchedPage && /Only chapter planning notes were cached/.test(readContext))
     return "I found "+matchedPage.title+" in Notion, but my offline cache contains its planning notes without the actual linked scene manuscripts. Open Settings → Notion and press Sync now. Make sure the Scenes database is shared with Mikan, too. Then I'll read the chapter itself rather than guessing.";
   if(matchedPage)return "I found the chapter in Notion, but couldn't finish reading it. I'd rather not pretend I've read scenes I haven't. Please check the Notion sync or try the chapter again.";
