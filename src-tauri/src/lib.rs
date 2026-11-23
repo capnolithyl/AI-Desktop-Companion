@@ -6,6 +6,7 @@ mod agent_tools;
 mod gemini;
 mod cloud_web_tools;
 mod cloud_memory_tools;
+mod cloud_evidence;
 mod openrouter;
 mod nvidia;
 mod openrouter_stream;
