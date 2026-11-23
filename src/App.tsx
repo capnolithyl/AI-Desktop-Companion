@@ -36,7 +36,7 @@ import { parseSlashCommand, SLASH_HELP } from "./slash-commands";
 import { decideDesktopTurn } from "./desktop-turn-routing";
 import { planDesktopWebExecution, resolvePublicWebExecution } from "./turn-execution-policy";
 import { isModelStatusQuestion, modelStatusAnswer } from "./model-status";
-import { modelSwitcherStatus, modelSwitcherChoice, NVIDIA_MODELS , unsuccessfulInferenceLabel } from "./model-switcher";
+import { modelSwitcherStatus, modelSwitcherChoice, NVIDIA_MODELS, unsuccessfulInferenceLabel } from "./model-switcher";
 import { isModelLedConversation, modelLedWebToolsAllowed, preserveModelLedChatAnswer } from "./model-led-routing";
 import { formatDebugLog, type Diagnostics, type MemoryRecallAudit, type OllamaStats, type ResearchAudit } from "./debug-log";
 import { remoteDiagnosticMessages, remoteAvatarDiagnostics } from "./remote-report";
