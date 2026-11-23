@@ -488,7 +488,7 @@ async fn grounded_public_reply(
         "accepted":verified.len(),"rejected":rejected,
         "pagesRead":pages_read,"sourceIds":source_ids
     }));
-    cloud_evidence::render_grounded(&verified,sources)
+    cloud_evidence::render_grounded_with_tone(&verified,sources,final_plan.tone.as_deref())
 }
 
 pub(crate) async fn chat(app:&AppHandle,request:&ChatRequest,key:&str,emitted:&AtomicBool)
