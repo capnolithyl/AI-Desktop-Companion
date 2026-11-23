@@ -81,9 +81,9 @@ pub fn stop_if_started() {
 
 #[derive(Clone, Deserialize, Serialize)]
 pub struct SemanticMatch {
-    id: i64,
-    fact: String,
-    score: Option<f64>,
+    pub(crate) id: i64,
+    pub(crate) fact: String,
+    pub(crate) score: Option<f64>,
 }
 
 #[derive(Deserialize)]
