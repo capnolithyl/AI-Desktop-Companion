@@ -179,11 +179,13 @@ export function notionManuscriptCharacterCount(evidence:NotionChapterEvidence):n
 /** Available original-prose budget is conservative even when Ollama's context
  * is 16K; normal system text, personal memories and chat history need space.
  */
-export function directManuscriptLimit(contextWindow:number=16384):number {
-  // Preserve local Ollama limits; hosted NVIDIA models can receive larger
-  // source context without depending on a slow local summary pass.
+export function directManuscriptLimit(
+  contextWindow:number=16384,processing:"direct-only"|"local-notes"="local-notes"
+):number {
+  // Preserve Ollama's existing 24K-character cap regardless of its context
+  // setting. Only the explicit NVIDIA single-model reading path gets more.
   const estimate=Math.max(4000,Math.floor((contextWindow-4500)*2.4));
-  return Math.min(contextWindow>16384 ? 96000 : 24000,estimate);
+  return Math.min(processing==="direct-only" ? 96000 : 24000,estimate);
 }
 export type NotionReadingProfile={contextWindow:number;processing:"direct-only"|"local-notes"};
 export function notionReadingProfile(
@@ -225,7 +227,7 @@ export async function readNotionChapter(
     "For a chapter-wide critique, cover EVERY scene, including major events in the middle. "+
     "If uncertain about a concrete fact, don't claim it happened.\n"+
     "READ STATUS: "+evidence.scenes.length+" linked scenes included; original manuscript is authoritative.\n";
-  if(Array.from(text).length<=directManuscriptLimit(contextWindow)) {
+  if(Array.from(text).length<=directManuscriptLimit(contextWindow,processing)) {
     return header+safety+"COMPLETE TEXT OF THE CACHED PAGE (APPROVED MANUSCRIPT ONLY):\n"+text;
   }
   // The selected NVIDIA model reads the original prose directly. If the
@@ -233,7 +235,7 @@ export async function readNotionChapter(
   // of silently calling local Gemma/Qwen many times for section notes.
   if(processing==="direct-only")
     throw new Error("Manuscript exceeds the single-model reading budget ("+
-      directManuscriptLimit(contextWindow).toLocaleString()+" characters). "+
+      directManuscriptLimit(contextWindow,processing).toLocaleString()+" characters). "+
       "Choose an individual scene or shorter section; the Notion cache is fine.");
   const partitions=evidence.scenes.map(scene=>splitNotionSections(scene.prose));
   const total=partitions.reduce((n,parts)=>n+parts.length,0);
