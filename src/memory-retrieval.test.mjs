@@ -193,3 +193,33 @@ test("sentiment and grammatical overlap cannot inject unrelated memories; topic 
   assert.deepEqual(selectDeterministicMemoryIds(facts,"Recommend mystery novels",[],[1,2,3],8).ids,[3]);
   assert.ok(selectDeterministicMemoryIds(facts,"Something to read",[{id:3,score:0.94}],[],8).ids.includes(3));
 });
+
+test("near-me follow-up recalls current residence, not unrelated family play",()=>{
+  const now=Date.now()/1000;
+  const stored=[
+    {id:45,fact:"The user currently lives in Bay City, Michigan, in the United States.",
+      category:"profile",tags:["location","home","bay city","michigan"],updatedAt:now-100},
+    {id:105,fact:"The user's daughter enjoys imaginative play with Jigglypuff.",
+      category:"family",tags:["pokemon","play"],updatedAt:now},
+    {id:46,fact:"The user previously lived in Germany.",
+      category:"profile",tags:["location","germany"],updatedAt:now+10}
+  ];
+  // The old selector sent #105 because 'play' matched, and dropped #45.
+  const selected=selectDeterministicMemoryIds(stored,
+    "Do they play near me any time soon?",
+    [{id:105,score:0.87},{id:45,score:0.41}], [105],10);
+  assert.deepEqual(selected.ids,[45]);
+  assert.deepEqual(selectDeterministicMemoryIds(stored,
+    "Which city do I live in?",[],[],10).ids,[45]);
+  assert.deepEqual(selectDeterministicMemoryIds(stored,
+    "Any coffee shops around here?",[],[],10).ids,[45]);
+  assert.deepEqual(selectDeterministicMemoryIds(stored,
+    "Tell me about my past in Germany",[],[],10).ids,[46]);
+});
+
+test("a historical hometown is not silently substituted for an unknown current city",()=>{
+  const stored=[{id:46,fact:"The user used to live in Dresden, Germany.",
+    category:"profile",tags:["location","home"],updatedAt:100}];
+  assert.deepEqual(selectDeterministicMemoryIds(stored,
+    "Do they play near me?",[],[],10).ids,[]);
+});
