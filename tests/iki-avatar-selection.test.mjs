@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { resolveDisplayedIkiRig } from "../src/iki-avatar-selection.ts";
 
 const defaultName = "Original · Mikan v3";
@@ -39,4 +40,11 @@ test("imported outfits still load their saved Blob and do not require a URL", ()
   assert.equal(result.customRig, uploadedFile);
   assert.equal(result.rigUrl, null);
   assert.equal(result.rigLabel, "Custom outfit");
+});
+
+// Guard the App-to-renderer connection too: unit tests alone cannot catch an omitted prop.
+test("App actually forwards the resolved outfit URL to IkiAvatar", () => {
+  const app = readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
+  assert.match(app, /resolveDisplayedIkiRig\(ikiRig, previewRig, wardrobePreviewVisible, defaultOutfitName\)/);
+  assert.match(app, /<IkiAvatar customRig=\{displayedIkiRig\.customRig\} rigUrl=\{displayedIkiRig\.rigUrl\}/);
 });
