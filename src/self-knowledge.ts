@@ -4,7 +4,7 @@
  * The CI checker detects unmapped Tauri commands, missing files and stale versions.
  * Add a feature here when adding capability, and update the matching source/docs.
  */
-export const CAPABILITY_RELEASE = "0.9.74";
+export const CAPABILITY_RELEASE = "0.9.75";
 
 export type CapabilityStage = "implemented" | "experimental" | "planned";
 export type RuntimeDependency = "none" | "ollama" | "search" | "mem0" | "voice" | "vision" | "pocket";
@@ -30,10 +30,10 @@ export type RuntimeReadiness = Partial<Record<RuntimeDependency, RuntimeState>>;
 export const CAPABILITIES: readonly Capability[] = [
   {
     id:"desktop-shell",label:"Desktop overlay and hotkey",category:"Desktop",
-    description:"Windows system-tray application with a draggable compact overlay, global Ctrl+Alt+M hotkey and hide/show controls.",
+    description:"Windows system-tray application with a draggable compact overlay, global Ctrl+Alt+M hotkey and hide/show controls. Settings now opens as a separate decorated, resizable, maximizable Control Center window while the floating companion remains compact. Closing Settings hides its window so an in-progress Brain Lab evaluation can continue; its settings, memory and wardrobe state synchronize with the companion.",
     stage:"implemented",runtime:"none",keywords:["tray","window","overlay","shortcut","hotkey","desktop","hide"],
-    sources:["src-tauri/src/lib.rs","src/App.tsx"],docs:["README.md","SETUP.md"],
-    commands:["toggle_companion","hide_companion"],
+    sources:["src-tauri/src/lib.rs","src/App.tsx","src/settings-window.ts"],docs:["README.md","SETUP.md"],
+    commands:["toggle_companion","hide_companion","open_settings_window","hide_settings_window","show_companion"],
     screens:["compact","help"],
     slashCommands:["help","hide","chat"]
   },
