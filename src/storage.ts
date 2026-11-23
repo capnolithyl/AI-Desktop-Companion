@@ -1,3 +1,4 @@
+import { emit } from "@tauri-apps/api/event";
 import { DEFAULT_PERSONALITY, readPersonality, type Personality } from "./personality";
 import { DEFAULT_COMMUNICATION, readCommunicationPreferences, type CommunicationPreferences } from "./communication-preferences";
 import type { ReasoningMode } from "./reasoning-mode";
@@ -166,6 +167,12 @@ export function loadSettings(): Settings {
 
 export function saveSettings(settings: Settings): void {
   localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+  // Every webview owns independent React state. Keep the companion current
+  // when preferences change in the standalone Control Center (and vice versa).
+  if (typeof window !== "undefined" && "__TAURI_INTERNALS__" in window) {
+    void emit("mikan://settings-changed", settings).catch(error =>
+      console.warn("Could not synchronize settings between windows:", error));
+  }
 }
 
 function openDatabase(): Promise<IDBDatabase> {
