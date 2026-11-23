@@ -320,7 +320,8 @@ test("four linked Notion scenes totaling over 50K chars go straight to NVIDIA",a
   }));
   const profile=notionReadingProfile("nvidia",16384);
   assert.equal(profile.processing,"direct-only");
-  assert.ok(directManuscriptLimit(profile.contextWindow)>57000);
+  assert.ok(directManuscriptLimit(profile.contextWindow,profile.processing)>57000);
+  assert.equal(directManuscriptLimit(48000),24000,"a large local context still keeps its old safe source cap");
   let localCalls=0;
   const full=await readNotionChapter(chapter,async()=>{localCalls++;return "";},
     ()=>{},()=>false,profile.contextWindow,profile.processing);
