@@ -117,6 +117,80 @@ fn functions(allow_web:bool,allow_memory:bool)->Value {
     }
     Value::Array(options)
 }
+// Model-led context assessment runs before *any* public page content is read.
+// The model identifies missing owner facts rather than an ever-growing list
+// of special-case natural-language triggers in JavaScript/Rust.
+fn memory_plan_tool()->Value{
+    json!([{"type":"function","function":{
+        "name":"select_needed_memory",
+        "description":"Choose the specific owner-saved facts needed to answer the latest user task well. Identify IMPLICIT needs too: attending an event requires knowing where the owner lives; a personalized recommendation might need preferences or restrictions. Return an empty queries list when no personal fact is needed. Do not request the whole profile, archived conversations, family details unrelated to the task, or facts already available in the conversation. Each query must ask for one kind of missing fact, not repeat the whole user question.",
+        "parameters":{"type":"object","properties":{
+            "queries":{"type":"array","items":{"type":"string"},"maxItems":2,
+                "description":"Zero to two short lookup topics, e.g. 'current home city'."}
+        },"required":["queries"],"additionalProperties":false}
+    }}])
+}
+
+fn parse_memory_plan(body:&Value)->Option<Vec<String>>{
+    let calls=body["choices"][0]["message"]["tool_calls"].as_array()?;
+    let call=calls.iter().find(|call|
+        call["function"]["name"].as_str()==Some("select_needed_memory"))?;
+    let args=call["function"]["arguments"].as_str()
+        .and_then(|s|serde_json::from_str::<Value>(s).ok())?;
+    let topics=args["queries"].as_array()?;
+    if topics.len()>2 {return None;}
+    let mut unique=std::collections::HashSet::new();
+    let mut selected=Vec::new();
+    for topic in topics {
+        let topic=topic.as_str()?.trim();
+        if !(3..=180).contains(&topic.chars().count()) {return None;}
+        if unique.insert(topic.to_lowercase()){selected.push(topic.to_owned());}
+    }
+    Some(selected)
+}
+
+fn memory_plan_messages(request:&ChatRequest)->Vec<Value>{
+    let mut messages=vec![json!({"role":"system","content":
+        "You are the owner's assistant deciding what PRIVATE, saved owner context is necessary before answering. Return a select_needed_memory tool call with up to two concise missing fact topics. Many tasks need no personal facts: use queries:[] then. Consider implicit prerequisites such as the owner's location for real-world attendance, travel reach or proximity. Do not answer the user's question, browse, or invent owner facts. Previous assistant claims are not proof of saved facts."
+    })];
+    let mut recent=request.messages.iter()
+        .filter(|message|message.role=="user" || message.role=="assistant")
+        .rev().take(5).collect::<Vec<_>>();
+    recent.reverse();
+    messages.extend(recent.into_iter().map(|message|json!({
+        "role":message.role,
+        "content":message.content.chars().take(1000).collect::<String>()
+    })));
+    messages
+}
+
+async fn choose_needed_memory(
+    client:&reqwest::Client,key:&str,model:&str,request:&ChatRequest
+)->Result<Vec<String>,String>{
+    let payload=json!({
+        "model":model,
+        "messages":memory_plan_messages(request),
+        "max_tokens":1200,
+        "stream":false,
+        "tools":memory_plan_tool(),
+        "tool_choice":"required"
+    });
+    let response=client.post("https://integrate.api.nvidia.com/v1/chat/completions")
+        .header("Authorization",format!("Bearer {key}"))
+        .timeout(Duration::from_secs(25))
+        .json(&payload).send().await
+        .map_err(|e|if e.is_timeout(){
+            "Context planning timed out".to_owned()
+        }else{"Context planning unavailable".to_owned()})?;
+    if !response.status().is_success(){
+        return Err(format!("Context planning HTTP {}",response.status().as_u16()));
+    }
+    let body:Value=response.json().await
+        .map_err(|_|"Invalid context planning response".to_owned())?;
+    parse_memory_plan(&body)
+        .ok_or_else(||"Model did not return a structured context plan".to_owned())
+}
+
 fn append_evidence(messages:&mut Vec<Value>, sources:&[web_search::SearchResult]) {
     if sources.is_empty(){return;}
     messages.push(json!({"role":"user","content":
