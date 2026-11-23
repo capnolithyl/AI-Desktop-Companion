@@ -482,13 +482,15 @@ async fn grounded_public_reply(
     }else{initial};
     let (verified,rejected)=cloud_evidence::verified_passages(&final_plan.passages,sources);
     let source_ids=verified.iter().map(|item|item.source).collect::<Vec<_>>();
+    let structured=verified.iter().filter(|item|item.subject.is_some()).count();
     let _=app.emit("mikan://evidence-tool",json!({
         "requestId":request.request_id,
         "status":if verified.is_empty(){"insufficient"}else{"grounded"},
         "accepted":verified.len(),"rejected":rejected,
+        "structured":structured,
         "pagesRead":pages_read,"sourceIds":source_ids
     }));
-    cloud_evidence::render_grounded(&verified,sources)
+    cloud_evidence::render_grounded_with_tone(&verified,sources,final_plan.tone.as_deref())
 }
 
 pub(crate) async fn chat(app:&AppHandle,request:&ChatRequest,key:&str,emitted:&AtomicBool)

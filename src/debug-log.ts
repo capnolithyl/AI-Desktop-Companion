@@ -134,7 +134,7 @@ export type Diagnostics = {
   stats: OllamaStats | null;
   research?: ResearchAudit;
   mikanify?: {applied:boolean;elapsedMs:number;draftCharacters:number;finalCharacters:number;error?:string};
-  sourceGrounding?: {status:string;accepted:number;rejected:number;pagesRead:number;
+  sourceGrounding?: {status:string;accepted:number;rejected:number;structured?:number;pagesRead:number;
     sourceIds:number[];error?:string|null};
   answerVerification?: {
     checked:number;rejected:number;recoveredHeadline:boolean;
@@ -259,6 +259,9 @@ function performanceLines(diagnostics: Diagnostics): string[] {
       "  Status: " + diagnostics.sourceGrounding.status,
       "  Accepted source passages: " + diagnostics.sourceGrounding.accepted,
       "  Rejected unsupported passages: " + diagnostics.sourceGrounding.rejected,
+      ...(diagnostics.sourceGrounding.structured != null ? [
+        "  Conversation-ready named facts: " + diagnostics.sourceGrounding.structured
+      ] : []),
       "  Full public pages read: " + diagnostics.sourceGrounding.pagesRead,
       "  Accepted source IDs: " + (diagnostics.sourceGrounding.sourceIds.length
         ? diagnostics.sourceGrounding.sourceIds.map(id=>"["+id+"]").join(", ") : "(none)"),
