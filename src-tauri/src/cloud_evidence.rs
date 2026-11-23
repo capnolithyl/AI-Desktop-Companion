@@ -12,7 +12,7 @@ const MAX_READ_PAGES: usize = 2;
 const MAX_QUOTE_CHARS: usize = 260;
 const MAX_CONTEXT_CHARS: usize = 4600;
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Default, Deserialize)]
 pub(crate) struct ProposedPassage {
     pub source: usize,
     pub quote: String,
@@ -253,9 +253,9 @@ mod tests {
     fn rejects_generated_dates_unrelated_quotes_and_invalid_sources(){
         let sources=docs();
         let passages=vec![
-            ProposedPassage{source:1,quote:"November 28, 2026: Comedy Show at 8 PM, $25".into()},
-            ProposedPassage{source:3,quote:sources[1].content.clone()},
-            ProposedPassage{source:2,quote:sources[1].content.clone()}
+            ProposedPassage{source:1,quote:"November 28, 2026: Comedy Show at 8 PM, $25".into(),..Default::default()},
+            ProposedPassage{source:3,quote:sources[1].content.clone(),..Default::default()},
+            ProposedPassage{source:2,quote:sources[1].content.clone(),..Default::default()}
         ];
         let (valid,rejected)=verified_passages(&passages,&sources);
         assert_eq!(rejected,2);
@@ -269,7 +269,7 @@ mod tests {
     #[test]
     fn generic_calendar_excerpts_cannot_prove_event_details(){
         let sources=vec![docs()[0].clone()];
-        let proposal=vec![ProposedPassage{source:1,quote:"Friday at 8 PM: Future Comedy at The Skyroom, $25".into()}];
+        let proposal=vec![ProposedPassage{source:1,quote:"Friday at 8 PM: Future Comedy at The Skyroom, $25".into(),..Default::default()}];
         let (valid,rejected)=verified_passages(&proposal,&sources);
         assert!(valid.is_empty());
         assert_eq!(rejected,1);
@@ -292,14 +292,88 @@ mod tests {
         }}]}}]});
         assert!(parse_evidence_plan(&empty).unwrap().passages.is_empty());
     }
+
+    #[test]
+    fn produces_a_readable_weekend_answer_from_literal_event_facts(){
+        let quote="### 2026 Santa's Arrival & Tree Lighting in Wenonah Park! Date and Time Fri, 27 Nov, 2026 - 07:00 PM Location Wenonah Park, 801 N Water St, Bay City, MI";
+        let quote2="### The Future of Comedy Show at The Skyroom (Bay City, MI) Date and Time Sat, 28 Nov, 2026 - 08:00 PM Location The Skyroom at Washington Lanes";
+        let sources=vec![
+            SearchResult{title:"Bay City weekend events | AllEvents".into(),url:"https://allevents.in/bay-city/this-weekend".into(),
+                content:format!("{quote}\n{quote2}"),engine:"webpage".into(),published_date:None}
+        ];
+        let proposed=vec![
+            ProposedPassage{source:1,quote:quote.into(),
+                subject:Some("2026 Santa's Arrival & Tree Lighting in Wenonah Park!".into()),
+                when:Some("Fri, 27 Nov, 2026 - 07:00 PM".into()),
+                where_at:Some("Wenonah Park, 801 N Water St, Bay City, MI".into()),
+                ..Default::default()},
+            ProposedPassage{source:1,quote:quote2.into(),
+                subject:Some("The Future of Comedy Show at The Skyroom (Bay City, MI)".into()),
+                when:Some("Sat, 28 Nov, 2026 - 08:00 PM".into()),
+                where_at:Some("The Skyroom at Washington Lanes".into()),
+                ..Default::default()}
+        ];
+        let (verified,rejected)=verified_passages(&proposed,&sources);
+        assert_eq!(rejected,0);
+        let answer=render_grounded(&verified,&sources);
+        assert!(answer.starts_with("Yep, I found"));
+        assert!(answer.contains("**2026 Santa's Arrival & Tree Lighting"));
+        assert!(answer.contains("is listed for **Fri, 27 Nov, 2026 - 07:00 PM**"));
+        assert!(answer.contains("at **Wenonah Park, 801 N Water St, Bay City, MI**"));
+        assert!(answer.contains("**The Future of Comedy Show"));
+        assert!(answer.contains("**Sat, 28 Nov, 2026 - 08:00 PM**"));
+        assert!(!answer.contains("Date and Time"));
+        assert!(!answer.contains("Bay City weekend events | AllEvents"));
+        assert!(!answer.contains("###"));
+        assert_eq!(answer.matches("[1]").count(),2);
+    }
+    #[test]
+    fn unverified_price_or_date_never_appears_as_a_fact(){
+        let sources=docs();
+        let quote=sources[1].content.clone();
+        let plan=vec![ProposedPassage{
+            source:2,quote,
+            subject:Some("Milwaukee Metal Fest".into()),
+            when:Some("November 25 2031".into()),
+            where_at:Some("Grand Rapids, MI".into()),
+            detail:Some("$900, admission required".into())
+        }];
+        let (verified,rejected)=verified_passages(&plan,&sources);
+        assert_eq!(rejected,0); // source quote survives; invented spans do not
+        assert_eq!(verified.len(),1);
+        let answer=render_grounded(&verified,&sources);
+        assert!(answer.contains("Milwaukee Metal Fest"));
+        assert!(!answer.contains("2031"));
+        assert!(!answer.contains("$900"));
+        assert!(!answer.contains("Grand Rapids"));
+        assert!(answer.contains("[2]"));
+    }
+    #[test]
+    fn useful_named_facts_take_priority_over_generic_marketing_quotes(){
+        let sources=docs();
+        let plan=vec![
+            ProposedPassage{source:1,quote:sources[0].content.clone(),..Default::default()},
+            ProposedPassage{source:2,quote:sources[1].content.clone(),
+                subject:Some("Sonic Temple".into()),
+                when:Some("May 15, 2027".into()),
+                where_at:Some("Columbus, OH".into()),..Default::default()}
+        ];
+        let (verified,_)=verified_passages(&plan,&sources);
+        assert_eq!(verified.len(),2);
+        let answer=render_grounded(&verified,&sources);
+        assert!(answer.contains("Sonic Temple"));
+        assert!(answer.contains("May 15, 2027"));
+        assert!(!answer.contains("Discover live shows"));
+        assert!(!answer.contains("only upcoming"));
+    }
     #[test]
     fn source_quotes_are_deduplicated_and_literal_not_model_paraphrases(){
         let sources=docs();
         let quote=sources[1].content.clone();
         let proposed=vec![
-            ProposedPassage{source:2,quote:quote.clone()},
+            ProposedPassage{source:2,quote:quote.clone(),..Default::default()},
             ProposedPassage{source:2,quote},
-            ProposedPassage{source:2,quote:"Shadows Fall has only one show this year.".into()}
+            ProposedPassage{source:2,quote:"Shadows Fall has only one show this year.".into(),..Default::default()}
         ];
         let (valid,rejected)=verified_passages(&proposed,&sources);
         assert_eq!(valid.len(),1);
