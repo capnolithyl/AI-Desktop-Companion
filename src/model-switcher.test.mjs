@@ -63,3 +63,13 @@ test("Auto manuscript analysis announces intentional local route instead of clai
   assert.match(state.title,/instead of.*OpenRouter\/free/);
   assert.equal(state.cloudActive,false);
 });
+
+test("NVIDIA selector preserves three supported cloud model IDs",()=>{
+  const model="nvidia/nemotron-3-ultra-550b-a55b";
+  assert.deepEqual(modelSwitcherChoice("nvidia:"+model,[]),{provider:"nvidia",nvidiaModel:model});
+  assert.equal(modelSwitcherChoice("nvidia:unapproved",[]),null);
+  const state=modelSwitcherStatus({...settings,provider:"nvidia",nvidiaModel:model},
+    {provider:"nvidia",model:"NVIDIA "+model});
+  assert.match(state.label,/NVIDIA.*nemotron-3-ultra/);
+  assert.equal(state.cloudActive,true);
+});

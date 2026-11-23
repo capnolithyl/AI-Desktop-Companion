@@ -413,7 +413,7 @@ pub(crate) async fn chat(app:&AppHandle,request:&ChatRequest,key:&str,emitted:&A
                 total_duration_ns:None,load_duration_ns:None,
                 prompt_eval_duration_ns:None,eval_duration_ns:None
             }),
-            sources,search_query,sources_carried_over,research_audit:None,
+            sources,search_query,search_trace:None,sources_carried_over,research_audit:None,
             model_used:format!("NVIDIA {actual}"),fallback_reason:None
         });
     }
