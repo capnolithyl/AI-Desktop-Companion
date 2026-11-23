@@ -34,7 +34,7 @@ fn overlap(needles:&[String],haystack:&str)->usize{
     let words=haystack.split(|ch:char|!ch.is_alphanumeric())
         .map(str::to_lowercase).collect::<Vec<_>>();
     needles.iter().filter(|term|words.iter()
-        .any(|word|word==*term || (term.len()>=4 && word.starts_with(term.as_str()))))
+        .any(|word|word==term || (term.len()>=4 && word.starts_with(term.as_str()))))
         .count()
 }
 
@@ -69,11 +69,14 @@ fn select_semantic<'a>(
     // has no meaningful neighbor, report no match instead of exporting junk.
     if best<0.56 {return vec![];}
     let cutoff=(best-0.08).max(0.56);
-    let allowed=matches.iter().filter(|hit|hit.score.is_some_and(|score|
-        score.is_finite() && score>=cutoff && score<=1.0))
-        .map(|hit|hit.id).collect::<HashSet<_>>();
-    facts.iter().filter(|fact|allowed.contains(&fact.id))
-        .take(MAX_MATCHES).collect()
+
+    let allowed=matches.iter().filter_map(|hit|hit.score.filter(|score|
+        score.is_finite() && *score>=cutoff && *score<=1.0).map(|score|(hit.id,score)))
+        .collect::<HashMap<_,_>>();
+    let mut ranked=facts.iter().filter_map(|fact|
+        allowed.get(&fact.id).map(|score|(fact,*score))).collect::<Vec<_>>();
+    ranked.sort_by(|a,b|b.1.total_cmp(&a.1));
+    ranked.into_iter().take(MAX_MATCHES).map(|(fact,_)|fact).collect()
 }
 
 pub(crate) async fn search(app:&AppHandle,args:&Value)->Value{
@@ -124,6 +127,33 @@ mod tests {
         assert_eq!(overlap(&search,
             "The owner's daughter loves imaginative play with Jigglypuff"),0);
         assert_eq!(terms("the user and owner"),Vec::<String>::new());
+    }
+    fn sample(id:i64,fact:&str,tags:&[&str])->memory::UserMemory{
+        memory::UserMemory {
+            id,fact:fact.into(),category:"profile".into(),
+            tags:tags.iter().map(|s|s.to_string()).collect(),
+            created_at:1,updated_at:1,importance:50,reference_count:0
+        }
+    }
+    #[test]
+    fn owner_context_query_filters_an_unrelated_high_ranking_memory(){
+        let items=vec![
+            sample(105,"The user's daughter enjoys imaginative play with Jigglypuff",&["play"]),
+            sample(45,"The user currently lives in Bay City, Michigan.",&["location","home"])
+        ];
+        let matches=select_lexical(&items,&[105,45],"owner's current home location");
+        assert_eq!(matches.iter().map(|m|m.id).collect::<Vec<_>>(),vec![45]);
+    }
+    #[test]
+    fn weak_semantic_neighbors_are_not_exported_as_private_facts(){
+        let items=vec![
+            sample(105,"The user's daughter enjoys imaginative play",&["family"]),
+            sample(45,"The user lives in Bay City, Michigan.",&["location","home"])
+        ];
+        let weak=vec![advanced_memory::SemanticMatch{id:105,fact:items[0].fact.clone(),score:Some(0.42)}];
+        assert!(select_semantic(&items,&weak).is_empty());
+        let good=vec![advanced_memory::SemanticMatch{id:45,fact:items[1].fact.clone(),score:Some(0.81)}];
+        assert_eq!(select_semantic(&items,&good)[0].id,45);
     }
     #[test]
     fn a_memory_query_is_bounded_and_broad_context_words_do_not_match(){
