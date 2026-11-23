@@ -22,6 +22,9 @@ const generic = new Set([
   "called","favorite","favourite","favorites","favourites","date",
   // Preference predicates describe a relationship, not the subject of recall.
   "like","love","hate","enjoy","dislike","prefer",
+  // Common query verbs/time words are not independent memory topics. In
+  // particular, concert "play" must not match a child's "imaginative play".
+  "play","near","time","soon","here",
   "your","mine","our","user","owner","mikan","not","another","their",
   "they","them","rather","asking","really","only","more","than","way",
   "should","will","tell"
