@@ -87,11 +87,12 @@ test("normal conversation instructions discourage stage direction narration with
 
 test("ordinary replies prefer short direct answers without endless self-correction", () => {
   const guidance = responseFocusGuidance([], "What next?");
-  assert.match(guidance, /1-3 short sentences/);
+  assert.match(guidance, /REPLY SCOPE: Follow the owner/);
+  assert.match(guidance, /Keep ordinary replies efficient without padding/);
   assert.match(guidance, /WHEN CORRECTED/);
   assert.match(guidance, /Never argue from an earlier guess/i);
   assert.match(guidance, /request a tighter crop/i);
-  assert.match(guidance, /Elaborate when the owner asks for details/);
+  assert.match(guidance, /Elaborate when asked for details/);
 });
 
 test("beginner tutoring gets a simple next step", () => {
