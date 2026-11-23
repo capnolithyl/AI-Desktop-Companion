@@ -236,19 +236,26 @@ test("browser relay requires a private key and delegates to the desktop, not a s
     assert.equal((await request(base + "/api/brain-eval","POST",jsonHeaders,
       {action:"start",mode:"live",repetitions:1,scenarioIds:["branch-a"],models})).status,400);
   }
+  for(const unapproved of ["nvidia:nvidia/fake-model",
+    "openrouter:paid/provider", "gemini:unconfigured-model", "auto"]){
+    assert.equal((await request(base + "/api/brain-eval","POST",jsonHeaders,
+      {action:"start",mode:"live",repetitions:1,scenarioIds:["branch-a"],
+        models:[unapproved]})).status,400,
+      "remote Brain Lab must reject unapproved cloud IDs: "+unapproved);
+  }
   assert.equal((await request(base + "/api/brain-eval","POST",jsonHeaders,
     {action:"start",mode:"routing",repetitions:1,scenarioIds:["branch-a"],
       models:["qwen3.5:9b","gemma4:12b"]})).status,400);
   assert.equal((await request(base + "/api/brain-eval","POST",jsonHeaders,
     {action:"start",mode:"live",researchMode:"simple",mikanifyAnswer:true,repetitions:3,scenarioIds:["branch-a","discovery-bands-wish"],
-      models:["qwen3.5:9b","gemma4:12b"]})).status,202);
+      models:["qwen3.5:9b","nvidia:nvidia/nemotron-3-ultra-550b-a55b"]})).status,202);
   assert.equal((await request(base + "/api/brain-eval","POST",jsonHeaders,
     {action:"start",mode:"live",repetitions:3,scenarioIds:["branch-a"]})).status,409);
   const evalJob=(await (await request(agent + "/agent/next","GET",desktopHeaders)).json()).job;
   assert.equal(evalJob.kind,"start_brain_eval");
   assert.deepEqual(evalJob.evalOptions,{
     mode:"live",researchMode:"simple",mikanifyAnswer:true,repetitions:3,scenarioIds:["branch-a","discovery-bands-wish"],
-    models:["qwen3.5:9b","gemma4:12b"]
+    models:["qwen3.5:9b","nvidia:nvidia/nemotron-3-ultra-550b-a55b"]
   });
   assert.equal((await request(agent + "/agent/ack","POST",desktopHeaders,{id:evalJob.id})).status,200);
   assert.equal((await request(agent + "/agent/state","POST",desktopHeaders,evalState("running",true))).status,200);
