@@ -2920,6 +2920,7 @@ export default function App() {
     geminiModel: settings.geminiModel,
     nvidiaModel: settings.nvidiaModel,
     models: availableModels,
+    nvidiaModels: NVIDIA_MODELS,
     modelStatus: remoteModelStatus,
     controlsBlocked: remoteBusyRef.current,
     busy,
