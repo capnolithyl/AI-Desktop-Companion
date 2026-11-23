@@ -1370,6 +1370,55 @@ fn toggle_window(app: &tauri::AppHandle) {
 }
 
 #[tauri::command]
+fn open_settings_window(app: tauri::AppHandle, tab: Option<String>, memory_tab: Option<String>) -> Result<(), String> {
+    let tab = match tab.as_deref() {
+        Some("ai" | "internet" | "notion" | "voice" | "appearance" | "interface"
+            | "personality" | "memory" | "capabilities" | "brain") => tab.as_deref().unwrap(),
+        _ => "appearance",
+    };
+    let memory_tab = match memory_tab.as_deref() {
+        Some("facts" | "chats" | "character" | "collections") => memory_tab.as_deref().unwrap(),
+        _ => "facts",
+    };
+    if let Some(window) = app.get_webview_window("settings") {
+        window.show().map_err(|error| error.to_string())?;
+        let _ = window.unminimize();
+        window.set_focus().map_err(|error| error.to_string())?;
+        app.emit_to("settings", "mikan://settings-tab",
+            json!({ "tab": tab, "memoryTab": memory_tab }))
+            .map_err(|error| error.to_string())?;
+        return Ok(());
+    }
+    // Only validated values reach the app-local URL (no external navigation).
+    let path = format!("index.html?settings=1&tab={tab}&memoryTab={memory_tab}");
+    tauri::WebviewWindowBuilder::new(&app, "settings", tauri::WebviewUrl::App(path.into()))
+        .title("Mikan Control Center")
+        .inner_size(1120.0, 780.0)
+        .min_inner_size(680.0, 480.0)
+        .resizable(true)
+        .decorations(true)
+        .always_on_top(false)
+        .build()
+        .map_err(|error| error.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+fn hide_settings_window(app: tauri::AppHandle) {
+    if let Some(window) = app.get_webview_window("settings") {
+        let _ = window.hide();
+    }
+}
+
+#[tauri::command]
+fn show_companion(app: tauri::AppHandle) {
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.show();
+        let _ = window.set_focus();
+    }
+}
+
+#[tauri::command]
 fn toggle_companion(app: tauri::AppHandle) {
     toggle_window(&app);
 }
@@ -1487,7 +1536,10 @@ pub fn run() {
             advanced_memory::memory_semantic_recall,
             advanced_memory::memory_semantic_status,
             toggle_companion,
-            hide_companion
+            hide_companion,
+            open_settings_window,
+            hide_settings_window,
+            show_companion
         ])
         .setup(|app| {
             advanced_memory::start_if_installed(app.handle());
@@ -1535,6 +1587,12 @@ pub fn run() {
                 if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                     api.prevent_close();
                     let _=window.hide();
+                }
+            } else if window.label()=="settings" {
+                if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                    // Keep long-running Brain Lab evaluations alive when the user closes the window.
+                    api.prevent_close();
+                    let _ = window.hide();
                 }
             } else if window.label()=="region-picker" {
                 if let tauri::WindowEvent::Destroyed = event {
