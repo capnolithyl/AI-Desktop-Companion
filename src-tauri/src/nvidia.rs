@@ -69,11 +69,21 @@ pub(crate) fn note_slow_request() {
     cool_down(90,"NVIDIA request exceeded its time budget");
 }
 
-/// Explicit allowlist keeps Mikan on the three models the owner chose.
+/// Server-side allowlist mirrors the desktop NVIDIA model picker.
+const SUPPORTED_MODELS: &[&str] = &[
+    "nvidia/nemotron-3-ultra-550b-a55b",
+    "nvidia/nemotron-3.5-lightning-30b-a3b",
+    "nvidia/nemotron-3.5-bolt-e4b",
+    "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
+    "poolside/laguna-xs-2.1",
+    "moonshotai/kimi-k3.1-pro",
+    "z-ai/glm-5.3-flash",
+    "mistralai/mistral-large-4-1t-a52b",
+];
 fn free_model(name:Option<&str>) -> Result<&str,String> {
     let model=name.filter(|s|!s.trim().is_empty()).unwrap_or(DEFAULT_MODEL);
-    if !matches!(model, "nvidia/nemotron-3-ultra-550b-a55b" | "z-ai/glm-5.3-flash" | "mistralai/mistral-large-4-1t-a52b") {
-        return Err("Choose one of the three supported NVIDIA prototype models".into());
+    if !SUPPORTED_MODELS.contains(&model) {
+        return Err("Choose a supported NVIDIA prototype model".into());
     }
     Ok(model)
 }
@@ -753,9 +763,15 @@ mod tests {
     #[test]
     fn only_owner_selected_nvidia_models() {
         assert!(free_model(None).is_ok());
-        for name in ["nvidia/nemotron-3-ultra-550b-a55b",
-                     "z-ai/glm-5.3-flash",
-                     "mistralai/mistral-large-4-1t-a52b"] {
+        assert_eq!(SUPPORTED_MODELS.len(),8);
+        for &name in SUPPORTED_MODELS {
+            assert!(free_model(Some(name)).is_ok());
+        }
+        for name in ["nvidia/nemotron-3.5-lightning-30b-a3b",
+                     "nvidia/nemotron-3.5-bolt-e4b",
+                     "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
+                     "poolside/laguna-xs-2.1",
+                     "moonshotai/kimi-k3.1-pro"] {
             assert!(free_model(Some(name)).is_ok());
         }
         assert!(free_model(Some("nvidia/other-model")).is_err());

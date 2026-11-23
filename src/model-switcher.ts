@@ -4,7 +4,16 @@
  * separately from whatever free model OpenRouter happened to route to.
  */
 export type ChatProvider = "local" | "auto" | "openrouter" | "gemini" | "nvidia";
-export const NVIDIA_MODELS = ["nvidia/nemotron-3-ultra-550b-a55b","z-ai/glm-5.3-flash","mistralai/mistral-large-4-1t-a52b"] as const;
+export const NVIDIA_MODELS = [
+  "nvidia/nemotron-3-ultra-550b-a55b",
+  "nvidia/nemotron-3.5-lightning-30b-a3b",
+  "nvidia/nemotron-3.5-bolt-e4b",
+  "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
+  "poolside/laguna-xs-2.1",
+  "moonshotai/kimi-k3.1-pro",
+  "z-ai/glm-5.3-flash",
+  "mistralai/mistral-large-4-1t-a52b",
+] as const;
 export type ModelSwitcherSettings = {
   provider: ChatProvider;
   model: string;
