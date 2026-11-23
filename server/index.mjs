@@ -136,6 +136,10 @@ const NVIDIA_MODELS = [
   "z-ai/glm-5.3-flash",
   "mistralai/mistral-large-4-1t-a52b"
 ];
+// Mirror native Brain Lab's per-model turn safety ceilings. The authenticated
+// relay checks BEFORE queueing so an oversized remote run returns HTTP 400
+// instead of being silently acknowledged then rejected by the desktop.
+const CLOUD_EVAL_TURN_LIMITS = {nvidia:24,openrouter:8,gemini:8};
 const allowedEvalModels = (desktop) => new Set([
   ...desktop.models,
   ...NVIDIA_MODELS.map(model => "nvidia:"+model),
@@ -377,6 +381,19 @@ export function createBridge({
             !Array.isArray(ids) || !ids.length || ids.length > allowedIds.size ||
             ids.length !== new Set(ids).size || ids.some(id => !allowedIds.has(id)))
             return fail(response, 400, "Choose a valid test mode, repetition count and scenario selection");
+          if(mode==="live" && Array.isArray(requestedModels)){
+            const turns=ids.reduce((sum,id)=>sum+
+              (desktop.brainEvalCatalog.find(item=>item.id===id)?.turns??0),0)*repetitions;
+            const limits=requestedModels.flatMap(model=>{
+              const provider=model.split(":")[0];
+              return provider in CLOUD_EVAL_TURN_LIMITS?[CLOUD_EVAL_TURN_LIMITS[provider]]:[];
+            });
+            const maximum=limits.length?Math.min(...limits):null;
+            if(maximum!==null && turns>maximum)
+              return fail(response,400,"Cloud Brain Lab run has "+turns+
+                " turns per model, exceeding the "+maximum+
+                "-turn free-tier limit. Select fewer scenarios/repetitions.");
+          }
           pending = {
             id: randomBytes(12).toString("hex"),kind:"start_brain_eval",
             evalOptions:{mode,repetitions,scenarioIds:ids,

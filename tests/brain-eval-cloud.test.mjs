@@ -5,6 +5,7 @@ import { brainEvalModels } from "../src/brain-eval.ts";
 import {
   CLOUD_EVAL_BUDGETS,brainCloudChoices,brainModelSelection,
   validateCloudTurnBudget,paceCloudBrainTurn,cloudRateLimitFailure,
+  cloudTurnLimit,fitCloudScenarios,
   reserveOpenRouterFreeTurn
 } from "../src/brain-eval-cloud.ts";
 
@@ -105,4 +106,45 @@ test("Cloud Brain Lab keeps isolated memory and preserves native provider API-ke
   assert.match(panel,/Compare local and free cloud models/);
   assert.match(backend,/allowedEvalModels\(desktop\)/);
   assert.match(backend,/NVIDIA_MODELS\.map\(model => "nvidia:"\+model\)/);
+});
+
+
+test("Cloud test budget explains all-scenarios silent rejection and fits whole tests",()=>{
+  const cloud=brainCloudChoices(settings);
+  const nvidia=cloud.find(choice=>choice.provider==="nvidia");
+  const router=cloud.find(choice=>choice.provider==="openrouter");
+  assert.equal(cloudTurnLimit([nvidia]),24);
+  assert.equal(cloudTurnLimit([nvidia,router]),8);
+  assert.equal(cloudTurnLimit([brainModelSelection(local[0],settings,local)]),null);
+  const fixtures=[
+    {id:"multi",steps:[1,2,3]},
+    {id:"short",steps:[1,2]},
+    {id:"third",steps:[1,2,3]},
+    {id:"overflow",steps:[1]}
+  ];
+  assert.deepEqual(fitCloudScenarios(fixtures,8,1),["multi","short","third"]);
+  assert.deepEqual(fitCloudScenarios(fixtures,8,2),["multi","overflow"]);
+  assert.deepEqual(fitCloudScenarios(fixtures,3,5),[],
+    "No test can fit when repetitions alone exceed quota");
+});
+
+test("Cloud run validation, any error and exact quota warning stay beside Run controls",()=>{
+  const panel=readFileSync(new URL("../src/BrainEvalPanel.tsx",import.meta.url),"utf8");
+  const run=panel.indexOf('className="save-button"');
+  const alert=panel.indexOf('aria-live="assertive"');
+  const monitor=panel.indexOf('aria-label="Brain Lab run progress"');
+  const catalog=panel.indexOf('className="brain-eval-catalog"');
+  assert.ok(run>=0 && alert>run && monitor>alert && catalog>monitor,
+    "Run errors must be visible above the collapsed/expanded giant scenario list");
+  assert.match(panel,/overCloudLimit/);
+  assert.match(panel,/Fit cloud selection/);
+  assert.match(panel,/fitCloudScenarios\(selected,cloudLimit,repeats\)/);
+  assert.match(panel,/Could not start: /);
+  const remote=readFileSync(new URL("../server/public/index.html",import.meta.url),"utf8");
+  assert.match(remote,/brainLabQuotaNote/);
+  assert.match(remote,/brainLabFitCloud/);
+  assert.match(remote,/brainLabStartFeedback=error.message/);
+  const bridge=readFileSync(new URL("../server/index.mjs",import.meta.url),"utf8");
+  assert.match(bridge,/CLOUD_EVAL_TURN_LIMITS/);
+  assert.match(bridge,/turns>maximum/);
 });

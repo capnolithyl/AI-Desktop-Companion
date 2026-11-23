@@ -347,8 +347,10 @@
       </section>
       <div class="brain-lab-actions">
         <button id="brainLabStart" class="settings-action" type="button" disabled>Start test run</button>
+        <button id="brainLabFitCloud" class="settings-action" type="button" hidden>Fit cloud selection</button>
         <button id="brainLabStop" class="settings-action danger" type="button" disabled>Stop</button>
       </div>
+      <p id="brainLabQuotaNote" class="settings-hint" role="status" hidden></p>
       <progress id="brainLabProgress" value="0" max="1"></progress>
       <div id="brainLabStatus" role="status" aria-live="polite">Waiting for desktop…</div>
       <div class="brain-lab-actions">
@@ -472,6 +474,9 @@
   var brainLabSelectClear = document.getElementById("brainLabSelectClear");
   var brainLabStart = document.getElementById("brainLabStart");
   var brainLabStop = document.getElementById("brainLabStop");
+  var brainLabFitCloud = document.getElementById("brainLabFitCloud");
+  var brainLabQuotaNote = document.getElementById("brainLabQuotaNote");
+  var brainLabStartFeedback = "";
   var brainLabStatus = document.getElementById("brainLabStatus");
   var brainLabProgress = document.getElementById("brainLabProgress");
   var brainLabJson = document.getElementById("brainLabJson");
@@ -938,6 +943,12 @@
       brainLabModelList.append(label);
     }
   }
+  function brainLabCloudLimit(models){
+    var limits={nvidia:24,openrouter:8,gemini:8};
+    var selected=models.map(function(model){return limits[model.split(":")[0]];})
+      .filter(function(limit){return Number.isFinite(limit);});
+    return selected.length?Math.min(...selected):null;
+  }
   function renderBrainLab(data) {
     var catalog = Array.isArray(data.brainEvalCatalog) ? data.brainEvalCatalog : [];
     var signature = JSON.stringify(catalog);
@@ -967,6 +978,17 @@
     var chosenTurns = brainLabCatalog.filter(function (item) {
       return brainLabSelectedIds?.has(item.id);
     }).reduce(function (sum,item) { return sum + item.turns; },0);
+    var turnCount=chosenTurns*Number(brainLabRepeats.value);
+    var cloudLimit=brainLabMode.value==="live"?brainLabCloudLimit(chosenModels):null;
+    var tooManyCloudTurns=cloudLimit!==null && turnCount>cloudLimit;
+    brainLabQuotaNote.hidden=cloudLimit===null && chosenModels.length<=10;
+    brainLabQuotaNote.textContent=chosenModels.length>10
+      ? "Select at most 10 models. Currently selected: "+chosenModels.length+"."
+      : cloudLimit===null?""
+      : "Cloud safety budget: "+turnCount+" / "+cloudLimit+" turns per model."+
+        (tooManyCloudTurns?" Too many selected. Reduce the scenarios/repetitions or use Fit cloud selection. No requests have been made.":"");
+    brainLabFitCloud.hidden=!tooManyCloudTurns;
+    brainLabFitCloud.disabled=!available;
     brainLabStart.disabled = !available || chosen.length===0 || chosenModels.length===0 || chosenModels.length>10;
     brainLabStart.textContent = "Start " + chosen.length + " scenarios × " +
       chosenModels.length+" model(s) ("+(chosenTurns * Number(brainLabRepeats.value)*chosenModels.length)+" turns)";
@@ -1020,6 +1042,7 @@
     else if (phase==="complete" || phase==="stopped")
       lines.push("Download pending: desktop report not yet accepted by the relay. The auto-saved files remain on your PC.");
     if (run.error) lines.push("Note: "+run.error);
+    if (brainLabStartFeedback) lines.push("Start rejected: "+brainLabStartFeedback);
     brainLabStatus.textContent = lines.join("\n");
   }
   function applyBrainLabNumbers(){
@@ -1072,8 +1095,42 @@
     selectBrainLab(passed.filter(function (_,i) {return i%7===0;}).map(function (item) {return item.id;}));
   });
   brainLabSelectClear.addEventListener("click",function(){selectBrainLab([]);});
+  brainLabFitCloud.addEventListener("click",function(){
+    if(!current||brainLabSubmitting||current.brainEval?.phase==="running")return;
+    var chosenModels=[...(brainLabSelectedModels||[])];
+    var limit=brainLabCloudLimit(chosenModels);
+    if(limit===null)return;
+    var remaining=Math.floor(limit/Number(brainLabRepeats.value));
+    var keep=[];
+    for(var item of brainLabCatalog){
+      if(brainLabSelectedIds?.has(item.id) && item.turns<=remaining){
+        keep.push(item.id);
+        remaining-=item.turns;
+      }
+    }
+    if(!keep.length){
+      brainLabStartFeedback="Even one selected scenario exceeds this budget with the current repetitions. Choose a shorter test or reduce repetitions.";
+      renderBrainLab(current);
+      return;
+    }
+    brainLabStartFeedback="";
+    selectBrainLab(keep);
+    brainLabStartFeedback="Selection adjusted to "+keep.length+" whole scenarios. Press Start to run them.";
+    renderBrainLab(current);
+  });
   brainLabStart.addEventListener("click", async function () {
     if (!current || brainLabSubmitting) return;
+    var selectedModels=[...(brainLabSelectedModels||[])];
+    var limit=brainLabMode.value==="live"?brainLabCloudLimit(selectedModels):null;
+    var turns=brainLabCatalog.filter(function(item){return brainLabSelectedIds?.has(item.id);})
+      .reduce(function(sum,item){return sum+item.turns;},0)*Number(brainLabRepeats.value);
+    if(limit!==null && turns>limit){
+      brainLabStartFeedback="Run not started. "+turns+" turns per model exceed the "+
+        limit+"-turn cloud limit. Use Fit cloud selection or choose fewer scenarios.";
+      renderBrainLab(current);
+      return;
+    }
+    brainLabStartFeedback="";
     brainLabSubmitting = true;
     brainLabStart.disabled = true;
     try {
@@ -1089,7 +1146,7 @@
       });
       brainLabStatus.textContent = "Start requested. Mikan is accepting the desktop job…";
       await refresh();
-    } catch(error) { brainLabStatus.textContent = error.message; }
+    } catch(error) { brainLabStartFeedback=error.message; }
     finally { brainLabSubmitting = false; if(current) renderBrainLab(current); }
   });
   brainLabStop.addEventListener("click", async function () {

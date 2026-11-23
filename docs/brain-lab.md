@@ -1,5 +1,25 @@
 # Mikan Brain Lab (P0)
 
+## v0.9.74: visible cloud Run limits and working fit action
+
+On v0.9.73 the UI initially selected all 84 scenarios. Selecting a free cloud model
+and pressing Run triggered the native per-model limit (NVIDIA 24 turns,
+OpenRouter/Gemini 8 turns) but the exception appeared **below** the enormous
+scenario list, making Run appear unresponsive. A separate >10-model limit also
+disabled Run without nearby explanation. The authenticated remote browser
+previously acknowledged these oversized jobs but the desktop silently rejected
+them afterward.
+
+Both desktop and remote Brain Lab now show the exact number of requested turns
+**per model** versus the strictest selected cloud cap beside Run. The explicit
+**Fit cloud selection** button retains whole selected scenarios in displayed
+order until the budget is reached, without starting inference or dropping cases
+silently. The user can still pick specific numbered scenarios instead. Run
+rejection messages are displayed above the scenario catalog, and the remote
+API rejects over-budget jobs with HTTP 400 **before** issuing a queued job.
+This is a UI and validation fix, not a change to provider RPM or daily quotas.
+
+
 ## v0.9.73: Free cloud models in Live Brain Lab
 
 **Fast** remains routing-only. **Live** can now compare installed local Ollama

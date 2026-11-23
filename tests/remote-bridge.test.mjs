@@ -243,6 +243,12 @@ test("browser relay requires a private key and delegates to the desktop, not a s
         models:[unapproved]})).status,400,
       "remote Brain Lab must reject unapproved cloud IDs: "+unapproved);
   }
+  // Previous remote UI silently acknowledged an oversized cloud run (202),
+  // then desktop rejected it. Reject before queueing with a visible 400.
+  assert.equal((await request(base + "/api/brain-eval","POST",jsonHeaders,
+    {action:"start",mode:"live",repetitions:5,
+      scenarioIds:["branch-a","discovery-bands-wish"],
+      models:["nvidia:nvidia/nemotron-3-ultra-550b-a55b"]})).status,400);
   assert.equal((await request(base + "/api/brain-eval","POST",jsonHeaders,
     {action:"start",mode:"routing",repetitions:1,scenarioIds:["branch-a"],
       models:["qwen3.5:9b","gemma4:12b"]})).status,400);
