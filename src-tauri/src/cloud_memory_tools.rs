@@ -34,7 +34,7 @@ fn overlap(needles:&[String],haystack:&str)->usize{
     let words=haystack.split(|ch:char|!ch.is_alphanumeric())
         .map(str::to_lowercase).collect::<Vec<_>>();
     needles.iter().filter(|term|words.iter()
-        .any(|word|word==term || (term.len()>=4 && word.starts_with(term.as_str()))))
+        .any(|word|word.as_str()==term.as_str() || (term.len()>=4 && word.starts_with(term.as_str()))))
         .count()
 }
 
@@ -107,6 +107,7 @@ pub(crate) async fn search(app:&AppHandle,args:&Value)->Value{
             "id":fact.id,
             "fact":fact.fact.chars().take(380).collect::<String>(),
             "category":fact.category,
+            "updatedAt":fact.updated_at,
             "tags":fact.tags.iter().take(6).collect::<Vec<_>>()
         })).collect::<Vec<_>>(),
         "source":"owner-edited local SQLite facts",
