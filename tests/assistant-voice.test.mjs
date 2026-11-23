@@ -30,3 +30,17 @@ test("desktop chat, Brain Lab and style pass all use the same voice builder",()=
   assert.match(lab,/assistantVoiceGuidance\(settings,roleplayAllowed\)/);
   assert.match(lab,/persona:assistantVoiceGuidance\(settings,roleplayAllowed\)/);
 });
+
+test("personality guidance adds natural character voice to technical answers without forcing catchphrases",()=>{
+  const settings={
+    systemPrompt:"You are Clockwork, a cheerful, sharp-witted librarian.",
+    communication:{...DEFAULT_COMMUNICATION,followUps:"natural"},
+    personality:{...DEFAULT_PERSONALITY}
+  };
+  const voice=assistantVoiceGuidance(settings);
+  assert.match(voice,/Clockwork, a cheerful/);
+  assert.match(voice,/technical work/);
+  assert.match(voice,/casual chat/);
+  assert.match(voice,/never trade factual accuracy/i);
+  assert.doesNotMatch(voice,/You are Mikan/);
+});
