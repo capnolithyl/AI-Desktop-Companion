@@ -67,6 +67,30 @@ export function brainModelSelection(
   throw new Error("Brain Lab model isn't installed or isn't an approved free cloud selection: "+requested);
 }
 
+/** Smallest quota cap for the currently selected cloud providers.
+ * Local-only runs are deliberately uncapped. */
+export function cloudTurnLimit(choices:ReadonlyArray<BrainEvalModelChoice>):number|null{
+  const limits=choices.flatMap(choice=>choice.provider==="local"
+    ? []:[CLOUD_EVAL_BUDGETS[choice.provider].maxTurns]);
+  return limits.length?Math.min(...limits):null;
+}
+
+/** Pick whole scenarios in displayed order; do not silently truncate a run.
+ * This is only called from the explicit "Fit selection" UI action. */
+export function fitCloudScenarios<T extends {id:string;steps:ReadonlyArray<unknown>}>(
+  selected:ReadonlyArray<T>,maxTurns:number,repetitions:number
+):string[]{
+  let remaining=Math.floor(maxTurns/repetitions);
+  const kept:string[]=[];
+  for(const scenario of selected){
+    if(scenario.steps.length<=remaining){
+      kept.push(scenario.id);
+      remaining-=scenario.steps.length;
+    }
+  }
+  return kept;
+}
+
 export function validateCloudTurnBudget(
   choices:ReadonlyArray<BrainEvalModelChoice>,turnsPerModel:number
 ):void{
