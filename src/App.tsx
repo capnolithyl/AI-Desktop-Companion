@@ -2577,13 +2577,13 @@ export default function App() {
       });
       if(modelLed) unlistenEvidence=await listen<{
         requestId:string;status:string;accepted:number;rejected:number;
-        pagesRead:number;sourceIds:number[];error?:string|null
+        structured?:number;pagesRead:number;sourceIds:number[];error?:string|null
       }>("mikan://evidence-tool",event=>{
         if(event.payload.requestId!==requestId) return;
         sourceGroundingAudit={
           status:event.payload.status,accepted:event.payload.accepted,
-          rejected:event.payload.rejected,pagesRead:event.payload.pagesRead,
-          sourceIds:event.payload.sourceIds,error:event.payload.error
+          rejected:event.payload.rejected,structured:event.payload.structured,
+          pagesRead:event.payload.pagesRead,sourceIds:event.payload.sourceIds,error:event.payload.error
         };
       });
       if (!groundedChapterTurn && maySpeakProgressively({
