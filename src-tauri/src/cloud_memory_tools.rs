@@ -30,6 +30,22 @@ fn terms(query:&str)->Vec<String>{
         .take(8).collect()
 }
 
+// A dedicated, parameterized FTS query for the *model's requested topic*.
+// Prefix matching handles ordinary inflections (live/lives, current/currently)
+// without any per-topic trigger phrases. Database text never enters the query.
+fn lexical_ids(db:&rusqlite::Connection,query:&str)->Vec<i64>{
+    let query=terms(query).iter()
+        .map(|term|format!("\\"{term}\\"*")).collect::<Vec<_>>().join(" OR ");
+    if query.is_empty(){return vec![];}
+    let Ok(mut stmt)=db.prepare(
+        "SELECT rowid FROM user_memory_search WHERE user_memory_search MATCH ?1
+         ORDER BY bm25(user_memory_search) LIMIT 32"
+    ) else {return vec![];};
+    let Ok(rows)=stmt.query_map([query],|row|row.get::<_,i64>(0))
+        else {return vec![];};
+    rows.filter_map(Result::ok).collect()
+}
+
 fn overlap(needles:&[String],haystack:&str)->usize{
     let words=haystack.split(|ch:char|!ch.is_alphanumeric())
         .map(str::to_lowercase).collect::<Vec<_>>();
@@ -52,8 +68,9 @@ fn select_lexical<'a>(
         (hits>0).then_some((fact,hits,*position))
     }).collect::<Vec<_>>();
     let best=candidates.iter().map(|(_,hits,_)|*hits).max().unwrap_or(0);
-    // Require the highest topic overlap: an incidental single word must not
-    // cause a large unrelated family-memory dump.
+    // Multi-concept requests need more than one matching word. This is a
+    // generic relevance floor, not a rule about locations or concerts.
+    if needle.len()>=2 && best<2 {return vec![];}
     candidates.retain(|(_,hits,_)|*hits==best);
     candidates.sort_by_key(|(fact,_,rank)|(*rank,fact.id));
     candidates.into_iter().take(MAX_MATCHES).map(|(fact,_,_)|fact).collect()
@@ -90,7 +107,7 @@ pub(crate) async fn search(app:&AppHandle,args:&Value)->Value{
         Err(_)=>return json!({"error":"Local saved-memory database unavailable"})
     };
     let lexical=memory::open_db(app).ok()
-        .and_then(|db|memory::find_fact_ids(&db,query).ok()).unwrap_or_default();
+        .map(|db|lexical_ids(&db,query)).unwrap_or_default();
     let picked=select_lexical(&facts,&lexical,query);
     let picked=if !picked.is_empty() {
         picked
@@ -155,6 +172,19 @@ mod tests {
         assert!(select_semantic(&items,&weak).is_empty());
         let good=vec![advanced_memory::SemanticMatch{id:45,fact:items[1].fact.clone(),score:Some(0.81)}];
         assert_eq!(select_semantic(&items,&good)[0].id,45);
+    }
+    #[test]
+    fn safe_prefix_fts_matches_saved_residence_without_topic_regex(){
+        let db=rusqlite::Connection::open_in_memory().unwrap();
+        db.execute_batch(
+            "CREATE VIRTUAL TABLE user_memory_search USING fts5(fact,category,tags);
+             INSERT INTO user_memory_search(rowid,fact,category,tags) VALUES
+              (45,'The user currently lives in Bay City, Michigan','profile','location home'),
+              (105,'Child enjoys imaginative play with Jigglypuff','family','pokemon play');"
+        ).unwrap();
+        assert_eq!(lexical_ids(&db,"current home city"),vec![45]);
+        assert_eq!(lexical_ids(&db,"where does the owner live"),vec![45]);
+        assert!(!lexical_ids(&db,"play").contains(&45));
     }
     #[test]
     fn a_memory_query_is_bounded_and_broad_context_words_do_not_match(){
