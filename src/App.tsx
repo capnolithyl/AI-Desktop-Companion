@@ -3313,19 +3313,27 @@ export default function App() {
     return () => { disposed = true; clearTimeout(timer); };
   }, []);
 
+  // Export any chat directly from the archive without opening or changing it.
+  // For the active chat, keep live messages (including an in-progress reply).
+  const copyConversationDebugLog = async (id:string|null) => {
+    const isCurrent=id===activeConversationId;
+    const exportMessages=isCurrent?messages:(id?(await memoryApi.listMessages(id)).map(restoreMessage):[]);
+    if(!exportMessages.length)throw new Error("No messages to export");
+    await copyTextToClipboard(formatDebugLog(exportMessages, {
+      conversationId:id,
+      model:settings.model,
+      provider:settings.provider,
+      geminiModel:settings.geminiModel,
+      openrouterModel:settings.openrouterModel,
+      contextWindow:settings.contextWindow,
+      buildInfo:BUILD_INFO,
+      avatarAnimation:isCurrent?avatarDebugText(avatarDebug,avatarDisplay,lastReplyCue):undefined
+    }));
+  };
   const copyFullDebugLog = async () => {
     if (!messages.length) return;
     try {
-      await copyTextToClipboard(formatDebugLog(messages, {
-        conversationId: activeConversationId,
-        model: settings.model,
-        provider: settings.provider,
-        geminiModel: settings.geminiModel,
-        openrouterModel: settings.openrouterModel,
-        contextWindow: settings.contextWindow,
-        buildInfo: BUILD_INFO,
-        avatarAnimation: avatarDebugText(avatarDebug, avatarDisplay, lastReplyCue)
-      }));
+      await copyConversationDebugLog(activeConversationId);
       setCopyLogState("copied");
     } catch (error) {
       console.warn("Failed to copy debug log:", error);
@@ -3661,6 +3669,8 @@ export default function App() {
         onDrag={dragPortrait}
         onNewChat={clearChat}
         onOpenChat={id=>{void openConversation(id);}}
+        onCopyChatDebug={copyConversationDebugLog}
+        onOpenCurrentLog={()=>setScreen("log")}
         onOpenHistory={()=>openMemory("chats")}
         onOpenMemory={()=>openMemory("facts")}
         onOpenSettings={openSettings}

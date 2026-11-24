@@ -51,3 +51,21 @@ test("activity uses real recalled facts, on-demand snapshots and executed querie
   assert.deepEqual(complete[0].lines,["actual query"]);
   assert.equal(workspaceActivity([{...base,sourcesCarriedOver:true}])[0].title,"Earlier web evidence reused");
 });
+
+test("recent chats copy their own debug log without switching the active conversation",()=>{
+  assert.match(shell,/onClick=\{\(\)=>void copyChat\(chat.id\)\}/);
+  assert.match(shell,/await onCopyChatDebug\(id\)/);
+  assert.match(css,/\.workspace-chat-row:hover \.workspace-chat-copy/);
+  assert.match(css,/\.workspace-chat-row:focus-within \.workspace-chat-copy/);
+  assert.match(app,/onCopyChatDebug=\{copyConversationDebugLog\}/);
+  const exportStart=app.indexOf("const copyConversationDebugLog = async");
+  const exportEnd=app.indexOf("const copyFullDebugLog = async",exportStart);
+  const exporter=app.slice(exportStart,exportEnd);
+  assert.ok(exportStart>=0&&exportEnd>exportStart);
+  assert.match(exporter,/isCurrent\?messages:/);
+  assert.match(exporter,/memoryApi\.listMessages\(id\)\)\.map\(restoreMessage\)/);
+  assert.match(exporter,/conversationId:id/);
+  assert.doesNotMatch(exporter,/openConversation\(|setActiveConversationId\(|setMessages\(/);
+  assert.match(shell,/onClick=\{onOpenCurrentLog\}/);
+  assert.match(app,/onOpenCurrentLog=\{\(\)=>setScreen\("log"\)\}/);
+});

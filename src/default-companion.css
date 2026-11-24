@@ -101,8 +101,11 @@
 }
 .workspace-chat-link svg {flex:0 0 18px;color:#e6a57c;}
 .workspace-chat-link span {min-width:0;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}
-.workspace-chat-link:hover:not(:disabled) {background:#503127;}
-.workspace-chat-link.active {
+.workspace-chat-row {display:flex;align-items:stretch;min-width:0;flex:0 0 auto;position:relative;border:1px solid transparent;border-radius:12px;}
+.workspace-chat-row:hover,.workspace-chat-row:focus-within {background:#503127;}
+.workspace-chat-row .workspace-chat-link {flex:1;min-width:0;border:0;background:transparent;box-shadow:none;}
+.workspace-chat-row .workspace-chat-link:hover:not(:disabled) {background:transparent;}
+.workspace-chat-row.active {
   border-color:#eb9752;background:linear-gradient(100deg,#794324,#543028);
   box-shadow:inset 2px 0 0 #ffc078,0 0 15px #fb7e3945;
 }
@@ -380,3 +383,20 @@
 .workspace-activity-entry ul {margin:5px 0 0;padding-left:16px;color:#fff0e5;}
 .workspace-activity-entry li+li {margin-top:5px;}
 @media(max-height:700px){.workspace-avatar-pane{overflow-y:auto;}.workspace-activity-log{flex-basis:210px;}}
+
+/* Keep the title and clipboard action separate: copying never opens the chat. */
+.workspace-chat-copy {
+  flex:0 0 29px;width:29px;min-width:0;align-self:center;display:grid;place-items:center;
+  height:29px;margin-right:4px;padding:0;border:1px solid transparent;border-radius:7px;
+  background:transparent;color:#ffd0a6;opacity:0;transition:opacity .12s;
+}
+.workspace-chat-row:hover .workspace-chat-copy,.workspace-chat-row:focus-within .workspace-chat-copy,
+.workspace-chat-copy:focus-visible,.workspace-chat-copy.copying,.workspace-chat-copy.copied,.workspace-chat-copy.failed {opacity:1;}
+.workspace-chat-copy:hover:not(:disabled) {background:#75482d;border-color:#d99666;}
+.workspace-chat-copy.copied {color:#b7e7b0;}
+.workspace-chat-copy.failed {color:#ffb4ac;}
+.workspace-copy-announcement {position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap;}
+.workspace-open-log {flex:0 0 auto;display:flex;align-items:center;gap:6px;padding:7px 9px;border:1px solid transparent;border-radius:9px;background:transparent;color:#eac5a9;font-size:12px;}
+.workspace-open-log:hover {background:#503127;border-color:#b57850;}
+@media(max-width:1100px){.workspace-open-log span{display:none;}}
+@media(hover:none){.workspace-chat-copy{opacity:1;}}

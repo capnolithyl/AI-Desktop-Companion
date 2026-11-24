@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode, type PointerEvent as ReactPointerEvent, type MouseEvent as ReactMouseEvent } from "react";
 import {
-  BookHeart, Cat, Eye, History, Layers3, MessageCircle, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen,
+  BookHeart, Cat, Check, Copy, Eye, History, Layers3, LoaderCircle, MessageCircle, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen,
   Palette, PawPrint, Plus, Search, Settings2, Shirt, Smile, Sparkles, Volume2, VolumeX, X
 } from "lucide-react";
 import { clampPanelWidth, resolveWorkspaceWidths, resizeWorkspacePanel, type WorkspaceActivityEntry, type WorkspacePanel, type WorkspaceWidths } from "./workspace-activity";
@@ -14,6 +14,7 @@ type Props={
   displayName:string; lastActivity:string; visionBusy:boolean; activityEntries:ReadonlyArray<WorkspaceActivityEntry>;
   onDrag:(event:ReactMouseEvent<HTMLElement>)=>void;
   onNewChat:()=>void; onOpenChat:(id:string)=>void; onOpenHistory:()=>void;
+  onCopyChatDebug:(id:string)=>Promise<void>; onOpenCurrentLog:()=>void;
   onOpenMemory:()=>void; onOpenSettings:()=>void; onOpenSearch:()=>void;
   onToggleVision:()=>void; onVoice:()=>void;
   onMute:()=>void; onExpression:(kind:"smile"|"laugh"|"surprised"|"sad"|"angry"|"nod"|"shake")=>void; onOutfit:()=>void;
@@ -48,10 +49,31 @@ function savePanelPreference(panel:SidePanel,visible:boolean){
 export function DefaultCompanionShell({
   avatar,modelPicker,transcript,composer,chats,activeConversationId,
   transcriptVersion,busy,muted,ready,memoryIssue,visionActive,visionBusy,displayName,lastActivity,activityEntries,
-  onDrag,onNewChat,onOpenChat,onOpenHistory,onOpenMemory,onOpenSettings,onOpenSearch,
+  onDrag,onNewChat,onOpenChat,onOpenHistory,onCopyChatDebug,onOpenCurrentLog,onOpenMemory,onOpenSettings,onOpenSearch,
   onToggleVision,onVoice,onMute,onExpression,onOutfit,onHide
 }:Props){
   const feedRef=useRef<HTMLDivElement>(null);
+  const [copyStatus,setCopyStatus]=useState<{id:string;state:"copying"|"copied"|"failed"}|null>(null);
+  const copyBusyRef=useRef(false);
+  const copyChat=async(id:string)=>{
+    if(copyBusyRef.current)return;
+    copyBusyRef.current=true;
+    setCopyStatus({id,state:"copying"});
+    try{
+      await onCopyChatDebug(id);
+      setCopyStatus({id,state:"copied"});
+    }catch(error){
+      console.warn("Could not copy conversation debug log:",error);
+      setCopyStatus({id,state:"failed"});
+    }finally{
+      copyBusyRef.current=false;
+    }
+  };
+  useEffect(()=>{
+    if(!copyStatus||copyStatus.state==="copying")return;
+    const timer=window.setTimeout(()=>setCopyStatus(null),3500);
+    return ()=>window.clearTimeout(timer);
+  },[copyStatus]);
   const [expressionMenuOpen,setExpressionMenuOpen]=useState(false);
   const [viewportWidth,setViewportWidth]=useState(()=>window.innerWidth);
   // Null means automatic responsive behavior. An explicit toggle is remembered.
@@ -154,12 +176,26 @@ export function DefaultCompanionShell({
         <div className="workspace-sidebar-label">RECENT CHATS</div>
         <nav className="workspace-recent">
           {chats.length===0&&<p className="workspace-empty-chats">Your conversations will appear here.</p>}
-          {chats.slice(0,7).map(chat=><button type="button" key={chat.id}
-            className={"workspace-chat-link"+(activeConversationId===chat.id?" active":"")}
-            disabled={busy} title={chat.title} onClick={()=>onOpenChat(chat.id)}>
-            <MessageCircle size={17}/><span>{chat.title||"Conversation"}</span>
-          </button>)}
+          {chats.slice(0,7).map(chat=>{
+            const status=copyStatus?.id===chat.id?copyStatus.state:null;
+            const copyLabel=status==="copied"?"Copied debug log":status==="failed"?"Copy failed; retry debug log":"Copy debug log";
+            return <div key={chat.id} className={"workspace-chat-row"+(activeConversationId===chat.id?" active":"")}>
+              <button type="button" className="workspace-chat-link"
+                disabled={busy} title={chat.title} onClick={()=>onOpenChat(chat.id)}>
+                <MessageCircle size={17}/><span>{chat.title||"Conversation"}</span>
+              </button>
+              <button type="button" className={"workspace-chat-copy"+(status?" "+status:"")}
+                disabled={copyStatus?.state==="copying"} title={copyLabel+" · Review before sharing"}
+                aria-label={copyLabel+" for "+(chat.title||"conversation")}
+                onClick={()=>void copyChat(chat.id)}>
+                {status==="copying"?<LoaderCircle size={15} className="spin"/>:status==="copied"?<Check size={15}/>:status==="failed"?<X size={15}/>:<Copy size={15}/>}
+              </button>
+            </div>;
+          })}
         </nav>
+        <span className="workspace-copy-announcement" role="status">
+          {copyStatus?.state==="copied"?"Debug log copied to clipboard. Review before sharing.":copyStatus?.state==="failed"?"Could not copy debug log. Please try again.":""}
+        </span>
         <button type="button" className="workspace-see-all" onClick={onOpenHistory}>
           <History size={17}/> Chat history
         </button>
@@ -173,6 +209,10 @@ export function DefaultCompanionShell({
         <div className="workspace-chat-heading">
           <div className="workspace-heading-icon"><MessageCircle size={22}/></div>
           <div><strong>{displayName}</strong><small>{busy?lastActivity:"Chatting with Mikan ♡"}</small></div>
+          <button type="button" className="workspace-open-log" onClick={onOpenCurrentLog}
+            aria-label="Open current conversation log" title="Current conversation log and diagnostics">
+            <History size={18}/><span>Conversation log</span>
+          </button>
         </div>
         <div className="workspace-transcript" ref={feedRef} role="log" aria-live="polite" aria-relevant="additions text">
           {transcript}
