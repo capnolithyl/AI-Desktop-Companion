@@ -3674,6 +3674,11 @@ export default function App() {
             <div className="workspace-message-body">
               <div className="workspace-message-author">
                 <strong>{message.role==="assistant"?"Mikan ♡":"You"}</strong>
+                {message.role==="assistant"&&!message.failed&&!!message.content&&
+                  <button type="button" className="workspace-message-speak" title="Read this reply aloud"
+                    aria-label="Speak this reply" onClick={()=>void speak(message.content)}>
+                    <Volume2 size={14}/>
+                  </button>}
                 <time dateTime={new Date(message.createdAt).toISOString()}>
                   {new Date(message.createdAt).toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"})}
                 </time>
