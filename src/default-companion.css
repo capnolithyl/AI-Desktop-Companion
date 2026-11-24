@@ -135,34 +135,63 @@
   display:flex;flex-direction:column;gap:18px;flex:1;overflow-y:auto;overflow-x:hidden;
   min-height:0;padding:24px 8px 24px 2px;scrollbar-width:thin;
 }
-.workspace-message {max-width:88%;min-width:0;display:flex;align-items:flex-start;gap:10px;}
+.workspace-message {max-width:88%;min-width:0;display:flex;align-items:flex-start;gap:16px;flex:0 0 auto;}
 .workspace-message.user {align-self:flex-end;flex-direction:row-reverse;}
 .workspace-message.assistant {align-self:flex-start;}
 .workspace-message-avatar {
-  display:grid;place-items:center;flex:0 0 35px;width:35px;height:35px;
+  display:grid;place-items:center;flex:0 0 35px;width:35px;height:35px;margin-top:26px;
   border:1px solid #dd9a6c;border-radius:50%;background:#5e3427;
   color:#ffc287;box-shadow:0 0 10px #f6934b5c;
 }
 .workspace-message.user .workspace-message-avatar {border-color:#9f6e62;background:#644044;color:#ffe0d7;box-shadow:none;}
 .workspace-message-body {display:flex;flex-direction:column;min-width:0;gap:6px;flex:1;}
-.workspace-message-author {display:flex;align-items:center;gap:12px;color:#ffb36e;font-size:12px;font-weight:750;}
+.workspace-message-author {display:flex;align-items:center;gap:8px;min-height:22px;color:#ffb36e;font-size:12px;font-weight:750;}
 .workspace-message.user .workspace-message-author {justify-content:flex-end;color:#e7c8bc;}
 .workspace-message-author time {margin-left:auto;font-size:11px;color:#d4a99b;font-weight:400;}
+/* Speech balloons: two nested triangles make a continuous outlined tail
+   without clipping Markdown, links, or code blocks inside the balloon. */
 .workspace-message-bubble {
-  min-width:0;overflow-wrap:anywhere;padding:15px 18px;border:1px solid #f49b50;
-  border-radius:18px;background:linear-gradient(135deg,#593126f2,#3c2828f5);
-  box-shadow:0 0 0 1px #ffcf9c1e,0 0 14px #f28a366e;
+  --bubble-edge:#f6a35b;
+  --bubble-near:#59352a;
+  --bubble-far:#3e2928;
+  --bubble-tail:var(--bubble-near);
+  position:relative;min-width:0;overflow-wrap:anywhere;padding:14px 19px;
+  border:1px solid var(--bubble-edge);border-radius:22px;
+  background:linear-gradient(110deg,var(--bubble-near),var(--bubble-far));
+  box-shadow:inset 0 0 18px #ffa6600c,0 0 13px #f28a3657;
   font-size:max(14px,var(--mikan-font-size));color:#fff2e8;line-height:1.6;
 }
-.workspace-message.user .workspace-message-bubble {
-  border-color:#9f6a66;background:linear-gradient(135deg,#5b3a3d,#463036);
-  box-shadow:inset 0 0 7px #ffffff08;
+.workspace-message.assistant .workspace-message-bubble {border-top-left-radius:16px;}
+.workspace-message-bubble::before,.workspace-message-bubble::after {
+  content:"";position:absolute;pointer-events:none;
+  top:13px;left:-12px;width:13px;height:16px;
+  clip-path:polygon(0 0,100% 22%,100% 100%);
+  background:var(--bubble-edge);
 }
+.workspace-message-bubble::after {
+  top:14px;left:-9px;width:11px;height:13px;
+  background:var(--bubble-tail);
+}
+.workspace-message.user .workspace-message-bubble {
+  --bubble-edge:#b47b77;
+  --bubble-near:#5a3a40;
+  --bubble-far:#4b3138;
+  --bubble-tail:var(--bubble-far);
+  border-top-right-radius:16px;
+  box-shadow:inset 0 0 8px #ffffff09,0 2px 9px #1b0d1133;
+}
+.workspace-message.user .workspace-message-bubble::before,
+.workspace-message.user .workspace-message-bubble::after {
+  left:auto;right:-12px;transform:scaleX(-1);
+}
+.workspace-message.user .workspace-message-bubble::after {right:-9px;}
+.workspace-message.workspace-thinking .workspace-message-avatar {margin-top:0;}
+.workspace-message.workspace-thinking .workspace-message-bubble {display:flex;align-items:center;gap:8px;}
 .workspace-message-bubble .markdown-text {font:inherit;overflow-wrap:anywhere;}
 .workspace-message-bubble .markdown-text > *:first-child {margin-top:0;}
 .workspace-message-bubble .markdown-text > *:last-child {margin-bottom:0;}
 .workspace-message-bubble a {color:#ffc08a;text-decoration:underline;}
-.workspace-message.failed .workspace-message-bubble {border-color:#f09090;color:#ffd7d7;}
+.workspace-message.failed .workspace-message-bubble {--bubble-edge:#f09090;--bubble-near:#563032;--bubble-far:#41282c;color:#ffd7d7;box-shadow:0 0 12px #e9858550;}
 .workspace-message-sources {
   border:1px solid #885a46;background:#322526;border-radius:12px;padding:8px 12px;
   color:#e8bbab;font-size:12px;

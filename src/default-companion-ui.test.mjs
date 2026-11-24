@@ -80,3 +80,12 @@ test("Default Iki portrait supports local selectable scenery without changing th
   assert.match(css,/var\(--workspace-avatar-background\)/);
   assert.match(css,/mask-image:linear-gradient/);
 });
+
+test("Default chat has directional speech balloon tails and consistent error styling",()=>{
+  assert.match(css,/\.workspace-message-bubble::before,\.workspace-message-bubble::after/);
+  assert.match(css,/clip-path:polygon/);
+  assert.match(css,/\.workspace-message\.user \.workspace-message-bubble::after/);
+  assert.match(css,/right:-12px;transform:scaleX\(-1\)/);
+  assert.match(css,/\.workspace-message\.failed \.workspace-message-bubble \{--bubble-edge:#f09090/);
+  assert.match(app,/<div className="workspace-message-bubble"><MarkdownText/);
+});
