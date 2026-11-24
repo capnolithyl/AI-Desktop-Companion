@@ -14,9 +14,9 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { initialSettingsTab, initialMemoryTab, isStandaloneSettingsWindow, validSettingsTab, validMemoryTab } from "./settings-window";
 import { register, unregister } from "@tauri-apps/plugin-global-shortcut";
 import {
-  ArrowLeft, ArrowUp, Brain, Camera, Cat, Check, ChevronLeft, ChevronRight, Clock3, Copy, Crop, Eye, EyeOff, FileText, Heart, History, Paperclip,
+  ArrowLeft, Brain, Camera, Cat, Check, House, FlaskConical, ChevronLeft, ChevronRight, Clock3, Copy, Crop, Eye, EyeOff, FileText, Heart, History, Paperclip,
   BookOpen, ExternalLink, HardDrive, LoaderCircle, MessageCircle, RotateCw, Search, Settings2, Shuffle, SlidersHorizontal, Sparkles, Square, SquarePen, Volume2, X,
-  Palette, Shirt, Globe2, Cpu, WandSparkles, Plug2, AudioLines, VolumeX
+  Palette, Shirt, Globe2, Cpu, WandSparkles, Plug2, AudioLines, VolumeX, PawPrint, Ellipsis, Plus
 } from "lucide-react";
 import {
   DEFAULT_SETTINGS, DEFAULT_APPEARANCE, DEFAULT_VOICE, loadPortrait, loadSettings, savePortrait, saveSettings,
@@ -114,7 +114,22 @@ const BrainEvalPanel = lazy(() => import("./BrainEvalPanel").then(module => ({ d
 const IkiAvatar = lazy(() => import("./IkiAvatar").then(module => ({ default: module.IkiAvatar })));
 
 type Screen = "compact" | "log" | "settings" | "search" | "page" | "help";
-type SettingsTab = "ai" | "internet" | "notion" | "voice" | "appearance" | "interface" | "personality" | "memory" | "capabilities" | "brain";
+type SettingsTab = "home" | "vision" | "ai" | "internet" | "notion" | "voice" | "appearance" | "interface" | "personality" | "memory" | "capabilities" | "brain";
+const SETTINGS_PAGE_COPY: Record<SettingsTab,{title:string;description:string}> = {
+  home: { title: "Welcome home", description: "Your personal Mikan control center" },
+  appearance: { title: "Character", description: "Outfits, avatar movement and presence" },
+  personality: { title: "Personality", description: "Mikan's character and conversation style" },
+  voice: { title: "Voice", description: "Voices, speech and playback" },
+  memory: { title: "Memory & chats", description: "Your conversations and long-term memory" },
+  ai: { title: "AI & models", description: "Inference providers and local models" },
+  internet: { title: "Web & Mikanify", description: "Search permissions, research and response styling" },
+  vision: { title: "Live Vision", description: "Screen awareness and capture permissions" },
+  notion: { title: "Notion", description: "Connected pages and knowledge" },
+  brain: { title: "Brain Lab", description: "Evaluate, compare and inspect Mikan's reasoning" },
+  interface: { title: "Look & feel", description: "Colors, typography and reactions" },
+  capabilities: { title: "Capabilities", description: "Everything Mikan can do today" }
+};
+
 type VoiceHealth = { ready: boolean; modelLoaded: boolean; device: string | null };
 type VoiceReference = { configured: boolean; transcript: string | null; durationSeconds: number | null; fileName: string | null };
 type SearchService = { state: string; message: string };
@@ -129,6 +144,8 @@ type ChatCompletion = { content: string; modelUsed?: string; fallbackReason?: st
 type LogMessage = Message & { createdAt: number; diagnostics?: Diagnostics; failed?: boolean; sources?: WebResult[]; searchQuery?: string; sourcesCarriedOver?: boolean };
 const HOTKEY = "Control+Alt+M";
 const BUNDLED_PORTRAIT = "/mikan.png";
+// Bundled reference artwork: local asset, no cloud request or missing /mikan.png URL.
+const CONTROL_CENTER_PORTRAIT = new URL("../assets/iki/mikan-reference.png", import.meta.url).href;
 
 function restoreMessage(saved: PersistedMessage): LogMessage {
   const metadata = readMessageMetadata(saved.metadataJson);
@@ -279,6 +296,12 @@ export default function App() {
   const [screen, setScreen] = useState<Screen>(standaloneSettings ? "settings" : "compact");
   const [settings, setSettings] = useState<Settings>(loadSettings);
   const [draft, setDraft] = useState<Settings>(settings);
+  const [settingsSaved, setSettingsSaved] = useState(false);
+  useEffect(() => { setSettingsSaved(false); }, [draft]);
+  const [localConfigOpen,setLocalConfigOpen]=useState(settings.provider==="local"||settings.provider==="auto");
+  useEffect(() => {
+    setLocalConfigOpen(draft.provider==="local"||draft.provider==="auto");
+  }, [draft.provider]);
   const [settingsTab, setSettingsTab] = useState<SettingsTab>(initialSettingsTab);
   useEffect(() => {
     if (typeof window === "undefined" || !("__TAURI_INTERNALS__" in window)) return;
@@ -317,6 +340,39 @@ export default function App() {
   const [memoryInitialTab, setMemoryInitialTab] = useState<"facts" | "chats" | "character" | "collections">(initialMemoryTab);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
+  // Keep seldom-used chat controls within one keyboard-accessible popover.
+  const [chatMenuOpen,setChatMenuOpen] = useState(false);
+  const [chatToolsOpen,setChatToolsOpen] = useState(false);
+  const chatMenuRef = useRef<HTMLDivElement>(null);
+  const chatMenuButtonRef = useRef<HTMLButtonElement>(null);
+  const chatToolsButtonRef = useRef<HTMLButtonElement>(null);
+  const chatToolsTrayRef = useRef<HTMLDivElement>(null);
+  useEffect(() => { setChatMenuOpen(false); setChatToolsOpen(false); }, [screen]);
+  useEffect(() => {
+    if (!chatMenuOpen && !chatToolsOpen) return;
+    const dismissOutside = (event: PointerEvent) => {
+      const target = event.target;
+      if (!(target instanceof Node)) return;
+      if (chatMenuOpen && !chatMenuRef.current?.contains(target)) setChatMenuOpen(false);
+      if (chatToolsOpen &&
+        !chatToolsButtonRef.current?.contains(target) &&
+        !chatToolsTrayRef.current?.contains(target)) setChatToolsOpen(false);
+    };
+    const dismissEscape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || (chatMenuOpen===false && chatToolsOpen===false)) return;
+      if (chatMenuOpen) chatMenuButtonRef.current?.focus();
+      else chatToolsButtonRef.current?.focus();
+      setChatMenuOpen(false); setChatToolsOpen(false);
+      if (!busy) event.stopPropagation();
+    };
+    document.addEventListener("pointerdown", dismissOutside);
+    document.addEventListener("keydown", dismissEscape);
+    return () => {
+      document.removeEventListener("pointerdown", dismissOutside);
+      document.removeEventListener("keydown", dismissEscape);
+    };
+  }, [chatMenuOpen,chatToolsOpen,busy]);
+
   const [stopping, setStopping] = useState(false);
   const [portrait, setPortrait] = useState<string | null>(BUNDLED_PORTRAIT);
   const [imageError, setImageError] = useState<string | null>(null);
@@ -971,7 +1027,7 @@ export default function App() {
       .catch(() => setAdvancedMemoryStatus({ready:false,reason:"Unavailable"}));
   };
   useEffect(() => {
-    if (screen === "settings" && settingsTab === "ai") refreshAdvancedMemoryStatus();
+    if (screen === "settings" && settingsTab === "memory") refreshAdvancedMemoryStatus();
   }, [screen, settingsTab]);
 
   const focusInput = useCallback(() => {
@@ -1498,7 +1554,7 @@ export default function App() {
     if (tab === "voice") void checkVoice(voiceEndpoint(settings.voice));
     setScreen("settings");
   };
-  const openSettings = () => openSettingsTab("appearance");
+  const openSettings = () => openSettingsTab("home");
 
   useEffect(() => {
     if (!standaloneSettings) return;
@@ -1745,7 +1801,8 @@ export default function App() {
     setSettings(updated);
     saveSettings(updated);
     setVoiceHealth(null);
-    goCompact();
+    if (standaloneSettings) setSettingsSaved(true);
+    else goCompact();
   };
 
   const settingsChatRef = useRef({
@@ -3358,57 +3415,82 @@ export default function App() {
       </div>}
       <div className="reply-panel" aria-live="polite">
         <div className="reply-header">
-          <div className="reply-title"><span className="cat-dot" /> <strong>MIKAN</strong>
-            {busy && <LoaderCircle size={15} className="spin" />}
+          <div className="reply-title">
+            <span className="chat-brand-mark" aria-hidden="true"><PawPrint size={17}/></span>
+            <div className="chat-brand-label"><strong>Mikan</strong><small>Your desktop companion</small></div>
+            {busy && <LoaderCircle size={15} className="spin" aria-label="Mikan is thinking"/>}
             {!busy && lastReply?.failed && <span className="error-caption">Error</span>}
           </div>
           <div className="dock-actions">
-            <button className="dock-icon search-dock-action" title={service?.message || "Checking search service…"}
-              aria-label={`Web search: ${service?.message || "Checking search service"}`}
-              onClick={() => setScreen("search")}>
-              <Search size={17}/>
-              <span aria-hidden="true" className={`search-health-dot ${service?.state || "checking"}`}/>
-            </button>
-            <button type="button"
-              className={`dock-icon live-vision-dock ${liveVision.enabled?"active":""}`}
-              aria-label={liveVision.enabled?"Turn Live Vision off":"Turn Live Vision on"}
-              aria-pressed={liveVision.enabled}
-              title={liveVision.enabled
-                ? "Live Vision ON: one private frame every 15 seconds. Click to stop."
-                : "Live Vision OFF: click to let Mikan see a recent screen when you chat."}
-              disabled={liveVisionBusy}
-              onClick={()=>void setLiveVisionEnabled(!liveVision.enabled)}>
-              {liveVisionBusy?<LoaderCircle size={17} className="spin"/>
-                : liveVision.enabled?<Eye size={17}/>:<EyeOff size={17}/>}
-              {liveVision.enabled&&<span className="live-vision-dot" aria-hidden="true"/>}
-            </button>
-            <button type="button" className="dock-icon" disabled={!settings.voice.muted && (!lastReply?.content || lastReply.failed)}
-              title={settings.voice.muted ? "Unmute Mikan" : voiceState === "idle" ? "Speak latest reply" : voiceState === "synthesizing" ? "Cancel pending speech" : "Stop speech"}
-              aria-label={settings.voice.muted ? "Unmute Mikan" : voiceState === "idle" ? "Speak latest reply" : "Stop speech"}
-              onClick={() => settings.voice.muted ? toggleVoiceMute() : voiceState === "idle" ? void speak(lastReply?.content ?? "") : stopSpeech()}>
-              {settings.voice.muted ? <VolumeX size={17}/> : voiceState === "synthesizing" ? <LoaderCircle className="spin" size={17}/> :
-                voiceState === "playing" ? <Square size={15} fill="currentColor"/> : <Volume2 size={17}/>}
-            </button>
-            <button className="dock-icon" title="Conversation log (/log)" aria-label="Conversation log" onClick={() => setScreen("log")}><History size={17}/></button>
-            <button className="dock-icon" title="Settings (/settings)" aria-label="Settings" onClick={openSettings}><Settings2 size={17}/></button>
-            <button className="dock-icon" title="Hide Mikan" aria-label="Hide Mikan" onClick={() => void invoke("hide_companion")}><X size={18}/></button>
+            {liveVision.enabled && <button type="button" className="chat-vision-active"
+              aria-label="Live Vision is active. Turn it off" title={`Live Vision captures every ${liveVision.captureIntervalSeconds}s and is analyzed only during chat · Click to disable`}
+              disabled={liveVisionBusy} onClick={()=>void setLiveVisionEnabled(false)}>
+              <Eye size={13}/><span>Vision on</span><span aria-hidden="true" className="chat-live-dot"/>
+            </button>}
+            {!settings.voice.muted && voiceState!=="idle" && <button type="button"
+              className="dock-icon chat-voice-active"
+              title={voiceState==="synthesizing"?"Cancel speech preparation":"Stop Mikan speaking"}
+              aria-label="Stop speaking" onClick={stopSpeech}>
+              {voiceState==="synthesizing"?<LoaderCircle size={17} className="spin"/>:<Square size={15} fill="currentColor"/>}
+            </button>}
+            <button type="button" className="dock-icon chat-history-action"
+              title="Conversation history (/log)" aria-label="Conversation history"
+              onClick={()=>setScreen("log")}><History size={18}/></button>
+            <div className="chat-menu-wrap" ref={chatMenuRef}>
+              <button type="button" ref={chatMenuButtonRef} className={"dock-icon chat-menu-trigger"+(chatMenuOpen?" active":"")}
+                title="More chat actions" aria-label="More chat actions"
+                aria-haspopup="dialog" aria-expanded={chatMenuOpen} aria-controls="chat-quick-menu"
+                onClick={()=>{
+                  const opening=!chatMenuOpen;
+                  setChatMenuOpen(opening);setChatToolsOpen(false);
+                  if(opening) requestAnimationFrame(()=>chatMenuRef.current?.querySelector<HTMLButtonElement>(".chat-quick-menu button")?.focus());
+                }}><Ellipsis size={21}/></button>
+              {chatMenuOpen && <div className="chat-quick-menu" id="chat-quick-menu" aria-label="Quick chat actions" role="dialog">
+                <div className="chat-quick-menu-title"><Sparkles size={14}/> QUICK ACTIONS</div>
+                <button type="button" disabled={busy||!memoryReady}
+                  onClick={()=>{setChatMenuOpen(false);clearChat();}}>
+                  <SquarePen size={17}/><span>New conversation</span>
+                </button>
+                <button type="button" onClick={()=>{setChatMenuOpen(false);setScreen("search");}}>
+                  <Search size={17}/><span>Web search</span>
+                  <span className={`chat-menu-status search-health-dot ${service?.state || "checking"}`}
+                    aria-hidden="true" title={service?.message || "Checking search service"}/>
+                </button>
+                <button type="button" disabled={liveVisionBusy}
+                  aria-pressed={liveVision.enabled}
+                  onClick={()=>{setChatMenuOpen(false);void setLiveVisionEnabled(!liveVision.enabled);}}>
+                  {liveVision.enabled?<EyeOff size={17}/>:<Eye size={17}/>}
+                  <span>{liveVision.enabled?"Turn Live Vision off":"Turn Live Vision on"}</span>
+                  {liveVision.enabled&&<span className="chat-menu-active-dot" aria-hidden="true"/>}
+                </button>
+                {!settings.voice.muted && <button type="button" disabled={!lastReply?.content||lastReply.failed}
+                  onClick={()=>{
+                    setChatMenuOpen(false);
+                    if(voiceState==="idle") void speak(lastReply?.content??"");
+                    else stopSpeech();
+                  }}>
+                  {voiceState!=="idle"?<Square size={16}/>:<Volume2 size={17}/>}
+                  <span>{voiceState==="idle"?"Read latest reply aloud":"Stop speaking"}</span>
+                </button>}
+                <button type="button" aria-pressed={settings.voice.muted}
+                  onClick={()=>{setChatMenuOpen(false);toggleVoiceMute();}}>
+                  {settings.voice.muted?<VolumeX size={17}/>:<Volume2 size={17}/>}
+                  <span>{settings.voice.muted?"Voice muted · unmute":"Mute voice replies"}</span>
+                </button>
+                <div className="chat-quick-menu-divider"/>
+                <button type="button" onClick={()=>{setChatMenuOpen(false);openSettings();}}>
+                  <Settings2 size={17}/><span>Control Center</span>
+                </button>
+                <button type="button" onClick={()=>{setChatMenuOpen(false);void invoke("hide_companion");}}>
+                  <EyeOff size={17}/><span>Hide Mikan</span>
+                </button>
+              </div>}
+            </div>
           </div>
         </div>
         <div className="latest-reply"><MarkdownText text={visibleReplyText}/></div>
         {voiceError && <div className="voice-error" role="alert">Voice: {voiceError}</div>}
       </div>
-      {liveVision.enabled && <div className="live-vision-strip" role="status">
-        <Eye size={14}/>
-        <span><strong>Live Vision ON</strong>
-          · {liveVision.error ? "capture error"
-            : liveVision.lastCaptureAtMs
-              ? `capturing every ${liveVision.captureIntervalSeconds}s` : "starting capture"}
-          {liveVision.region ? " · selected region" : " · full monitor"}
-          · analyzed when you chat
-        </span>
-        <button type="button" onClick={()=>void setLiveVisionEnabled(false)}
-          disabled={liveVisionBusy}>Off</button>
-      </div>}
       {(liveVisionError||liveVision.error)&&
         <div className="vision-error" role="alert">{liveVisionError||liveVision.error}</div>}
       {capturePickerOpen && <div className="vision-panel">
@@ -3482,30 +3564,43 @@ export default function App() {
           onClick={()=>{setPendingAttachment(null);setAttachmentError(null);}}><X size={15}/></button>
       </div>}
       {attachmentError && <div className="vision-error" role="alert">{attachmentError}</div>}
-      <div className="input-row">
-        <input ref={uploadRef} type="file" hidden aria-label="Choose a file to attach"
-          onChange={event=>{
-            const file=event.currentTarget.files?.[0];
-            event.currentTarget.value="";
-            void attachFile(file);
-          }}/>
-        <button type="button" className="vision-capture-button" aria-label="Attach a file"
-          title="Attach local text, PDF, Office document, spreadsheet or image"
-          disabled={busy||attachmentBusy}
-          onClick={()=>uploadRef.current?.click()}>
-          {attachmentBusy?<LoaderCircle size={19} className="spin"/>:<Paperclip size={19}/>}
+      <input ref={uploadRef} type="file" hidden aria-label="Choose a file to attach"
+        onChange={event=>{
+          const file=event.currentTarget.files?.[0];
+          event.currentTarget.value="";
+          void attachFile(file);
+        }}/>
+      {chatToolsOpen && <div className="chat-tool-tray" id="chat-tool-tray" ref={chatToolsTrayRef}
+        role="group" aria-label="Message attachments">
+        <button type="button" disabled={busy||attachmentBusy} onClick={()=>{
+          setChatToolsOpen(false);uploadRef.current?.click();
+        }}>
+          {attachmentBusy?<LoaderCircle size={17} className="spin"/>:<Paperclip size={17}/>}
+          Attach a file
         </button>
-        <button type="button" className="vision-capture-button" aria-label="Capture a screen for Mikan"
-          title="Capture and preview a screen (one shot, not continuous)"
-          disabled={busy||captureBusy}
-          onClick={()=>capturePickerOpen?setCapturePickerOpen(false):void openCapturePicker()}>
-          {captureBusy?<LoaderCircle size={19} className="spin"/>:<Camera size={19}/>}
+        <button type="button" disabled={busy||captureBusy} onClick={()=>{
+          setChatToolsOpen(false);
+          if(capturePickerOpen) setCapturePickerOpen(false); else void openCapturePicker();
+        }}>
+          {captureBusy?<LoaderCircle size={17} className="spin"/>:<Camera size={17}/>}
+          Share screen
+        </button>
+      </div>}
+      <div className="input-row">
+        <button type="button" ref={chatToolsButtonRef}
+          className={"chat-tools-toggle"+(chatToolsOpen?" active":"")}
+          aria-label="Add an attachment or share screen"
+          aria-expanded={chatToolsOpen} aria-controls="chat-tool-tray"
+          title="Attach a file or share a screen" disabled={busy}
+          onClick={()=>{setChatToolsOpen(open=>!open);setChatMenuOpen(false);}}>
+          <Plus size={20} strokeWidth={2.1}/>
         </button>
         <textarea
           ref={inputRef}
           aria-label="Message Mikan"
+          title="Enter sends · Shift+Enter adds a line · /help lists commands"
           rows={2}
-          placeholder="Message Mikan…  /help for commands"
+          placeholder="Message Mikan…"
           value={input}
           onChange={event => setInput(event.target.value)}
           onKeyDown={event => {
@@ -3526,8 +3621,8 @@ export default function App() {
             {stopping ? <LoaderCircle className="spin" size={20}/> : <Square size={18} fill="currentColor"/>}
           </button>
         ) : (
-          <button type="button" className="send-button" aria-label="Send" title="Send message"
-            disabled={!memoryReady || attachmentBusy || (!input.trim() && !pendingAttachment && !pendingScreenshot && !liveVision.enabled)} onClick={() => void send()}><ArrowUp size={20}/></button>
+          <button type="button" className="send-button chat-paw-send" aria-label="Send message" title="Send message · Enter"
+            disabled={!memoryReady || attachmentBusy || (!input.trim() && !pendingAttachment && !pendingScreenshot && !liveVision.enabled)} onClick={() => {setChatToolsOpen(false);void send();}}><PawPrint size={23} fill="currentColor" strokeWidth={1.6}/></button>
         )}
       </div>
       <div className="dock-footer">
@@ -3556,11 +3651,12 @@ export default function App() {
               )}
             </optgroup>
           </select>
-          <button type="button" className="refresh-model-button" title="Refresh installed Ollama models"
-            aria-label="Refresh installed models" disabled={busy || connection.mode === "loading"}
-            onClick={() => void refreshModels(settings.endpoint)}><RotateCw size={13}/></button>
         </div>
-        <span title={memoryError || "Memory ready"}>{memoryError ? "Memory unavailable" : !memoryReady ? "Loading memory…" : "Ctrl + Alt + M"}</span>
+        <span role="status" className={`chat-memory-status ${memoryError?"error":!memoryReady?"loading":"ready"}`}
+          title={memoryError || (memoryReady?"Memory is ready · Ctrl+Alt+M opens Mikan":"Preparing local memory…")}>
+          <span className="chat-memory-dot" aria-hidden="true"/>
+          {memoryError?"Memory issue":!memoryReady?"Loading…":"Ready"}
+        </span>
       </div>
     </section>}
 
@@ -3737,10 +3833,13 @@ export default function App() {
       <footer className="drawer-footer">Commands are handled locally, without sending them to Ollama.</footer>
     </section>}
 
-    {screen === "settings" && <section className="drawer" role="dialog" aria-label="Mikan settings">
-      <header className="drawer-header">
-        <button className="back-button" title="Back to companion" onClick={goCompact}><ArrowLeft size={19}/></button>
-        <div className="drawer-title"><strong>Settings</strong><span>Mikan Desktop v{DESKTOP_VERSION} · Local first</span></div>
+    {screen === "settings" && <section className="drawer control-center-window" role="dialog" aria-label="Mikan settings">
+      <header className="drawer-header control-center-header">
+        <button className="back-button" title="Close Control Center" aria-label="Close Control Center" onClick={goCompact}><ArrowLeft size={20}/></button>
+        <span className="control-header-glyph"><Settings2 size={22}/></span>
+        <span className="control-header-paws" aria-hidden="true"><PawPrint/><Sparkles size={13}/><PawPrint/></span>
+        <div className="drawer-title"><strong>{SETTINGS_PAGE_COPY[settingsTab].title}</strong><span>{SETTINGS_PAGE_COPY[settingsTab].description}</span></div>
+        <span className="control-local-indicator"><span aria-hidden="true"/> Local first</span>
         {(["ai", "internet", "voice", "appearance", "interface"] as SettingsTab[]).includes(settingsTab) &&
           <button className="secondary-action" onClick={() => setDraft(current => ({
             ...current,
@@ -3748,7 +3847,6 @@ export default function App() {
               endpoint: DEFAULT_SETTINGS.endpoint, model: DEFAULT_SETTINGS.model,
               provider: DEFAULT_SETTINGS.provider, nvidiaModel: DEFAULT_SETTINGS.nvidiaModel, modelLed: DEFAULT_SETTINGS.modelLed, geminiModel: DEFAULT_SETTINGS.geminiModel,
               openrouterModel: DEFAULT_SETTINGS.openrouterModel,
-              systemPrompt: DEFAULT_SETTINGS.systemPrompt,
               contextWindow: DEFAULT_SETTINGS.contextWindow,
               reasoningMode: DEFAULT_SETTINGS.reasoningMode
             } : settingsTab === "internet" ? {
@@ -3763,20 +3861,28 @@ export default function App() {
       </header>
       <div className={settingsTab === "brain" ? "settings-layout brain-lab-layout" : "settings-layout"}>
         <nav className="settings-tabs" aria-label="Settings categories">
+          <div className="control-brand">
+            <div className="control-brand-icon"><Cat size={25}/></div>
+            <div><strong>Mikan</strong><small>CONTROL CENTER</small></div>
+          </div>
           {([
-            { group: "MIKAN", items: [
+            { group: "START HERE", items: [
+              ["home", "Overview", House]
+            ] },
+            { group: "YOUR COMPANION", items: [
               ["appearance", "Character", Shirt],
               ["personality", "Personality", WandSparkles],
               ["voice", "Voice", AudioLines]
             ] },
-            { group: "KNOWLEDGE & TOOLS", items: [
-              ["memory", "Memory & chats", Brain],
+            { group: "INTELLIGENCE", items: [
               ["ai", "AI & models", Cpu],
-              ["internet", "Web & research", Globe2],
-              ["notion", "Notion notes", BookOpen],
-              ["brain", "Brain lab", Brain]
+              ["internet", "Web & Mikanify", Globe2],
+              ["vision", "Live Vision", Eye],
+              ["memory", "Memory & chats", Brain],
+              ["notion", "Notion", BookOpen]
             ] },
-            { group: "APPLICATION", items: [
+            { group: "WORKSPACE", items: [
+              ["brain", "Brain Lab", FlaskConical],
               ["interface", "Look & feel", Palette],
               ["capabilities", "Capabilities", Plug2]
             ] }
@@ -3795,17 +3901,38 @@ export default function App() {
                   if (tab === "capabilities") void checkCapabilities();
                   if (tab === "voice") void checkVoice(voiceEndpoint(draft.voice));
                 }}>
-                <Icon size={16} strokeWidth={1.9}/><span>{label}</span>
+                <span className="control-nav-icon"><Icon size={19} strokeWidth={1.85}/></span><span>{label}</span>
               </button>
             )}
           </div>)}
+          <div className="control-sidebar-decoration" aria-hidden="true">
+            <Sparkles size={13}/><PawPrint size={34}/><Sparkles size={10}/>
+          </div>
         </nav>
         <div key={settingsTab} className={settingsTab === "brain" ? "settings-body settings-brain"
-          : settingsTab === "memory" || settingsTab === "capabilities" ? "settings-body settings-embedded"
+          : settingsTab === "memory" ? "settings-body settings-embedded settings-memory-view"
+          : settingsTab === "capabilities" ? "settings-body settings-embedded"
           : "settings-body"}>
         {settingsTab === "brain" && <Suspense fallback={<div className="settings-section-title">Opening Brain Lab…</div>}>
           <BrainEvalPanel settings={settings} availableModels={availableModels} />
         </Suspense>}
+        {settingsTab === "memory" && <div className="control-memory-addon">
+          <details className="control-disclosure">
+            <summary><strong>Advanced memory integration</strong><span>Optional Mem0 semantic recall</span></summary>
+          <div className="settings-section-title"><Brain size={17}/> Advanced personal memory (Mem0 OSS)</div>
+          <div className="service-panel">
+            <div><strong>Semantic recall · local</strong>
+              <span className={advancedMemoryStatus?.ready ? "service-running" : "service-muted"}>
+                {advancedMemoryStatus === null ? "Checking…" : advancedMemoryStatus.ready
+                  ? "Ready · Mem0 + Ollama" : advancedMemoryStatus.reason || "Not running"}
+              </span>
+            </div>
+            <button type="button" className="secondary-action"
+              onClick={refreshAdvancedMemoryStatus}><RotateCw size={14}/> Check status</button>
+            <small>Optional real Mem0 semantic retrieval. Uses your editable SQLite facts and local Ollama, never a cloud account. Run the bundled advanced-memory setup script once to enable it. If unavailable, ordinary SQLite recall continues unchanged.</small>
+          </div>
+          </details>
+        </div>}
         {settingsTab === "memory" && <MemoryPanel embedded key={memoryInitialTab} initialTab={memoryInitialTab}
           conversations={conversations} sessionSummaries={sessionSummaries} facts={userFacts}
           characterFacts={characterFacts} interests={interests} currentId={activeConversationId}
@@ -3815,7 +3942,7 @@ export default function App() {
           onAutoRememberUserChange={enabled => applySetting({autoRememberUser: enabled})}
           onAutoRememberMikanChange={enabled => applySetting({autoRememberMikan: enabled})}
           automaticError={automaticMemoryError}
-          busy={busy} error={memoryError} onClose={() => setSettingsTab("appearance")}
+          busy={busy} error={memoryError} onClose={() => setSettingsTab("home")}
           onNew={standaloneSettings
               ? () => { void emit("mikan://settings-chat", { action: "new" }); goCompact(); }
               : clearChat}
@@ -3829,28 +3956,76 @@ export default function App() {
           onAddCharacter={addCharacter} onEditCharacter={editCharacter}
           onDeleteCharacter={deleteCharacter} onRefresh={refreshMemory}/>}
         {settingsTab === "capabilities" && <CapabilitiesPanel embedded health={capabilityHealth}
-          checking={capabilitiesChecking} onClose={() => setSettingsTab("appearance")}
+          checking={capabilitiesChecking} onClose={() => setSettingsTab("home")}
           onRefresh={() => void checkCapabilities()}
           onAsk={question => {
               if (standaloneSettings) void emit("mikan://settings-chat", { action: "prefill", text: question });
               else { setInput(question); goCompact(); focusInput(); }
             }}/>} 
+        {settingsTab === "home" && <div className="control-home">
+          <section className="control-home-hero">
+            <span className="control-hero-paws" aria-hidden="true"><PawPrint size={31}/><Sparkles size={14}/><PawPrint size={22}/></span>
+            <div className="control-home-copy">
+              <span className="control-eyebrow"><Sparkles size={17}/> MAKE MIKAN YOURS</span>
+              <h2>Your companion.<br/><em>Your rules.</em></h2>
+              <p>From her voice and personality to the AI behind her answers, everything has a place now.</p>
+              <button type="button" className="control-primary-link" onClick={() => openSettingsTab("ai")}>
+                <Cpu size={18}/> Configure Mikan's brain <ChevronRight size={18}/>
+              </button>
+            </div>
+            <img className="control-home-portrait" src={CONTROL_CENTER_PORTRAIT} alt="" loading="lazy" decoding="async"/>
+          </section>
+          <div className="control-home-heading">
+            <div><h3>Explore your settings</h3><p>Choose an area to customize. Advanced options stay tucked away until you need them.</p></div>
+          </div>
+          <div className="control-home-grid">
+            {([
+              { tab: "appearance", title: "Character", description: "Outfits, wardrobe & animation", Icon: Shirt },
+              { tab: "ai", title: "AI & models", description: draft.provider === "local" ? "Local Ollama" : draft.provider === "auto" ? "Automatic provider" : "Using "+draft.provider, Icon: Cpu },
+              { tab: "voice", title: "Voice", description: draft.voice.muted ? "Muted right now" : draft.voice.engine === "pocket" ? "Pocket TTS" : "Qwen3-TTS", Icon: AudioLines },
+              { tab: "internet", title: "Web & Mikanify", description: "Mikanify: "+(draft.mikanifyAnswer ? "on" : "off")+" · search: "+(draft.autoSearch ? "automatic" : "manual"), Icon: Sparkles },
+              { tab: "memory", title: "Memory & chats", description: "Remembered facts and conversation history", Icon: Brain },
+              { tab: "vision", title: "Live Vision", description: liveVision.enabled ? "Screen capture enabled" : "Screen capture off", Icon: Eye },
+              { tab: "brain", title: "Brain Lab", description: "Scenarios, runs & diagnostics", Icon: FlaskConical },
+              { tab: "interface", title: "Look & feel", description: "Typography, colors & reactions", Icon: Palette }
+            ] as const).map(({tab,title,description,Icon}) =>
+              <button type="button" key={tab} className="control-home-card" onClick={()=>openSettingsTab(tab)}>
+                <span className="control-home-card-icon"><Icon size={22} strokeWidth={1.9}/></span>
+                <span><strong>{title}</strong><small>{description}</small></span>
+                <ChevronRight className="control-home-card-arrow" size={19}/>
+              </button>
+            )}
+          </div>
+          <div className="control-home-note"><Cat size={19}/> Settings are saved to this PC. Cloud credentials stay in Windows Credential Manager.</div>
+        </div>}
         {settingsTab === "ai" && <>
-          <div className="settings-section-title">Inference provider</div>
-          <label className="setting-field">Primary model
-            <select aria-label="AI inference provider" value={draft.provider}
-              onChange={event => setDraft(current => ({
-                ...current,provider:event.target.value as Settings["provider"]
-              }))}>
-              <option value="local">Local Ollama only</option>
-              <option value="auto">Auto · OpenRouter free → Ollama fallback</option>
-              <option value="openrouter">OpenRouter free only · show cloud errors</option>
-              <option value="gemini">Gemini only · show cloud errors</option>
-              <option value="nvidia">NVIDIA · selected developer model</option>
-            </select>
-            <small>Auto uses free OpenRouter first, switching to local Qwen when its quota or network fails. Gemini remains selectable separately. Memory, SearXNG, and Pocket TTS stay unchanged.</small>
-          </label>
-          <div className="settings-section-title">NVIDIA · Developer prototyping</div>
+          <section className="control-intro"><h2>Choose how Mikan thinks</h2><p>Pick a model provider. Only its configuration appears below. Cloud keys remain in Windows Credential Manager.</p></section>
+          <div className="control-provider-choices" role="group" aria-label="Inference provider">
+            {([
+              { id: "local", label: "Local", detail: "Private Ollama models", Icon: HardDrive },
+              { id: "nvidia", label: "NVIDIA", detail: "Hosted Nemotron & more", Icon: Cpu },
+              { id: "auto", label: "Auto", detail: "Free cloud, local fallback", Icon: Sparkles },
+              { id: "openrouter", label: "OpenRouter", detail: "Free models only", Icon: Globe2 },
+              { id: "gemini", label: "Gemini", detail: "Google AI", Icon: Brain }
+            ] as const).map(({ id, label, detail, Icon }) =>
+              <button key={id} type="button" className={"control-provider-choice "+(draft.provider===id?"selected":"")}
+                aria-pressed={draft.provider===id}
+                onClick={()=>setDraft(current=>({...current,provider:id}))}>
+                <Icon size={22} strokeWidth={1.75}/>
+                <strong>{label}</strong><small>{detail}</small>
+              </button>
+            )}
+          </div>
+          <p className="control-provider-summary">{
+            draft.provider === "auto" ? "Free OpenRouter models first, then your saved Ollama model if cloud access fails." :
+            draft.provider === "local" ? "Runs locally. Chat and sensitive memory can stay on your PC." :
+            draft.provider === "nvidia" ? "Experimental hosted models. API quotas and tool support vary." :
+            draft.provider === "openrouter" ? "Only free OpenRouter models; cloud errors are shown instead of switching silently." :
+            "Google Gemini through your configured API project."
+          }</p>
+          <div className="settings-section-title">Provider configuration</div>
+          {draft.provider === "nvidia" && <section className="control-provider-pane">
+          <div className="settings-section-title"><Cpu size={18}/> NVIDIA · Developer prototyping</div>
           <label className="setting-field">NVIDIA model
             <select value={draft.nvidiaModel} onChange={event=>setDraft(current=>({...current,nvidiaModel:event.target.value}))}>
               {NVIDIA_MODELS.map(name=><option key={name} value={name}>{name}</option>)}
@@ -3878,6 +4053,8 @@ export default function App() {
             <span><strong>Model-led conversation · experimental</strong>
               <small>With NVIDIA selected, skip local Qwen's web-intent planning. NVIDIA may request relevant saved facts from a bounded local memory tool before public searches; it still decides when public read-only web tools are useful, within web permissions and private-context restrictions and source checks for research requests. Compare with the guided pipeline by toggling this off. Tool-enabled conversations may not stream immediately.</small></span>
           </label>
+          </section>}
+          {(draft.provider === "openrouter" || draft.provider === "auto") && <section className="control-provider-pane">
           <div className="settings-section-title">OpenRouter · Free models only</div>
           <label className="setting-field">OpenRouter model ID
             <input spellCheck={false} value={draft.openrouterModel}
@@ -3904,6 +4081,8 @@ export default function App() {
           </div>
           {openrouterKeyError && <small className="field-error" role="alert">{openrouterKeyError}</small>}
           {openrouterTestResult && <small className={openrouterTestResult.startsWith("Connection failed:")?"field-error":"settings-note"} role="status">{openrouterTestResult}</small>}
+          </section>}
+          {draft.provider === "gemini" && <section className="control-provider-pane">
           <div className="settings-section-title">Google Gemini · Optional</div>
           <label className="setting-field">Gemini model ID
             <input spellCheck={false} value={draft.geminiModel}
@@ -3929,6 +4108,9 @@ export default function App() {
           </div>
           {geminiKeyError && <small className="field-error" role="alert">{geminiKeyError}</small>}
           {geminiTestResult && <small className={geminiTestResult.startsWith("Connection failed:")?"field-error":"settings-note"} role="status">{geminiTestResult}</small>}
+          </section>}
+          <details className="control-disclosure control-local-config" open={localConfigOpen} onToggle={event=>setLocalConfigOpen(event.currentTarget.open)}>
+            <summary><strong>{draft.provider === "local" ? "Local Ollama model" : "Local Ollama & fallback"}</strong><span>Model, context and reasoning</span></summary>
           <div className="settings-section-title">Local fallback · Ollama</div>
           <label className="setting-field">Ollama endpoint
             <input spellCheck={false} value={draft.endpoint}
@@ -3973,63 +4155,16 @@ export default function App() {
             </select>
             <small>For supported local reasoning models (including Qwen 3.5). Tool planning and memory extraction stay fast. Deep mode may be slower.</small>
           </label>
-          <label className="setting-field">System/persona prompt
-            <textarea rows={9} value={draft.systemPrompt}
-              onChange={event => setDraft({ ...draft, systemPrompt: event.target.value })}/>
-            <small>Core personality instructions. Presets and sliders live in the separate Personality panel.</small>
-          </label>
-          <div className="settings-section-title">Communication preferences</div>
-          <p className="settings-note">These instructions apply to every reply, even when personal memory retrieval doesn't find the relevant preference.</p>
-          <label className="setting-field">How Mikan addresses you
-            <select value={draft.communication.addressMode}
-              onChange={event => setDraft(current => ({ ...current, communication: {
-                ...current.communication,
-                addressMode: event.target.value as typeof current.communication.addressMode
-              }}))}>
-              <option value="endearments">Endearments and nicknames, not my first name</option>
-              <option value="neutral">No names or nicknames</option>
-              <option value="first-name">First name is okay</option>
-            </select>
-          </label>
-          {draft.communication.addressMode === "endearments" && <label className="setting-field">Preferred endearments
-            <input value={draft.communication.endearments} maxLength={240}
-              placeholder="honey, sweetheart, darling"
-              onChange={event => setDraft(current => ({ ...current, communication: {
-                ...current.communication, endearments: event.target.value
-              }}))}/>
-            <small>Separate suggestions with commas. Mikan doesn't need to use one in every reply.</small>
-          </label>}
-          <label className="setting-field">Reply length
-            <select value={draft.communication.replyLength}
-              onChange={event => setDraft(current => ({ ...current, communication: {
-                ...current.communication,
-                replyLength: event.target.value as typeof current.communication.replyLength
-              }}))}>
-              <option value="concise">Concise</option>
-              <option value="balanced">Balanced</option>
-              <option value="detailed">Detailed when useful</option>
-            </select>
-          </label>
-          <label className="setting-field">Follow-up questions
-            <select value={draft.communication.followUps}
-              onChange={event => setDraft(current => ({ ...current, communication: {
-                ...current.communication,
-                followUps: event.target.value as typeof current.communication.followUps
-              }}))}>
-              <option value="necessary">Only when useful</option>
-              <option value="natural">Conversational</option>
-            </select>
-          </label>
-          <label className="setting-field">Other communication preferences
-            <textarea rows={3} maxLength={1000} value={draft.communication.customGuidance}
-              placeholder="Optional instructions about how Mikan talks to you..."
-              onChange={event => setDraft(current => ({ ...current, communication: {
-                ...current.communication, customGuidance: event.target.value
-              }}))}/>
-            <small>Saved locally. These are behavioral preferences, not memories of facts about you.</small>
-          </label>
-          <button type="button" className="secondary-action"
-            onClick={() => setSettingsTab("personality")}><SlidersHorizontal size={15}/> Personality settings</button>
+          </details>
+
+          <button type="button" className="control-crosslink" onClick={()=>setSettingsTab("internet")}>
+            <Sparkles size={20}/>
+            <span><strong>Web research &amp; Mikanify</strong><small>Search permissions, source interpretation and Mikan's response style live in Web settings.</small></span>
+            <ChevronRight size={18}/>
+          </button>
+        </>}
+        {settingsTab === "vision" && <>
+          <section className="control-intro"><h2>Live Vision</h2><p>Mikan's eyes, on your terms. Screen capture stays opt-in and is processed locally.</p></section>
           <div className="settings-section-title"><Eye size={17}/> Live Vision</div>
           <div className="service-panel">
             <div><strong>Screen awareness</strong>
@@ -4081,22 +4216,39 @@ export default function App() {
               {captureError||liveVisionError}</small>}
             <small>Live Vision is OFF after every app restart. Cropping occurs before JPEG resizing, helping small text stay legible on ultrawide screens. The latest frame stays in RAM and goes only to local Ollama chat. Very short intervals add CPU capture work, not continuous GPU inference.</small>
           </div>
-          <div className="settings-section-title"><Brain size={17}/> Advanced personal memory (Mem0 OSS)</div>
-          <div className="service-panel">
-            <div><strong>Semantic recall · local</strong>
-              <span className={advancedMemoryStatus?.ready ? "service-running" : "service-muted"}>
-                {advancedMemoryStatus === null ? "Checking…" : advancedMemoryStatus.ready
-                  ? "Ready · Mem0 + Ollama" : advancedMemoryStatus.reason || "Not running"}
-              </span>
-            </div>
-            <button type="button" className="secondary-action"
-              onClick={refreshAdvancedMemoryStatus}><RotateCw size={14}/> Check status</button>
-            <small>Optional real Mem0 semantic retrieval. Uses your editable SQLite facts and local Ollama, never a cloud account. Run the bundled advanced-memory setup script once to enable it. If unavailable, ordinary SQLite recall continues unchanged.</small>
-          </div>
-
         </>}
         {settingsTab === "internet" && <>
-          <div className="settings-section-title">Local search service</div>
+          <section className="control-intro"><h2>Web, research &amp; Mikanify</h2><p>Control when Mikan searches, how she reads sources and how she sounds afterward.</p></section>
+          <section className="control-form-section control-research-primary">
+            <div className="settings-section-title"><Sparkles size={18}/> Research &amp; response style</div>
+          <label className="settings-toggle">
+            <input type="checkbox" checked={draft.autoSearch}
+              onChange={e => setDraft(current => ({ ...current, autoSearch: e.target.checked }))}/>
+            <span><strong>Automatic web tools</strong>
+              <small>Allow Mikan's local planner to search public sites when evidence would improve the answer, not just for explicit research questions. Search queries exclude private context. Off by default.</small>
+            </span>
+          </label>
+          <div className="setting-field">
+            <label htmlFor="research-interpretation-mode">Web research interpretation</label>
+            <select id="research-interpretation-mode" value={draft.researchMode}
+              onChange={e=>setDraft(current=>({...current,researchMode:e.target.value as Settings["researchMode"]}))}>
+              <option value="simple">Simple · read sources and answer (recommended)</option>
+              <option value="strict">Strict · experimental evidence extraction (parked)</option>
+            </select>
+            <small>Simple reads retrieved excerpts directly and compares dates for changing facts. Strict preserves the previous JSON evidence pipeline for testing. Both use the live desktop clock and real SearXNG sources.</small>
+          </div>
+          <div id="web-mikanify" className="control-highlight-row"><Sparkles size={18}/><div><strong>Mikanify web answers</strong><p>Keep the factual research, then optionally give the answer Mikan's voice.</p></div></div>
+          <label className="settings-toggle">
+            <input type="checkbox" checked={draft.mikanifyAnswer}
+              disabled={draft.researchMode!=="simple"}
+              onChange={event=>setDraft(current=>({...current,mikanifyAnswer:event.target.checked}))}/>
+            <span><strong>Mikanify answer 🐈 · experimental</strong>
+              <small>After Simple web research, use one additional local Ollama pass to rewrite the completed answer in Mikan's own voice. It must retain the original facts and citations, but may still change them. Off by default. Brain Lab records both versions for comparison. No extra web searches.</small>
+            </span>
+          </label>
+          </section>
+
+          <div className="settings-section-title"><Globe2 size={18}/> Local search service</div>
           <label className="setting-field">SearXNG endpoint
             <input spellCheck={false} value={draft.searxngEndpoint}
               onChange={event => setDraft({ ...draft, searxngEndpoint: event.target.value })}
@@ -4127,31 +4279,7 @@ export default function App() {
               <small>Check SearXNG every 45 seconds, start Docker Desktop if needed, and recover a stopped or unresponsive container. Turning this off leaves services alone. Pressing Stop also disables recovery.</small>
             </span>
           </label>
-          <label className="settings-toggle">
-            <input type="checkbox" checked={draft.autoSearch}
-              onChange={e => setDraft(current => ({ ...current, autoSearch: e.target.checked }))}/>
-            <span><strong>Automatic web tools</strong>
-              <small>Allow Mikan's local planner to search public sites when evidence would improve the answer, not just for explicit research questions. Search queries exclude private context. Off by default.</small>
-            </span>
-          </label>
-          <div className="setting-field">
-            <label htmlFor="research-interpretation-mode">Web research interpretation</label>
-            <select id="research-interpretation-mode" value={draft.researchMode}
-              onChange={e=>setDraft(current=>({...current,researchMode:e.target.value as Settings["researchMode"]}))}>
-              <option value="simple">Simple · read sources and answer (recommended)</option>
-              <option value="strict">Strict · experimental evidence extraction (parked)</option>
-            </select>
-            <small>Simple reads retrieved excerpts directly and compares dates for changing facts. Strict preserves the previous JSON evidence pipeline for testing. Both use the live desktop clock and real SearXNG sources.</small>
-          </div>
-          <label className="settings-toggle">
-            <input type="checkbox" checked={draft.mikanifyAnswer}
-              disabled={draft.researchMode!=="simple"}
-              onChange={event=>setDraft(current=>({...current,mikanifyAnswer:event.target.checked}))}/>
-            <span><strong>Mikanify answer 🐈 · experimental</strong>
-              <small>After Simple web research, use one additional local Ollama pass to rewrite the completed answer in Mikan's own voice. It must retain the original facts and citations, but may still change them. Off by default. Brain Lab records both versions for comparison. No extra web searches.</small>
-            </span>
-          </label>
-          <details className="service-panel">
+          <details className="control-disclosure">
             <summary><strong>Preferred sources by topic</strong> (optional)</summary>
             <small>These sites receive a ranking boost; other websites remain searchable. Domain names only, separated by commas. You can edit the topics or add your own.</small>
             {draft.sourcePreferences.map((entry,index)=><div className="setting-field" key={index}>
@@ -4245,6 +4373,8 @@ export default function App() {
             </div>
             {voiceError && <small className="field-error" role="alert">{voiceError}</small>}
           </div>
+          <details className="control-disclosure control-voice-identity">
+            <summary><strong>Saved voice identity</strong><span>WAV reference and transcript · edit when needed</span></summary>
           <div className="settings-section-title">Saved voice identity</div>
           <div className="service-panel">
             <div>
@@ -4303,6 +4433,8 @@ export default function App() {
             ? "Save or replace a WAV here. Mikan reloads its managed Pocket CPU server automatically and the Test voice button will use your new recording. No Qwen server or setup script needed after Pocket's initial installation."
             : "Saving requires the Qwen Python server. Your WAV and transcript persist in %LOCALAPPDATA%\\Mikan\\voice."}</small>
           </div>
+
+          </details>
           <label className="settings-toggle">
             <input type="checkbox" checked={draft.voice.muted}
               onChange={event => setDraft(current => ({ ...current, voice: { ...current.voice, muted: event.target.checked } }))}/>
@@ -4348,12 +4480,71 @@ export default function App() {
           </label>
         </>}
         {settingsTab === "personality" && <>
+          <div className="control-page-note"><WandSparkles size={20}/> Tune her character, then shape how she talks to you. Personality sliders save immediately; communication preferences save with the button below.</div>
           <div className="settings-section-title">Mikan's personality</div>
           <p className="settings-note"><Sparkles size={16}/> Adjust how Mikan talks and reacts. These changes are saved immediately.</p>
           <PersonalityPresets value={settings.personality} onChange={updatePersonality}/>
           <div className="settings-section-title">Fine-tune her personality</div>
           <PersonalitySliders value={settings.personality} onChange={updatePersonality}/>
           <small className="wardrobe-hint">These preferences guide future replies without requiring a restart.</small>
+          <section className="control-form-section" aria-label="Conversation and communication">          <label className="setting-field">System/persona prompt
+            <textarea rows={9} value={draft.systemPrompt}
+              onChange={event => setDraft({ ...draft, systemPrompt: event.target.value })}/>
+            <small>Core personality instructions. Presets and sliders live in the separate Personality panel.</small>
+          </label>
+          <div className="settings-section-title">Communication preferences</div>
+          <p className="settings-note">These instructions apply to every reply, even when personal memory retrieval doesn't find the relevant preference.</p>
+          <label className="setting-field">How Mikan addresses you
+            <select value={draft.communication.addressMode}
+              onChange={event => setDraft(current => ({ ...current, communication: {
+                ...current.communication,
+                addressMode: event.target.value as typeof current.communication.addressMode
+              }}))}>
+              <option value="endearments">Endearments and nicknames, not my first name</option>
+              <option value="neutral">No names or nicknames</option>
+              <option value="first-name">First name is okay</option>
+            </select>
+          </label>
+          {draft.communication.addressMode === "endearments" && <label className="setting-field">Preferred endearments
+            <input value={draft.communication.endearments} maxLength={240}
+              placeholder="honey, sweetheart, darling"
+              onChange={event => setDraft(current => ({ ...current, communication: {
+                ...current.communication, endearments: event.target.value
+              }}))}/>
+            <small>Separate suggestions with commas. Mikan doesn't need to use one in every reply.</small>
+          </label>}
+          <label className="setting-field">Reply length
+            <select value={draft.communication.replyLength}
+              onChange={event => setDraft(current => ({ ...current, communication: {
+                ...current.communication,
+                replyLength: event.target.value as typeof current.communication.replyLength
+              }}))}>
+              <option value="concise">Concise</option>
+              <option value="balanced">Balanced</option>
+              <option value="detailed">Detailed when useful</option>
+            </select>
+          </label>
+          <label className="setting-field">Follow-up questions
+            <select value={draft.communication.followUps}
+              onChange={event => setDraft(current => ({ ...current, communication: {
+                ...current.communication,
+                followUps: event.target.value as typeof current.communication.followUps
+              }}))}>
+              <option value="necessary">Only when useful</option>
+              <option value="natural">Conversational</option>
+            </select>
+          </label>
+          <label className="setting-field">Other communication preferences
+            <textarea rows={3} maxLength={1000} value={draft.communication.customGuidance}
+              placeholder="Optional instructions about how Mikan talks to you..."
+              onChange={event => setDraft(current => ({ ...current, communication: {
+                ...current.communication, customGuidance: event.target.value
+              }}))}/>
+            <small>Saved locally. These are behavioral preferences, not memories of facts about you.</small>
+          </label>
+          <button type="button" className="secondary-action"
+            onClick={() => setSettingsTab("personality")}><SlidersHorizontal size={15}/> Personality settings</button>
+</section>
         </>}
         {settingsTab === "interface" && <>
           <div className="settings-section-title">Colors and typography</div>
@@ -4429,9 +4620,9 @@ export default function App() {
             <span className="avatar-position-labels" aria-hidden="true">
               <span>Lower</span><span>Higher</span>
             </span>
-            <small>Move Mikan inside her viewport to reveal more or less of her outfit. Live preview; save to keep this position.</small>
+            <small>Move Mikan inside her compact avatar viewport to reveal more or less of an outfit. Save to apply the position.</small>
           </label>
-          <button type="button" className="inline-action"
+          <button type="button" className="inline-action control-inline-reset"
             disabled={avatarDisplay !== "animated" || draft.appearance.avatarVerticalOffset === DEFAULT_AVATAR_VERTICAL_OFFSET}
             onClick={() => setDraft(current => ({ ...current, appearance: {
               ...current.appearance, avatarVerticalOffset: DEFAULT_AVATAR_VERTICAL_OFFSET
@@ -4442,8 +4633,8 @@ export default function App() {
               <strong title={previewChoice.name}>{previewChoice.name}</strong>
               <span>{previewIndex + 1} / {wardrobeChoices.length}</span>
             </div>
-            <small className="wardrobe-hint">Browse to preview each outfit on animated Mikan. Nothing changes permanently until you choose Wear.</small>
-            <div className="wardrobe-preview-note"><Eye size={15}/> Previewing directly on Mikan to the left.</div>
+            <small className="wardrobe-hint">Browse saved outfits by name. Wear applies your selected outfit; the list itself does not alter the saved files.</small>
+            <div className="wardrobe-preview-note"><Eye size={15}/> Browse outfits here; Wear applies your choice to Mikan's companion window.</div>
             <div className="wardrobe-navigation">
               <button type="button" aria-label="Previous outfit" title="Previous outfit"
                 disabled={!ikiReady || ikiBusy || wardrobeChoices.length < 2}
@@ -4465,8 +4656,8 @@ export default function App() {
                 <Check size={15}/> {(ikiRig?.id ?? null) === previewChoice.id ? "Currently wearing" : "Wear this outfit"}
               </button>
               <button type="button" disabled={!ikiReady || ikiBusy || (ikiRig?.id ?? null) === previewChoice.id}
-                onClick={() => setPreviewOutfitId(ikiRig?.id ?? null)}>Cancel preview</button>
-              <button type="button" title="Preview a random everyday outfit" aria-label="Surprise me"
+                onClick={() => setPreviewOutfitId(ikiRig?.id ?? null)}>Back to current</button>
+              <button type="button" title="Pick a random everyday outfit" aria-label="Pick a random outfit"
                 disabled={!ikiReady || ikiBusy || wardrobeChoices.length < 2}
                 onClick={() => {
                   const surprise = pickDailyOutfit(wardrobeChoices, {
@@ -4523,12 +4714,13 @@ export default function App() {
               onClick={() => void browseIkiOutfit()}>Add outfit (.iki)</button>
             <button type="button" disabled={ikiBusy}
               onClick={() => void changeIkiOutfitFolder()}>Choose outfits folder</button>
+            {previewChoice.id && <button type="button" className="control-outfit-remove" disabled={ikiBusy}
+              onClick={() => void forgetSelectedIkiOutfit(previewChoice.id!)}>Remove from wardrobe list</button>}
           </div>
           <small className="iki-wardrobe-path" title={ikiOutfitFolder || "Uses project outfits folder when available"}>
             Folder: {ikiOutfitFolder || "Project outfits folder (or last-used location)"}
           </small>
-          {previewChoice.id && <button type="button" className="inline-action" disabled={ikiBusy}
-            onClick={() => void forgetSelectedIkiOutfit(previewChoice.id!)}>Remove previewed outfit from list</button>}
+
           {ikiError && <p className="field-error" role="alert">{ikiError}</p>}
           <div className="settings-section-title">Live avatar movement</div>
           <label className="avatar-debug-toggle">
@@ -4571,20 +4763,38 @@ export default function App() {
           </label>
         </>}
         </div>
+        {(["home","appearance","personality","voice","ai","internet","vision","notion","interface"] as SettingsTab[]).includes(settingsTab) &&
+          <aside className="control-portrait-aside" aria-label="Mikan's companion artwork">
+            <div className="control-portrait-card">
+              <div className="control-portrait-glow" aria-hidden="true"/>
+              <div className="control-portrait-title"><PawPrint size={20}/><strong>Mikan</strong><Sparkles size={15}/></div>
+              <div className="control-portrait-illustration">
+                <img src={CONTROL_CENTER_PORTRAIT} alt="Mikan in her reference outfit" loading="lazy" decoding="async"/>
+              </div>
+              <div className="control-portrait-message">
+                <PawPrint size={21} aria-hidden="true"/>
+                <span>{settingsTab==="home"?"Make yourself at home!":settingsTab==="appearance"?"A new look? I'm all ears.":"Your companion, your way."}</span>
+              </div>
+              <div className="control-portrait-sparkles" aria-hidden="true"><Sparkles size={19}/><PawPrint size={26}/></div>
+            </div>
+          </aside>}
       </div>
-      {(["ai", "internet", "voice", "appearance", "interface"] as SettingsTab[]).includes(settingsTab) &&
-        <footer className="settings-footer">
-          <button className="save-button" onClick={saveConfiguration}><Check size={17}/> Save settings</button>
-        </footer>}
-      <footer className="settings-build-footer" title={"Built: "+BUILD_INFO.builtAt+" · Commit: "+BUILD_INFO.commit}>
-        <span>Desktop {buildIdentityLabel()}</span>
-        <button type="button" className="inline-action" aria-label="Copy desktop build information"
-          onClick={() => void copyTextToClipboard([
-            "Desktop: "+buildIdentityLabel(),
-            "Commit: "+BUILD_INFO.commit,
-            "Build timestamp: "+BUILD_INFO.builtAt,
-            "Build type: "+BUILD_INFO.kind
-          ].join("\n"))}><Copy size={12}/> Copy</button>
+      <footer className="control-commandbar" title={"Built: "+BUILD_INFO.builtAt+" · Commit: "+BUILD_INFO.commit}>
+        <div className="control-build-label">
+          <span className="control-build-dot" aria-hidden="true"/>
+          <span>Mikan v{DESKTOP_VERSION}</span>
+          <button type="button" className="control-build-copy"
+            aria-label="Copy desktop build information"
+            title={"Copy "+buildIdentityLabel()}
+            onClick={() => void copyTextToClipboard([
+              "Desktop: "+buildIdentityLabel(),
+              "Commit: "+BUILD_INFO.commit,
+              "Build timestamp: "+BUILD_INFO.builtAt,
+              "Build type: "+BUILD_INFO.kind
+            ].join("\n"))}><Copy size={14}/> Build details</button>
+        </div>
+        {(["ai", "internet", "voice", "appearance", "interface", "personality"] as SettingsTab[]).includes(settingsTab) &&
+          <button type="button" className="save-button" onClick={saveConfiguration}><Check size={18}/> {settingsSaved ? "Saved" : "Save changes"}</button>}
       </footer>
     </section>}
   </main>;
