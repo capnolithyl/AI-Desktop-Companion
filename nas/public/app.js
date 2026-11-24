@@ -36,7 +36,7 @@ async function loadChats(){
   chats.replaceChildren();
   for(const chat of data.conversations){
     const button=document.createElement("button");button.className="chat-item"+(currentId===chat.id?" active":"");
-    button.textContent=chat.title;button.title=chat.title;
+    button.textContent=chat.title;button.title=chat.title;button.dataset.id=chat.id;
     button.addEventListener("click",()=>selectChat(chat.id));
     chats.append(button);
   }
@@ -47,7 +47,7 @@ async function loadChats(){
     currentId=created.id;return loadChats();
   }
   localStorage.setItem("mikan-nas-chat",currentId);
-  chats.querySelectorAll("button").forEach(b=>b.classList.toggle("active",data.conversations.find(c=>c.id===currentId)?.title===b.textContent));
+  chats.querySelectorAll("button").forEach(b=>b.classList.toggle("active",b.dataset.id===currentId));
 }
 async function selectChat(id){
   if(busy)return;
