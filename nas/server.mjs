@@ -196,7 +196,7 @@ export function makeServer({store,config,key,promptFile="",maintenanceFile="/dat
         if (!store.exists(conversationId)) return json(res,404,{error:"Conversation not found"});
         if (unavailable()) return json(res,409,{error:"Mikan is already responding"});
         const selected=models.active();
-        models.reserve(selected.provider);
+        if(!models.available(selected.provider))return json(res,429,{error:"NAS cloud request budget reached. Try again later or select another provider."});
         busy=true;
         let user;const mode=research.get(),trace=turnTrace(mode);
         try {

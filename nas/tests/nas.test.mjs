@@ -1,3 +1,6 @@
+// Run the original desktop regression suites against the same shared modules.
+import "../../src/notion-knowledge.test.mjs";
+import "../../src/notion-reading.test.mjs";
 import {publicIPv4,webURL,searchResults,readWeb,researchTurn,researchSettings} from "../research.mjs";
 import {providerSettings,boundedHistory} from "../provider-settings.mjs";
 import {updateControl} from "../update-control.mjs";
@@ -531,7 +534,7 @@ test("NAS knowledge preserves approved scenes and separates cloud permission and
     fail=true;lib.sync();for(let i=0;i<100&&lib.isRunning();i++)await new Promise(r=>setTimeout(r,5));assert.equal(lib.status().job.state,"failed");assert.equal(lib.status().pages.length,2);
     await lib.cachedRead("https://example.com/");const cached=await lib.cachedRead("https://example.com/");assert.equal(cached.fromCache,true);assert.equal(reads,1);
     clock+=3600001;await lib.cachedRead("https://example.com/",{recent:true});assert.equal(reads,2);
-    lib.remove("notion",scene);await assert.rejects(lib.load(candidates.find(p=>p.id===chapter),"manuscript","Chapter 1","nvidia"),/Linked scenes are missing/);
+    lib.remove("notion",scene);await assert.rejects(lib.load(candidates.find(p=>p.id===chapter),"manuscript","Chapter 1","nvidia"),/offline|Linked scenes are missing/);
     lib.disconnect();assert.equal(lib.status().pages.length,0);assert.equal(lib.status().webPages.length,1);assert.equal(store.listMemories().length,0);
   }finally{store.db.close();rmSync(root,{recursive:true,force:true});}
 });
@@ -546,12 +549,15 @@ test("NAS knowledge turns use cached manuscript without public search or memory 
   const chunk=store.db.prepare("INSERT INTO notion_chunks(page_id,title,content) VALUES(?,?,?)").run(id,"Chapter 1","# Approved manuscript prose\n\nA lantern stood beside the window.");
   store.db.prepare("INSERT INTO notion_fts(rowid,title,content) VALUES(?,?,?)").run(chunk.lastInsertRowid,"Chapter 1","A lantern stood beside the window.");
   lib.settings({allowNotionCloud:true});
-  let publicCalls=0,modelCalls=0;
+  let publicCalls=0,modelCalls=0,rejectNext=false;
   const server=makeServer({store,key,knowledge:lib,config:{provider:"nvidia",model:"test",key:"synthetic-test-key"},search:async()=>{publicCalls++;throw Error("No public search permitted");},
-    generate:async({system,onDelta})=>{
+    generate:async({system,onDelta,history})=>{
       modelCalls++;
       if(system.startsWith("You are a read-only LOCAL reference-library planner"))return JSON.stringify({action:"knowledge",ids:[id],scope:"manuscript"});
-      assert.match(system,/A lantern stood beside the window/);const answer="The chapter begins with a lantern [1].";onDelta(answer);return answer;
+      assert.match(system,/A lantern stood beside the window/);
+      assert.equal(history.length,1);assert.equal(history[0].role,"user");
+      const answer=rejectNext?(rejectNext=false,'The narrator says "The black dragon flew over the castle."'):"The chapter begins with a lantern [1].";
+      onDelta(answer);return answer;
     }});
   await new Promise(r=>server.listen(0,"127.0.0.1",r));const base="http://127.0.0.1:"+server.address().port;
   try{
@@ -559,9 +565,28 @@ test("NAS knowledge turns use cached manuscript without public search or memory 
     assert.equal((await fetch(base+"/api/knowledge/document?kind=notion&id="+id)).status,401);
     assert.equal((await (await fetch(base+"/api/knowledge",{headers})).json()).pages.length,1);
     const c=store.newConversation();
-    const r=await fetch(base+"/api/chat",{method:"POST",headers,body:JSON.stringify({conversationId:c.id,text:"Read chapter 1 of my book"})});assert.match(await r.text(),/event: done/);
+    const r=await fetch(base+"/api/chat",{method:"POST",headers,body:JSON.stringify({conversationId:c.id,text:"Read chapter 1 of my book and give me your opinion"})});assert.match(await r.text(),/event: done/);
     const saved=store.messages(c.id).at(-1);assert.equal(saved.inference.sources[0].kind,"notion");assert.ok(!JSON.stringify(saved.inference).includes("A lantern stood beside the window"));
-    assert.equal(publicCalls,0);assert.equal(modelCalls,2);assert.equal(saved.inference.timing.modelCalls,2);
+    assert.equal(publicCalls,0);assert.equal(modelCalls,1);assert.equal(saved.inference.timing.modelCalls,1);
+    // Repeated explicit request uses the same desktop selector, not LLM routing.
+    const repeat=await fetch(base+"/api/chat",{method:"POST",headers,body:JSON.stringify({conversationId:c.id,text:"Read the complete first chapter of my book and give me your opinion. Paraphrase everything."})});
+    assert.match(await repeat.text(),/event: done/);
+    assert.equal(store.messages(c.id).at(-1).inference.sources[0].id,id);
+    assert.equal(modelCalls,2);
+    rejectNext=true;
+    const repair=await fetch(base+"/api/chat",{method:"POST",headers,body:JSON.stringify({conversationId:c.id,text:"Review chapter 1 of my book once more."})});
+    const repaired=await repair.text();assert.doesNotMatch(repaired,/black dragon/);
+    assert.match(store.messages(c.id).at(-1).content,/lantern/);
+    assert.equal(store.messages(c.id).at(-1).inference.timing.modelCalls,2);
+    assert.equal(modelCalls,4);
+    const load=await fetch(base+"/api/chat",{method:"POST",headers,body:JSON.stringify({conversationId:c.id,text:"Read chapter 1 of my book again"})});
+    assert.match(await load.text(),/event: done/);
+    assert.match(store.messages(c.id).at(-1).content,/reloaded/);
+    assert.equal(modelCalls,4);
+    const missing=await fetch(base+"/api/chat",{method:"POST",headers,body:JSON.stringify({conversationId:c.id,text:"Read chapter 7 of my book"})});
+    assert.match(await missing.text(),/event: done/);
+    assert.doesNotMatch(store.messages(c.id).at(-1).content,/lantern/);
+    assert.equal(modelCalls,4);
     assert.ok(store.learning.diagnostics(c.id).some(e=>e.kind==="skipped"&&e.payload.reason.includes("reference knowledge")));
     assert.equal(store.listMemories().length,0);
   }finally{await new Promise(r=>server.close(r));store.db.close();rmSync(root,{recursive:true,force:true});}

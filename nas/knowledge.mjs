@@ -1,6 +1,6 @@
 import {readFileSync,writeFileSync,renameSync,unlinkSync} from "node:fs";
 import {randomUUID} from "node:crypto";
-import {joinNotionChunks,buildNotionChapterEvidence,readNotionChapter,notionManuscriptCharacterCount} from "../src/notion-reading.ts";
+import {joinNotionChunks,buildNotionChapterEvidence,readNotionChapter,notionManuscriptCharacterCount,notionReadingProfile,shouldRefetchNotionDocument,notionSceneLinksNeedRefresh,describeNotionSceneLinks} from "../src/notion-reading.ts";
 import {webURL} from "./research.mjs";
 const invalid=(message,status=400)=>Object.assign(Error(message),{status});
 const MAX_PAGES=1000,MAX_BLOCKS=30000,MAX_CHARS=16000000;
@@ -167,6 +167,20 @@ export function createKnowledge({db,file="",apiFactory=notionApi,now=Date.now,re
     if(doc.chunks.reduce((n,c)=>n+c.length,0)+relatedPages.reduce((n,s)=>n+s.chunks.reduce((x,c)=>x+c.length,0),0)>2000000)throw invalid("Document exceeds reading limit");
     return doc;
   }
+  // Read-only targeted recovery: do not replace the library or silently claim
+  // a new full sync. Use the same approved scene reader as the desktop.
+  async function liveDocument(id){
+    if(!token)throw invalid("Notion connection unavailable; sync linked scene pages",409);
+    const client=api(),rows=await collect(client,[{id,kind:"page",title:"Requested chapter"}],()=>{});
+    const chapter=rows.find(p=>p.id===id);
+    if(!chapter)throw invalid("Chapter could not be opened");
+    const relatedPages=[];let missingRelatedPages=0;
+    for(const rel of chapter.relations.filter(r=>r.property==="Scenes")){
+      const scene=rows.find(p=>p.id===rel.id)??(await collect(client,[{id:rel.id,kind:"page",title:"Linked scene"}],()=>{})).find(p=>p.id===rel.id);
+      if(scene)relatedPages.push({title:scene.title,url:scene.url,chunks:scene.chunks});else missingRelatedPages++;
+    }
+    return {...chapter,relatedPages,missingRelatedPages,syncedAt:Math.floor(now()/1000),live:true};
+  }
   const terms=q=>[...new Set(String(q).normalize("NFKC").toLowerCase().match(/[\p{L}\p{N}]+/gu)??[])].filter(t=>t.length>=2).slice(0,24).map(t=>'"'+t+'"').join(" OR ");
   function candidates(question,history,previous=[]){
     const query=terms([...history.filter(m=>m.role==="user").slice(-3).map(m=>m.content),question].join(" "));
@@ -187,12 +201,20 @@ export function createKnowledge({db,file="",apiFactory=notionApi,now=Date.now,re
   async function load(p,scope,question,provider){
     if(p.kind==="notion"){
       if(!enabled())throw invalid("Notion cloud retrieval is disabled");
-      const doc=document(p.id);
+      let doc=document(p.id);
       let text,coverage="excerpt",manuscriptEvidence;
       if(scope==="manuscript"){
+        const profile=notionReadingProfile(provider,16384);
+        // NAS has no desktop Ollama sidecar. Never substitute hidden cloud
+        // note-generation calls for the desktop's local summarizer.
+        const readApproved=async()=>readNotionChapter(doc,async()=>{throw Error("No auxiliary summarization");},()=>{},()=>false,profile.contextWindow,"direct-only");
+        try{text=await readApproved();}
+        catch(e){if(!token||!shouldRefetchNotionDocument(e))throw e;doc=await liveDocument(p.id);text=await readApproved();}
         const evidence=buildNotionChapterEvidence(doc);manuscriptEvidence=evidence;
-        text=await readNotionChapter(doc,async()=>{throw Error("No auxiliary summarization");},()=>{},()=>false,provider==="nvidia"?48000:16384,"direct-only");
         coverage="complete approved manuscript ("+evidence.scenes.length+" scenes, "+notionManuscriptCharacterCount(evidence)+" characters)";
+      }else if(scope==="scenes"){
+        if(token&&notionSceneLinksNeedRefresh(doc))doc=await liveDocument(p.id);
+        text=describeNotionSceneLinks(doc);coverage="linked scene metadata";
       }else if(scope==="full"){
         const original=joinNotionChunks(doc.chunks);if(doc.relatedPages.length||doc.missingRelatedPages)throw invalid("Select manuscript reading to include linked scenes");
         if(original.length>(provider==="nvidia"?75000:24000))throw invalid("Page exceeds direct reading budget; request a shorter section");
@@ -203,7 +225,7 @@ export function createKnowledge({db,file="",apiFactory=notionApi,now=Date.now,re
         text=(hits.length?hits.map(r=>r.content):doc.chunks.slice(0,2)).join("\n\n").slice(0,10000);
       }
       if(!text.trim())throw invalid("No readable cached text");
-      return {id:p.id,url:doc.url,title:doc.title,kind:"notion",content:text,syncedAt:doc.syncedAt,coverage,publishedDate:null,...(manuscriptEvidence?{manuscriptEvidence}:{})};
+      return {id:p.id,url:doc.url,title:doc.title,kind:"notion",content:text,syncedAt:doc.syncedAt,coverage,publishedDate:null,...(manuscriptEvidence?{manuscriptEvidence}:{}),...(doc.live?{live:true}:{})};
     }
     if(!webEnabled())throw invalid("Web cache disabled");
     const row=db.prepare("SELECT * FROM nas_web_cache WHERE url=?").get(p.id);
@@ -228,5 +250,5 @@ export function createKnowledge({db,file="",apiFactory=notionApi,now=Date.now,re
     }else if(kind==="web"){db.prepare("DELETE FROM nas_web_fts WHERE url=?").run(id);db.prepare("DELETE FROM nas_web_cache WHERE url=?").run(id);}else throw invalid("Unknown knowledge kind");});return status();
   }
   function inspect(kind,id){if(kind==="notion"){const doc=document(id);return {title:doc.title,url:doc.url,content:joinNotionChunks(doc.chunks).slice(0,30000),relatedPages:doc.relatedPages.map(s=>({title:s.title,url:s.url})),missingRelatedPages:doc.missingRelatedPages};}if(kind==="web"){const row=db.prepare("SELECT title,resolved_url AS url,content FROM nas_web_cache WHERE url=?").get(id);if(row)return row;}throw invalid("Cached document not found",404);}
-  return {status,connect,refresh,settings,sync,disconnect,candidates,load,cachedRead,remove,inspect,isRunning:()=>syncing,enabled,webEnabled};
+  return {status,connect,refresh,settings,sync,disconnect,candidates,notionPages:()=>enabled()?pages():[],load,cachedRead,remove,inspect,isRunning:()=>syncing,enabled,webEnabled};
 }
