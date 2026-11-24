@@ -13,6 +13,9 @@
     "global-shortcut:allow-unregister",
     "opener:default",
     "core:window:allow-set-size",
+    "core:window:allow-set-min-size",
+    "core:window:allow-set-always-on-top",
+    "core:window:allow-center",
     "core:window:allow-set-position",
     "core:window:allow-outer-position",
     "core:window:allow-current-monitor"
