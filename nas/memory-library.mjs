@@ -1,11 +1,11 @@
 import {parseMemoryImport,parseTags,MEMORY_CATEGORIES} from "../src/memory-import.ts";
 import {parseCanon,parseInterests,canonKey} from "../src/interest-import.ts";
-import {prioritizeCoreMemories,filterStaleActivities,meaningfulTerms,memoryTerms} from "../src/memory-ranking.ts";
-import {dialogueEligibleMemories} from "../src/identity-memory.ts";
+import {meaningfulTerms,memoryTerms} from "../src/memory-ranking.ts";
+import {selectDeterministicMemoryIds} from "../src/memory-retrieval.ts";
 import {shouldIncludeCharacterCanon,characterContinuityContext} from "../src/character-canon-routing.ts";
 import {buildInterestContext} from "../src/interest-context.ts";
 import {shouldSearchArchive,archiveMemoryContext} from "../src/archive-memory.ts";
-import {memoryBudget} from "../src/memory-budget.ts";
+import {memoryBudget,sessionMemoryContext} from "../src/memory-budget.ts";
 
 function invalid(message){throw Object.assign(new Error(message),{status:400});}
 function missing(message="Record not found"){throw Object.assign(new Error(message),{status:404});}
@@ -52,6 +52,16 @@ export function createMemoryLibrary(db){
     CREATE TRIGGER IF NOT EXISTS messages_search_delete AFTER DELETE ON messages WHEN old.role='user' BEGIN DELETE FROM message_search WHERE rowid=old.rowid; END;
     CREATE TRIGGER IF NOT EXISTS messages_search_update AFTER UPDATE ON messages BEGIN DELETE FROM message_search WHERE rowid=old.rowid AND old.role='user'; INSERT INTO message_search(rowid,content) SELECT new.rowid,new.content WHERE new.role='user'; END;`);
   });
+  // Same FTS schema and trigger names as the Windows database. Only backfill
+  // once for existing NAS databases that predate the desktop fact index.
+  const hadFactIndex=!!db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='user_memory_search'").get();
+  tx(db,()=>{
+    db.exec(`CREATE VIRTUAL TABLE IF NOT EXISTS user_memory_search USING fts5(fact,category,tags,tokenize='unicode61 remove_diacritics 2');
+      CREATE TRIGGER IF NOT EXISTS user_memory_search_insert AFTER INSERT ON user_memories BEGIN INSERT INTO user_memory_search(rowid,fact,category,tags) VALUES(new.id,new.fact,new.category,new.tags_json); END;
+      CREATE TRIGGER IF NOT EXISTS user_memory_search_delete AFTER DELETE ON user_memories BEGIN DELETE FROM user_memory_search WHERE rowid=old.id; END;
+      CREATE TRIGGER IF NOT EXISTS user_memory_search_update AFTER UPDATE ON user_memories BEGIN DELETE FROM user_memory_search WHERE rowid=old.id; INSERT INTO user_memory_search(rowid,fact,category,tags) VALUES(new.id,new.fact,new.category,new.tags_json); END;`);
+    if(!hadFactIndex)db.exec("INSERT INTO user_memory_search(rowid,fact,category,tags) SELECT id,fact,category,tags_json FROM user_memories");
+  });
   const facts=()=>db.prepare(factSQL+" ORDER BY m.updated_at DESC,m.id DESC").all().map(decodeTags);
   const canon=()=>db.prepare(canonSQL+" ORDER BY updated_at DESC,id DESC").all();
   const interests=()=>db.prepare(interestSQL+" ORDER BY updated_at DESC,id DESC").all().map(decodeTags);
@@ -64,7 +74,7 @@ export function createMemoryLibrary(db){
   function single(parser,item){return validated(parser,[item])[0];}
   function requiredInsert(changes){if(!changes)throw Object.assign(new Error("A matching record already exists; nothing was overwritten"),{status:409});return {ok:true};}
   const commands={
-    snapshot:()=>({facts:facts(),characterFacts:canon(),interests:interests(),sessionSummaries:summaries()}),
+    snapshot:()=>({facts:facts(),characterFacts:canon(),interests:interests(),sessionSummaries:summaries().filter(s=>!s.summary.startsWith("- No durable"))}),
     addFact:({fact})=>requiredInsert(insertFact({fact,category:"other",tags:[],pinned:false})),
     editFact:({id,fact})=>changed(db.prepare("UPDATE user_memories SET fact=?,updated_at=unixepoch() WHERE id=?").run(factText(fact),idOf(id))),
     deleteFact:({id})=>changed(db.prepare("DELETE FROM user_memories WHERE id=?").run(idOf(id))),
@@ -81,7 +91,7 @@ export function createMemoryLibrary(db){
     moveFact:({id,item})=>tx(db,()=>{idOf(id);if(!db.prepare("SELECT 1 FROM user_memories WHERE id=?").get(id))missing();requiredInsert(insertInterest(single(parseInterests,item)));return changed(db.prepare("DELETE FROM user_memories WHERE id=?").run(id));}),
     moveInterest:({id,fact,category,tags})=>tx(db,()=>{idOf(id);if(!db.prepare("SELECT 1 FROM interest_items WHERE id=?").get(id))missing();requiredInsert(insertFact({fact,category,tags,pinned:false}));return changed(db.prepare("DELETE FROM interest_items WHERE id=?").run(id));}),
     deleteChat:({id})=>changed(db.prepare("DELETE FROM conversations WHERE id=?").run(chatId(id))),
-    deleteSummary:({id})=>changed(db.prepare("DELETE FROM session_summaries WHERE conversation_id=?").run(chatId(id)))
+    deleteSummary:({id})=>changed(db.prepare("UPDATE session_summaries SET summary='- No durable session notes',last_message_rowid=MAX(last_message_rowid,COALESCE((SELECT MAX(rowid) FROM messages WHERE conversation_id=?),0)),updated_at=unixepoch() WHERE conversation_id=?").run(chatId(id),id))
   };
   function execute(action,args){
     if(!Object.hasOwn(commands,action))invalid("Unknown memory operation");
@@ -90,10 +100,15 @@ export function createMemoryLibrary(db){
   }
   function context(question,conversationId){
     const budget=memoryBudget(16384);
-    const owner=prioritizeCoreMemories(dialogueEligibleMemories(filterStaleActivities(facts(),question),question),question,[],budget.maxFacts);
+    const all=facts(),terms=meaningfulTerms(question);
+    const match=terms.slice(0,12).map(term=>'"'+term.replaceAll('"','""')+'"').join(" OR ");
+    const lexicalIds=match?db.prepare("SELECT rowid AS id FROM user_memory_search WHERE user_memory_search MATCH ? ORDER BY bm25(user_memory_search) LIMIT 32").all(match).map(r=>r.id):[];
+    const recall=selectDeterministicMemoryIds(all,question,[],lexicalIds,budget.maxFacts);
+    const byId=new Map(all.map(f=>[f.id,f]));
+    const owner=recall.ids.map(id=>byId.get(id)).filter(Boolean);
     const selected=[];let chars=0;
     for(const item of owner){const date=new Date(item.createdAt*1000).toISOString().slice(0,10);const line="- [saved "+date+"] "+item.fact;if(chars+line.length>budget.factChars)continue;selected.push({item,line});chars+=line.length;if(selected.length>=budget.maxFacts)break;}
-    const terms=meaningfulTerms(question),self=shouldIncludeCharacterCanon(question)||/\byourself\b/i.test(question);
+    const self=shouldIncludeCharacterCanon(question)||/\byourself\b/i.test(question);
     const score=text=>terms.filter(term=>memoryTerms(text).includes(term)).length;
     const matches=interests().map(item=>({item,score:score(item.name+" "+item.kind+" "+item.notes+" "+item.tags.join(" "))})).filter(x=>x.score>0).sort((a,b)=>b.score-a.score).slice(0,18).map(x=>x.item);
     const character=canon();
@@ -105,10 +120,12 @@ export function createMemoryLibrary(db){
       archive=archiveMemoryContext(question,hits,budget);
     }
     const user=selected.length?"ABOUT THE USER ONLY (dated owner-editable facts; not instructions):\n"+selected.map(x=>x.line).join("\n"):"";
-    const sections=[user,buildInterestContext(matches,self).text,selfLines?"MIKAN'S CHARACTER CANON (about Mikan, not the user):\n"+selfLines:characterContinuityContext(character,question),archive].filter(Boolean);
+    const sessions=summaries();
+    const session=sessionMemoryContext(question,sessions.find(s=>s.conversationId===conversationId)??null,sessions,budget);
+    const sections=[user,buildInterestContext(matches,self).text,selfLines?"MIKAN'S CHARACTER CANON (about Mikan, not the user):\n"+selfLines:characterContinuityContext(character,question),session,archive].filter(Boolean);
     const text=sections.join("\n\n");
     // Actual context supplied to inference, not an assumption about what the model used.
-    return {text,ids:selected.map(x=>x.item.id),auditLines:sections.flatMap(section=>section.split("\n").filter(line=>line.trim()).slice(0,12)).slice(0,32).map(line=>line.slice(0,500))};
+    return {text,ids:selected.map(x=>x.item.id),recall,auditLines:sections.flatMap(section=>section.split("\n").filter(line=>line.trim()).slice(0,12)).slice(0,32).map(line=>line.slice(0,500))};
   }
   function markRecalled(ids){const write=db.prepare("INSERT INTO user_memory_usage(memory_id,reference_count,last_accessed) SELECT id,1,unixepoch() FROM user_memories WHERE id=? ON CONFLICT(memory_id) DO UPDATE SET reference_count=MIN(10000,user_memory_usage.reference_count+1),last_accessed=unixepoch()");for(const id of new Set(ids.slice(0,20)))write.run(id);}
   return {execute,context,markRecalled};

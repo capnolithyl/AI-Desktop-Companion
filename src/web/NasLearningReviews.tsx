@@ -14,6 +14,8 @@ export function NasLearningReviews({status,client,onChanged}:{status:LearningSta
   return <section className="memory-reviews" aria-label="NAS memory suggestions">
     <div className="memory-review-heading"><strong>Memory suggestions ({status.reviews.length})</strong><button className="secondary-action" disabled={working} onClick={()=>void act(async()=>{})}><RotateCw size={13}/> Refresh</button></div>
     <p className="memory-explainer">The model decides which durable memories to save, suggest for review or skip. Changes to established facts, interests or canon need your approval. Learning uses a separate cloud request for each privacy-eligible completed turn; evidence and permissions are validated before writing.</p>
+    <label className="memory-explainer"><input type="checkbox" checked={status.settings.sessions??false} disabled={working} onChange={e=>void act(()=>client.saveLearning({...status.settings,sessions:e.target.checked}))}/> Automatically summarize past conversations using the selected cloud provider</label>
+    <p className="memory-explainer">Optional. Sends bounded, privacy-filtered user messages for evidence-backed session notes after six answered turns. Off by default; separate from permanent facts and character canon.</p>
     <p className="memory-explainer">Extraction queue: {status.queued} waiting or processing, {status.failed} requiring attention.
       {status.failed>0&&<button className="secondary-action" disabled={working} onClick={()=>void act(()=>client.retryLearning())}>Retry failed jobs</button>}
     </p>

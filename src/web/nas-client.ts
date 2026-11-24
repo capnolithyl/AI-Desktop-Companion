@@ -2,7 +2,7 @@ import {importCompanionProfile,exportCompanionProfile,type CompanionProfile} fro
 import type {UserFact,CharacterFact,InterestItem,MemoryConversation} from "../memory-client";
 import type {SessionSummary} from "../memory-budget";
 export type NasChat=MemoryConversation;
-export type LearningSettings={user:boolean;character:boolean};
+export type LearningSettings={user:boolean;character:boolean;sessions?:boolean};
 export type LearningStatus={
   settings:LearningSettings;queued:number;failed:number;
   lastOutcome:{saved:number;reviewQueued:number;processedAt:number;proposed?:number;validated?:number;entries:{kind:string;description:string;evidence:string;status:string}[]}|null;

@@ -1,3 +1,4 @@
+mod source_record;
 mod web_search;
 mod source_priority;
 mod web_reader;

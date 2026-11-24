@@ -68,6 +68,7 @@ jobs:
             sleep 1
           done
           curl -fsS http://127.0.0.1:3847/api/health
+          printf '%s' '{"question":"test","sources":[],"passages":[]}' | docker exec -i mikan-nas-ci /app/nas/mikan-research-native | grep -F '"kind":"passages"'
           curl -fsSL http://127.0.0.1:3847/ | grep -F 'Mikan · Beholder'
           curl -fsS http://127.0.0.1:3847/legacy | grep -F 'Beholder cloud preview'
           curl -fsS -H 'Authorization: Bearer 01234567890123456789012345678901' http://127.0.0.1:3847/api/profile | grep -F 'mikan-companion-profile'

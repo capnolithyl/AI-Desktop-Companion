@@ -1,5 +1,4 @@
 use futures_util::StreamExt;
-use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::{collections::HashSet, sync::{Mutex, OnceLock}, time::{Duration, Instant}};
 
@@ -33,16 +32,7 @@ async fn pace_live_search() {
     }
 }
 
-#[derive(Clone, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct SearchResult {
-    pub title: String,
-    pub url: String,
-    pub content: String,
-    pub engine: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub published_date: Option<String>,
-}
+pub use crate::source_record::SearchResult;
 
 pub(crate) fn local_searxng_url(endpoint: &str) -> Result<String, String> {
     let parsed = reqwest::Url::parse(endpoint)

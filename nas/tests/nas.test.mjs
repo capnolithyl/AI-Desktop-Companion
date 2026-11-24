@@ -1,3 +1,6 @@
+import "../../src/memory-retrieval.test.mjs";
+import "../../src/memory-budget.test.mjs";
+import "../../src/session-memory.test.mjs";
 import "../../tests/assistant-instructions.test.mjs";
 import "../../src/runtime-context.test.mjs";
 import "../../src/evidence-verification.test.mjs";
@@ -628,5 +631,35 @@ test("NAS strict public research uses shared evidence guard and never streams re
     assert.equal(reserved,3);assert.match(result.answer,/2023/);assert.doesNotMatch(result.answer,/Invented Album|2028/);
     assert.equal(chunks.join(""),result.answer);
     assert.ok(events.some(e=>e.title==="Research evidence audit"&&e.detail.includes("rejected 1")));
+  }finally{store.db.close();rmSync(root,{recursive:true,force:true});}
+});
+
+test("NAS uses shared deterministic memory selection and imported session continuity",()=>{
+  const root=mkdtempSync(join(tmpdir(),"mikan-parity-memory-")),store=openStore(join(root,"db.sqlite3"));
+  try{
+    store.library.execute("importFacts",{items:[{fact:"The user currently lives in Bay City, Michigan.",category:"profile",tags:["location"],pinned:false},{fact:"The user likes black metal.",category:"preferences",tags:["music"],pinned:true}]});
+    assert.match(store.library.context("What is happening near me?",null).text,/Bay City/);
+    assert.equal(store.library.context("Hello",null).ids.length,0);
+    const old=store.newConversation(),current=store.newConversation();
+    store.db.prepare("INSERT INTO session_summaries(conversation_id,summary,last_message_rowid) VALUES(?,?,?)").run(old.id,'- Beholder NAS configuration [user said: "Beholder uses a Synology NAS"]',1);
+    assert.match(store.library.context("Continue configuring Beholder",current.id).text,/EARLIER RELATED SESSION/);
+    store.library.execute("deleteSummary",{id:old.id});
+    assert.doesNotMatch(store.library.context("Continue configuring Beholder",current.id).text,/Synology NAS/);
+  }finally{store.db.close();rmSync(root,{recursive:true,force:true});}
+});
+test("session summary opt-in uses original evidence-checked merge and persists watermark",async()=>{
+  const root=mkdtempSync(join(tmpdir(),"mikan-parity-session-")),store=openStore(join(root,"db.sqlite3"));
+  try{
+    const chat=store.newConversation();
+    for(let i=0;i<6;i++){store.append(chat.id,"user","I am working on the Beholder project number "+i);store.append(chat.id,"assistant","Understood");}
+    let calls=0;
+    const generate=async()=>{calls++;return JSON.stringify({notes:[{note:"Beholder project",evidence:"I am working on the Beholder project number 0"},{note:"Invented detail",evidence:"I made a spaceship"}]});};
+    const config={provider:"nvidia",model:"test"};
+    await store.learning.processNext(generate,config);assert.equal(calls,0);
+    store.learning.setSettings({user:false,character:false,sessions:true});
+    await store.learning.processNext(generate,config);assert.equal(calls,1);
+    const summaries=store.library.execute("snapshot",{}).sessionSummaries;
+    assert.match(summaries[0].summary,/Beholder project/);assert.doesNotMatch(summaries[0].summary,/Invented detail/);
+    await store.learning.processNext(generate,config);assert.equal(calls,1);
   }finally{store.db.close();rmSync(root,{recursive:true,force:true});}
 });
