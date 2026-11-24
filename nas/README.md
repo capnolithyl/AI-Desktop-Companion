@@ -124,3 +124,5 @@ The web build now uses the real desktop workspace, CSS, artwork, personality con
 Build on Windows in the NAS worktree using `npm ci` then `npm run build:nas`. Copy the **contents** of `.nas-deploy` to your existing NAS `docker/mikan` folder using ordinary overwrite/copy (never mirror/delete). The bundle contains neither `.env` nor `data`, so keep the existing ones. Before updating, stop the container and back up the whole data directory. Then run `sudo docker compose up -d --build` from `/volume1/docker/mikan/nas`. No Tailscale changes. Visit the existing URL and hard refresh. The default workspace is the first UI mode ported; Minimal and other control-center pages remain future work.
 
 Do not copy the entire git repo or use `robocopy /MIR` over the live NAS data. If the new UI fails, `/legacy` still works using the same database and profile.
+
+The NAS smoke-test workflow also publishes `mikan-nas-deployment` as a ZIP artifact after the build and packaged-container checks pass. You can extract that instead of running the Windows build yourself. Copy its contents into the existing NAS deployment root without replacing `.env` or `nas/data/`.

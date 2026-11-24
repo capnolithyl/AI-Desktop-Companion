@@ -92,6 +92,8 @@ export function NasApp(){
   const lock=()=>{if(busy||saving)return;setAuthenticated(false);setKey("");setToken("");sessionStorage.removeItem(KEY);setMessages([]);setChats([]);setFacts([]);setActive(null);setPage("chat");setNotice("");};
   const report=(error:unknown)=>setNotice(error instanceof Error?error.message:String(error));
   const openPage=(next:Page)=>{
+    if(saving)return;
+    if((page==="personality"||page==="appearance")&&JSON.stringify(draft)!==JSON.stringify(profile)&&!window.confirm("Discard unsaved profile changes?"))return;
     setNotice("");setDraft(profile);setPage(next);
     if(next==="memory")void client.facts().then(setFacts).catch(report);
   };
@@ -185,7 +187,7 @@ export function NasApp(){
           onKeyDown={event=>{if(event.key==="Enter"&&!event.shiftKey&&!event.nativeEvent.isComposing){event.preventDefault();void send();}}}/>
         <button className="send-button chat-paw-send" type="submit" aria-label="Send message" disabled={busy||!input.trim()}>{busy?<LoaderCircle className="spin" size={20}/>:<WorkspaceSendPaw/>}</button>
       </form>}/>:<section className="drawer control-center-window" role="dialog" aria-label="Mikan Control Center">
-      <header className="drawer-header control-center-header"><button type="button" className="back-button" onClick={()=>{setPage("chat");setNotice("");}} title="Back to chat"><ArrowLeft size={20}/></button>
+      <header className="drawer-header control-center-header"><button type="button" className="back-button" onClick={()=>openPage("chat")} title="Back to chat"><ArrowLeft size={20}/></button>
         <span className="control-header-glyph"><Settings2 size={22}/></span><div className="drawer-title"><strong>{tabs.find(t=>t.id===page)?.label||"Conversation log"}</strong><span>Mikan's control center · Beholder</span></div>
         <span className="control-local-indicator"><span/> NAS</span></header>
       <div className="settings-layout"><nav className="settings-tabs" aria-label="Settings categories">
