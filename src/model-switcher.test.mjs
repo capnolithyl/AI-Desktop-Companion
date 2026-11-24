@@ -64,15 +64,16 @@ test("Auto manuscript analysis announces intentional local route instead of clai
   assert.equal(state.cloudActive,false);
 });
 
-test("NVIDIA selector accepts the eight supported cloud model IDs",()=>{
+test("NVIDIA selector accepts the nine supported cloud model IDs",()=>{
   const newModels=[
     "nvidia/nemotron-3.5-lightning-30b-a3b",
     "nvidia/nemotron-3.5-bolt-e4b",
     "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
     "poolside/laguna-xs-2.1",
-    "moonshotai/kimi-k3.1-pro"
+    "moonshotai/kimi-k3.1-pro",
+    "deepseek-ai/deepseek-v4.1-flash"
   ];
-  assert.equal(NVIDIA_MODELS.length,8);
+  assert.equal(NVIDIA_MODELS.length,9);
   for (const model of newModels) assert.ok(NVIDIA_MODELS.includes(model),model);
   for (const model of NVIDIA_MODELS) {
     assert.deepEqual(modelSwitcherChoice("nvidia:"+model,[]),{provider:"nvidia",nvidiaModel:model});

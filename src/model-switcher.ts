@@ -13,6 +13,7 @@ export const NVIDIA_MODELS = [
   "moonshotai/kimi-k3.1-pro",
   "z-ai/glm-5.3-flash",
   "mistralai/mistral-large-4-1t-a52b",
+  "deepseek-ai/deepseek-v4.1-flash",
 ] as const;
 export type ModelSwitcherSettings = {
   provider: ChatProvider;

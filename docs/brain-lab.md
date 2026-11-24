@@ -1,5 +1,9 @@
 # Mikan Brain Lab (P0)
 
+## Experimental DeepSeek NVIDIA selection
+
+DeepSeek V4.1 Flash (`deepseek-ai/deepseek-v4.1-flash`) is selectable through the existing NVIDIA developer endpoint in desktop, remote UI and Live Brain Lab. NVIDIA catalog information is inconsistent about free endpoint availability (the model page lists it as deprecated); actual access requires a live smoke test with the existing key. No paid endpoint or paid fallback is added. Tool and image support must be verified against the live deployment. Existing NVIDIA pacing and quota protections apply.
+
 ## v0.9.74: visible cloud Run limits and working fit action
 
 On v0.9.73 the UI initially selected all 84 scenarios. Selecting a free cloud model
