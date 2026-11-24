@@ -341,12 +341,12 @@ export function BrainEvalPanel({settings,availableModels}:{settings:Settings;ava
         </select>
       </label>
       <label className="brain-eval-mikanify">
-        <span>Mikanify answer 🐈</span>
+        <span className="brain-mikanify-copy"><strong>Mikanify answer 🐈</strong>
+          <small>Optional local restyle. Both original and rewritten answers stay in the report.</small></span>
         <input type="checkbox" checked={mikanifyAnswer}
           disabled={busy||mode!=="live"||researchMode!=="simple"}
           aria-label="Mikanify answer (experimental second local pass)"
           onChange={e=>setMikanifyAnswer(e.target.checked)}/>
-        <small>Optional local restyle; the report saves both original and rewritten research answers.</small>
       </label>
       <label>Repeat each scenario
         <select value={repeats} disabled={busy} onChange={e=>setRepeats(Number(e.target.value))}>
