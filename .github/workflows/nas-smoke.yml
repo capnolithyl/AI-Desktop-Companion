@@ -1,0 +1,157 @@
+name: NAS cloud prototype smoke tests
+on:
+  pull_request:
+    paths:
+      - "nas/**"
+      - "src/**"
+      - "public/**"
+      - "assets/iki/**"
+      - "package*.json"
+      - ".dockerignore"
+      - ".github/workflows/nas-smoke.yml"
+  push:
+    branches:
+      - feature/nas-cloud-mikan-experimental
+    paths:
+      - "nas/**"
+      - "src/**"
+      - "public/**"
+      - "assets/iki/**"
+      - "package*.json"
+      - ".dockerignore"
+      - ".github/workflows/nas-smoke.yml"
+concurrency:
+  group: nas-smoke-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  nas:
+    permissions:
+      contents: read
+      packages: write
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Syntax check
+        run: |
+          sh -n nas/update-beholder.sh
+          sh -n nas/update-control-host.sh
+          node --check nas/update-control.mjs
+          node --check nas/build-info.mjs
+          node --check nas/server.mjs
+          node --check nas/storage.mjs
+          node --check nas/learning.mjs
+          node --check nas/providers.mjs
+          node --check nas/provider-settings.mjs
+          node --check nas/research.mjs
+          node --check nas/turn.mjs
+          node --check nas/brain-lab.mjs
+          node --check nas/knowledge.mjs
+          node --check nas/knowledge-plan.mjs
+          node --check nas/public/app.js
+      - name: Run NAS smoke tests
+        timeout-minutes: 2
+        run: node --test --test-timeout=20000 nas/tests/nas.test.mjs
+      - name: Build shared React workspace and deployment bundle
+        run: npm ci && npm run build:nas
+      - name: Validate Docker image
+        run: docker build --platform linux/amd64 --label org.opencontainers.image.source=https://github.com/capnolithyl/AI-Desktop-Companion --label org.opencontainers.image.revision="$GITHUB_SHA" -f .nas-deploy/nas/Dockerfile -t mikan-nas:ci .nas-deploy
+      - name: Smoke test packaged workspace
+        run: |
+          docker run --rm -d --name mikan-nas-ci -p 127.0.0.1:3847:3847 -e MIKAN_REMOTE_KEY=01234567890123456789012345678901 -e NVIDIA_API_KEY=synthetic-test-key -e MIKAN_PROVIDER=nvidia mikan-nas:ci
+          trap 'docker logs mikan-nas-ci; docker stop mikan-nas-ci' EXIT
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:3847/api/health; then break; fi
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:3847/api/health
+          printf '%s' '{"question":"test","sources":[],"passages":[]}' | docker exec -i mikan-nas-ci /app/nas/mikan-research-native | grep -F '"kind":"passages"'
+          docker exec -i mikan-nas-ci node --input-type=module <<'JS'
+          import assert from "node:assert/strict";
+          import {nativeResearchAvailable,reviewNativeResearch} from "/app/nas/native-research.mjs";
+          assert.equal(nativeResearchAvailable(),true);
+          const sources=[
+            {title:"Pet Shop of Horrors",url:"https://example.org/short",kind:"page",content:"Pet Shop of Horrors has 4 episodes. Pet Shop of Horrors is a horror anthology series with unusual stories."},
+            {title:"Junji Ito Collection",url:"https://example.org/long",kind:"page",content:"Junji Ito Collection has 12 episodes. Junji Ito Collection is an animated horror series based on manga."}
+          ];
+          const question="short horror anime under six episodes";
+          const task={kind:"discover",requirements:[{quote:"under six episodes",relation:"lt",limit:6,unit:"episodes"}],roles:[],exclude:[]};
+          const suggestion=(source,name,count,fit)=>({source,name,creator:"",identity_quote:name+" has "+count+" episodes.",fit_quote:fit,measurements:[{source,value:count,unit:"episodes",quote:name+" has "+count+" episodes."}],relations:[]});
+          const result=reviewNativeResearch(JSON.stringify({suggestions:[
+            suggestion(1,"Pet Shop of Horrors",4,"Pet Shop of Horrors is a horror anthology series with unusual stories."),
+            suggestion(2,"Junji Ito Collection",12,"Junji Ito Collection is an animated horror series based on manga.")
+          ]}),question,task,sources);
+          assert.equal(result.accepted,1);assert.equal(result.rejected,1);assert.match(result.text,/Pet Shop of Horrors/);assert.doesNotMatch(result.text,/Junji Ito Collection/);
+          const passage=reviewNativeResearch(JSON.stringify({passages:[{source:1,quote:"Pet Shop of Horrors has 4 episodes."},{source:1,quote:"Pet Shop of Horrors was released in 2028."}]}),"Episode count",null,sources);
+          assert.equal(passage.accepted,1);assert.equal(passage.rejected,1);assert.doesNotMatch(passage.text,/2028/);
+          import {openStore} from "/app/nas/storage.mjs";
+          import {executeNasTurn,turnTrace} from "/app/nas/turn.mjs";
+          import {generateReply} from "/app/nas/providers.mjs";
+          const store=openStore(":memory:"),chat=store.newConversation();
+          const prompt="Recommend three horror anime with fewer than six episodes.";
+          store.append(chat.id,"user",prompt);
+          const trace=turnTrace("strict"),chunks=[],events=[];let calls=0,extractions=0;
+          const selected={provider:"nvidia",model:"nvidia/nemotron-3-ultra-550b-a55b",key:"synthetic-test-key",historyChars:16000};
+          const selectedTask={...task,requirements:[{quote:"fewer than six episodes",relation:"lt",limit:6,unit:"episodes"}]};
+          const turn=await executeNasTurn({store,conversationId:chat.id,question:prompt,selected,mode:"strict",trace,canRequest:()=>true,reserve:()=>calls++,
+            search:async()=>sources,read:async()=>{throw Error("unexpected read");},onDelta:piece=>chunks.push(piece),activity:event=>events.push(event),
+            requestModel:async args=>{
+              if(args.system.startsWith("You are a read-only research planner"))return JSON.stringify(calls===1?{action:"search",query:"horror anime fewer than six episodes",task:selectedTask}:{action:"none"});
+              assert.ok(args.structuredTool);assert.doesNotMatch(args.system,/PERSONAL DETAIL ACCURACY/);extractions++;
+              return generateReply({...args,fetchImpl:async(_url,options)=>{
+                const body=JSON.parse(options.body);assert.equal(body.stream,false);assert.equal(body.chat_template_kwargs.enable_thinking,false);
+                if(extractions===1)return Response.json({choices:[{finish_reason:"length",message:{content:""}}],usage:{completion_tokens:4096,completion_tokens_details:{reasoning_tokens:4096}}});
+                assert.equal(body.max_tokens,8192);
+                const raw=JSON.stringify({passages:[],suggestions:[suggestion(1,"Pet Shop of Horrors",4,"Pet Shop of Horrors is a horror anthology series with unusual stories."),suggestion(2,"Junji Ito Collection",12,"Junji Ito Collection is an animated horror series based on manga.")]});
+                return Response.json({choices:[{finish_reason:"tool_calls",message:{tool_calls:[{function:{name:"submit_source_evidence",arguments:raw}}]}}]});
+              }});
+            }});
+          assert.equal(calls,4);assert.equal(extractions,2);assert.match(turn.answer,/Pet Shop of Horrors/);assert.doesNotMatch(turn.answer,/Junji Ito Collection/);
+          assert.equal(chunks.join(""),turn.answer);assert.equal(trace.snapshot().stages.find(s=>s.stage==="answer").errorCode,"output-limit");
+          assert.equal(trace.snapshot().inference[0].reasoningTokens,4096);
+          assert.ok(events.some(e=>e.title==="Native research evidence audit"));
+          const recoveryChat=store.newConversation();store.append(recoveryChat.id,"user",prompt);
+          let recoveryCalls=0,recoverySearches=0;
+          const lead={title:"Lantern Tale",url:"https://example.org/lead",kind:"preview",content:"Lantern Tale is a horror anime."};
+          const details={title:"Lantern Tale episode guide",url:"https://example.org/details",kind:"preview",content:"Lantern Tale has 4 episodes."};
+          const recoveredTurn=await executeNasTurn({store,conversationId:recoveryChat.id,question:prompt,selected,mode:"strict",canRequest:()=>true,reserve:()=>recoveryCalls++,
+            search:async query=>{recoverySearches++;if(recoverySearches===1)return [lead];assert.match(query,/Lantern Tale.*episode count/);return [details];},
+            read:async()=>{throw Error("unexpected read");},requestModel:async args=>{
+              if(args.system.startsWith("You are a read-only research planner"))return JSON.stringify(recoveryCalls===1?{action:"search",query:"short horror anime",task:selectedTask}:{action:"none"});
+              return JSON.stringify({passages:[],suggestions:[{source:1,name:"Lantern Tale",identity_quote:lead.content,fit_quote:lead.content,measurements:recoverySearches===2?[{source:2,value:4,unit:"episodes",quote:details.content}]:[],relations:[]}],answer:""});
+            }});
+          assert.equal(recoverySearches,2);assert.equal(recoveryCalls,4);assert.match(recoveredTurn.answer,/Lantern Tale/);assert.match(recoveredTurn.answer,/4 episodes/);
+          const synthesized=reviewNativeResearch(JSON.stringify({passages:[{source:1,quote:"Pet Shop of Horrors has 4 episodes."}],suggestions:[],answer:"Pet Shop of Horrors has 4 episodes [1]."}),"Episode count",null,sources);
+          assert.equal(synthesized.presentation,"checked synthesis");
+          const invented=reviewNativeResearch(JSON.stringify({passages:[{source:1,quote:"Pet Shop of Horrors has 4 episodes."}],suggestions:[],answer:"Pet Shop of Horrors has 40 episodes [1]."}),"Episode count",null,sources);
+          assert.equal(invented.presentation,"verified excerpts");assert.doesNotMatch(invented.text,/40 episodes/);
+          store.db.close();
+          console.log("Packaged shared native gates, recovery and full strict turn passed");
+          JS
+          curl -fsSL http://127.0.0.1:3847/ | grep -F 'Mikan · Beholder'
+          curl -fsS http://127.0.0.1:3847/legacy | grep -F 'Beholder cloud preview'
+          curl -fsS -H 'Authorization: Bearer 01234567890123456789012345678901' http://127.0.0.1:3847/api/profile | grep -F 'mikan-companion-profile'
+          curl -fsS -H 'Authorization: Bearer 01234567890123456789012345678901' http://127.0.0.1:3847/api/status | node -e 'let b="";process.stdin.on("data",x=>b+=x);process.stdin.on("end",()=>{const v=JSON.parse(b).build;if(v.commit!==process.env.GITHUB_SHA||v.backendHash!==v.actualBackendHash)process.exit(1);})'
+      - name: Exercise updater and rollback against disposable containers
+        run: sh nas/tests/update-integration.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mikan-nas-deployment
+          path: .nas-deploy/
+          include-hidden-files: true
+          if-no-files-found: error
+      - name: Publish tested experimental image
+        if: github.event_name == 'push' && github.ref == 'refs/heads/feature/nas-cloud-mikan-experimental'
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          printf '%s' "$GHCR_TOKEN" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+          image=ghcr.io/capnolithyl/mikan-nas
+          docker tag mikan-nas:ci "$image:sha-$GITHUB_SHA"
+          docker push "$image:sha-$GITHUB_SHA"
+          docker tag mikan-nas:ci "$image:experimental"
+          docker push "$image:experimental"
+          docker logout ghcr.io

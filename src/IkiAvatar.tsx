@@ -70,6 +70,12 @@ export function IkiAvatar({
     let sampleTimer: ReturnType<typeof setInterval> | null = null;
     let latestSample: AvatarMotionSample | null = null;
     let samplePending = false;
+    const native = "__TAURI_INTERNALS__" in window;
+    const onPointer = (event: PointerEvent) => {
+      const rect=canvas.getBoundingClientRect();
+      latestSample={cursorX:event.clientX,cursorY:event.clientY,windowX:rect.left,windowY:rect.top,windowWidth:rect.width,windowHeight:rect.height,velocityX:0,velocityY:0,motionAgeMs:10000};
+    };
+    if(!native)window.addEventListener("pointermove",onPointer,{passive:true});
     // Snapshot at mount start: events arriving while the model is loading
     // should still play once the renderer becomes ready.
     let seenReaction = reactionRef.current?.serial ?? 0;
@@ -173,8 +179,7 @@ export function IkiAvatar({
             samplePending = false;
           }
         };
-        void pollMotion();
-        sampleTimer = setInterval(() => { void pollMotion(); }, 65);
+        if(native){void pollMotion();sampleTimer = setInterval(() => { void pollMotion(); }, 65);}
         // Reactions are events rather than permanent state. Matching the
         // imported rig's declared names keeps seasonal costume rigs compatible.
         const expressionNames = new Map(
@@ -298,6 +303,7 @@ export function IkiAvatar({
       cancelled = true;
       cancelAnimationFrame(frame);
       if (sampleTimer) clearInterval(sampleTimer);
+      if(!native)window.removeEventListener("pointermove",onPointer);
       observer?.disconnect();
       if (playerRef.current === player) playerRef.current = null;
       player?.destroy();

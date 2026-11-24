@@ -1,0 +1,5 @@
+data/
+.env
+
+web-dist/
+data-test-*/

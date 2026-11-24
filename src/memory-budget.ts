@@ -32,7 +32,7 @@ const genericSummaryTerms = new Set([
   "what","when","where","which","would","could","should","about",
   "with","this","that","your","their","more","last","time","earlier",
   "please","have","been","user","said","conversation","remember",
-  "continue","discussed","talked","notes","were","from","some"
+  "continue","discussed","talked","notes","were","from","some","can","could","one","other","another","who","how","why","the","and","for","you","him","her","them","they","was","are","have","has","had","does","did","like","want","need","give","tell","make","help","bored","entertain","entertainment","professional","experience","recommend","offer","services","based","worked","working","work"
 ]);
 function summaryTerms(query: string): string[] {
   return [...new Set((query.toLowerCase().match(/[\p{L}\p{N}]{3,}/gu)??[])
@@ -48,12 +48,16 @@ export function sessionMemoryContext(
   const notes: string[] = [];
   if (current && useful(current)) notes.push("THIS CONVERSATION (compressed earlier turns): " + current.summary.trim());
   const candidates=recent.filter(s=>s.conversationId!==current?.conversationId && useful(s))
-    .map(s=>({s, score: relevantTerms.filter(term=>s.summary.toLowerCase().includes(term)).length}))
+    .map(s=>{const words=new Set(summaryTerms(s.summary));const fullWords=new Set(s.summary.toLowerCase().match(/[\p{L}\p{N}]{3,}/gu)??[]);return {s,score:relevantTerms.filter(term=>words.has(term)||fullWords.has(term)).length};})
     .sort((a,b)=> b.score-a.score ||
       // Prefer newer history if no specific matches; timestamps are Unix seconds.
       Math.abs(nowSeconds-b.s.updatedAt)-Math.abs(nowSeconds-a.s.updatedAt));
   const selected=candidates.find(c=>c.score>0)?.s ?? (explicit?candidates[0]?.s:undefined);
-  if (selected) notes.push("EARLIER RELATED SESSION (may be outdated): " + selected.summary.trim());
+  if (selected) {
+    const lines=selected.summary.split("\n").filter(line=>{const words=new Set(line.toLowerCase().match(/[\p{L}\p{N}]{3,}/gu)??[]);return relevantTerms.some(term=>words.has(term));});
+    const content=lines.length?lines.join("\n"):explicit?selected.summary.trim():"";
+    if(content)notes.push("EARLIER RELATED SESSION (may be outdated): "+content);
+  }
   if (!notes.length) return "";
   let left = budget.sessionChars;
   const chosen: string[] = [];

@@ -1,0 +1,19 @@
+# Private search sidecar; no published ports. Existing Mikan network is external.
+services:
+  searxng:
+    image: docker.io/searxng/searxng:latest
+    container_name: mikan-searxng
+    restart: unless-stopped
+    environment:
+      SEARXNG_BASE_URL: "http://mikan-searxng:8080/"
+      SEARXNG_SECRET: "${SEARXNG_SECRET:?Set a random secret in .env}"
+    volumes:
+      - ./config:/etc/searxng
+      - ./cache:/var/cache/searxng
+    mem_limit: 512m
+    networks:
+      - mikan
+networks:
+  mikan:
+    external: true
+    name: nas_default

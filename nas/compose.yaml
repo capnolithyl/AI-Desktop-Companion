@@ -1,0 +1,19 @@
+services:
+  mikan:
+    build:
+      context: ..
+      dockerfile: nas/Dockerfile
+    image: mikan-nas:experimental
+    restart: unless-stopped
+    init: true
+    env_file: .env
+    read_only: true
+    ports:
+      - "127.0.0.1:3847:3847"
+    volumes:
+      - "${MIKAN_DATA_DIR:-./data}:/data"
+    tmpfs:
+      - /tmp:size=64m
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 512m

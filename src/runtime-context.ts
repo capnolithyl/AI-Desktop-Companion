@@ -47,7 +47,7 @@ export function runtimeContext(now: Date = new Date()): string {
   const today = `${datePart("year")}-${datePart("month")}-${datePart("day")}`;
 
   return [
-    "LIVE CONTEXT FROM THE DESKTOP APPLICATION (not model training data):",
+    "LIVE CONTEXT FROM THE HOST APPLICATION (not model training data):",
     `Current local date and time: ${eastern} (America/Detroit, U.S. Eastern Time).`,
     `Current local calendar date (YYYY-MM-DD): ${today}.`,
     `Current UTC time: ${now.toISOString()}.`,

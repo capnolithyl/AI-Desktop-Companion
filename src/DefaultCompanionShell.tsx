@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode, type PointerEvent as ReactPointerEvent, type MouseEvent as ReactMouseEvent } from "react";
 import {
   BookHeart, Check, Copy, Eye, History, Layers3, LoaderCircle, MessageCircle, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen,
-  Palette, PawPrint, Plus, Search, Settings2, Shirt, Smile, Volume2, VolumeX, X
+  Palette, PawPrint, Plus, Search, Settings2, Shirt, Smile, Trash2, Volume2, VolumeX, X
 } from "lucide-react";
 import { clampPanelWidth, resolveWorkspaceWidths, resizeWorkspacePanel, type WorkspaceActivityEntry, type WorkspacePanel, type WorkspaceWidths } from "./workspace-activity";
 import { type AvatarBackground } from "./avatar-background";
@@ -17,11 +17,15 @@ type Props={
   displayName:string; lastActivity:string; visionBusy:boolean; activityEntries:ReadonlyArray<WorkspaceActivityEntry>;
   onDrag:(event:ReactMouseEvent<HTMLElement>)=>void;
   onNewChat:()=>void; onOpenChat:(id:string)=>void; onOpenHistory:()=>void;
-  onCopyChatDebug:(id:string)=>Promise<void>; onOpenCurrentLog:()=>void;
+  onCopyChatDebug:(id:string)=>Promise<void>; onDeleteChat:(id:string)=>Promise<void>; onOpenCurrentLog:()=>void;
   onOpenMemory:()=>void; onOpenSettings:()=>void; onOpenSearch:()=>void;
   onToggleVision:()=>void; onVoice:()=>void;
   onMute:()=>void; onExpression:(kind:"smile"|"laugh"|"surprised"|"sad"|"angry"|"nod"|"shake")=>void; onOutfit:()=>void;
   onHide:()=>void;
+  unavailable?:{search?:boolean;voice?:boolean;vision?:boolean};
+  webMode?:boolean;
+  sidebarVersion?:ReactNode;
+  activityError?:string;
 };
 
 type SidePanel = WorkspacePanel;
@@ -52,12 +56,23 @@ function savePanelPreference(panel:SidePanel,visible:boolean){
 export function DefaultCompanionShell({
   avatar,avatarBackground,onAvatarContextMenu,modelPicker,transcript,composer,chats,activeConversationId,
   transcriptVersion,busy,muted,ready,memoryIssue,visionActive,visionBusy,displayName,lastActivity,activityEntries,
-  onDrag,onNewChat,onOpenChat,onOpenHistory,onCopyChatDebug,onOpenCurrentLog,onOpenMemory,onOpenSettings,onOpenSearch,
-  onToggleVision,onVoice,onMute,onExpression,onOutfit,onHide
+  onDrag,onNewChat,onOpenChat,onOpenHistory,onCopyChatDebug,onDeleteChat,onOpenCurrentLog,onOpenMemory,onOpenSettings,onOpenSearch,
+  onToggleVision,onVoice,onMute,onExpression,onOutfit,onHide,unavailable,webMode=false,sidebarVersion,activityError
 }:Props){
   const feedRef=useRef<HTMLDivElement>(null);
   const [copyStatus,setCopyStatus]=useState<{id:string;state:"copying"|"copied"|"failed"}|null>(null);
   const copyBusyRef=useRef(false);
+  const [confirmDelete,setConfirmDelete]=useState<string|null>(null);
+  const [deleting,setDeleting]=useState<string|null>(null);
+  const [deleteError,setDeleteError]=useState("");
+  const deleteBusyRef=useRef(false);
+  const deleteChat=async(id:string)=>{
+    if(busy||deleteBusyRef.current||confirmDelete!==id)return;
+    deleteBusyRef.current=true;setDeleting(id);setDeleteError("");
+    try{await onDeleteChat(id);setConfirmDelete(null);}
+    catch(error){setDeleteError(error instanceof Error?error.message:String(error));}
+    finally{deleteBusyRef.current=false;setDeleting(null);}
+  };
   const copyChat=async(id:string)=>{
     if(copyBusyRef.current)return;
     copyBusyRef.current=true;
@@ -167,13 +182,13 @@ export function DefaultCompanionShell({
           {showAvatar?<PanelRightClose size={19}/>:<PanelRightOpen size={19}/>}
         </button>
         <button type="button" onClick={onOpenSettings} title="Control Center" aria-label="Control Center"><Settings2 size={19}/></button>
-        <button type="button" onClick={onHide} title="Hide Mikan" aria-label="Hide Mikan"><X size={19}/></button>
+        <button type="button" onClick={onHide} title={webMode?"Lock Mikan":"Hide Mikan"} aria-label={webMode?"Lock Mikan":"Hide Mikan"}><X size={19}/></button>
       </div>
     </header>
     <div className={"workspace-layout"+(showChats?" has-sidebar":"")+(showAvatar?" has-avatar":"")+(draggingPanel?" resizing":"")}
       style={{"--workspace-left":widths.chats+"px","--workspace-right":widths.avatar+"px"} as CSSProperties}>
       {showChats&&<aside className="workspace-sidebar" aria-label="Conversations">
-        <button type="button" className="workspace-new-chat" onClick={onNewChat} disabled={busy}>
+        <button type="button" className="workspace-new-chat" onClick={onNewChat} disabled={busy||deleting!==null}>
           <Plus size={20}/> New chat
         </button>
         <div className="workspace-sidebar-label">RECENT CHATS</div>
@@ -182,28 +197,46 @@ export function DefaultCompanionShell({
           {chats.slice(0,7).map(chat=>{
             const status=copyStatus?.id===chat.id?copyStatus.state:null;
             const copyLabel=status==="copied"?"Copied debug log":status==="failed"?"Copy failed; retry debug log":"Copy debug log";
-            return <div key={chat.id} className={"workspace-chat-row"+(activeConversationId===chat.id?" active":"")}>
+            return <div key={chat.id} className="workspace-chat-entry"><div className={"workspace-chat-row"+(activeConversationId===chat.id?" active":"")}>
               <button type="button" className="workspace-chat-link"
-                disabled={busy} title={chat.title} onClick={()=>onOpenChat(chat.id)}>
+                disabled={busy||deleting!==null} title={chat.title} onClick={()=>onOpenChat(chat.id)}>
                 <MessageCircle size={17}/><span>{chat.title||"Conversation"}</span>
               </button>
               <button type="button" className={"workspace-chat-copy"+(status?" "+status:"")}
-                disabled={copyStatus?.state==="copying"} title={copyLabel+" · Review before sharing"}
+                disabled={copyStatus?.state==="copying"||deleting!==null} title={copyLabel+" · Review before sharing"}
                 aria-label={copyLabel+" for "+(chat.title||"conversation")}
                 onClick={()=>void copyChat(chat.id)}>
                 {status==="copying"?<LoaderCircle size={15} className="spin"/>:status==="copied"?<Check size={15}/>:status==="failed"?<X size={15}/>:<Copy size={15}/>}
               </button>
+              <button type="button" className={"workspace-chat-delete"+(confirmDelete===chat.id?" confirming":"")}
+                disabled={busy||deleting!==null||copyStatus?.state==="copying"}
+                title="Delete chat" aria-label={"Delete chat "+(chat.title||"Conversation")}
+                onClick={()=>{setConfirmDelete(chat.id);setDeleteError("");}}>
+                <Trash2 size={15}/>
+              </button>
+            </div>
+            {confirmDelete===chat.id&&<div className="workspace-chat-delete-confirm" role="group" aria-label="Confirm conversation deletion">
+              <span>Delete this chat and its messages?</span>
+              {deleteError&&<small role="alert">{deleteError}</small>}
+              <div>
+                <button type="button" className="workspace-chat-delete-accept" disabled={busy||deleting!==null} onClick={()=>void deleteChat(chat.id)}>
+                  {deleting===chat.id?<LoaderCircle size={13} className="spin"/>:<Trash2 size={13}/>} Delete
+                </button>
+                <button type="button" disabled={deleting!==null} onClick={()=>{setConfirmDelete(null);setDeleteError("");}}>Cancel</button>
+              </div>
+            </div>}
             </div>;
           })}
         </nav>
         <span className="workspace-copy-announcement" role="status">
           {copyStatus?.state==="copied"?"Debug log copied to clipboard. Review before sharing.":copyStatus?.state==="failed"?"Could not copy debug log. Please try again.":""}
         </span>
-        <button type="button" className="workspace-see-all" onClick={onOpenHistory}>
+        <button type="button" className="workspace-see-all" disabled={deleting!==null} onClick={onOpenHistory}>
           <History size={17}/> Chat history
         </button>
         <div className="workspace-sidebar-bottom">
           <div className="workspace-sidebar-cat" aria-hidden="true"><WorkspacePeekCat/></div>
+          {sidebarVersion}
           <button type="button" onClick={onOpenSettings} title="Customize Mikan"><Palette size={20}/> Customize</button>
         </div>
       </aside>}
@@ -222,7 +255,7 @@ export function DefaultCompanionShell({
         </div>
         <div className="workspace-composer">
           <div className="workspace-action-chips" role="group" aria-label="Chat tools">
-            <button type="button" onClick={onOpenSearch}><Search size={17}/> Search</button>
+            <button type="button" disabled={unavailable?.search} title={unavailable?.search?"Web research not connected yet":undefined} onClick={onOpenSearch}><Search size={17}/> Search</button>
           </div>
           {composer}
         </div>
@@ -254,7 +287,7 @@ export function DefaultCompanionShell({
           <div className="workspace-detail-row">
             <span><Eye size={16}/> Live Vision</span>
             <button type="button" className="workspace-switch" role="switch" aria-checked={visionActive}
-              aria-label="Live Vision" disabled={visionBusy} onClick={onToggleVision}
+              aria-label="Live Vision" disabled={visionBusy||unavailable?.vision} onClick={onToggleVision}
               title={visionActive?"Stop ongoing screen capture":"Start Live Vision using the configured display or region"}>
               <span className="workspace-switch-track" aria-hidden="true"/>{visionActive?"On":"Off"}
             </button>
@@ -262,7 +295,7 @@ export function DefaultCompanionShell({
           <div className="workspace-detail-row">
             <span>{muted?<VolumeX size={16}/>:<Volume2 size={16}/>} Voice output</span>
             <button type="button" className="workspace-switch" role="switch" aria-checked={!muted}
-              aria-label="Voice output" onClick={onMute} title={muted?"Unmute Mikan":"Mute Mikan"}>
+              aria-label="Voice output" disabled={unavailable?.voice} onClick={onMute} title={muted?"Unmute Mikan":"Mute Mikan"}>
               <span className="workspace-switch-track" aria-hidden="true"/>{muted?"Off":"On"}
             </button>
           </div>
@@ -280,7 +313,7 @@ export function DefaultCompanionShell({
             </div>}
           </div>
           <button type="button" onClick={onOutfit}><Shirt size={17}/> Outfit</button>
-          <button type="button" onClick={onVoice} title="Voice settings"><Settings2 size={16}/> Voice settings</button>
+          <button type="button" onClick={onVoice} disabled={unavailable?.voice} title={unavailable?.voice?"Voice not connected yet":"Voice settings"}><Settings2 size={16}/> Voice settings</button>
         </div>
         <section className="workspace-activity-log" aria-label="Conversation activity">
           <div className="workspace-activity-heading">
@@ -289,7 +322,8 @@ export function DefaultCompanionShell({
           </div>
           {busy&&<p className="workspace-activity-live" role="status"><span className="workspace-live-pulse"/>{lastActivity||"Working…"}</p>}
           <div className="workspace-activity-feed" role="log" aria-live="polite" aria-relevant="additions text">
-            {!activityEntries.length&&<p className="workspace-activity-empty">Memories recalled and web searches will appear here as Mikan works.</p>}
+            {activityError&&<p className="workspace-activity-empty" role="status">{activityError}</p>}
+            {!activityEntries.length&&!activityError&&<p className="workspace-activity-empty">{webMode?"Saved and recalled memories will appear here. Web searches will join them when connected.":"Memories recalled and web searches will appear here as Mikan works."}</p>}
             {activityEntries.map(entry=><article key={entry.id} className="workspace-activity-entry">
               <div className="workspace-activity-entry-title">
                 {entry.kind==="memory"?<BookHeart size={16}/>:<Search size={16}/>}

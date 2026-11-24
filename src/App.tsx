@@ -19,7 +19,7 @@ import { initialSettingsTab, initialMemoryTab, isStandaloneSettingsWindow, valid
 import { register, unregister } from "@tauri-apps/plugin-global-shortcut";
 import {
   ArrowLeft, Brain, Camera, Cat, Check, House, FlaskConical, ChevronLeft, ChevronRight, Clock3, Copy, Crop, Eye, EyeOff, FileText, Heart, History, Paperclip,
-  BookOpen, ExternalLink, HardDrive, LoaderCircle, MessageCircle, RotateCw, Search, Settings2, Shuffle, SlidersHorizontal, Sparkles, Square, SquarePen, Volume2, X,
+  BookOpen, ExternalLink, HardDrive, LoaderCircle, MessageCircle, RotateCw, Search, Settings2, Shuffle, Sparkles, Square, SquarePen, Volume2, X,
   Palette, Shirt, Globe2, Cpu, WandSparkles, Plug2, AudioLines, VolumeX, PawPrint, Ellipsis, Plus, PanelsTopLeft, UserRound
 } from "lucide-react";
 import {
@@ -33,6 +33,8 @@ import {
 import { PersonalityPresets, PersonalitySliders } from "./PersonalityControls";
 import { respectAddressPreference } from "./communication-preferences";
 import { assistantVoiceGuidance } from "./assistant-voice";
+import { exportCompanionProfile } from "./companion-profile";
+import { PersonaCommunicationFields } from "./PersonaCommunicationFields";
 import { characterContinuityContext } from "./character-canon-routing";
 import { automaticMemoryNotice } from "./memory-outcome";
 import { snapshotForReplay } from "./conversation-replay";
@@ -3812,6 +3814,7 @@ export default function App() {
         onNewChat={clearChat}
         onOpenChat={id=>{void openConversation(id);}}
         onCopyChatDebug={copyConversationDebugLog}
+        onDeleteChat={deleteConversation}
         onOpenCurrentLog={()=>setScreen("log")}
         onOpenHistory={()=>openMemory("chats")}
         onOpenMemory={()=>openMemory("facts")}
@@ -4854,64 +4857,18 @@ export default function App() {
           <div className="settings-section-title">Fine-tune her personality</div>
           <PersonalitySliders value={settings.personality} onChange={updatePersonality}/>
           <small className="wardrobe-hint">These preferences guide future replies without requiring a restart.</small>
-          <section className="control-form-section" aria-label="Conversation and communication">          <label className="setting-field">System/persona prompt
-            <textarea rows={9} value={draft.systemPrompt}
-              onChange={event => setDraft({ ...draft, systemPrompt: event.target.value })}/>
-            <small>Core personality instructions. Presets and sliders live in the separate Personality panel.</small>
-          </label>
-          <div className="settings-section-title">Communication preferences</div>
-          <p className="settings-note">These instructions apply to every reply, even when personal memory retrieval doesn't find the relevant preference.</p>
-          <label className="setting-field">How Mikan addresses you
-            <select value={draft.communication.addressMode}
-              onChange={event => setDraft(current => ({ ...current, communication: {
-                ...current.communication,
-                addressMode: event.target.value as typeof current.communication.addressMode
-              }}))}>
-              <option value="endearments">Endearments and nicknames, not my first name</option>
-              <option value="neutral">No names or nicknames</option>
-              <option value="first-name">First name is okay</option>
-            </select>
-          </label>
-          {draft.communication.addressMode === "endearments" && <label className="setting-field">Preferred endearments
-            <input value={draft.communication.endearments} maxLength={240}
-              placeholder="honey, sweetheart, darling"
-              onChange={event => setDraft(current => ({ ...current, communication: {
-                ...current.communication, endearments: event.target.value
-              }}))}/>
-            <small>Separate suggestions with commas. Mikan doesn't need to use one in every reply.</small>
-          </label>}
-          <label className="setting-field">Reply length
-            <select value={draft.communication.replyLength}
-              onChange={event => setDraft(current => ({ ...current, communication: {
-                ...current.communication,
-                replyLength: event.target.value as typeof current.communication.replyLength
-              }}))}>
-              <option value="concise">Concise</option>
-              <option value="balanced">Balanced</option>
-              <option value="detailed">Detailed when useful</option>
-            </select>
-          </label>
-          <label className="setting-field">Follow-up questions
-            <select value={draft.communication.followUps}
-              onChange={event => setDraft(current => ({ ...current, communication: {
-                ...current.communication,
-                followUps: event.target.value as typeof current.communication.followUps
-              }}))}>
-              <option value="necessary">Only when useful</option>
-              <option value="natural">Conversational</option>
-            </select>
-          </label>
-          <label className="setting-field">Other communication preferences
-            <textarea rows={3} maxLength={1000} value={draft.communication.customGuidance}
-              placeholder="Optional instructions about how Mikan talks to you..."
-              onChange={event => setDraft(current => ({ ...current, communication: {
-                ...current.communication, customGuidance: event.target.value
-              }}))}/>
-            <small>Saved locally. These are behavioral preferences, not memories of facts about you.</small>
-          </label>
-          <button type="button" className="secondary-action"
-            onClick={() => setSettingsTab("personality")}><SlidersHorizontal size={15}/> Personality settings</button>
-</section>
+          <button type="button" className="secondary-action" onClick={() => {
+            const profile=exportCompanionProfile({
+              systemPrompt:draft.systemPrompt,personality:settings.personality,communication:draft.communication,
+              avatarBackground,outfitId:ikiRig?.id??null,avatarDisplay,
+              verticalOffset:settings.appearance.avatarVerticalOffset,followCursor:avatarPresence.followCursor
+            });
+            const url=URL.createObjectURL(new Blob([JSON.stringify(profile,null,2)],{type:"application/json"}));
+            const link=document.createElement("a");link.href=url;link.download="mikan-companion-profile.json";
+            document.body.appendChild(link);link.click();link.remove();window.setTimeout(()=>URL.revokeObjectURL(url),1000);
+          }}><FileText size={15}/> Export companion profile for NAS</button>
+          <small className="wardrobe-hint">Exports persona, sliders, communication rules and bundled avatar preferences. No provider keys, custom asset files or memories.</small>
+          <PersonaCommunicationFields value={draft} onChange={patch=>setDraft(current=>({...current,...patch}))}/>
         </>}
         {settingsTab === "interface" && <>
           <div className="settings-section-title"><PawPrint size={18}/> Frontend layout</div>

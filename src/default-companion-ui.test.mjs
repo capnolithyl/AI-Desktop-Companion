@@ -149,3 +149,17 @@ test("Default portrait has no redundant title and the illustrated send button ha
   assert.match(app,/defaultUi\?<WorkspaceSendPaw\/>:<PawPrint/);
   assert.match(css,/\.companion\.default-layout-active \.workspace-composer \.input-row textarea:focus \{[\s\S]*?border:0;background:transparent;box-shadow:none/);
 });
+
+test("recent chat deletion requires explicit confirmation and uses each runtime's existing handler",()=>{
+  const nas=readFileSync(new URL("./web/NasApp.tsx",import.meta.url),"utf8");
+  assert.ok(shell.includes('className={"workspace-chat-delete"'));
+  assert.ok(shell.includes('setConfirmDelete(chat.id)'));
+  assert.ok(shell.includes('confirmDelete===chat.id&&'));
+  assert.ok(shell.includes('await onDeleteChat(id)'));
+  assert.ok(shell.includes('confirmDelete!==id'));
+  assert.ok(css.includes('.workspace-chat-row:hover .workspace-chat-delete'));
+  assert.ok(css.includes('.workspace-chat-row:focus-within .workspace-chat-delete'));
+  assert.ok(app.includes('onDeleteChat={deleteConversation}'));
+  assert.ok(nas.includes('onDeleteChat={deleteChat}'));
+  assert.ok(nas.includes('await client.memoryAction("deleteChat",{id})'));
+});
