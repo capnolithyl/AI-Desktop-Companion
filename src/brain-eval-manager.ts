@@ -280,7 +280,8 @@ async function executeOne(
     );
   }
   const infer:EvalInference=async({
-    messages,selectedMemories,evidence,researchPlanned,researchQuery,replyEffort,webRequest
+    messages,selectedMemories,evidence,researchPlanned,researchQuery,researchTask,replyEffort,webRequest,
+    nativeWebAllowed
   })=>{
     if(controller.signal.aborted)throw new Error("Stopped by owner");
     if(selection.provider!=="local"){
@@ -310,17 +311,28 @@ async function executeOne(
     // Use the SAME owner-configured voice and operational instructions as
     // actual desktop chat. Fixture isolation is the only Brain Lab-specific
     // instruction; real web evidence is still handled by native chat_stream.
+    // A generic "tell me about X" route should not force public verification
+    // when the relevant local facts have already been supplied. Current,
+    // explicitly directed document/search requests still require web evidence.
+    const locallyAnswerable=selection.provider==="nvidia" &&
+      selectedMemories.length>0 && !researchQuery && !researchTask &&
+      webRequest?.researchRecent!==true;
+    const publicResearchPlanned=researchPlanned && !locallyAnswerable;
     const sharedTurnInstructions=assistantTurnInstructionParts({
       settings:{...settings,researchMode:request.researchMode??settings.researchMode},
       question:last,history:messages.slice(0,-1),
       allowRoleplay:roleplayAllowed,
-      researchActive:researchPlanned||webRequest?.autoSearch===true,
-      publicWebRequested:webRequest?.autoSearch===true,
+      researchActive:publicResearchPlanned||webRequest?.autoSearch===true,
+      // Model-led NVIDIA may execute search_web/read_webpage after this prompt.
+      // Do not tell it research already failed just because no query was preplanned.
+      publicWebRequested:webRequest?.autoSearch===true ||
+        (nativeWebAllowed===true && publicResearchPlanned===true),
       plannedPublicSearch:!!researchQuery,
-      plannedButNotExecuted:researchPlanned&&!webRequest?.autoSearch
+      plannedButNotExecuted:publicResearchPlanned&&!webRequest?.autoSearch &&
+        nativeWebAllowed!==true
     });
     const system=joinAssistantInstructionParts(sharedTurnInstructions,[
-      "ISOLATED BRAIN LAB FIXTURES: User memories in this test are synthetic data. Never write production memories, use private integrations or contact owner-connected accounts. Public tool permissions are enforced by the normal application backend.",
+      "ISOLATED BRAIN LAB FIXTURES: User memories in this test are synthetic data. Use the supplied facts directly for questions about these fictional entities; they are not public-web claims and do not require public verification. Never replace an answer supported by the supplied memory with a claim that external sources are unavailable. Search public sources only when the user actually needs fresh external facts. Never write production memories, use private integrations or contact owner-connected accounts. Public tool permissions are enforced by the normal application backend.",
       memory,
       evidence?"Fixture-only, NOT live web evidence: "+evidence:""
     ]);
@@ -341,7 +353,15 @@ async function executeOne(
         // Synthetic fixture data was explicitly supplied in the system
         // message. Never open production personal-memory/Notion tools in lab.
         cloudAllowMemory:false,
-        cloudAllowWeb:selection.provider!=="local"&&webRequest?.autoSearch===true,
+        // Explicitly supplied synthetic memory fixtures are a valid answer
+        // source even when the coarse research route over-classifies a turn.
+        cloudHasRelevantMemories:selectedMemories.length>0,
+        currentYear:new Date().getFullYear(),
+        // NVIDIA model-led Lab turns use native read-only tools under the same
+        // permission gate as production. Other providers retain planned routes.
+        cloudAllowWeb:selection.provider==="nvidia"
+          ? nativeWebAllowed===true
+          : selection.provider!=="local"&&webRequest?.autoSearch===true,
         messages:[{role:"system",content:system},...messages.map(m=>({role:m.role,content:m.content}))],
         ...(webRequest??{autoSearch:false,researchRoute:"chat"}),
         sourcePreferences:settings.sourcePreferences,
@@ -441,7 +461,11 @@ async function executeOne(
     researchMode:request.researchMode??settings.researchMode,
     mikanifyAnswer:request.mikanifyAnswer??settings.mikanifyAnswer,
     scenarios,repetitions:request.repetitions,
-    signal:controller.signal,...(request.mode==="live"?{infer,planWeb,previewMemory,liveWeb:true}:{}),
+    // NVIDIA's production model-led mode must not depend on the local Ollama
+    // planner. The other provider paths continue to exercise hybrid planning.
+    modelLedWeb:selection.provider==="nvidia",
+    signal:controller.signal,...(request.mode==="live"?{infer,
+      ...(selection.provider==="nvidia"?{}:{planWeb}),previewMemory,liveWeb:true}:{}),
     onProgress:(done,_total,label)=>setStatus({done:progressOffset+done,
       label:"Model "+(modelIndex+1)+"/"+modelCount+" ("+selection.id+"): "+label})
   });
