@@ -3424,7 +3424,7 @@ export default function App() {
         }}>Review</button>}
         <button type="button" className="memory-toast-dismiss" aria-label="Dismiss memory notice"
           onClick={()=>setMemoryToast(null)}><X size={13}/></button>
-      </div>
+      </div>}
       <div className="reply-panel" aria-live="polite">
         <div className="reply-header">
           <div className="reply-title">
