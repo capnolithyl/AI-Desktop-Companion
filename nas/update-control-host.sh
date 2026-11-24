@@ -60,8 +60,8 @@ case "$code" in
     if grep -Fq 'Update successful:' "$output"; then phase=updated
     elif grep -Fq 'Previously failed image' "$output"; then phase=failed
     elif grep -Eq 'defer|deferred|Update already running' "$output"; then phase=deferred
-    elif [ "$(installed || true)" = "$(available)" ]; then phase=current
     elif [ "$mode" = check ] && grep -Fq 'Available build ' "$output"; then phase=available
+    elif [ "$(installed || true)" = "$(available)" ]; then phase=current
     else phase=deferred
     fi ;;
   *) if grep -Fq 'Rollback successful' "$output"; then phase=rolled-back; else phase=failed; fi ;;
