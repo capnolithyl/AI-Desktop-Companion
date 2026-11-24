@@ -2205,6 +2205,9 @@ button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px
    This does not recolor the standalone Settings webview or touch remote/mobile. */
 .companion:not(.settings-standalone) > .dock {
   --chat-light:#ffb56d;--chat-muted:#d8b2a7;--chat-edge:#9e5b3c;
+  /* A transparent native window clips anything painted outside its bounds.
+     Give the glow breathing room and keep its falloff inside that margin. */
+  left:16px;right:16px;bottom:16px;
   background:radial-gradient(ellipse 100% 95% at 50% -28%,
       rgb(var(--accent-rgb,255 173 126) / .19),transparent 76%),
     linear-gradient(145deg,
@@ -2213,8 +2216,9 @@ button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px
   border:1px solid #e59b5c;
   border-radius:21px;
   padding:15px 15px 12px;
-  box-shadow:inset 0 0 0 1px #fbb57d2b,inset 0 14px 26px #ed733614,
-    0 0 16px #f88a3c6d,0 0 39px #ee753444,0 12px 38px #180b11b3;
+  box-shadow:inset 0 0 0 1px #fbb57d3d,
+    inset 0 0 22px #f98c342e,inset 0 14px 26px #ed733614,
+    0 0 7px #f88a3c8c,0 0 12px #ee75343d;
   backdrop-filter:blur(24px);
   color:#fff0e6;
 }
@@ -2402,13 +2406,24 @@ button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px
   color:#c8a89b;gap:10px;align-items:center;
 }
 .companion:not(.settings-standalone) .model-switcher {
-  max-width:78%;gap:8px;flex:1 1 auto;
+  position:relative;max-width:78%;gap:8px;flex:1 1 auto;
 }
 .companion:not(.settings-standalone) .model-switcher select {
-  min-height:32px;padding:7px 10px;
+  min-height:32px;padding:7px 34px 7px 10px;
   border:1px solid #795240;border-radius:999px;
   background:#382728;color:#ffdbc4;
   font-size:11px;font-weight:600;
+  appearance:none;
+}
+/* Draw our own chevron slightly farther inside the pill. Keep the native
+   <select> and its keyboard/screen-reader behavior untouched. */
+.companion:not(.settings-standalone) .model-switcher::after {
+  content:"";position:absolute;right:19px;top:50%;pointer-events:none;
+  width:7px;height:7px;border-right:2px solid #ffbe89;
+  border-bottom:2px solid #ffbe89;transform:translateY(-65%) rotate(45deg);
+}
+.companion:not(.settings-standalone) .model-switcher:has(select:disabled)::after {
+  opacity:.5;
 }
 .companion:not(.settings-standalone) .model-switcher select:not(:disabled):hover {border-color:#b77b56;}
 .companion:not(.settings-standalone) .model-switcher .status-dot {
