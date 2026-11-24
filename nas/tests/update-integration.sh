@@ -70,4 +70,32 @@ sudo test -f "$state/failed-image"
 # A known-bad candidate should not repeatedly interrupt the live service.
 sudo sh "$root/update.sh"
 [ "$(current)" = "$good" ]
-echo "Deployment, consistent snapshot, rollback and failed-image suppression passed."
+# Exercise the root bridge and authenticated UI request endpoint with the real image.
+sed -e "s|^ROOT=/volume1/docker/mikan/nas$|ROOT=$app|" \
+    -e "s|^STATE=/volume1/docker/mikan-updater$|STATE=$state|" \
+    -e "s|^UPDATER=/root/mikan-updater/update-beholder.sh$|UPDATER=$root/update.sh|" \
+    -e 's|^REGISTRY=.*$|REGISTRY=mikan-nas:test-candidate|' \
+    nas/update-control-host.sh >"$root/control.sh"
+grep -Fxq "ROOT=$app" "$root/control.sh"
+grep -Fxq "STATE=$state" "$root/control.sh"
+grep -Fxq "UPDATER=$root/update.sh" "$root/control.sh"
+docker tag mikan-nas:ci mikan-nas:test-candidate
+sudo sh "$root/control.sh"
+curl -fsS -H "$auth" http://127.0.0.1:3847/api/updates | grep -Fq '"phase":"current"'
+test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:3847/api/updates)" = 401
+test "$(curl -s -o /dev/null -w '%{http_code}' -H "$auth" -H 'Content-Type: application/json' -d '{"action":"shell"}' http://127.0.0.1:3847/api/updates)" = 400
+curl -fsS -H "$auth" -H 'Content-Type: application/json' -d '{"action":"check"}' http://127.0.0.1:3847/api/updates | grep -Fq '"queued":"check"'
+sudo sh "$root/control.sh"
+curl -fsS -H "$auth" http://127.0.0.1:3847/api/updates | grep -Fq '"pending":null'
+printf 'FROM mikan-nas:ci\nLABEL test.manual=true\n' | docker build -t mikan-nas:test-candidate -
+manual="$(docker image inspect -f '{{.Id}}' mikan-nas:test-candidate)"
+curl -fsS -H "$auth" -H 'Content-Type: application/json' -d '{"action":"check"}' http://127.0.0.1:3847/api/updates >/dev/null
+sudo sh "$root/control.sh"
+[ "$(current)" = "$good" ]
+curl -fsS -H "$auth" http://127.0.0.1:3847/api/updates | grep -Fq '"phase":"available"'
+curl -fsS -H "$auth" -H 'Content-Type: application/json' -d '{"action":"install"}' http://127.0.0.1:3847/api/updates >/dev/null
+sudo sh "$root/control.sh"
+[ "$(current)" = "$manual" ]
+curl -fsS -H "$auth" http://127.0.0.1:3847/api/updates | grep -Fq '"phase":"updated"'
+curl -fsS -H "$auth" http://127.0.0.1:3847/api/library | grep -Fq 'Updater fixture must survive'
+echo "Deployment, rollback, and authenticated manual update bridge passed."

@@ -7,13 +7,14 @@ export function NasUpdates({client}:{client:NasClient}){
   const [state,setState]=useState<NasUpdateStatus|null>(null);
   const [working,setWorking]=useState(false);
   const [error,setError]=useState("");
+  const [pollError,setPollError]=useState("");
   const [history,setHistory]=useState(false);
   useEffect(()=>{
     let cancelled=false,polling=false;
     const poll=async()=>{
       if(polling)return;polling=true;
-      try{const next=await client.updates();if(!cancelled){setState(next);setError("");}}
-      catch{if(!cancelled)setError("Update status temporarily unavailable. Retrying…");}
+      try{const next=await client.updates();if(!cancelled){setState(next);setPollError("");}}
+      catch{if(!cancelled)setPollError("Update status temporarily unavailable. Retrying…");}
       finally{polling=false;}
     };
     void poll();const timer=window.setInterval(()=>void poll(),3000);
@@ -26,7 +27,7 @@ export function NasUpdates({client}:{client:NasClient}){
     finally{setWorking(false);}
   };
   const host=state?.host,waiting=working||!!state?.pending||host?.phase==="checking"||host?.phase==="installing";
-  const update=!!host?.available&&host.available!==state?.build.commit;
+  const update=!!host?.available&&(host.phase==="available"||host.available!==state?.build.commit)&&host.phase!=="failed"&&host.phase!=="rolled-back";
   return <>
     <div className="control-page-note"><RefreshCw size={20}/> Beholder installs tested experimental builds automatically when idle. Your memories are backed up before each deployment.</div>
     <div className="settings-section-title">Software updates</div>
@@ -36,7 +37,7 @@ export function NasUpdates({client}:{client:NasClient}){
       <p role="status">{state?.pending?"Queued: "+state.pending:host?labels[host.phase]:"Waiting for host updater connection"}</p>
       {host&&<><p>Latest known build: {host.available?.slice(0,8)??"Unknown"}</p><p>Last checked: {date(host.checkedAt)}</p><p>Last recorded deployment backup: {date(host.lastBackup)}</p></>}
       {state&&!host&&<p className="settings-note">The host update-control task must be installed once. Existing automatic updates still work.</p>}
-      {error&&<p role="alert"><AlertTriangle size={14}/> {error}</p>}
+      {(error||pollError)&&<p role="alert"><AlertTriangle size={14}/> {error||pollError}</p>}
       <div className="nas-profile-actions">
         <button className="secondary-action" disabled={!host||waiting} onClick={()=>void request("check")}><RefreshCw size={15}/> Check for updates</button>
         <button className="secondary-action" disabled={!host||waiting||!update} onClick={()=>void request("install")}><Download size={15}/> Install now</button>
