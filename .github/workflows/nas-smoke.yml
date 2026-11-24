@@ -1,0 +1,30 @@
+name: NAS cloud prototype smoke tests
+on:
+  pull_request:
+    paths:
+      - "nas/**"
+      - ".github/workflows/nas-smoke.yml"
+  push:
+    branches:
+      - feature/nas-cloud-mikan-experimental
+    paths:
+      - "nas/**"
+      - ".github/workflows/nas-smoke.yml"
+jobs:
+  nas:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Syntax check
+        run: |
+          node --check nas/server.mjs
+          node --check nas/storage.mjs
+          node --check nas/providers.mjs
+          node --check nas/public/app.js
+      - name: Run NAS smoke tests
+        run: node --test nas/tests/nas.test.mjs
+      - name: Validate Docker image
+        run: docker build -f nas/Dockerfile -t mikan-nas:ci .
