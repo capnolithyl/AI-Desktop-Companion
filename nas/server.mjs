@@ -8,7 +8,8 @@ import { updateControl } from "./update-control.mjs";
 import { openStore } from "./storage.mjs";
 import { assistantVoiceGuidance, CHARACTER_VOICE_REMINDER } from "../src/assistant-voice.ts";
 import { exportCompanionProfile, importCompanionProfile } from "../src/companion-profile.ts";
-import { generateReply, providerConfig } from "./providers.mjs";
+import { generateReply } from "./providers.mjs";
+import {providerSettings,boundedHistory} from "./provider-settings.mjs";
 
 const ROOT=dirname(fileURLToPath(import.meta.url));
 const BUILD=runningBuildInfo();
@@ -66,7 +67,7 @@ function systemPrompt(promptFile,store,memory) {
     CHARACTER_VOICE_REMINDER].join("\n\n");
 }
 
-export function makeServer({store,config,key,promptFile="",maintenanceFile="/data/.mikan-update-maintenance",updates=updateControl(),generate=generateReply}) {
+export function makeServer({store,config,key,promptFile="",maintenanceFile="/data/.mikan-update-maintenance",updates=updateControl(),models=providerSettings({initial:config,db:store.db}),generate=generateReply}) {
   if (typeof key!=="string" || key.length<32) throw new Error("MIKAN_REMOTE_KEY must be at least 32 characters");
   let busy=false,lastReplyAt=0,activeWrites=0;
   const maintenance=()=>existsSync(maintenanceFile);
@@ -99,7 +100,13 @@ export function makeServer({store,config,key,promptFile="",maintenanceFile="/dat
         return json(res,202,updates.queue(body?.action));
       }
       if (req.method==="GET" && path==="/api/status")
-        return json(res,200,{provider:config.provider,model:config.model,busy:unavailable(),build:BUILD});
+        return json(res,200,{...models.view(),busy:unavailable(),build:BUILD});
+      if(req.method==="GET"&&path==="/api/models")return json(res,200,models.view());
+      if(req.method==="PUT"&&path==="/api/models"){
+        const patch=await readJson(req,4096);
+        if(unavailable())return json(res,409,{error:"Wait for the current reply or memory extraction before switching models."});
+        return json(res,200,models.save(patch));
+      }
       if (req.method==="GET" && path==="/api/profile")
         return json(res,200,exportCompanionProfile(currentProfile(promptFile,store)));
       if (req.method==="PUT" && path==="/api/profile") {
@@ -166,19 +173,22 @@ export function makeServer({store,config,key,promptFile="",maintenanceFile="/dat
           return json(res,400,{error:"Invalid conversation or message (limit: 4000 characters)"});
         if (!store.exists(conversationId)) return json(res,404,{error:"Conversation not found"});
         if (unavailable()) return json(res,409,{error:"Mikan is already responding"});
+        const selected=models.active();
+        models.reserve(selected.provider);
         busy=true;
+        let user,actualModel=null;
         try {
         const prior=store.messages(conversationId,1)?.at(-1);
-        const user=store.append(conversationId,"user",question);
-        const history=store.messages(conversationId,26).map(m=>({role:m.role,content:m.content.slice(0,12000)}));
+        user=store.append(conversationId,"user",question);
+        const history=boundedHistory(store.messages(conversationId,80),selected.historyChars);
         const memory=store.library.context(question,conversationId);
         const instructions=systemPrompt(promptFile,store,memory);
         res.writeHead(200,{"Content-Type":"text/event-stream; charset=utf-8",
           "Cache-Control":"no-cache, no-transform","X-Accel-Buffering":"no",
           "X-Content-Type-Options":"nosniff"});
-          const answer=await generate({config,system:instructions,history,
+          const answer=await generate({config:selected,system:instructions,history,onModel:model=>{actualModel=model;},
             onDelta:part=>sse(res,"delta",{text:part})});
-          const saved=store.append(conversationId,"assistant",answer);
+          const saved=store.append(conversationId,"assistant",answer,{provider:selected.provider,requestedModel:selected.model,actualModel,outcome:"completed"});
           store.library.markRecalled(memory.ids);
           try{store.learning.recordRecall(conversationId,saved.id,memory.auditLines);}catch{console.error('Could not record NAS memory recall activity');}
           try{store.learning.enqueue(user,saved,conversationId,prior?.role==="assistant"?prior.content:"");}catch{console.error("Could not queue NAS memory extraction");}
@@ -186,9 +196,11 @@ export function makeServer({store,config,key,promptFile="",maintenanceFile="/dat
           sse(res,"done",{message:saved});
         } catch(error) {
           // Do not leak upstream response bodies or credentials to the browser.
-          console.error("NAS cloud chat failed:",String(error?.message||error).slice(0,250).replaceAll(config.key,"[redacted]"));
+          const upstreamStatus=Number.isInteger(error?.upstreamStatus)?error.upstreamStatus:null;
+          if(user)store.recordInference(user.id,{provider:selected.provider,requestedModel:selected.model,actualModel,outcome:"failed",upstreamStatus});
+          console.error("NAS cloud chat failed:",selected.provider,selected.model,upstreamStatus??"request/stream error");
           if (!res.headersSent) json(res,500,{error:"Could not prepare the conversation"});
-          else sse(res,"error",{error:"Cloud reply failed. Check NAS container logs and provider quota."});
+          else sse(res,"error",{error:upstreamStatus===429?"Provider quota reached (HTTP 429). No automatic retry.":"Cloud reply failed ("+selected.provider+(upstreamStatus?" HTTP "+upstreamStatus:"")+"). Check the selected model and provider quota."});
         } finally {
           busy=false;
           res.end();
@@ -203,18 +215,23 @@ export function makeServer({store,config,key,promptFile="",maintenanceFile="/dat
     }finally{if(writing)activeWrites--;}
   });
   server.requestTimeout=30000;
-  const timer=setInterval(()=>{if(!maintenance()&&!unavailable()&&Date.now()-lastReplyAt>=15000)void store.learning.processNext(generate,config).catch(()=>console.error("NAS memory worker failed"));},15000);
+  const timer=setInterval(()=>{
+    if(maintenance()||unavailable()||Date.now()-lastReplyAt<15000)return;
+    let selected;try{selected=models.active();}catch{return;}
+    if(!models.available(selected.provider))return;
+    void store.learning.processNext(args=>{models.reserve(selected.provider);return generate(args);},selected).catch(()=>console.error("NAS memory worker failed"));
+  },15000);
   timer.unref();server.once("close",()=>clearInterval(timer));
   return server;
 }
 
 export function startServer(env=process.env) {
-  const config=providerConfig(env);
   const store=openStore(env.MIKAN_DB_PATH||"/data/mikan-memory.sqlite3");
-  const server=makeServer({store,config,key:env.MIKAN_REMOTE_KEY,
+  const models=providerSettings({env,db:store.db,file:join(dirname(env.MIKAN_DB_PATH||"/data/mikan-memory.sqlite3"),".mikan-provider-settings.json")});
+  const server=makeServer({store,models,key:env.MIKAN_REMOTE_KEY,
     promptFile:env.MIKAN_SYSTEM_PROMPT_FILE||"/data/persona.txt"});
   const port=Number(env.PORT||3847);
-  server.listen(port,"0.0.0.0",()=>console.log("Mikan NAS ready on port "+port+" ("+config.provider+")"));
+  server.listen(port,"0.0.0.0",()=>console.log("Mikan NAS ready on port "+port+" ("+models.view().provider+")"));
   const shutdown=()=>server.close(()=>{store.db.close();process.exit(0);});
   process.once("SIGTERM",shutdown);
   process.once("SIGINT",shutdown);

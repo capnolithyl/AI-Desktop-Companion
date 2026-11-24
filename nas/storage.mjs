@@ -62,21 +62,26 @@ export function openStore(path) {
   }
   function messages(id, limit = 80) {
     if (!exists(id)) return null;
-    return db.prepare(`SELECT id,role,content,created_at AS createdAt FROM
-       (SELECT id,role,content,created_at FROM messages WHERE conversation_id=?
+    return db.prepare(`SELECT id,role,content,created_at AS createdAt,metadata_json FROM
+       (SELECT id,role,content,created_at,metadata_json FROM messages WHERE conversation_id=?
         ORDER BY created_at DESC,rowid DESC LIMIT ?) ORDER BY created_at ASC`)
-      .all(id, limit);
+      .all(id, limit).map(({metadata_json,...message})=>{
+        try{const inference=JSON.parse(metadata_json)?.nasInference;return inference?{...message,inference}:message;}catch{return message;}
+      });
   }
-  function append(id, role, content) {
+  function recordInference(id,inference){
+    db.prepare("UPDATE messages SET metadata_json=? WHERE id=?").run(JSON.stringify({nasInference:inference}),id);
+  }
+  function append(id, role, content, inference=null) {
     if (!exists(id)) throw new Error("Conversation not found");
     const message = { id:randomUUID(), role, content, createdAt:Date.now() };
     db.prepare(`INSERT INTO messages
-      (id,conversation_id,role,content,created_at,metadata_json) VALUES(?,?,?,?,?,'{}')`)
-      .run(message.id,id,role,content,message.createdAt);
+      (id,conversation_id,role,content,created_at,metadata_json) VALUES(?,?,?,?,?,?)`)
+      .run(message.id,id,role,content,message.createdAt,JSON.stringify(inference?{nasInference:inference}:{}));
     db.prepare(`UPDATE conversations SET title=CASE WHEN title='New conversation' AND ?='user'
       THEN substr(?,1,70) ELSE title END,updated_at=? WHERE id=?`)
       .run(role,content,Math.floor(Date.now()/1000),id);
-    return message;
+    return inference?{...message,inference}:message;
   }
   function listMemories(limit = 200) {
     return db.prepare("SELECT id,fact,category,updated_at AS updatedAt FROM user_memories ORDER BY updated_at DESC LIMIT ?").all(limit);
@@ -92,7 +97,7 @@ export function openStore(path) {
   }
   const library=createMemoryLibrary(db);
   const learning=createLearning(db,library);
-  return { db, library, learning, getProfile, saveProfile, hasTable, conversations, newConversation, exists, messages, append, listMemories, addMemory, removeMemory };
+  return { db, library, learning, getProfile, saveProfile, hasTable, conversations, newConversation, exists, messages, append, recordInference, listMemories, addMemory, removeMemory };
 }
 
 // Lexical recall first. Existing FTS5 and optional Qdrant remain intact for a later integration.

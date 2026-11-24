@@ -7,9 +7,9 @@ rmSync(target,{recursive:true,force:true});
 mkdirSync(join(target,"nas"),{recursive:true});
 mkdirSync(join(target,"src"),{recursive:true});
 mkdirSync(join(target,"assets/iki"),{recursive:true});
-for(const name of ["Dockerfile","build-info.mjs","compose.yaml","compose.registry.yaml","update-beholder.sh","update-control-host.sh","update-control.mjs",".env.example","server.mjs","storage.mjs","memory-library.mjs","learning.mjs","providers.mjs","public","web-dist","README.md"])
+for(const name of ["Dockerfile","build-info.mjs","compose.yaml","compose.registry.yaml","update-beholder.sh","update-control-host.sh","update-control.mjs",".env.example","server.mjs","storage.mjs","memory-library.mjs","learning.mjs","providers.mjs","provider-settings.mjs","public","web-dist","README.md"])
   cpSync(join(root,"nas",name),join(target,"nas",name),{recursive:true});
-for(const name of ["assistant-voice.ts","personality.ts","communication-preferences.ts","companion-profile.ts","avatar-background.ts","avatar-viewport.ts","memory-import.ts","interest-import.ts","memory-ranking.ts","identity-memory.ts","character-canon-routing.ts","interest-context.ts","archive-memory.ts","memory-budget.ts"])
+for(const name of ["model-switcher.ts","assistant-voice.ts","personality.ts","communication-preferences.ts","companion-profile.ts","avatar-background.ts","avatar-viewport.ts","memory-import.ts","interest-import.ts","memory-ranking.ts","identity-memory.ts","character-canon-routing.ts","interest-context.ts","archive-memory.ts","memory-budget.ts"])
   cpSync(join(root,"src",name),join(target,"src",name));
 cpSync(join(root,"assets/iki/mikan-chat-avatar.webp"),join(target,"assets/iki/mikan-chat-avatar.webp"));
 cpSync(join(root,".dockerignore"),join(target,".dockerignore"));

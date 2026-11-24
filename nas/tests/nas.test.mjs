@@ -1,3 +1,4 @@
+import {providerSettings,boundedHistory} from "../provider-settings.mjs";
 import {updateControl} from "../update-control.mjs";
 import {nasActivity} from "../../src/web/nas-activity.ts";
 import {memoryNotice} from "../../src/web/memory-notifications.ts";
@@ -352,4 +353,48 @@ test("host update control only accepts fixed actions and tracks committed host r
     assert.ok(control.get().host.lastBackup);
     assert.equal(control.get().pending,null);
   }finally{rmSync(root,{recursive:true,force:true});}
+});
+
+test("NAS provider selection persists, keeps keys write-only and budgets real requests",()=>{
+  const root=mkdtempSync(join(tmpdir(),"mikan-providers-")),store=openStore(join(root,"db.sqlite3"));
+  const file=join(root,"settings.json"),env={NVIDIA_API_KEY:"synthetic-nvidia-secret"};
+  let time=100000000;
+  try{
+    const models=providerSettings({env,file,db:store.db,now:()=>time});
+    assert.equal(models.active().provider,"nvidia");
+    assert.throws(()=>models.save({provider:"openrouter",model:"paid/model",select:true}),/free route/);
+    assert.throws(()=>models.save({provider:"gemini",select:true}),/Configure a key/);
+    const next=models.save({provider:"openrouter",model:"openrouter/free",apiKey:"synthetic-router-secret",select:true,historyChars:16000});
+    assert.doesNotMatch(JSON.stringify(next),/synthetic-/);
+    const reopened=providerSettings({env,file,db:store.db,now:()=>time});
+    assert.equal(reopened.active().provider,"openrouter");
+    assert.equal(reopened.active().key,"synthetic-router-secret");
+    assert.equal(reopened.active().historyChars,16000);
+    for(let i=0;i<15;i++)reopened.reserve("openrouter");
+    assert.throws(()=>reopened.reserve("openrouter"),/budget reached/);
+    time+=61000;
+    assert.equal(reopened.available("openrouter"),true);
+    assert.equal(boundedHistory([{role:"user",content:"old"},{role:"assistant",content:"past"},{role:"user",content:"latest"}],6).at(-1).content,"latest");
+    reopened.save({provider:"openrouter",clearKey:true});
+    assert.throws(()=>reopened.active(),/Configure/);
+  }finally{store.db.close();rmSync(root,{recursive:true,force:true});}
+});
+test("NAS cloud settings API is authenticated, selects the next turn and records provider model metadata",async()=>{
+  const root=mkdtempSync(join(tmpdir(),"mikan-model-api-")),store=openStore(join(root,"db.sqlite3"));
+  const key="01234567890123456789012345678901",headers={Authorization:"Bearer "+key,"Content-Type":"application/json"};
+  const models=providerSettings({env:{NVIDIA_API_KEY:"synthetic-nvidia-secret",OPENROUTER_API_KEY:"synthetic-router-secret"},db:store.db});
+  const server=makeServer({store,key,models,generate:async({config,onModel,onDelta})=>{
+    assert.equal(config.provider,"openrouter");onModel("actual/free-model");onDelta("Hi");return "Hi";
+  }});
+  await new Promise(resolve=>server.listen(0,"127.0.0.1",resolve));
+  const base="http://127.0.0.1:"+server.address().port;
+  try{
+    assert.equal((await fetch(base+"/api/models")).status,401);
+    const response=await fetch(base+"/api/models",{method:"PUT",headers,body:JSON.stringify({provider:"openrouter",select:true})});
+    assert.equal(response.status,200);assert.doesNotMatch(await response.text(),/synthetic-/);
+    const c=store.newConversation();
+    const r=await fetch(base+"/api/chat",{method:"POST",headers,body:JSON.stringify({conversationId:c.id,text:"Hello"})});
+    assert.match(await r.text(),/event: done/);
+    assert.deepEqual(store.messages(c.id).at(-1).inference,{provider:"openrouter",requestedModel:"openrouter/free",actualModel:"actual/free-model",outcome:"completed"});
+  }finally{await new Promise(resolve=>server.close(resolve));store.db.close();rmSync(root,{recursive:true,force:true});}
 });

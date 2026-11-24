@@ -44,6 +44,7 @@ jobs:
           node --check nas/storage.mjs
           node --check nas/learning.mjs
           node --check nas/providers.mjs
+          node --check nas/provider-settings.mjs
           node --check nas/public/app.js
       - name: Run NAS smoke tests
         run: node --test nas/tests/nas.test.mjs

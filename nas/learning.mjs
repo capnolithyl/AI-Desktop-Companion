@@ -256,7 +256,7 @@ export function createLearning(db,library){
     }catch{
       tx(db,()=>{
         const changed=db.prepare("UPDATE nas_learning_jobs SET status='failed' WHERE assistant_id=?").run(job.assistant_id).changes;
-        if(changed)emit("failed",{stage},job);
+        if(changed)emit("failed",{stage,provider:config.provider,requestedModel:config.model},job);
       });
     }
     finally{running=false;}

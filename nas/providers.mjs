@@ -14,10 +14,9 @@ export function providerConfig(env = process.env) {
   return { provider, model, key };
 }
 function remoteError(status, body, key) {
-  const message = String(body).replaceAll(key, "[redacted]").slice(0,320);
-  return new Error("Cloud model request failed ("+status+"): "+message);
+  return Object.assign(new Error("Cloud model request failed ("+status+")"),{upstreamStatus:status});
 }
-export async function generateReply({config, system, history, onDelta, fetchImpl=fetch, temperature=0.7, maxTokens=1400}) {
+export async function generateReply({config, system, history, onDelta, onModel=()=>{}, fetchImpl=fetch, temperature=0.7, maxTokens=1400}) {
   const {provider,model,key} = config;
   if (provider === "gemini") {
     const contents = history.map(m=>({
@@ -33,6 +32,7 @@ export async function generateReply({config, system, history, onDelta, fetchImpl
     const raw = await response.text();
     if (!response.ok) throw remoteError(response.status,raw,key);
     const json = JSON.parse(raw);
+    if(typeof json.modelVersion==="string")onModel(json.modelVersion.slice(0,160));
     const result = (json.candidates?.[0]?.content?.parts||[])
       .map(part=>part.text||"").join("").trim();
     if (!result) throw new Error("Cloud model returned an empty answer");
@@ -63,6 +63,7 @@ export async function generateReply({config, system, history, onDelta, fetchImpl
     let event;
     try {event=JSON.parse(data);}catch{return;}
     if (event.error) throw new Error("Provider rejected the stream");
+    if(typeof event.model==="string")onModel(event.model.slice(0,160));
     const delta=event.choices?.[0]?.delta?.content;
     const text = typeof delta==="string" ? delta :
       Array.isArray(delta) ? delta.filter(x=>x.type==="text").map(x=>x.text||"").join("") : "";
