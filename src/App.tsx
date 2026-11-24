@@ -12,7 +12,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { emit, listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { getCurrentWindow, currentMonitor, LogicalSize } from "@tauri-apps/api/window";
 import { companionWindowSize } from "./companion-layout";
-import { DefaultCompanionShell } from "./DefaultCompanionShell";
+
 import { initialSettingsTab, initialMemoryTab, isStandaloneSettingsWindow, validSettingsTab, validMemoryTab } from "./settings-window";
 import { register, unregister } from "@tauri-apps/plugin-global-shortcut";
 import {
@@ -114,6 +114,7 @@ import {
 
 const BrainEvalPanel = lazy(() => import("./BrainEvalPanel").then(module => ({ default: module.BrainEvalPanel })));
 const IkiAvatar = lazy(() => import("./IkiAvatar").then(module => ({ default: module.IkiAvatar })));
+const DefaultCompanionShell = lazy(() => import("./DefaultCompanionShell").then(module => ({default:module.DefaultCompanionShell})));
 
 type Screen = "compact" | "log" | "settings" | "search" | "page" | "help";
 type SettingsTab = "home" | "vision" | "ai" | "internet" | "notion" | "voice" | "appearance" | "interface" | "personality" | "memory" | "capabilities" | "brain";
@@ -3383,7 +3384,7 @@ export default function App() {
   };
 
   const avatarContents = <>
-      {avatarDisplay === "animated" && ikiReady ? (
+      {(defaultUi ? !ikiError : avatarDisplay === "animated") && ikiReady ? (
         <Suspense fallback={<img className="character-portrait" src={portrait ?? BUNDLED_PORTRAIT}
           alt="Mikan is getting ready" draggable={false}/>}>
         <IkiAvatar customRig={displayedIkiRig.customRig} rigUrl={displayedIkiRig.rigUrl} speaking={voiceState === "playing"}
@@ -3623,7 +3624,12 @@ export default function App() {
     {portraitMenuAt && <PortraitContextMenu position={portraitMenuAt} items={portraitMenuItems}
       onClose={() => setPortraitMenuAt(null)}/>}
 
-    {!standaloneSettings && defaultUi && screen === "compact" &&
+    {!standaloneSettings && defaultUi && screen === "compact" && <Suspense
+      fallback={<div role="status" className="workspace-loading-fallback"
+        style={{position:"absolute",inset:18,display:"grid",placeItems:"center",
+          color:"#ffbd84",background:"#281b1d",border:"1px solid #b06d48",borderRadius:20}}>
+        <span><PawPrint size={25}/> Opening Mikan's desktop…</span>
+      </div>}>
       <DefaultCompanionShell
         avatar={<div className="workspace-avatar-rig" title="Drag Mikan to move this window"
           onMouseDown={dragPortrait}
@@ -3694,7 +3700,7 @@ export default function App() {
             </div>}
           {voiceError&&<div className="vision-error" role="alert">Voice: {voiceError}</div>}
         </>}
-      />}
+      /></Suspense>}
 
     {!standaloneSettings && !defaultUi && <section className="dock" aria-label="Chat with Mikan">
       {memoryToast && <div key={memoryToast.key}
