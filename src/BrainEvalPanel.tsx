@@ -24,6 +24,7 @@ const totalFixtureTurns=EVAL_SCENARIOS.reduce((n,s)=>n+s.steps.length,0);
 
 export function BrainEvalPanel({settings,availableModels}:{settings:Settings;availableModels:readonly string[]}){
   const [mode,setMode]=useState<EvalMode>("routing");
+  const [scenarioPage,setScenarioPage]=useState(0);
   const [workspaceTab,setWorkspaceTab]=useState<"run"|"scenarios"|"results">("run");
   const [researchMode,setResearchMode]=useState<Settings["researchMode"]>(settings.researchMode);
   const [mikanifyAnswer,setMikanifyAnswer]=useState(settings.mikanifyAnswer);
@@ -74,6 +75,10 @@ export function BrainEvalPanel({settings,availableModels}:{settings:Settings;ava
     (!searchTerm||[s.id,s.group,brainScenarioLabel(s.id,s.label)]
       .some(value=>value.toLocaleLowerCase().includes(searchTerm)))
   );
+  const pageSize=20;
+  const totalPages=Math.max(1,Math.ceil(visible.length/pageSize));
+  const currentPage=Math.min(scenarioPage,totalPages-1);
+  const pageScenarios=visible.slice(currentPage*pageSize,(currentPage+1)*pageSize);
   const selected=EVAL_SCENARIOS.filter(s=>selectedIds.has(s.id));
   const turnsPerModel=selected.reduce((total,scenario)=>total+scenario.steps.length,0)*repeats;
   const cloudLimit=cloudTurnLimit(cloudSelected);
@@ -245,7 +250,6 @@ export function BrainEvalPanel({settings,availableModels}:{settings:Settings;ava
     {workspaceTab==="run"&&<div className="brain-workspace-view brain-workspace-run">
       <div className="brain-section-heading"><h3>Run configuration</h3><span>{selected.length} scenarios · {modelsToRun.length} model(s)</span></div>
       
-    <div className="settings-section-title"><BrainCircuit size={17}/> Brain lab · P0 reliability</div>
     <details className="brain-eval-explainer">
       <summary>What Brain Lab tests <span>Isolated memories · Live uses real SearXNG</span></summary>
       <p>Brain Lab tests Mikan's routing and model responses using synthetic facts.
@@ -262,7 +266,9 @@ export function BrainEvalPanel({settings,availableModels}:{settings:Settings;ava
         Strict keeps the previous experimental extraction path. Each gets separate scenario grades.</p>
     </details>
 
-          <section className="brain-eval-presets" aria-label="Saved Brain Lab configurations">
+          <details className="control-disclosure brain-eval-preset-disclosure">
+      <summary><strong>Saved test presets</strong><span>Load, save and manage configurations</span></summary>
+    <section className="brain-eval-presets" aria-label="Saved Brain Lab configurations">
       <div className="brain-eval-presets-header">
         <strong>Saved test presets</strong>
         <small>Restore scenarios, models, repetitions and filters · never runs automatically</small>
@@ -294,6 +300,7 @@ export function BrainEvalPanel({settings,availableModels}:{settings:Settings;ava
       </div>
       <small>Saving with an existing name updates that preset. Presets stay on this device.</small>
     </section>
+    </details>
 
           <div className="brain-eval-toolbar">
       <label>Test mode
@@ -467,7 +474,7 @@ export function BrainEvalPanel({settings,availableModels}:{settings:Settings;ava
       </label>
       <label>Show status
         <select value={statusFilter} disabled={busy}
-          onChange={e=>setStatusFilter(e.target.value as typeof statusFilter)}>
+          onChange={e=>{setStatusFilter(e.target.value as typeof statusFilter);setScenarioPage(0);}}>
           <option value="all">All statuses</option>
           <option value="failed">Failed</option>
           <option value="review">Needs review</option>
@@ -480,7 +487,7 @@ export function BrainEvalPanel({settings,availableModels}:{settings:Settings;ava
 
               <label className="brain-eval-find">Find scenario
         <input type="search" value={search}
-          onChange={e=>setSearch(e.target.value)}
+          onChange={e=>{setSearch(e.target.value);setScenarioPage(0);}}
           placeholder="Search #65, anime, singer…" aria-label="Find Brain Lab scenario" />
       </label>
       </div>
@@ -496,12 +503,7 @@ export function BrainEvalPanel({settings,availableModels}:{settings:Settings;ava
       </div>
       <small id="brain-eval-number-feedback" role="status">{numberFeedback}</small>
     </div>
-    <div className="brain-eval-select-actions">
-      <button type="button" disabled={busy} onClick={()=>selectOnly(visible.map(s=>s.id))}>Select visible ({visible.length})</button>
-      <button type="button" disabled={busy} onClick={selectUnresolved}>Select unresolved</button>
-      <button type="button" disabled={busy} onClick={selectRegression}>Passed regression sample</button>
-      <button type="button" disabled={busy} onClick={()=>selectOnly([])}>Clear selection</button>
-    </div>
+
 
       <div className="brain-eval-select-actions">
         <button type="button" disabled={busy} onClick={()=>selectOnly(visible.map(s=>s.id))}>Select visible ({visible.length})</button>
@@ -517,7 +519,7 @@ export function BrainEvalPanel({settings,availableModels}:{settings:Settings;ava
       </header>
       <div className="brain-eval-catalog" role="group" aria-label="Select Brain Lab scenarios">
       {visible.length===0&&<p className="brain-eval-subtitle">No scenarios match this filter.</p>}
-      {visible.map(s=>{
+      {pageScenarios.map(s=>{
         const view=statuses.get(s.id)!;
         return <div className="brain-eval-test-row" key={s.id}>
           <label title={s.note??s.group}>
@@ -539,6 +541,11 @@ export function BrainEvalPanel({settings,availableModels}:{settings:Settings;ava
           </div>}
         </div>;
       })}
+      </div>
+      <div className="brain-scenario-pagination" role="navigation" aria-label="Scenario pages">
+        <button type="button" disabled={currentPage===0} onClick={()=>setScenarioPage(page=>Math.max(0,page-1))}>Previous</button>
+        <span>Page {currentPage+1} of {totalPages} · {visible.length} matching</span>
+        <button type="button" disabled={currentPage>=totalPages-1} onClick={()=>setScenarioPage(page=>Math.min(totalPages-1,page+1))}>Next</button>
       </div>
     </section>
     <p className="brain-eval-muted-note">
