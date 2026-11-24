@@ -1,4 +1,4 @@
-import { useEffect, useRef, type ReactNode, type MouseEvent as ReactMouseEvent } from "react";
+import { useEffect, useRef, useState, type ReactNode, type MouseEvent as ReactMouseEvent } from "react";
 import {
   BookHeart, Cat, Eye, History, MessageCircle, Mic,
   Palette, PawPrint, Plus, Search, Settings2, Shirt, Smile, Sparkles, Volume2, VolumeX, X
@@ -29,6 +29,14 @@ export function DefaultCompanionShell({
   onOpenVision,onAttach,onVoice,onMute,onExpression,onOutfit,onHide
 }:Props){
   const feedRef=useRef<HTMLDivElement>(null);
+  // Hide AND unmount the real Iki player when space cannot accommodate it.
+  // Merely CSS-hiding the canvas would leave an unnecessary GPU render loop.
+  const [showAvatar,setShowAvatar]=useState(()=>window.innerWidth>1030);
+  useEffect(()=>{
+    const resize=()=>setShowAvatar(window.innerWidth>1030);
+    window.addEventListener("resize",resize);
+    return ()=>window.removeEventListener("resize",resize);
+  },[]);
   useEffect(()=>{
     const el=feedRef.current;
     if(el)el.scrollTop=el.scrollHeight;
@@ -99,7 +107,7 @@ export function DefaultCompanionShell({
           {composer}
         </div>
       </section>
-      <aside className="workspace-avatar-pane" aria-label="Animated Mikan companion">
+      {showAvatar && <aside className="workspace-avatar-pane" aria-label="Animated Mikan companion">
         <div className="workspace-avatar-glow" aria-hidden="true"/>
         <div className="workspace-avatar-top"><PawPrint size={20}/><strong>Mikan ♡</strong><Sparkles size={15}/></div>
         <div className="workspace-iki-stage">{avatar}</div>
@@ -114,7 +122,7 @@ export function DefaultCompanionShell({
           <button type="button" onClick={onExpression}><Smile size={17}/> Expression</button>
           <button type="button" onClick={onOutfit}><Shirt size={17}/> Outfit</button>
         </div>
-      </aside>
+      </aside>}
     </div>
   </section>;
 }
