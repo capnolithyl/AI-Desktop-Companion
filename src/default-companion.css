@@ -133,7 +133,7 @@
 .workspace-chat-count {max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#e3bba6;font-size:11px;}
 .workspace-transcript {
   display:flex;flex-direction:column;gap:18px;flex:1;overflow-y:auto;overflow-x:hidden;
-  min-height:0;padding:24px 8px 24px 2px;scrollbar-width:thin;
+  min-height:0;padding:24px 10px 24px 7px;scrollbar-width:thin;
 }
 .workspace-message {max-width:88%;min-width:0;display:flex;align-items:flex-start;gap:16px;flex:0 0 auto;}
 .workspace-message.user {align-self:flex-end;flex-direction:row-reverse;}
@@ -144,54 +144,48 @@
   color:#ffc287;box-shadow:0 0 10px #f6934b5c;
 }
 .workspace-message.user .workspace-message-avatar {border-color:#9f6e62;background:#644044;color:#ffe0d7;box-shadow:none;}
-.workspace-message-body {display:flex;flex-direction:column;min-width:0;gap:6px;flex:1;}
+.workspace-message-body {display:flex;flex-direction:column;min-width:0;gap:3px;flex:1;}
 .workspace-message-author {display:flex;align-items:center;gap:8px;min-height:22px;color:#ffb36e;font-size:12px;font-weight:750;}
 .workspace-message.user .workspace-message-author {justify-content:flex-end;color:#e7c8bc;}
-.workspace-message-author time {margin-left:auto;font-size:11px;color:#d4a99b;font-weight:400;}
-/* Speech balloons: two nested triangles make a continuous outlined tail
-   without clipping Markdown, links, or code blocks inside the balloon. */
+.workspace-message.user .workspace-message-author {padding-right:4px;}
+/* Open-sided SVG tails join the border instead of drawing a detached wedge.
+   A constant edge fill ensures the join stays seamless as the message grows. */
 .workspace-message-bubble {
-  --bubble-edge:#f6a35b;
-  --bubble-near:#59352a;
-  --bubble-far:#3e2928;
+  --bubble-edge:#ffb366;
+  --bubble-near:#573126;
+  --bubble-far:#432b29;
   --bubble-tail:var(--bubble-near);
-  position:relative;min-width:0;overflow-wrap:anywhere;padding:14px 19px;
-  border:1px solid var(--bubble-edge);border-radius:22px;
-  background:linear-gradient(110deg,var(--bubble-near),var(--bubble-far));
-  box-shadow:inset 0 0 18px #ffa6600c,0 0 13px #f28a3657;
-  font-size:max(14px,var(--mikan-font-size));color:#fff2e8;line-height:1.6;
+  position:relative;isolation:isolate;min-width:0;overflow-wrap:anywhere;
+  padding:10px 18px 8px;border:1px solid var(--bubble-edge);border-radius:25px;
+  background:linear-gradient(90deg,var(--bubble-near) 0%,var(--bubble-near) 5%,var(--bubble-far) 95%,var(--bubble-far) 100%);
+  box-shadow:inset 0 0 18px #ff9b382b,0 0 0 1px #ffbb7630,0 0 16px #f28a3666;
+  font-size:max(14px,var(--mikan-font-size));color:#fff2e8;line-height:1.5;
 }
-.workspace-message.assistant .workspace-message-bubble {border-top-left-radius:16px;}
-.workspace-message-bubble::before,.workspace-message-bubble::after {
-  content:"";position:absolute;pointer-events:none;
-  top:13px;left:-12px;width:13px;height:16px;
-  clip-path:polygon(0 0,100% 22%,100% 100%);
-  background:var(--bubble-edge);
-}
-.workspace-message-bubble::after {
-  top:14px;left:-9px;width:11px;height:13px;
-  background:var(--bubble-tail);
+.workspace-message.assistant .workspace-message-bubble {border-top-left-radius:19px;}
+.workspace-bubble-tail {
+  position:absolute;display:block;pointer-events:none;
+  top:16px;left:-15px;width:18px;height:22px;overflow:visible;
+  filter:drop-shadow(-2px 0 3px #f28a363d);
 }
 .workspace-message.user .workspace-message-bubble {
   --bubble-edge:#b47b77;
   --bubble-near:#5a3a40;
   --bubble-far:#4b3138;
   --bubble-tail:var(--bubble-far);
-  border-top-right-radius:16px;
-  box-shadow:inset 0 0 8px #ffffff09,0 2px 9px #1b0d1133;
+  border-top-right-radius:19px;
+  box-shadow:inset 0 0 9px #ffffff0b,0 2px 9px #1b0d1133;
 }
-.workspace-message.user .workspace-message-bubble::before,
-.workspace-message.user .workspace-message-bubble::after {
-  left:auto;right:-12px;transform:scaleX(-1);
-}
-.workspace-message.user .workspace-message-bubble::after {right:-9px;}
+.workspace-message.user .workspace-bubble-tail {left:auto;right:-15px;transform:scaleX(-1);filter:none;}
+.workspace-bubble-footer {display:flex;justify-content:flex-end;align-items:center;margin-top:3px;min-height:14px;}
+.workspace-bubble-footer time {font-size:11px;line-height:1.2;color:#e3bdb0;font-weight:400;white-space:nowrap;}
 .workspace-message.workspace-thinking .workspace-message-avatar {margin-top:0;}
-.workspace-message.workspace-thinking .workspace-message-bubble {display:flex;align-items:center;gap:8px;}
+.workspace-message.workspace-thinking .workspace-message-bubble {display:flex;align-items:center;gap:8px;min-height:44px;}
+.workspace-message.workspace-thinking .workspace-bubble-tail {top:10px;}
 .workspace-message-bubble .markdown-text {font:inherit;overflow-wrap:anywhere;}
 .workspace-message-bubble .markdown-text > *:first-child {margin-top:0;}
 .workspace-message-bubble .markdown-text > *:last-child {margin-bottom:0;}
 .workspace-message-bubble a {color:#ffc08a;text-decoration:underline;}
-.workspace-message.failed .workspace-message-bubble {--bubble-edge:#f09090;--bubble-near:#563032;--bubble-far:#41282c;color:#ffd7d7;box-shadow:0 0 12px #e9858550;}
+.workspace-message.failed .workspace-message-bubble {--bubble-edge:#f09090;--bubble-near:#563032;--bubble-far:#41282c;color:#ffd7d7;box-shadow:inset 0 0 12px #e985851a,0 0 12px #e9858550;}
 .workspace-message-sources {
   border:1px solid #885a46;background:#322526;border-radius:12px;padding:8px 12px;
   color:#e8bbab;font-size:12px;

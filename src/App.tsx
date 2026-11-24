@@ -152,6 +152,16 @@ const BUNDLED_PORTRAIT = "/mikan.png";
 const CONTROL_CENTER_PORTRAIT = new URL("../assets/iki/mikan-reference.png", import.meta.url).href;
 const WORKSPACE_CHAT_PORTRAIT = new URL("../assets/iki/mikan-chat-avatar.webp", import.meta.url).href;
 
+// The open right edge overlaps the balloon border; the fill hides that seam.
+// The same shape mirrors for user messages, including failed/streaming turns.
+function WorkspaceBubbleTail() {
+  return <svg className="workspace-bubble-tail" viewBox="0 0 18 22" aria-hidden="true" focusable="false">
+    <path d="M17 3 H2 Q1 3 2 4 Q10 10 17 18"
+      fill="var(--bubble-tail)" stroke="var(--bubble-edge)" strokeWidth="1.25"
+      strokeLinecap="round" strokeLinejoin="round"/>
+  </svg>;
+}
+
 function restoreMessage(saved: PersistedMessage): LogMessage {
   const metadata = readMessageMetadata(saved.metadataJson);
   return {
@@ -3704,11 +3714,16 @@ export default function App() {
                     aria-label="Speak this reply" onClick={()=>void speak(message.content)}>
                     <Volume2 size={14}/>
                   </button>}
-                <time dateTime={new Date(message.createdAt).toISOString()}>
-                  {new Date(message.createdAt).toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"})}
-                </time>
               </div>
-              <div className="workspace-message-bubble"><MarkdownText text={message.content||(busy?"Thinking…":"")}/></div>
+              <div className="workspace-message-bubble">
+                <WorkspaceBubbleTail/>
+                <MarkdownText text={message.content||(busy?"Thinking…":"")}/>
+                <div className="workspace-bubble-footer">
+                  <time dateTime={new Date(message.createdAt).toISOString()}>
+                    {new Date(message.createdAt).toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"})}
+                  </time>
+                </div>
+              </div>
               {(message.sources?.length||message.searchQuery)&&
                 <details className="workspace-message-sources">
                   <summary>Sources &amp; research details ({message.sources?.length??0})</summary>
@@ -3724,7 +3739,7 @@ export default function App() {
           {busy && messages[messages.length-1]?.role!=="assistant" &&
             <div className="workspace-message assistant workspace-thinking" role="status">
               <span className="workspace-message-avatar" aria-hidden="true"><img className="workspace-chat-portrait" src={WORKSPACE_CHAT_PORTRAIT} alt="" width={40} height={40} draggable={false}/></span>
-              <div className="workspace-message-bubble"><LoaderCircle size={17} className="spin"/> {activity}</div>
+              <div className="workspace-message-bubble"><WorkspaceBubbleTail/><LoaderCircle size={17} className="spin"/> {activity}</div>
             </div>}
           {voiceError&&<div className="vision-error" role="alert">Voice: {voiceError}</div>}
         </>}

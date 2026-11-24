@@ -81,13 +81,16 @@ test("Default Iki portrait supports local selectable scenery without changing th
   assert.match(css,/mask-image:linear-gradient/);
 });
 
-test("Default chat has directional speech balloon tails and consistent error styling",()=>{
-  assert.match(css,/\.workspace-message-bubble::before,\.workspace-message-bubble::after/);
-  assert.match(css,/clip-path:polygon/);
-  assert.match(css,/\.workspace-message\.user \.workspace-message-bubble::after/);
-  assert.match(css,/right:-12px;transform:scaleX\(-1\)/);
+test("Default chat uses seamless mirrored SVG tails and bubble-local timestamps",()=>{
+  assert.match(app,/function WorkspaceBubbleTail\(\)/);
+  assert.match(app,/d="M17 3 H2 Q1 3 2 4 Q10 10 17 18"/);
+  assert.match(app,/fill="var\(--bubble-tail\)" stroke="var\(--bubble-edge\)"/);
+  assert.equal((app.match(/<WorkspaceBubbleTail\/>/g)||[]).length,2);
+  assert.match(css,/\.workspace-message\.user \.workspace-bubble-tail \{left:auto;right:-15px;transform:scaleX\(-1\)/);
+  assert.doesNotMatch(css,/\.workspace-message-bubble::before/);
   assert.match(css,/\.workspace-message\.failed \.workspace-message-bubble \{--bubble-edge:#f09090/);
-  assert.match(app,/<div className="workspace-message-bubble"><MarkdownText/);
+  assert.match(app,/<div className="workspace-bubble-footer">\s*<time/);
+  assert.match(app,/<WorkspaceBubbleTail\/>\s*<MarkdownText/);
 });
 
 test("Default chat uses the bundled cropped Mikan portrait, including while thinking",()=>{
