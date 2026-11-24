@@ -1370,7 +1370,7 @@ fn toggle_window(app: &tauri::AppHandle) {
 }
 
 #[tauri::command]
-fn open_settings_window(app: tauri::AppHandle, tab: Option<String>, memory_tab: Option<String>) -> Result<(), String> {
+async fn open_settings_window(app: tauri::AppHandle, tab: Option<String>, memory_tab: Option<String>) -> Result<(), String> {
     let tab = match tab.as_deref() {
         Some("ai" | "internet" | "notion" | "voice" | "appearance" | "interface"
             | "personality" | "memory" | "capabilities" | "brain") => tab.as_deref().unwrap(),
@@ -1542,10 +1542,30 @@ pub fn run() {
             show_companion
         ])
         .setup(|app| {
-            advanced_memory::start_if_installed(app.handle());
-            // Optional, previously registered local Qwen3-TTS uses the owner's
-            // existing ROCm Python environment; never installs GPU packages.
-            let _ = voice::start_if_configured();
+            // Keep native window creation and first paint independent of optional
+            // Python sidecars. Windows Defender may scan executables after updates.
+            // Both services still start automatically, without model preloading.
+            let memory_app = app.handle().clone();
+            if let Err(error) = std::thread::Builder::new()
+                .name("mikan-memory-sidecar".into())
+                .spawn(move || {
+                    let started = std::time::Instant::now();
+                    advanced_memory::start_if_installed(&memory_app);
+                    eprintln!("[startup] memory sidecar check: {} ms", started.elapsed().as_millis());
+                }) {
+                eprintln!("[startup] could not start memory sidecar thread: {error}");
+            }
+            if let Err(error) = std::thread::Builder::new()
+                .name("mikan-voice-sidecar".into())
+                .spawn(move || {
+                    let started = std::time::Instant::now();
+                    if let Err(error) = voice::start_if_configured() {
+                        eprintln!("[startup] optional voice service: {error}");
+                    }
+                    eprintln!("[startup] voice sidecar check: {} ms", started.elapsed().as_millis());
+                }) {
+                eprintln!("[startup] could not start voice sidecar thread: {error}");
+            }
             let show = MenuItem::with_id(app, "show", "Show / Hide Mikan", true, None::<&str>)?;
             let quit = MenuItem::with_id(app, "quit", "Quit Mikan", true, None::<&str>)?;
             let menu = Menu::with_items(app, &[&show, &quit])?;
