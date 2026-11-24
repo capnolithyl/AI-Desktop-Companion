@@ -26,5 +26,7 @@ jobs:
           node --check nas/public/app.js
       - name: Run NAS smoke tests
         run: node --test nas/tests/nas.test.mjs
+      - name: Build shared React workspace and deployment bundle
+        run: npm ci && npm run build:nas
       - name: Validate Docker image
-        run: docker build -f nas/Dockerfile -t mikan-nas:ci .
+        run: docker build -f .nas-deploy/nas/Dockerfile -t mikan-nas:ci .nas-deploy

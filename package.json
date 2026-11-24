@@ -21,7 +21,8 @@
     "wardrobe:check": "node scripts/wardrobe-manifest.mjs check",
     "wardrobe:sync": "node scripts/wardrobe-manifest.mjs sync",
     "test:wardrobe": "node --experimental-strip-types --test tests/wardrobe-manifest.test.mjs tests/iki-avatar-selection.test.mjs",
-    "build:remote": "vite build --config server/avatar.vite.config.ts"
+    "build:remote": "vite build --config server/avatar.vite.config.ts",
+    "build:nas": "tsc --noEmit && vite build --config nas/web.vite.config.ts && node nas/prepare-deployment.mjs"
   },
   "dependencies": {
     "@ikijs/engine": "^0.10.0",

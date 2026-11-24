@@ -22,6 +22,8 @@ type Props={
   onToggleVision:()=>void; onVoice:()=>void;
   onMute:()=>void; onExpression:(kind:"smile"|"laugh"|"surprised"|"sad"|"angry"|"nod"|"shake")=>void; onOutfit:()=>void;
   onHide:()=>void;
+  unavailable?:{search?:boolean;voice?:boolean;vision?:boolean};
+  webMode?:boolean;
 };
 
 type SidePanel = WorkspacePanel;
@@ -53,7 +55,7 @@ export function DefaultCompanionShell({
   avatar,avatarBackground,onAvatarContextMenu,modelPicker,transcript,composer,chats,activeConversationId,
   transcriptVersion,busy,muted,ready,memoryIssue,visionActive,visionBusy,displayName,lastActivity,activityEntries,
   onDrag,onNewChat,onOpenChat,onOpenHistory,onCopyChatDebug,onOpenCurrentLog,onOpenMemory,onOpenSettings,onOpenSearch,
-  onToggleVision,onVoice,onMute,onExpression,onOutfit,onHide
+  onToggleVision,onVoice,onMute,onExpression,onOutfit,onHide,unavailable,webMode=false
 }:Props){
   const feedRef=useRef<HTMLDivElement>(null);
   const [copyStatus,setCopyStatus]=useState<{id:string;state:"copying"|"copied"|"failed"}|null>(null);
@@ -167,7 +169,7 @@ export function DefaultCompanionShell({
           {showAvatar?<PanelRightClose size={19}/>:<PanelRightOpen size={19}/>}
         </button>
         <button type="button" onClick={onOpenSettings} title="Control Center" aria-label="Control Center"><Settings2 size={19}/></button>
-        <button type="button" onClick={onHide} title="Hide Mikan" aria-label="Hide Mikan"><X size={19}/></button>
+        <button type="button" onClick={onHide} title={webMode?"Lock Mikan":"Hide Mikan"} aria-label={webMode?"Lock Mikan":"Hide Mikan"}><X size={19}/></button>
       </div>
     </header>
     <div className={"workspace-layout"+(showChats?" has-sidebar":"")+(showAvatar?" has-avatar":"")+(draggingPanel?" resizing":"")}
@@ -222,7 +224,7 @@ export function DefaultCompanionShell({
         </div>
         <div className="workspace-composer">
           <div className="workspace-action-chips" role="group" aria-label="Chat tools">
-            <button type="button" onClick={onOpenSearch}><Search size={17}/> Search</button>
+            <button type="button" disabled={unavailable?.search} title={unavailable?.search?"Web research not connected yet":undefined} onClick={onOpenSearch}><Search size={17}/> Search</button>
           </div>
           {composer}
         </div>
@@ -254,7 +256,7 @@ export function DefaultCompanionShell({
           <div className="workspace-detail-row">
             <span><Eye size={16}/> Live Vision</span>
             <button type="button" className="workspace-switch" role="switch" aria-checked={visionActive}
-              aria-label="Live Vision" disabled={visionBusy} onClick={onToggleVision}
+              aria-label="Live Vision" disabled={visionBusy||unavailable?.vision} onClick={onToggleVision}
               title={visionActive?"Stop ongoing screen capture":"Start Live Vision using the configured display or region"}>
               <span className="workspace-switch-track" aria-hidden="true"/>{visionActive?"On":"Off"}
             </button>
@@ -262,7 +264,7 @@ export function DefaultCompanionShell({
           <div className="workspace-detail-row">
             <span>{muted?<VolumeX size={16}/>:<Volume2 size={16}/>} Voice output</span>
             <button type="button" className="workspace-switch" role="switch" aria-checked={!muted}
-              aria-label="Voice output" onClick={onMute} title={muted?"Unmute Mikan":"Mute Mikan"}>
+              aria-label="Voice output" disabled={unavailable?.voice} onClick={onMute} title={muted?"Unmute Mikan":"Mute Mikan"}>
               <span className="workspace-switch-track" aria-hidden="true"/>{muted?"Off":"On"}
             </button>
           </div>
@@ -280,7 +282,7 @@ export function DefaultCompanionShell({
             </div>}
           </div>
           <button type="button" onClick={onOutfit}><Shirt size={17}/> Outfit</button>
-          <button type="button" onClick={onVoice} title="Voice settings"><Settings2 size={16}/> Voice settings</button>
+          <button type="button" onClick={onVoice} disabled={unavailable?.voice} title={unavailable?.voice?"Voice not connected yet":"Voice settings"}><Settings2 size={16}/> Voice settings</button>
         </div>
         <section className="workspace-activity-log" aria-label="Conversation activity">
           <div className="workspace-activity-heading">

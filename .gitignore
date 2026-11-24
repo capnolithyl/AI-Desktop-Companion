@@ -26,3 +26,7 @@ assets/iki/.tools/
 
 # Locally compiled remote avatar runtime
 server/.generated/
+
+# Locally generated NAS deployment bundle
+.nas-deploy/
+nas/web-dist/

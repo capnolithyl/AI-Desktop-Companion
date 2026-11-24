@@ -116,3 +116,11 @@ Back up `nas/data/` through your usual NAS backup process. For a consistent SQLi
 - **Before merging:** review security boundary, complete real provider smoke tests, and check Docker build and memory consumption on the actual NAS.
 
 Design principle: keep this as a parallel proof of concept until it earns the job of Mikan's central backend.
+
+## Shared React workspace update (phase 1)
+
+The web build now uses the real desktop workspace, CSS, artwork, personality controls, Markdown and Iki renderer. The old preview remains available at `/legacy`. The NAS profile (persona, communication, sliders and bundled avatar settings) persists in the existing SQLite database, not in browser localStorage. The desktop export button is under Personality; export a profile and import it in the NAS Control Center. It does not contain provider keys or memory data. Custom imported rigs and the full desktop settings/runtime are not yet portable.
+
+Build on Windows in the NAS worktree using `npm ci` then `npm run build:nas`. Copy the **contents** of `.nas-deploy` to your existing NAS `docker/mikan` folder using ordinary overwrite/copy (never mirror/delete). The bundle contains neither `.env` nor `data`, so keep the existing ones. Before updating, stop the container and back up the whole data directory. Then run `sudo docker compose up -d --build` from `/volume1/docker/mikan/nas`. No Tailscale changes. Visit the existing URL and hard refresh. The default workspace is the first UI mode ported; Minimal and other control-center pages remain future work.
+
+Do not copy the entire git repo or use `robocopy /MIR` over the live NAS data. If the new UI fails, `/legacy` still works using the same database and profile.

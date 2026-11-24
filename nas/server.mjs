@@ -1,7 +1,7 @@
 import { createServer } from "node:http";
 import { readFileSync, existsSync } from "node:fs";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { join, dirname } from "node:path";
+import { join, dirname, resolve, extname, sep } from "node:path";
 import { timingSafeEqual } from "node:crypto";
 import { openStore, recallProfileContext } from "./storage.mjs";
 import { assistantVoiceGuidance, CHARACTER_VOICE_REMINDER } from "../src/assistant-voice.ts";
@@ -33,9 +33,18 @@ async function readJson(req,max=8192) {
 function serveFile(res,filename,type) {
   const headers={"Content-Type":type,"X-Content-Type-Options":"nosniff",
     "Referrer-Policy":"no-referrer","Cache-Control":"no-store",
-    "Content-Security-Policy":"default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'"};
+    "Content-Security-Policy":"default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; worker-src 'self' blob:; connect-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'"};
   res.writeHead(200,headers);
   res.end(readFileSync(filename));
+}
+const WEB_ROOT=join(ROOT,"web-dist");
+const TYPES={".html":"text/html; charset=utf-8",".js":"text/javascript; charset=utf-8",".css":"text/css; charset=utf-8",".png":"image/png",".webp":"image/webp",".jpg":"image/jpeg",".svg":"image/svg+xml",".iki":"application/json",".json":"application/json",".woff2":"font/woff2",".ico":"image/x-icon"};
+function workspaceFile(path) {
+  let relative;
+  try {relative=decodeURIComponent(path.slice("/workspace/".length));} catch {return null;}
+  const filename=resolve(WEB_ROOT,relative||"index.html");
+  if(!filename.startsWith(WEB_ROOT+sep) || !TYPES[extname(filename)] || !existsSync(filename))return null;
+  return {filename,type:TYPES[extname(filename)]};
 }
 function sse(res,kind,value) {
   if (!res.destroyed) res.write("event: "+kind+"\ndata: "+JSON.stringify(value)+"\n\n");
@@ -59,7 +68,14 @@ export function makeServer({store,config,key,promptFile="",generate=generateRepl
   const server=createServer(async(req,res)=>{
     try {
       const path=new URL(req.url||"/","http://localhost").pathname;
-      if (req.method==="GET" && path==="/") return serveFile(res,join(ROOT,"public/index.html"),"text/html; charset=utf-8");
+      if (req.method==="GET" && (path==="/"||path==="/workspace") && existsSync(join(WEB_ROOT,"index.html"))) {
+        res.writeHead(302,{Location:"/workspace/","Cache-Control":"no-store"});return res.end();
+      }
+      if(req.method==="GET" && path.startsWith("/workspace/")) {
+        const asset=workspaceFile(path);
+        return asset?serveFile(res,asset.filename,asset.type):json(res,404,{error:"Workspace asset not found"});
+      }
+      if (req.method==="GET" && (path==="/"||path==="/legacy")) return serveFile(res,join(ROOT,"public/index.html"),"text/html; charset=utf-8");
       if (req.method==="GET" && path==="/app.js") return serveFile(res,join(ROOT,"public/app.js"),"text/javascript; charset=utf-8");
       if (req.method==="GET" && path==="/style.css") return serveFile(res,join(ROOT,"public/style.css"),"text/css; charset=utf-8");
       if (req.method==="GET" && path==="/avatar.webp") return serveFile(res,join(ROOT,"assets/mikan-chat-avatar.webp"),"image/webp");

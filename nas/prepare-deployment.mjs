@@ -1,0 +1,15 @@
+import {cpSync,mkdirSync,rmSync} from "node:fs";
+import {join} from "node:path";
+import {fileURLToPath} from "node:url";
+const root=fileURLToPath(new URL("..",import.meta.url)), target=join(root,".nas-deploy");
+rmSync(target,{recursive:true,force:true});
+mkdirSync(join(target,"nas"),{recursive:true});
+mkdirSync(join(target,"src"),{recursive:true});
+mkdirSync(join(target,"assets/iki"),{recursive:true});
+for(const name of ["Dockerfile","compose.yaml",".env.example","server.mjs","storage.mjs","providers.mjs","public","web-dist","README.md"])
+  cpSync(join(root,"nas",name),join(target,"nas",name),{recursive:true});
+for(const name of ["assistant-voice.ts","personality.ts","communication-preferences.ts","companion-profile.ts","avatar-background.ts","avatar-viewport.ts"])
+  cpSync(join(root,"src",name),join(target,"src",name));
+cpSync(join(root,"assets/iki/mikan-chat-avatar.webp"),join(target,"assets/iki/mikan-chat-avatar.webp"));
+cpSync(join(root,".dockerignore"),join(target,".dockerignore"));
+console.log("NAS deployment ready: .nas-deploy (no database, .env or provider keys)");
