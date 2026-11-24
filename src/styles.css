@@ -2530,6 +2530,50 @@ button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px
   border-color:#f4a66e;color:#ffe2bf;background:#77432f;
 }
 
+
+/* Desktop UI layout selector, shared by both native-window sizes. */
+.settings-standalone .control-layout-choices {
+  display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:13px;margin:0 0 12px;
+}
+.settings-standalone .control-layout-choice {
+  min-height:150px;min-width:0;display:flex;align-items:flex-start;flex-direction:column;
+  justify-content:center;gap:10px;text-align:left;
+  padding:20px 22px;border:1px solid #755043;border-radius:16px;
+  color:#ffe1cf;background:linear-gradient(145deg,#382729,#2c2124);
+  transition:background .17s,border-color .17s,box-shadow .17s,transform .17s;
+}
+.settings-standalone .control-layout-choice > svg {color:#ffad70;}
+.settings-standalone .control-layout-choice > strong {font-size:17px;color:#fff1e6;line-height:1.2;}
+.settings-standalone .control-layout-choice > small {color:#d5b0a3;font-size:13px;line-height:1.5;}
+.settings-standalone .control-layout-choice:hover {border-color:#ee9e63;transform:translateY(-2px);background:#492d2b;}
+.settings-standalone .control-layout-choice.selected {
+  border-color:#ffad6b;background:linear-gradient(145deg,#643b2a,#3e2a28);
+  box-shadow:inset 3px 0 0 #ffb568,0 0 24px #ef8a414a;
+}
+.settings-standalone .control-layout-hint {font-size:13px;color:#d8b9aa;margin:0 0 26px;}
+/* Give the real interactive Iki canvas its entire Default portrait stage. */
+.default-layout-active .workspace-avatar-rig {
+  display:flex;position:absolute;inset:0;min-width:0;min-height:0;
+  align-items:stretch;justify-content:center;overflow:hidden;
+}
+.default-layout-active .workspace-avatar-rig .iki-avatar-canvas {width:100%;height:100%;pointer-events:auto;}
+@media(max-width:775px) {
+  .settings-standalone .control-layout-choices {grid-template-columns:1fr;}
+  .settings-standalone .control-layout-choice {min-height:115px;}
+}
+@media(prefers-reduced-motion:reduce) {
+  .settings-standalone .control-layout-choice {transition:none;transform:none;}
+}
+
+/* Wardrobe backgrounds also render in the independently loaded Control Center. */
+.control-background-options {display:grid;grid-template-columns:repeat(auto-fit,minmax(115px,1fr));gap:9px;margin:8px 0;}
+.control-background-choice {display:flex;flex-wrap:wrap;align-items:center;gap:5px;min-width:0;padding:6px;border:1px solid #9c684c;border-radius:12px;background:#402a26;color:#ffe0c8;text-align:left;font-size:12px;}
+.control-background-choice.selected {border-color:#ffb46d;box-shadow:0 0 9px #f28a364d;}
+.control-background-preview {display:block;flex:0 0 100%;height:72px;border-radius:7px;background:#513126;background-size:cover;background-position:center 28%;}
+.control-background-choice > span:nth-child(2) {flex:1;min-width:0;}
+.control-background-choice svg {flex:0 0 auto;color:#ffc17f;}
+
+
 /* Disposable historical reply comparison. Lives outside the real message list. */
 .replay-preview {
   flex:0 0 auto;max-height:min(50vh,430px);overflow-y:auto;

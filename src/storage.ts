@@ -8,6 +8,7 @@ import { DEFAULT_SOURCE_PREFERENCES, readSourcePreferences, type SourcePreferenc
 import { DEFAULT_VOICE_VOLUME, readVoiceVolume } from "./speech";
 import { DEFAULT_EMOJI_BUBBLE_SECONDS, readEmojiBubbleSeconds } from "./emoji-reactions";
 import { DEFAULT_AVATAR_VERTICAL_OFFSET, readAvatarVerticalOffset } from "./avatar-viewport";
+import { readCompanionUiMode, type CompanionUiMode } from "./companion-layout";
 
 export type ResearchMode = "simple" | "strict";
 export type ChatRole = "user" | "assistant";
@@ -52,6 +53,7 @@ function readVoice(value: unknown): VoiceSettings {
 }
 
 export type Appearance = {
+  uiMode: CompanionUiMode;
   accent: string;
   panel: string;
   opacity: number;
@@ -61,6 +63,7 @@ export type Appearance = {
   avatarVerticalOffset: number;
 };
 export const DEFAULT_APPEARANCE: Appearance = {
+  uiMode: "minimal",
   accent: "#ffad7e",
   panel: "#211b25",
   opacity: 0.94,
@@ -76,6 +79,7 @@ function readAppearance(value: unknown): Appearance {
   const v = value && typeof value === "object" ? value as Partial<Appearance> : {};
   const fonts = ["Segoe UI", "Arial", "Verdana", "Georgia"];
   return {
+    uiMode: readCompanionUiMode(v.uiMode),
     accent: safeHex(v.accent, DEFAULT_APPEARANCE.accent),
     panel: safeHex(v.panel, DEFAULT_APPEARANCE.panel),
     opacity: typeof v.opacity === "number" && Number.isFinite(v.opacity) ? Math.max(0.65, Math.min(1, v.opacity)) : DEFAULT_APPEARANCE.opacity,
