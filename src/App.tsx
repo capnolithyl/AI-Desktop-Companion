@@ -335,7 +335,7 @@ export default function App() {
   const [memoryReady, setMemoryReady] = useState(false);
   const [memoryError, setMemoryError] = useState<string | null>(null);
   const [automaticMemoryError, setAutomaticMemoryError] = useState<string | null>(null);
-  const [memoryToast, setMemoryToast] = useState<{ key: number; message: string } | null>(null);
+  const [memoryToast, setMemoryToast] = useState<{ key: number; message: string; detailed:boolean } | null>(null);
   const [memoryInitialTab, setMemoryInitialTab] = useState<"facts" | "chats" | "character" | "collections">(initialMemoryTab);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
@@ -539,14 +539,14 @@ export default function App() {
   const notionChapterRef = useRef<NotionChapterSession | null>(null);
   const automaticMemoryQueue = useRef<Promise<void>>(Promise.resolve());
   const memoryToastId = useRef(0);
-  const confirmMemorySaved = (message: string) => {
-    setMemoryToast({ key: ++memoryToastId.current, message });
+  const confirmMemorySaved = (message: string, detailed = false) => {
+    setMemoryToast({ key: ++memoryToastId.current, message, detailed });
   };
   useEffect(() => {
     if (!memoryToast) return;
     const timer = window.setTimeout(() => {
       setMemoryToast(current => current?.key === memoryToast.key ? null : current);
-    }, 3300);
+    }, memoryToast.detailed ? 12000 : 3300);
     return () => window.clearTimeout(timer);
   }, [memoryToast]);
   const sessionMemoryQueue = useRef<Promise<void>>(Promise.resolve());
@@ -1268,6 +1268,16 @@ export default function App() {
     await memoryApi.deleteInterest(id);
     await refreshInterests();
   };
+  const moveFactToInterest = async (id:number,item:IncomingInterest) => {
+    await memoryApi.convertFactToInterest(id,item);
+    await Promise.all([refreshFacts(),refreshInterests()]);
+    confirmMemorySaved(`Moved to Interests: ${item.name}`);
+  };
+  const moveInterestToFact = async (id:number,fact:string,category:MemoryCategory,tags:string[]) => {
+    await memoryApi.convertInterestToFact(id,fact,category,tags);
+    await Promise.all([refreshFacts(),refreshInterests()]);
+    confirmMemorySaved(`Moved to About you: ${fact}`);
+  };
   const importCharacter = async (rows:IncomingCanon[]) => {
     const result=await memoryApi.importCharacterFacts(rows);
     await refreshCharacter();
@@ -1317,7 +1327,7 @@ export default function App() {
         const result = await memoryApi.processPendingJobs();
         // Show what SQLite actually changed, not only the number of writes.
         const notice = automaticMemoryNotice(result);
-        if (notice) confirmMemorySaved(notice);
+        if (notice) confirmMemorySaved(notice,!!result.entries?.length);
         if (result.userSaved || result.characterSaved || result.interestsSaved) {
           await Promise.all([
             result.userSaved ? refreshFacts() : Promise.resolve(),
@@ -1342,7 +1352,7 @@ export default function App() {
         const result = await memoryApi.processPendingJobs();
         if (cancelled) return;
         const recoveredNotice = automaticMemoryNotice(result);
-        if (recoveredNotice) confirmMemorySaved(recoveredNotice);
+        if (recoveredNotice) confirmMemorySaved(recoveredNotice,!!result.entries?.length);
         if (result.userSaved) void refreshFacts();
         if (result.interestsSaved) void refreshInterests();
         if (result.characterSaved) void refreshCharacter();
@@ -3404,11 +3414,17 @@ export default function App() {
       onClose={() => setPortraitMenuAt(null)}/>}
 
     {!standaloneSettings && <section className="dock" aria-label="Chat with Mikan">
-      {memoryToast && <div key={memoryToast.key} className="desktop-memory-toast"
+      {memoryToast && <div key={memoryToast.key}
+        className={memoryToast.detailed?"desktop-memory-toast detailed":"desktop-memory-toast"}
         role="status" aria-live="polite" aria-atomic="true">
         <Check size={15} aria-hidden="true"/>
         <span>{memoryToast.message}</span>
-      </div>}
+        {memoryToast.detailed && <button type="button" onClick={()=>{
+          setMemoryToast(null);openMemory("facts");
+        }}>Review</button>}
+        <button type="button" className="memory-toast-dismiss" aria-label="Dismiss memory notice"
+          onClick={()=>setMemoryToast(null)}><X size={13}/></button>
+      </div>
       <div className="reply-panel" aria-live="polite">
         <div className="reply-header">
           <div className="reply-title">
@@ -3933,6 +3949,7 @@ export default function App() {
           conversations={conversations} sessionSummaries={sessionSummaries} facts={userFacts}
           characterFacts={characterFacts} interests={interests} currentId={activeConversationId}
           onImportInterests={importInterests} onEditInterest={editInterest} onDeleteInterest={deleteInterest}
+          onMoveFactToInterest={moveFactToInterest} onMoveInterestToFact={moveInterestToFact}
           onImportCharacter={importCharacter}
           autoRememberUser={settings.autoRememberUser} autoRememberMikan={settings.autoRememberMikan}
           onAutoRememberUserChange={enabled => applySetting({autoRememberUser: enabled})}
