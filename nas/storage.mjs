@@ -2,6 +2,7 @@ import { DatabaseSync } from "node:sqlite";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { randomUUID } from "node:crypto";
+import { createMemoryLibrary } from "./memory-library.mjs";
 import { readCompanionProfile } from "../src/companion-profile.ts";
 
 // Compatible with desktop Mikan's core SQLite tables. Never delete or rebuild imported tables.
@@ -47,13 +48,13 @@ export function openStore(path) {
     return !!db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?").get(name);
   }
   function conversations() {
-    return db.prepare("SELECT id,title,updated_at AS updatedAt FROM conversations ORDER BY updated_at DESC LIMIT 100").all();
+    return db.prepare("SELECT id,title,created_at AS createdAt,updated_at AS updatedAt FROM conversations ORDER BY updated_at DESC LIMIT 200").all();
   }
   function newConversation() {
     const id = randomUUID(), now = Math.floor(Date.now() / 1000);
     db.prepare("INSERT INTO conversations(id,title,created_at,updated_at) VALUES(?,?,?,?)")
       .run(id, "New conversation", now, now);
-    return { id, title: "New conversation", updatedAt: now };
+    return { id, title: "New conversation", createdAt: now, updatedAt: now };
   }
   function exists(id) {
     return !!db.prepare("SELECT 1 FROM conversations WHERE id=?").get(id);
@@ -88,7 +89,8 @@ export function openStore(path) {
   function removeMemory(id) {
     return db.prepare("DELETE FROM user_memories WHERE id=?").run(id).changes > 0;
   }
-  return { db, getProfile, saveProfile, hasTable, conversations, newConversation, exists, messages, append, listMemories, addMemory, removeMemory };
+  const library=createMemoryLibrary(db);
+  return { db, library, getProfile, saveProfile, hasTable, conversations, newConversation, exists, messages, append, listMemories, addMemory, removeMemory };
 }
 
 // Lexical recall first. Existing FTS5 and optional Qdrant remain intact for a later integration.

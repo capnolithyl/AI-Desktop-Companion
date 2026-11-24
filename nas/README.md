@@ -126,3 +126,6 @@ Build on Windows in the NAS worktree using `npm ci` then `npm run build:nas`. Co
 Do not copy the entire git repo or use `robocopy /MIR` over the live NAS data. If the new UI fails, `/legacy` still works using the same database and profile.
 
 The NAS smoke-test workflow also publishes `mikan-nas-deployment` as a ZIP artifact after the build and packaged-container checks pass. You can extract that instead of running the Windows build yourself. Copy its contents into the existing NAS deployment root without replacing `.env` or `nas/data/`.
+
+### Structured memory library
+The NAS now exposes authenticated owner facts, labels, pins, character canon, interests, conversation deletion and existing session notes using desktop-compatible tables. Imports append without overwriting duplicates, and conversions are transactional. Existing FTS archive searches retrieve bounded historical user quotations only. Automatic extraction, review queue, semantic embeddings and destructive bulk replacement are not available in this phase. The deployment bundle includes the shared validators and retrieval modules.

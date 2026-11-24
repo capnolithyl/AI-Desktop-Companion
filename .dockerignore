@@ -8,6 +8,14 @@
 !src/companion-profile.ts
 !src/avatar-background.ts
 !src/avatar-viewport.ts
+!src/memory-import.ts
+!src/interest-import.ts
+!src/memory-ranking.ts
+!src/identity-memory.ts
+!src/character-canon-routing.ts
+!src/interest-context.ts
+!src/archive-memory.ts
+!src/memory-budget.ts
 !assets/
 !assets/iki/
 !assets/iki/mikan-chat-avatar.webp

@@ -98,3 +98,29 @@ test("OpenAI-compatible streaming parser forwards only assistant output",async()
   assert.equal(answer,"Hello there");
   assert.deepEqual(chunks,["Hello"," there"]);
 });
+
+test("structured memory library preserves categories, pins, canon and interests; conversions roll back",()=>{
+  const root=mkdtempSync(join(tmpdir(),"mikan-library-")),store=openStore(join(root,"memory.sqlite3"));
+  const call=(action,args={})=>store.library.execute(action,args);
+  try{
+    const item={fact:"I love Shadows Fall",category:"preferences",tags:["metal"],pinned:true};
+    assert.deepEqual(call("importFacts",{items:[item,item]}),{inserted:1,duplicates:1});
+    const fact=call("snapshot").facts[0];
+    assert.equal(fact.importance,95);assert.deepEqual(fact.tags,["metal"]);
+    call("addCanon",{item:{category:"favorites",label:"Favorite band",value:"Finntroll"}});
+    const band={name:"Shadows Fall",kind:"band",status:"favorite",rating:10,notes:"",tags:["metal"]};
+    call("importInterests",{items:[band]});
+    assert.throws(()=>call("moveFact",{id:fact.id,item:band}),/already exists/);
+    assert.equal(call("snapshot").facts.length,1);
+    const self=store.library.context("What is your favorite band?",null).text;
+    assert.match(self,/Finntroll/);assert.doesNotMatch(self,/OWNER'S STRUCTURED INTEREST COLLECTION/);
+    const old=store.newConversation(),current=store.newConversation();
+    store.append(old.id,"user","The Beholder project is using Synology");
+    store.append(old.id,"assistant","Fabricated unsupported claim about Synology");
+    const recalled=store.library.context("What did we discuss about Synology?",current.id).text;
+    assert.match(recalled,/The Beholder project is using Synology/);assert.doesNotMatch(recalled,/Fabricated unsupported claim/);
+    call("deleteChat",{id:old.id});
+    assert.doesNotMatch(store.library.context("What did we discuss about Synology?",current.id).text,/The Beholder project/);
+    assert.throws(()=>call("constructor"),/Unknown memory operation/);
+  }finally{store.db.close();rmSync(root,{recursive:true,force:true});}
+});
