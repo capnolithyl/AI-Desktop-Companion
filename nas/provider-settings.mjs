@@ -34,11 +34,12 @@ export function providerSettings({initial,env={},file="",db,now=Date.now}){
     return {provider:saved.provider,model:saved.models[saved.provider],historyChars:saved.historyChars,
       providers:PROVIDERS.map(provider=>({provider,model:saved.models[provider],models:models(provider),configured:configured(provider),credentialSource:saved.keys[provider]?"nas":configured(provider)?"environment":"missing",imageInput:"unsupported",nativeTools:"unverified"}))};
   }
-  function active(){
-    const p=saved.provider;
+  function active(){return configFor(saved.provider,saved.models[saved.provider]);}
+  function configFor(p,model){
+    if(!PROVIDERS.includes(p)||!models(p).includes(model))throw invalid("Select an approved configured model");
     if(!configured(p))throw invalid("Configure the selected provider API key in Models & providers.",503);
-    if(!modelValid(p,saved.models[p]))throw invalid("Select an approved cloud model.",400);
-    return {provider:p,model:saved.models[p],key:credential(p),historyChars:saved.historyChars};
+    if(!modelValid(p,model))throw invalid("Select an approved cloud model.",400);
+    return {provider:p,model,key:credential(p),historyChars:saved.historyChars};
   }
   function save(patch){
     const p=patch?.provider;
@@ -87,7 +88,7 @@ export function providerSettings({initial,env={},file="",db,now=Date.now}){
     db.prepare("INSERT INTO nas_provider_requests(provider,started_at) VALUES(?,?)").run(p,t);
   }
   function cooldown(p){db.prepare("INSERT INTO nas_provider_cooldown(provider,until_ms) VALUES(?,?) ON CONFLICT(provider) DO UPDATE SET until_ms=excluded.until_ms").run(p,now()+300000);}
-  return {view,active,save,available,reserve,cooldown};
+  return {view,active,configFor,save,available,reserve,cooldown};
 }
 export function boundedHistory(messages,budget){
   let remaining=budget;

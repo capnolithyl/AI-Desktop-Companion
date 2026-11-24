@@ -13,7 +13,8 @@ export type LibrarySnapshot={facts:UserFact[];characterFacts:CharacterFact[];int
 export type CloudProvider="nvidia"|"openrouter"|"gemini";
 export type ResearchMode="off"|"simple"|"strict";
 export type NasSource={url:string;title:string;kind:"preview"|"page";publishedDate:string|null};
-export type NasInference={provider:CloudProvider;requestedModel:string;actualModel:string|null;outcome:"completed"|"failed";upstreamStatus?:number|null;sources?:NasSource[]};
+export type NasTiming={mode:ResearchMode;totalMs:number;firstTextMs:number|null;modelCalls:number;stages:{stage:string;startMs:number;elapsedMs:number;success:boolean}[]};
+export type NasInference={provider:CloudProvider;requestedModel:string;actualModel:string|null;outcome:"completed"|"failed";upstreamStatus?:number|null;sources?:NasSource[];timing?:NasTiming};
 export type NasMessage={id:string;role:"user"|"assistant";content:string;createdAt:number;inference?:NasInference};
 export type ProviderEntry={provider:CloudProvider;model:string;models:string[];configured:boolean;credentialSource:"nas"|"environment"|"missing";imageInput:"unsupported";nativeTools:"unverified"};
 export type NasModels={provider:CloudProvider;model:string;historyChars:number;providers:ProviderEntry[]};
@@ -25,6 +26,10 @@ export type UpdateRecord={phase:UpdatePhase;installed:string|null;available:stri
 export type NasUpdateStatus={build:NasBuild;pending:"check"|"install"|null;host:(UpdateRecord&{checkedAt:number|null;lastBackup:number|null;history:UpdateRecord[]})|null};
 export type NasStatus=NasModels&{busy:boolean;build?:NasBuild};
 export type LearningEvent={id:number;conversationId:string|null;assistantId:string|null;kind:"outcome"|"failed"|"queued"|"skipped"|"recall"|"search";createdAt:number;payload:{saved?:number;reviewQueued?:number;entries?:{description:string;status:string;kind:string}[];stage?:string;validated?:number;proposed?:number;reason?:string;lines?:string[];title?:string;detail?:string}};
+export type BrainScenario={id:string;number:number;label:string;group:string;turns:number;supported:boolean};
+export type BrainStep={user:string;answer?:string;grade:"passed"|"failed"|"review";failures:string[];qualityFlags?:string[];reviewGoal?:string|null;timing:NasTiming;actualModel:string|null;selectedMemoryIds?:number[];sources?:(NasSource&{content:string})[];events:{title:string;detail:string;lines:string[]}[]};
+export type BrainSummary={id:string;state:string;startedAt:number;finishedAt:number|null;provider:CloudProvider;model:string;mode:ResearchMode;repetitions:number;scenarioIds:string[];total:number;done:number;currentLabel:string};
+export type BrainReport=BrainSummary&{cases:{id:string;label:string;number:number;repeat:number;steps:BrainStep[]}[]};
 export class NasRequestError extends Error {
   constructor(message:string,readonly status:number){super(message);}
 }
@@ -39,6 +44,11 @@ export class NasClient {
   private async json<T>(path:string,options?:RequestInit):Promise<T>{return (await this.request(path,options)).json();}
   updates(){return this.json<NasUpdateStatus>("updates");}
   requestUpdate(action:"check"|"install"){return this.json<{queued:string}>("updates",{method:"POST",body:JSON.stringify({action})});}
+  brainCatalog(){return this.json<BrainScenario[]>("brain-lab/catalog");}
+  brainStatus(){return this.json<{running:boolean;current:BrainReport|null;history:BrainSummary[]}>("brain-lab");}
+  brainReport(id:string){return this.json<BrainReport>("brain-lab/report/"+encodeURIComponent(id));}
+  startBrain(config:{provider:CloudProvider;model:string;mode:ResearchMode;scenarioIds:string[];repetitions:number}){return this.json<{id:string}>("brain-lab/start",{method:"POST",body:JSON.stringify(config)});}
+  stopBrain(){return this.json<{running:boolean}>("brain-lab/stop",{method:"POST",body:"{}"});}
   research(){return this.json<{mode:ResearchMode}>("research");}
   saveResearch(mode:ResearchMode){return this.json<{mode:ResearchMode}>("research",{method:"PUT",body:JSON.stringify({mode})});}
   testResearch(){return this.json<{ok:boolean;count:number}>("research/test",{method:"POST",body:"{}"});}

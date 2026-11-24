@@ -16,6 +16,8 @@ import {MemoryPanel} from "../MemoryPanel";
 import {NasLearningReviews} from "./NasLearningReviews";
 import {NasUpdates} from "./NasUpdates";
 import {NasResearch} from "./NasResearch";
+import {NasBrainLab} from "./NasBrainLab";
+import {NasTiming} from "./NasTiming";
 import {NasModels} from "./NasModels";
 import type {NasModels as ModelSettings,CloudProvider} from "./nas-client";
 import {memoryNotice} from "./memory-notifications";
@@ -24,7 +26,7 @@ const portrait=new URL("../../assets/iki/mikan-chat-avatar.webp",import.meta.url
 const referencePortrait=new URL("../../assets/iki/mikan-reference.png",import.meta.url).href;
 const KEY="mikan-nas-key";
 const CLIENT_BUILD=__MIKAN_NAS_BUILD__;
-type Page="chat"|"personality"|"appearance"|"memory"|"history"|"capabilities"|"models"|"research"|"updates"|"log";
+type Page="chat"|"personality"|"appearance"|"memory"|"history"|"capabilities"|"models"|"research"|"brain-lab"|"updates"|"log";
 const tabs=[
   {id:"personality",label:"Personality",icon:WandSparkles},
   {id:"appearance",label:"Character",icon:Shirt},
@@ -33,6 +35,7 @@ const tabs=[
   {id:"capabilities",label:"Capabilities",icon:Plug2},
   {id:"models",label:"Models & providers",icon:Cpu},
   {id:"research",label:"Web research",icon:Globe},
+  {id:"brain-lab",label:"Brain Lab",icon:Brain},
   {id:"updates",label:"Software Updates",icon:RefreshCw}
 ] as const;
 function downloadProfile(profile:CompanionProfile){
@@ -340,11 +343,12 @@ export function NasApp(){
           onImportFacts={items=>mutate<{inserted:number;duplicates:number}>("importFacts",{items})} onExportFacts={exportFacts}
           onRefresh={refreshLibrary} onAddCharacter={(category,label,value)=>changeMemory("addCanon",{item:{category,label,value}})}
           onEditCharacter={(id,category,label,value)=>changeMemory("editCanon",{id,item:{category,label,value}})} onDeleteCharacter={id=>changeMemory("deleteCanon",{id})}/>}
-        {page==="log"&&<><div className="settings-section-title">Conversation log</div><p className="settings-note">Currently selected: {status?.provider} · {status?.model}</p>{messages.map(message=><div key={message.id} className="control-form-section"><strong>{message.role==="assistant"?"Mikan":"You"}</strong>{message.inference&&<p className="settings-note">{message.inference.provider} · {message.inference.actualModel||message.inference.requestedModel} · {message.inference.outcome}{!message.inference.actualModel?" (actual model not reported)":""}</p>}<ChatMarkdown text={message.content} onOpenLink={openLink}/></div>)}</>}
+        {page==="log"&&<><div className="settings-section-title">Conversation log</div><p className="settings-note">Currently selected: {status?.provider} · {status?.model}</p>{messages.map(message=><div key={message.id} className="control-form-section"><strong>{message.role==="assistant"?"Mikan":"You"}</strong>{message.inference&&<p className="settings-note">{message.inference.provider} · {message.inference.actualModel||message.inference.requestedModel} · {message.inference.outcome}{!message.inference.actualModel?" (actual model not reported)":""}</p>}{message.inference?.timing&&<NasTiming timing={message.inference.timing}/>}<ChatMarkdown text={message.content} onOpenLink={openLink}/></div>)}</>}
         {page==="models"&&status?.providers&&<NasModels models={status} client={client} onChanged={applyModels} busy={busy||switching||status.busy}/>}
+        {page==="brain-lab"&&status?.providers&&<NasBrainLab client={client} models={status} busy={busy||!!status.busy}/>}
         {page==="research"&&<NasResearch client={client} busy={busy||!!status?.busy}/>}
         {page==="updates"&&<NasUpdates client={client}/>}
-        {page==="capabilities"&&<><div className="settings-section-title">Beholder runtime</div><section className="control-form-section"><p>Cloud chat · {status?.provider} · {status?.model}</p><p>Persistent conversations, owner facts, pins, character canon, structured interests, historical archive retrieval, opt-in automatic learning and review, shared persona, animated Iki, bundled outfits and backgrounds.</p><p>Not connected yet: Qdrant, Notion, Brain Lab, voice synthesis, screen capture and desktop synchronization. Windows window controls and global hotkeys stay native.</p><p>The old prototype is still available at <a href="/legacy">/legacy</a>.</p></section></>}
+        {page==="capabilities"&&<><div className="settings-section-title">Beholder runtime</div><section className="control-form-section"><p>Cloud chat · {status?.provider} · {status?.model}</p><p>Persistent conversations, owner facts, pins, character canon, structured interests, historical archive retrieval, opt-in automatic learning and review, shared persona, animated Iki, bundled outfits and backgrounds.</p><p>Not connected yet: Qdrant, Notion, voice synthesis, screen capture and desktop synchronization. Windows window controls and global hotkeys stay native.</p><p>The old prototype is still available at <a href="/legacy">/legacy</a>.</p></section></>}
         {notice&&<p className="settings-note" role="status">{notice}</p>}
         {(page==="personality"||page==="appearance")&&<div className="nas-save-row"><button className="secondary-action" disabled={saving} onClick={()=>void save(draft)}>{saving?"Saving…":"Save settings"}</button></div>}
       </div></div>

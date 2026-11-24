@@ -16,7 +16,7 @@ export function providerConfig(env = process.env) {
 function remoteError(status) {
   return Object.assign(new Error("Cloud model request failed ("+status+")"),{upstreamStatus:status});
 }
-export async function generateReply({config, system, history, onDelta, onModel=()=>{}, fetchImpl=fetch, temperature=0.7, maxTokens=1400}) {
+export async function generateReply({config, system, history, onDelta, onModel=()=>{}, fetchImpl=fetch, temperature=0.7, maxTokens=1400,signal}) {
   const {provider,model,key} = config;
   if (provider === "gemini") {
     const contents = history.map(m=>({
@@ -27,7 +27,7 @@ export async function generateReply({config, system, history, onDelta, onModel=(
       {method:"POST",headers:{"Content-Type":"application/json","x-goog-api-key":key},
         body:JSON.stringify({systemInstruction:{parts:[{text:system}]},contents,
           generationConfig:{maxOutputTokens:maxTokens,temperature}}),
-        signal:AbortSignal.timeout(120000)}
+        signal:signal?AbortSignal.any([signal,AbortSignal.timeout(120000)]):AbortSignal.timeout(120000)}
     );
     const raw = await response.text();
     if (!response.ok) throw remoteError(response.status);
@@ -49,7 +49,7 @@ export async function generateReply({config, system, history, onDelta, onModel=(
       ...(provider==="openrouter"?{"HTTP-Referer":"https://github.com/capnolithyl/AI-Desktop-Companion","X-Title":"Mikan NAS"}:{})},
     body:JSON.stringify({model,stream:true,max_tokens:maxTokens,temperature,
       messages:[{role:"system",content:system},...history.map(m=>({role:m.role,content:m.content}))]}),
-    signal:AbortSignal.timeout(120000)
+    signal:signal?AbortSignal.any([signal,AbortSignal.timeout(120000)]):AbortSignal.timeout(120000)
   });
   if (!response.ok) throw remoteError(response.status);
   if (!response.body) throw new Error("Provider did not return a response stream");

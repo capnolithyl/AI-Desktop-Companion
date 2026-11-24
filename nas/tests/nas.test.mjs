@@ -398,7 +398,9 @@ test("NAS cloud settings API is authenticated, selects the next turn and records
     const c=store.newConversation();
     const r=await fetch(base+"/api/chat",{method:"POST",headers,body:JSON.stringify({conversationId:c.id,text:"Hello"})});
     assert.match(await r.text(),/event: done/);
-    assert.deepEqual(store.messages(c.id).at(-1).inference,{provider:"openrouter",requestedModel:"openrouter/free",actualModel:"actual/free-model",outcome:"completed"});
+    const {timing,...inference}=store.messages(c.id).at(-1).inference;
+    assert.deepEqual(inference,{provider:"openrouter",requestedModel:"openrouter/free",actualModel:"actual/free-model",outcome:"completed"});
+    assert.equal(timing.modelCalls,1);assert.ok(timing.totalMs>=0);assert.equal(timing.stages.at(-1).stage,"answer");
   }finally{await new Promise(resolve=>server.close(resolve));store.db.close();rmSync(root,{recursive:true,force:true});}
 });
 
@@ -475,4 +477,28 @@ test("NAS planner receives live calendar grounding and general source selection 
     assert.match(request.system,/Do not constrain a current search to past years/);
     assert.match(request.system,/Read those before general marketing pages/);
   }
+});
+
+test("Brain Lab uses shared fixtures in isolated SQLite, preserves owner memory and records timings",async()=>{
+  const {createBrainLab,seedEvalStore}=await import("../brain-lab.mjs");
+  const root=mkdtempSync(join(tmpdir(),"mikan-brain-")),store=openStore(join(root,"db.sqlite3"));
+  try{
+    store.addMemory("Private owner fact must never enter test");
+    const models=providerSettings({initial:{provider:"nvidia",model:"test",key:"synthetic-test-key"},db:store.db});
+    const lab=createBrainLab({db:store.db,models,build:{commit:"test"},pace:async()=>{},search:async()=>{throw Error("No search expected");},
+      requestModel:async({system,history,onDelta,onModel})=>{
+        assert.doesNotMatch(system,/Private owner fact/);
+        const answer=history.at(-1).content.includes("song")?"Winterglass":"Cobalt Harbor";
+        onModel?.("test");onDelta(answer);return answer;
+      }});
+    assert.ok(lab.catalog().length>50);
+    assert.throws(()=>lab.start({provider:"nvidia",model:"test",mode:"off",repetitions:5,scenarioIds:lab.catalog().filter(s=>s.supported).map(s=>s.id)}),/at most/);
+    const started=lab.start({provider:"nvidia",model:"test",mode:"off",repetitions:1,scenarioIds:["branch-b"]});
+    for(let i=0;i<100&&lab.isRunning();i++)await new Promise(r=>setTimeout(r,10));
+    const report=lab.get(started.id);assert.equal(report.state,"finished");assert.equal(report.done,3);
+    assert.ok(report.cases[0].steps.every(s=>s.timing.modelCalls===1));
+    assert.equal(store.listMemories().length,1);assert.equal(store.conversations().length,0);
+    assert.equal(store.db.prepare("SELECT count(*) AS n FROM nas_provider_requests").get().n,3);
+    const fixture=seedEvalStore();try{assert.ok(fixture.listMemories().length>10);}finally{fixture.db.close();}
+  }finally{store.db.close();rmSync(root,{recursive:true,force:true});}
 });
