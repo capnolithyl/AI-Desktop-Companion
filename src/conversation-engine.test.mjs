@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   boundedConversation, needsContextResolution, condenserPrompt,
-  resolveConversationQuestion, contextGuidance, responseFocusGuidance
+  resolveConversationQuestion, contextGuidance, responseFocusGuidance, ownerConversationAnchor
 } from "./conversation-engine.ts";
 
 const history = [
@@ -116,4 +116,32 @@ test("shared reply contract resolves ambiguous media names and avoids fake recom
   assert.match(guidance,/When the source search was only PLANNED but never executed/);
   assert.match(guidance,/NATURAL CONTINUITY/);
   assert.match(guidance,/without searching or trying to sell/);
+});
+
+test("owner corrections anchor the current song without laundering assistant guesses",()=>{
+  const turns=[
+    {role:"user",content:"Monolith is fantastic, and Just Another Body is huge."},
+    {role:"assistant",content:"Just Another Body closes Monolith and has an exact lyric."},
+    {role:"user",content:"Just Another Body is on Terrasite, not Monolith."},
+    {role:"assistant",content:"You're right, I got the album wrong."}
+  ];
+  const anchor=ownerConversationAnchor(turns,"Kingdom of Tyrants is fantastic too.");
+  assert.match(anchor,/Just Another Body is on Terrasite, not Monolith/);
+  assert.match(anchor,/CURRENT owner message: Kingdom of Tyrants/);
+  assert.doesNotMatch(anchor,/Just Another Body closes Monolith/);
+  assert.match(anchor,/LATEST owner message/);
+  assert.match(anchor,/Do not silently transfer lyrics/);
+  assert.match(anchor,/does not require exact lyrics, timestamps, guest credits or historical firsts/i);
+});
+test("topic anchors are owner-only, short, and omitted for first turns",()=>{
+  assert.equal(ownerConversationAnchor([],"Hi"),"");
+  const turns=Array.from({length:20},(_,i)=>({
+    role:i%2===0?"assistant":"user",
+    content:"Message "+i+" "+"x".repeat(750)
+  }));
+  const anchor=ownerConversationAnchor(turns,"New subject");
+  assert.ok(anchor.length<1800);
+  assert.match(anchor,/Message 19/);
+  assert.doesNotMatch(anchor,/Message 13/);
+  assert.doesNotMatch(anchor,/Message 18/);
 });

@@ -2529,3 +2529,32 @@ button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px
 .companion:not(.settings-standalone) .chat-voice-active:hover {
   border-color:#f4a66e;color:#ffe2bf;background:#77432f;
 }
+
+/* Disposable historical reply comparison. Lives outside the real message list. */
+.replay-preview {
+  flex:0 0 auto;max-height:min(50vh,430px);overflow-y:auto;
+  margin:10px 14px 0;padding:12px;border-radius:14px;
+  border:1px solid rgb(var(--accent-rgb,255 173 126) / .40);
+  background:linear-gradient(145deg,#49312e,#30262b);
+  box-shadow:inset 0 0 28px #ffb46d12,0 0 18px #ff9b3a12;
+  color:#fff1e5;display:flex;flex-direction:column;gap:10px;
+}
+.replay-heading {display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
+.replay-heading > strong {display:flex;align-items:center;gap:6px;color:#ffc18d;font-size:13px;}
+.replay-heading > span {font-size:10px;color:#dfb8a5;flex:1 1 125px;}
+.replay-heading > button {margin-left:auto;}
+.replay-question {font-size:11px;line-height:1.5;color:#e5c6b5;overflow-wrap:anywhere;}
+.replay-question strong {color:#fff0e2;}
+.replay-columns {display:grid;grid-template-columns:repeat(auto-fit,minmax(min(220px,100%),1fr));gap:9px;min-width:0;}
+.replay-response {border:1px solid #946b5977;border-radius:10px;background:#271f25cc;padding:10px;min-width:0;overflow-wrap:anywhere;}
+.replay-response > strong {font-size:11px;display:block;color:#ffbd8d;margin-bottom:8px;}
+.replay-response .message-content {font-size:12px;line-height:1.5;}
+.replay-response .message-content p {margin:0 0 8px;}
+.replay-response > p {display:flex;align-items:center;gap:6px;font-size:12px;color:#e6bcac;}
+.replay-response .message-error {color:#ffafba;}
+.replay-preview > small {font-size:10px;line-height:1.4;color:#cfae9e;}
+.replay-evidence summary {font-size:11px;cursor:pointer;color:#ffd1ab;}
+.replay-evidence .source-link {display:block;margin:7px 0;max-width:100%;white-space:normal;text-align:left;}
+.log-message-header .voice-log-action {margin-left:0;flex:0 0 auto;}
+.log-message-header strong {margin-right:auto;}
+.log-message-header .voice-log-action:disabled {opacity:.5;cursor:not-allowed;}
