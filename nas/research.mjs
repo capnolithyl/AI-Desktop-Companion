@@ -77,6 +77,8 @@ export function pageText(body,type){
   return {title:clean(title).slice(0,180),content:clean(content).slice(0,10000)};
 }
 export async function readWeb(value,request=pageRequest){
+  // Uncached benchmark reads ignore production cache freshness options.
+  if(typeof request!=="function")request=pageRequest;
   let url=webURL(value);
   for(let i=0;i<4&&url;i++){
     const r=await request(url);

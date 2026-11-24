@@ -77,7 +77,7 @@ async function collect(api,roots,progress){
         let rows=p.relation??[];
         if(p.has_more){
           if(typeof p.id!=="string")throw invalid("Incomplete relation property",502);
-          rows=(await api.list("pages/"+id+"/properties/"+encodeURIComponent(p.id))).map(x=>x.relation);
+          rows=(await api.list("pages/"+id+"/properties/"+encodeURIComponent(decodeURIComponent(p.id)))).map(x=>x.relation);
         }
         for(const row of rows)if(idOk(row?.id))relations.push({property:name,id:canonical(row.id)});
       }else if(p.type!=="title"){
@@ -173,7 +173,7 @@ export function createKnowledge({db,file="",apiFactory=notionApi,now=Date.now,re
     const out=[];
     if(enabled()){
       const prior=previous.filter(s=>s.kind==="notion").map(s=>s.id);
-      const rows=query?db.prepare("SELECT c.page_id AS id FROM notion_fts JOIN notion_chunks c ON c.id=notion_fts.rowid WHERE notion_fts MATCH ? ORDER BY bm25(notion_fts) LIMIT 100").all(query):[];
+      const rows=query?db.prepare("SELECT c.page_id AS id FROM notion_fts JOIN notion_chunks c ON c.id=notion_fts.rowid WHERE notion_fts MATCH ? ORDER BY bm25(notion_fts,5,1) LIMIT 500").all(query):[];
       const all=pages();const wanted=[...new Set([...prior,...rows.map(r=>r.id)])];
       const chosen=[...wanted.map(id=>all.find(p=>p.id===id)).filter(Boolean),...all.filter(p=>!wanted.includes(p.id))].slice(0,120);
       for(const p of chosen)out.push({id:p.id,title:p.title.slice(0,180),kind:"notion",url:p.url,syncedAt:p.syncedAt});
@@ -188,9 +188,9 @@ export function createKnowledge({db,file="",apiFactory=notionApi,now=Date.now,re
     if(p.kind==="notion"){
       if(!enabled())throw invalid("Notion cloud retrieval is disabled");
       const doc=document(p.id);
-      let text,coverage="excerpt";
+      let text,coverage="excerpt",manuscriptEvidence;
       if(scope==="manuscript"){
-        const evidence=buildNotionChapterEvidence(doc);
+        const evidence=buildNotionChapterEvidence(doc);manuscriptEvidence=evidence;
         text=await readNotionChapter(doc,async()=>{throw Error("No auxiliary summarization");},()=>{},()=>false,provider==="nvidia"?48000:16384,"direct-only");
         coverage="complete approved manuscript ("+evidence.scenes.length+" scenes, "+notionManuscriptCharacterCount(evidence)+" characters)";
       }else if(scope==="full"){
@@ -203,7 +203,7 @@ export function createKnowledge({db,file="",apiFactory=notionApi,now=Date.now,re
         text=(hits.length?hits.map(r=>r.content):doc.chunks.slice(0,2)).join("\n\n").slice(0,10000);
       }
       if(!text.trim())throw invalid("No readable cached text");
-      return {id:p.id,url:doc.url,title:doc.title,kind:"notion",content:text,syncedAt:doc.syncedAt,coverage,publishedDate:null};
+      return {id:p.id,url:doc.url,title:doc.title,kind:"notion",content:text,syncedAt:doc.syncedAt,coverage,publishedDate:null,...(manuscriptEvidence?{manuscriptEvidence}:{})};
     }
     if(!webEnabled())throw invalid("Web cache disabled");
     const row=db.prepare("SELECT * FROM nas_web_cache WHERE url=?").get(p.id);

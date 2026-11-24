@@ -15,14 +15,15 @@ export async function planKnowledge({knowledge,history,previous,question,provide
   if(plan?.action!=="knowledge"||!["excerpt","full","manuscript"].includes(plan.scope)||!Array.isArray(plan.ids)||!plan.ids.length)return fail("No valid local reference selection; no public research performed.");
   const ids=[...new Set(plan.ids)];
   if(ids.length>(plan.scope==="excerpt"?3:1)||ids.some(id=>!candidates.some(p=>p.id===id)))return fail("Invalid local reference selection. Ask for clarification rather than substituting another document.");
-  const sources=[],errors=[];
+  const sources=[],errors=[];let manuscriptEvidence;
   for(const id of ids){
     const p=candidates.find(p=>p.id===id);
     try{
-      const result=await knowledge.load(p,plan.scope,question,provider);
+      const {manuscriptEvidence:evidence,...result}=await knowledge.load(p,plan.scope,question,provider);
+      if(evidence)manuscriptEvidence=evidence;
       sources.push(result);activity({title:p.kind==="notion"?"Notion read":"Cached webpage recalled",detail:result.coverage,lines:[result.title,result.url]});
     }catch(e){const message=e instanceof Error?e.message:"Reference read failed";errors.push(message.slice(0,500));activity({title:"Knowledge read failed",detail:message.slice(0,300),lines:[p.title]});}
   }
   if(errors.length&&plan.scope!=="excerpt")return fail(errors.join("; ")+" Do not substitute excerpts or claim a complete read.");
-  return {local:true,sources,note:errors.join("; "),evidence:JSON.stringify(sources.map((s,i)=>({number:i+1,...s})))};
+  return {local:true,sources,note:errors.join("; "),evidence:JSON.stringify(sources.map((s,i)=>({number:i+1,...s}))),manuscriptEvidence};
 }

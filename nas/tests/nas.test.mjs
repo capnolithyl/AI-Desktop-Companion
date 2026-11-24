@@ -535,3 +535,34 @@ test("NAS knowledge preserves approved scenes and separates cloud permission and
     lib.disconnect();assert.equal(lib.status().pages.length,0);assert.equal(lib.status().webPages.length,1);assert.equal(store.listMemories().length,0);
   }finally{store.db.close();rmSync(root,{recursive:true,force:true});}
 });
+
+test("NAS knowledge turns use cached manuscript without public search or memory extraction",async()=>{
+  const {createKnowledge}=await import("../knowledge.mjs");
+  const root=mkdtempSync(join(tmpdir(),"mikan-knowledge-http-")),store=openStore(join(root,"db.sqlite3"));
+  const key="01234567890123456789012345678901",headers={Authorization:"Bearer "+key,"Content-Type":"application/json"};
+  const lib=createKnowledge({db:store.db,read:async()=>{throw Error("Unexpected network read");}});
+  const id="11111111-1111-1111-1111-111111111111";
+  store.db.prepare("INSERT INTO notion_pages(id,title,url,last_edited,synced_at) VALUES(?,?,?,?,?)").run(id,"Chapter 1","https://www.notion.so/"+id.replaceAll("-",""),"",1700000000);
+  const chunk=store.db.prepare("INSERT INTO notion_chunks(page_id,title,content) VALUES(?,?,?)").run(id,"Chapter 1","# Approved manuscript prose\n\nA lantern stood beside the window.");
+  store.db.prepare("INSERT INTO notion_fts(rowid,title,content) VALUES(?,?,?)").run(chunk.lastInsertRowid,"Chapter 1","A lantern stood beside the window.");
+  lib.settings({allowNotionCloud:true});
+  let publicCalls=0,modelCalls=0;
+  const server=makeServer({store,key,knowledge:lib,config:{provider:"nvidia",model:"test",key:"synthetic-test-key"},search:async()=>{publicCalls++;throw Error("No public search permitted");},
+    generate:async({system,onDelta})=>{
+      modelCalls++;
+      if(system.startsWith("You are a read-only LOCAL reference-library planner"))return JSON.stringify({action:"knowledge",ids:[id],scope:"manuscript"});
+      assert.match(system,/A lantern stood beside the window/);const answer="The chapter begins with a lantern [1].";onDelta(answer);return answer;
+    }});
+  await new Promise(r=>server.listen(0,"127.0.0.1",r));const base="http://127.0.0.1:"+server.address().port;
+  try{
+    assert.equal((await fetch(base+"/api/knowledge")).status,401);
+    assert.equal((await fetch(base+"/api/knowledge/document?kind=notion&id="+id)).status,401);
+    assert.equal((await (await fetch(base+"/api/knowledge",{headers})).json()).pages.length,1);
+    const c=store.newConversation();
+    const r=await fetch(base+"/api/chat",{method:"POST",headers,body:JSON.stringify({conversationId:c.id,text:"Read chapter 1 of my book"})});assert.match(await r.text(),/event: done/);
+    const saved=store.messages(c.id).at(-1);assert.equal(saved.inference.sources[0].kind,"notion");assert.ok(!JSON.stringify(saved.inference).includes("A lantern stood beside the window"));
+    assert.equal(publicCalls,0);assert.equal(modelCalls,2);assert.equal(saved.inference.timing.modelCalls,2);
+    assert.ok(store.learning.diagnostics(c.id).some(e=>e.kind==="skipped"&&e.payload.reason.includes("reference knowledge")));
+    assert.equal(store.listMemories().length,0);
+  }finally{await new Promise(r=>server.close(r));store.db.close();rmSync(root,{recursive:true,force:true});}
+});
