@@ -169,3 +169,20 @@ test("chat file/screen actions stay accessible behind one contextual plus", () =
   assert.match(styles,/\.chat-tool-tray/);
   assert.match(styles,/--panel-rgb/);
 });
+
+test("floating chat glow fades within the transparent native window and the model arrow has inset clearance", () => {
+  const css = readFileSync(new URL("./styles.css",import.meta.url),"utf8");
+  const dockStart = css.indexOf(".companion:not(.settings-standalone) > .dock {");
+  const dockEnd = css.indexOf("\n}",dockStart);
+  assert.ok(dockStart>0 && dockEnd>dockStart);
+  const dock = css.slice(dockStart,dockEnd);
+  assert.match(dock,/left:16px;right:16px;bottom:16px/);
+  assert.match(dock,/inset 0 0 22px/);
+  assert.doesNotMatch(dock,/0 0 39px|0 12px 38px/);
+  const switcher = css.slice(css.indexOf(".companion:not(.settings-standalone) .model-switcher {"));
+  assert.match(switcher,/appearance:none/);
+  assert.match(switcher,/padding:7px 34px 7px 10px/);
+  assert.match(switcher,/\.model-switcher::after \{/);
+  assert.match(switcher,/right:19px/);
+  assert.match(switcher,/pointer-events:none/);
+});
