@@ -10,13 +10,15 @@ import { shouldMikanifyAnswer, type MikanifyResult } from "./mikanify";
 import { resolveConversationQuestion, needsContextResolution } from "./conversation-engine";
 import { invoke } from "@tauri-apps/api/core";
 import { emit, listen, type UnlistenFn } from "@tauri-apps/api/event";
-import { getCurrentWindow } from "@tauri-apps/api/window";
+import { getCurrentWindow, currentMonitor, LogicalSize } from "@tauri-apps/api/window";
+import { companionWindowSize } from "./companion-layout";
+import { DefaultCompanionShell } from "./DefaultCompanionShell";
 import { initialSettingsTab, initialMemoryTab, isStandaloneSettingsWindow, validSettingsTab, validMemoryTab } from "./settings-window";
 import { register, unregister } from "@tauri-apps/plugin-global-shortcut";
 import {
   ArrowLeft, Brain, Camera, Cat, Check, House, FlaskConical, ChevronLeft, ChevronRight, Clock3, Copy, Crop, Eye, EyeOff, FileText, Heart, History, Paperclip,
   BookOpen, ExternalLink, HardDrive, LoaderCircle, MessageCircle, RotateCw, Search, Settings2, Shuffle, SlidersHorizontal, Sparkles, Square, SquarePen, Volume2, X,
-  Palette, Shirt, Globe2, Cpu, WandSparkles, Plug2, AudioLines, VolumeX, PawPrint, Ellipsis, Plus
+  Palette, Shirt, Globe2, Cpu, WandSparkles, Plug2, AudioLines, VolumeX, PawPrint, Ellipsis, Plus, PanelsTopLeft
 } from "lucide-react";
 import {
   DEFAULT_SETTINGS, DEFAULT_APPEARANCE, DEFAULT_VOICE, loadPortrait, loadSettings, savePortrait, saveSettings,
@@ -295,6 +297,33 @@ export default function App() {
   useEffect(()=>{void restoreBrainEvalReport()},[]);
   const [screen, setScreen] = useState<Screen>(standaloneSettings ? "settings" : "compact");
   const [settings, setSettings] = useState<Settings>(loadSettings);
+  const defaultUi = !standaloneSettings && settings.appearance.uiMode === "default";
+  const [workspaceExpressionIndex,setWorkspaceExpressionIndex] = useState(0);
+
+  // Switching layouts changes the native Tauri window, not just the React CSS.
+  // The familiar 520px always-on-top pet remains intact in Minimal mode.
+  useEffect(()=>{
+    if(standaloneSettings||typeof window==="undefined"||!("__TAURI_INTERNALS__" in window))return;
+    let cancelled=false;
+    void (async()=>{
+      const native=getCurrentWindow();
+      const monitor=await currentMonitor();
+      if(cancelled)return;
+      const scale=monitor?.scaleFactor||1;
+      const target=companionWindowSize(
+        settings.appearance.uiMode,
+        monitor?monitor.size.width/scale:1920,
+        monitor?monitor.size.height/scale:1080
+      );
+      if(settings.appearance.uiMode==="minimal")await native.setMinSize(new LogicalSize(410,580));
+      if(cancelled)return;
+      await native.setAlwaysOnTop(target.alwaysOnTop);
+      await native.setSize(new LogicalSize(target.width,target.height));
+      if(settings.appearance.uiMode==="default")await native.setMinSize(new LogicalSize(760,570));
+      if(!cancelled)await native.center();
+    })().catch(error=>console.warn("Companion layout could not resize the native window:",error));
+    return ()=>{cancelled=true;};
+  },[standaloneSettings,settings.appearance.uiMode]);
   const [draft, setDraft] = useState<Settings>(settings);
   const [settingsSaved, setSettingsSaved] = useState(false);
   useEffect(() => { setSettingsSaved(false); }, [draft]);
@@ -4565,6 +4594,20 @@ export default function App() {
 </section>
         </>}
         {settingsTab === "interface" && <>
+          <div className="settings-section-title"><PawPrint size={18}/> Frontend layout</div>
+          <div className="control-layout-choices" role="group" aria-label="Desktop UI layout">
+            {([
+              {value:"minimal",title:"Minimal",description:"Your compact floating companion. Quick chat without getting in the way.",Icon:MessageCircle},
+              {value:"default",title:"Default",description:"A full desktop workspace with chat history and the live Iki avatar.",Icon:PanelsTopLeft}
+            ] as const).map(({value,title,description,Icon})=>
+              <button type="button" key={value} className={"control-layout-choice "+(draft.appearance.uiMode===value?"selected":"")}
+                aria-pressed={draft.appearance.uiMode===value}
+                onClick={()=>setDraft(old=>({...old,appearance:{...old.appearance,uiMode:value}}))}>
+                <Icon size={26}/><strong>{title}</strong><small>{description}</small>
+              </button>
+            )}
+          </div>
+          <p className="control-layout-hint">Save changes to switch. Minimal stays always on top; Default opens a larger, resizable window.</p>
           <div className="settings-section-title">Colors and typography</div>
           <div className="setting-field"><span>Accent color</span>
             <div className="color-choices">
