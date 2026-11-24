@@ -96,7 +96,7 @@ test("warm Control Center decor uses bundled Mikan artwork only where wide layou
   assert.match(app,/CONTROL_CENTER_PORTRAIT = new URL\("\.\.\/assets\/iki\/mikan-reference\.png"/);
   assert.match(app,/className="control-portrait-aside"/);
   assert.match(app,/className="control-header-paws"/);
-  assert.match(styles,/@media\(min-width:1550px\)/);
+  assert.match(styles,/@media\(min-width:1360px\)/);
   assert.match(styles,/\.control-portrait-aside/);
   assert.match(styles,/\.control-sidebar-decoration/);
   assert.match(app,/control-inline-reset/);
