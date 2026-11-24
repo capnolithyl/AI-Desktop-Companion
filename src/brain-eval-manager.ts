@@ -311,21 +311,28 @@ async function executeOne(
     // Use the SAME owner-configured voice and operational instructions as
     // actual desktop chat. Fixture isolation is the only Brain Lab-specific
     // instruction; real web evidence is still handled by native chat_stream.
+    // A generic "tell me about X" route should not force public verification
+    // when the relevant local facts have already been supplied. Current,
+    // explicitly directed document/search requests still require web evidence.
+    const locallyAnswerable=selection.provider==="nvidia" &&
+      selectedMemories.length>0 && !researchQuery && !researchTask &&
+      webRequest?.researchRecent!==true;
+    const publicResearchPlanned=researchPlanned && !locallyAnswerable;
     const sharedTurnInstructions=assistantTurnInstructionParts({
       settings:{...settings,researchMode:request.researchMode??settings.researchMode},
       question:last,history:messages.slice(0,-1),
       allowRoleplay:roleplayAllowed,
-      researchActive:researchPlanned||webRequest?.autoSearch===true,
+      researchActive:publicResearchPlanned||webRequest?.autoSearch===true,
       // Model-led NVIDIA may execute search_web/read_webpage after this prompt.
       // Do not tell it research already failed just because no query was preplanned.
       publicWebRequested:webRequest?.autoSearch===true ||
-        (nativeWebAllowed===true && researchPlanned===true),
+        (nativeWebAllowed===true && publicResearchPlanned===true),
       plannedPublicSearch:!!researchQuery,
-      plannedButNotExecuted:researchPlanned&&!webRequest?.autoSearch &&
+      plannedButNotExecuted:publicResearchPlanned&&!webRequest?.autoSearch &&
         nativeWebAllowed!==true
     });
     const system=joinAssistantInstructionParts(sharedTurnInstructions,[
-      "ISOLATED BRAIN LAB FIXTURES: User memories in this test are synthetic data. Never write production memories, use private integrations or contact owner-connected accounts. Public tool permissions are enforced by the normal application backend.",
+      "ISOLATED BRAIN LAB FIXTURES: User memories in this test are synthetic data. Use the supplied facts directly for questions about these fictional entities; they are not public-web claims and do not require public verification. Never replace an answer supported by the supplied memory with a claim that external sources are unavailable. Search public sources only when the user actually needs fresh external facts. Never write production memories, use private integrations or contact owner-connected accounts. Public tool permissions are enforced by the normal application backend.",
       memory,
       evidence?"Fixture-only, NOT live web evidence: "+evidence:""
     ]);
