@@ -17,7 +17,7 @@ function remoteError(status, body, key) {
   const message = String(body).replaceAll(key, "[redacted]").slice(0,320);
   return new Error("Cloud model request failed ("+status+"): "+message);
 }
-export async function generateReply({config, system, history, onDelta, fetchImpl=fetch}) {
+export async function generateReply({config, system, history, onDelta, fetchImpl=fetch, temperature=0.7, maxTokens=1400}) {
   const {provider,model,key} = config;
   if (provider === "gemini") {
     const contents = history.map(m=>({
@@ -27,7 +27,7 @@ export async function generateReply({config, system, history, onDelta, fetchImpl
       "https://generativelanguage.googleapis.com/v1beta/models/"+encodeURIComponent(model)+":generateContent",
       {method:"POST",headers:{"Content-Type":"application/json","x-goog-api-key":key},
         body:JSON.stringify({systemInstruction:{parts:[{text:system}]},contents,
-          generationConfig:{maxOutputTokens:1400,temperature:0.7}}),
+          generationConfig:{maxOutputTokens:maxTokens,temperature}}),
         signal:AbortSignal.timeout(120000)}
     );
     const raw = await response.text();
@@ -47,7 +47,7 @@ export async function generateReply({config, system, history, onDelta, fetchImpl
     method:"POST",
     headers:{"Authorization":"Bearer "+key,"Content-Type":"application/json",
       ...(provider==="openrouter"?{"HTTP-Referer":"https://github.com/capnolithyl/AI-Desktop-Companion","X-Title":"Mikan NAS"}:{})},
-    body:JSON.stringify({model,stream:true,max_tokens:1400,temperature:0.7,
+    body:JSON.stringify({model,stream:true,max_tokens:maxTokens,temperature,
       messages:[{role:"system",content:system},...history.map(m=>({role:m.role,content:m.content}))]}),
     signal:AbortSignal.timeout(120000)
   });

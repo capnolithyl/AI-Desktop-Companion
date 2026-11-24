@@ -2,6 +2,7 @@ import { DatabaseSync } from "node:sqlite";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { randomUUID } from "node:crypto";
+import { createLearning } from "./learning.mjs";
 import { createMemoryLibrary } from "./memory-library.mjs";
 import { readCompanionProfile } from "../src/companion-profile.ts";
 
@@ -90,7 +91,8 @@ export function openStore(path) {
     return db.prepare("DELETE FROM user_memories WHERE id=?").run(id).changes > 0;
   }
   const library=createMemoryLibrary(db);
-  return { db, library, getProfile, saveProfile, hasTable, conversations, newConversation, exists, messages, append, listMemories, addMemory, removeMemory };
+  const learning=createLearning(db,library);
+  return { db, library, learning, getProfile, saveProfile, hasTable, conversations, newConversation, exists, messages, append, listMemories, addMemory, removeMemory };
 }
 
 // Lexical recall first. Existing FTS5 and optional Qdrant remain intact for a later integration.

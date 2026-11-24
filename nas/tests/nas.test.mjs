@@ -129,3 +129,31 @@ test("structured memory library preserves categories, pins, canon and interests;
     assert.throws(()=>call("constructor"),/Unknown memory operation/);
   }finally{store.db.close();rmSync(root,{recursive:true,force:true});}
 });
+
+test("NAS learning is opt-in, quote-grounded and reviewable",async()=>{
+  const root=mkdtempSync(join(tmpdir(),"mikan-learn-")),store=openStore(join(root,"memory.sqlite3"));
+  const c=store.newConversation(),l=store.learning;
+  const turn=(u,a)=>[store.append(c.id,"user",u),store.append(c.id,"assistant",a)];
+  const response=async facts=>await l.processNext(async()=>JSON.stringify({facts,interests:[],canon:[]}),{});
+  try{
+    assert.equal(l.enqueue(...turn("I love coffee","Nice!"),c.id),false);
+    l.setSettings({user:true,character:false});
+    assert.equal(l.enqueue(...turn("My password is abc123","Okay"),c.id),false);
+    assert.equal(l.enqueue(...turn("I love coffee","Nice!"),c.id),true);
+    await response([{fact:"The user loves coffee",evidence:"I love coffee",scope:"long_term"},{fact:"The user likes tea",evidence:"I love tea",scope:"long_term"}]);
+    assert.equal(store.library.execute("snapshot",{}).facts[0].fact,"The user loves coffee");
+    assert.equal(l.getStatus().lastOutcome.saved,1);
+    l.enqueue(...turn("Actually, I prefer tea instead of coffee","Got it"),c.id);
+    const id=store.library.execute("snapshot",{}).facts[0].id;
+    await response([{fact:"The user prefers tea instead of coffee",evidence:"Actually, I prefer tea instead of coffee",scope:"long_term",relatedId:id}]);
+    const review=l.getStatus().reviews[0];assert.equal(review.targetId,id);
+    assert.equal(store.library.execute("snapshot",{}).facts[0].fact,"The user loves coffee");
+    l.resolve(review.id,"accept");
+    assert.equal(store.library.execute("snapshot",{}).facts[0].fact,"The user prefers tea instead of coffee");
+    assert.equal(l.getStatus().history.length,1);
+    l.enqueue(...turn("I like pizza","Good"),c.id);
+    await l.processNext(async()=>{throw Error("quota");},{});
+    assert.equal(l.getStatus().failed,1);assert.equal(l.retry().count,1);
+    l.setSettings({user:false,character:false});assert.equal(l.getStatus().queued,0);
+  }finally{store.db.close();rmSync(root,{recursive:true,force:true});}
+});

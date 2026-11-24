@@ -6,7 +6,7 @@ rmSync(target,{recursive:true,force:true});
 mkdirSync(join(target,"nas"),{recursive:true});
 mkdirSync(join(target,"src"),{recursive:true});
 mkdirSync(join(target,"assets/iki"),{recursive:true});
-for(const name of ["Dockerfile","compose.yaml",".env.example","server.mjs","storage.mjs","memory-library.mjs","providers.mjs","public","web-dist","README.md"])
+for(const name of ["Dockerfile","compose.yaml",".env.example","server.mjs","storage.mjs","memory-library.mjs","learning.mjs","providers.mjs","public","web-dist","README.md"])
   cpSync(join(root,"nas",name),join(target,"nas",name),{recursive:true});
 for(const name of ["assistant-voice.ts","personality.ts","communication-preferences.ts","companion-profile.ts","avatar-background.ts","avatar-viewport.ts","memory-import.ts","interest-import.ts","memory-ranking.ts","identity-memory.ts","character-canon-routing.ts","interest-context.ts","archive-memory.ts","memory-budget.ts"])
   cpSync(join(root,"src",name),join(target,"src",name));
