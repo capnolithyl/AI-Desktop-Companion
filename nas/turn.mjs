@@ -39,10 +39,10 @@ export function turnTrace(mode){
     finally{stages.push({stage,startMs:began,elapsedMs:elapsed()-began,success,...details,...(errorCode?{errorCode}:{})});}
   }
   return {measure,firstText(){if(firstTextMs===null)firstTextMs=elapsed();},model(value){actualModel=value;},actualModel:()=>actualModel,usage:(stage,value)=>inference.push({stage,...value}),
-    snapshot:()=>({mode,totalMs:elapsed(),firstTextMs,stages:[...stages],...(inference.length?{inference:[...inference]}:{}),modelCalls:stages.filter(s=>["planner","knowledge-planner","answer","manuscript-repair","research-repair","research-recovery","agent"].includes(s.stage)).length})};
+    snapshot:()=>({mode,totalMs:elapsed(),firstTextMs,stages:[...stages],...(inference.length?{inference:[...inference]}:{}),modelCalls:stages.filter(s=>["planner","knowledge-planner","answer","manuscript-repair","research-repair","research-recovery","agent","agent-answer"].includes(s.stage)).length})};
 }
 // Shared executor: caller owns authentication, admission, persistence and quota.
-export async function executeNasTurn({store,conversationId,question,selected,mode,promptFile="",requestModel,reserve,canRequest,search,read,trace=turnTrace(mode),onDelta=()=>{},activity=()=>{},signal,knowledge,publicAgent=process.env.MIKAN_PUBLIC_AGENT==="1"}){
+export async function executeNasTurn({store,conversationId,question,selected,mode,promptFile="",requestModel,reserve,canRequest,search,read,trace=turnTrace(mode),onDelta=()=>{},activity=()=>{},signal,knowledge,publicAgent=process.env.MIKAN_PUBLIC_AGENT==="1",agentDiagnostics=false}){
   signal?.throwIfAborted();
   const {history,rawHistory,memory}=await trace.measure("context",()=>{
     const rawHistory=store.messages(conversationId,80);
@@ -55,8 +55,10 @@ export async function executeNasTurn({store,conversationId,question,selected,mod
   const local=knowledge?await trace.measure("knowledge",()=>planKnowledge({knowledge,history,previous,question,provider:selected.provider,canRequest:()=>!signal?.aborted&&canRequest(2),generate:args=>trace.measure("knowledge-planner",()=>{signal?.throwIfAborted();reserve();return requestModel({...args,config:selected,signal,onUsage:v=>trace.usage("knowledge-planner",v)});}),activity})):null;
   const activeTask=rawHistory.filter(m=>m.role==="assistant").at(-1)?.inference?.researchTask;
   if(!local&&publicAgent&&mode!=="off"&&selected.provider==="nvidia"){
-    const agent=await agentResearch({mode,history,activeTask,signal,ownerFacts:store.listMemories(),canRequest:()=>!signal?.aborted&&canRequest(),activity,
+    const agent=await agentResearch({mode,history,signal,ownerFacts:store.listMemories(),canRequest:(slots=1)=>!signal?.aborted&&canRequest(slots),activity,diagnostics:agentDiagnostics,
+      answerSystem:systemPrompt(promptFile,store,{text:"",ids:[],auditLines:[]},{question,history:[],mode,researchActive:true,plannedPublicSearch:true,publicWebRequested:true}),
       generate:args=>trace.measure("agent",()=>{signal?.throwIfAborted();reserve();return requestModel({...args,config:selected,signal,onModel:v=>trace.model(v),onUsage:v=>trace.usage("agent",v)});}),
+      compose:args=>trace.measure("agent-answer",()=>{signal?.throwIfAborted();reserve();return requestModel({...args,config:selected,signal,onModel:v=>trace.model(v),onUsage:v=>trace.usage("agent-answer",v)});}),
       search:(query,recent)=>trace.measure("search",()=>search(query,recent)),read:(url,options)=>trace.measure("read",()=>read(url,options))});
     if(agent){trace.firstText();onDelta(agent.answer);return {...agent,memory:{text:"",ids:[],auditLines:[]}};}
     // The agent chose no public tool. Continue through the ordinary persona
