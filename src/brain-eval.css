@@ -368,3 +368,254 @@
 .brain-eval-preset-controls button{padding:8px 11px;background:#4a3748;color:#ffe6d9;border:1px solid #795869;border-radius:8px;font-size:12px}
 .brain-eval-preset-controls button:disabled{opacity:.45}
 .brain-eval-preset-controls input:focus-visible,.brain-eval-preset-controls select:focus-visible,.brain-eval-preset-controls button:focus-visible{outline:2px solid #ffc99f;outline-offset:2px}
+
+
+/* Brain Lab v2. The UI now has dedicated Run, Scenarios and Results workspaces;
+   preserve isolated evaluation semantics and the existing run manager. */
+.settings-standalone .brain-eval-panel {
+  --lab-card:#332427;--lab-border:#69463d;
+  display:flex;flex-direction:column;gap:0;padding:0;max-width:1500px;
+  color:var(--cc-text,#fff1e7);font-size:14px;line-height:1.55;
+}
+.settings-standalone .brain-workspace-header {
+  display:flex;gap:17px;align-items:center;min-height:95px;margin:0 0 22px;
+}
+.settings-standalone .brain-workspace-icon {
+  flex:0 0 63px;height:63px;display:grid;place-items:center;
+  color:#ffba7b;background:#553123;border:1px solid #a4643a;border-radius:20px;
+  box-shadow:0 8px 29px #e4773325;
+}
+.settings-standalone .brain-workspace-header h2 {
+  font-size:30px;letter-spacing:-.04em;line-height:1.18;color:#fff0e6;margin:4px 0 5px;
+}
+.settings-standalone .brain-workspace-header p {font-size:14px;color:#cfaca2;margin:0;max-width:900px;}
+.settings-standalone .brain-workspace-tabs {
+  position:sticky;top:-1px;z-index:3;
+  display:flex;gap:10px;flex-wrap:wrap;margin:0 0 23px;padding:7px;
+  background:#2a1d1f;border:1px solid #66463d;border-radius:16px;
+  box-shadow:0 10px 24px #150b0b44;
+}
+.settings-standalone .brain-workspace-tabs button {
+  flex:1 1 150px;display:flex;align-items:center;justify-content:center;gap:10px;
+  min-height:46px;padding:10px 15px;border:1px solid transparent;border-radius:11px;
+  color:#dcb9a9;background:transparent;font-size:14px;font-weight:690;
+}
+.settings-standalone .brain-workspace-tabs button:hover {background:#4b302b;color:#ffdda9;}
+.settings-standalone .brain-workspace-tabs button.active {
+  color:#2e1a13;background:#ffa957;border-color:#ffbc77;
+  box-shadow:0 5px 16px #f47e3f22;
+}
+.settings-standalone .brain-workspace-tabs button small {
+  color:inherit;opacity:.8;font-size:11px;font-weight:600;
+}
+.settings-standalone .brain-workspace-view {
+  display:grid;align-content:start;gap:20px;animation:brain-enter .22s ease-out;
+}
+@keyframes brain-enter {
+  from {opacity:.4;transform:translateY(6px);}
+  to {opacity:1;transform:translateY(0);}
+}
+.settings-standalone .brain-section-heading {
+  display:flex;align-items:baseline;justify-content:space-between;flex-wrap:wrap;gap:12px;
+  margin:0 0 2px;padding:0 0 12px;border-bottom:1px solid var(--cc-divider,#61433d);
+}
+.settings-standalone .brain-section-heading h3 {color:#ffe3ce;font-size:20px;margin:0;letter-spacing:-.025em;}
+.settings-standalone .brain-section-heading span {color:#cfafa1;font-size:13px;}
+.settings-standalone .brain-eval-explainer,
+.settings-standalone .brain-eval-preset-disclosure {
+  margin:0;padding:0;overflow:hidden;border:1px solid var(--lab-border);
+  border-radius:15px;background:linear-gradient(145deg,#342527,#2a2023);
+  color:#e5c7bd;
+}
+.settings-standalone .brain-eval-explainer > summary,
+.settings-standalone .brain-eval-preset-disclosure > summary {
+  min-height:54px;padding:15px 19px;
+  display:flex;align-items:center;justify-content:space-between;gap:14px;
+  color:#ffd8bd;font-size:14px;font-weight:700;cursor:pointer;list-style:none;
+}
+.settings-standalone .brain-eval-explainer > summary::before {display:none;}
+.settings-standalone .brain-eval-explainer > summary::after,
+.settings-standalone .brain-eval-preset-disclosure > summary::after {
+  content:"";width:9px;height:9px;flex:0 0 9px;
+  border-right:2px solid #ffa45a;border-bottom:2px solid #ffa45a;
+  transform:rotate(45deg);transition:transform .17s ease;
+}
+.settings-standalone .brain-eval-explainer[open] > summary::after,
+.settings-standalone .brain-eval-preset-disclosure[open] > summary::after {transform:rotate(225deg);}
+.settings-standalone .brain-eval-explainer > summary::-webkit-details-marker,
+.settings-standalone .brain-eval-preset-disclosure > summary::-webkit-details-marker {display:none;}
+.settings-standalone .brain-eval-explainer > summary span,
+.settings-standalone .brain-eval-preset-disclosure > summary span {font-size:12px;color:#cfafa1;font-weight:400;}
+.settings-standalone .brain-eval-explainer > p,
+.settings-standalone .brain-eval-preset-disclosure > .brain-eval-presets {margin:12px 19px 20px;}
+.settings-standalone .brain-eval-presets {
+  padding:18px;border:1px solid #63443f;border-radius:12px;background:#251b1e;
+}
+.settings-standalone .brain-eval-presets-header strong {font-size:15px;color:#fff0e5;}
+.settings-standalone .brain-eval-preset-controls label,
+.settings-standalone .brain-eval-toolbar label,
+.settings-standalone .brain-eval-model-trace-picker {font-size:14px;color:#f6dacc;}
+.settings-standalone .brain-eval-toolbar {
+  display:grid;grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:15px;padding:20px;border-radius:17px;border:1px solid var(--lab-border);
+  background:linear-gradient(140deg,#332427,#2a2023);
+}
+.settings-standalone .brain-eval-toolbar label {gap:9px;font-weight:650;}
+.settings-standalone .brain-eval-toolbar select,
+.settings-standalone .brain-eval-toolbar input {font-size:14px;min-height:45px;}
+.settings-standalone .brain-eval-mikanify {
+  align-self:stretch;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;
+  gap:8px;padding:10px 14px;border:1px solid #69433c;border-radius:12px;
+  background:#442c29;color:#ffdebb;
+}
+.settings-standalone .brain-eval-mikanify small {flex-basis:100%;font-size:12px;color:#d1aa9c;}
+.settings-standalone .brain-eval-mikanify input {width:18px;height:18px;}
+.settings-standalone .brain-eval-model-picker {
+  padding:20px;gap:15px;background:#332427;border:1px solid var(--lab-border);
+  border-radius:17px;font-size:14px;color:#fff0e8;
+}
+.settings-standalone .brain-eval-model-heading strong {font-size:16px;}
+.settings-standalone .brain-eval-model-heading span {font-size:13px;}
+.settings-standalone .brain-eval-model-list {
+  grid-template-columns:repeat(auto-fit,minmax(245px,1fr));
+  max-height:295px;gap:8px;scrollbar-width:thin;
+}
+.settings-standalone .brain-eval-model-list label {
+  align-items:flex-start;min-height:48px;padding:12px;
+  background:#402b2c;border:1px solid #61403b;border-radius:11px;
+  color:#f2dbd1;font-size:13px;
+}
+.settings-standalone .brain-eval-model-list label span {min-width:0;overflow-wrap:anywhere;line-height:1.4;}
+.settings-standalone .brain-eval-model-actions button,
+.settings-standalone .brain-eval-select-actions button,
+.settings-standalone .brain-eval-preset-controls button,
+.settings-standalone .brain-eval-number-row button {
+  min-height:42px;padding:10px 15px;background:#543229;border:1px solid #986343;
+  border-radius:10px;color:#ffe1c6;font-size:13px;font-weight:650;
+}
+.settings-standalone .brain-eval-select-actions {
+  padding:0;gap:9px;display:flex;flex-wrap:wrap;
+}
+.settings-standalone .brain-eval-select-actions .brain-return-to-run {
+  background:#86502e;border-color:#e98b45;
+}
+.settings-standalone .brain-eval-actionbar {
+  display:grid;gap:17px;padding:21px;border:1px solid #8b5339;border-radius:17px;
+  background:linear-gradient(120deg,#422a25,#2d2122);
+}
+.settings-standalone .brain-eval-action-buttons {display:flex;gap:11px;align-items:center;flex-wrap:wrap;}
+.settings-standalone .brain-eval-action-buttons .save-button {
+  min-height:47px;font-size:14px;color:#2b1a12;border:1px solid #ffb86a;
+  background:#ffa34d;border-radius:11px;padding:12px 19px;
+}
+.settings-standalone .brain-eval-action-buttons .secondary-action {
+  margin:0;min-height:43px;font-size:13px;
+}
+.settings-standalone .brain-eval-run-monitor {
+  padding:19px;gap:11px;border-radius:13px;border:1px solid #745047;
+  background:#2b2022;color:#f4d9cf;
+}
+.settings-standalone .brain-eval-run-heading strong {font-size:16px;color:#ffe0c0;}
+.settings-standalone .brain-eval-run-details {font-size:13px;line-height:1.5;color:#d9bab1;}
+.settings-standalone .brain-eval-run-monitor progress {height:10px;accent-color:#ffa14e;border-radius:999px;}
+.settings-standalone .brain-eval-status-summary {gap:9px;}
+.settings-standalone .brain-eval-status {font-size:11px;letter-spacing:.045em;padding:7px 11px;border-radius:9px;}
+.settings-standalone .brain-eval-filters {grid-template-columns:repeat(3,minmax(0,1fr));}
+.settings-standalone .brain-eval-filters .brain-eval-find {grid-column:auto;}
+.settings-standalone .brain-eval-number-select {
+  display:grid;gap:9px;padding:17px 20px;border:1px solid var(--lab-border);
+  border-radius:15px;background:#302325;
+}
+.settings-standalone .brain-eval-number-select label {font-size:14px;color:#ffe0c6;}
+.settings-standalone .brain-eval-number-select input {min-height:43px;}
+.settings-standalone .brain-eval-number-select small {font-size:13px;}
+.settings-standalone .brain-eval-catalog-disclosure {
+  display:grid;gap:13px;margin:0;padding:0;min-width:0;
+}
+.settings-standalone .brain-eval-catalog-header {
+  display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap;
+  padding:0 0 8px;color:#ffe5d1;background:transparent;
+}
+.settings-standalone .brain-eval-catalog-header strong {font-size:16px;}
+.settings-standalone .brain-eval-catalog-header span {font-size:13px;color:#ceafa3;}
+.settings-standalone .brain-eval-catalog {
+  display:grid;gap:8px;padding:10px;border:1px solid var(--lab-border);
+  border-radius:15px;background:#261c1e;min-width:0;
+}
+.settings-standalone .brain-eval-test-row {
+  display:flex;min-height:62px;gap:13px;padding:13px 16px;
+  align-items:center;flex-wrap:wrap;
+  background:#39282a;border:1px solid #583c38;border-radius:11px;
+}
+.settings-standalone .brain-eval-test-row > label {flex:1 1 280px;gap:13px;}
+.settings-standalone .brain-eval-test-row label strong {font-size:14px;color:#ffe5d6;line-height:1.45;}
+.settings-standalone .brain-eval-test-row label small {font-size:12px;color:#cda99d;margin-top:5px;}
+.settings-standalone .brain-eval-review-actions button {font-size:12px;min-height:37px;}
+.settings-standalone .brain-scenario-pagination {
+  display:flex;gap:14px;align-items:center;justify-content:center;
+  padding:12px 0;color:#dbc0b1;font-size:13px;
+}
+.settings-standalone .brain-scenario-pagination button {
+  min-width:92px;min-height:39px;padding:8px 12px;
+  color:#ffe3c7;background:#51322e;border:1px solid #91604c;border-radius:9px;
+}
+.settings-standalone .brain-scenario-pagination button:disabled {opacity:.4;cursor:not-allowed;}
+.settings-standalone .brain-eval-metrics {
+  grid-template-columns:repeat(auto-fit,minmax(195px,1fr));gap:12px;
+}
+.settings-standalone .brain-eval-metric {
+  padding:18px;gap:8px;border:1px solid #6a453c;border-radius:15px;
+  background:linear-gradient(145deg,#352528,#2d2224);
+}
+.settings-standalone .brain-eval-metric > span {font-size:13px;color:#e6c6ba;}
+.settings-standalone .brain-eval-metric > strong {font-size:28px;color:#ffb274;line-height:1.1;}
+.settings-standalone .brain-eval-metric > small {font-size:12px;color:#cba89e;line-height:1.5;}
+.settings-standalone .brain-eval-group {font-size:14px;grid-template-columns:minmax(120px,1fr) minmax(90px,2fr) 60px;gap:14px;}
+.settings-standalone .brain-eval-bar {height:9px;background:#543734;}
+.settings-standalone .brain-eval-bar span {background:#ed9857;}
+.settings-standalone .brain-eval-comparison {
+  display:grid;gap:13px;padding:20px;font-size:14px;
+  background:#332427;border:1px solid var(--lab-border);border-radius:15px;
+}
+.settings-standalone .brain-eval-comparison table {font-size:13px;}
+.settings-standalone .brain-eval-comparison th,.settings-standalone .brain-eval-comparison td {padding:12px 13px;border-bottom-color:#61423c;}
+.settings-standalone .brain-eval-traces {gap:12px;}
+.settings-standalone .brain-eval-traces details.service-panel {
+  margin:0;padding:0;background:#332428;border:1px solid #71483c;border-radius:15px;overflow:hidden;
+}
+.settings-standalone .brain-eval-traces details.service-panel > summary {
+  display:flex;align-items:center;gap:12px;list-style:none;min-height:58px;
+  padding:15px 20px;cursor:pointer;
+}
+.settings-standalone .brain-eval-traces details.service-panel > summary::-webkit-details-marker {display:none;}
+.settings-standalone .brain-eval-summary strong {font-size:14px;color:#ffe1c5;}
+.settings-standalone .brain-eval-summary span {font-size:12px;color:#dbb6a8;}
+.settings-standalone .brain-eval-step {padding:17px 19px;gap:9px;font-size:14px;border-top-color:#69473f;}
+.settings-standalone .brain-eval-step>div:first-child strong {font-size:14px;}
+.settings-standalone .brain-eval-step small {font-size:12px;color:#d9b7aa;line-height:1.65;}
+.settings-standalone .brain-eval-answer {padding:14px;border-radius:10px;background:#20191a;line-height:1.65;}
+.settings-standalone .brain-empty-results {
+  display:grid;justify-items:center;gap:12px;text-align:center;
+  padding:65px 20px;border:1px dashed #88604a;border-radius:17px;
+  color:#dfb6a0;background:#322325;
+}
+.settings-standalone .brain-empty-results svg {color:#ffad6a;}
+.settings-standalone .brain-empty-results strong {color:#ffdfc6;font-size:20px;}
+.settings-standalone .brain-empty-results p {margin:0;font-size:14px;}
+.settings-standalone .brain-eval-history {padding:12px 0;font-size:13px;border-bottom:1px solid #5e3e38;}
+@media(max-width:1100px){
+  .settings-standalone .brain-eval-toolbar,.settings-standalone .brain-eval-filters {grid-template-columns:repeat(2,minmax(0,1fr));}
+  .settings-standalone .brain-eval-filters .brain-eval-find {grid-column:1/-1;}
+  .settings-standalone .brain-eval-model-list {grid-template-columns:repeat(2,minmax(0,1fr));}
+}
+@media(max-width:760px){
+  .settings-standalone .brain-workspace-tabs {flex-direction:column;}
+  .settings-standalone .brain-workspace-tabs button {flex:0 0 auto;justify-content:flex-start;min-height:42px;}
+  .settings-standalone .brain-eval-toolbar,.settings-standalone .brain-eval-filters {grid-template-columns:1fr;}
+  .settings-standalone .brain-eval-model-list {grid-template-columns:1fr;}
+}
+@media(prefers-reduced-motion:reduce){
+  .settings-standalone .brain-workspace-view {animation:none;}
+  .settings-standalone .brain-eval-explainer > summary::after,
+  .settings-standalone .brain-eval-preset-disclosure > summary::after {transition:none;}
+}
