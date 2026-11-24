@@ -214,7 +214,7 @@ export type EvalMemoryFact=RankableMemory & {
   /** Other expected fact IDs proven by this synthetic record. Fixture metadata, not routing logic. */
   alsoSupports?:readonly number[];
 };
-import {EVAL_FACTS,EVAL_SCENARIOS,brainScenarioNumber,brainScenarioLabel,brainMemoryEvidence,sameMeaning,brainReplyQualityFlags,scoreAnswer} from "./brain-eval-fixtures.ts";
+import {EVAL_FACTS,brainScenarioNumber,brainScenarioLabel,brainMemoryEvidence,brainReplyQualityFlags,scoreAnswer} from "./brain-eval-fixtures.ts";
 export {EVAL_FACTS,EVAL_SCENARIOS,brainScenarioNumber,brainScenarioLabel,brainMemoryEvidence,sameMeaning,brainReplyQualityFlags,scoreAnswer} from "./brain-eval-fixtures.ts";
 function routeMatches(actual:string,expected:EvalRoute="any"):boolean {
   return expected==="any" || (expected==="non-research" ? actual!=="research":actual===expected);

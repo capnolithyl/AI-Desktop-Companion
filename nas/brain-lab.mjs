@@ -27,7 +27,7 @@ export function gradeNasStep(step,result,events){
   for(const id of expected.excludeMemory??[])if(result.memory.ids.includes(id))failures.push("Unexpected synthetic memory #"+id);
   for(const phrase of expected.publicQueryIncludes??[])if(!webEvents.some(e=>e.title==="Web search"&&e.lines.some(q=>sameMeaning(q,phrase))))failures.push("Missing public query term: "+phrase);
   // Current facts, evidence entailment and conversational intent need human review.
-  const review=!!(expected.conversationGoal||webExpected===true||!(expected.answerIncludes?.length||expected.answerAny?.length||expected.answerExcludes?.length));
+  const review=!!(expected.conversationGoal||webExpected===true||expected.route==="factual"||!(expected.answerIncludes?.length||expected.answerAny?.length||expected.answerExcludes?.length));
   return {grade:failures.length?"failed":review?"review":"passed",failures,qualityFlags:brainReplyQualityFlags(result.answer,expected),reviewGoal:expected.conversationGoal??null};
 }
 export function createBrainLab({db,models,requestModel,search,read,build,pace=paceCloudBrainTurn}){
@@ -38,7 +38,7 @@ export function createBrainLab({db,models,requestModel,search,read,build,pace=pa
   for(const r of recent())if(r.state==="running"||r.state==="stopping"){r.state="interrupted";r.finishedAt=Date.now();save(r);}
   let current=null,controller=null;
   const catalog=()=>scenarioInfo;
-  const status=()=>({running:!!controller,current,history:recent().filter(r=>r.id!==current?.id).map(({cases,...r})=>r)});
+  const status=()=>({running:!!controller,current,history:db.prepare("SELECT json_remove(report_json,'$.cases') AS report_json FROM nas_brain_reports ORDER BY created_at DESC LIMIT 20").all().map(r=>JSON.parse(r.report_json)).filter(r=>r.id!==current?.id)});
   function start(body){
     if(controller)throw invalid("Brain Lab is already running",409);
     const {provider,model,scenarioIds,mode,repetitions}=body??{};
@@ -52,10 +52,10 @@ export function createBrainLab({db,models,requestModel,search,read,build,pace=pa
     if(mode==="off"&&scenarios.some(s=>s.steps.some(t=>t.expect.web===true||t.expect.route==="research")))throw invalid("Enable Simple or Strict for web scenarios");
     if(!models.available(provider))throw invalid("Provider request budget exhausted",429);
     controller=new AbortController();const signal=controller.signal;
-    const report={id:randomUUID(),state:"running",startedAt:Date.now(),finishedAt:null,build,provider,model,mode,repetitions,scenarioIds,total,done:0,currentLabel:"Starting",cases:[],environment:"isolated-synthetic+live-public-web",writesToRealMemories:false};
+    const report={id:randomUUID(),state:"running",startedAt:Date.now(),finishedAt:null,build,provider,model,mode,repetitions,scenarioIds,total,done:0,currentLabel:"Starting",cases:[],environment:mode==="off"?"isolated-synthetic":"isolated-synthetic+live-public-web",writesToRealMemories:false};
     current=report;
     try{save(report);}catch(e){controller=null;current=null;throw e;}
-    void run(report,scenarios,selected,signal);
+    void run(report,scenarios,selected,signal).catch(()=>{console.error("Could not persist NAS Brain Lab report");});
     return {id:report.id};
   }
   async function run(report,scenarios,selected,signal){
@@ -78,6 +78,7 @@ export function createBrainLab({db,models,requestModel,search,read,build,pace=pa
             try{result=await executeNasTurn({store:sandbox,conversationId:chat.id,question:step.user,selected,mode:report.mode,requestModel,search,read,signal,trace,
               reserve:()=>models.reserve(selected.provider),canRequest:()=>models.available(selected.provider),activity:e=>events.push(e)});
             }catch(e){row.steps.push({user:step.user,grade:"failed",failures:[signal.aborted?"Stopped":"Provider or turn failed"],timing:trace.snapshot(),events,actualModel:trace.actualModel()});save(report);throw e;}
+            signal.throwIfAborted();
             sandbox.append(chat.id,"assistant",result.answer);
             sandbox.library.markRecalled(result.memory.ids);
             row.steps.push({user:step.user,answer:result.answer,...gradeNasStep(step,result,events),timing:trace.snapshot(),actualModel:trace.actualModel(),selectedMemoryIds:result.memory.ids,
@@ -87,8 +88,8 @@ export function createBrainLab({db,models,requestModel,search,read,build,pace=pa
         }finally{sandbox.db.close();}
       }
       report.state="finished";
-    }catch(e){report.state=signal.aborted?"stopped":e?.status===429||e?.upstreamStatus===429?"quota":"failed";}
-    finally{report.finishedAt=Date.now();report.currentLabel="";controller=null;save(report);}
+    }catch(e){report.state=signal.aborted?"stopped":e?.status===429||e?.upstreamStatus===429?"quota":"failed";report.error=report.state==="quota"?"Provider quota reached; no retries":report.state==="failed"?"Turn or fixture execution failed":null;}
+    finally{report.finishedAt=Date.now();report.currentLabel="";controller=null;save(report);db.prepare("DELETE FROM nas_brain_reports WHERE id NOT IN (SELECT id FROM nas_brain_reports ORDER BY created_at DESC LIMIT 50)").run();}
   }
   function stop(){if(controller){current.state="stopping";controller.abort();save(current);}return {running:!!controller};}
   function get(id){const row=db.prepare("SELECT report_json FROM nas_brain_reports WHERE id=?").get(id);if(!row)throw invalid("Report not found",404);return JSON.parse(row.report_json);}

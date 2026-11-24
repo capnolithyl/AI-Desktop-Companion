@@ -3,7 +3,7 @@ import {performance} from "node:perf_hooks";
 import {assistantVoiceGuidance,CHARACTER_VOICE_REMINDER} from "../src/assistant-voice.ts";
 import {boundedHistory} from "./provider-settings.mjs";
 import {researchTurn,researchInstructions} from "./research.mjs";
-function currentProfile(promptFile,store) {
+export function currentProfile(promptFile,store) {
   const legacy=promptFile && existsSync(promptFile) ? {systemPrompt:readFileSync(promptFile,"utf8")} : undefined;
   return store.getProfile(legacy);
 }

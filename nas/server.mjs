@@ -9,7 +9,7 @@ import { openStore } from "./storage.mjs";
 import { exportCompanionProfile, importCompanionProfile } from "../src/companion-profile.ts";
 import { generateReply } from "./providers.mjs";
 import {providerSettings} from "./provider-settings.mjs";
-import {executeNasTurn,turnTrace} from "./turn.mjs";
+import {executeNasTurn,turnTrace,currentProfile} from "./turn.mjs";
 import {createBrainLab} from "./brain-lab.mjs";
 import {researchSettings,searchWeb,readWeb} from "./research.mjs";
 

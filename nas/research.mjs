@@ -109,7 +109,7 @@ export async function researchTurn({mode,history,generate,canRequest,search=sear
   const planner=async input=>{
     if(!canRequest())return null;
     try{return planFrom(await generate({system:POLICY+"\nLIVE UTC DATE: "+now.toISOString().slice(0,10)+" (year "+now.getUTCFullYear()+"). Use this date for current research.",history:[{role:"user",content:JSON.stringify(input)}],temperature:0.1,maxTokens:700,onDelta:()=>{}}));}
-    catch(error){if(error?.upstreamStatus===429)throw error;errors.push("Research planner unavailable");return null;}
+    catch(error){if(error?.upstreamStatus===429||error?.status===429)throw error;errors.push("Research planner unavailable");return null;}
   };
   const record=(title,detail,lines=[])=>activity({title,detail,lines});
   const add=s=>{const i=sources.findIndex(x=>x.url===s.url);if(i>=0){if(s.kind==="page")sources[i]={...s,publishedDate:sources[i].publishedDate??s.publishedDate};}else if(sources.length<8)sources.push(s);};
