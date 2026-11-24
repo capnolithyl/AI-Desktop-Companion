@@ -2205,8 +2205,11 @@ button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px
    This does not recolor the standalone Settings webview or touch remote/mobile. */
 .companion:not(.settings-standalone) > .dock {
   --chat-light:#ffb56d;--chat-muted:#d8b2a7;--chat-edge:#9e5b3c;
-  background:radial-gradient(ellipse 100% 95% at 50% -28%,#71433155,transparent 76%),
-    linear-gradient(145deg,rgba(59,36,35,.975),rgba(34,25,28,.965) 72%);
+  background:radial-gradient(ellipse 100% 95% at 50% -28%,
+      rgb(var(--accent-rgb,255 173 126) / .19),transparent 76%),
+    linear-gradient(145deg,
+      color-mix(in srgb,rgb(var(--panel-rgb,33 27 37)) 58%,#70412c),
+      rgb(var(--panel-rgb,33 27 37) / var(--panel-opacity,.94)) 92%);
   border:1px solid #e59b5c;
   border-radius:21px;
   padding:15px 15px 12px;
@@ -2475,4 +2478,12 @@ button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px
   .companion:not(.settings-standalone) .send-button.chat-paw-send,
   .companion:not(.settings-standalone) .input-row textarea,
   .companion:not(.settings-standalone) .chat-tools-toggle {transition:none;}
+}
+
+.companion:not(.settings-standalone) .chat-voice-active {
+  border-color:#b8774b;color:#ffcd9d;background:#5b382d;
+  box-shadow:0 0 13px #fd853c45;
+}
+.companion:not(.settings-standalone) .chat-voice-active:hover {
+  border-color:#f4a66e;color:#ffe2bf;background:#77432f;
 }
