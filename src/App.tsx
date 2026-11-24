@@ -293,6 +293,10 @@ export default function App() {
   const [screen, setScreen] = useState<Screen>(standaloneSettings ? "settings" : "compact");
   const [settings, setSettings] = useState<Settings>(loadSettings);
   const [draft, setDraft] = useState<Settings>(settings);
+  const [localConfigOpen,setLocalConfigOpen]=useState(settings.provider==="local"||settings.provider==="auto");
+  useEffect(() => {
+    setLocalConfigOpen(draft.provider==="local"||draft.provider==="auto");
+  }, [draft.provider]);
   const [settingsTab, setSettingsTab] = useState<SettingsTab>(initialSettingsTab);
   useEffect(() => {
     if (typeof window === "undefined" || !("__TAURI_INTERNALS__" in window)) return;
@@ -985,7 +989,7 @@ export default function App() {
       .catch(() => setAdvancedMemoryStatus({ready:false,reason:"Unavailable"}));
   };
   useEffect(() => {
-    if (screen === "settings" && settingsTab === "ai") refreshAdvancedMemoryStatus();
+    if (screen === "settings" && settingsTab === "memory") refreshAdvancedMemoryStatus();
   }, [screen, settingsTab]);
 
   const focusInput = useCallback(() => {
@@ -3822,11 +3826,29 @@ export default function App() {
           </div>)}
         </nav>
         <div key={settingsTab} className={settingsTab === "brain" ? "settings-body settings-brain"
-          : settingsTab === "memory" || settingsTab === "capabilities" ? "settings-body settings-embedded"
+          : settingsTab === "memory" ? "settings-body settings-embedded settings-memory-view"
+          : settingsTab === "capabilities" ? "settings-body settings-embedded"
           : "settings-body"}>
         {settingsTab === "brain" && <Suspense fallback={<div className="settings-section-title">Opening Brain Lab…</div>}>
           <BrainEvalPanel settings={settings} availableModels={availableModels} />
         </Suspense>}
+        {settingsTab === "memory" && <div className="control-memory-addon">
+          <details className="control-disclosure">
+            <summary><strong>Advanced memory integration</strong><span>Optional Mem0 semantic recall</span></summary>
+          <div className="settings-section-title"><Brain size={17}/> Advanced personal memory (Mem0 OSS)</div>
+          <div className="service-panel">
+            <div><strong>Semantic recall · local</strong>
+              <span className={advancedMemoryStatus?.ready ? "service-running" : "service-muted"}>
+                {advancedMemoryStatus === null ? "Checking…" : advancedMemoryStatus.ready
+                  ? "Ready · Mem0 + Ollama" : advancedMemoryStatus.reason || "Not running"}
+              </span>
+            </div>
+            <button type="button" className="secondary-action"
+              onClick={refreshAdvancedMemoryStatus}><RotateCw size={14}/> Check status</button>
+            <small>Optional real Mem0 semantic retrieval. Uses your editable SQLite facts and local Ollama, never a cloud account. Run the bundled advanced-memory setup script once to enable it. If unavailable, ordinary SQLite recall continues unchanged.</small>
+          </div>
+          </details>
+        </div>}
         {settingsTab === "memory" && <MemoryPanel embedded key={memoryInitialTab} initialTab={memoryInitialTab}
           conversations={conversations} sessionSummaries={sessionSummaries} facts={userFacts}
           characterFacts={characterFacts} interests={interests} currentId={activeConversationId}
@@ -4002,7 +4024,7 @@ export default function App() {
           {geminiKeyError && <small className="field-error" role="alert">{geminiKeyError}</small>}
           {geminiTestResult && <small className={geminiTestResult.startsWith("Connection failed:")?"field-error":"settings-note"} role="status">{geminiTestResult}</small>}
           </section>}
-          <details className="control-disclosure control-local-config" key={draft.provider} open={draft.provider === "local" || draft.provider === "auto"}>
+          <details className="control-disclosure control-local-config" open={localConfigOpen} onToggle={event=>setLocalConfigOpen(event.currentTarget.open)}>
             <summary><strong>{draft.provider === "local" ? "Local Ollama model" : "Local Ollama & fallback"}</strong><span>Model, context and reasoning</span></summary>
           <div className="settings-section-title">Local fallback · Ollama</div>
           <label className="setting-field">Ollama endpoint
@@ -4049,22 +4071,12 @@ export default function App() {
             <small>For supported local reasoning models (including Qwen 3.5). Tool planning and memory extraction stay fast. Deep mode may be slower.</small>
           </label>
           </details>
-          <details className="control-disclosure">
-            <summary><strong>Advanced memory integration</strong><span>Optional Mem0 semantic recall</span></summary>
-          <div className="settings-section-title"><Brain size={17}/> Advanced personal memory (Mem0 OSS)</div>
-          <div className="service-panel">
-            <div><strong>Semantic recall · local</strong>
-              <span className={advancedMemoryStatus?.ready ? "service-running" : "service-muted"}>
-                {advancedMemoryStatus === null ? "Checking…" : advancedMemoryStatus.ready
-                  ? "Ready · Mem0 + Ollama" : advancedMemoryStatus.reason || "Not running"}
-              </span>
-            </div>
-            <button type="button" className="secondary-action"
-              onClick={refreshAdvancedMemoryStatus}><RotateCw size={14}/> Check status</button>
-            <small>Optional real Mem0 semantic retrieval. Uses your editable SQLite facts and local Ollama, never a cloud account. Run the bundled advanced-memory setup script once to enable it. If unavailable, ordinary SQLite recall continues unchanged.</small>
-          </div>
-          </details>
 
+          <button type="button" className="control-crosslink" onClick={()=>setSettingsTab("internet")}>
+            <Sparkles size={20}/>
+            <span><strong>Web research &amp; Mikanify</strong><small>Search permissions, source interpretation and Mikan's response style live in Web settings.</small></span>
+            <ChevronRight size={18}/>
+          </button>
         </>}
         {settingsTab === "vision" && <>
           <section className="control-intro"><h2>Live Vision</h2><p>Mikan's eyes, on your terms. Screen capture stays opt-in and is processed locally.</p></section>
@@ -4276,6 +4288,8 @@ export default function App() {
             </div>
             {voiceError && <small className="field-error" role="alert">{voiceError}</small>}
           </div>
+          <details className="control-disclosure control-voice-identity">
+            <summary><strong>Saved voice identity</strong><span>WAV reference and transcript · edit when needed</span></summary>
           <div className="settings-section-title">Saved voice identity</div>
           <div className="service-panel">
             <div>
@@ -4334,6 +4348,8 @@ export default function App() {
             ? "Save or replace a WAV here. Mikan reloads its managed Pocket CPU server automatically and the Test voice button will use your new recording. No Qwen server or setup script needed after Pocket's initial installation."
             : "Saving requires the Qwen Python server. Your WAV and transcript persist in %LOCALAPPDATA%\\Mikan\\voice."}</small>
           </div>
+
+          </details>
           <label className="settings-toggle">
             <input type="checkbox" checked={draft.voice.muted}
               onChange={event => setDraft(current => ({ ...current, voice: { ...current.voice, muted: event.target.checked } }))}/>
@@ -4532,8 +4548,8 @@ export default function App() {
               <strong title={previewChoice.name}>{previewChoice.name}</strong>
               <span>{previewIndex + 1} / {wardrobeChoices.length}</span>
             </div>
-            <small className="wardrobe-hint">Browse to preview each outfit on animated Mikan. Nothing changes permanently until you choose Wear.</small>
-            <div className="wardrobe-preview-note"><Eye size={15}/> Previewing directly on Mikan to the left.</div>
+            <small className="wardrobe-hint">Browse saved outfits by name. Wear applies your selected outfit; the list itself does not alter the saved files.</small>
+            <div className="wardrobe-preview-note"><Eye size={15}/> Browse outfits here; Wear applies your choice to Mikan's companion window.</div>
             <div className="wardrobe-navigation">
               <button type="button" aria-label="Previous outfit" title="Previous outfit"
                 disabled={!ikiReady || ikiBusy || wardrobeChoices.length < 2}
