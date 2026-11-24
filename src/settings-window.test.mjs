@@ -40,3 +40,14 @@ test("optional native Python sidecars cannot block Tauri's setup callback", () =
   assert.match(setup, /\.spawn\(move \|\| \{[\s\S]*advanced_memory::start_if_installed/);
   assert.match(setup, /\.spawn\(move \|\| \{[\s\S]*voice::start_if_configured/);
 });
+
+test("settings window creation stays async on Windows WebView2", () => {
+  const rust = readFileSync(new URL("../src-tauri/src/lib.rs", import.meta.url), "utf8");
+  assert.match(rust, /#\[tauri::command\]\s+async fn open_settings_window\(/);
+});
+
+test("failed desktop bundle loading reports an error instead of a perpetual spinner", () => {
+  const entry = readFileSync(new URL("./main.tsx", import.meta.url), "utf8");
+  assert.match(entry, /\.catch\(error => \{/);
+  assert.match(entry, /Could not start Mikan/);
+});
