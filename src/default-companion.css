@@ -271,3 +271,15 @@
   display:block;padding:10px 6px;text-align:center;min-height:37px;
   border-radius:8px;font-size:12px;
 }
+
+.workspace-memory-toast {
+  position:absolute;z-index:30;left:50%;top:23px;transform:translateX(-50%);
+  display:flex;align-items:center;gap:10px;max-width:min(600px,calc(100% - 44px));
+  padding:12px 15px;border:1px solid #a8d3a0;border-radius:13px;
+  color:#e0f6dd;background:#24402ff0;box-shadow:0 0 22px #8cdc986b,0 12px 35px #0c1010ad;
+  font-size:13px;
+}
+.workspace-memory-toast.detailed {white-space:pre-line;max-height:190px;overflow:auto;}
+.workspace-memory-toast span {flex:1;min-width:0;overflow-wrap:anywhere;}
+.workspace-memory-toast button {flex:0 0 auto;border:1px solid #9ed09f;border-radius:9px;padding:7px 9px;background:#34583a;color:#edffec;}
+.workspace-memory-toast button:hover {background:#436d48;}
