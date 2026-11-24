@@ -1,5 +1,5 @@
 import {lookup} from "node:dns/promises";
-import {parseWebToolDecision} from "../src/unified-planner.ts";
+import {parseWebToolDecision,publicPlanningHistory} from "../src/unified-planner.ts";
 import {BlockList,isIP} from "node:net";
 import http from "node:http";
 import https from "node:https";
@@ -107,7 +107,7 @@ export function researchSettings(db){
 export async function researchTurn({mode,history,generate,canRequest,search=searchWeb,read=readWeb,activity=()=>{},now=new Date()}){
   if(mode==="off")return {sources:[],note:""};
   const sources=[],errors=[];const last=history.at(-1)?.content??"";
-  const recent=history.filter(m=>m.role==="user").slice(-4).map(m=>({role:m.role,content:m.content.slice(-1600)}));
+  const recent=publicPlanningHistory(history.slice(0,-1)).map(content=>({role:"user",content}));
   // No retrieved memories, assistant replies or persona are sent to the planner.
   const planner=async input=>{
     if(!canRequest())return null;

@@ -29,7 +29,7 @@ jobs:
       contents: read
       packages: write
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -69,6 +69,26 @@ jobs:
           done
           curl -fsS http://127.0.0.1:3847/api/health
           printf '%s' '{"question":"test","sources":[],"passages":[]}' | docker exec -i mikan-nas-ci /app/nas/mikan-research-native | grep -F '"kind":"passages"'
+          docker exec -i mikan-nas-ci node --input-type=module <<'JS'
+          import assert from "node:assert/strict";
+          import {nativeResearchAvailable,reviewNativeResearch} from "/app/nas/native-research.mjs";
+          assert.equal(nativeResearchAvailable(),true);
+          const sources=[
+            {title:"Pet Shop of Horrors",url:"https://example.org/short",kind:"page",content:"Pet Shop of Horrors has 4 episodes. Pet Shop of Horrors is a horror anthology series with unusual stories."},
+            {title:"Junji Ito Collection",url:"https://example.org/long",kind:"page",content:"Junji Ito Collection has 12 episodes. Junji Ito Collection is an animated horror series based on manga."}
+          ];
+          const question="short horror anime under six episodes";
+          const task={kind:"discover",requirements:[{quote:"under six episodes",relation:"lt",limit:6,unit:"episodes"}],roles:[],exclude:[]};
+          const suggestion=(source,name,count,fit)=>({source,name,creator:"",identity_quote:name+" has "+count+" episodes.",fit_quote:fit,measurements:[{source,value:count,unit:"episodes",quote:name+" has "+count+" episodes."}],relations:[]});
+          const result=reviewNativeResearch(JSON.stringify({suggestions:[
+            suggestion(1,"Pet Shop of Horrors",4,"Pet Shop of Horrors is a horror anthology series with unusual stories."),
+            suggestion(2,"Junji Ito Collection",12,"Junji Ito Collection is an animated horror series based on manga.")
+          ]}),question,task,sources);
+          assert.equal(result.accepted,1);assert.equal(result.rejected,1);assert.match(result.text,/Pet Shop of Horrors/);assert.doesNotMatch(result.text,/Junji Ito Collection/);
+          const passage=reviewNativeResearch(JSON.stringify({passages:[{source:1,quote:"Pet Shop of Horrors has 4 episodes."},{source:1,quote:"Pet Shop of Horrors was released in 2028."}]}),"Episode count",null,sources);
+          assert.equal(passage.accepted,1);assert.equal(passage.rejected,1);assert.doesNotMatch(passage.text,/2028/);
+          console.log("Packaged shared native gates passed");
+          JS
           curl -fsSL http://127.0.0.1:3847/ | grep -F 'Mikan · Beholder'
           curl -fsS http://127.0.0.1:3847/legacy | grep -F 'Beholder cloud preview'
           curl -fsS -H 'Authorization: Bearer 01234567890123456789012345678901' http://127.0.0.1:3847/api/profile | grep -F 'mikan-companion-profile'

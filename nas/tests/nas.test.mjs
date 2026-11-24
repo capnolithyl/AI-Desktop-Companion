@@ -97,7 +97,7 @@ test("NAS HTTP requires a key, streams replies and persists them",async()=>{
     assert.equal(saved.messages.at(-1).content,"Meow!");
     assert.equal((await fetch(base+"/api/memories",{headers:{Authorization:"Bearer wrong"}})).status,401);
     const activity=await (await fetch(base+"/api/learning/diagnostics/"+created.id,{headers})).json();
-    assert.ok(activity.events.some(e=>e.kind==="recall"&&e.payload.lines.length));
+    assert.ok(!activity.events.some(e=>e.kind==="recall"&&e.payload.lines.some(line=>line.includes("A new owner-approved test fact"))),"Unrelated pins must not enter ordinary chat");
     assert.equal((await fetch(base+"/api/learning/diagnostics/"+created.id)).status,401);
   } finally {
     await new Promise(resolve=>server.close(resolve));store.db.close();

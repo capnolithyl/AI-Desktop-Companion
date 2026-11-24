@@ -31,3 +31,28 @@ nas/update.log
 
 nas/.mikan-update-request*
 nas/.mikan-update-status.json*
+
+# Exact shared backend modules copied by the deployment packager.
+!src/model-switcher.ts
+!src/brain-eval-fixtures.ts
+!src/brain-eval-cloud.ts
+!src/notion-reading.ts
+!src/notion-knowledge.ts
+!src/assistant-instructions.ts
+!src/personal-grounding.ts
+!src/runtime-context.ts
+!src/conversation-engine.ts
+!src/narration-filter.ts
+!src/evidence-verification.ts
+!src/memory-retrieval.ts
+!src/session-memory.ts
+!src/unified-planner.ts
+!src-tauri/
+!src-tauri/src/
+!src-tauri/src/source_record.rs
+!src-tauri/src/quantities.rs
+!src-tauri/src/attribution.rs
+!src-tauri/src/recommendation_gate.rs
+!src-tauri/src/cloud_evidence.rs
+nas/research-native/target/
+nas/research-native/target/**
