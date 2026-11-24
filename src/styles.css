@@ -1874,3 +1874,198 @@ button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px
 .settings-standalone .personality-field {margin-bottom:20px;}
 .settings-standalone .personality-label {font-size:15px;}
 .settings-standalone .personality-label output {color:#ffb06d;}
+
+
+/* Control Center polish: bright copper light, playful paw details and responsive artwork.
+   Keep all of this scoped to Settings. The floating companion stays unchanged. */
+.settings-standalone > .drawer.control-center-window {
+  position:absolute; border:1px solid #9b5134;
+  box-shadow:inset 0 0 0 1px #ffb46d2b,inset 0 0 42px #ff7d1610;
+}
+.settings-standalone .control-center-header {
+  position:relative;isolation:isolate;
+  border-bottom:1px solid #a15d3c;
+  box-shadow:inset 0 -2px 8px #ec813821,0 5px 27px #f47c1320;
+}
+.settings-standalone .control-center-header .control-header-glyph {
+  border-color:#f29c50;box-shadow:0 0 14px #ff8c5152,inset 0 0 12px #ff8f3022;
+}
+.settings-standalone .control-center-header .drawer-title {position:relative;z-index:1;}
+.settings-standalone .control-header-paws {
+  position:absolute;top:16px;right:205px;display:flex;align-items:center;gap:18px;
+  color:#f49b5b;opacity:.38;transform:rotate(-9deg);
+  filter:drop-shadow(0 0 11px #ff8f3b);
+  pointer-events:none;
+}
+.settings-standalone .control-header-paws svg:first-child {width:25px;height:25px;transform:rotate(19deg);}
+.settings-standalone .control-header-paws svg:last-child {width:35px;height:35px;transform:rotate(-22deg);}
+.settings-standalone .settings-layout > .settings-tabs {
+  position:relative;
+  box-shadow:inset -1px 0 0 #a9673e4d,inset -18px 0 35px #ff8d1108;
+}
+.settings-standalone .control-brand-icon {
+  box-shadow:0 0 18px #f38d447a,inset 0 0 20px #f6ac3424;
+}
+.settings-standalone .control-brand strong {text-shadow:0 0 21px #ff9f5091;}
+.settings-standalone .control-sidebar-decoration {
+  display:flex;align-items:center;justify-content:center;gap:12px;
+  flex:0 0 auto;margin:15px 8px 1px;
+  min-height:74px;color:#fdac64;opacity:.72;pointer-events:none;
+  filter:drop-shadow(0 0 12px #fb742b);
+}
+.settings-standalone .control-sidebar-decoration svg:nth-child(2){transform:rotate(-13deg);}
+.settings-standalone .settings-layout .settings-tab.active {
+  border-color:#ffad53;
+  box-shadow:inset 3px 0 0 #ffbe76,0 0 18px #f579302b,0 0 0 1px #f78a3238;
+}
+.settings-standalone .settings-layout .settings-tab:hover {
+  box-shadow:0 0 13px #ff8f242c;
+}
+.settings-standalone .settings-body .control-provider-pane,
+.settings-standalone .settings-body .wardrobe-browser,
+.settings-standalone .settings-body .service-panel,
+.settings-standalone .settings-body .control-form-section,
+.settings-standalone .settings-body .control-disclosure {
+  box-shadow:0 14px 40px #1206093b,inset 0 1px 0 #ffcfa90d,0 0 24px #eb80400c;
+}
+.settings-standalone .settings-body .control-research-primary {
+  box-shadow:0 0 0 1px #ff923f3b,0 0 37px #ff7a2f21 !important;
+}
+.settings-standalone .control-home-card:hover,
+.settings-standalone .control-provider-choice.selected,
+.settings-standalone .control-crosslink:hover {
+  box-shadow:0 0 0 1px #ffb37766,0 0 28px #f8793340;
+}
+.settings-standalone .control-home-hero {
+  isolation:isolate;min-height:280px;
+  border-color:#f2a052;
+  box-shadow:inset 0 0 2px #fff4be,0 0 21px #f98e4052,0 0 48px #ef7a2429;
+  background:radial-gradient(circle at 81% 37%,#a75a387d,transparent 47%),
+    linear-gradient(113deg,#422822,#2b1d20);
+}
+.settings-standalone .control-home-hero::before {
+  content:"";pointer-events:none;position:absolute;inset:0;
+  background:linear-gradient(120deg,transparent 52%,#ffad3b18 68%,transparent 93%);
+  z-index:0;
+}
+.settings-standalone .control-home-hero .control-home-portrait {
+  height:100%;width:52%;max-width:none;top:0;bottom:0;right:0;
+  object-fit:cover;object-position:50% 24%;opacity:.89;
+  -webkit-mask-image:linear-gradient(to right,transparent 0%,#000 46%);
+  mask-image:linear-gradient(to right,transparent 0%,#000 46%);
+  filter:drop-shadow(0 12px 26px #f9892537);
+}
+.settings-standalone .control-hero-paws {
+  position:absolute;right:43%;top:21px;z-index:1;
+  display:flex;align-items:center;gap:10px;color:#ffaa65;opacity:.56;
+  transform:rotate(18deg);pointer-events:none;
+  filter:drop-shadow(0 0 10px #ffb045);
+}
+.settings-standalone .control-home-hero h2 em {text-shadow:0 0 27px #f7904a6b;}
+.settings-standalone .control-home-copy {width:min(68%,650px);}
+.settings-standalone .control-primary-link,
+.settings-standalone .control-commandbar .save-button {
+  box-shadow:0 0 0 1px #ffce855c,0 0 22px #ff9b4c5c,0 5px 25px #ec6e3533;
+}
+.settings-standalone .control-primary-link:hover,
+.settings-standalone .control-commandbar .save-button:hover {
+  box-shadow:0 0 0 1px #ffce85a8,0 0 34px #ff9e6480;
+}
+.settings-standalone .control-commandbar {
+  border-top-color:#8c543b;box-shadow:0 -7px 25px #ff81201a;
+}
+/* Stop inherited width:100% from stretching standalone inline actions and resets. */
+.settings-standalone .settings-layout > .settings-body > button.inline-action {
+  width:fit-content!important;max-width:100%;
+  margin:4px auto 13px 0!important;padding:9px 11px;
+  min-height:35px;justify-content:flex-start;text-align:left;
+  border:1px solid transparent;background:transparent;
+  box-shadow:none;
+}
+.settings-standalone .settings-layout > .settings-body > button.inline-action:disabled {
+  opacity:.45;background:none;border-color:transparent;
+}
+.settings-standalone .settings-layout > .settings-body > button.inline-action:not(:disabled):hover {
+  background:#54372b;border-color:#a5684d;
+}
+.settings-standalone .iki-wardrobe-actions {
+  display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:flex-start;
+  margin:14px 0;
+}
+.settings-standalone .iki-wardrobe-actions > button {
+  flex:0 0 auto;width:auto!important;min-height:40px;
+  padding:10px 15px;font-size:13px;border-radius:10px;
+}
+.settings-standalone .iki-wardrobe-actions > .control-outfit-remove {
+  margin-left:auto;border:1px solid #9e574d;color:#ffc7b8;background:#452827;
+}
+.settings-standalone .iki-wardrobe-actions > .control-outfit-remove:hover {background:#60312f;border-color:#ee8170;}
+
+/* The portrait is an unobtrusive side companion only when there is room.
+   Keep full horizontal workspace for Memory, Brain Lab and narrow windows. */
+.settings-standalone .control-portrait-aside {display:none;}
+@media(min-width:1550px) {
+  .settings-standalone .control-portrait-aside {
+    display:block;position:relative;isolation:isolate;
+    flex:0 0 clamp(270px,21vw,360px);width:clamp(270px,21vw,360px);
+    min-width:0;overflow:hidden;background:#211719;
+    border-left:1px solid #b56d47;
+    box-shadow:-7px 0 29px #e982262a,inset 3px 0 0 #ffbe7542;
+  }
+  .settings-standalone .settings-layout > .settings-body:not(.settings-embedded) {
+    padding-left:clamp(20px,2.3vw,36px);padding-right:clamp(20px,2.3vw,36px);
+  }
+  .settings-standalone .control-portrait-card {position:absolute;inset:0;overflow:hidden;}
+  .settings-standalone .control-portrait-card::before {
+    content:"";position:absolute;inset:0;z-index:0;pointer-events:none;
+    background:radial-gradient(ellipse at 50% 27%,#f37f375a,transparent 66%),
+      radial-gradient(ellipse at 50% 90%,#8b3f2855,transparent 70%);
+  }
+  .settings-standalone .control-portrait-title {
+    position:absolute;top:22px;left:17px;right:17px;z-index:3;
+    display:flex;align-items:center;gap:11px;padding:13px 15px;
+    color:#ffad65;background:#34201dcc;border:1px solid #c47b42;
+    border-radius:15px;box-shadow:0 0 22px #f98b4666;
+  }
+  .settings-standalone .control-portrait-title strong {
+    color:#ffe5c7;font-size:20px;letter-spacing:.025em;
+    font-family:"Segoe UI Variable","Segoe UI",system-ui,sans-serif;
+  }
+  .settings-standalone .control-portrait-title svg:last-child {margin-left:auto;}
+  .settings-standalone .control-portrait-glow {
+    position:absolute;top:110px;left:50%;width:320px;height:380px;transform:translateX(-50%);
+    border-radius:50%;background:#e67f4157;filter:blur(74px);pointer-events:none;
+  }
+  .settings-standalone .control-portrait-illustration {position:absolute;inset:105px -15px 80px;}
+  .settings-standalone .control-portrait-illustration img {
+    display:block;width:100%;height:100%;object-fit:cover;object-position:50% 25%;
+    -webkit-mask-image:linear-gradient(to bottom,#000 65%,#000e 77%,transparent 100%);
+    mask-image:linear-gradient(to bottom,#000 65%,#000e 77%,transparent 100%);
+    filter:drop-shadow(0 0 18px #f8944e41);
+  }
+  .settings-standalone .control-portrait-message {
+    position:absolute;bottom:28px;left:18px;right:18px;z-index:2;
+    display:flex;align-items:center;gap:12px;min-height:76px;padding:18px;
+    border:1px solid #ffab64;border-radius:17px;
+    color:#ffe7d4;background:#3e2620e8;
+    box-shadow:0 0 22px #f7984d65,inset 0 0 14px #ffae4a24;
+    font-size:14px;line-height:1.5;
+  }
+  .settings-standalone .control-portrait-message svg {flex:0 0 auto;color:#ffa64f;}
+  .settings-standalone .control-portrait-sparkles {
+    position:absolute;z-index:1;right:19px;bottom:133px;
+    display:grid;gap:13px;color:#f5a264;transform:rotate(-14deg);
+    filter:drop-shadow(0 0 12px #ff913d);
+  }
+}
+@media(max-width:800px) {
+  .settings-standalone .control-header-paws {display:none;}
+  .settings-standalone .control-home-hero .control-home-portrait {opacity:.38;}
+  .settings-standalone .control-home-copy {width:100%;}
+  .settings-standalone .iki-wardrobe-actions > .control-outfit-remove {margin-left:0;}
+}
+@media(prefers-reduced-motion:reduce) {
+  .settings-standalone .control-home-card,
+  .settings-standalone .control-provider-choice,
+  .settings-standalone .control-center-header * {transition:none;}
+}
