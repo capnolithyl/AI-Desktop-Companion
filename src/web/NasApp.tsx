@@ -1,0 +1,224 @@
+import {useState,useRef,useEffect,useMemo,type FormEvent,type ChangeEvent,type CSSProperties} from "react";
+import {ArrowLeft,Cat,Brain,Shirt,WandSparkles,Settings2,PawPrint,Sparkles,History,UserRound,Download,Upload,Plug2,Lock,Trash2,LoaderCircle} from "lucide-react";
+import {DefaultCompanionShell} from "../DefaultCompanionShell";
+import {WorkspaceAvatarRays,WorkspacePawSeal,WorkspaceSendPaw} from "../WorkspaceDecor";
+import {ChatMarkdown} from "../components/ChatMarkdown";
+import {PersonalityPresets,PersonalitySliders} from "../PersonalityControls";
+import {PersonaCommunicationFields} from "../PersonaCommunicationFields";
+import {IkiAvatar} from "../IkiAvatar";
+import {defaultRigUrl,defaultOutfitName,shippedOutfits,shippedOutfitById} from "../bundled-iki-outfits";
+import {AVATAR_BACKGROUNDS} from "../avatar-background";
+import {PortraitContextMenu,type PortraitMenuItem} from "../PortraitContextMenu";
+import {reactionFromReply,type AvatarReaction,type AvatarReactionKind} from "../avatar-reactions";
+import {DEFAULT_COMPANION_PROFILE,importCompanionProfile,exportCompanionProfile,type CompanionProfile} from "../companion-profile";
+import {NasClient,type NasMessage,type NasChat,type NasFact,type NasStatus} from "./nas-client";
+const portrait=new URL("../../assets/iki/mikan-chat-avatar.webp",import.meta.url).href;
+const referencePortrait=new URL("../../assets/iki/mikan-reference.png",import.meta.url).href;
+const KEY="mikan-nas-key";
+type Page="chat"|"personality"|"appearance"|"memory"|"history"|"capabilities"|"log";
+const tabs=[
+  {id:"personality",label:"Personality",icon:WandSparkles},
+  {id:"appearance",label:"Character",icon:Shirt},
+  {id:"memory",label:"Memory & chats",icon:Brain},
+  {id:"history",label:"Chat history",icon:History},
+  {id:"capabilities",label:"Capabilities",icon:Plug2}
+] as const;
+function downloadProfile(profile:CompanionProfile){
+  const url=URL.createObjectURL(new Blob([JSON.stringify(exportCompanionProfile(profile),null,2)],{type:"application/json"}));
+  const a=document.createElement("a");a.href=url;a.download="mikan-companion-profile.json";document.body.appendChild(a);a.click();a.remove();window.setTimeout(()=>URL.revokeObjectURL(url),1000);
+}
+function openLink(href:string){try{const url=new URL(href);if(["https:","http:"].includes(url.protocol))window.open(url.href,"_blank","noopener,noreferrer");}catch{/* Reject invalid URLs. */}}
+function Bubble({message,latest,busy}:{message:NasMessage;latest:boolean;busy:boolean}){
+  const assistant=message.role==="assistant";
+  const timestamp=message.createdAt<1e12?message.createdAt*1000:message.createdAt;
+  const date=new Date(timestamp);
+  return <article className={"workspace-message "+message.role}>
+    {assistant&&latest&&<WorkspaceAvatarRays/>}
+    <span className="workspace-message-avatar" aria-hidden="true">{assistant?<img className="workspace-chat-portrait" src={portrait} alt="" width={58} height={58} draggable={false}/>:<UserRound size={19}/>}</span>
+    <div className="workspace-message-body"><div className="workspace-message-author"><strong>{assistant?"Mikan ♡":"You"}</strong></div>
+      <div className="workspace-message-bubble"><svg className="workspace-bubble-tail" viewBox="0 0 18 22" aria-hidden="true"><path d="M18 2 H13 Q11 8 2 8 Q8 12 13 20 H18Z" fill="var(--bubble-tail)"/><path d="M13 2 Q11 8 2 8 Q8 12 13 20" fill="none" stroke="var(--bubble-edge)" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+      <div className="workspace-bubble-content"><ChatMarkdown text={message.content||(busy?"Thinking…":"")} onOpenLink={openLink}/>{assistant&&message.content.length>=120&&<WorkspacePawSeal/>}</div>
+      <div className="workspace-bubble-footer"><time dateTime={date.toISOString()}>{date.toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"})}</time></div></div>
+    </div>
+  </article>;
+}
+
+export function NasApp(){
+  const [key,setKey]=useState(()=>sessionStorage.getItem(KEY)||"");
+  const [token,setToken]=useState("");
+  const [authenticated,setAuthenticated]=useState(false);
+  const [connecting,setConnecting]=useState(false);
+  const [status,setStatus]=useState<NasStatus|null>(null);
+  const [profile,setProfile]=useState<CompanionProfile>(DEFAULT_COMPANION_PROFILE);
+  const [draft,setDraft]=useState<CompanionProfile>(DEFAULT_COMPANION_PROFILE);
+  const [chats,setChats]=useState<NasChat[]>([]);
+  const [messages,setMessages]=useState<NasMessage[]>([]);
+  const [active,setActive]=useState<string|null>(null);
+  const [input,setInput]=useState("");
+  const [busy,setBusy]=useState(false);
+  const [saving,setSaving]=useState(false);
+  const [page,setPage]=useState<Page>("chat");
+  const [notice,setNotice]=useState("");
+  const [facts,setFacts]=useState<NasFact[]>([]);
+  const [fact,setFact]=useState("");
+  const [rigError,setRigError]=useState("");
+  const [reaction,setReaction]=useState<AvatarReaction|null>(null);
+  const [menu,setMenu]=useState<{x:number;y:number}|null>(null);
+  const serial=useRef(0);
+  const inFlight=useRef(false);
+  const client=useMemo(()=>new NasClient(key),[key]);
+  const file=useRef<HTMLInputElement>(null);
+  const mounted=useRef(true);
+  useEffect(()=>{mounted.current=true;return()=>{mounted.current=false;};},[]);
+  useEffect(()=>{
+    if(!key)return;
+    let valid=true;setConnecting(true);setNotice("");
+    void (async()=>{
+      try{
+        const [info,stored,list]=await Promise.all([client.status(),client.profile(),client.chats()]);
+        if(!valid)return;
+        let selected=list.find(c=>c.id===localStorage.getItem("mikan-nas-chat"))??list[0];
+        if(!selected)selected=await client.createChat();
+        const history=await client.messages(selected.id);
+        if(!valid)return;
+        setStatus(info);setProfile(stored);setDraft(stored);setChats(list.length?list:[selected]);setActive(selected.id);setMessages(history);
+        localStorage.setItem("mikan-nas-chat",selected.id);sessionStorage.setItem(KEY,key);setAuthenticated(true);
+      }catch(error){if(valid){setAuthenticated(false);sessionStorage.removeItem(KEY);setNotice(String(error instanceof Error?error.message:error));}}
+      finally{if(valid)setConnecting(false);}
+    })();
+    return()=>{valid=false;};
+  },[key,client]);
+  useEffect(()=>{setRigError("");},[profile.outfitId,profile.avatarDisplay]);
+  const lock=()=>{if(busy||saving)return;setAuthenticated(false);setKey("");setToken("");sessionStorage.removeItem(KEY);setMessages([]);setChats([]);setFacts([]);setActive(null);setPage("chat");setNotice("");};
+  const report=(error:unknown)=>setNotice(error instanceof Error?error.message:String(error));
+  const openPage=(next:Page)=>{
+    setNotice("");setDraft(profile);setPage(next);
+    if(next==="memory")void client.facts().then(setFacts).catch(report);
+  };
+  const openChat=async(id:string)=>{
+    if(inFlight.current||busy)return;
+    try{const history=await client.messages(id);setActive(id);setMessages(history);setPage("chat");setNotice("");localStorage.setItem("mikan-nas-chat",id);}
+    catch(error){report(error);}
+  };
+  const newChat=async()=>{
+    if(inFlight.current||busy)return;
+    try{const chat=await client.createChat();setChats(previous=>[chat,...previous]);setMessages([]);setActive(chat.id);localStorage.setItem("mikan-nas-chat",chat.id);setPage("chat");setNotice("");}
+    catch(error){report(error);}
+  };
+  const express=(kind:AvatarReactionKind)=>setReaction({kind,serial:++serial.current,source:"test"});
+  const save=async(next:CompanionProfile)=>{
+    if(saving)return;setSaving(true);setNotice("");
+    try{const saved=await client.saveProfile(next);setProfile(saved);setDraft(saved);setNotice("Saved on Beholder.");}
+    catch(error){report(error);}
+    finally{setSaving(false);}
+  };
+  const importFile=async(event:ChangeEvent<HTMLInputElement>)=>{
+    const selected=event.target.files?.[0];event.target.value="";
+    if(!selected)return;
+    try{if(selected.size>64000)throw new Error("Profile is too large");const imported=importCompanionProfile(JSON.parse(await selected.text()));setDraft(imported);setNotice("Profile loaded. Review it, then Save settings to apply.");}
+    catch(error){report(error);}
+  };
+  const send=async(event?:FormEvent)=>{
+    event?.preventDefault();
+    const text=input.trim(),id=active;
+    if(!text||!id||busy||inFlight.current)return;
+    inFlight.current=true;setBusy(true);setNotice("");setInput("");
+    const stamp=Date.now(),pending="nas-pending-"+stamp;
+    setMessages(previous=>[...previous,{id:pending+"-user",role:"user",content:text,createdAt:stamp},{id:pending,role:"assistant",content:"",createdAt:stamp+1}]);
+    let full="";
+    try{await client.chat(id,text,delta=>{full+=delta;setMessages(previous=>previous.map(m=>m.id===pending?{...m,content:full}:m));});
+      const kind=reactionFromReply(full);if(kind)setReaction({kind,serial:++serial.current,source:"reply"});
+    }catch(error){report(error);}
+    finally{
+      try{const [history,list]=await Promise.all([client.messages(id),client.chats()]);if(mounted.current){setMessages(history);setChats(list);}}
+      catch(error){report(error);}
+      inFlight.current=false;setBusy(false);
+    }
+  };
+  const addFact=async(event:FormEvent)=>{
+    event.preventDefault();
+    if(!fact.trim())return;
+    try{await client.addFact(fact.trim());setFact("");setFacts(await client.facts());}
+    catch(error){report(error);}
+  };
+  const removeFact=async(id:number)=>{
+    if(!window.confirm("Delete this saved fact from Beholder?"))return;
+    try{await client.removeFact(id);setFacts(await client.facts());}catch(error){report(error);}
+  };
+  if(!authenticated)return <main className="nas-gate"><form className="nas-login control-form-section" onSubmit={event=>{event.preventDefault();if(token.trim()===key){setKey("");window.setTimeout(()=>setKey(token.trim()),0);}else setKey(token.trim());}}>
+    <img src={portrait} alt="Mikan"/><h1>Welcome home ♡</h1><p>Mikan · Beholder</p>
+    <label className="setting-field">NAS access key<input type="password" value={token} autoComplete="off" onChange={event=>setToken(event.target.value)} required/></label>
+    <button className="secondary-action" disabled={connecting}>{connecting?<LoaderCircle className="spin" size={16}/>:<Lock size={16}/>} {connecting?"Connecting…":"Unlock Mikan"}</button>
+    {notice&&<p role="alert">{notice}</p>}
+  </form></main>;
+  const outfit=shippedOutfitById(profile.outfitId);
+  const avatar=<div className="workspace-avatar-rig" style={{width:"100%",height:"100%"}}>
+    {profile.avatarDisplay==="animated"&&!rigError?<IkiAvatar customRig={null} rigUrl={outfit?.bundledUrl||defaultRigUrl}
+      rigLabel={outfit?.name||defaultOutfitName} speaking={false} reaction={reaction} debugVisible={false}
+      presencePreferences={{followCursor:profile.followCursor,dragSway:false}} dragging={false} verticalOffset={profile.verticalOffset}
+      onDebug={()=>{}} onError={setRigError}/>:<img className="character-portrait" src={referencePortrait} alt="Mikan" draggable={false}/>}
+  </div>;
+  const menuItems:PortraitMenuItem[]=[
+    {id:"outfit",label:"Change outfit",children:[{id:"default",label:defaultOutfitName,selected:!profile.outfitId,onSelect:()=>void save({...profile,outfitId:null})},...shippedOutfits.map(item=>({id:item.id,label:item.name,selected:profile.outfitId===item.id,onSelect:()=>void save({...profile,outfitId:item.id})}))]},
+    {id:"background",label:"Background",children:AVATAR_BACKGROUNDS.map(item=>({id:item.id,label:item.label,selected:profile.avatarBackground===item.id,onSelect:()=>void save({...profile,avatarBackground:item.id})}))},
+    {id:"appearance",label:"Character settings",onSelect:()=>openPage("appearance")}
+  ];
+  const latest=[...messages].reverse().find(m=>m.role==="assistant")?.id;
+  return <main className={"companion nas-app "+(page==="chat"?"default-layout-active":"settings-mode settings-standalone")}
+    style={{"--mikan-font":"Segoe UI, system-ui, sans-serif"} as CSSProperties}>
+    {page==="chat"?<DefaultCompanionShell avatar={avatar} avatarBackground={profile.avatarBackground} onAvatarContextMenu={event=>{event.preventDefault();setMenu({x:event.clientX,y:event.clientY});}}
+      chats={chats} activeConversationId={active} transcriptVersion={messages.length+":"+(messages.at(-1)?.content.length||0)+":"+busy}
+      busy={busy} muted ready memoryIssue={false} visionActive={false} visionBusy={false}
+      displayName={chats.find(c=>c.id===active)?.title||"Beholder Companion"} lastActivity={busy?"Thinking…":"Ready"} activityEntries={[]}
+      webMode unavailable={{voice:true,vision:true,search:true}} onDrag={()=>{}} onHide={lock}
+      onNewChat={()=>void newChat()} onOpenChat={id=>void openChat(id)} onOpenHistory={()=>openPage("history")}
+      onCopyChatDebug={async id=>{const history=await client.messages(id);await navigator.clipboard.writeText(JSON.stringify({service:"nas",model:status?.model,conversation:id,messages:history},null,2));}}
+      onOpenCurrentLog={()=>openPage("log")} onOpenMemory={()=>openPage("memory")} onOpenSettings={()=>openPage("personality")}
+      onOpenSearch={()=>openPage("capabilities")} onToggleVision={()=>{}} onVoice={()=>{}} onMute={()=>{}}
+      onExpression={express} onOutfit={()=>openPage("appearance")}
+      modelPicker={<div className="model-switcher"><select aria-label="Configured NAS model" value={status?.model||""} disabled><option value={status?.model||""}>{status?.model||"Cloud model"}</option></select></div>}
+      transcript={<>{!messages.length&&<div className="workspace-greeting"><PawPrint size={42}/><strong>Ready for a little conversation?</strong><span>Beholder is awake.</span></div>}
+        {messages.map(message=><Bubble key={message.id} message={message} latest={message.id===latest} busy={busy}/>)}
+        {notice&&<div className="workspace-system-feedback" role="status"><Sparkles size={18}/><span>{notice}</span></div>}</>}
+      composer={<form className="input-row" onSubmit={event=>void send(event)}>
+        <textarea aria-label="Message Mikan" rows={2} placeholder="Message Mikan…" maxLength={4000} value={input} onChange={event=>setInput(event.target.value)}
+          onKeyDown={event=>{if(event.key==="Enter"&&!event.shiftKey&&!event.nativeEvent.isComposing){event.preventDefault();void send();}}}/>
+        <button className="send-button chat-paw-send" type="submit" aria-label="Send message" disabled={busy||!input.trim()}>{busy?<LoaderCircle className="spin" size={20}/>:<WorkspaceSendPaw/>}</button>
+      </form>}/>:<section className="drawer control-center-window" role="dialog" aria-label="Mikan Control Center">
+      <header className="drawer-header control-center-header"><button type="button" className="back-button" onClick={()=>{setPage("chat");setNotice("");}} title="Back to chat"><ArrowLeft size={20}/></button>
+        <span className="control-header-glyph"><Settings2 size={22}/></span><div className="drawer-title"><strong>{tabs.find(t=>t.id===page)?.label||"Conversation log"}</strong><span>Mikan's control center · Beholder</span></div>
+        <span className="control-local-indicator"><span/> NAS</span></header>
+      <div className="settings-layout"><nav className="settings-tabs" aria-label="Settings categories">
+        <div className="control-brand"><div className="control-brand-icon"><Cat size={25}/></div><div><strong>Mikan</strong><small>CONTROL CENTER</small></div></div>
+        <div className="settings-nav-group"><div className="settings-nav-heading">YOUR COMPANION</div>
+          {tabs.map(({id,label,icon:Icon})=><button type="button" key={id} className={"settings-tab"+(page===id?" active":"")} onClick={()=>openPage(id)}><span className="control-nav-icon"><Icon size={19}/></span><span>{label}</span></button>)}
+        </div><div className="control-sidebar-decoration"><Sparkles size={13}/><PawPrint size={34}/><Sparkles size={10}/></div>
+      </nav><div className="settings-body">
+        {page==="personality"&&<>
+          <div className="control-page-note"><WandSparkles size={20}/> Same personality and communication rules as desktop Mikan. Save to apply across browsers.</div>
+          <div className="nas-profile-actions"><button className="secondary-action" onClick={()=>file.current?.click()}><Upload size={15}/> Import desktop profile</button><button className="secondary-action" onClick={()=>downloadProfile(draft)}><Download size={15}/> Export profile</button><input ref={file} type="file" accept=".json,application/json" hidden onChange={event=>void importFile(event)}/></div>
+          <div className="settings-section-title">Mikan's personality</div><PersonalityPresets value={draft.personality} onChange={personality=>setDraft(current=>({...current,personality}))}/>
+          <div className="settings-section-title">Fine-tune her personality</div><PersonalitySliders value={draft.personality} onChange={personality=>setDraft(current=>({...current,personality}))}/>
+          <PersonaCommunicationFields value={draft} onChange={patch=>setDraft(current=>({...current,...patch}))}/>
+        </>}
+        {page==="appearance"&&<><div className="settings-section-title">Mikan's wardrobe</div>
+          <section className="control-form-section"><label className="setting-field">Outfit<select value={draft.outfitId??""} onChange={event=>setDraft(current=>({...current,outfitId:event.target.value||null}))}><option value="">{defaultOutfitName}</option>{shippedOutfits.map(item=><option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
+          <label className="setting-field">Background<select value={draft.avatarBackground} onChange={event=>setDraft(current=>({...current,avatarBackground:event.target.value as CompanionProfile["avatarBackground"]}))}>{AVATAR_BACKGROUNDS.map(item=><option key={item.id} value={item.id}>{item.label}</option>)}</select></label>
+          <label className="setting-field">Avatar display<select value={draft.avatarDisplay} onChange={event=>setDraft(current=>({...current,avatarDisplay:event.target.value as CompanionProfile["avatarDisplay"]}))}><option value="animated">Animated Iki</option><option value="portrait">Portrait</option></select></label>
+          <label className="setting-field">Vertical position · {draft.verticalOffset}<input type="range" min={-300} max={300} value={draft.verticalOffset} onChange={event=>setDraft(current=>({...current,verticalOffset:Number(event.target.value)}))}/></label>
+          <label className="setting-field"><span>Follow cursor <input type="checkbox" checked={draft.followCursor} onChange={event=>setDraft(current=>({...current,followCursor:event.target.checked}))}/></span></label>
+          {rigError&&<p role="alert">{rigError}</p>}
+          <small>Bundled outfits are shared with desktop. Custom imported rigs are not yet supported in NAS mode.</small></section></>}
+        {page==="memory"&&<><div className="settings-section-title">Saved owner facts</div><form className="control-form-section" onSubmit={event=>void addFact(event)}><label className="setting-field">Remember that…<textarea value={fact} maxLength={800} onChange={event=>setFact(event.target.value)}/></label><button className="secondary-action" disabled={!fact.trim()}>Save fact</button></form>
+          {facts.map(item=><div key={item.id} className="nas-fact control-form-section"><span>{item.fact}</span><button className="secondary-action" title="Delete fact" onClick={()=>void removeFact(item.id)}><Trash2 size={15}/></button></div>)}
+          <p className="settings-note">Basic fact management. Full desktop memory, canon and interest panels remain to be ported.</p></>}
+        {page==="history"&&<><div className="settings-section-title">Conversations</div>{chats.map(chat=><button key={chat.id} className="secondary-action nas-history-button" disabled={busy} onClick={()=>void openChat(chat.id)}>{chat.title||"Conversation"}</button>)}</>}
+        {page==="log"&&<><div className="settings-section-title">Conversation log</div><p className="settings-note">NAS model: {status?.model}</p>{messages.map(message=><div key={message.id} className="control-form-section"><strong>{message.role==="assistant"?"Mikan":"You"}</strong><ChatMarkdown text={message.content} onOpenLink={openLink}/></div>)}</>}
+        {page==="capabilities"&&<><div className="settings-section-title">Beholder runtime</div><section className="control-form-section"><p>Cloud chat · {status?.provider} · {status?.model}</p><p>Persistent conversations, lexical memory recall, shared persona, animated Iki, bundled outfits and backgrounds.</p><p>Not connected yet: provider switching in the UI, automatic memory, Qdrant, web research, Notion, Brain Lab, voice synthesis, screen capture and desktop synchronization. Windows window controls and global hotkeys stay native.</p><p>The old prototype is still available at <a href="/legacy">/legacy</a>.</p></section></>}
+        {notice&&<p className="settings-note" role="status">{notice}</p>}
+        {(page==="personality"||page==="appearance")&&<div className="nas-save-row"><button className="secondary-action" disabled={saving} onClick={()=>void save(draft)}>{saving?"Saving…":"Save settings"}</button></div>}
+      </div></div>
+    </section>}
+    {menu&&page==="chat"&&<PortraitContextMenu position={menu} items={menuItems} onClose={()=>setMenu(null)}/>}
+  </main>;
+}
