@@ -28,9 +28,14 @@ test("communication preferences are wired into the desktop UI and chat", async()
   assert.match(app,/assistantTurnInstructionParts\(/);
   assert.match(instruction,/assistantVoiceGuidance\(settings,allowRoleplay\)/);
   assert.match(voice,/communicationGuidance\(settings\.communication\)/);
-  assert.match(app,/Communication preferences/);
-  assert.match(app,/draft\.communication\.addressMode/);
-  assert.match(app,/draft\.communication\.customGuidance/);
+  const fields=readFileSync(new URL("./PersonaCommunicationFields.tsx",import.meta.url),"utf8");
+  const nas=readFileSync(new URL("./web/NasApp.tsx",import.meta.url),"utf8");
+  assert.match(app,/<PersonaCommunicationFields value=\{draft\}/);
+  assert.match(nas,/<PersonaCommunicationFields value=\{draft\}/);
+  assert.match(fields,/Communication preferences/);
+  assert.match(fields,/value\.communication\.addressMode/);
+  assert.match(fields,/value\.communication\.customGuidance/);
+  assert.match(fields,/onChange\(\{communication:/);
 });
 test("reviewed corrections can replace earlier interest records",async()=>{
   const {readFileSync} = await import("node:fs");
