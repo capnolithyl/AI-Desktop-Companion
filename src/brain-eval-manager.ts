@@ -316,9 +316,13 @@ async function executeOne(
       question:last,history:messages.slice(0,-1),
       allowRoleplay:roleplayAllowed,
       researchActive:researchPlanned||webRequest?.autoSearch===true,
-      publicWebRequested:webRequest?.autoSearch===true,
+      // Model-led NVIDIA may execute search_web/read_webpage after this prompt.
+      // Do not tell it research already failed just because no query was preplanned.
+      publicWebRequested:webRequest?.autoSearch===true ||
+        (nativeWebAllowed===true && researchPlanned),
       plannedPublicSearch:!!researchQuery,
-      plannedButNotExecuted:researchPlanned&&!webRequest?.autoSearch
+      plannedButNotExecuted:researchPlanned&&!webRequest?.autoSearch &&
+        nativeWebAllowed!==true
     });
     const system=joinAssistantInstructionParts(sharedTurnInstructions,[
       "ISOLATED BRAIN LAB FIXTURES: User memories in this test are synthetic data. Never write production memories, use private integrations or contact owner-connected accounts. Public tool permissions are enforced by the normal application backend.",

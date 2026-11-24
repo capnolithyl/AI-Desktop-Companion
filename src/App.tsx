@@ -2727,7 +2727,9 @@ export default function App() {
       const sharedTurnInstructions=assistantTurnInstructionParts({
         settings,question:text,history:groundedChapterTurn?[]:messages,
         allowRoleplay,researchActive:researchPlan.mode!=="chat",
-        publicWebRequested:effectiveWeb,plannedPublicSearch,
+        publicWebRequested:effectiveWeb ||
+          (modelLed && cloudMaySearch && researchPlan.mode!=="chat"),
+        plannedPublicSearch,
         plannedButNotExecuted:plannedPublicSearch&&!effectiveWeb
       });
       const completion = await invoke<ChatCompletion>("chat_stream", {
