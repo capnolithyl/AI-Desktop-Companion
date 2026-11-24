@@ -52,7 +52,6 @@ import {
   type CharacterCategory, type CharacterFact, type InterestItem
 } from "./memory-client";
 import { MemoryPanel } from "./MemoryPanel";
-const BrainEvalPanel = lazy(() => import("./BrainEvalPanel").then(module => ({ default: module.BrainEvalPanel })));
 import {
   subscribeBrainEval, getBrainEvalStatus, getBrainEvalReport, restoreBrainEvalReport,
   startBrainEvaluation, stopBrainEvaluation, reviewBrainEvalScenario,
@@ -84,7 +83,6 @@ import {
 import { CAPTURE_INTERVAL_MIN,CAPTURE_INTERVAL_MAX,ANALYSIS_POLICY,type RegionChoice } from "./capture-region";
 import { attachmentQuestion, attachmentPromptText, loadChatAttachment, type PendingAttachment, type ExtractedDocument } from "./chat-attachments";
 import { parseIkiModel } from "@ikijs/format";
-const IkiAvatar = lazy(() => import("./IkiAvatar").then(module => ({ default: module.IkiAvatar })));
 import { resolveDisplayedIkiRig } from "./iki-avatar-selection";
 import { PortraitContextMenu, type PortraitMenuItem } from "./PortraitContextMenu";
 import type { MenuPoint } from "./portrait-context-menu";
@@ -110,6 +108,9 @@ import {
   localWardrobeDay, pickDailyOutfit, type WardrobeChoice, type WardrobeConfig,
   type OutfitMetadata
 } from "./iki-wardrobe";
+
+const BrainEvalPanel = lazy(() => import("./BrainEvalPanel").then(module => ({ default: module.BrainEvalPanel })));
+const IkiAvatar = lazy(() => import("./IkiAvatar").then(module => ({ default: module.IkiAvatar })));
 
 type Screen = "compact" | "log" | "settings" | "search" | "page" | "help";
 type SettingsTab = "ai" | "internet" | "notion" | "voice" | "appearance" | "interface" | "personality" | "memory" | "capabilities" | "brain";
