@@ -113,7 +113,7 @@ const BrainEvalPanel = lazy(() => import("./BrainEvalPanel").then(module => ({ d
 const IkiAvatar = lazy(() => import("./IkiAvatar").then(module => ({ default: module.IkiAvatar })));
 
 type Screen = "compact" | "log" | "settings" | "search" | "page" | "help";
-type SettingsTab = "ai" | "internet" | "notion" | "voice" | "appearance" | "interface" | "personality" | "memory" | "capabilities" | "brain";
+type SettingsTab = "home" | "vision" | "ai" | "internet" | "notion" | "voice" | "appearance" | "interface" | "personality" | "memory" | "capabilities" | "brain";
 type VoiceHealth = { ready: boolean; modelLoaded: boolean; device: string | null };
 type VoiceReference = { configured: boolean; transcript: string | null; durationSeconds: number | null; fileName: string | null };
 type SearchService = { state: string; message: string };
@@ -1497,7 +1497,7 @@ export default function App() {
     if (tab === "voice") void checkVoice(voiceEndpoint(settings.voice));
     setScreen("settings");
   };
-  const openSettings = () => openSettingsTab("appearance");
+  const openSettings = () => openSettingsTab("home");
 
   useEffect(() => {
     if (!standaloneSettings) return;
@@ -3811,7 +3811,7 @@ export default function App() {
           onAutoRememberUserChange={enabled => applySetting({autoRememberUser: enabled})}
           onAutoRememberMikanChange={enabled => applySetting({autoRememberMikan: enabled})}
           automaticError={automaticMemoryError}
-          busy={busy} error={memoryError} onClose={() => setSettingsTab("appearance")}
+          busy={busy} error={memoryError} onClose={() => setSettingsTab("home")}
           onNew={standaloneSettings
               ? () => { void emit("mikan://settings-chat", { action: "new" }); goCompact(); }
               : clearChat}
@@ -3969,63 +3969,22 @@ export default function App() {
             </select>
             <small>For supported local reasoning models (including Qwen 3.5). Tool planning and memory extraction stay fast. Deep mode may be slower.</small>
           </label>
-          <label className="setting-field">System/persona prompt
-            <textarea rows={9} value={draft.systemPrompt}
-              onChange={event => setDraft({ ...draft, systemPrompt: event.target.value })}/>
-            <small>Core personality instructions. Presets and sliders live in the separate Personality panel.</small>
-          </label>
-          <div className="settings-section-title">Communication preferences</div>
-          <p className="settings-note">These instructions apply to every reply, even when personal memory retrieval doesn't find the relevant preference.</p>
-          <label className="setting-field">How Mikan addresses you
-            <select value={draft.communication.addressMode}
-              onChange={event => setDraft(current => ({ ...current, communication: {
-                ...current.communication,
-                addressMode: event.target.value as typeof current.communication.addressMode
-              }}))}>
-              <option value="endearments">Endearments and nicknames, not my first name</option>
-              <option value="neutral">No names or nicknames</option>
-              <option value="first-name">First name is okay</option>
-            </select>
-          </label>
-          {draft.communication.addressMode === "endearments" && <label className="setting-field">Preferred endearments
-            <input value={draft.communication.endearments} maxLength={240}
-              placeholder="honey, sweetheart, darling"
-              onChange={event => setDraft(current => ({ ...current, communication: {
-                ...current.communication, endearments: event.target.value
-              }}))}/>
-            <small>Separate suggestions with commas. Mikan doesn't need to use one in every reply.</small>
-          </label>}
-          <label className="setting-field">Reply length
-            <select value={draft.communication.replyLength}
-              onChange={event => setDraft(current => ({ ...current, communication: {
-                ...current.communication,
-                replyLength: event.target.value as typeof current.communication.replyLength
-              }}))}>
-              <option value="concise">Concise</option>
-              <option value="balanced">Balanced</option>
-              <option value="detailed">Detailed when useful</option>
-            </select>
-          </label>
-          <label className="setting-field">Follow-up questions
-            <select value={draft.communication.followUps}
-              onChange={event => setDraft(current => ({ ...current, communication: {
-                ...current.communication,
-                followUps: event.target.value as typeof current.communication.followUps
-              }}))}>
-              <option value="necessary">Only when useful</option>
-              <option value="natural">Conversational</option>
-            </select>
-          </label>
-          <label className="setting-field">Other communication preferences
-            <textarea rows={3} maxLength={1000} value={draft.communication.customGuidance}
-              placeholder="Optional instructions about how Mikan talks to you..."
-              onChange={event => setDraft(current => ({ ...current, communication: {
-                ...current.communication, customGuidance: event.target.value
-              }}))}/>
-            <small>Saved locally. These are behavioral preferences, not memories of facts about you.</small>
-          </label>
-          <button type="button" className="secondary-action"
-            onClick={() => setSettingsTab("personality")}><SlidersHorizontal size={15}/> Personality settings</button>
+          <div className="settings-section-title"><Brain size={17}/> Advanced personal memory (Mem0 OSS)</div>
+          <div className="service-panel">
+            <div><strong>Semantic recall · local</strong>
+              <span className={advancedMemoryStatus?.ready ? "service-running" : "service-muted"}>
+                {advancedMemoryStatus === null ? "Checking…" : advancedMemoryStatus.ready
+                  ? "Ready · Mem0 + Ollama" : advancedMemoryStatus.reason || "Not running"}
+              </span>
+            </div>
+            <button type="button" className="secondary-action"
+              onClick={refreshAdvancedMemoryStatus}><RotateCw size={14}/> Check status</button>
+            <small>Optional real Mem0 semantic retrieval. Uses your editable SQLite facts and local Ollama, never a cloud account. Run the bundled advanced-memory setup script once to enable it. If unavailable, ordinary SQLite recall continues unchanged.</small>
+          </div>
+
+        </>}
+        {settingsTab === "vision" && <>
+          <section className="control-intro"><h2>Live Vision</h2><p>Mikan's eyes, on your terms. Screen capture stays opt-in and is processed locally.</p></section>
           <div className="settings-section-title"><Eye size={17}/> Live Vision</div>
           <div className="service-panel">
             <div><strong>Screen awareness</strong>
@@ -4077,21 +4036,9 @@ export default function App() {
               {captureError||liveVisionError}</small>}
             <small>Live Vision is OFF after every app restart. Cropping occurs before JPEG resizing, helping small text stay legible on ultrawide screens. The latest frame stays in RAM and goes only to local Ollama chat. Very short intervals add CPU capture work, not continuous GPU inference.</small>
           </div>
-          <div className="settings-section-title"><Brain size={17}/> Advanced personal memory (Mem0 OSS)</div>
-          <div className="service-panel">
-            <div><strong>Semantic recall · local</strong>
-              <span className={advancedMemoryStatus?.ready ? "service-running" : "service-muted"}>
-                {advancedMemoryStatus === null ? "Checking…" : advancedMemoryStatus.ready
-                  ? "Ready · Mem0 + Ollama" : advancedMemoryStatus.reason || "Not running"}
-              </span>
-            </div>
-            <button type="button" className="secondary-action"
-              onClick={refreshAdvancedMemoryStatus}><RotateCw size={14}/> Check status</button>
-            <small>Optional real Mem0 semantic retrieval. Uses your editable SQLite facts and local Ollama, never a cloud account. Run the bundled advanced-memory setup script once to enable it. If unavailable, ordinary SQLite recall continues unchanged.</small>
-          </div>
-
         </>}
         {settingsTab === "internet" && <>
+          <section className="control-intro"><h2>Web, research &amp; Mikanify</h2><p>Control when Mikan searches, how she reads sources and how she sounds afterward.</p></section>
           <div className="settings-section-title">Local search service</div>
           <label className="setting-field">SearXNG endpoint
             <input spellCheck={false} value={draft.searxngEndpoint}
@@ -4344,12 +4291,71 @@ export default function App() {
           </label>
         </>}
         {settingsTab === "personality" && <>
+          <div className="control-page-note"><WandSparkles size={20}/> Tune her character, then shape how she talks to you. Personality sliders save immediately; communication preferences save with the button below.</div>
           <div className="settings-section-title">Mikan's personality</div>
           <p className="settings-note"><Sparkles size={16}/> Adjust how Mikan talks and reacts. These changes are saved immediately.</p>
           <PersonalityPresets value={settings.personality} onChange={updatePersonality}/>
           <div className="settings-section-title">Fine-tune her personality</div>
           <PersonalitySliders value={settings.personality} onChange={updatePersonality}/>
           <small className="wardrobe-hint">These preferences guide future replies without requiring a restart.</small>
+          <section className="control-form-section" aria-label="Conversation and communication">          <label className="setting-field">System/persona prompt
+            <textarea rows={9} value={draft.systemPrompt}
+              onChange={event => setDraft({ ...draft, systemPrompt: event.target.value })}/>
+            <small>Core personality instructions. Presets and sliders live in the separate Personality panel.</small>
+          </label>
+          <div className="settings-section-title">Communication preferences</div>
+          <p className="settings-note">These instructions apply to every reply, even when personal memory retrieval doesn't find the relevant preference.</p>
+          <label className="setting-field">How Mikan addresses you
+            <select value={draft.communication.addressMode}
+              onChange={event => setDraft(current => ({ ...current, communication: {
+                ...current.communication,
+                addressMode: event.target.value as typeof current.communication.addressMode
+              }}))}>
+              <option value="endearments">Endearments and nicknames, not my first name</option>
+              <option value="neutral">No names or nicknames</option>
+              <option value="first-name">First name is okay</option>
+            </select>
+          </label>
+          {draft.communication.addressMode === "endearments" && <label className="setting-field">Preferred endearments
+            <input value={draft.communication.endearments} maxLength={240}
+              placeholder="honey, sweetheart, darling"
+              onChange={event => setDraft(current => ({ ...current, communication: {
+                ...current.communication, endearments: event.target.value
+              }}))}/>
+            <small>Separate suggestions with commas. Mikan doesn't need to use one in every reply.</small>
+          </label>}
+          <label className="setting-field">Reply length
+            <select value={draft.communication.replyLength}
+              onChange={event => setDraft(current => ({ ...current, communication: {
+                ...current.communication,
+                replyLength: event.target.value as typeof current.communication.replyLength
+              }}))}>
+              <option value="concise">Concise</option>
+              <option value="balanced">Balanced</option>
+              <option value="detailed">Detailed when useful</option>
+            </select>
+          </label>
+          <label className="setting-field">Follow-up questions
+            <select value={draft.communication.followUps}
+              onChange={event => setDraft(current => ({ ...current, communication: {
+                ...current.communication,
+                followUps: event.target.value as typeof current.communication.followUps
+              }}))}>
+              <option value="necessary">Only when useful</option>
+              <option value="natural">Conversational</option>
+            </select>
+          </label>
+          <label className="setting-field">Other communication preferences
+            <textarea rows={3} maxLength={1000} value={draft.communication.customGuidance}
+              placeholder="Optional instructions about how Mikan talks to you..."
+              onChange={event => setDraft(current => ({ ...current, communication: {
+                ...current.communication, customGuidance: event.target.value
+              }}))}/>
+            <small>Saved locally. These are behavioral preferences, not memories of facts about you.</small>
+          </label>
+          <button type="button" className="secondary-action"
+            onClick={() => setSettingsTab("personality")}><SlidersHorizontal size={15}/> Personality settings</button>
+</section>
         </>}
         {settingsTab === "interface" && <>
           <div className="settings-section-title">Colors and typography</div>
@@ -4568,7 +4574,7 @@ export default function App() {
         </>}
         </div>
       </div>
-      {(["ai", "internet", "voice", "appearance", "interface"] as SettingsTab[]).includes(settingsTab) &&
+      {(["ai", "internet", "voice", "appearance", "interface", "personality"] as SettingsTab[]).includes(settingsTab) &&
         <footer className="settings-footer">
           <button className="save-button" onClick={saveConfiguration}><Check size={17}/> Save settings</button>
         </footer>}
