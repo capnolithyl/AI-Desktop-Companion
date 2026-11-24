@@ -280,7 +280,7 @@ async function executeOne(
     );
   }
   const infer:EvalInference=async({
-    messages,selectedMemories,evidence,researchPlanned,researchQuery,replyEffort,webRequest,
+    messages,selectedMemories,evidence,researchPlanned,researchQuery,researchTask,replyEffort,webRequest,
     nativeWebAllowed
   })=>{
     if(controller.signal.aborted)throw new Error("Stopped by owner");
