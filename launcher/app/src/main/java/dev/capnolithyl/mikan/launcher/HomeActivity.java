@@ -42,6 +42,7 @@ public class HomeActivity extends Activity {
     private boolean drawer=false;
     private boolean settings=false;
     private LauncherUpdater updater;
+    private PortraitStore portraits;
     private float touchX,touchY;
     private final Runnable tick=new Runnable(){ public void run(){ updateClock(); handler.postDelayed(this,15000); } };
     private static final class App {
@@ -57,6 +58,7 @@ public class HomeActivity extends Activity {
         getWindow().getDecorView().setSystemUiVisibility(0);
         prefs=getSharedPreferences("launcher",MODE_PRIVATE);
         updater=new LauncherUpdater(this);
+        portraits=new PortraitStore(this);
         loadApps();
         restoreFavorites();
         showHome();
@@ -147,13 +149,14 @@ public class HomeActivity extends Activity {
         clock=text("",48,CREAM,false);body.addView(clock);
         date=text("",16,MUTED,false);body.addView(date);gap(body,20);
         LinearLayout card=horizontal();card.setPadding(dp(12),dp(12),dp(14),dp(12));card.setBackground(shape(PANEL,26,true));
-        ImageView portrait=new ImageView(this);portrait.setImageDrawable(asset("mikan-chat-avatar.webp"));portrait.setScaleType(ImageView.ScaleType.CENTER_CROP);portrait.setBackground(shape(0xff50332b,24,false));portrait.setClipToOutline(true);
+        ImageView portrait=new ImageView(this);portrait.setImageDrawable(portraits.get());portrait.setScaleType(ImageView.ScaleType.CENTER_CROP);portrait.setBackground(shape(0xff50332b,24,false));portrait.setClipToOutline(true);
         card.addView(portrait,new LinearLayout.LayoutParams(dp(108),dp(132)));
         LinearLayout copy=vertical();copy.setPadding(dp(14),0,0,0);card.addView(copy,new LinearLayout.LayoutParams(0,-2,1));
         copy.addView(text("Mikan ♡",20,PEACH,true));gap(copy,8);
         greeting=text("",19,CREAM,true);copy.addView(greeting);gap(copy,7);
-        copy.addView(text("Your cozy little corner.",13,MUTED,false));gap(copy,10);
-        copy.addView(text("●  Local mode",12,PEACH,false));body.addView(card);gap(body,22);
+        copy.addView(text("Tap to chat with Mikan",13,MUTED,false));gap(copy,10);
+        copy.addView(text("♡  Open Mikan Web ↗",12,PEACH,false));
+        card.setContentDescription("Open Mikan Web");card.setFocusable(true);card.setOnClickListener(v->openMikan());body.addView(card);gap(body,22);
         body.addView(text("YOUR FAVORITES",12,MUTED,true));gap(body,8);
         ArrayList<App> pinned=new ArrayList<>();for(String key:favorites){App a=find(key);if(a!=null)pinned.add(a);}
         int dockCount=prefs.getInt("dockCount",5);
@@ -215,6 +218,10 @@ public class HomeActivity extends Activity {
         setting(body,"Grid: "+prefs.getInt("columns",4)+" columns",()->chooseNumber("columns","Grid columns",new int[]{4,5}));
         setting(body,"Dock: "+prefs.getInt("dockCount",5)+" apps",()->chooseNumber("dockCount","Dock size",new int[]{3,4,5}));
         setting(body,"Manage favorites",this::manageFavorites);
+        gap(body,18);body.addView(text("MIKAN",12,PEACH,true));gap(body,10);
+        setting(body,"Choose portrait",this::pickPortrait);
+        setting(body,"Reset portrait",()->new AlertDialog.Builder(this).setTitle("Reset portrait?").setNegativeButton("Cancel",null).setPositiveButton("Reset",(d,w)->{portraits.reset();showSettings();}).show());
+        setting(body,"Mikan Web address",()->editMikanUrl(false));
         gap(body,18);body.addView(text("SYSTEM",12,PEACH,true));gap(body,10);
         setting(body,"Default home app",this::chooseHome);
         setting(body,"Check for launcher updates",()->updater.check());
@@ -245,6 +252,44 @@ public class HomeActivity extends Activity {
             if(mono!=null){Drawable d=mono.getConstantState()==null?mono:mono.getConstantState().newDrawable();d=d.mutate();d.setTint(PEACH);return d;}
         }
         return LauncherIcons.create(this,app.component.getPackageName(),app.label,app.icon);
+    }
+    private void pickPortrait(){
+        Intent i=new Intent(Intent.ACTION_OPEN_DOCUMENT).setType("image/*").addCategory(Intent.CATEGORY_OPENABLE);
+        try{startActivityForResult(i,73);}catch(Exception e){Toast.makeText(this,"No image picker available.",Toast.LENGTH_SHORT).show();}
+    }
+    @Override protected void onActivityResult(int request,int result,Intent data){
+        super.onActivityResult(request,result,data);
+        if(request!=73||result!=RESULT_OK||data==null||data.getData()==null)return;
+        final android.net.Uri uri=data.getData();
+        new Thread(()->{
+            boolean ok=portraits.importImage(uri);
+            runOnUiThread(()->{
+                if(isFinishing()||isDestroyed())return;
+                Toast.makeText(this,ok?"Mikan portrait saved locally ♡":"Could not read this image.",Toast.LENGTH_SHORT).show();
+                if(settings)showSettings();else if(!drawer)showHome();
+            });
+        },"mikan-portrait-import").start();
+    }
+    private void openMikan(){
+        String url=prefs.getString("mikanWebUrl","");
+        if(url.isEmpty()){editMikanUrl(true);return;}
+        try{startActivity(new Intent(Intent.ACTION_VIEW,android.net.Uri.parse(url)).addCategory(Intent.CATEGORY_BROWSABLE));}
+        catch(Exception e){Toast.makeText(this,"No browser available to open Mikan.",Toast.LENGTH_LONG).show();}
+    }
+    private void editMikanUrl(boolean openAfter){
+        EditText field=new EditText(this);field.setSingleLine(true);field.setInputType(android.text.InputType.TYPE_CLASS_TEXT|android.text.InputType.TYPE_TEXT_VARIATION_URI);
+        field.setHint("https://your-mikan-host/");field.setText(prefs.getString("mikanWebUrl",""));
+        AlertDialog dialog=new AlertDialog.Builder(this).setTitle("Mikan Web address")
+            .setMessage("Enter the HTTPS address of your Mikan web interface. Saved on this phone only.")
+            .setView(field).setNegativeButton("Cancel",null).setPositiveButton("Save",null).create();
+        dialog.setOnShowListener(d->dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v->{
+            String value=field.getText().toString().trim();
+            try{
+                java.net.URI uri=new java.net.URI(value);
+                if(!"https".equalsIgnoreCase(uri.getScheme())||uri.getHost()==null||uri.getUserInfo()!=null)throw new IllegalArgumentException();
+                prefs.edit().putString("mikanWebUrl",value).apply();dialog.dismiss();if(openAfter)openMikan();
+            }catch(Exception e){field.setError("Enter a valid HTTPS web address.");}
+        }));dialog.show();
     }
     private void chooseHome(){
         try{
