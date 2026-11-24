@@ -1737,3 +1737,60 @@ button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px
   .settings-standalone .control-home-card,
   .settings-standalone .control-disclosure summary:after {transition:none!important;transform:none!important;}
 }
+
+
+/* Secondary control-center surfaces and contextual tools. */
+.settings-standalone .settings-layout > .settings-body.settings-memory-view {
+  flex-direction:column;align-items:stretch;gap:0;
+}
+.settings-standalone .control-memory-addon {
+  flex:0 0 auto;max-height:46%;overflow-y:auto;
+  padding:15px clamp(20px,3vw,38px) 0;
+  background:#241b1d;border-bottom:1px solid #573b36;
+}
+.settings-standalone .control-memory-addon details.control-disclosure {
+  padding:0;background:#312326;border:1px solid #6e4840;border-radius:13px;overflow:hidden;
+  margin:0 auto 13px;max-width:1100px;
+}
+.settings-standalone .control-memory-addon details.control-disclosure > summary {
+  padding:13px 17px;list-style:none;cursor:pointer;
+  display:flex;align-items:center;justify-content:space-between;
+  color:#ffcca7;font-size:14px;font-weight:690;
+}
+.settings-standalone .control-memory-addon details.control-disclosure > summary::-webkit-details-marker {display:none;}
+.settings-standalone .control-memory-addon details.control-disclosure > summary:after {
+  content:"";width:9px;height:9px;flex-shrink:0;
+  border-bottom:2px solid #ffab60;border-right:2px solid #ffab60;
+  transform:rotate(45deg);transition:transform .16s;
+}
+.settings-standalone .control-memory-addon details.control-disclosure[open] > summary:after {transform:rotate(225deg);}
+.settings-standalone .control-memory-addon .settings-section-title {margin:12px 18px;color:#ffb37b;font-size:15px;}
+.settings-standalone .control-memory-addon .service-panel {
+  padding:16px 18px;margin:12px 18px 17px;border-radius:13px;
+  color:#ffeadc;background:#261d1e;border:1px solid #66453f;
+}
+.settings-standalone .control-memory-addon .service-panel strong {font-size:14px;}
+.settings-standalone .control-memory-addon .service-panel small {display:block;margin-top:7px;color:#d3aea3;font-size:12.5px;line-height:1.55;}
+.settings-standalone .control-memory-addon .secondary-action {
+  min-height:38px;padding:9px 13px;border-radius:9px;
+  background:#53342b;border:1px solid #986047;color:#ffddc4;font-size:13px;
+  display:inline-flex;align-items:center;gap:8px;
+}
+.settings-standalone .control-crosslink {
+  display:flex;align-items:center;gap:15px;width:100%;min-height:75px;
+  padding:17px 19px;margin:7px auto 22px;
+  text-align:left;border:1px solid #986142;border-radius:15px;
+  color:#ffb47c;background:linear-gradient(110deg,#503124,#352526);
+}
+.settings-standalone .control-crosslink:hover {background:#64402b;border-color:#ffc08b;}
+.settings-standalone .control-crosslink > span {flex:1;min-width:0;display:grid;gap:4px;}
+.settings-standalone .control-crosslink strong {font-size:15px;color:#ffe4d0;}
+.settings-standalone .control-crosslink small {font-size:13px;color:#d9b5a9;line-height:1.45;}
+.settings-standalone .control-voice-identity > .service-panel {margin-top:14px;}
+.settings-standalone .settings-body > .control-form-section {width:100%;}
+.settings-standalone .settings-body .settings-toggle > span > small {font-size:13px;}
+.settings-standalone .settings-body .service-panel > small {font-size:13px;}
+.settings-standalone .settings-body .setting-field small {font-size:13px;}
+.settings-standalone .settings-body input[type=file] {color:#d6b6ab;}
+.settings-standalone .settings-body .personality-presets,
+.settings-standalone .settings-body .personality-sliders {color:#fff0e5;}
