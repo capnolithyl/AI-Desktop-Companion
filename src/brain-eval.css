@@ -619,3 +619,50 @@
   .settings-standalone .brain-eval-explainer > summary::after,
   .settings-standalone .brain-eval-preset-disclosure > summary::after {transition:none;}
 }
+
+
+/* Mikanify is one compact wrapping row, not an overflow-prone three-child column. */
+.settings-standalone .brain-eval-toolbar label.brain-eval-mikanify {
+  display:flex;flex-direction:row;align-items:center;justify-content:space-between;
+  gap:13px;flex-wrap:nowrap;width:100%;max-width:100%;min-width:0;
+  box-sizing:border-box;overflow:hidden;
+  padding:14px 16px;border:1px solid #a86a4b;border-radius:13px;
+  background:linear-gradient(120deg,#51312a,#3c292b);
+  box-shadow:inset 0 0 15px #ff8e2e16,0 0 19px #e9843325;
+}
+.settings-standalone .brain-eval-toolbar .brain-mikanify-copy {
+  display:grid;flex:1 1 0;min-width:0;max-width:100%;
+  gap:5px;line-height:1.4;white-space:normal;overflow-wrap:anywhere;
+}
+.settings-standalone .brain-eval-toolbar .brain-mikanify-copy strong {
+  display:block;font-size:14px;color:#ffe0c9;
+}
+.settings-standalone .brain-eval-toolbar .brain-mikanify-copy small {
+  display:block;min-width:0;max-width:100%;font-size:12px;
+  line-height:1.5;color:#e2b7a6;white-space:normal;overflow-wrap:anywhere;
+}
+.settings-standalone .brain-eval-toolbar label.brain-eval-mikanify > input[type="checkbox"] {
+  flex:0 0 19px;min-width:19px;width:19px;max-width:19px;
+  min-height:19px;height:19px;margin:0;padding:0;
+  border:0;accent-color:#ffa65c;
+}
+.settings-standalone .brain-workspace-view {
+  max-width:100%;min-width:0;overflow-wrap:anywhere;
+}
+.settings-standalone .brain-eval-toolbar > *,
+.settings-standalone .brain-workspace-tabs > *,
+.settings-standalone .brain-workspace-header > * {
+  min-width:0;
+}
+.settings-standalone .brain-workspace-tabs button {white-space:normal;}
+.settings-standalone .brain-eval-preset-disclosure > summary,
+.settings-standalone .brain-eval-explainer > summary {min-width:0;flex-wrap:wrap;}
+.settings-standalone .brain-eval-toolbar select {text-overflow:ellipsis;}
+@media(max-width:1040px) {
+  .settings-standalone .brain-eval-toolbar label.brain-eval-mikanify {
+    grid-column:1/-1;
+  }
+}
+@media(prefers-reduced-motion:reduce) {
+  .settings-standalone .brain-eval-toolbar label.brain-eval-mikanify {transition:none;}
+}
