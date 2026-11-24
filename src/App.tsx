@@ -338,6 +338,7 @@ export default function App() {
   const [memoryToast, setMemoryToast] = useState<{ key: number; message: string } | null>(null);
   const [memoryInitialTab, setMemoryInitialTab] = useState<"facts" | "chats" | "character" | "collections">(initialMemoryTab);
   const [input, setInput] = useState("");
+  const [busy, setBusy] = useState(false);
   // Keep seldom-used chat controls within one keyboard-accessible popover.
   const [chatMenuOpen,setChatMenuOpen] = useState(false);
   const [chatToolsOpen,setChatToolsOpen] = useState(false);
@@ -371,7 +372,6 @@ export default function App() {
     };
   }, [chatMenuOpen,chatToolsOpen,busy]);
 
-  const [busy, setBusy] = useState(false);
   const [stopping, setStopping] = useState(false);
   const [portrait, setPortrait] = useState<string | null>(BUNDLED_PORTRAIT);
   const [imageError, setImageError] = useState<string | null>(null);
