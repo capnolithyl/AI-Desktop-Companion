@@ -202,7 +202,7 @@ export function makeServer({store,config,key,promptFile="",maintenanceFile="/dat
         res.writeHead(200,{"Content-Type":"text/event-stream; charset=utf-8",
           "Cache-Control":"no-cache, no-transform","X-Accel-Buffering":"no",
           "X-Content-Type-Options":"nosniff"});
-          const researched=await researchTurn({mode,history,search,read,canRequest:()=>models.available(selected.provider),generate:args=>{models.reserve(selected.provider);return requestModel({...args,config:selected});},activity:event=>store.learning.recordSearch(conversationId,user.id,event)});
+          const researched=await researchTurn({mode,history,search,read,canRequest:()=>models.available(selected.provider),generate:args=>{models.reserve(selected.provider);return requestModel({...args,config:selected});},activity:event=>{try{store.learning.recordSearch(conversationId,user.id,event);}catch{console.error("Could not record NAS research activity");}}});
           if(mode!=="off")instructions+="\n\n"+researchInstructions(researched,mode);
           const answer=await requestModel({config:selected,system:instructions,history,onModel:model=>{actualModel=model;},
             onDelta:part=>sse(res,"delta",{text:part})});

@@ -422,3 +422,38 @@ test("model-led NAS research uses bounded public evidence and skips private chat
   const found=await researchTurn({mode:"strict",history,generate:async()=>JSON.stringify(++step===1?{action:"search",query:"public release"}:{action:"none",readIndices:[1]}),canRequest:()=>true,search,read,activity:e=>events.push(e)});
   assert.equal(calls,1);assert.equal(found.sources.length,1);assert.equal(found.sources[0].kind,"page");assert.equal(found.sources[0].publishedDate,"2026-11-24");assert.equal(events.length,2);
 });
+
+test("NAS research respects opt-in, does not expose assistant memories to planner, and stops on provider quota",async()=>{
+  const history=[{role:"assistant",content:"private assistant recall"},{role:"user",content:"Public topic"}];
+  const never=async()=>{throw Error("Unexpected request");};
+  assert.deepEqual(await researchTurn({mode:"off",history,generate:never,canRequest:()=>true,search:never}),{sources:[],note:""});
+  await researchTurn({mode:"simple",history,generate:async request=>{
+    assert.doesNotMatch(request.history[0].content,/private assistant recall/);
+    return JSON.stringify({action:"none"});
+  },canRequest:()=>true,search:never});
+  await assert.rejects(researchTurn({mode:"strict",history,generate:async()=>{throw Object.assign(Error("quota"),{upstreamStatus:429});},canRequest:()=>true,search:never}),/quota/);
+});
+test("NAS research API persists opt-in and actual source activity",async()=>{
+  const root=mkdtempSync(join(tmpdir(),"mikan-research-api-")),store=openStore(join(root,"db.sqlite3"));
+  const key="01234567890123456789012345678901",headers={Authorization:"Bearer "+key,"Content-Type":"application/json"};
+  const source={url:"https://example.com/",title:"Public source",content:"Public evidence",kind:"preview",publishedDate:null};
+  const server=makeServer({store,key,config:{provider:"nvidia",model:"test",key:"synthetic-test-key"},
+    search:async()=>[source],generate:async({system,onDelta})=>{
+      if(system.startsWith("You are a read-only research planner"))return JSON.stringify({action:"search",query:"public example"});
+      assert.match(system,/Public evidence/);onDelta("Public evidence [1]");return "Public evidence [1]";
+    }});
+  await new Promise(resolve=>server.listen(0,"127.0.0.1",resolve));
+  const base="http://127.0.0.1:"+server.address().port;
+  try{
+    assert.equal((await fetch(base+"/api/research")).status,401);
+    assert.equal((await (await fetch(base+"/api/research",{headers})).json()).mode,"off");
+    assert.equal((await fetch(base+"/api/research",{method:"PUT",headers,body:JSON.stringify({mode:"simple"})})).status,200);
+    const c=store.newConversation();
+    const r=await fetch(base+"/api/chat",{method:"POST",headers,body:JSON.stringify({conversationId:c.id,text:"Find public example"})});
+    assert.match(await r.text(),/event: done/);
+    assert.equal(store.messages(c.id).at(-1).inference.sources[0].url,source.url);
+    assert.ok(nasActivity(store.learning.diagnostics(c.id)).some(e=>e.kind==="search"&&e.title==="Web search"));
+    assert.equal(researchSettings(store.db).get(),"simple");
+    assert.equal(store.db.prepare("SELECT count(*) AS n FROM nas_provider_requests").get().n,2);
+  }finally{await new Promise(resolve=>server.close(resolve));store.db.close();rmSync(root,{recursive:true,force:true});}
+});

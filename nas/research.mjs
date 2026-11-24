@@ -24,7 +24,7 @@ export function searchResults(data){
   const seen=new Set(),results=[];
   for(const item of Array.isArray(data?.results)?data.results:[]){
     const url=webURL(item?.url);
-    if(!url||seen.has(url.href))continue;
+    if(!url||seen.has(url.href)||isIP(url.hostname)&&!publicIPv4(url.hostname))continue;
     seen.add(url.href);
     results.push({url:url.href,title:String(item.title??url.hostname).slice(0,180),content:String(item.content??"").slice(0,1100),
       kind:"preview",publishedDate:typeof item.publishedDate==="string"?item.publishedDate.slice(0,80):null});
@@ -104,12 +104,12 @@ export function researchSettings(db){
 export async function researchTurn({mode,history,generate,canRequest,search=searchWeb,read=readWeb,activity=()=>{},now=new Date()}){
   if(mode==="off")return {sources:[],note:""};
   const sources=[],errors=[];const last=history.at(-1)?.content??"";
-  const recent=history.slice(-5).map(m=>({role:m.role,content:m.content.slice(-1600)}));
-  // No retrieved memories or persona are sent to the planner.
+  const recent=history.filter(m=>m.role==="user").slice(-4).map(m=>({role:m.role,content:m.content.slice(-1600)}));
+  // No retrieved memories, assistant replies or persona are sent to the planner.
   const planner=async input=>{
     if(!canRequest())return null;
     try{return planFrom(await generate({system:POLICY,history:[{role:"user",content:JSON.stringify(input)}],temperature:0.1,maxTokens:700,onDelta:()=>{}}));}
-    catch{errors.push("Research planner unavailable");return null;}
+    catch(error){if(error?.upstreamStatus===429)throw error;errors.push("Research planner unavailable");return null;}
   };
   const record=(title,detail,lines=[])=>activity({title,detail,lines});
   const add=s=>{const i=sources.findIndex(x=>x.url===s.url);if(i>=0){if(s.kind==="page")sources[i]={...s,publishedDate:sources[i].publishedDate??s.publishedDate};}else if(sources.length<8)sources.push(s);};
@@ -124,7 +124,7 @@ export async function researchTurn({mode,history,generate,canRequest,search=sear
     catch{errors.push("Page could not be read");record("Webpage read failed","Page unavailable");}
   };
   const plan=await planner({currentTime:now.toISOString(),recentConversation:recent,currentUser:last});
-  if(!plan)return {sources,note:"Research planning was unavailable. Do not claim any web research occurred."};
+  if(!plan){record("Research planning unavailable","No public research performed");return {sources,note:"Research planning was unavailable. Do not claim any web research occurred."};}
   if(plan.action==="none")return {sources,note:""};
   if(plan.action==="search")await find(plan);
   if(plan.action==="read"){
