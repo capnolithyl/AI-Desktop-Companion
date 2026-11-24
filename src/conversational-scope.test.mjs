@@ -21,6 +21,11 @@ test("never narrows questions, tasks, web research or potentially consequential 
     "I want you to make the button smaller.",
     "We should merge those PRs.",
     "Let's try another approach.",
+    "I want to know who wrote that song.",
+    "I wonder if we could regenerate those messages.",
+    "I'm wondering whether that is possible.",
+    "What about the second question",
+    "I need to understand this error.",
     "Can you help me with my dog?",
     "Give me feeding advice",
     "/help"
