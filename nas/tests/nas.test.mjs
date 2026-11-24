@@ -457,3 +457,22 @@ test("NAS research API persists opt-in and actual source activity",async()=>{
     assert.equal(store.db.prepare("SELECT count(*) AS n FROM nas_provider_requests").get().n,2);
   }finally{await new Promise(resolve=>server.close(resolve));store.db.close();rmSync(root,{recursive:true,force:true});}
 });
+
+test("NAS planner receives live calendar grounding and general source selection guidance",async()=>{
+  const requests=[];
+  const history=[{role:"user",content:"What is the latest public release?"}];
+  await researchTurn({mode:"strict",history,now:new Date("2031-02-03T00:00:00Z"),
+    canRequest:()=>true,generate:async request=>{
+      requests.push(request);
+      return JSON.stringify(requests.length===1?{action:"search",query:"public release 2031",recent:true}:{action:"none",readIndices:[]});
+    },search:async(query,recent)=>{
+      assert.equal(query,"public release 2031");assert.equal(recent,true);
+      return [{url:"https://example.com/",title:"Official changelog",content:"Release",kind:"preview",publishedDate:null}];
+    }});
+  assert.equal(requests.length,2);
+  for(const request of requests){
+    assert.match(request.system,/LIVE UTC DATE: 2031-02-03/);
+    assert.match(request.system,/Do not constrain a current search to past years/);
+    assert.match(request.system,/Read those before general marketing pages/);
+  }
+});
