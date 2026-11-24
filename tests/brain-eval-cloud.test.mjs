@@ -19,7 +19,10 @@ const local=["qwen3.5:9b","gemma4:12b"];
 
 test("Brain Lab offers every approved NVIDIA model plus configured free OpenRouter and Gemini",()=>{
   const choices=brainCloudChoices(settings);
-  assert.equal(choices.filter(choice=>choice.provider==="nvidia").length,8);
+  assert.equal(choices.filter(choice=>choice.provider==="nvidia").length,9);
+  const deepseek="nvidia:deepseek-ai/deepseek-v4.1-flash";
+  assert.ok(choices.some(choice=>choice.id===deepseek));
+  assert.equal(brainModelSelection(deepseek,settings,local).model,"deepseek-ai/deepseek-v4.1-flash");
   assert.ok(choices.some(choice=>choice.id==="openrouter:openrouter/free"));
   assert.ok(choices.some(choice=>choice.id==="gemini:gemini-3.8-flash"));
   const valid=[...local,...choices.map(choice=>choice.id)];
@@ -104,6 +107,7 @@ test("Cloud Brain Lab keeps isolated memory and preserves native provider API-ke
   assert.match(manager,/cloudKeyStatusCommand\(selection\.provider\)/);
   assert.match(manager,/controller\.abort\(\)/);
   assert.match(panel,/Compare local and free cloud models/);
+  assert.ok(backend.includes('"deepseek-ai/deepseek-v4.1-flash"'));
   assert.match(backend,/allowedEvalModels\(desktop\)/);
   assert.match(backend,/NVIDIA_MODELS\.map\(model => "nvidia:"\+model\)/);
 });

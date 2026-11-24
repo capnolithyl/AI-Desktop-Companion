@@ -134,7 +134,8 @@ const NVIDIA_MODELS = [
   "poolside/laguna-xs-2.1",
   "moonshotai/kimi-k3.1-pro",
   "z-ai/glm-5.3-flash",
-  "mistralai/mistral-large-4-1t-a52b"
+  "mistralai/mistral-large-4-1t-a52b",
+  "deepseek-ai/deepseek-v4.1-flash"
 ];
 // Mirror native Brain Lab's per-model turn safety ceilings. The authenticated
 // relay checks BEFORE queueing so an oversized remote run returns HTTP 400
