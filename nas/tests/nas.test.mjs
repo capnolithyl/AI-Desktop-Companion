@@ -1,3 +1,4 @@
+import {publicIPv4,webURL,searchResults,readWeb,researchTurn,researchSettings} from "../research.mjs";
 import {providerSettings,boundedHistory} from "../provider-settings.mjs";
 import {updateControl} from "../update-control.mjs";
 import {nasActivity} from "../../src/web/nas-activity.ts";
@@ -399,4 +400,25 @@ test("NAS cloud settings API is authenticated, selects the next turn and records
     assert.match(await r.text(),/event: done/);
     assert.deepEqual(store.messages(c.id).at(-1).inference,{provider:"openrouter",requestedModel:"openrouter/free",actualModel:"actual/free-model",outcome:"completed"});
   }finally{await new Promise(resolve=>server.close(resolve));store.db.close();rmSync(root,{recursive:true,force:true});}
+});
+
+test("NAS research rejects non-public destinations and retains source identities",async()=>{
+  for(const ip of ["127.0.0.1","192.168.1.2","100.82.48.82","169.254.169.254","10.0.0.1","::1","224.1.2.3"])assert.equal(publicIPv4(ip),false);
+  assert.equal(publicIPv4("8.8.8.8"),true);
+  assert.equal(webURL("http://localhost:3847"),null);
+  assert.equal(webURL("https://user:password@example.com"),null);
+  assert.equal(searchResults({results:[{url:"https://example.com",title:"A"},{url:"https://example.com",title:"duplicate"},{url:"javascript:alert(1)"}]}).length,1);
+  const result=await readWeb("https://example.com",async()=>({body:"<title>Test</title><script>secret</script><p>Evidence</p>",type:"text/html"}));
+  assert.match(result.content,/Evidence/);assert.doesNotMatch(result.content,/secret/);
+  await assert.rejects(readWeb("http://127.0.0.1"),/Non-public/);
+});
+test("model-led NAS research uses bounded public evidence and skips private chat",async()=>{
+  let calls=0;const events=[],history=[{role:"user",content:"What is the latest public test release?"}];
+  const search=async()=>{calls++;return [{url:"https://example.com/",title:"Release",content:"Preview",kind:"preview",publishedDate:"2026-11-24"}];};
+  const read=async()=>({url:"https://example.com/",title:"Release notes",content:"Actual release",kind:"page",publishedDate:null});
+  const skipped=await researchTurn({mode:"simple",history,generate:async()=>JSON.stringify({action:"none"}),canRequest:()=>true,search});
+  assert.equal(calls,0);assert.equal(skipped.sources.length,0);
+  let step=0;
+  const found=await researchTurn({mode:"strict",history,generate:async()=>JSON.stringify(++step===1?{action:"search",query:"public release"}:{action:"none",readIndices:[1]}),canRequest:()=>true,search,read,activity:e=>events.push(e)});
+  assert.equal(calls,1);assert.equal(found.sources.length,1);assert.equal(found.sources[0].kind,"page");assert.equal(found.sources[0].publishedDate,"2026-11-24");assert.equal(events.length,2);
 });

@@ -11,7 +11,9 @@ export type LearningStatus={
 };
 export type LibrarySnapshot={facts:UserFact[];characterFacts:CharacterFact[];interests:InterestItem[];sessionSummaries:SessionSummary[]};
 export type CloudProvider="nvidia"|"openrouter"|"gemini";
-export type NasInference={provider:CloudProvider;requestedModel:string;actualModel:string|null;outcome:"completed"|"failed";upstreamStatus?:number|null};
+export type ResearchMode="off"|"simple"|"strict";
+export type NasSource={url:string;title:string;kind:"preview"|"page";publishedDate:string|null};
+export type NasInference={provider:CloudProvider;requestedModel:string;actualModel:string|null;outcome:"completed"|"failed";upstreamStatus?:number|null;sources?:NasSource[]};
 export type NasMessage={id:string;role:"user"|"assistant";content:string;createdAt:number;inference?:NasInference};
 export type ProviderEntry={provider:CloudProvider;model:string;models:string[];configured:boolean;credentialSource:"nas"|"environment"|"missing";imageInput:"unsupported";nativeTools:"unverified"};
 export type NasModels={provider:CloudProvider;model:string;historyChars:number;providers:ProviderEntry[]};
@@ -22,7 +24,7 @@ export type UpdatePhase="checking"|"current"|"available"|"installing"|"deferred"
 export type UpdateRecord={phase:UpdatePhase;installed:string|null;available:string|null;at:number};
 export type NasUpdateStatus={build:NasBuild;pending:"check"|"install"|null;host:(UpdateRecord&{checkedAt:number|null;lastBackup:number|null;history:UpdateRecord[]})|null};
 export type NasStatus=NasModels&{busy:boolean;build?:NasBuild};
-export type LearningEvent={id:number;conversationId:string|null;assistantId:string|null;kind:"outcome"|"failed"|"queued"|"skipped"|"recall";createdAt:number;payload:{saved?:number;reviewQueued?:number;entries?:{description:string;status:string;kind:string}[];stage?:string;validated?:number;proposed?:number;reason?:string;lines?:string[]}};
+export type LearningEvent={id:number;conversationId:string|null;assistantId:string|null;kind:"outcome"|"failed"|"queued"|"skipped"|"recall"|"search";createdAt:number;payload:{saved?:number;reviewQueued?:number;entries?:{description:string;status:string;kind:string}[];stage?:string;validated?:number;proposed?:number;reason?:string;lines?:string[];title?:string;detail?:string}};
 export class NasRequestError extends Error {
   constructor(message:string,readonly status:number){super(message);}
 }
@@ -37,6 +39,9 @@ export class NasClient {
   private async json<T>(path:string,options?:RequestInit):Promise<T>{return (await this.request(path,options)).json();}
   updates(){return this.json<NasUpdateStatus>("updates");}
   requestUpdate(action:"check"|"install"){return this.json<{queued:string}>("updates",{method:"POST",body:JSON.stringify({action})});}
+  research(){return this.json<{mode:ResearchMode}>("research");}
+  saveResearch(mode:ResearchMode){return this.json<{mode:ResearchMode}>("research",{method:"PUT",body:JSON.stringify({mode})});}
+  testResearch(){return this.json<{ok:boolean;count:number}>("research/test",{method:"POST",body:"{}"});}
   models(){return this.json<NasModels>("models");}
   saveModels(patch:NasModelPatch){return this.json<NasModels>("models",{method:"PUT",body:JSON.stringify(patch)});}
   status(){return this.json<NasStatus>("status");}

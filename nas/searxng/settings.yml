@@ -1,0 +1,18 @@
+use_default_settings:
+  engines:
+    keep_only:
+      - yahoo
+engines:
+  - name: yahoo
+    disabled: false
+general:
+  instance_name: "Mikan NAS Search"
+search:
+  safe_search: 1
+  formats:
+    - html
+    - json
+server:
+  secret_key: "overridden-by-environment"
+  limiter: false
+  image_proxy: false

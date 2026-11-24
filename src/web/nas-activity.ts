@@ -8,7 +8,9 @@ export function nasActivity(events:readonly LearningEvent[]):WorkspaceActivityEn
   for(const e of [...events].sort((a,b)=>b.createdAt-a.createdAt||b.id-a.id)){
     const base={id:"nas-event:"+e.id,kind:"memory" as const,timestamp:e.createdAt*1000};
     const p=e.payload;
-    if(e.kind==="recall"){
+    if(e.kind==="search"){
+      entries.push({...base,kind:"search",title:p.title??"Web research",detail:p.detail,lines:p.lines??[]});
+    }else if(e.kind==="recall"){
       entries.push({...base,title:"Memory recalled",detail:"Context supplied to the model",lines:p.lines??[]});
     }else if(e.kind==="outcome"){
       const saved=(p.entries??[]).filter(v=>v.status==="saved").map(v=>v.description);
