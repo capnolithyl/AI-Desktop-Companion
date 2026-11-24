@@ -346,6 +346,9 @@ async function executeOne(
         // Synthetic fixture data was explicitly supplied in the system
         // message. Never open production personal-memory/Notion tools in lab.
         cloudAllowMemory:false,
+        // Explicitly supplied synthetic memory fixtures are a valid answer
+        // source even when the coarse research route over-classifies a turn.
+        cloudHasRelevantMemories:selectedMemories.length>0,
         // NVIDIA model-led Lab turns use native read-only tools under the same
         // permission gate as production. Other providers retain planned routes.
         cloudAllowWeb:selection.provider==="nvidia"
