@@ -4,6 +4,23 @@ import android.graphics.*;
 import android.graphics.drawable.*;
 
 final class LauncherIcons {
+    // Adaptive monochrome layers include generous transparent safe-zone margins.
+    // Normalize the visible artwork, not the entire adaptive icon canvas.
+    static Drawable normalizedMonochrome(Context context,Drawable source,int tint){
+        final int size=144;
+        Drawable d=source.getConstantState()==null?source:source.getConstantState().newDrawable();
+        Bitmap rendered=Bitmap.createBitmap(size,size,Bitmap.Config.ARGB_8888);
+        Rect old=new Rect(d.getBounds());d.setBounds(0,0,size,size);d.draw(new Canvas(rendered));d.setBounds(old);
+        int[] pixels=new int[size*size];rendered.getPixels(pixels,0,size,0,0,size,size);
+        int left=size,top=size,right=-1,bottom=-1;
+        for(int y=0;y<size;y++)for(int x=0;x<size;x++)if((pixels[y*size+x]>>>24)>32){left=Math.min(left,x);right=Math.max(right,x);top=Math.min(top,y);bottom=Math.max(bottom,y);}
+        if(right<left||bottom<top){rendered.recycle();return null;}
+        int width=right-left+1,height=bottom-top+1;float scale=124f/Math.max(width,height);
+        float w=width*scale,h=height*scale;Bitmap result=Bitmap.createBitmap(size,size,Bitmap.Config.ARGB_8888);
+        Paint paint=new Paint(Paint.ANTI_ALIAS_FLAG|Paint.FILTER_BITMAP_FLAG);paint.setColorFilter(new PorterDuffColorFilter(tint,PorterDuff.Mode.SRC_IN));
+        new Canvas(result).drawBitmap(rendered,new Rect(left,top,right+1,bottom+1),new RectF((size-w)/2,(size-h)/2,(size+w)/2,(size+h)/2),paint);
+        rendered.recycle();return new BitmapDrawable(context.getResources(),result);
+    }
     static Drawable create(Context context,String pkg,String label,Drawable original){
         // Recognizable warm line-art for common apps. Other apps keep their shape
         // with a luminance-based amber filter instead of an opaque solid tint.

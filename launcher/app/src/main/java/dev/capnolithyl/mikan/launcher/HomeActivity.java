@@ -33,6 +33,7 @@ public class HomeActivity extends Activity {
     private static final int CREAM=0xffffe9d5, PEACH=0xffffbf88, MUTED=0xffe1bda9, PANEL=0xe6312325, BORDER=0xff805439;
     private final Handler handler=new Handler(Looper.getMainLooper());
     private final ArrayList<App> apps=new ArrayList<>();
+    private final Map<String,Drawable.ConstantState> monoCache=new HashMap<>();
     private final ArrayList<String> favorites=new ArrayList<>();
     private SharedPreferences prefs;
     private FrameLayout root;
@@ -49,6 +50,8 @@ public class HomeActivity extends Activity {
     private final Map<TextView,String> badgeViews=new HashMap<>();
     private final Runnable refreshExtras=new Runnable(){public void run(){refreshExtras();handler.postDelayed(this,2500);}};
     private float touchX,touchY;
+    private boolean seekGesture;
+    private final Runnable progressTick=new Runnable(){public void run(){if(music!=null)music.updatePosition();handler.postDelayed(this,1000);}};
     private final Runnable tick=new Runnable(){ public void run(){ updateClock(); handler.postDelayed(this,15000); } };
     private static final class App {
         final ComponentName component; final String label; final Drawable icon; final String folderKey;
@@ -76,13 +79,17 @@ public class HomeActivity extends Activity {
         if(settings) showSettings(); else if(drawer && search!=null) renderResults(search.getText().toString()); else showHome();
         handler.removeCallbacks(tick); handler.post(tick);
         handler.removeCallbacks(refreshExtras);handler.post(refreshExtras);
+        handler.removeCallbacks(progressTick);handler.post(progressTick);
     }
-    @Override protected void onPause(){handler.removeCallbacks(tick);handler.removeCallbacks(refreshExtras);super.onPause();}
+    @Override protected void onPause(){handler.removeCallbacks(tick);handler.removeCallbacks(refreshExtras);handler.removeCallbacks(progressTick);super.onPause();}
     @Override protected void onNewIntent(Intent intent){super.onNewIntent(intent);setIntent(intent);hideKeyboard();homePage=0;showHome();}
     @Override public void onBackPressed(){if(drawer||settings){hideKeyboard();showHome();}else if(homePage!=0){homePage=0;showHome();}}
     private int dp(float n){return Math.round(n*getResources().getDisplayMetrics().density);}
     private GradientDrawable shape(int color,int radius,boolean border){
         GradientDrawable d=new GradientDrawable();d.setColor(color);d.setCornerRadius(dp(radius));if(border)d.setStroke(dp(1),BORDER);return d;
+    }
+    private GradientDrawable panelShape(int radius){
+        GradientDrawable d=new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,new int[]{0xf13d2a28,0xed2a2022});d.setCornerRadius(dp(radius));d.setStroke(dp(1),0xff906044);return d;
     }
     private LinearLayout vertical(){LinearLayout v=new LinearLayout(this);v.setOrientation(LinearLayout.VERTICAL);return v;}
     private LinearLayout horizontal(){LinearLayout v=new LinearLayout(this);v.setOrientation(LinearLayout.HORIZONTAL);v.setGravity(Gravity.CENTER_VERTICAL);return v;}
@@ -111,7 +118,7 @@ public class HomeActivity extends Activity {
         setContentView(root);root.requestApplyInsets();
     }
     private void loadApps(){
-        apps.clear();
+        apps.clear();monoCache.clear();
         Intent intent=new Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER);
         for(ResolveInfo r:getPackageManager().queryIntentActivities(intent,0)){
             if(r.activityInfo==null||r.activityInfo.packageName.equals(getPackageName()))continue;
@@ -153,41 +160,44 @@ public class HomeActivity extends Activity {
         TextView brand=text("MIKAN OS  ♡",13,PEACH,true);
         header.addView(brand,new LinearLayout.LayoutParams(0,-2,1));
         header.addView(action("⚙",this::showSettings));page.addView(header);
-        ScrollView scroll=new ScrollView(this);scroll.setFillViewport(false);scroll.setVerticalScrollBarEnabled(false);
+        ScrollView scroll=new ScrollView(this);scroll.setFillViewport(false);scroll.setVerticalScrollBarEnabled(true);scroll.setScrollbarFadingEnabled(true);
         page.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
         LinearLayout body=vertical();scroll.addView(body,new ScrollView.LayoutParams(-1,-2));
-        gap(body,16);
+        gap(body,6);
         if(widgetHere("clockPage",1)){
-        clock=text("",48,CREAM,false);body.addView(clock);
-        date=text("",16,MUTED,false);body.addView(date);gap(body,20);}
+        clock=text("",44,CREAM,false);clock.setIncludeFontPadding(false);body.addView(clock);
+        gap(body,3);date=text("",15,MUTED,false);date.setIncludeFontPadding(false);body.addView(date);gap(body,12);}
         if(widgetHere("mikanPage",1)){
-        LinearLayout card=horizontal();card.setPadding(dp(12),dp(12),dp(14),dp(12));card.setBackground(shape(PANEL,26,true));
+        LinearLayout card=horizontal();card.setPadding(dp(10),dp(10),dp(12),dp(10));card.setBackground(panelShape(23));card.setElevation(dp(2));
         ImageView portrait=new ImageView(this);portrait.setImageDrawable(portraits.get());portrait.setScaleType(ImageView.ScaleType.CENTER_CROP);portrait.setBackground(shape(0xff50332b,24,false));portrait.setClipToOutline(true);
-        card.addView(portrait,new LinearLayout.LayoutParams(dp(108),dp(132)));
-        LinearLayout copy=vertical();copy.setPadding(dp(14),0,0,0);card.addView(copy,new LinearLayout.LayoutParams(0,-2,1));
-        copy.addView(text("Mikan ♡",20,PEACH,true));gap(copy,8);
-        greeting=text("",19,CREAM,true);copy.addView(greeting);gap(copy,7);
-        copy.addView(text("Tap to chat with Mikan",13,MUTED,false));gap(copy,10);
+        card.addView(portrait,new LinearLayout.LayoutParams(dp(104),dp(108)));
+        LinearLayout copy=vertical();copy.setPadding(dp(12),0,0,0);card.addView(copy,new LinearLayout.LayoutParams(0,-2,1));
+        copy.addView(text("Mikan ♡",19,PEACH,true));gap(copy,3);
+        greeting=text("",17,CREAM,true);copy.addView(greeting);gap(copy,3);
+        copy.addView(text("Tap to chat with Mikan",12,MUTED,false));gap(copy,4);
         copy.addView(text("♡  Open Mikan Web ↗",12,PEACH,false));
-        card.setContentDescription("Open Mikan Web");card.setFocusable(true);card.setOnClickListener(v->openMikan());body.addView(card);gap(body,22);}
-        if(widgetHere("musicPage",1)){music=new MusicPanel(this);body.addView(music.view());gap(body,16);}
-        body.addView(text("YOUR FAVORITES",12,MUTED,true));gap(body,8);
+        card.setContentDescription("Open Mikan Web");card.setFocusable(true);card.setOnClickListener(v->openMikan());body.addView(card);gap(body,12);}
+        if(widgetHere("musicPage",1)){music=new MusicPanel(this);body.addView(music.view());gap(body,10);}
+        body.addView(text("YOUR FAVORITES",12,MUTED,true));gap(body,4);
         ArrayList<App> pinned=new ArrayList<>();for(String key:favorites){App a=find(key);if(a!=null)pinned.add(a);}
         int dockCount=prefs.getInt("dockCount",5);
         int columns=prefs.getInt("columns",4), perPage=columns*2;
         int start=Math.min(pinned.size(),dockCount+homePage*perPage),end=Math.min(pinned.size(),start+perPage);
         if(start==end)body.addView(text("Pin apps from the drawer or create a folder in settings.",14,MUTED,false));else addGrid(body,pinned.subList(start,end),columns);
-        gap(body,12);
-        LinearLayout dock=horizontal();dock.setPadding(dp(4),dp(8),dp(4),dp(8));dock.setBackground(shape(PANEL,28,true));
-        for(int i=0;i<dockCount;i++){if(i<pinned.size())dock.addView(tile(pinned.get(i),false),new LinearLayout.LayoutParams(0,-2,1));else{View blank=new View(this);dock.addView(blank,new LinearLayout.LayoutParams(0,dp(60),1));}}
+        gap(body,6);
+        LinearLayout dock=horizontal();dock.setPadding(dp(4),dp(5),dp(4),dp(5));dock.setBackground(panelShape(24));dock.setElevation(dp(2));
+        for(int i=0;i<dockCount;i++){if(i<pinned.size())dock.addView(tile(pinned.get(i),false),new LinearLayout.LayoutParams(0,-2,1));else{View blank=new View(this);dock.addView(blank,new LinearLayout.LayoutParams(0,dp(56),1));}}
         LinearLayout nav=horizontal();nav.setGravity(Gravity.CENTER);int count=pageCount();
-        if(homePage>0)nav.addView(action("‹",()->changePage(-1)));
-        TextView index=text((homePage+1)+" / "+count,13,PEACH,true);index.setGravity(Gravity.CENTER);nav.addView(index,new LinearLayout.LayoutParams(dp(70),dp(42)));
-        if(homePage+1<count)nav.addView(action("›",()->changePage(1)));
-        page.addView(nav);gap(page,6);page.addView(dock);gap(page,10);
-        TextView drawerButton=action("⌕   Search apps  ·  Swipe up",this::showDrawer);page.addView(drawerButton,new LinearLayout.LayoutParams(-1,dp(52)));
+        if(count>1){
+        if(homePage>0)nav.addView(pageArrow("‹",()->changePage(-1)));
+        TextView index=text((homePage+1)+" / "+count,13,PEACH,true);index.setGravity(Gravity.CENTER);nav.addView(index,new LinearLayout.LayoutParams(dp(70),dp(36)));
+        if(homePage+1<count)nav.addView(pageArrow("›",()->changePage(1)));
+        page.addView(nav);gap(page,4);}
+        page.addView(dock);gap(page,7);
+        TextView drawerButton=action("⌕   Search apps  ·  Swipe up",this::showDrawer);page.addView(drawerButton,new LinearLayout.LayoutParams(-1,dp(48)));
         updateClock();refreshExtras();
     }
+    private TextView pageArrow(String label,Runnable r){TextView v=action(label,r);v.setMinHeight(dp(36));v.setPadding(dp(16),dp(4),dp(16),dp(4));return v;}
     private void updateClock(){
         if(drawer||settings)return;
         Date now=new Date();if(clock!=null)clock.setText(android.text.format.DateFormat.getTimeFormat(this).format(now));
@@ -196,12 +206,12 @@ public class HomeActivity extends Activity {
         if(greeting!=null)greeting.setText(hour<5?"Still awake? ♡":hour<12?"Good morning ♡":hour<18?"Good afternoon ♡":"Good evening ♡");
     }
     private View tile(App app,boolean label){
-        LinearLayout cell=vertical();cell.setGravity(Gravity.CENTER);cell.setPadding(dp(3),dp(6),dp(3),dp(6));
-        ImageView icon=new ImageView(this);icon.setImageDrawable(themedIcon(app));icon.setScaleType(ImageView.ScaleType.FIT_CENTER);icon.setPadding(dp(7),dp(7),dp(7),dp(7));icon.setBackground(shape(0xff50332b,18,true));
+        LinearLayout cell=vertical();cell.setGravity(Gravity.CENTER);cell.setPadding(dp(2),dp(3),dp(2),dp(3));
+        ImageView icon=new ImageView(this);icon.setImageDrawable(themedIcon(app));icon.setScaleType(ImageView.ScaleType.FIT_CENTER);int inset=dp(prefs.getBoolean("themed",true)?5:7);icon.setPadding(inset,inset,inset,inset);icon.setBackground(shape(0xff50332b,17,true));
         FrameLayout iconFrame=new FrameLayout(this);iconFrame.addView(icon,new FrameLayout.LayoutParams(-1,-1));
         TextView dot=text("•",18,PEACH,true);dot.setGravity(Gravity.CENTER);dot.setBackground(shape(0xff50332b,20,false));dot.setVisibility(View.GONE);FrameLayout.LayoutParams bp=new FrameLayout.LayoutParams(dp(16),dp(16),Gravity.TOP|Gravity.RIGHT);iconFrame.addView(dot,bp);badgeViews.put(dot,app.key());
         cell.addView(iconFrame,new LinearLayout.LayoutParams(dp(50),dp(50)));
-        if(label){TextView name=text(app.label,11,CREAM,false);name.setGravity(Gravity.CENTER);name.setMaxLines(2);name.setEllipsize(android.text.TextUtils.TruncateAt.END);LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(-1,dp(32));p.topMargin=dp(4);cell.addView(name,p);}
+        if(label){TextView name=text(app.label,11,CREAM,false);name.setGravity(Gravity.TOP|Gravity.CENTER_HORIZONTAL);name.setIncludeFontPadding(false);name.setMaxLines(2);name.setMinLines(2);name.setEllipsize(android.text.TextUtils.TruncateAt.END);LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(-1,-2);p.topMargin=dp(3);cell.addView(name,p); }
         cell.setContentDescription(app.label);cell.setOnClickListener(v->launch(app));cell.setOnLongClickListener(v->{if(!drawer&&favorites.contains(app.key())){ClipData data=ClipData.newPlainText("mikan-favorite",app.key());v.startDragAndDrop(data,new View.DragShadowBuilder(v),app.key(),0);}else appOptions(app);return true;});
         if(!drawer)cell.setOnDragListener((v,event)->{if(event.getAction()==android.view.DragEvent.ACTION_DRAG_STARTED)return event.getLocalState() instanceof String;
             if(event.getAction()==android.view.DragEvent.ACTION_DRAG_ENTERED)v.setAlpha(.55f);
@@ -280,7 +290,7 @@ public class HomeActivity extends Activity {
         if(app.component.getPackageName().equals("dev.capnolithyl.mikan.pocket"))return getDrawable(dev.capnolithyl.mikan.launcher.R.drawable.mikan_icon);
         if(Build.VERSION.SDK_INT>=33&&app.icon instanceof AdaptiveIconDrawable){
             Drawable mono=((AdaptiveIconDrawable)app.icon).getMonochrome();
-            if(mono!=null){Drawable d=mono.getConstantState()==null?mono:mono.getConstantState().newDrawable();d=d.mutate();d.setTint(PEACH);return d;}
+            if(mono!=null){Drawable.ConstantState cached=monoCache.get(app.key());if(cached!=null)return cached.newDrawable(getResources());Drawable d=LauncherIcons.normalizedMonochrome(this,mono,PEACH);if(d!=null){if(d.getConstantState()!=null)monoCache.put(app.key(),d.getConstantState());return d;}}
         }
         return LauncherIcons.create(this,app.component.getPackageName(),app.label,app.icon);
     }
@@ -402,9 +412,9 @@ public class HomeActivity extends Activity {
         }catch(Exception e){new AlertDialog.Builder(this).setMessage("Open Android Settings → Apps → Default apps → Home app.").setPositiveButton("OK",null).show();}
     }
     @Override public boolean dispatchTouchEvent(MotionEvent event){
-        if(event.getActionMasked()==MotionEvent.ACTION_DOWN){touchX=event.getX();touchY=event.getY();}
-        if(!drawer&&!settings&&event.getActionMasked()==MotionEvent.ACTION_UP&&Math.abs(event.getX()-touchX)>dp(90)&&Math.abs(event.getY()-touchY)<dp(55)){MotionEvent cancel=MotionEvent.obtain(event);cancel.setAction(MotionEvent.ACTION_CANCEL);super.dispatchTouchEvent(cancel);cancel.recycle();changePage(event.getX()<touchX?1:-1);return true;}
-        if(!drawer&&!settings&&event.getActionMasked()==MotionEvent.ACTION_UP&&root!=null&&touchY>root.getHeight()-dp(180)&&touchY-event.getY()>dp(70)&&Math.abs(event.getX()-touchX)<dp(90)){
+        if(event.getActionMasked()==MotionEvent.ACTION_DOWN){touchX=event.getX();touchY=event.getY();seekGesture=music!=null&&music.isSeekTouch(event.getRawX(),event.getRawY());}
+        if(!seekGesture&&!drawer&&!settings&&event.getActionMasked()==MotionEvent.ACTION_UP&&Math.abs(event.getX()-touchX)>dp(90)&&Math.abs(event.getY()-touchY)<dp(55)){MotionEvent cancel=MotionEvent.obtain(event);cancel.setAction(MotionEvent.ACTION_CANCEL);super.dispatchTouchEvent(cancel);cancel.recycle();changePage(event.getX()<touchX?1:-1);return true;}
+        if(!seekGesture&&!drawer&&!settings&&event.getActionMasked()==MotionEvent.ACTION_UP&&root!=null&&touchY>root.getHeight()-dp(180)&&touchY-event.getY()>dp(70)&&Math.abs(event.getX()-touchX)<dp(90)){
             MotionEvent cancel=MotionEvent.obtain(event);cancel.setAction(MotionEvent.ACTION_CANCEL);super.dispatchTouchEvent(cancel);cancel.recycle();showDrawer();return true;
         }
         return super.dispatchTouchEvent(event);
