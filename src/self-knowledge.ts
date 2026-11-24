@@ -112,9 +112,9 @@ export const CAPABILITIES: readonly Capability[] = [
   },
   {
     id:"conversation-history",label:"Persistent chat history",category:"Memory",
-    description:"Settings → Memory & chats provides an SQLite conversation archive and owner-controlled conversation deletion, alongside the chat history log. Conversation content is not the same as durable personal facts.",
-    stage:"implemented",runtime:"none",keywords:["history","chat","archive","conversation","log","messages"],
-    sources:["src-tauri/src/memory.rs","src/memory-client.ts","src/MemoryPanel.tsx"],docs:["MEMORY.md"],
+    description:"Settings → Memory & chats provides an SQLite conversation archive and owner-controlled conversation deletion, alongside the chat history log. The log has a one-off Reply Replay action that compares a previous answer with a new answer using only the historical text before that reply; previews are not saved as messages or extracted as memories. Replay uses the currently configured model and settings, and it cannot recreate old image attachments, live tool results or exact generation randomness. Conversation content is not the same as durable personal facts.",
+    stage:"implemented",runtime:"none",keywords:["history","chat","archive","conversation","log","messages","replay","regenerate","compare"],
+    sources:["src-tauri/src/memory.rs","src/memory-client.ts","src/MemoryPanel.tsx","src/conversation-replay.ts","src/App.tsx"],docs:["MEMORY.md"],
     commands:["memory_list_conversations","memory_create_conversation","memory_list_messages","memory_save_message","memory_delete_conversation"],
     screens:["log"],
     slashCommands:["chats","log","new"]
