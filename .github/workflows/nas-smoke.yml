@@ -1,4 +1,4 @@
-name: NAS cloud prototype smoke tests
+name: NAS deployment smoke tests
 on:
   pull_request:
     paths:
@@ -11,7 +11,7 @@ on:
       - ".github/workflows/nas-smoke.yml"
   push:
     branches:
-      - feature/nas-cloud-mikan-experimental
+      - main
     paths:
       - "nas/**"
       - "src/**"
@@ -144,7 +144,7 @@ jobs:
           include-hidden-files: true
           if-no-files-found: error
       - name: Publish tested experimental image
-        if: github.event_name == 'push' && github.ref == 'refs/heads/feature/nas-cloud-mikan-experimental'
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         env:
           GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
