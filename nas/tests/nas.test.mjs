@@ -740,3 +740,11 @@ test("agent executes actual calls, preserves natural queries and prevents unappr
    }});
  assert.deepEqual(queries,["Example model official release"]);assert.equal(reads,0);assert.match(result.answer,/Example Model 4/);assert.equal(round,3);
 });
+
+test("agent obeys no-browse and refuses unverified latest answer after skipped lookup",async()=>{
+ const {agentResearch}=await import("../agent-research.mjs");
+ const common={mode:"simple",canRequest:()=>true,search:async()=>{throw Error("unexpected search")},read:async()=>{throw Error("unexpected read")},generate:async()=>({content:"NO_PUBLIC_RESEARCH",toolCalls:[]})};
+ assert.equal(await agentResearch({...common,history:[{role:"user",content:"Don't browse. What is the latest model?"}]}),null);
+ const skipped=await agentResearch({...common,history:[{role:"user",content:"What is the latest model?"}]});
+ assert.match(skipped.answer,/could not complete a public lookup/);
+});

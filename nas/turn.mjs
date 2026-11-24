@@ -55,7 +55,7 @@ export async function executeNasTurn({store,conversationId,question,selected,mod
   const local=knowledge?await trace.measure("knowledge",()=>planKnowledge({knowledge,history,previous,question,provider:selected.provider,canRequest:()=>!signal?.aborted&&canRequest(2),generate:args=>trace.measure("knowledge-planner",()=>{signal?.throwIfAborted();reserve();return requestModel({...args,config:selected,signal,onUsage:v=>trace.usage("knowledge-planner",v)});}),activity})):null;
   const activeTask=rawHistory.filter(m=>m.role==="assistant").at(-1)?.inference?.researchTask;
   if(!local&&publicAgent&&mode!=="off"&&selected.provider==="nvidia"){
-    const agent=await agentResearch({mode,history,activeTask,signal,canRequest:()=>!signal?.aborted&&canRequest(),activity,
+    const agent=await agentResearch({mode,history,activeTask,signal,ownerFacts:store.listMemories(),canRequest:()=>!signal?.aborted&&canRequest(),activity,
       generate:args=>trace.measure("agent",()=>{signal?.throwIfAborted();reserve();return requestModel({...args,config:selected,signal,onModel:v=>trace.model(v),onUsage:v=>trace.usage("agent",v)});}),
       search:(query,recent)=>trace.measure("search",()=>search(query,recent)),read:(url,options)=>trace.measure("read",()=>read(url,options))});
     if(agent){trace.firstText();onDelta(agent.answer);return {...agent,memory:{text:"",ids:[],auditLines:[]}};}

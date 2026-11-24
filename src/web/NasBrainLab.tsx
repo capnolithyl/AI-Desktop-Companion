@@ -10,6 +10,7 @@ const stateName:Record<string,string>={running:"Running",stopping:"Stopping",fin
 export function NasBrainLab({client,models,busy}:{client:NasClient;models:NasModels;busy:boolean}){
   const [catalog,setCatalog]=useState<BrainScenario[]>([]),[report,setReport]=useState<BrainReport|null>(null),[history,setHistory]=useState<BrainSummary[]>([]),[view,setView]=useState<BrainReport|null>(null),[running,setRunning]=useState(false),[loading,setLoading]=useState(true),[working,setWorking]=useState(false),[error,setError]=useState("");
   const [choice,setChoice]=useState(JSON.stringify([models.provider,models.model])),[mode,setMode]=useState<ResearchMode>("strict"),[repetitions,setRepetitions]=useState(1),[numbers,setNumbers]=useState(""),[filter,setFilter]=useState(""),[category,setCategory]=useState("all");
+  const [publicAgent,setPublicAgent]=useState(false);
   const [ids,setIds]=useState<string[]>([]),[tab,setTab]=useState<Tab>("run"),[page,setPage]=useState(0);
   const [provider,model]=JSON.parse(choice) as [CloudProvider,string];
   const options=models.providers.filter(p=>p.configured).flatMap(p=>p.models.map(m=>({provider:p.provider,model:m,id:JSON.stringify([p.provider,m])})));
@@ -22,7 +23,7 @@ export function NasBrainLab({client,models,busy}:{client:NasClient;models:NasMod
   const visible=filtered.slice(safePage*PAGE_SIZE,(safePage+1)*PAGE_SIZE);
   async function refresh(){const s=await client.brainStatus();setReport(s.current);setHistory(s.history);setRunning(s.running);}
   useEffect(()=>{let live=true;let updating=false;const poll=async()=>{if(updating)return;updating=true;try{const s=await client.brainStatus();if(live){setReport(s.current);setHistory(s.history);setRunning(s.running);setLoading(false);}}catch(e){if(live)setError(String(e));}finally{updating=false;}};void client.brainCatalog().then(c=>{if(live)setCatalog(c);}).catch(e=>{if(live)setError(String(e));});void poll();const timer=setInterval(()=>void poll(),2500);return()=>{live=false;clearInterval(timer);};},[client]);
-  async function start(){setWorking(true);setError("");setView(null);try{await client.startBrain({provider,model,mode,scenarioIds:ids,repetitions});await refresh();}catch(e){setError(String(e));}finally{setWorking(false);}}
+  async function start(){setWorking(true);setError("");setView(null);try{await client.startBrain({provider,model,mode,scenarioIds:ids,repetitions,publicAgent:provider==="nvidia"&&publicAgent});await refresh();}catch(e){setError(String(e));}finally{setWorking(false);}}
   async function stop(){setWorking(true);try{await client.stopBrain();await refresh();}catch(e){setError(String(e));}finally{setWorking(false);}}
   function selectNumbers(){const values=numbers.split(",").map(v=>Number(v.trim()));const found=catalog.filter(s=>s.supported&&values.includes(s.number));if(!found.length||found.length!==new Set(values).size){setError("Enter supported scenario numbers separated by commas.");return;}setIds(found.map(s=>s.id));setError("");}
   const shown=view??report,steps=shown?.cases.flatMap(c=>c.steps)??[];
@@ -45,6 +46,7 @@ export function NasBrainLab({client,models,busy}:{client:NasClient;models:NasMod
       <div className="brain-eval-toolbar nas-brain-toolbar">
         <label className="nas-brain-model-field">Cloud model<select value={choice} onChange={e=>setChoice(e.target.value)} disabled={locked}>{options.map(o=><option key={o.id} value={o.id}>{o.provider} · {o.model}</option>)}</select></label>
         <label>Research mode<select value={mode} disabled={locked} onChange={e=>setMode(e.target.value as ResearchMode)}><option value="strict">Strict</option><option value="simple">Simple</option><option value="off">Off</option></select></label>
+        {provider==="nvidia"&&<label>Research engine<select value={publicAgent?"agent":"legacy"} disabled={locked} onChange={e=>setPublicAgent(e.target.value==="agent")}><option value="legacy">Existing pipeline</option><option value="agent">Native tools (experimental)</option></select></label>}
         <label>Repetitions<select value={repetitions} disabled={locked} onChange={e=>setRepetitions(Number(e.target.value))}>{[1,2,3,5].map(n=><option key={n} value={n}>{n}×</option>)}</select></label>
       </div>
       <section className="brain-eval-actionbar">

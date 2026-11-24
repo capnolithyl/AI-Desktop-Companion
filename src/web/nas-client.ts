@@ -28,7 +28,7 @@ export type NasStatus=NasModels&{busy:boolean;build?:NasBuild};
 export type LearningEvent={id:number;conversationId:string|null;assistantId:string|null;kind:"outcome"|"failed"|"queued"|"skipped"|"recall"|"search";createdAt:number;payload:{saved?:number;reviewQueued?:number;entries?:{description:string;status:string;kind:string}[];stage?:string;validated?:number;proposed?:number;reason?:string;lines?:string[];title?:string;detail?:string}};
 export type BrainScenario={id:string;number:number;label:string;group:string;turns:number;supported:boolean};
 export type BrainStep={user:string;researchTask?:unknown;answer?:string;error?:string;timing:NasTiming;actualModel:string|null;selectedMemoryIds?:number[];sources?:(NasSource&{content:string})[];events:{title:string;detail:string;lines:string[]}[]};
-export type BrainSummary={id:string;state:string;startedAt:number;finishedAt:number|null;provider:CloudProvider;model:string;mode:ResearchMode;repetitions:number;scenarioIds:string[];total:number;done:number;currentLabel:string};
+export type BrainSummary={id:string;state:string;startedAt:number;finishedAt:number|null;provider:CloudProvider;model:string;mode:ResearchMode;repetitions:number;publicAgent?:boolean;scenarioIds:string[];total:number;done:number;currentLabel:string};
 export type BrainReport=BrainSummary&{cases:{id:string;label:string;number:number;repeat:number;steps:BrainStep[]}[]};
 export type KnowledgePage={id:string;title:string;url:string;characters:number;syncedAt?:number;fetchedAt?:number;chunkCount?:number;lastEdited?:string};
 export type KnowledgeStatus={connected:boolean;allowNotionCloud:boolean;cacheWeb:boolean;allPages:boolean;selected:string[];available:{id:string;title:string;kind:string;url:string}[];job:{state:string;done:number;title:string;error:string|null};pages:KnowledgePage[];webPages:KnowledgePage[]};
@@ -50,7 +50,7 @@ export class NasClient {
   brainCatalog(){return this.json<BrainScenario[]>("brain-lab/catalog");}
   brainStatus(){return this.json<{running:boolean;current:BrainReport|null;history:BrainSummary[]}>("brain-lab");}
   brainReport(id:string){return this.json<BrainReport>("brain-lab/report/"+encodeURIComponent(id));}
-  startBrain(config:{provider:CloudProvider;model:string;mode:ResearchMode;scenarioIds:string[];repetitions:number}){return this.json<{id:string}>("brain-lab/start",{method:"POST",body:JSON.stringify(config)});}
+  startBrain(config:{provider:CloudProvider;model:string;mode:ResearchMode;scenarioIds:string[];repetitions:number;publicAgent?:boolean}){return this.json<{id:string}>("brain-lab/start",{method:"POST",body:JSON.stringify(config)});}
   stopBrain(){return this.json<{running:boolean}>("brain-lab/stop",{method:"POST",body:"{}"});}
   knowledge(){return this.json<KnowledgeStatus>("knowledge");}
   knowledgeAction(action:string,args:object={}){return this.json<KnowledgeStatus>("knowledge",{method:"POST",body:JSON.stringify({action,...args})});}

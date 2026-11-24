@@ -1,7 +1,7 @@
 // Experimental public-only native tool loop. No private memories, local
 // documents, write tools or arbitrary URL access. Existing NAS auth, SSRF
 // protection, provider quota ledger and Notion route remain authoritative.
-import {parseWebToolDecision,publicPlanningHistory} from "../src/unified-planner.ts";
+import {parseWebToolDecision,publicPlanningHistory,readResearchTask} from "../src/unified-planner.ts";
 import {reviewResearchCompletion} from "../src/evidence-verification.ts";
 import {nativeResearchAvailable,reviewNativeResearch,structuredResearchTool} from "./native-research.mjs";
 import {researchPlannerTool,webURL} from "./research.mjs";
@@ -14,15 +14,17 @@ const evidenceTool=structuredResearchTool();
 const finishTool=tool("submit_research_answer","Return the natural answer with numbered citations. For constrained recommendations provide typed discovery task and literal per-candidate identity, relevance, measurement and credit evidence. For factual questions use lookup, not discovery. A disputed claim is NOT a required constraint. For a refinement retain all still-applicable constraints.",
  object({...evidenceTool.function.parameters.properties,task:researchPlannerTool().function.parameters.properties.task},["answer","task","passages","suggestions"]));
 const rawToolText=s=>/^\s*(?:\x60{3}(?:json)?\s*)?\{\s*"(?:tool|arguments|function|tool_calls|name)"\s*:/i.test(s)||/<(?:tool_call|function_call)>/i.test(s);
-const safeQuery=q=>parseWebToolDecision(JSON.stringify({web:{search:true,query:q}}),true,[]);
+const safeQuery=(q,ownerFacts)=>parseWebToolDecision(JSON.stringify({web:{search:true,query:q}}),true,[],ownerFacts);
 const unique=a=>[...new Set(a)];
 const norm=s=>String(s??"").toLowerCase().replace(/\s+/g," ").trim();
 const citationIds=s=>[...s.matchAll(/\[(\d+)\]/g)].map(m=>Number(m[1]));
 const clip=s=>({...s,content:String(s.content??"").slice(0,3500)});
 const constraintHistory=(history,question)=>[...publicPlanningHistory(history.slice(0,-1)),question].join("\n");
-export async function agentResearch({mode,history,activeTask,generate,canRequest,search,read,activity=()=>{},signal,now=new Date()}){
+export async function agentResearch({mode,history,activeTask,generate,canRequest,search,read,activity=()=>{},signal,now=new Date(),ownerFacts=[]}){
   const strict=mode==="strict",sources=[],events=[],seenQueries=new Set(),seenReads=new Set();
   const question=history.at(-1)?.content??"";
+  if(/\b(?:do not|don\x27t|never|no need to)\s+(?:browse|search|look up|use the web|go online)\b/i.test(question))return null;
+  if(/\b(?:password|passphrase|api.?key|access.?token|secret|ssn|social security|bank account|my (?:name|birthday|birthdate|wife|husband|daughter|son|child|kids|family|address|home|phone|email|doctor|medication))\b/i.test(question)||/[\w.+-]+@[\w.-]+\.[a-z]{2,}/i.test(question))return null;
   // Only recent locally screened user messages, never the memory or persona
   // prompt, are visible while public tool permissions are available.
   const transcript=[{role:"user",content:JSON.stringify({recentUserTurns:publicPlanningHistory(history.slice(0,-1)),currentUser:question,previousPublicTask:activeTask??null})}];
@@ -38,14 +40,13 @@ export async function agentResearch({mode,history,activeTask,generate,canRequest
     const response=await generate({system,history:transcript,agentTools:tools,agentToolChoice:last?"none":"auto",maxTokens:3072,temperature:0.2});
     if(!response||typeof response.content!=="string"||!Array.isArray(response.toolCalls))throw Error("Invalid native agent response");
     if(!response.toolCalls.length){
-      if(!attempted&&response.content.trim()==="NO_PUBLIC_RESEARCH")return null;
+      if(!attempted&&response.content.trim()==="NO_PUBLIC_RESEARCH")break;
       answer=rawToolText(response.content)?"":response.content;break;
     }
     // Final answer calls do not execute any external operation.
     const finish=response.toolCalls.filter(c=>c.function.name==="submit_research_answer");
     if(finish.length===1&&response.toolCalls.length===1){
-      try{finalPayload=JSON.parse(finish[0].function.arguments);answer=typeof finalPayload.answer==="string"?finalPayload.answer:"";task=finalPayload.task;}catch{answer="";}
-      if(!attempted)return null;
+      try{finalPayload=JSON.parse(finish[0].function.arguments);answer=typeof finalPayload.answer==="string"?finalPayload.answer:"";task=readResearchTask(finalPayload.task);}catch{answer="";}
       break;
     }
     transcript.push({role:"assistant",content:response.content||null,tool_calls:response.toolCalls});
@@ -56,7 +57,7 @@ export async function agentResearch({mode,history,activeTask,generate,canRequest
         const args=JSON.parse(call.function.arguments);
         if(!args||typeof args!=="object"||Array.isArray(args))throw Error("Invalid arguments");
         if(call.function.name==="search_web"&&!last&&searched<maxSearches){
-          const decision=safeQuery(args.query);
+          const decision=safeQuery(args.query,ownerFacts);
           if(!decision.search)result={error:"Unsafe or invalid public query"};
           else if(seenQueries.has(norm(decision.query)))result={error:"Already searched; choose a different focused query"};
           else{
@@ -91,7 +92,11 @@ export async function agentResearch({mode,history,activeTask,generate,canRequest
       transcript.push({role:"tool",tool_call_id:call.id,content:JSON.stringify(result)});
     }
   }
-  if(!attempted)return null;
+  if(!attempted){
+    // A failed public lookup cannot become a confident answer from stale knowledge.
+    if(/\b(?:latest|current|right now|as of today|search again|verify|look up)\b/i.test(question)&&!/^\s*(?:i feel|i am|i\x27m)\b/i.test(question))return {answer:"I could not complete a public lookup for this request. I don't want to present old information as current.",researched:{sources:[],note:"Public lookup unavailable",evidence:""}};
+    return null;
+  }
   const refs=citationIds(answer),validRefs=refs.length&&refs.every(i=>sources[i-1]);
   if(rawToolText(answer)||!answer.trim()||!validRefs)answer="I searched, but couldn't compose a supported answer from the results. The retrieved sources are available below.";
   else if(strict){
