@@ -402,7 +402,7 @@ fn valid_id(id: &str) -> bool {
     id.len() == 36 && id.bytes().all(|b| b.is_ascii_hexdigit() || b == b'-')
 }
 
-fn clean_fact(value: &str) -> Result<String, String> {
+pub(crate) fn clean_fact(value: &str) -> Result<String, String> {
     let fact = value.split_whitespace().collect::<Vec<_>>().join(" ");
     if fact.is_empty() || fact.chars().count() > 500 {
         return Err("A memory must contain 1–500 characters".into());
@@ -413,12 +413,12 @@ fn clean_fact(value: &str) -> Result<String, String> {
 const MEMORY_CATEGORIES: &[&str] = &[
     "profile","family","work","projects","interests","preferences","routines","other"
 ];
-fn clean_category(value: &str) -> Result<String, String> {
+pub(crate) fn clean_category(value: &str) -> Result<String, String> {
     let category=value.trim().to_lowercase();
     if MEMORY_CATEGORIES.contains(&category.as_str()) { Ok(category) }
     else { Err("Unknown memory category".into()) }
 }
-fn clean_tags(tags: &[String]) -> Result<Vec<String>, String> {
+pub(crate) fn clean_tags(tags: &[String]) -> Result<Vec<String>, String> {
     if tags.len()>8 { return Err("Use up to 8 tags per memory".into()); }
     let mut seen=std::collections::HashSet::new();
     let mut result=Vec::new();

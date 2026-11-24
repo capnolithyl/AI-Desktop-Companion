@@ -46,7 +46,7 @@ fn normalized(value: &str, limit: usize, label: &str) -> Result<String, String> 
     }
     Ok(clean)
 }
-fn checked(mut item: IncomingInterest) -> Result<IncomingInterest, String> {
+pub(crate) fn checked(mut item: IncomingInterest) -> Result<IncomingInterest, String> {
     item.name = normalized(&item.name, 180, "Interest name")?;
     item.kind = item.kind.trim().to_lowercase();
     item.status = item.status.trim().to_lowercase();

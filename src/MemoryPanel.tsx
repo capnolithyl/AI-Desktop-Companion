@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { ArrowLeft, Check, MessageCircle, Plus, RotateCw, Star, Trash2, X, Settings2, BookPlus } from "lucide-react";
 import type { CharacterCategory, CharacterFact, InterestItem, MemoryConversation, UserFact } from "./memory-client";
-import type { IncomingCanon, IncomingInterest } from "./interest-import";
+import {INTEREST_KINDS,INTEREST_STATUSES,type IncomingCanon,type IncomingInterest} from "./interest-import";
 import { InterestCollectionTab } from "./InterestCollectionTab";
 import {MemoryImporter} from "./MemoryImporter";
 import {MEMORY_CATEGORIES,parseTags,type ImportMemory,type MemoryCategory} from "./memory-import";
@@ -20,6 +20,8 @@ type Props = {
   onImportInterests: (items:IncomingInterest[])=>Promise<{inserted:number;duplicates:number}>;
   onEditInterest: (id:number,item:IncomingInterest)=>Promise<void>;
   onDeleteInterest: (id:number)=>Promise<void>;
+  onMoveFactToInterest: (id:number,item:IncomingInterest)=>Promise<void>;
+  onMoveInterestToFact: (id:number,fact:string,category:MemoryCategory,tags:string[])=>Promise<void>;
   onImportCharacter: (items:IncomingCanon[])=>Promise<{inserted:number;duplicates:number}>;
   autoRememberUser: boolean;
   autoRememberMikan: boolean;
@@ -56,7 +58,7 @@ function shortDate(seconds: number): string {
 /** Separate fact and conversation controls; no automatic memory extraction in phase one. */
 export function MemoryPanel({
   embedded = false, initialTab = "facts", conversations, sessionSummaries, facts, characterFacts,
-  interests,onImportInterests,onEditInterest,onDeleteInterest,onImportCharacter,
+  interests,onImportInterests,onEditInterest,onDeleteInterest,onMoveFactToInterest,onMoveInterestToFact,onImportCharacter,
   autoRememberUser, autoRememberMikan, automaticError, onAutoRememberUserChange, onAutoRememberMikanChange,
   currentId, busy, error, onClose, onNew,
   onOpen, onDeleteChat, onDeleteSessionSummary, onAddFact, onEditFact, onDeleteFact, onPinFact,
@@ -75,6 +77,10 @@ export function MemoryPanel({
   const [organizeCategory,setOrganizeCategory]=useState<MemoryCategory>("other");
   const [organizeTags,setOrganizeTags]=useState("");
   const [confirmId, setConfirmId] = useState<string | null>(null);
+  const [moveFactId,setMoveFactId]=useState<number|null>(null);
+  const [moveInterest,setMoveInterest]=useState<IncomingInterest>({
+    name:"",kind:"album",status:"experienced",rating:null,notes:"",tags:[]
+  });
   const [working, setWorking] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
 
@@ -222,12 +228,46 @@ export function MemoryPanel({
                 setOrganizeId(fact.id);setOrganizeCategory(fact.category??"other");setOrganizeTags((fact.tags??[]).join(", "));
               }}>Organize</button>
               <button type="button" onClick={() => { setEditId(fact.id); setEditValue(fact.fact); }}>Edit</button>
+              <button type="button" disabled={working} onClick={()=>{
+                const match=fact.fact.match(/['"“]([^'"”]{1,180})['"”]/);
+                const lower=fact.fact.toLowerCase();
+                setMoveInterest({
+                  name:match?.[1]??"",kind:lower.includes("album")?"album":"other",
+                  status:/did not enjoy|dislike|hate/i.test(lower)?"dislike":
+                    /\bcool\b|\blov(?:e|es|ed)\b|\blike\b/i.test(lower)?"like":"experienced",
+                  rating:null,notes:fact.fact,tags:[...fact.tags]
+                });
+                setMoveFactId(fact.id);
+              }}>Move to Interests</button>
               {confirmId === `fact:${fact.id}` ? <>
                 <button type="button" className="memory-danger" disabled={working}
                   onClick={() => void run(async () => { await onDeleteFact(fact.id); setConfirmId(null); })}>Confirm delete</button>
                 <button type="button" onClick={() => setConfirmId(null)}>Cancel</button>
               </> : <button type="button" onClick={() => setConfirmId(`fact:${fact.id}`)}><Trash2 size={13}/> Delete</button>}
             </div>
+            {moveFactId===fact.id && <div className="memory-organize" aria-label="Move memory to Interests">
+              <strong>Move to Interests</strong>
+              <small>Review the structured entry. The About you record is removed only after the new Interest saves.</small>
+              <label>Title <input aria-label="Converted interest title" maxLength={180}
+                value={moveInterest.name} onChange={e=>setMoveInterest(v=>({...v,name:e.target.value}))}/></label>
+              <div className="memory-import-row-controls">
+                <label>Kind <select value={moveInterest.kind} onChange={e=>setMoveInterest(v=>({...v,kind:e.target.value as IncomingInterest["kind"]}))}>
+                  {INTEREST_KINDS.map(kind=><option key={kind} value={kind}>{kind}</option>)}
+                </select></label>
+                <label>Relationship <select value={moveInterest.status} onChange={e=>setMoveInterest(v=>({...v,status:e.target.value as IncomingInterest["status"]}))}>
+                  {INTEREST_STATUSES.map(status=><option key={status} value={status}>{status}</option>)}
+                </select></label>
+              </div>
+              <label>Notes <textarea maxLength={500} rows={2} value={moveInterest.notes}
+                onChange={e=>setMoveInterest(v=>({...v,notes:e.target.value}))}/></label>
+              <div className="memory-actions">
+                <button type="button" disabled={working||!moveInterest.name.trim()}
+                  onClick={()=>void run(async()=>{
+                    await onMoveFactToInterest(fact.id,moveInterest);setMoveFactId(null);
+                  })}><Check size={13}/> Confirm move</button>
+                <button type="button" onClick={()=>setMoveFactId(null)}>Cancel</button>
+              </div>
+            </div>}
             </details>
           </>}
         </article>)}
@@ -239,7 +279,8 @@ export function MemoryPanel({
         </div>}
       </> : tab === "collections" ? <>
         <InterestCollectionTab items={interests} onImport={onImportInterests}
-          onEdit={onEditInterest} onDelete={onDeleteInterest}/>
+          onEdit={onEditInterest} onDelete={onDeleteInterest}
+          onMoveToFact={onMoveInterestToFact}/>
       </> : tab === "character" ? <>
         <label className="memory-auto-toggle">
           <input type="checkbox" checked={autoRememberMikan}
