@@ -3768,7 +3768,6 @@ export default function App() {
               endpoint: DEFAULT_SETTINGS.endpoint, model: DEFAULT_SETTINGS.model,
               provider: DEFAULT_SETTINGS.provider, nvidiaModel: DEFAULT_SETTINGS.nvidiaModel, modelLed: DEFAULT_SETTINGS.modelLed, geminiModel: DEFAULT_SETTINGS.geminiModel,
               openrouterModel: DEFAULT_SETTINGS.openrouterModel,
-              systemPrompt: DEFAULT_SETTINGS.systemPrompt,
               contextWindow: DEFAULT_SETTINGS.contextWindow,
               reasoningMode: DEFAULT_SETTINGS.reasoningMode
             } : settingsTab === "internet" ? {
@@ -4538,7 +4537,7 @@ export default function App() {
             <span className="avatar-position-labels" aria-hidden="true">
               <span>Lower</span><span>Higher</span>
             </span>
-            <small>Move Mikan inside her viewport to reveal more or less of her outfit. Live preview; save to keep this position.</small>
+            <small>Move Mikan inside her compact avatar viewport to reveal more or less of an outfit. Save to apply the position.</small>
           </label>
           <button type="button" className="inline-action"
             disabled={avatarDisplay !== "animated" || draft.appearance.avatarVerticalOffset === DEFAULT_AVATAR_VERTICAL_OFFSET}
@@ -4574,8 +4573,8 @@ export default function App() {
                 <Check size={15}/> {(ikiRig?.id ?? null) === previewChoice.id ? "Currently wearing" : "Wear this outfit"}
               </button>
               <button type="button" disabled={!ikiReady || ikiBusy || (ikiRig?.id ?? null) === previewChoice.id}
-                onClick={() => setPreviewOutfitId(ikiRig?.id ?? null)}>Cancel preview</button>
-              <button type="button" title="Preview a random everyday outfit" aria-label="Surprise me"
+                onClick={() => setPreviewOutfitId(ikiRig?.id ?? null)}>Back to current</button>
+              <button type="button" title="Pick a random everyday outfit" aria-label="Pick a random outfit"
                 disabled={!ikiReady || ikiBusy || wardrobeChoices.length < 2}
                 onClick={() => {
                   const surprise = pickDailyOutfit(wardrobeChoices, {
