@@ -30,7 +30,7 @@ pub struct MemoryJobRequest {
     context_window: Option<u32>,
 }
 
-#[derive(Serialize)]
+#[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ExtractionEntry {
     kind: String,
@@ -57,6 +57,8 @@ pub struct MemoryJobStatus {
     character_saved: usize,
     interests_saved: usize,
     interest_changes: Vec<memory_extraction::InterestStatusChange>,
+    /// Exact committed items from all jobs processed in this drain.
+    entries: Vec<ExtractionEntry>,
     review_queued: usize,
     queued: i64,
     failed: i64,
@@ -111,25 +113,10 @@ pub fn memory_enqueue_turn(app: AppHandle, request: MemoryJobRequest) -> Result<
     enqueue(&memory::open_db(&app)?, &request)
 }
 
-fn status(db: &Connection) -> Result<MemoryJobStatus,String> {
-    let queued=db.query_row("SELECT COUNT(*) FROM automatic_memory_jobs
-        WHERE status IN ('queued','processing')",[],|r|r.get(0))
-        .map_err(|e|e.to_string())?;
-    let failed=db.query_row("SELECT COUNT(*) FROM automatic_memory_jobs
-        WHERE status='failed'",[],|r|r.get(0))
-        .map_err(|e|e.to_string())?;
-    let latest=db.query_row(
-        "SELECT assistant_message_id,user_saved,character_saved,interests_saved,review_queued,processed_at
-         FROM automatic_memory_runs WHERE outcome_known=1
-         ORDER BY processed_at DESC,rowid DESC LIMIT 1",[],|r|Ok((
-             r.get::<_,String>(0)?,
-             MemoryOutcome {user_saved:r.get(1)?,character_saved:r.get(2)?,
-                interests_saved:r.get(3)?,review_queued:r.get(4)?,
-                processed_at:r.get(5)?,entries:Vec::new()}
-         ))
-    ).optional().map_err(|e|e.to_string())?;
-    let last_outcome=if let Some((assistant_id,mut outcome))=latest {
-        let user_id:Option<String>=db.query_row(
+/// Resolve exact committed entries for this job, retaining separate About you,
+/// Interest and Mikan labels. No generated text is passed off as a DB outcome.
+fn entries_for_run(db:&Connection,assistant_id:&str)->Result<Vec<ExtractionEntry>,String>{
+    let user_id:Option<String>=db.query_row(
             "SELECT u.id FROM messages u
              WHERE u.conversation_id=(SELECT conversation_id FROM messages WHERE id=?1)
                AND u.role='user'
@@ -153,11 +140,33 @@ fn status(db: &Connection) -> Result<MemoryJobStatus,String> {
              FROM memory_fact_reviews r WHERE r.source_message_id=?1
              ORDER BY 1,2"
         ).map_err(|e|e.to_string())?;
-        outcome.entries=stmt.query_map(
+    let entries=stmt.query_map(
             params![user_id.unwrap_or_default(),assistant_id],
             |r|Ok(ExtractionEntry {kind:r.get(0)?,description:r.get(1)?,evidence:r.get(2)?})
         ).map_err(|e|e.to_string())?
           .collect::<Result<Vec<_>,_>>().map_err(|e|e.to_string())?;
+    Ok(entries)
+}
+
+fn status(db: &Connection) -> Result<MemoryJobStatus,String> {
+    let queued=db.query_row("SELECT COUNT(*) FROM automatic_memory_jobs
+        WHERE status IN ('queued','processing')",[],|r|r.get(0))
+        .map_err(|e|e.to_string())?;
+    let failed=db.query_row("SELECT COUNT(*) FROM automatic_memory_jobs
+        WHERE status='failed'",[],|r|r.get(0))
+        .map_err(|e|e.to_string())?;
+    let latest=db.query_row(
+        "SELECT assistant_message_id,user_saved,character_saved,interests_saved,review_queued,processed_at
+         FROM automatic_memory_runs WHERE outcome_known=1
+         ORDER BY processed_at DESC,rowid DESC LIMIT 1",[],|r|Ok((
+             r.get::<_,String>(0)?,
+             MemoryOutcome {user_saved:r.get(1)?,character_saved:r.get(2)?,
+                interests_saved:r.get(3)?,review_queued:r.get(4)?,
+                processed_at:r.get(5)?,entries:Vec::new()}
+         ))
+    ).optional().map_err(|e|e.to_string())?;
+    let last_outcome=if let Some((assistant_id,mut outcome))=latest {
+        outcome.entries=entries_for_run(db,&assistant_id)?;
         Some(outcome)
     }else{None};
     Ok(MemoryJobStatus{queued,failed,last_outcome,..Default::default()})
@@ -253,6 +262,7 @@ pub async fn memory_process_pending_jobs(app: AppHandle) -> Result<MemoryJobStat
                 totals.character_saved+=saved.character_saved;
                 totals.interests_saved+=saved.interests_saved;
                 totals.interest_changes.extend(saved.interest_changes);
+                totals.entries.extend(entries_for_run(&db,&job.assistant_message_id)?);
                 totals.review_queued+=saved.review_queued;
             },
             Err(err) => {
@@ -357,6 +367,28 @@ mod tests {
         assert_eq!(outcome.entries[0].kind,"Interest");
         assert!(outcome.entries[0].description.contains("Gristle Licker"));
         assert!(outcome.entries[0].evidence.contains("favorite songs"));
+    }
+    #[test]
+    fn job_entries_preserve_distinct_fact_and_interest_destinations() {
+        let db=fixture();
+        db.execute(
+            "INSERT INTO user_memories(fact) VALUES('The user enjoyed Humanure')",[]
+        ).unwrap();
+        let fact_id=db.last_insert_rowid();
+        db.execute(
+            "INSERT INTO automatic_memory_sources(memory_kind,memory_id,source_message_id,evidence)
+             VALUES('user',?1,?2,'I enjoyed Humanure')",
+            params![fact_id,USER]
+        ).unwrap();
+        db.execute(
+            "INSERT INTO interest_items(name,kind,status,source,source_message_id)
+             VALUES('Karma Bloody Karma','album','like','conversation',?1)",
+            params![USER]
+        ).unwrap();
+        let entries=entries_for_run(&db,ASSIST).unwrap();
+        assert_eq!(entries.len(),2);
+        assert!(entries.iter().any(|item|item.kind=="About you" && item.description.contains("Humanure")));
+        assert!(entries.iter().any(|item|item.kind=="Interest" && item.description.contains("Karma Bloody Karma")));
     }
     #[test]
     fn successfully_processed_turns_cannot_be_queued_again() {
