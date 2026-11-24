@@ -33,7 +33,7 @@ fn evaluate(input: Input) -> Value {
             return json!({"kind":"recommendation","approved":gate.approved,"rejected":gate.rejected,
                 "requirements":gate.requirements,"ignoredRequirements":gate.ignored_requirements,
                 "rejectedDetails":gate.rejected_details,"relationsChecked":gate.relations_checked,
-                "exclusionsChecked":gate.exclusions_checked});
+                "exclusionsChecked":gate.exclusions_checked,"followupQuery":gate.followup_query});
         }
     }
     let (verified,rejected)=cloud_evidence::verified_passages(&input.passages,&input.sources);

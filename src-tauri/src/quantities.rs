@@ -3,7 +3,7 @@
 //! entity/category classifier. The source quote remains the authority.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Dimension {
-    Duration, Episodes, Tracks, Pages, Chapters, Words, Seasons
+    Duration, Episodes, Tracks, Pages, Chapters, Words, Seasons, ReleaseYear
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -24,6 +24,7 @@ fn normalize_unit(unit: &str) -> Option<(Dimension, f64)> {
         "chapter"|"chapters" => Some((Dimension::Chapters,1.0)),
         "word"|"words" => Some((Dimension::Words,1.0)),
         "season"|"seasons" => Some((Dimension::Seasons,1.0)),
+        "release year" => Some((Dimension::ReleaseYear,1.0)),
         _ => None
     }
 }
@@ -66,6 +67,7 @@ fn number_word(word:&str)->Option<f64>{
 pub fn canonical(value:f64,unit:&str)->Option<Quantity>{
     let (dim,factor)=normalize_unit(unit)?;
     if !value.is_finite()||value<0.0||value>1_000_000_000.0{return None}
+    if dim==Dimension::ReleaseYear && (value.fract()!=0.0 || !(1800.0..=2200.0).contains(&value)){return None}
     Some(Quantity{dim,amount:value*factor})
 }
 
@@ -102,6 +104,19 @@ pub fn measured_in(raw:&str)->Vec<Quantity>{
 /// A compound duration must match the full duration.
 pub fn first_measure_matches(raw:&str,expected:Quantity)->bool {
     let t=tokens(raw);
+    if expected.dim==Dimension::ReleaseYear {
+        // Require the first explicit release predicate after the named work.
+        // A review date, publication timestamp, or arbitrary bare year does not qualify.
+        for (i,word) in t.iter().enumerate() {
+            if ["released","premiered","debuted","published","aired"].contains(&word.as_str()) {
+                let next=t.get(i+1).map(String::as_str);
+                let index=if matches!(next,Some("in"|"on")){i+2}else{i+1};
+                return t.get(index).and_then(|v|v.parse::<f64>().ok())
+                    .and_then(|v|canonical(v,"release year")).is_some_and(|v|approx_equal(v,expected));
+            }
+        }
+        return false
+    }
     let mut pairs=Vec::<(usize,Quantity)>::new();
     for (i,pair) in t.windows(2).enumerate(){
         if let Some(amount)=number_word(&pair[0]){
@@ -124,6 +139,7 @@ pub fn first_measure_matches(raw:&str,expected:Quantity)->bool {
 }
 
 pub fn mention_supports(raw:&str,expected:Quantity)->bool{
+    if expected.dim==Dimension::ReleaseYear {return tokens(raw).iter().any(|t|t.parse::<f64>().ok().is_some_and(|v|v==expected.amount));}
     measured_in(raw).into_iter().any(|found|approx_equal(found,expected))
 }
 
@@ -181,5 +197,18 @@ mod tests{
     fn refuses_unitless_numbers_and_incompatible_dimensions(){
         assert!(canonical(90.0,"year").is_none());
         assert!(!mention_supports("A list of 9 films. Each film has 12 chapters.",q(9.0,"tracks")));
+    }
+}
+
+#[cfg(test)]
+mod release_year_tests {
+    use super::*;
+    #[test]
+    fn explicit_release_year_is_not_a_page_or_review_date(){
+        let year=canonical(2014.0,"release year").unwrap();
+        assert!(first_measure_matches(" was released in 2014",year));
+        assert!(!first_measure_matches(" was reviewed in 2014",year));
+        assert!(!first_measure_matches(" was released in 2009 and another work debuted in 2014",year));
+        assert!(mention_supports("after 2010",canonical(2010.0,"release year").unwrap()));
     }
 }

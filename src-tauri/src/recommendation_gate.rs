@@ -156,6 +156,10 @@ pub fn quoted_requirement_valid(question: &str, req: &HardRequirement) -> bool {
     else if ["exactly ","equal to "]
         .iter().any(|marker| text.contains(*marker)) { Some("eq") }
     else {None};
+    if target.dim==quantities::Dimension::ReleaseYear {
+        let date_relation=if text.contains("after "){Some("gt")}else if text.contains("before "){Some("lt")}else{expected};
+        return date_relation==Some(req.relation.as_str())
+    }
     expected == Some(req.relation.as_str())
 }
 
@@ -169,6 +173,7 @@ fn missing_field(unit: quantities::Dimension) -> &'static str {
         Chapters => "chapter count",
         Words => "word count",
         Seasons => "season count",
+        ReleaseYear => "release year",
     }
 }
 
@@ -305,7 +310,7 @@ pub fn screen_task(
         .take(4).cloned().partition(|limit| quoted_requirement_valid(question, limit));
     let unresolved_limit = ignored_requirements.iter().any(|limit|
         norm(question).contains(&norm(&limit.quote))
-        && !quantities::measured_in(&limit.quote).is_empty()
+        && (!quantities::measured_in(&limit.quote).is_empty() || limit.unit=="release year")
     );
     let mut exclusions: HashSet<_> = task.exclude.iter().take(6)
         .filter(|name| (3..=110).contains(&name.trim().chars().count())
