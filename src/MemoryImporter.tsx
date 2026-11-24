@@ -9,7 +9,7 @@ type Props = {
   facts:UserFact[];
   onImport:(items:ImportMemory[])=>Promise<{inserted:number;duplicates:number}>;
   onExport:()=>Promise<{path:string;count:number}>;
-  onReplace:(items:ImportMemory[],expectedCount:number)=>
+  onReplace?:(items:ImportMemory[],expectedCount:number)=>
     Promise<{inserted:number;oldCount:number;backupPath:string}>;
 };
 
@@ -79,6 +79,7 @@ export function MemoryImporter({facts,onImport,onExport,onReplace}:Props){
         [{fact:row.fact,category:row.category,tags:parseTags(row.tagsInput),pinned:row.pinned}] : []);
       if(!items.length)throw Error("All imported facts are duplicates or excluded");
       if(mode==="replace"){
+        if(!onReplace)throw Error("Bulk replacement is not available in this runtime");
         const saved=await onReplace(items,facts.length);
         setResult("Replaced "+saved.oldCount+" personal memories with "+saved.inserted+
           " reviewed memories. Automatic backup: "+saved.backupPath);
@@ -102,7 +103,7 @@ export function MemoryImporter({facts,onImport,onExport,onReplace}:Props){
         setMode(e.target.value as typeof mode);setConfirmation("");setResult(null);
       }}>
         <option value="append">Add new memories (skip existing matches)</option>
-        <option value="replace">Replace all personal memories with this file</option>
+        {onReplace&&<option value="replace">Replace all personal memories with this file</option>}
       </select>
     </label>
     {mode==="replace" && <p className="memory-explainer">

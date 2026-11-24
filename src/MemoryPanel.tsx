@@ -11,6 +11,7 @@ import type { SessionSummary } from "./memory-budget";
 
 type Props = {
   embedded?: boolean;
+  nasMode?: boolean;
   initialTab?: "chats" | "facts" | "character" | "collections";
   conversations: MemoryConversation[];
   sessionSummaries: SessionSummary[];
@@ -43,7 +44,7 @@ type Props = {
   onUpdateFactMetadata: (id: number, category: MemoryCategory, tags: string[]) => Promise<void>;
   onImportFacts: (items: ImportMemory[]) => Promise<{inserted:number;duplicates:number}>;
   onExportFacts: () => Promise<{path:string;count:number}>;
-  onReplaceFacts: (items: ImportMemory[], expectedCount: number) =>
+  onReplaceFacts?: (items: ImportMemory[], expectedCount: number) =>
     Promise<{inserted:number;oldCount:number;backupPath:string}>;
   onRefresh: () => Promise<void>;
   onAddCharacter: (category: CharacterCategory, label: string, value: string) => Promise<void>;
@@ -57,7 +58,7 @@ function shortDate(seconds: number): string {
 
 /** Separate fact and conversation controls; no automatic memory extraction in phase one. */
 export function MemoryPanel({
-  embedded = false, initialTab = "facts", conversations, sessionSummaries, facts, characterFacts,
+  embedded = false, nasMode = false, initialTab = "facts", conversations, sessionSummaries, facts, characterFacts,
   interests,onImportInterests,onEditInterest,onDeleteInterest,onMoveFactToInterest,onMoveInterestToFact,onImportCharacter,
   autoRememberUser, autoRememberMikan, automaticError, onAutoRememberUserChange, onAutoRememberMikanChange,
   currentId, busy, error, onClose, onNew,
@@ -104,7 +105,7 @@ export function MemoryPanel({
     role={embedded ? "region" : "dialog"} aria-label="Mikan memory">
     <header className="drawer-header">
       {!embedded && <button type="button" className="back-button" title="Back to companion" onClick={onClose}><ArrowLeft size={19}/></button>}
-      <div className="drawer-title"><strong>{embedded?"Your memory library":"Memory"}</strong><span>Private SQLite storage on this PC</span></div>
+      <div className="drawer-title"><strong>{embedded?"Your memory library":"Memory"}</strong><span>{nasMode?"Private SQLite storage on Beholder":"Private SQLite storage on this PC"}</span></div>
       <button type="button" className="secondary-action" disabled={working}
         onClick={() => void run(onRefresh)}><RotateCw size={14}/> Refresh</button>
     </header>
@@ -152,21 +153,22 @@ export function MemoryPanel({
             </div>
           </details>
           <details className="memory-disclosure">
-            <summary><Settings2 size={18}/><span><strong>Automatic memory &amp; tools</strong><small>{autoRememberUser?"Automatic recall is on":"Automatic recall is off"} · corrections, import and export</small></span></summary>
+            <summary><Settings2 size={18}/><span><strong>{nasMode?"Memory import & export":"Automatic memory & tools"}</strong><small>{nasMode?"Owner-approved import and export":(autoRememberUser?"Automatic recall is on":"Automatic recall is off")+" · corrections, import and export"}</small></span></summary>
             <div className="memory-disclosure-body">
-        <label className="memory-auto-toggle">
+        {!nasMode&&<><label className="memory-auto-toggle">
           <input type="checkbox" checked={autoRememberUser}
             onChange={event => onAutoRememberUserChange(event.target.checked)}/>
           <span><strong>Automatically remember useful facts about you</strong>
             <small>Checks explicit, lasting details after a reply. Sensitive information is skipped by default.</small>
           </span>
         </label>
-        <MemoryReviews onChanged={onRefresh}/>
+        <MemoryReviews onChanged={onRefresh}/></>}
+        {nasMode&&<p className="memory-explainer">Automatic learning and correction reviews are not connected yet. Manual changes and recall are available.</p>}
         <MemoryImporter facts={facts} onImport={onImportFacts} onExport={onExportFacts} onReplace={onReplaceFacts}/>
             </div>
           </details>
         </div>
-        {!facts.length && <p className="memory-empty">Nothing saved yet. Use this form or /remember followed by a fact.</p>}
+        {!facts.length && <p className="memory-empty">Nothing saved yet. Use this form to save a fact.</p>}
         {!!facts.length && <div className="memory-filter">
           <input value={filterText} placeholder="Search facts or tags…" aria-label="Filter memories"
             onChange={e=>{setFilterText(e.target.value);setVisibleLimit(12);}}/>
@@ -282,13 +284,13 @@ export function MemoryPanel({
           onEdit={onEditInterest} onDelete={onDeleteInterest}
           onMoveToFact={onMoveInterestToFact}/>
       </> : tab === "character" ? <>
-        <label className="memory-auto-toggle">
+        {!nasMode&&<label className="memory-auto-toggle">
           <input type="checkbox" checked={autoRememberMikan}
             onChange={event => onAutoRememberMikanChange(event.target.checked)}/>
           <span><strong>Automatically remember Mikan's new preferences</strong>
             <small>When you ask about her interests, a specific answer can become part of her identity.</small>
           </span>
-        </label>
+        </label>}
         <CharacterCanonTab facts={characterFacts} onAdd={onAddCharacter}
           onEdit={onEditCharacter} onDelete={onDeleteCharacter} onImport={onImportCharacter}/>
       </> : <>

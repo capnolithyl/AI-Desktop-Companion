@@ -1,5 +1,8 @@
 import {importCompanionProfile,exportCompanionProfile,type CompanionProfile} from "../companion-profile";
-export type NasChat={id:string;title:string;updatedAt:number};
+import type {UserFact,CharacterFact,InterestItem,MemoryConversation} from "../memory-client";
+import type {SessionSummary} from "../memory-budget";
+export type NasChat=MemoryConversation;
+export type LibrarySnapshot={facts:UserFact[];characterFacts:CharacterFact[];interests:InterestItem[];sessionSummaries:SessionSummary[]};
 export type NasMessage={id:string;role:"user"|"assistant";content:string;createdAt:number};
 export type NasFact={id:number;fact:string;category:string;updatedAt:number};
 export type NasStatus={provider:string;model:string;busy:boolean};
@@ -21,6 +24,8 @@ export class NasClient {
   async facts(){return (await this.json<{memories:NasFact[]}>("memories")).memories;}
   addFact(fact:string){return this.json("memories",{method:"POST",body:JSON.stringify({fact})});}
   removeFact(id:number){return this.json("memories/"+id,{method:"DELETE"});}
+  library(){return this.json<LibrarySnapshot>("library");}
+  memoryAction<T=unknown>(action:string,args:object){return this.json<T>("library",{method:"POST",body:JSON.stringify({action,args})});}
   async chat(id:string,text:string,onDelta:(text:string)=>void){
     const response=await this.request("chat",{method:"POST",body:JSON.stringify({conversationId:id,text})});
     if(!response.body)throw new Error("No response stream");

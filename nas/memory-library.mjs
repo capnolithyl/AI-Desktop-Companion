@@ -47,10 +47,10 @@ export function createMemoryLibrary(db){
   const hasFTS=db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='message_search'").get();
   if(!hasFTS)tx(db,()=>{
     db.exec(`CREATE VIRTUAL TABLE message_search USING fts5(content,tokenize='unicode61 remove_diacritics 2');
-    INSERT INTO message_search(rowid,content) SELECT rowid,content FROM messages;
-    CREATE TRIGGER IF NOT EXISTS message_search_insert AFTER INSERT ON messages BEGIN INSERT INTO message_search(rowid,content) VALUES(new.rowid,new.content); END;
-    CREATE TRIGGER IF NOT EXISTS message_search_delete AFTER DELETE ON messages BEGIN DELETE FROM message_search WHERE rowid=old.rowid; END;
-    CREATE TRIGGER IF NOT EXISTS message_search_update AFTER UPDATE OF content ON messages BEGIN DELETE FROM message_search WHERE rowid=old.rowid; INSERT INTO message_search(rowid,content) VALUES(new.rowid,new.content); END;`);
+    INSERT INTO message_search(rowid,content) SELECT rowid,content FROM messages WHERE role='user';
+    CREATE TRIGGER IF NOT EXISTS messages_search_insert AFTER INSERT ON messages WHEN new.role='user' BEGIN INSERT INTO message_search(rowid,content) VALUES(new.rowid,new.content); END;
+    CREATE TRIGGER IF NOT EXISTS messages_search_delete AFTER DELETE ON messages WHEN old.role='user' BEGIN DELETE FROM message_search WHERE rowid=old.rowid; END;
+    CREATE TRIGGER IF NOT EXISTS messages_search_update AFTER UPDATE ON messages BEGIN DELETE FROM message_search WHERE rowid=old.rowid AND old.role='user'; INSERT INTO message_search(rowid,content) SELECT new.rowid,new.content WHERE new.role='user'; END;`);
   });
   const facts=()=>db.prepare(factSQL+" ORDER BY m.updated_at DESC,m.id DESC").all().map(decodeTags);
   const canon=()=>db.prepare(canonSQL+" ORDER BY updated_at DESC,id DESC").all();

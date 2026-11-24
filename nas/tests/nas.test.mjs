@@ -56,6 +56,11 @@ test("NAS HTTP requires a key, streams replies and persists them",async()=>{
     assert.equal((await fetch(base+"/api/status")).status,401);
     const headers={Authorization:"Bearer "+key,"Content-Type":"application/json"};
     assert.equal((await fetch(base+"/api/profile")).status,401);
+    assert.equal((await fetch(base+"/api/library")).status,401);
+    assert.equal((await fetch(base+"/api/library",{method:"POST",headers,body:JSON.stringify({action:"addFact",args:{fact:"A new owner-approved test fact"}})})).status,200);
+    const library=await (await fetch(base+"/api/library",{headers})).json();
+    assert.equal(library.facts[0].fact,"A new owner-approved test fact");
+    assert.equal((await fetch(base+"/api/library",{method:"POST",headers,body:JSON.stringify({action:"constructor"})})).status,400);
     const profile=exportCompanionProfile({...DEFAULT_COMPANION_PROFILE,
       personality:{...DEFAULT_COMPANION_PROFILE.personality,flirtiness:95},
       communication:{...DEFAULT_COMPANION_PROFILE.communication,customGuidance:"Never call me by my name"}});

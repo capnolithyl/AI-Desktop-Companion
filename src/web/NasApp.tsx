@@ -1,5 +1,5 @@
 import {useState,useRef,useEffect,useMemo,type FormEvent,type ChangeEvent,type CSSProperties} from "react";
-import {ArrowLeft,Cat,Brain,Shirt,WandSparkles,Settings2,PawPrint,Sparkles,History,UserRound,Download,Upload,Plug2,Lock,Trash2,LoaderCircle} from "lucide-react";
+import {ArrowLeft,Cat,Brain,Shirt,WandSparkles,Settings2,PawPrint,Sparkles,History,UserRound,Download,Upload,Plug2,Lock,LoaderCircle} from "lucide-react";
 import {DefaultCompanionShell} from "../DefaultCompanionShell";
 import {WorkspaceAvatarRays,WorkspacePawSeal,WorkspaceSendPaw} from "../WorkspaceDecor";
 import {ChatMarkdown} from "../components/ChatMarkdown";
@@ -11,7 +11,8 @@ import {AVATAR_BACKGROUNDS} from "../avatar-background";
 import {PortraitContextMenu,type PortraitMenuItem} from "../PortraitContextMenu";
 import {reactionFromReply,type AvatarReaction,type AvatarReactionKind} from "../avatar-reactions";
 import {DEFAULT_COMPANION_PROFILE,importCompanionProfile,exportCompanionProfile,type CompanionProfile} from "../companion-profile";
-import {NasClient,type NasMessage,type NasChat,type NasFact,type NasStatus} from "./nas-client";
+import {NasClient,type NasMessage,type NasChat,type LibrarySnapshot,type NasStatus} from "./nas-client";
+import {MemoryPanel} from "../MemoryPanel";
 const portrait=new URL("../../assets/iki/mikan-chat-avatar.webp",import.meta.url).href;
 const referencePortrait=new URL("../../assets/iki/mikan-reference.png",import.meta.url).href;
 const KEY="mikan-nas-key";
@@ -59,8 +60,7 @@ export function NasApp(){
   const [saving,setSaving]=useState(false);
   const [page,setPage]=useState<Page>("chat");
   const [notice,setNotice]=useState("");
-  const [facts,setFacts]=useState<NasFact[]>([]);
-  const [fact,setFact]=useState("");
+  const [library,setLibrary]=useState<LibrarySnapshot>({facts:[],characterFacts:[],interests:[],sessionSummaries:[]});
   const [rigError,setRigError]=useState("");
   const [reaction,setReaction]=useState<AvatarReaction|null>(null);
   const [menu,setMenu]=useState<{x:number;y:number}|null>(null);
@@ -89,13 +89,16 @@ export function NasApp(){
     return()=>{valid=false;};
   },[key,client]);
   useEffect(()=>{setRigError("");},[profile.outfitId,profile.avatarDisplay]);
-  const lock=()=>{if(busy||saving)return;setAuthenticated(false);setKey("");setToken("");sessionStorage.removeItem(KEY);setMessages([]);setChats([]);setFacts([]);setActive(null);setPage("chat");setNotice("");};
+  const lock=()=>{if(busy||saving)return;setAuthenticated(false);setKey("");setToken("");sessionStorage.removeItem(KEY);setMessages([]);setChats([]);setLibrary({facts:[],characterFacts:[],interests:[],sessionSummaries:[]});setActive(null);setPage("chat");setNotice("");};
   const report=(error:unknown)=>setNotice(error instanceof Error?error.message:String(error));
+  const refreshLibrary=async()=>{const [snapshot,list]=await Promise.all([client.library(),client.chats()]);setLibrary(snapshot);setChats(list);};
+  const mutate=async<T,>(action:string,args:object):Promise<T>=>{const result=await client.memoryAction<T>(action,args);await refreshLibrary();return result;};
+  const changeMemory=async(action:string,args:object)=>{await mutate(action,args);};
   const openPage=(next:Page)=>{
     if(saving)return;
     if((page==="personality"||page==="appearance")&&JSON.stringify(draft)!==JSON.stringify(profile)&&!window.confirm("Discard unsaved profile changes?"))return;
     setNotice("");setDraft(profile);setPage(next);
-    if(next==="memory")void client.facts().then(setFacts).catch(report);
+    if(next==="memory"||next==="history")void refreshLibrary().catch(report);
   };
   const openChat=async(id:string)=>{
     if(inFlight.current||busy)return;
@@ -137,15 +140,16 @@ export function NasApp(){
       inFlight.current=false;setBusy(false);
     }
   };
-  const addFact=async(event:FormEvent)=>{
-    event.preventDefault();
-    if(!fact.trim())return;
-    try{await client.addFact(fact.trim());setFact("");setFacts(await client.facts());}
-    catch(error){report(error);}
+  const exportFacts=async()=>{
+    const snapshot=await client.library();
+    const memories=snapshot.facts.map(f=>({...f,pinned:(f.importance??50)>=90}));
+    const url=URL.createObjectURL(new Blob([JSON.stringify({schema:"mikan-user-memories",version:1,memories},null,2)],{type:"application/json"}));
+    const link=document.createElement("a");link.href=url;link.download="mikan-user-memories.json";document.body.appendChild(link);link.click();link.remove();window.setTimeout(()=>URL.revokeObjectURL(url),1000);
+    return {path:"mikan-user-memories.json (browser download)",count:memories.length};
   };
-  const removeFact=async(id:number)=>{
-    if(!window.confirm("Delete this saved fact from Beholder?"))return;
-    try{await client.removeFact(id);setFacts(await client.facts());}catch(error){report(error);}
+  const deleteChat=async(id:string)=>{
+    await changeMemory("deleteChat",{id});
+    if(active===id){setActive(null);setMessages([]);localStorage.removeItem("mikan-nas-chat");await newChat();}
   };
   if(!authenticated)return <main className="nas-gate"><form className="nas-login control-form-section" onSubmit={event=>{event.preventDefault();if(token.trim()===key){setKey("");window.setTimeout(()=>setKey(token.trim()),0);}else setKey(token.trim());}}>
     <img src={portrait} alt="Mikan"/><h1>Welcome home ♡</h1><p>Mikan · Beholder</p>
@@ -195,7 +199,7 @@ export function NasApp(){
         <div className="settings-nav-group"><div className="settings-nav-heading">YOUR COMPANION</div>
           {tabs.map(({id,label,icon:Icon})=><button type="button" key={id} className={"settings-tab"+(page===id?" active":"")} onClick={()=>openPage(id)}><span className="control-nav-icon"><Icon size={19}/></span><span>{label}</span></button>)}
         </div><div className="control-sidebar-decoration"><Sparkles size={13}/><PawPrint size={34}/><Sparkles size={10}/></div>
-      </nav><div className="settings-body">
+      </nav><div className={(page==="memory"||page==="history")?"settings-body settings-embedded settings-memory-view":"settings-body"}>
         {page==="personality"&&<>
           <div className="control-page-note"><WandSparkles size={20}/> Same personality and communication rules as desktop Mikan. Save to apply across browsers.</div>
           <div className="nas-profile-actions"><button className="secondary-action" onClick={()=>file.current?.click()}><Upload size={15}/> Import desktop profile</button><button className="secondary-action" onClick={()=>downloadProfile(draft)}><Download size={15}/> Export profile</button><input ref={file} type="file" accept=".json,application/json" hidden onChange={event=>void importFile(event)}/></div>
@@ -211,12 +215,23 @@ export function NasApp(){
           <label className="setting-field"><span>Follow cursor <input type="checkbox" checked={draft.followCursor} onChange={event=>setDraft(current=>({...current,followCursor:event.target.checked}))}/></span></label>
           {rigError&&<p role="alert">{rigError}</p>}
           <small>Bundled outfits are shared with desktop. Custom imported rigs are not yet supported in NAS mode.</small></section></>}
-        {page==="memory"&&<><div className="settings-section-title">Saved owner facts</div><form className="control-form-section" onSubmit={event=>void addFact(event)}><label className="setting-field">Remember that…<textarea value={fact} maxLength={800} onChange={event=>setFact(event.target.value)}/></label><button className="secondary-action" disabled={!fact.trim()}>Save fact</button></form>
-          {facts.map(item=><div key={item.id} className="nas-fact control-form-section"><span>{item.fact}</span><button className="secondary-action" title="Delete fact" onClick={()=>void removeFact(item.id)}><Trash2 size={15}/></button></div>)}
-          <p className="settings-note">Basic fact management. Full desktop memory, canon and interest panels remain to be ported.</p></>}
-        {page==="history"&&<><div className="settings-section-title">Conversations</div>{chats.map(chat=><button key={chat.id} className="secondary-action nas-history-button" disabled={busy} onClick={()=>void openChat(chat.id)}>{chat.title||"Conversation"}</button>)}</>}
+        {(page==="memory"||page==="history")&&<MemoryPanel embedded nasMode key={page} initialTab={page==="history"?"chats":"facts"}
+          conversations={chats} sessionSummaries={library.sessionSummaries} facts={library.facts} characterFacts={library.characterFacts} interests={library.interests}
+          onImportInterests={items=>mutate<{inserted:number;duplicates:number}>("importInterests",{items})}
+          onEditInterest={(id,item)=>changeMemory("editInterest",{id,item})} onDeleteInterest={id=>changeMemory("deleteInterest",{id})}
+          onMoveFactToInterest={(id,item)=>changeMemory("moveFact",{id,item})}
+          onMoveInterestToFact={(id,fact,category,tags)=>changeMemory("moveInterest",{id,fact,category,tags})}
+          onImportCharacter={items=>mutate<{inserted:number;duplicates:number}>("importCanon",{items})}
+          autoRememberUser={false} autoRememberMikan={false} automaticError={null} onAutoRememberUserChange={()=>{}} onAutoRememberMikanChange={()=>{}}
+          currentId={active} busy={busy} error={notice||null} onClose={()=>openPage("chat")} onNew={()=>void newChat()} onOpen={openChat}
+          onDeleteChat={deleteChat} onDeleteSessionSummary={id=>changeMemory("deleteSummary",{id})}
+          onAddFact={fact=>changeMemory("addFact",{fact})} onEditFact={(id,fact)=>changeMemory("editFact",{id,fact})} onDeleteFact={id=>changeMemory("deleteFact",{id})}
+          onPinFact={(id,pinned)=>changeMemory("pinFact",{id,pinned})} onUpdateFactMetadata={(id,category,tags)=>changeMemory("labelFact",{id,category,tags})}
+          onImportFacts={items=>mutate<{inserted:number;duplicates:number}>("importFacts",{items})} onExportFacts={exportFacts}
+          onRefresh={refreshLibrary} onAddCharacter={(category,label,value)=>changeMemory("addCanon",{item:{category,label,value}})}
+          onEditCharacter={(id,category,label,value)=>changeMemory("editCanon",{id,item:{category,label,value}})} onDeleteCharacter={id=>changeMemory("deleteCanon",{id})}/>}
         {page==="log"&&<><div className="settings-section-title">Conversation log</div><p className="settings-note">NAS model: {status?.model}</p>{messages.map(message=><div key={message.id} className="control-form-section"><strong>{message.role==="assistant"?"Mikan":"You"}</strong><ChatMarkdown text={message.content} onOpenLink={openLink}/></div>)}</>}
-        {page==="capabilities"&&<><div className="settings-section-title">Beholder runtime</div><section className="control-form-section"><p>Cloud chat · {status?.provider} · {status?.model}</p><p>Persistent conversations, lexical memory recall, shared persona, animated Iki, bundled outfits and backgrounds.</p><p>Not connected yet: provider switching in the UI, automatic memory, Qdrant, web research, Notion, Brain Lab, voice synthesis, screen capture and desktop synchronization. Windows window controls and global hotkeys stay native.</p><p>The old prototype is still available at <a href="/legacy">/legacy</a>.</p></section></>}
+        {page==="capabilities"&&<><div className="settings-section-title">Beholder runtime</div><section className="control-form-section"><p>Cloud chat · {status?.provider} · {status?.model}</p><p>Persistent conversations, owner facts, pins, character canon, structured interests, historical archive retrieval, shared persona, animated Iki, bundled outfits and backgrounds.</p><p>Not connected yet: provider switching in the UI, automatic memory, Qdrant, web research, Notion, Brain Lab, voice synthesis, screen capture and desktop synchronization. Windows window controls and global hotkeys stay native.</p><p>The old prototype is still available at <a href="/legacy">/legacy</a>.</p></section></>}
         {notice&&<p className="settings-note" role="status">{notice}</p>}
         {(page==="personality"||page==="appearance")&&<div className="nas-save-row"><button className="secondary-action" disabled={saving} onClick={()=>void save(draft)}>{saving?"Saving…":"Save settings"}</button></div>}
       </div></div>
