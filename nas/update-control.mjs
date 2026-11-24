@@ -1,7 +1,8 @@
 import {readFileSync,writeFileSync,renameSync,unlinkSync,existsSync} from "node:fs";
 import {join} from "node:path";
 import {pathToFileURL} from "node:url";
-const actions=new Set(["check","install"]);
+const actions=new Set(["check","install","switch-stable","switch-preview"]);
+const channels=new Set(["stable","preview"]);
 const phases=new Set(["checking","current","available","installing","deferred","updated","failed","rolled-back"]);
 const revision=v=>typeof v==="string"&&/^[a-f0-9]{40}$/.test(v)?v:null;
 export function updateControl(dir="/data"){
@@ -17,7 +18,9 @@ export function updateControl(dir="/data"){
   function queue(action){
     if(!actions.has(action))throw Object.assign(new Error("Invalid update action"),{status:400});
     if(pending())throw Object.assign(new Error("An update request is already queued"),{status:409});
-    if(!read())throw Object.assign(new Error("Host update controls are not connected"),{status:503});
+    const host=read();
+    if(!host)throw Object.assign(new Error("Host update controls are not connected"),{status:503});
+    if(action.startsWith("switch-")&&!channels.has(host.channel))throw Object.assign(new Error("Install the channel-capable host scripts first"),{status:503});
     try{writeFileSync(request,action,{flag:"wx",mode:0o600});}
     catch(e){if(e.code==="EEXIST")throw Object.assign(new Error("An update request is already queued"),{status:409});throw e;}
     return {queued:action};
@@ -31,9 +34,9 @@ export function updateControl(dir="/data"){
     unlinkSync(claimed);
     return value;
   }
-  function publish(phase,installed,available){
+  function publish(phase,installed,available,channel){
     if(!phases.has(phase))throw Error("Invalid phase");
-    const previous=read(),now=Date.now(),entry={phase,installed:revision(installed),available:revision(available),at:now};
+    const previous=read(),now=Date.now(),entry={phase,installed:revision(installed),available:revision(available),at:now,...(channels.has(channel)?{channel}:{})};
     const history=Array.isArray(previous?.history)?previous.history.slice(0,19):[];
     if(["updated","failed","rolled-back"].includes(phase))history.unshift(entry);
     const next={...entry,checkedAt:["checking","installing"].includes(phase)?previous?.checkedAt??null:now,lastBackup:phase==="updated"||phase==="rolled-back"?now:previous?.lastBackup??null,history};

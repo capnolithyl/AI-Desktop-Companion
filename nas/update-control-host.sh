@@ -1,5 +1,5 @@
 #!/bin/sh
-# Root-owned host bridge: only two fixed requests, never execute app-provided commands.
+# Root-owned host bridge: fixed check/install/channel requests, never app-provided commands.
 set -eu
 umask 077
 PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/var/packages/ContainerManager/target/usr/bin:$PATH
@@ -7,7 +7,8 @@ export PATH
 ROOT=/volume1/docker/mikan/nas
 STATE=/volume1/docker/mikan-updater
 UPDATER=/root/mikan-updater/update-beholder.sh
-REGISTRY=ghcr.io/capnolithyl/mikan-nas:experimental
+REGISTRY=ghcr.io/capnolithyl/mikan-nas:stable
+PREVIEW_REGISTRY=ghcr.io/capnolithyl/mikan-nas:preview
 [ "$(id -u)" = 0 ] || exit 1
 mkdir -p "$STATE"
 chmod 700 "$STATE"
@@ -31,12 +32,30 @@ installed(){
   docker image inspect -f '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$image"
 }
 available(){ docker image inspect -f '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$REGISTRY" 2>/dev/null || true; }
-publish(){ bridge publish "$1" "$(installed || true)" "$(available)" >/dev/null 2>&1 || true; }
+publish(){ bridge publish "$1" "$(installed || true)" "$(available)" "$channel" >/dev/null 2>&1 || true; }
 now="$(date +%s)"
 last=0
 if [ -f "$STATE/last-auto-check" ]; then last="$(cat "$STATE/last-auto-check")"; fi
 case "$last" in ""|*[!0-9]*) last=0;; esac
+channel=stable
+if [ -f "$STATE/channel" ]; then
+  channel="$(cat "$STATE/channel")"
+  case "$channel" in stable|preview) ;; *) channel=stable ;; esac
+fi
 request="$(bridge take 2>/dev/null || true)"
+# Selection is root-owned state, outside the application data/rollback snapshot.
+# The only permitted channel change is one of these literal queued actions.
+case "$request" in
+  switch-stable) channel=stable ;;
+  switch-preview) channel=preview ;;
+esac
+case "$request" in
+  switch-stable|switch-preview)
+    printf '%s\n' "$channel" >"$STATE/channel.tmp"
+    mv "$STATE/channel.tmp" "$STATE/channel"
+    request=install ;;
+esac
+[ "$channel" != preview ] || REGISTRY="$PREVIEW_REGISTRY"
 # Default automatic deployment cadence stays at five minutes. The one-minute
 # host task only wakes to consume explicit requests between those checks.
 case "$request" in
@@ -53,7 +72,7 @@ esac
 # credentials, host paths, or arbitrary errors to the web application.
 output="$STATE/control-last-run.log"
 code=0
-sh "$UPDATER" "$@" >"$output" 2>&1 || code=$?
+MIKAN_UPDATE_CHANNEL="$channel" sh "$UPDATER" "$@" >"$output" 2>&1 || code=$?
 cat "$output"
 case "$code" in
   0)

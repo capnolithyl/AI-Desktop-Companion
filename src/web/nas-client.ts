@@ -22,8 +22,10 @@ export type NasModelPatch={provider:CloudProvider;model?:string;apiKey?:string;c
 export type NasFact={id:number;fact:string;category:string;updatedAt:number};
 export type NasBuild={version:string;commit:string;backendHash:string|null;actualBackendHash:string};
 export type UpdatePhase="checking"|"current"|"available"|"installing"|"deferred"|"updated"|"failed"|"rolled-back";
-export type UpdateRecord={phase:UpdatePhase;installed:string|null;available:string|null;at:number};
-export type NasUpdateStatus={build:NasBuild;pending:"check"|"install"|null;host:(UpdateRecord&{checkedAt:number|null;lastBackup:number|null;history:UpdateRecord[]})|null};
+export type UpdateChannel="stable"|"preview";
+export type UpdateAction="check"|"install"|"switch-stable"|"switch-preview";
+export type UpdateRecord={channel?:UpdateChannel;phase:UpdatePhase;installed:string|null;available:string|null;at:number};
+export type NasUpdateStatus={build:NasBuild;pending:UpdateAction|null;host:(UpdateRecord&{checkedAt:number|null;lastBackup:number|null;history:UpdateRecord[]})|null};
 export type NasStatus=NasModels&{busy:boolean;build?:NasBuild};
 export type LearningEvent={id:number;conversationId:string|null;assistantId:string|null;kind:"outcome"|"failed"|"queued"|"skipped"|"recall"|"search";createdAt:number;payload:{saved?:number;reviewQueued?:number;entries?:{description:string;status:string;kind:string}[];stage?:string;validated?:number;proposed?:number;reason?:string;lines?:string[];title?:string;detail?:string}};
 export type BrainScenario={id:string;number:number;label:string;group:string;turns:number;supported:boolean};
@@ -46,7 +48,7 @@ export class NasClient {
   }
   private async json<T>(path:string,options?:RequestInit):Promise<T>{return (await this.request(path,options)).json();}
   updates(){return this.json<NasUpdateStatus>("updates");}
-  requestUpdate(action:"check"|"install"){return this.json<{queued:string}>("updates",{method:"POST",body:JSON.stringify({action})});}
+  requestUpdate(action:UpdateAction){return this.json<{queued:string}>("updates",{method:"POST",body:JSON.stringify({action})});}
   brainCatalog(){return this.json<BrainScenario[]>("brain-lab/catalog");}
   brainStatus(){return this.json<{running:boolean;current:BrainReport|null;history:BrainSummary[]}>("brain-lab");}
   brainReport(id:string){return this.json<BrainReport>("brain-lab/report/"+encodeURIComponent(id));}

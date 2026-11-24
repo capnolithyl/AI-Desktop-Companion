@@ -713,3 +713,18 @@ test("followup retains previously validated task constraints even when planner o
  assert.equal(result.task.requirements.length,2);
  assert.equal(result.task.requirements[0].unit,"episodes");
 });
+
+test("channel requests require upgraded host and reject arbitrary image tags",()=>{
+ const root=mkdtempSync(join(tmpdir(),"mikan-channel-"));
+ try{
+  const control=updateControl(root);control.publish("current","a".repeat(40),"a".repeat(40));
+  assert.throws(()=>control.queue("switch-preview"),/host scripts/);
+  control.publish("current","a".repeat(40),"a".repeat(40),"stable");
+  assert.throws(()=>control.queue("switch-ghcr.io/other/image"),/Invalid update action/);
+  assert.deepEqual(control.queue("switch-preview"),{queued:"switch-preview"});
+  assert.equal(control.take(),"switch-preview");
+  control.publish("updated","b".repeat(40),"b".repeat(40),"preview");
+  assert.equal(control.get().host.channel,"preview");
+  assert.equal(control.get().host.history[0].channel,"preview");
+ }finally{rmSync(root,{recursive:true,force:true});}
+});

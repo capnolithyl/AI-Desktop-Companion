@@ -6,7 +6,14 @@ PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/var/packages/ContainerManager
 export PATH
 ROOT=/volume1/docker/mikan/nas
 STATE=/volume1/docker/mikan-updater
-REGISTRY=ghcr.io/capnolithyl/mikan-nas:experimental
+REGISTRY=ghcr.io/capnolithyl/mikan-nas:stable
+PREVIEW_REGISTRY=ghcr.io/capnolithyl/mikan-nas:preview
+# Only the root-owned bridge selects this fixed channel. No arbitrary tags.
+case "${MIKAN_UPDATE_CHANNEL:-stable}" in
+  stable) ;;
+  preview) REGISTRY="$PREVIEW_REGISTRY" ;;
+  *) echo "Invalid update channel"; exit 2 ;;
+esac
 MANAGED=mikan-nas:managed
 PREVIOUS=mikan-nas:rollback
 DATA="$ROOT/data"

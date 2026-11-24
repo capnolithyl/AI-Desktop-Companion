@@ -12,6 +12,7 @@ on:
   push:
     branches:
       - main
+      - preview
     paths:
       - "nas/**"
       - "src/**"
@@ -143,8 +144,8 @@ jobs:
           path: .nas-deploy/
           include-hidden-files: true
           if-no-files-found: error
-      - name: Publish tested experimental image
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+      - name: Publish tested channel image
+        if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/preview')
         env:
           GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -152,6 +153,16 @@ jobs:
           image=ghcr.io/capnolithyl/mikan-nas
           docker tag mikan-nas:ci "$image:sha-$GITHUB_SHA"
           docker push "$image:sha-$GITHUB_SHA"
-          docker tag mikan-nas:ci "$image:experimental"
-          docker push "$image:experimental"
+          case "$GITHUB_REF" in
+            refs/heads/main)
+              # Keep legacy tag STABLE forever for older installed host scripts.
+              for tag in stable experimental; do
+                docker tag mikan-nas:ci "$image:$tag"
+                docker push "$image:$tag"
+              done ;;
+            refs/heads/preview)
+              docker tag mikan-nas:ci "$image:preview"
+              docker push "$image:preview" ;;
+            *) exit 2 ;;
+          esac
           docker logout ghcr.io

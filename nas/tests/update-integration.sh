@@ -16,6 +16,7 @@ printf '%s\n' MIKAN_REMOTE_KEY=01234567890123456789012345678901 NVIDIA_API_KEY=s
 sed -e "s|^ROOT=/volume1/docker/mikan/nas$|ROOT=$app|" \
     -e "s|^STATE=/volume1/docker/mikan-updater$|STATE=$state|" \
     -e 's|^REGISTRY=.*$|REGISTRY=mikan-nas:test-candidate|' \
+    -e 's|^PREVIEW_REGISTRY=.*$|PREVIEW_REGISTRY=mikan-nas:test-preview|' \
     -e 's|docker pull "$REGISTRY"|docker image inspect "$REGISTRY"|' \
     -e 's|"$attempts" -lt 24|"$attempts" -lt 8|' \
     -e 's|sleep 5|sleep 1|' \
@@ -75,6 +76,7 @@ sed -e "s|^ROOT=/volume1/docker/mikan/nas$|ROOT=$app|" \
     -e "s|^STATE=/volume1/docker/mikan-updater$|STATE=$state|" \
     -e "s|^UPDATER=/root/mikan-updater/update-beholder.sh$|UPDATER=$root/update.sh|" \
     -e 's|^REGISTRY=.*$|REGISTRY=mikan-nas:test-candidate|' \
+    -e 's|^PREVIEW_REGISTRY=.*$|PREVIEW_REGISTRY=mikan-nas:test-preview|' \
     nas/update-control-host.sh >"$root/control.sh"
 grep -Fxq "ROOT=$app" "$root/control.sh"
 grep -Fxq "STATE=$state" "$root/control.sh"
@@ -98,4 +100,17 @@ sudo sh "$root/control.sh"
 [ "$(current)" = "$manual" ]
 curl -fsS -H "$auth" http://127.0.0.1:3847/api/updates | grep -Fq '"phase":"updated"'
 curl -fsS -H "$auth" http://127.0.0.1:3847/api/library | grep -Fq 'Updater fixture must survive'
-echo "Deployment, rollback, and authenticated manual update bridge passed."
+# Real channel selection: separate image identities, fixed allowlist, same DB.
+printf 'FROM mikan-nas:ci\nLABEL test.preview=true\n' | docker build -t mikan-nas:test-preview -
+preview="$(docker image inspect -f '{{.Id}}' mikan-nas:test-preview)"
+curl -fsS -H "$auth" http://127.0.0.1:3847/api/updates | grep -Fq '"channel":"stable"'
+curl -fsS -H "$auth" -H 'Content-Type: application/json' -d '{"action":"switch-preview"}' http://127.0.0.1:3847/api/updates >/dev/null
+sudo sh "$root/control.sh"
+[ "$(current)" = "$preview" ]
+curl -fsS -H "$auth" http://127.0.0.1:3847/api/updates | grep -Fq '"channel":"preview"'
+curl -fsS -H "$auth" -H 'Content-Type: application/json' -d '{"action":"switch-stable"}' http://127.0.0.1:3847/api/updates >/dev/null
+sudo sh "$root/control.sh"
+[ "$(current)" = "$manual" ]
+curl -fsS -H "$auth" http://127.0.0.1:3847/api/library | grep -Fq 'Updater fixture must survive'
+curl -fsS -H "$auth" http://127.0.0.1:3847/api/updates | grep -Fq '"channel":"stable"'
+echo "Deployment, rollback, manual update bridge and channel switching passed."
