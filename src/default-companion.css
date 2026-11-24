@@ -283,3 +283,12 @@
 .workspace-memory-toast span {flex:1;min-width:0;overflow-wrap:anywhere;}
 .workspace-memory-toast button {flex:0 0 auto;border:1px solid #9ed09f;border-radius:9px;padding:7px 9px;background:#34583a;color:#edffec;}
 .workspace-memory-toast button:hover {background:#436d48;}
+
+.workspace-message-author .workspace-message-speak {
+  display:grid;place-items:center;flex:0 0 26px;width:26px;height:26px;
+  padding:4px;border:1px solid transparent;border-radius:8px;
+  color:#e4aa81;background:transparent;opacity:.72;
+}
+.workspace-message-author .workspace-message-speak:hover {
+  opacity:1;border-color:#b87550;background:#69412e;color:#ffdfbb;
+}
