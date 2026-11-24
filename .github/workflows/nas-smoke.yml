@@ -29,6 +29,7 @@ jobs:
       contents: read
       packages: write
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -47,7 +48,8 @@ jobs:
           node --check nas/provider-settings.mjs
           node --check nas/public/app.js
       - name: Run NAS smoke tests
-        run: node --test nas/tests/nas.test.mjs
+        timeout-minutes: 2
+        run: node --test --test-timeout=20000 nas/tests/nas.test.mjs
       - name: Build shared React workspace and deployment bundle
         run: npm ci && npm run build:nas
       - name: Validate Docker image

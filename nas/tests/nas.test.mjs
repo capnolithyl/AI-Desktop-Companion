@@ -319,13 +319,14 @@ test("maintenance waits for an admitted reply to finish and rejects later writes
   const maintenanceFile=join(root,"maintenance"),key="0123456789abcdef0123456789abcdef",chat=store.newConversation();
   let entered,release;
   const started=new Promise(resolve=>entered=resolve),finish=new Promise(resolve=>release=resolve);
-  const server=makeServer({store,key,maintenanceFile,config:{provider:"nvidia",model:"test",key:"not-real"},generate:async()=>{entered();await finish;return "Finished";}});
+  const server=makeServer({store,key,maintenanceFile,config:{provider:"nvidia",model:"test",key:"synthetic-test-key"},generate:async()=>{entered();await finish;return "Finished";}});
   await new Promise(resolve=>server.listen(0,"127.0.0.1",resolve));
   const base="http://127.0.0.1:"+server.address().port,headers={Authorization:"Bearer "+key,"Content-Type":"application/json"};
   let pending;
   try{
     pending=fetch(base+"/api/chat",{method:"POST",headers,body:JSON.stringify({conversationId:chat.id,text:"Hello"})}).then(r=>r.text());
-    await started;
+    // Reject immediately if the request finishes before entering generation.
+    await Promise.race([started,pending.then(()=>{throw new Error("Chat ended before entering the mock generator");})]);
     writeFileSync(maintenanceFile,"");
     assert.equal((await (await fetch(base+"/api/health")).json()).idle,false);
     assert.equal((await fetch(base+"/api/conversations",{method:"POST",headers,body:"{}"})).status,503);
