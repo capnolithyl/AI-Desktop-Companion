@@ -289,7 +289,36 @@ pub(crate) fn render_grounded_with_tone(
         .collect::<Vec<_>>().join("\n"))
 }
 
-pub(crate) fn requested_pages(plan:&EvidencePlan,sources:&[SearchResult])->Vec<(usize,String)>{
+/// Simple mode is intentionally conversational and *not* a claim-by-claim
+/// evidence audit. Keep a draft only when every numbered citation points to
+/// an actual source. This verifies citation targets, NOT factual entailment.
+/// Strict mode still uses independently verified verbatim source passages.
+pub(crate) fn checked_cited_draft(draft:&str,sources:&[SearchResult])->Option<Vec<usize>> {
+    if sources.is_empty() || draft.trim().is_empty() || draft.chars().count()>6000 {
+        return None;
+    }
+    let bytes=draft.as_bytes();
+    let mut references=Vec::<usize>::new();
+    let mut index=0;
+    while index<bytes.len() {
+        if bytes[index]!=b'[' {index+=1;continue;}
+        let mut end=index+1;
+        while end<bytes.len() && end-index<=3 && bytes[end].is_ascii_digit(){
+            end+=1;
+        }
+        if end>index+1 && end<bytes.len() && bytes[end]==b']'{
+            let id=draft.get(index+1..end)?.parse::<usize>().ok()?;
+            if id==0 || id>sources.len() || sources[id-1].content.trim().is_empty(){
+                return None;
+            }
+            if !references.contains(&id){references.push(id);}
+            index=end+1;
+        }else{index+=1;}
+    }
+    if references.is_empty(){None}else{Some(references)}
+}
+
+pub(crate) fn requested_pages(plan:&EvidencePlan,sources:&[SearchResult]>{
     let mut selected=Vec::new();
     let mut seen=HashSet::new();
     for number in plan.read_source_indices.iter().take(MAX_READ_PAGES){
@@ -342,6 +371,15 @@ mod tests {
         let answer=render_grounded(&valid,&sources);
         assert!(answer.contains("didn't establish"));
         assert!(!answer.contains("Future Comedy"));
+    }
+    #[test]
+    fn simple_mode_requires_real_citation_ids_and_falls_back_otherwise(){
+        let sources=docs();
+        assert_eq!(checked_cited_draft(
+            "The tour source lists Milwaukee and Columbus [2].",&sources),Some(vec![2]));
+        assert_eq!(checked_cited_draft("The unseen release is tomorrow [3].",&sources),None);
+        assert_eq!(checked_cited_draft("The venue date is unknown.",&sources),None);
+        assert_eq!(checked_cited_draft("No citation [0].",&sources),None);
     }
     #[test]
     fn version_in_a_verified_quote_is_not_lost_when_only_date_is_structured(){

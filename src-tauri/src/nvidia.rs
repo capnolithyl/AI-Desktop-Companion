@@ -767,11 +767,35 @@ pub(crate) async fn chat(app:&AppHandle,request:&ChatRequest,key:&str,emitted:&A
             // A failed required lookup must not be answered from model memory.
             "I couldn't verify that from current public sources, so I won't invent an answer.".into()
         }else if !sources.is_empty() && public_tool_used {
-            let _=app.emit("mikan://activity",json!({
-                "requestId":request.request_id,
-                "text":"Checking factual claims against source passages…"
-            }));
-            grounded_public_reply(&client,key,model,app,request,&mut sources).await
+            // Simple mode was meant to let the selected model explain the
+            // evidence conversationally, not replace its answer with a quote
+            // list. Validate citation targets while clearly distinguishing
+            // that from semantic fact verification. Strict mode retains the
+            // verified-excerpt renderer; uncited Simple drafts fall back to it.
+            let simple=request.research_mode.as_deref()==Some("simple");
+            if simple {
+                if let Some(cited)=cloud_evidence::checked_cited_draft(&draft,&sources){
+                    let _=app.emit("mikan://evidence-tool",json!({
+                        "requestId":request.request_id,
+                        "status":"citation-only","accepted":cited.len(),
+                        "rejected":0,"structured":0,"pagesRead":0,
+                        "sourceIds":cited
+                    }));
+                    draft
+                }else{
+                    let _=app.emit("mikan://activity",json!({
+                        "requestId":request.request_id,
+                        "text":"Draft lacked valid source citations; checking excerpts…"
+                    }));
+                    grounded_public_reply(&client,key,model,app,request,&mut sources).await
+                }
+            }else{
+                let _=app.emit("mikan://activity",json!({
+                    "requestId":request.request_id,
+                    "text":"Checking factual claims against source passages…"
+                }));
+                grounded_public_reply(&client,key,model,app,request,&mut sources).await
+            }
         }else if public_tool_used {
             let _=app.emit("mikan://evidence-tool",json!({
                 "requestId":request.request_id,"status":"no-sources",
