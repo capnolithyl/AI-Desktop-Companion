@@ -20,8 +20,9 @@ function remoteError(status) {
 const safeReason=value=>typeof value==="string"&&/^[a-zA-Z0-9_-]{1,40}$/.test(value)?value:null;
 const tokenCount=value=>Number.isSafeInteger(value)&&value>=0&&value<=10000000?value:null;
 export function inferenceError(code){return Object.assign(Error(code),{code});}
-export async function generateReply({config, system, history, onDelta=()=>{}, onModel=()=>{}, onUsage=()=>{}, fetchImpl=fetch, temperature=0.7, maxTokens=4096,signal,structuredTool}) {
+export async function generateReply({config, system, history, onDelta=()=>{}, onModel=()=>{}, onUsage=()=>{}, fetchImpl=fetch, temperature=0.7, maxTokens=4096,signal,structuredTool,agentTools,agentToolChoice="auto"}) {
   const {provider,model,key} = config;
+  if(agentTools&&provider!=="nvidia")throw inferenceError("agent-provider-not-supported");
   if (provider === "gemini") {
     const contents = history.map(m=>({
       role:m.role==="assistant"?"model":"user", parts:[{text:m.content}]
@@ -55,20 +56,27 @@ export async function generateReply({config, system, history, onDelta=()=>{}, on
     method:"POST",
     headers:{"Authorization":"Bearer "+key,"Content-Type":"application/json",
       ...(provider==="openrouter"?{"HTTP-Referer":"https://github.com/capnolithyl/AI-Desktop-Companion","X-Title":"Mikan NAS"}:{})},
-    body:JSON.stringify({model,stream:!structuredTool,max_tokens:maxTokens,temperature,
-      ...(structuredTool?{tools:[structuredTool],tool_choice:"required"}:{stream_options:{include_usage:true}}),
+    body:JSON.stringify({model,stream:!structuredTool&&!agentTools,max_tokens:maxTokens,temperature,
+      ...(agentTools?{tools:agentTools,tool_choice:agentToolChoice}:structuredTool?{tools:[structuredTool],tool_choice:"required"}:{stream_options:{include_usage:true}}),
       // Same model-specific evidence setting used by the desktop NVIDIA adapter.
-      ...(structuredTool&&provider==="nvidia"&&model==="nvidia/nemotron-3-ultra-550b-a55b"?{chat_template_kwargs:{enable_thinking:false,force_nonempty_content:true}}:{}),
-      messages:[{role:"system",content:system},...history.map(m=>({role:m.role,content:m.content}))]}),
+      ...((structuredTool||agentTools)&&provider==="nvidia"&&model==="nvidia/nemotron-3-ultra-550b-a55b"?{chat_template_kwargs:{enable_thinking:false,force_nonempty_content:true}}:{}),
+      messages:[{role:"system",content:system},...history.map(m=>agentTools&&m.role==="tool"?{role:"tool",tool_call_id:m.tool_call_id,content:m.content}:agentTools&&m.role==="assistant"&&m.tool_calls?{role:"assistant",content:m.content??null,tool_calls:m.tool_calls}:{role:m.role,content:m.content})]}),
     signal:signal?AbortSignal.any([signal,AbortSignal.timeout(120000)]):AbortSignal.timeout(120000)
   });
   if (!response.ok) throw remoteError(response.status);
-  if(structuredTool){
+  if(structuredTool||agentTools){
     const data=await response.json(),choice=data.choices?.[0],message=choice?.message;
     const finish=safeReason(choice?.finish_reason);
     onUsage({finishReason:finish,outputTokens:tokenCount(data.usage?.completion_tokens),reasoningTokens:tokenCount(data.usage?.completion_tokens_details?.reasoning_tokens),maxTokens});
     if(typeof data.model==="string"&&data.model.length<=160&&/^[\w./:-]+$/.test(data.model)&&!data.model.includes(key))onModel(data.model);
     if(finish==="length")throw inferenceError("output-limit");
+    if(agentTools){
+      const calls=Array.isArray(message?.tool_calls)?message.tool_calls:[];
+      if(calls.length>6||calls.some(c=>typeof c.id!=="string"||c.id.length>200||c.type!=="function"||typeof c.function?.name!=="string"||typeof c.function?.arguments!=="string"||c.function.arguments.length>32000)||new Set(calls.map(c=>c.id)).size!==calls.length)throw inferenceError("invalid-agent-tool-call");
+      const content=typeof message?.content==="string"?message.content.trim():"";
+      if(!calls.length&&!content)throw inferenceError("empty-output");
+      return {content,toolCalls:calls.map(c=>({id:c.id,type:"function",function:{name:c.function.name,arguments:c.function.arguments}}))};
+    }
     const matching=message?.tool_calls?.filter(c=>c.function?.name===structuredTool.function.name)??[];
     if(matching.length===1&&typeof matching[0].function.arguments==="string")return matching[0].function.arguments;
     // Some OpenAI-compatible models provide JSON content instead of a tool call.

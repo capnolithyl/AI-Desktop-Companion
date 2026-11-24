@@ -71,7 +71,7 @@ const researchTaskInstructions = [
   'Task shape: {"kind":"discover|verify|lookup","subject":"","entityType":"","details":[],"preferences":[],"sourceUrl":"","requirements":[{"quote":"under two hours","relation":"lt","limit":2,"unit":"hours"}],"roles":[],"exclude":[]}. Use empty arrays when no such criterion applies.'
 ].join("\n");
 
-function readResearchTask(value: unknown): ResearchTask | undefined {
+export function readResearchTask(value: unknown): ResearchTask | undefined {
   if (!value || typeof value !== "object") return undefined;
   const task = value as Record<string, unknown>;
   if (task.kind !== "discover" && task.kind !== "verify" && task.kind !== "lookup") return undefined;
