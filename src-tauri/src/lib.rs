@@ -21,6 +21,7 @@ mod quantities;
 mod attribution;
 mod memory;
 mod interest_memory;
+mod memory_conversion;
 mod memory_extraction;
 mod memory_jobs;
 mod memory_reviews;
@@ -1515,6 +1516,8 @@ pub fn run() {
             interest_memory::memory_update_interest,
             interest_memory::memory_delete_interest,
             interest_memory::memory_search_interests,
+            memory_conversion::memory_convert_fact_to_interest,
+            memory_conversion::memory_convert_interest_to_fact,
             memory::memory_add_character_fact,
             memory::memory_update_character_fact,
             memory::memory_delete_character_fact,
