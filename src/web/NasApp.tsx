@@ -11,7 +11,7 @@ import {AVATAR_BACKGROUNDS} from "../avatar-background";
 import {PortraitContextMenu,type PortraitMenuItem} from "../PortraitContextMenu";
 import {reactionFromReply,type AvatarReaction,type AvatarReactionKind} from "../avatar-reactions";
 import {DEFAULT_COMPANION_PROFILE,importCompanionProfile,exportCompanionProfile,type CompanionProfile} from "../companion-profile";
-import {NasClient,type NasMessage,type NasChat,type LibrarySnapshot,type NasStatus,type LearningStatus,type LearningSettings} from "./nas-client";
+import {NasClient,NasRequestError,type NasMessage,type NasChat,type LibrarySnapshot,type NasStatus,type LearningStatus,type LearningSettings} from "./nas-client";
 import {MemoryPanel} from "../MemoryPanel";
 import {NasLearningReviews} from "./NasLearningReviews";
 const portrait=new URL("../../assets/iki/mikan-chat-avatar.webp",import.meta.url).href;
@@ -136,7 +136,7 @@ export function NasApp(){
     let full="";
     try{await client.chat(id,text,delta=>{full+=delta;setMessages(previous=>previous.map(m=>m.id===pending?{...m,content:full}:m));});
       const kind=reactionFromReply(full);if(kind)setReaction({kind,serial:++serial.current,source:"reply"});
-    }catch(error){report(error);}
+    }catch(error){if(error instanceof NasRequestError&&error.status===409)setInput(previous=>previous||text);report(error);}
     finally{
       try{const [history,list]=await Promise.all([client.messages(id),client.chats()]);if(mounted.current){setMessages(history);setChats(list);}}
       catch(error){report(error);}

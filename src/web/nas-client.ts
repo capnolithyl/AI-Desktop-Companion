@@ -13,12 +13,15 @@ export type LibrarySnapshot={facts:UserFact[];characterFacts:CharacterFact[];int
 export type NasMessage={id:string;role:"user"|"assistant";content:string;createdAt:number};
 export type NasFact={id:number;fact:string;category:string;updatedAt:number};
 export type NasStatus={provider:string;model:string;busy:boolean};
+export class NasRequestError extends Error {
+  constructor(message:string,readonly status:number){super(message);}
+}
 export class NasClient {
   constructor(private readonly key:string){}
   private async request(path:string,options:RequestInit={}){
     const response=await fetch("/api/"+path,{...options,cache:"no-store",headers:{
       Authorization:"Bearer "+this.key,...(options.body?{"Content-Type":"application/json"}:{}),...options.headers}});
-    if(!response.ok){const body=await response.json().catch(()=>({}));throw new Error(body.error||"NAS request failed ("+response.status+")");}
+    if(!response.ok){const body=await response.json().catch(()=>({}));throw new NasRequestError(body.error||"NAS request failed ("+response.status+")",response.status);}
     return response;
   }
   private async json<T>(path:string,options?:RequestInit):Promise<T>{return (await this.request(path,options)).json();}

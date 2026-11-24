@@ -13,6 +13,7 @@ const quoteOK=(text,q)=>typeof q==="string"&&q.length>=3&&q.length<=350&&text.in
 const fail=(message,status=400)=>{throw Object.assign(new Error(message),{status});};
 const tx=(db,fn)=>{db.exec("BEGIN IMMEDIATE");try{const v=fn();db.exec("COMMIT");return v;}catch(e){db.exec("ROLLBACK");throw e;}};
 export function eligibleTurn(user,assistant,settings,prior=""){
+  if(/\b(?:pretend|roleplay|hypothetical|imagine that|for example)\b/i.test(user))return {user:false,character:false};
   const direct=/\b(?:i|my|we|our)\b/i.test(user);
   const contextual=prior.includes("?")&&/\byour\b/i.test(prior)&&!temporary.test(prior)&&!sensitive.test(prior)&&user.length<=180;
   return {
@@ -56,7 +57,7 @@ function parseCandidates(raw,user,assistant,flags){
       if(!quoteOK(assistant,evidence)||!favorite.test(evidence)||!clean(v?.value)||sensitive.test(clean(v?.label)+" "+clean(v?.value))||!lower(evidence).includes(lower(v.value)))continue;
       let item;try{item=parseCanon(JSON.stringify([{category:v.category,label:v.label,value:v.value}]),"json")[0];}catch{continue;}
       if(item.category!=="favorites")continue;
-      const auto=lower(evidence).replace(/[.!]+$/,"")==="my "+lower(item.label)+" is "+lower(item.value)&&!/[?;]|\b(?:maybe|probably|not|pretend|if)\b/i.test(evidence);
+      const auto=lower(evidence).replace(/[.!]+$/,"")==="my "+lower(item.label)+" is "+lower(item.value)&&!/[?;]|\b(?:maybe|probably|not|pretend|if)\b/i.test(evidence)&&same(clean(assistant).replace(/[.!]+$/,""),clean(evidence).replace(/[.!]+$/,""));
       list.push({kind:"canon",item,evidence,auto});
     }
   }

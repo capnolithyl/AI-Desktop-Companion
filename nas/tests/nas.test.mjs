@@ -159,3 +159,35 @@ test("NAS learning is opt-in, quote-grounded and reviewable",async()=>{
     l.setSettings({user:false,character:false});assert.equal(l.getStatus().queued,0);
   }finally{store.db.close();rmSync(root,{recursive:true,force:true});}
 });
+
+test("NAS extraction separates canon and interests, preserves existing favorite ratings and resumes failed work",async()=>{
+  const root=mkdtempSync(join(tmpdir(),"mikan-learn-media-")),path=join(root,"memory.sqlite3");
+  let store=openStore(path);
+  try{
+    store.learning.setSettings({user:true,character:true});
+    const c=store.newConversation();
+    const enqueue=(u,a)=>store.learning.enqueue(store.append(c.id,"user",u),store.append(c.id,"assistant",a),c.id);
+    const run=async data=>store.learning.processNext(async()=>JSON.stringify({facts:[],interests:[],canon:[],...data}),{});
+    assert.equal(enqueue("Pretend I love coffee","My favorite drink is tea"),false);
+    enqueue("My favorite band is Example Band","Nice!");
+    await run({interests:[{name:"Example Band",kind:"band",status:"favorite",evidence:"My favorite band is Example Band"}]});
+    let s=store.library.execute("snapshot",{});
+    assert.equal(s.interests[0].status,"favorite");
+    store.library.execute("editInterest",{id:s.interests[0].id,item:{...s.interests[0],rating:9,notes:"Keep this"}});
+    enqueue("I like Example Band","Nice!");
+    await run({interests:[{name:"Example Band",kind:"band",status:"like",evidence:"I like Example Band"}]});
+    assert.equal(store.learning.getStatus().reviews.length,0);
+    enqueue("What is your favorite color?","My favorite color is orange.");
+    await run({canon:[{category:"favorites",label:"Favorite color",value:"orange",evidence:"My favorite color is orange."}]});
+    s=store.library.execute("snapshot",{});
+    assert.equal(s.characterFacts[0].value,"orange");
+    assert.equal(s.facts.length,0);
+    assert.equal(s.interests[0].rating,9);
+    enqueue("I love tea","Nice!");
+    store.db.close();store=openStore(path);
+    assert.equal(store.learning.settings().user,true);
+    assert.equal(store.learning.getStatus().queued,1);
+    await run({facts:[{fact:"The user loves tea",evidence:"I love tea",scope:"long_term"}]});
+    assert.equal(store.library.execute("snapshot",{}).facts[0].fact,"The user loves tea");
+  }finally{store.db.close();rmSync(root,{recursive:true,force:true});}
+});
