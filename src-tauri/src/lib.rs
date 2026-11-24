@@ -1393,6 +1393,8 @@ async fn open_settings_window(app: tauri::AppHandle, tab: Option<String>, memory
     let path = format!("index.html?settings=1&tab={tab}&memoryTab={memory_tab}");
     tauri::WebviewWindowBuilder::new(&app, "settings", tauri::WebviewUrl::App(path.into()))
         .title("Mikan Control Center")
+        // Match the inline splash so the native WebView2 initialization does not flash black.
+        .background_color(tauri::window::Color(0x1d, 0x22, 0x28, 0xff))
         .inner_size(1120.0, 780.0)
         .min_inner_size(680.0, 480.0)
         .resizable(true)
