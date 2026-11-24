@@ -1370,7 +1370,7 @@ fn toggle_window(app: &tauri::AppHandle) {
 }
 
 #[tauri::command]
-fn open_settings_window(app: tauri::AppHandle, tab: Option<String>, memory_tab: Option<String>) -> Result<(), String> {
+async fn open_settings_window(app: tauri::AppHandle, tab: Option<String>, memory_tab: Option<String>) -> Result<(), String> {
     let tab = match tab.as_deref() {
         Some("ai" | "internet" | "notion" | "voice" | "appearance" | "interface"
             | "personality" | "memory" | "capabilities" | "brain") => tab.as_deref().unwrap(),
