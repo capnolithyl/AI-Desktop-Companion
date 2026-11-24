@@ -3832,21 +3832,33 @@ export default function App() {
               else { setInput(question); goCompact(); focusInput(); }
             }}/>} 
         {settingsTab === "ai" && <>
-          <div className="settings-section-title">Inference provider</div>
-          <label className="setting-field">Primary model
-            <select aria-label="AI inference provider" value={draft.provider}
-              onChange={event => setDraft(current => ({
-                ...current,provider:event.target.value as Settings["provider"]
-              }))}>
-              <option value="local">Local Ollama only</option>
-              <option value="auto">Auto · OpenRouter free → Ollama fallback</option>
-              <option value="openrouter">OpenRouter free only · show cloud errors</option>
-              <option value="gemini">Gemini only · show cloud errors</option>
-              <option value="nvidia">NVIDIA · selected developer model</option>
-            </select>
-            <small>Auto uses free OpenRouter first, switching to local Qwen when its quota or network fails. Gemini remains selectable separately. Memory, SearXNG, and Pocket TTS stay unchanged.</small>
-          </label>
-          <div className="settings-section-title">NVIDIA · Developer prototyping</div>
+          <section className="control-intro"><h2>Choose how Mikan thinks</h2><p>Pick a model provider. Only its configuration appears below. Cloud keys remain in Windows Credential Manager.</p></section>
+          <div className="control-provider-choices" role="group" aria-label="Inference provider">
+            {([
+              { id: "local", label: "Local", detail: "Private Ollama models", Icon: HardDrive },
+              { id: "nvidia", label: "NVIDIA", detail: "Hosted Nemotron & more", Icon: Cpu },
+              { id: "auto", label: "Auto", detail: "Free cloud, local fallback", Icon: Sparkles },
+              { id: "openrouter", label: "OpenRouter", detail: "Free models only", Icon: Globe2 },
+              { id: "gemini", label: "Gemini", detail: "Google AI", Icon: Brain }
+            ] as const).map(({ id, label, detail, Icon }) =>
+              <button key={id} type="button" className={"control-provider-choice "+(draft.provider===id?"selected":"")}
+                aria-pressed={draft.provider===id}
+                onClick={()=>setDraft(current=>({...current,provider:id}))}>
+                <Icon size={22} strokeWidth={1.75}/>
+                <strong>{label}</strong><small>{detail}</small>
+              </button>
+            )}
+          </div>
+          <p className="control-provider-summary">{
+            draft.provider === "auto" ? "Free OpenRouter models first, then your saved Ollama model if cloud access fails." :
+            draft.provider === "local" ? "Runs locally. Chat and sensitive memory can stay on your PC." :
+            draft.provider === "nvidia" ? "Experimental hosted models. API quotas and tool support vary." :
+            draft.provider === "openrouter" ? "Only free OpenRouter models; cloud errors are shown instead of switching silently." :
+            "Google Gemini through your configured API project."
+          }</p>
+          <div className="settings-section-title">Provider configuration</div>
+          {draft.provider === "nvidia" && <section className="control-provider-pane">
+          <div className="settings-section-title"><Cpu size={18}/> NVIDIA · Developer prototyping</div>
           <label className="setting-field">NVIDIA model
             <select value={draft.nvidiaModel} onChange={event=>setDraft(current=>({...current,nvidiaModel:event.target.value}))}>
               {NVIDIA_MODELS.map(name=><option key={name} value={name}>{name}</option>)}
@@ -3874,6 +3886,8 @@ export default function App() {
             <span><strong>Model-led conversation · experimental</strong>
               <small>With NVIDIA selected, skip local Qwen's web-intent planning. NVIDIA may request relevant saved facts from a bounded local memory tool before public searches; it still decides when public read-only web tools are useful, within web permissions and private-context restrictions and source checks for research requests. Compare with the guided pipeline by toggling this off. Tool-enabled conversations may not stream immediately.</small></span>
           </label>
+          </section>}
+          {(draft.provider === "openrouter" || draft.provider === "auto") && <section className="control-provider-pane">
           <div className="settings-section-title">OpenRouter · Free models only</div>
           <label className="setting-field">OpenRouter model ID
             <input spellCheck={false} value={draft.openrouterModel}
@@ -3900,6 +3914,8 @@ export default function App() {
           </div>
           {openrouterKeyError && <small className="field-error" role="alert">{openrouterKeyError}</small>}
           {openrouterTestResult && <small className={openrouterTestResult.startsWith("Connection failed:")?"field-error":"settings-note"} role="status">{openrouterTestResult}</small>}
+          </section>}
+          {draft.provider === "gemini" && <section className="control-provider-pane">
           <div className="settings-section-title">Google Gemini · Optional</div>
           <label className="setting-field">Gemini model ID
             <input spellCheck={false} value={draft.geminiModel}
@@ -3925,6 +3941,9 @@ export default function App() {
           </div>
           {geminiKeyError && <small className="field-error" role="alert">{geminiKeyError}</small>}
           {geminiTestResult && <small className={geminiTestResult.startsWith("Connection failed:")?"field-error":"settings-note"} role="status">{geminiTestResult}</small>}
+          </section>}
+          <details className="control-disclosure control-local-config" key={draft.provider} open={draft.provider === "local" || draft.provider === "auto"}>
+            <summary><strong>{draft.provider === "local" ? "Local Ollama model" : "Local Ollama & fallback"}</strong><span>Model, context and reasoning</span></summary>
           <div className="settings-section-title">Local fallback · Ollama</div>
           <label className="setting-field">Ollama endpoint
             <input spellCheck={false} value={draft.endpoint}
@@ -3969,6 +3988,9 @@ export default function App() {
             </select>
             <small>For supported local reasoning models (including Qwen 3.5). Tool planning and memory extraction stay fast. Deep mode may be slower.</small>
           </label>
+          </details>
+          <details className="control-disclosure">
+            <summary><strong>Advanced memory integration</strong><span>Optional Mem0 semantic recall</span></summary>
           <div className="settings-section-title"><Brain size={17}/> Advanced personal memory (Mem0 OSS)</div>
           <div className="service-panel">
             <div><strong>Semantic recall · local</strong>
@@ -3981,6 +4003,7 @@ export default function App() {
               onClick={refreshAdvancedMemoryStatus}><RotateCw size={14}/> Check status</button>
             <small>Optional real Mem0 semantic retrieval. Uses your editable SQLite facts and local Ollama, never a cloud account. Run the bundled advanced-memory setup script once to enable it. If unavailable, ordinary SQLite recall continues unchanged.</small>
           </div>
+          </details>
 
         </>}
         {settingsTab === "vision" && <>
@@ -4039,7 +4062,36 @@ export default function App() {
         </>}
         {settingsTab === "internet" && <>
           <section className="control-intro"><h2>Web, research &amp; Mikanify</h2><p>Control when Mikan searches, how she reads sources and how she sounds afterward.</p></section>
-          <div className="settings-section-title">Local search service</div>
+          <section className="control-form-section control-research-primary">
+            <div className="settings-section-title"><Sparkles size={18}/> Research &amp; response style</div>
+          <label className="settings-toggle">
+            <input type="checkbox" checked={draft.autoSearch}
+              onChange={e => setDraft(current => ({ ...current, autoSearch: e.target.checked }))}/>
+            <span><strong>Automatic web tools</strong>
+              <small>Allow Mikan's local planner to search public sites when evidence would improve the answer, not just for explicit research questions. Search queries exclude private context. Off by default.</small>
+            </span>
+          </label>
+          <div className="setting-field">
+            <label htmlFor="research-interpretation-mode">Web research interpretation</label>
+            <select id="research-interpretation-mode" value={draft.researchMode}
+              onChange={e=>setDraft(current=>({...current,researchMode:e.target.value as Settings["researchMode"]}))}>
+              <option value="simple">Simple · read sources and answer (recommended)</option>
+              <option value="strict">Strict · experimental evidence extraction (parked)</option>
+            </select>
+            <small>Simple reads retrieved excerpts directly and compares dates for changing facts. Strict preserves the previous JSON evidence pipeline for testing. Both use the live desktop clock and real SearXNG sources.</small>
+          </div>
+          <div id="web-mikanify" className="control-highlight-row"><Sparkles size={18}/><div><strong>Mikanify web answers</strong><p>Keep the factual research, then optionally give the answer Mikan's voice.</p></div></div>
+          <label className="settings-toggle">
+            <input type="checkbox" checked={draft.mikanifyAnswer}
+              disabled={draft.researchMode!=="simple"}
+              onChange={event=>setDraft(current=>({...current,mikanifyAnswer:event.target.checked}))}/>
+            <span><strong>Mikanify answer 🐈 · experimental</strong>
+              <small>After Simple web research, use one additional local Ollama pass to rewrite the completed answer in Mikan's own voice. It must retain the original facts and citations, but may still change them. Off by default. Brain Lab records both versions for comparison. No extra web searches.</small>
+            </span>
+          </label>
+          </section>
+
+          <div className="settings-section-title"><Globe2 size={18}/> Local search service</div>
           <label className="setting-field">SearXNG endpoint
             <input spellCheck={false} value={draft.searxngEndpoint}
               onChange={event => setDraft({ ...draft, searxngEndpoint: event.target.value })}
@@ -4070,31 +4122,7 @@ export default function App() {
               <small>Check SearXNG every 45 seconds, start Docker Desktop if needed, and recover a stopped or unresponsive container. Turning this off leaves services alone. Pressing Stop also disables recovery.</small>
             </span>
           </label>
-          <label className="settings-toggle">
-            <input type="checkbox" checked={draft.autoSearch}
-              onChange={e => setDraft(current => ({ ...current, autoSearch: e.target.checked }))}/>
-            <span><strong>Automatic web tools</strong>
-              <small>Allow Mikan's local planner to search public sites when evidence would improve the answer, not just for explicit research questions. Search queries exclude private context. Off by default.</small>
-            </span>
-          </label>
-          <div className="setting-field">
-            <label htmlFor="research-interpretation-mode">Web research interpretation</label>
-            <select id="research-interpretation-mode" value={draft.researchMode}
-              onChange={e=>setDraft(current=>({...current,researchMode:e.target.value as Settings["researchMode"]}))}>
-              <option value="simple">Simple · read sources and answer (recommended)</option>
-              <option value="strict">Strict · experimental evidence extraction (parked)</option>
-            </select>
-            <small>Simple reads retrieved excerpts directly and compares dates for changing facts. Strict preserves the previous JSON evidence pipeline for testing. Both use the live desktop clock and real SearXNG sources.</small>
-          </div>
-          <label className="settings-toggle">
-            <input type="checkbox" checked={draft.mikanifyAnswer}
-              disabled={draft.researchMode!=="simple"}
-              onChange={event=>setDraft(current=>({...current,mikanifyAnswer:event.target.checked}))}/>
-            <span><strong>Mikanify answer 🐈 · experimental</strong>
-              <small>After Simple web research, use one additional local Ollama pass to rewrite the completed answer in Mikan's own voice. It must retain the original facts and citations, but may still change them. Off by default. Brain Lab records both versions for comparison. No extra web searches.</small>
-            </span>
-          </label>
-          <details className="service-panel">
+          <details className="control-disclosure">
             <summary><strong>Preferred sources by topic</strong> (optional)</summary>
             <small>These sites receive a ranking boost; other websites remain searchable. Domain names only, separated by commas. You can edit the topics or add your own.</small>
             {draft.sourcePreferences.map((entry,index)=><div className="setting-field" key={index}>
