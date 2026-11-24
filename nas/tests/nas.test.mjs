@@ -751,8 +751,8 @@ test("agent executes actual calls, preserves natural queries and prevents unappr
      assert.equal(args.history.at(-1).role,"tool");
      if(round===2)return {content:"",toolCalls:[call("b","read_webpage",{url:"http://127.0.0.1/private"})]};
      assert.match(args.history.at(-1).content,/explicitly supplied/);
-     return {content:"Example Model 4 officially released [1].",toolCalls:[]};
-   }});
+     return {content:"RESEARCH_DONE",toolCalls:[]};
+   },compose:async args=>{assert.equal(args.agentTools,undefined);assert.match(args.history[0].content,/Example Model 4 officially released/);return "Example Model 4 officially released [1].";}});
  assert.deepEqual(queries,["Example model official release"]);assert.equal(reads,0);assert.match(result.answer,/Example Model 4/);assert.equal(round,3);
 });
 
@@ -762,4 +762,26 @@ test("agent obeys no-browse and refuses unverified latest answer after skipped l
  assert.equal(await agentResearch({...common,history:[{role:"user",content:"Don't browse. What is the latest model?"}]}),null);
  const skipped=await agentResearch({...common,history:[{role:"user",content:"What is the latest model?"}]});
  assert.match(skipped.answer,/could not complete a public lookup/);
+});
+
+test("agent reserves a separate normal answer request instead of disabling tools mid-turn",async()=>{
+ const {agentResearch}=await import("../agent-research.mjs");let calls=0,composed=0;const events=[];
+ const result=await agentResearch({mode:"simple",history:[{role:"user",content:"Recommend short horror anime."}],canRequest:slots=>calls+composed+(slots??1)<=3,activity:e=>events.push(e),
+  search:async()=>[{url:"https://example.org/anime",title:"Lantern",content:"Lantern has four episodes."}],read:async()=>{throw Error("unexpected read");},
+  generate:async args=>{calls++;assert.equal(args.agentToolChoice,"auto");assert.deepEqual(args.agentTools.map(t=>t.function.name),["search_web","read_webpage"]);return {content:"",toolCalls:[{id:"call"+calls,type:"function",function:{name:"search_web",arguments:JSON.stringify({query:"short horror anime "+calls})}}]};},
+  compose:async args=>{composed++;assert.equal(args.agentTools,undefined);assert.equal(args.structuredTool,undefined);assert.equal(args.maxTokens,6144);assert.match(args.history[0].content,/Lantern has four episodes/);return "Lantern looks promising, with four episodes.";}}); 
+ assert.equal(calls,2);assert.equal(composed,1);assert.match(result.answer,/Lantern looks promising/);assert.match(result.answer,/unverified/);assert.ok(events.some(e=>e.detail==="quota-reserve"));
+});
+test("agent strict synthesis retains earlier constraints and qualifies invalid citations without erasing prose",async()=>{
+ const {agentResearch}=await import("../agent-research.mjs");let calls=0;
+ const result=await agentResearch({mode:"strict",history:[{role:"user",content:"Find an anime under six episodes."},{role:"user",content:"Only after 2010."}],canRequest:()=>true,
+ search:async()=>[{url:"https://example.org/anime",title:"Lantern",content:"Lantern has four episodes. It premiered in 2014."}],
+ generate:async()=>++calls===1?{content:"",toolCalls:[{id:"1",type:"function",function:{name:"search_web",arguments:'{"query":"short anime after 2010"}'}}]}:{content:"RESEARCH_DONE",toolCalls:[]},
+ compose:async args=>{assert.match(args.system,/check every material claim/);assert.match(args.history[0].content,/under six episodes/);assert.match(args.history[0].content,/Only after 2010/);return "Lantern has four episodes [1]. It premiered in 2014 [99].";}});
+ assert.match(result.answer,/four episodes \[1\]/);assert.match(result.answer,/unverified reference/);assert.doesNotMatch(result.answer,/\[99\]/);
+});
+test("web extraction removes quoted template attributes and navigation without losing facts",async()=>{
+ const result=await readWeb("https://example.org",async()=>({type:"text/html",body:"<html><head><title>Test</title></head><nav>menu links</nav><div data-mw='{\"template\":\"[[Hidden]] > broken markup <ref>\"}'><p>Lantern premiered in 2014 &amp; has 4 episodes.</p><p>Author&#x27;s name</p></div><footer>footer spam</footer></html>"}));
+ assert.match(result.content,/Lantern premiered in 2014 & has 4 episodes/);
+ assert.match(result.content,/Author's name/);assert.doesNotMatch(result.content,/template|Hidden|menu links|footer spam/);
 });

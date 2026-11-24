@@ -81,7 +81,7 @@ export async function agentResearch({mode,history,generate,compose=generate,canR
             }else{
               if(index>=0)sources[index]=clip({...page,url,publishedDate:page.publishedDate??sources[index].publishedDate});
               else add(page);
-              record(page.fromCache?"Cached webpage read":"Webpage read",page.title,[url]);result={sources:snapshot()};
+              record(page.fromCache?"Cached webpage read":"Webpage read",page.title,[url]);result={source:snapshot()[index>=0?index:sources.findIndex(s=>s.url===page.url)]};
             }
           }
         }

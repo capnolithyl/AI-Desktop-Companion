@@ -71,11 +71,38 @@ async function pageRequest(url,resolveAddress=publicAddress){
 }
 export function pageText(body,type){
   if(type.startsWith("text/plain"))return {title:"",content:body.trim().slice(0,10000)};
-  // Bounded, best-effort markup-to-text only; no scripts, DOM or remote assets.
+  // Quoted attributes can contain '>' and '<', notably Wikipedia data-mw.
+  // Strip complete tags without rendering HTML or executing scripts.
   const title=body.match(/<title\b[^>]*>([\s\S]*?)<\/title>/i)?.[1]??"";
-  const clean=s=>s.replace(/&(?:amp|lt|gt|quot|apos|nbsp|#39);/g,x=>({"&amp;":"&","&lt;":"<","&gt;":">","&quot;":'"',"&apos;":"'","&#39;":"'","&nbsp;":" "})[x]);
-  const content=body.replace(/<!--[\s\S]*?-->/g," ") .replace(/<(nav|header|footer|aside)\b[^>]*>[\s\S]*?<\/\1\s*>/gi," ").replace(/<(script|style|noscript|svg|template)\b[^>]*>[\s\S]*?<\/\1\s*>/gi," ").replace(/<\/(?:p|div|h[1-6]|li|article|section|tr)>/gi,"\n").replace(/<[^>]*>/g," ").replace(/[ \t]+/g," ").replace(/\n\s*\n/g,"\n").trim();
-  return {title:clean(title).slice(0,180),content:clean(content).slice(0,10000)};
+  const entities={amp:"&",lt:"<",gt:">",quot:'"',apos:"'",nbsp:" "};
+  const clean=s=>s.replace(/&(?:amp|lt|gt|quot|apos|nbsp|#\d{1,7}|#x[\da-f]{1,6});/gi,x=>{
+    const key=x.slice(1,-1).toLowerCase();
+    if(key[0]!=="#")return entities[key]??x;
+    const n=key[1]==="x"?parseInt(key.slice(2),16):Number(key.slice(1));
+    return Number.isInteger(n)&&n>0&&n<=0x10ffff&&!(n>=0xd800&&n<=0xdfff)?String.fromCodePoint(n):x;
+  });
+  body=body.replace(/<(script|style|noscript|template)\b[^>]*>[\s\S]*?<\/\1\s*>/gi," ");
+  const tag=/<(?:!--[\s\S]*?-->|\/?[a-z][\w:-]*(?:[^"'<>]|"[^"]*"|'[^']*')*>)/gi;
+  const hidden=new Set(["script","style","noscript","svg","template","head","nav","header","footer","aside","button","form"]);
+  const blocks=new Set(["p","div","h1","h2","h3","h4","h5","h6","li","article","section","tr","br","dd","dt"]);
+  let previous=0,skipTag=null,skipDepth=0;
+  const out=[];
+  for(const match of body.matchAll(tag)){
+    if(!skipTag)out.push(body.slice(previous,match.index));
+    previous=match.index+match[0].length;
+    const parsed=match[0].match(/^<(\/?)([\w:-]+)/);
+    if(!parsed)continue;
+    const closing=parsed[1]==="/",name=parsed[2].toLowerCase(),selfClosing=/\/>$/.test(match[0]);
+    if(skipTag){
+      if(name===skipTag){if(closing){if(--skipDepth===0)skipTag=null;}else if(!selfClosing)skipDepth++;}
+      continue;
+    }
+    if(!closing&&!selfClosing&&hidden.has(name)){skipTag=name;skipDepth=1;continue;}
+    out.push(blocks.has(name)&&(closing||name==="br")?"\n":" ");
+  }
+  if(!skipTag)out.push(body.slice(previous));
+  const content=clean(out.join("")).replace(/[ \t\r\u00a0]+/g," ").replace(/ *\n */g,"\n").replace(/\n{2,}/g,"\n").trim();
+  return {title:clean(title).slice(0,180),content:content.slice(0,10000)};
 }
 export async function readWeb(value,request=pageRequest){
   // Uncached benchmark reads ignore production cache freshness options.
