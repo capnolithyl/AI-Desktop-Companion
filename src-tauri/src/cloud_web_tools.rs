@@ -23,10 +23,15 @@ pub(crate) fn record_read_page(
     existing:&mut Vec<web_search::SearchResult>,
     title:&str,url:&str,content:&str
 ){
+    // A previously owner-directed direct read must remain a direct read
+    // after evidence enrichment reloads the same URL. Keep source timestamps.
+    let previous=existing.iter().find(|source|source.url==url);
+    let direct=previous.is_some_and(|source|source.engine=="direct webpage");
     let page=web_search::SearchResult {
         title:title.to_owned(),url:url.to_owned(),
-        content:content.chars().take(4600).collect(),
-        engine:"webpage".into(),published_date:None
+        content:content.chars().take(9000).collect(),
+        engine:if direct {"direct webpage"} else {"webpage"}.into(),
+        published_date:previous.and_then(|source|source.published_date.clone())
     };
     if let Some(index)=existing.iter().position(|source|source.url==url){
         existing[index]=page;
@@ -82,6 +87,21 @@ pub(crate) async fn execute_tool(
 #[cfg(test)]
 mod tests{
     use super::*;
+    #[test]
+    fn evidence_enrichment_cannot_erase_a_direct_document_read(){
+        let url="https://example.org/readme";
+        let mut sources=vec![web_search::SearchResult{
+            title:"README".into(),url:url.into(),
+            content:"Initial owner-authorized page content.".into(),
+            engine:"direct webpage".into(),published_date:Some("2026-11-23".into())
+        }];
+        record_read_page(&mut sources,"README",url,
+            "The actual owner's README includes explicit details about memory and notes.");
+        assert_eq!(sources[0].engine,"direct webpage");
+        assert_eq!(sources[0].published_date.as_deref(),Some("2026-11-23"));
+        assert_eq!(sources.len(),1);
+    }
+
     #[test]
     fn full_page_replaces_search_snippet_without_moving_citation_index(){
         let mut sources=vec![

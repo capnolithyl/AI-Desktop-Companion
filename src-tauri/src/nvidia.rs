@@ -455,9 +455,11 @@ async fn grounded_public_reply(
     client:&reqwest::Client,key:&str,model:&str,app:&AppHandle,
     request:&ChatRequest,sources:&mut Vec<web_search::SearchResult>
 )->String{
-    let question=request.messages.iter().rev().find(|m|m.role=="user")
-        .map(|m|m.content.as_str()).unwrap_or("");
-    let initial=match request_evidence_plan(client,key,model,question,sources,true).await{
+    // Evidence selection must understand the referent and actual question.
+    // Only recent user turns, never the full private system/memory prompt,
+    // are supplied as conversational context to this separate evidence pass.
+    let question=evidence_question(&request.messages);
+    let initial=match request_evidence_plan(client,key,model,&question,sources,true).await{
         Ok(plan)=>plan,
         Err(reason)=>{
             let _=app.emit("mikan://evidence-tool",json!({
@@ -478,7 +480,7 @@ async fn grounded_public_reply(
         }
     }
     let final_plan=if pages_read>0 {
-        match request_evidence_plan(client,key,model,question,sources,false).await{
+        match request_evidence_plan(client,key,model,&question,sources,false).await{
             Ok(plan)=>plan,
             Err(reason)=>{
                 let _=app.emit("mikan://evidence-tool",json!({
@@ -506,6 +508,18 @@ async fn grounded_public_reply(
     cloud_evidence::render_grounded_with_tone(&verified,sources,final_plan.tone.as_deref())
 }
 
+
+/// Keep prior user questions available for pronouns like "it", "they", and
+/// "the other one". Do not include assistant guesses or the system prompt.
+fn evidence_question(messages:&[ChatMessage])->String {
+    let users=messages.iter().filter(|m|m.role=="user")
+        .rev().take(3).map(|m|m.content.chars().take(280).collect::<String>())
+        .collect::<Vec<_>>();
+    let Some(latest)=users.first() else {return String::new()};
+    if users.len()==1{return latest.clone();}
+    let prior=users.iter().skip(1).rev().cloned().collect::<Vec<_>>().join("\n");
+    format!("RECENT USER CONTEXT (for resolving referents, not separate tasks):\n{prior}\nCURRENT QUESTION:\n{latest}")
+}
 
 // Only owner-supplied HTTPS document locators may be marked as direct reads.
 // A search-result URL is never promoted to an owner-directed document.
@@ -636,7 +650,9 @@ pub(crate) async fn chat(app:&AppHandle,request:&ChatRequest,key:&str,emitted:&A
         // Private memory lookup is available before public source material
         // enters the model. A malicious webpage cannot trigger later recalls.
         let offer_memory=offer_tools && allow_memory && !public_tool_used && memory_calls<2;
-        let offer_web=offer_tools && allow_web;
+        // A directed document was already fetched under the owner's explicit
+        // authorization. Do not replace it with an unrelated search guess.
+        let offer_web=offer_tools && allow_web && direct_document.is_none();
         if allow_tools && !offer_tools {
             let _=app.emit("mikan://activity",json!({
                 "requestId":request.request_id,
@@ -703,7 +719,7 @@ pub(crate) async fn chat(app:&AppHandle,request:&ChatRequest,key:&str,emitted:&A
                             json!({"error":"Public web tools are disabled for this turn"})
                         } else {
                             public_tool_used=true;
-                            if name=="search_web" {
+                            if name=="search_web" && direct_document.is_none() {
                                 if let Some(query)=args["query"].as_str(){
                                     search_query=Some(query.to_owned());
                                 }
@@ -812,6 +828,20 @@ pub(crate) async fn nvidia_test_connection(model:String)->Result<String,String>{
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn evidence_pass_keeps_referents_without_copying_system_secrets(){
+        let turns=vec![
+            ChatMessage{role:"system".into(),content:"DO NOT LEAK PRIVATE KEY".into(),images:vec![]},
+            ChatMessage{role:"user".into(),content:"I'm excited about the next Metal Album.".into(),images:vec![]},
+            ChatMessage{role:"assistant".into(),content:"Unverified answer".into(),images:vec![]},
+            ChatMessage{role:"user".into(),content:"Have they announced anything?".into(),images:vec![]}
+        ];
+        let question=evidence_question(&turns);
+        assert!(question.contains("next Metal Album"));
+        assert!(question.contains("Have they announced anything?"));
+        assert!(!question.contains("PRIVATE KEY"));
+        assert!(!question.contains("Unverified answer"));
+    }
     #[test]
     fn exact_url_provenance_requires_owner_supplied_locator() {
         let url="https://github.com/capnolithyl/AI-Desktop-Companion";

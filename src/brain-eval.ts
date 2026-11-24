@@ -15,6 +15,7 @@ import type { ResearchAudit, ToolPlanningAudit } from "./debug-log.ts";
 import { publicDocumentUrls, type PublicResearchContext, type ResearchTask } from "./unified-planner.ts";
 import { modelLedWebToolsAllowed } from "./model-led-routing.ts";
 import { modelLedBrainExecution } from "./brain-eval-model-led.ts";
+import { contextualMemoryQuery } from "./brain-eval-memory-context.ts";
 
 export type EvalRoute = "chat" | "research" | "factual" | "non-research" | "any";
 export type MemoryCaptureExpectation = {
@@ -748,10 +749,13 @@ export async function runBrainEvaluation(options:EvalOptions):Promise<EvalReport
         personalTurn:isPersonalMemoryQuestion(step.user),capabilityQuestion:decision.capabilityQuestion,
         existingSearch:false,attachment:false,screenshot:false,liveFrame:false,roleplay:scenario.id==="search-in-roleplay"
       });
-      const lexicalIds=rankMemories([...EVAL_FACTS],step.user).slice(0,30).map(f=>f.id);
+      // Short pronoun follow-ups need earlier USER-named referents to retrieve
+      // a relevant fixture. This is local memory recall, never a web query.
+      const memoryQuery=contextualMemoryQuery(step.user,previous);
+      const lexicalIds=rankMemories([...EVAL_FACTS],memoryQuery).slice(0,30).map(f=>f.id);
       // No fabricated vector scores. The fixture tests the actual lexical/fusion fallback
       // without Qdrant, then reports when semantic retrieval would have been necessary.
-      const memory=selectDeterministicMemoryIds([...EVAL_FACTS],step.user,[],lexicalIds,8);
+      const memory=selectDeterministicMemoryIds([...EVAL_FACTS],memoryQuery,[],lexicalIds,8);
       const selectedFacts=memory.ids.map(id=>EVAL_FACTS.find(f=>f.id===id))
         .filter((fact):fact is EvalMemoryFact=>!!fact);
       const selected=selectedFacts.map(f=>({id:f.id,fact:f.fact}));

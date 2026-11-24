@@ -79,3 +79,30 @@ test("model-led explicit public research uses provider tools, not generic determ
   assert.equal(run.autoSearch,false);
   assert.equal(run.researchGeneralFallback,false);
 });
+
+test("referential memory retrieval recovers named facts without editing public queries",async()=>{
+  const {contextualMemoryQuery}=await import("../src/brain-eval-memory-context.ts");
+  const prior=[
+    {role:"user",content:"Tell me about Cobalt Harbor and Lantern Desk."},
+    {role:"assistant",content:"A made-up reply with a distracting third entity."},
+    {role:"user",content:"Which one uses TypeScript?"}
+  ];
+  const local=contextualMemoryQuery("And who sings for the other one?",prior);
+  assert.match(local,/Cobalt Harbor/);
+  assert.match(local,/Lantern Desk/);
+  assert.doesNotMatch(local,/distracting third entity/);
+  assert.equal(contextualMemoryQuery("Tell me about an unrelated game.",prior),
+    "Tell me about an unrelated game.");
+
+  const seen=[];
+  await runBrainEvaluation({
+    mode:"live",provider:"nvidia",model:"fixture",modelLedWeb:true,
+    repetitions:1,scenarios:[scenario("ambiguous-references")],
+    infer:async args=>{
+      seen.push({ids:args.selectedMemories.map(f=>f.id),web:args.nativeWebAllowed});
+      return {text:"Fixture response",webExecution:{query:null,results:[],sourcesCarriedOver:false}};
+    }
+  });
+  assert.ok(seen[2].ids.includes(103),
+    "The third turn must retrieve the remembered vocalist through user-context recall");
+});

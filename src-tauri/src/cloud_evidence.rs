@@ -10,7 +10,9 @@ use std::collections::HashSet;
 const MAX_PASSAGES: usize = 5;
 const MAX_READ_PAGES: usize = 2;
 const MAX_QUOTE_CHARS: usize = 260;
-const MAX_CONTEXT_CHARS: usize = 4600;
+// Preserve enough of direct documentation to reach actual implementation
+// details; a 4600-character prefix often contains release notes only.
+const MAX_CONTEXT_CHARS: usize = 9000;
 
 #[derive(Clone, Debug, Default, Deserialize)]
 pub(crate) struct ProposedPassage {
@@ -76,9 +78,9 @@ pub(crate) fn evidence_messages(question:&str,sources:&[SearchResult],allow_read
         "fullPageRead":source.engine=="webpage"
     })).collect::<Vec<_>>();
     let policy=if allow_read {
-        "If an excerpt is only a generic calendar/search listing, request read_source_indices for relevant pages rather than fabricating specific events. Prefer direct official sources, but don't assume they prove the absence of other listings."
+        "If an excerpt is generic or off-topic, request up to two relevant full pages. Prefer primary release notes or official announcements for changes and freshness. A historic tour or an existing feature is not evidence of a newly announced release or change. Don't mistake a page about the same subject for evidence answering a more specific question."
     } else {
-        "No more webpages can be read. Return read_source_indices: []. Include only source passages that directly support the requested information."
+        "No more webpages can be read. Return read_source_indices: []. Include only source passages that DIRECTLY answer the current request; unrelated older coverage is not a valid answer."
     };
     vec![
         json!({"role":"system","content":format!(
@@ -177,6 +179,12 @@ fn line_for_passage(passage:&VerifiedPassage)->String{
     let Some(subject)=passage.subject.as_deref() else {
         return format!("“{}” {}",plain(&passage.quote,MAX_QUOTE_CHARS),citation);
     };
+    // A source about a release contains a concrete version in its full quote,
+    // but the structured subject/date slots alone would silently discard it.
+    // When there is no concrete detail/place slot, show the verified quote.
+    if passage.detail.is_none() && passage.where_at.is_none(){
+        return format!("“{}” {}",plain(&passage.quote,MAX_QUOTE_CHARS),citation);
+    }
     let subject=plain(subject,140);
     let when=passage.when.as_deref().map(|value|plain(value,85));
     let place=passage.where_at.as_deref().map(|value|plain(value,140));
@@ -266,7 +274,7 @@ pub(crate) fn render_grounded_with_tone(
     if chosen.len()==1 {
         let intro=match tone {
             Some("careful")=>"I could substantiate this detail:",
-            Some("neutral")=>"One useful detail from the sources:",
+            Some("neutral")=>"Here's what the source establishes:",
             _=>"I found one promising lead! 😺"
         };
         return format!("{intro} {}",
@@ -286,7 +294,8 @@ pub(crate) fn requested_pages(plan:&EvidencePlan,sources:&[SearchResult])->Vec<(
     let mut seen=HashSet::new();
     for number in plan.read_source_indices.iter().take(MAX_READ_PAGES){
         if let Some(source)=number.checked_sub(1).and_then(|index|sources.get(index)){
-            if source.engine!="webpage" && seen.insert(source.url.clone()){
+            if source.engine!="webpage" && source.engine!="direct webpage"
+                && seen.insert(source.url.clone()){
                 selected.push((*number,source.url.clone()));
             }
         }
@@ -334,6 +343,35 @@ mod tests {
         assert!(answer.contains("didn't establish"));
         assert!(!answer.contains("Future Comedy"));
     }
+    #[test]
+    fn version_in_a_verified_quote_is_not_lost_when_only_date_is_structured(){
+        let quote="llama.cpp latest release b12651 was published Nov 23, 2026.";
+        let sources=vec![SearchResult{
+            title:"Release tracker".into(),url:"https://example.org/releases".into(),
+            content:quote.into(),engine:"yahoo".into(),published_date:None
+        }];
+        let (facts,rejected)=verified_passages(&[ProposedPassage{
+            source:1,quote:quote.into(),subject:Some("llama.cpp".into()),
+            when:Some("Nov 23, 2026".into()),..Default::default()
+        }],&sources);
+        assert_eq!(rejected,0);
+        let rendered=render_grounded(&facts,&sources);
+        assert!(rendered.contains("b12651"));
+        assert!(rendered.contains("[1]"));
+        assert!(!rendered.contains("is listed for"));
+    }
+
+    #[test]
+    fn owner_direct_page_is_not_reread_to_overwrite_provenance(){
+        let sources=vec![SearchResult{
+            title:"README".into(),url:"https://example.org/readme".into(),
+            content:"Already read text".into(),engine:"direct webpage".into(),
+            published_date:None
+        }];
+        let plan=EvidencePlan{tone:None,read_source_indices:vec![1],passages:vec![]};
+        assert!(requested_pages(&plan,&sources).is_empty());
+    }
+
     #[test]
     fn parsed_evidence_tool_accepts_empty_and_page_read_plans(){
         let response=json!({"choices":[{"message":{"tool_calls":[{"function":{
