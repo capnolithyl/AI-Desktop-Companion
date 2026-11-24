@@ -97,7 +97,19 @@ export function createLearning(db,library){
     "CREATE TABLE IF NOT EXISTS nas_learning_reviews(id INTEGER PRIMARY KEY,source_id TEXT NOT NULL REFERENCES messages(id) ON DELETE CASCADE,kind TEXT NOT NULL,payload_json TEXT NOT NULL,evidence TEXT NOT NULL,target_id INTEGER,target_json TEXT,status TEXT NOT NULL DEFAULT 'pending',created_at INTEGER NOT NULL DEFAULT(unixepoch()),UNIQUE(source_id,kind,payload_json));"+
     "CREATE TABLE IF NOT EXISTS nas_learning_history(id INTEGER PRIMARY KEY,kind TEXT NOT NULL,record_id INTEGER NOT NULL,previous_json TEXT NOT NULL,replacement_json TEXT NOT NULL,changed_at INTEGER NOT NULL DEFAULT(unixepoch()));"+
     "CREATE TABLE IF NOT EXISTS automatic_memory_sources(memory_kind TEXT NOT NULL CHECK(memory_kind IN ('user','character')),memory_id INTEGER NOT NULL,source_message_id TEXT REFERENCES messages(id) ON DELETE SET NULL,captured_at INTEGER NOT NULL DEFAULT(unixepoch()),evidence TEXT NOT NULL,PRIMARY KEY(memory_kind,memory_id));");
+  db.exec("CREATE TABLE IF NOT EXISTS nas_learning_events(id INTEGER PRIMARY KEY AUTOINCREMENT,conversation_id TEXT REFERENCES conversations(id) ON DELETE CASCADE,assistant_id TEXT REFERENCES messages(id) ON DELETE CASCADE,kind TEXT NOT NULL,payload_json TEXT NOT NULL,created_at INTEGER NOT NULL DEFAULT(unixepoch()))");
   db.exec("UPDATE nas_learning_jobs SET status='failed' WHERE status='processing'");
+  function emit(kind,payload,job={}){
+    db.prepare("INSERT INTO nas_learning_events(conversation_id,assistant_id,kind,payload_json) VALUES(?,?,?,?)").run(job.conversation_id??null,job.assistant_id??null,kind,JSON.stringify(payload));
+  }
+  function events(after=null){
+    const cursor=db.prepare("SELECT COALESCE(MAX(id),0) AS id FROM nas_learning_events").get().id;
+    const items=after===null?[]:db.prepare("SELECT id,conversation_id AS conversationId,assistant_id AS assistantId,kind,payload_json AS payload,created_at AS createdAt FROM nas_learning_events WHERE id>? ORDER BY id LIMIT 100").all(after).map(r=>({...r,payload:JSON.parse(r.payload)}));
+    return {cursor:after===null?cursor:items.at(-1)?.id??Math.max(after,cursor),items};
+  }
+  function diagnostics(conversationId){
+    return db.prepare("SELECT id,assistant_id AS assistantId,kind,payload_json AS payload,created_at AS createdAt FROM nas_learning_events WHERE conversation_id=? ORDER BY id DESC LIMIT 20").all(conversationId).map(r=>({...r,payload:JSON.parse(r.payload)}));
+  }
   const settings=()=>{const r=db.prepare("SELECT capture_user AS user,capture_character AS character FROM nas_learning_settings WHERE id=1").get();return {user:!!r.user,character:!!r.character};};
   function setSettings(v){
     if(!v||typeof v.user!=="boolean"||typeof v.character!=="boolean")fail("Invalid learning settings");
@@ -151,14 +163,16 @@ export function createLearning(db,library){
       if(action==="accept"){
         const target=row.target_id?find(row.kind,row.target_id):null;
         if(row.target_id&&(!target||JSON.stringify({...target,referenceCount:0})!==JSON.stringify({...JSON.parse(row.target_json),referenceCount:0})))fail("Original record changed. Dismiss the suggestion and edit the current record.",409);
-        save({kind:row.kind,item:JSON.parse(row.payload_json),evidence:row.evidence},row.source_id,target);
+        const item=JSON.parse(row.payload_json);
+        save({kind:row.kind,item,evidence:row.evidence},row.source_id,target);
+        emit("outcome",{saved:1,reviewQueued:0,entries:[{kind:row.kind,description:display(row.kind,item),status:"saved"}]});
       }
       db.prepare("UPDATE nas_learning_reviews SET status=? WHERE id=?").run(action==="accept"?"accepted":"dismissed",id);
       return {ok:true};
     });
   }
   const retry=()=>({count:db.prepare("UPDATE nas_learning_jobs SET status='queued',attempts=0 WHERE status='failed'").run().changes});
-  function apply(job,list){
+  function apply(job,list,diagnostic={}){
     tx(db,()=>{
       const live=db.prepare("SELECT * FROM nas_learning_jobs WHERE assistant_id=? AND status='processing'").get(job.assistant_id);
       if(!live)return;
@@ -187,7 +201,9 @@ export function createLearning(db,library){
           if(r.changes){reviewQueued++;entries.push({kind,description:display(kind,item),evidence:c.evidence,status:"review"});}
         }
       }
-      db.prepare("UPDATE nas_learning_jobs SET status='done',outcome_json=? WHERE assistant_id=?").run(JSON.stringify({saved,reviewQueued,entries,processedAt:Math.floor(Date.now()/1000)}),job.assistant_id);
+      const outcome={saved,reviewQueued,entries,processedAt:Math.floor(Date.now()/1000),...diagnostic};
+      db.prepare("UPDATE nas_learning_jobs SET status='done',outcome_json=? WHERE assistant_id=?").run(JSON.stringify(outcome),job.assistant_id);
+      emit("outcome",outcome,job);
     });
   }
   let running=false;
@@ -197,6 +213,7 @@ export function createLearning(db,library){
     if(!job)return;
     running=true;
     db.prepare("UPDATE nas_learning_jobs SET status='processing',attempts=attempts+1 WHERE assistant_id=?").run(job.assistant_id);
+    let stage="source";
     try{
       const user=db.prepare("SELECT content,rowid FROM messages WHERE id=? AND role='user'").get(job.user_id);
       const assistant=db.prepare("SELECT content FROM messages WHERE id=? AND role='assistant'").get(job.assistant_id);
@@ -208,10 +225,19 @@ export function createLearning(db,library){
       const currentAssistant=sensitive.test(assistant.content)?"[private message omitted]":assistant.content.slice(0,3500);
       const existing=references(snap(),[...recent.map(m=>m.content),user.content,currentAssistant].join("\n"),capture);
       const input={capture,currentUser:sensitive.test(user.content)?"[private message omitted]":user.content.slice(0,4000),currentAssistant,recent,existing};
+      stage="provider";
       const raw=await generate({config,system:LEARNING_PROMPT,history:[{role:"user",content:JSON.stringify(input)}],onDelta:()=>{},temperature:0.1,maxTokens:2400});
-      apply(job,parseCandidates(raw,input.currentUser,input.currentAssistant,capture,new Set(existing.facts.map(x=>x.id))));
-    }catch{db.prepare("UPDATE nas_learning_jobs SET status='failed' WHERE assistant_id=?").run(job.assistant_id);}
+      stage="validation";
+      const candidates=parseCandidates(raw,input.currentUser,input.currentAssistant,capture,new Set(existing.facts.map(x=>x.id)));
+      stage="persist";
+      apply(job,candidates,{validated:candidates.length});
+    }catch{
+      tx(db,()=>{
+        const changed=db.prepare("UPDATE nas_learning_jobs SET status='failed' WHERE assistant_id=?").run(job.assistant_id).changes;
+        if(changed)emit("failed",{stage},job);
+      });
+    }
     finally{running=false;}
   }
-  return {settings,setSettings,enqueue,getStatus,resolve,retry,processNext,isRunning:()=>running};
+  return {settings,setSettings,enqueue,getStatus,resolve,retry,processNext,events,diagnostics,isRunning:()=>running};
 }

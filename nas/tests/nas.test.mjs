@@ -231,3 +231,24 @@ test("Natural banter, hypothetical statements and contextual answers all reach t
     assert.equal(store.library.execute("snapshot",{}).facts.length,2);
   }finally{store.db.close();rmSync(root,{recursive:true,force:true});}
 });
+
+test("committed memory outcomes and failures are delivered once per cursor",async()=>{
+  const root=mkdtempSync(join(tmpdir(),"mikan-events-")),store=openStore(join(root,"memory.sqlite3"));
+  try{
+    const c=store.newConversation(),l=store.learning;
+    l.setSettings({user:true,character:false});
+    const baseline=l.events();
+    const enqueue=u=>l.enqueue(store.append(c.id,"user",u),store.append(c.id,"assistant","Nice!"),c.id);
+    enqueue("I like pears");
+    await l.processNext(async()=>JSON.stringify({facts:[{fact:"The user likes pears",evidence:"I like pears",action:"save",scope:"long_term",category:"preferences",tags:[]}],interests:[],canon:[]}),{});
+    const first=l.events(baseline.cursor);
+    assert.equal(first.items.length,1);assert.equal(first.items[0].payload.saved,1);
+    assert.equal(store.library.execute("snapshot",{}).facts[0].fact,"The user likes pears");
+    assert.deepEqual(l.events(first.cursor).items,[]);
+    enqueue("Thanks");await l.processNext(async()=>JSON.stringify({facts:[],interests:[],canon:[]}),{});
+    enqueue("I like tea");await l.processNext(async()=>{throw Error("synthetic private upstream failure");},{});
+    const next=l.events(first.cursor);
+    assert.equal(next.items.length,2);assert.equal(next.items[0].payload.saved,0);assert.equal(next.items[1].kind,"failed");assert.equal(next.items[1].payload.stage,"provider");
+    assert.equal(l.diagnostics(c.id).length,3);assert.ok(!JSON.stringify(next).includes("synthetic private"));
+  }finally{store.db.close();rmSync(root,{recursive:true,force:true});}
+});

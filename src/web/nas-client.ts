@@ -12,7 +12,9 @@ export type LearningStatus={
 export type LibrarySnapshot={facts:UserFact[];characterFacts:CharacterFact[];interests:InterestItem[];sessionSummaries:SessionSummary[]};
 export type NasMessage={id:string;role:"user"|"assistant";content:string;createdAt:number};
 export type NasFact={id:number;fact:string;category:string;updatedAt:number};
-export type NasStatus={provider:string;model:string;busy:boolean};
+export type NasBuild={version:string;commit:string;backendHash:string|null;actualBackendHash:string};
+export type NasStatus={provider:string;model:string;busy:boolean;build?:NasBuild};
+export type LearningEvent={id:number;conversationId:string|null;assistantId:string|null;kind:"outcome"|"failed";createdAt:number;payload:{saved?:number;reviewQueued?:number;entries?:{description:string;status:string;kind:string}[];stage?:string;validated?:number}};
 export class NasRequestError extends Error {
   constructor(message:string,readonly status:number){super(message);}
 }
@@ -34,6 +36,8 @@ export class NasClient {
   async facts(){return (await this.json<{memories:NasFact[]}>("memories")).memories;}
   addFact(fact:string){return this.json("memories",{method:"POST",body:JSON.stringify({fact})});}
   removeFact(id:number){return this.json("memories/"+id,{method:"DELETE"});}
+  learningEvents(after?:number){return this.json<{cursor:number;items:LearningEvent[]}>("learning/events"+(after===undefined?"":"?after="+after));}
+  learningDiagnostics(id:string){return this.json<{events:LearningEvent[]}>("learning/diagnostics/"+encodeURIComponent(id));}
   learning(){return this.json<LearningStatus>("learning");}
   saveLearning(settings:LearningSettings){return this.json<LearningSettings>("learning",{method:"PUT",body:JSON.stringify(settings)});}
   retryLearning(){return this.json<{count:number}>("learning/retry",{method:"POST",body:"{}"});}

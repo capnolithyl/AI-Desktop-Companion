@@ -3,12 +3,14 @@ import { readFileSync, existsSync } from "node:fs";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { join, dirname, resolve, extname, sep } from "node:path";
 import { timingSafeEqual } from "node:crypto";
+import { runningBuildInfo } from "./build-info.mjs";
 import { openStore } from "./storage.mjs";
 import { assistantVoiceGuidance, CHARACTER_VOICE_REMINDER } from "../src/assistant-voice.ts";
 import { exportCompanionProfile, importCompanionProfile } from "../src/companion-profile.ts";
 import { generateReply, providerConfig } from "./providers.mjs";
 
 const ROOT=dirname(fileURLToPath(import.meta.url));
+const BUILD=runningBuildInfo();
 
 function safeEqual(a,b) {
   if (typeof a!=="string" || typeof b!=="string") return false;
@@ -85,7 +87,7 @@ export function makeServer({store,config,key,promptFile="",generate=generateRepl
       if (!safeEqual(req.headers.authorization?.replace(/^Bearer /i,""),key))
         return json(res,401,{error:"Enter your Mikan NAS access key"});
       if (req.method==="GET" && path==="/api/status")
-        return json(res,200,{provider:config.provider,model:config.model,busy:unavailable()});
+        return json(res,200,{provider:config.provider,model:config.model,busy:unavailable(),build:BUILD});
       if (req.method==="GET" && path==="/api/profile")
         return json(res,200,exportCompanionProfile(currentProfile(promptFile,store)));
       if (req.method==="PUT" && path==="/api/profile") {
@@ -105,6 +107,14 @@ export function makeServer({store,config,key,promptFile="",generate=generateRepl
         const items=store.messages(match[1]);
         return items?json(res,200,{messages:items}):json(res,404,{error:"Conversation not found"});
       }
+      if(req.method==="GET"&&path==="/api/learning/events"){
+        const value=new URL(req.url||"/","http://localhost").searchParams.get("after");
+        const after=value===null?null:Number(value);
+        if(after!==null&&(!Number.isSafeInteger(after)||after<0))return json(res,400,{error:"Invalid event cursor"});
+        return json(res,200,store.learning.events(after));
+      }
+      const diagnostics=path.match(/^\/api\/learning\/diagnostics\/([\w-]+)$/);
+      if(req.method==="GET"&&diagnostics)return json(res,200,{events:store.learning.diagnostics(diagnostics[1])});
       if(req.method==="GET"&&path==="/api/learning")return json(res,200,store.learning.getStatus());
       if(req.method==="PUT"&&path==="/api/learning"){
         const value=await readJson(req,2048);

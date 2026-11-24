@@ -24,6 +24,7 @@ type Props={
   onHide:()=>void;
   unavailable?:{search?:boolean;voice?:boolean;vision?:boolean};
   webMode?:boolean;
+  sidebarVersion?:ReactNode;
 };
 
 type SidePanel = WorkspacePanel;
@@ -55,7 +56,7 @@ export function DefaultCompanionShell({
   avatar,avatarBackground,onAvatarContextMenu,modelPicker,transcript,composer,chats,activeConversationId,
   transcriptVersion,busy,muted,ready,memoryIssue,visionActive,visionBusy,displayName,lastActivity,activityEntries,
   onDrag,onNewChat,onOpenChat,onOpenHistory,onCopyChatDebug,onOpenCurrentLog,onOpenMemory,onOpenSettings,onOpenSearch,
-  onToggleVision,onVoice,onMute,onExpression,onOutfit,onHide,unavailable,webMode=false
+  onToggleVision,onVoice,onMute,onExpression,onOutfit,onHide,unavailable,webMode=false,sidebarVersion
 }:Props){
   const feedRef=useRef<HTMLDivElement>(null);
   const [copyStatus,setCopyStatus]=useState<{id:string;state:"copying"|"copied"|"failed"}|null>(null);
@@ -206,6 +207,7 @@ export function DefaultCompanionShell({
         </button>
         <div className="workspace-sidebar-bottom">
           <div className="workspace-sidebar-cat" aria-hidden="true"><WorkspacePeekCat/></div>
+          {sidebarVersion}
           <button type="button" onClick={onOpenSettings} title="Customize Mikan"><Palette size={20}/> Customize</button>
         </div>
       </aside>}

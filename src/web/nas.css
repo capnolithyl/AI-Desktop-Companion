@@ -11,3 +11,6 @@ html:has(.nas-app),body:has(.nas-app),body:has(.nas-gate){background:#211412!imp
 .nas-app .nas-history-button{display:flex;width:100%;justify-content:flex-start;margin:7px 0;}
 .nas-app .workspace-model select:disabled{opacity:1;}
 @media(max-width:620px){.nas-app .mikan-workspace{inset:5px;border-radius:16px;}.nas-app.settings-standalone .settings-layout>.settings-tabs{width:66px;min-width:66px;flex:0 0 66px;padding:12px 5px;}.nas-app .settings-tabs .control-brand>div:last-child,.nas-app .settings-tabs .settings-tab>span:last-child,.nas-app .settings-nav-heading,.nas-app .control-sidebar-decoration{display:none;}.nas-app .settings-tabs .settings-tab{justify-content:center;padding:10px 4px;}.nas-app .control-local-indicator{display:none;}.nas-app .settings-layout>.settings-body{padding:15px 12px;}}
+
+.nas-app .workspace-sidebar-bottom .nas-build-label{justify-content:center;gap:8px;min-height:30px;padding:4px 8px;font-size:11px;color:#d5aea1;text-align:center;}
+.nas-build-label span{display:grid;gap:2px;}.nas-build-label small{font-size:10px;opacity:.8;}.nas-build-label.mismatch{color:#ffbf84!important;}.nas-app .nas-memory-toast{position:fixed;top:20px;z-index:1000;}.nas-app .nas-memory-toast.warning{background:#453023;border-color:#e3a968;color:#ffe3be;box-shadow:0 0 18px #c4875055;}
