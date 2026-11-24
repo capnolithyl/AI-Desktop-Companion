@@ -299,7 +299,6 @@ export default function App() {
   const [screen, setScreen] = useState<Screen>(standaloneSettings ? "settings" : "compact");
   const [settings, setSettings] = useState<Settings>(loadSettings);
   const defaultUi = !standaloneSettings && settings.appearance.uiMode === "default";
-  const [workspaceExpressionIndex,setWorkspaceExpressionIndex] = useState(0);
 
   // Switching layouts changes the native Tauri window, not just the React CSS.
   // The familiar 520px always-on-top pet remains intact in Minimal mode.
@@ -3651,22 +3650,21 @@ export default function App() {
         onOpenMemory={()=>openMemory("facts")}
         onOpenSettings={openSettings}
         onOpenSearch={()=>setScreen("search")}
-        onOpenVision={()=>{void openCapturePicker();}}
+        onOpenVision={()=>{if(liveVision.enabled)void setLiveVisionEnabled(false);else void openCapturePicker();}}
         onAttach={()=>uploadRef.current?.click()}
         onVoice={()=>openSettingsTab("voice")}
         onMute={toggleVoiceMute}
-        onExpression={()=>{
-          const reactions=(["smile","laugh","surprised","nod"] as const);
-          testAvatarReaction(reactions[workspaceExpressionIndex%reactions.length]);
-          setWorkspaceExpressionIndex(index=>index+1);
-        }}
+        onExpression={kind=>testAvatarReaction(kind)}
         onOutfit={()=>openSettingsTab("appearance")}
         onHide={()=>{void invoke("hide_companion");}}
         composer={composerControls}
         transcript={<>
           {messages.length===0 && <div className="workspace-greeting">
             <PawPrint size={42}/><strong>Ready for a little conversation?</strong>
-            <span>Mikan's right here. Say hello! ♡</span>
+            <span>{greeting}</span>
+          </div>}
+          {feedback&&<div className="workspace-system-feedback" role="status">
+            <Sparkles size={18}/><span>{feedback}</span>
           </div>}
           {messages.map(message=><article key={message.id}
             className={"workspace-message "+message.role+(message.failed?" failed":"")}>
