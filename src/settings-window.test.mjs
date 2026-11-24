@@ -186,3 +186,46 @@ test("floating chat glow fades within the transparent native window and the mode
   assert.match(switcher,/right:19px/);
   assert.match(switcher,/pointer-events:none/);
 });
+
+test("Look & feel offers persisted Minimal and Default desktop shells",()=>{
+  const storage=readFileSync(new URL("./storage.ts",import.meta.url),"utf8");
+  const app=readFileSync(new URL("./App.tsx",import.meta.url),"utf8");
+  const shell=readFileSync(new URL("./DefaultCompanionShell.tsx",import.meta.url),"utf8");
+  assert.match(storage,/uiMode: "minimal"/);
+  assert.match(storage,/uiMode: readCompanionUiMode\(v\.uiMode\)/);
+  assert.match(app,/settingsTab === "interface"/);
+  assert.match(app,/control-layout-choices/);
+  assert.match(app,/draft\.appearance\.uiMode===value/);
+  assert.match(app,/settings\.appearance\.uiMode === "default"/);
+  assert.match(app,/const avatarContents =/);
+  assert.match(app,/const composerControls =/);
+  assert.match(app,/DefaultCompanionShell/);
+  assert.match(shell,/className="workspace-iki-stage"/);
+  assert.match(shell,/\{avatar\}/);
+  assert.match(shell,/className="workspace-transcript"/);
+  assert.match(shell,/className="workspace-action-chips"/);
+});
+
+test("native resizing is restricted to main companion and honors overlay mode",()=>{
+  const app=readFileSync(new URL("./App.tsx",import.meta.url),"utf8");
+  const perms=readFileSync(new URL("../src-tauri/capabilities/default.json",import.meta.url),"utf8");
+  assert.match(app,/if\(standaloneSettings\|\|typeof window/);
+  assert.match(app,/await native\.setSize\(new LogicalSize\(target\.width,target\.height\)\)/);
+  assert.match(app,/await native\.setAlwaysOnTop\(target\.alwaysOnTop\)/);
+  assert.match(app,/await native\.setMinSize/);
+  assert.match(perms,/core:window:allow-set-min-size/);
+  assert.match(perms,/core:window:allow-set-always-on-top/);
+  assert.match(perms,/core:window:allow-center/);
+});
+
+test("Default reuses native Iki and composer without duplicating memory state",()=>{
+  const app=readFileSync(new URL("./App.tsx",import.meta.url),"utf8");
+  const avatar=readFileSync(new URL("./IkiAvatar.tsx",import.meta.url),"utf8");
+  assert.match(app,/avatar=\{<div className="workspace-avatar-rig"/);
+  assert.match(app,/\{avatarContents\}/);
+  assert.match(app,/composer=\{composerControls\}/);
+  assert.match(app,/modelPicker=\{modelFooter\}/);
+  assert.match(avatar,/new IkiPlayer\(canvas\)/);
+  assert.match(app,/onOpenChat=\{id=>\{void openConversation\(id\);\}\}/);
+  assert.match(app,/onExpression=\{\(\)=>/);
+});
