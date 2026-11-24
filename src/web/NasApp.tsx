@@ -11,8 +11,9 @@ import {AVATAR_BACKGROUNDS} from "../avatar-background";
 import {PortraitContextMenu,type PortraitMenuItem} from "../PortraitContextMenu";
 import {reactionFromReply,type AvatarReaction,type AvatarReactionKind} from "../avatar-reactions";
 import {DEFAULT_COMPANION_PROFILE,importCompanionProfile,exportCompanionProfile,type CompanionProfile} from "../companion-profile";
-import {NasClient,type NasMessage,type NasChat,type LibrarySnapshot,type NasStatus} from "./nas-client";
+import {NasClient,type NasMessage,type NasChat,type LibrarySnapshot,type NasStatus,type LearningStatus,type LearningSettings} from "./nas-client";
 import {MemoryPanel} from "../MemoryPanel";
+import {NasLearningReviews} from "./NasLearningReviews";
 const portrait=new URL("../../assets/iki/mikan-chat-avatar.webp",import.meta.url).href;
 const referencePortrait=new URL("../../assets/iki/mikan-reference.png",import.meta.url).href;
 const KEY="mikan-nas-key";
@@ -60,6 +61,7 @@ export function NasApp(){
   const [saving,setSaving]=useState(false);
   const [page,setPage]=useState<Page>("chat");
   const [notice,setNotice]=useState("");
+  const [learning,setLearning]=useState<LearningStatus|null>(null);
   const [library,setLibrary]=useState<LibrarySnapshot>({facts:[],characterFacts:[],interests:[],sessionSummaries:[]});
   const [rigError,setRigError]=useState("");
   const [reaction,setReaction]=useState<AvatarReaction|null>(null);
@@ -89,9 +91,10 @@ export function NasApp(){
     return()=>{valid=false;};
   },[key,client]);
   useEffect(()=>{setRigError("");},[profile.outfitId,profile.avatarDisplay]);
-  const lock=()=>{if(busy||saving)return;setAuthenticated(false);setKey("");setToken("");sessionStorage.removeItem(KEY);setMessages([]);setChats([]);setLibrary({facts:[],characterFacts:[],interests:[],sessionSummaries:[]});setActive(null);setPage("chat");setNotice("");};
+  const lock=()=>{if(busy||saving)return;setAuthenticated(false);setKey("");setToken("");sessionStorage.removeItem(KEY);setMessages([]);setChats([]);setLibrary({facts:[],characterFacts:[],interests:[],sessionSummaries:[]});setLearning(null);setActive(null);setPage("chat");setNotice("");};
   const report=(error:unknown)=>setNotice(error instanceof Error?error.message:String(error));
-  const refreshLibrary=async()=>{const [snapshot,list]=await Promise.all([client.library(),client.chats()]);setLibrary(snapshot);setChats(list);};
+  const refreshLibrary=async()=>{const [snapshot,list,learn]=await Promise.all([client.library(),client.chats(),client.learning()]);setLibrary(snapshot);setChats(list);setLearning(learn);};
+  const setLearningFlags=async(next:LearningSettings)=>{try{await client.saveLearning(next);await refreshLibrary();}catch(error){report(error);}};
   const mutate=async<T,>(action:string,args:object):Promise<T>=>{const result=await client.memoryAction<T>(action,args);await refreshLibrary();return result;};
   const changeMemory=async(action:string,args:object)=>{await mutate(action,args);};
   const openPage=(next:Page)=>{
@@ -222,7 +225,8 @@ export function NasApp(){
           onMoveFactToInterest={(id,item)=>changeMemory("moveFact",{id,item})}
           onMoveInterestToFact={(id,fact,category,tags)=>changeMemory("moveInterest",{id,fact,category,tags})}
           onImportCharacter={items=>mutate<{inserted:number;duplicates:number}>("importCanon",{items})}
-          autoRememberUser={false} autoRememberMikan={false} automaticError={null} onAutoRememberUserChange={()=>{}} onAutoRememberMikanChange={()=>{}}
+          nasLearning={learning?<NasLearningReviews status={learning} client={client} onChanged={refreshLibrary}/>:undefined}
+          autoRememberUser={learning?.settings.user??false} autoRememberMikan={learning?.settings.character??false} automaticError={null} onAutoRememberUserChange={user=>{if(learning)void setLearningFlags({...learning.settings,user});}} onAutoRememberMikanChange={character=>{if(learning)void setLearningFlags({...learning.settings,character});}}
           currentId={active} busy={busy} error={notice||null} onClose={()=>openPage("chat")} onNew={()=>void newChat()} onOpen={openChat}
           onDeleteChat={deleteChat} onDeleteSessionSummary={id=>changeMemory("deleteSummary",{id})}
           onAddFact={fact=>changeMemory("addFact",{fact})} onEditFact={(id,fact)=>changeMemory("editFact",{id,fact})} onDeleteFact={id=>changeMemory("deleteFact",{id})}
@@ -231,7 +235,7 @@ export function NasApp(){
           onRefresh={refreshLibrary} onAddCharacter={(category,label,value)=>changeMemory("addCanon",{item:{category,label,value}})}
           onEditCharacter={(id,category,label,value)=>changeMemory("editCanon",{id,item:{category,label,value}})} onDeleteCharacter={id=>changeMemory("deleteCanon",{id})}/>}
         {page==="log"&&<><div className="settings-section-title">Conversation log</div><p className="settings-note">NAS model: {status?.model}</p>{messages.map(message=><div key={message.id} className="control-form-section"><strong>{message.role==="assistant"?"Mikan":"You"}</strong><ChatMarkdown text={message.content} onOpenLink={openLink}/></div>)}</>}
-        {page==="capabilities"&&<><div className="settings-section-title">Beholder runtime</div><section className="control-form-section"><p>Cloud chat · {status?.provider} · {status?.model}</p><p>Persistent conversations, owner facts, pins, character canon, structured interests, historical archive retrieval, shared persona, animated Iki, bundled outfits and backgrounds.</p><p>Not connected yet: provider switching in the UI, automatic memory, Qdrant, web research, Notion, Brain Lab, voice synthesis, screen capture and desktop synchronization. Windows window controls and global hotkeys stay native.</p><p>The old prototype is still available at <a href="/legacy">/legacy</a>.</p></section></>}
+        {page==="capabilities"&&<><div className="settings-section-title">Beholder runtime</div><section className="control-form-section"><p>Cloud chat · {status?.provider} · {status?.model}</p><p>Persistent conversations, owner facts, pins, character canon, structured interests, historical archive retrieval, opt-in automatic learning and review, shared persona, animated Iki, bundled outfits and backgrounds.</p><p>Not connected yet: provider switching in the UI, Qdrant, web research, Notion, Brain Lab, voice synthesis, screen capture and desktop synchronization. Windows window controls and global hotkeys stay native.</p><p>The old prototype is still available at <a href="/legacy">/legacy</a>.</p></section></>}
         {notice&&<p className="settings-note" role="status">{notice}</p>}
         {(page==="personality"||page==="appearance")&&<div className="nas-save-row"><button className="secondary-action" disabled={saving} onClick={()=>void save(draft)}>{saving?"Saving…":"Save settings"}</button></div>}
       </div></div>

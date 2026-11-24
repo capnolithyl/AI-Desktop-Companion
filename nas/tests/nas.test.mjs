@@ -57,6 +57,8 @@ test("NAS HTTP requires a key, streams replies and persists them",async()=>{
     const headers={Authorization:"Bearer "+key,"Content-Type":"application/json"};
     assert.equal((await fetch(base+"/api/profile")).status,401);
     assert.equal((await fetch(base+"/api/library")).status,401);
+    assert.equal((await fetch(base+"/api/learning")).status,401);
+    assert.equal((await fetch(base+"/api/learning",{headers})).status,200);
     assert.equal((await fetch(base+"/api/library",{method:"POST",headers,body:JSON.stringify({action:"addFact",args:{fact:"A new owner-approved test fact"}})})).status,200);
     const library=await (await fetch(base+"/api/library",{headers})).json();
     assert.equal(library.facts[0].fact,"A new owner-approved test fact");

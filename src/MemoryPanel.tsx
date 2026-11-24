@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { ArrowLeft, Check, MessageCircle, Plus, RotateCw, Star, Trash2, X, Settings2, BookPlus } from "lucide-react";
 import type { CharacterCategory, CharacterFact, InterestItem, MemoryConversation, UserFact } from "./memory-client";
 import {INTEREST_KINDS,INTEREST_STATUSES,type IncomingCanon,type IncomingInterest} from "./interest-import";
@@ -12,6 +12,7 @@ import type { SessionSummary } from "./memory-budget";
 type Props = {
   embedded?: boolean;
   nasMode?: boolean;
+  nasLearning?: ReactNode;
   initialTab?: "chats" | "facts" | "character" | "collections";
   conversations: MemoryConversation[];
   sessionSummaries: SessionSummary[];
@@ -58,7 +59,7 @@ function shortDate(seconds: number): string {
 
 /** Separate fact and conversation controls; no automatic memory extraction in phase one. */
 export function MemoryPanel({
-  embedded = false, nasMode = false, initialTab = "facts", conversations, sessionSummaries, facts, characterFacts,
+  embedded = false, nasMode = false, nasLearning, initialTab = "facts", conversations, sessionSummaries, facts, characterFacts,
   interests,onImportInterests,onEditInterest,onDeleteInterest,onMoveFactToInterest,onMoveInterestToFact,onImportCharacter,
   autoRememberUser, autoRememberMikan, automaticError, onAutoRememberUserChange, onAutoRememberMikanChange,
   currentId, busy, error, onClose, onNew,
@@ -153,17 +154,17 @@ export function MemoryPanel({
             </div>
           </details>
           <details className="memory-disclosure">
-            <summary><Settings2 size={18}/><span><strong>{nasMode?"Memory import & export":"Automatic memory & tools"}</strong><small>{nasMode?"Owner-approved import and export":(autoRememberUser?"Automatic recall is on":"Automatic recall is off")+" · corrections, import and export"}</small></span></summary>
+            <summary><Settings2 size={18}/><span><strong>{nasMode&&!nasLearning?"Memory import & export":"Automatic memory & tools"}</strong><small>{nasMode&&!nasLearning?"Owner-approved import and export":(autoRememberUser?"Automatic recall is on":"Automatic recall is off")+" · corrections, import and export"}</small></span></summary>
             <div className="memory-disclosure-body">
-        {!nasMode&&<><label className="memory-auto-toggle">
+        {(!nasMode||nasLearning)&&<><label className="memory-auto-toggle">
           <input type="checkbox" checked={autoRememberUser}
             onChange={event => onAutoRememberUserChange(event.target.checked)}/>
           <span><strong>Automatically remember useful facts about you</strong>
             <small>Checks explicit, lasting details after a reply. Sensitive information is skipped by default.</small>
           </span>
         </label>
-        <MemoryReviews onChanged={onRefresh}/></>}
-        {nasMode&&<p className="memory-explainer">Automatic learning and correction reviews are not connected yet. Manual changes and recall are available.</p>}
+        {nasMode?nasLearning:<MemoryReviews onChanged={onRefresh}/>}</>}
+        {nasMode&&!nasLearning&&<p className="memory-explainer">Automatic learning and correction reviews are not connected yet. Manual changes and recall are available.</p>}
         <MemoryImporter facts={facts} onImport={onImportFacts} onExport={onExportFacts} onReplace={onReplaceFacts}/>
             </div>
           </details>
@@ -284,7 +285,7 @@ export function MemoryPanel({
           onEdit={onEditInterest} onDelete={onDeleteInterest}
           onMoveToFact={onMoveInterestToFact}/>
       </> : tab === "character" ? <>
-        {!nasMode&&<label className="memory-auto-toggle">
+        {(!nasMode||nasLearning)&&<label className="memory-auto-toggle">
           <input type="checkbox" checked={autoRememberMikan}
             onChange={event => onAutoRememberMikanChange(event.target.checked)}/>
           <span><strong>Automatically remember Mikan's new preferences</strong>

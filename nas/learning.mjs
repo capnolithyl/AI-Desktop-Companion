@@ -123,7 +123,7 @@ export function createLearning(db,library){
       if(!row)fail("Review no longer available",404);
       if(action==="accept"){
         const target=row.target_id?find(row.kind,row.target_id):null;
-        if(row.target_id&&(!target||JSON.stringify(target)!==row.target_json))fail("Original record changed. Dismiss the suggestion and edit the current record.",409);
+        if(row.target_id&&(!target||JSON.stringify({...target,referenceCount:0})!==JSON.stringify({...JSON.parse(row.target_json),referenceCount:0})))fail("Original record changed. Dismiss the suggestion and edit the current record.",409);
         save({kind:row.kind,item:JSON.parse(row.payload_json),evidence:row.evidence},row.source_id,target);
       }
       db.prepare("UPDATE nas_learning_reviews SET status=? WHERE id=?").run(action==="accept"?"accepted":"dismissed",id);
@@ -143,7 +143,11 @@ export function createLearning(db,library){
         if(kind==="fact"){
           if(rows.some(x=>memoryKey(x.fact)===memoryKey(item.fact)))continue;
           const similar=rows.map(x=>({x,score:overlap(x.fact,item.fact)})).filter(x=>x.score>=2).sort((a,b)=>b.score-a.score);
-          target=rows.find(x=>x.id===c.relatedId&&overlap(x.fact,item.fact)>=1)??similar[0]?.x;
+          target=revision.test(c.evidence)?rows.find(x=>x.id===c.relatedId&&overlap(x.fact,item.fact)>=1):undefined;
+          if(!target&&similar.length)c.auto=false;
+          // A favorite of the same topic can conflict even when the value is different.
+          const slot=lower(item.fact).match(/^the user\x27s favou?rite (.+?) is /)?.[1];
+          if(slot&&rows.some(x=>lower(x.fact).includes("favorite "+slot+" is ")||lower(x.fact).includes("favourite "+slot+" is ")))c.auto=false;
         }else if(kind==="interest"){
           target=rows.find(x=>x.kind===item.kind&&same(x.name,item.name));
           if(target&&(target.status===item.status||(target.status==="favorite"&&item.status==="like"&&!revision.test(c.evidence))))continue;

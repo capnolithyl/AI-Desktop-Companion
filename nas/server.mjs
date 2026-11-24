@@ -85,7 +85,7 @@ export function makeServer({store,config,key,promptFile="",generate=generateRepl
       if (!safeEqual(req.headers.authorization?.replace(/^Bearer /i,""),key))
         return json(res,401,{error:"Enter your Mikan NAS access key"});
       if (req.method==="GET" && path==="/api/status")
-        return json(res,200,{provider:config.provider,model:config.model,busy});
+        return json(res,200,{provider:config.provider,model:config.model,busy:unavailable()});
       if (req.method==="GET" && path==="/api/profile")
         return json(res,200,exportCompanionProfile(currentProfile(promptFile,store)));
       if (req.method==="PUT" && path==="/api/profile") {
@@ -120,7 +120,7 @@ export function makeServer({store,config,key,promptFile="",generate=generateRepl
         return json(res,200,store.library.execute("snapshot",{}));
       if (req.method==="POST" && path==="/api/library") {
         const body=await readJson(req,3500000);
-        if(busy) return json(res,409,{error:"Wait for the current reply before changing memories"});
+        if(unavailable()) return json(res,409,{error:"Wait for the current model request before changing memories"});
         if(!body||typeof body.action!=="string")return json(res,400,{error:"Invalid memory request"});
         return json(res,200,store.library.execute(body.action,body.args??{}));
       }
@@ -136,7 +136,7 @@ export function makeServer({store,config,key,promptFile="",generate=generateRepl
       const del=path.match(/^\/api\/memories\/(\d+)$/);
       if (req.method==="DELETE" && del) return json(res,200,{removed:store.removeMemory(Number(del[1]))});
       if (req.method==="POST" && path==="/api/chat") {
-        if (unavailable()) return json(res,409,{error:"Mikan is already responding"});
+        if (unavailable()) return json(res,409,{error:store.learning.isRunning()?"Mikan is processing memories. Retry in a moment.":"Mikan is already responding"});
         const body=await readJson(req);
         const question=typeof body.text==="string"?body.text.trim():"";
         const conversationId=body.conversationId;
@@ -180,7 +180,7 @@ export function makeServer({store,config,key,promptFile="",generate=generateRepl
     }
   });
   server.requestTimeout=30000;
-  const timer=setInterval(()=>{if(!unavailable()&&Date.now()-lastReplyAt>=15000)void store.learning.processNext(generate,config);},15000);
+  const timer=setInterval(()=>{if(!unavailable()&&Date.now()-lastReplyAt>=15000)void store.learning.processNext(generate,config).catch(()=>console.error("NAS memory worker failed"));},15000);
   timer.unref();server.once("close",()=>clearInterval(timer));
   return server;
 }

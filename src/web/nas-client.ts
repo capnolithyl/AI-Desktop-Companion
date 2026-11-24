@@ -2,6 +2,13 @@ import {importCompanionProfile,exportCompanionProfile,type CompanionProfile} fro
 import type {UserFact,CharacterFact,InterestItem,MemoryConversation} from "../memory-client";
 import type {SessionSummary} from "../memory-budget";
 export type NasChat=MemoryConversation;
+export type LearningSettings={user:boolean;character:boolean};
+export type LearningStatus={
+  settings:LearningSettings;queued:number;failed:number;
+  lastOutcome:{saved:number;reviewQueued:number;processedAt:number;entries:{kind:string;description:string;evidence:string;status:string}[]}|null;
+  reviews:{id:number;kind:string;description:string;evidence:string;targetId:number|null;current:string|null}[];
+  history:{id:number;kind:string;previous:string;replacement:string;changedAt:number}[];
+};
 export type LibrarySnapshot={facts:UserFact[];characterFacts:CharacterFact[];interests:InterestItem[];sessionSummaries:SessionSummary[]};
 export type NasMessage={id:string;role:"user"|"assistant";content:string;createdAt:number};
 export type NasFact={id:number;fact:string;category:string;updatedAt:number};
@@ -24,6 +31,10 @@ export class NasClient {
   async facts(){return (await this.json<{memories:NasFact[]}>("memories")).memories;}
   addFact(fact:string){return this.json("memories",{method:"POST",body:JSON.stringify({fact})});}
   removeFact(id:number){return this.json("memories/"+id,{method:"DELETE"});}
+  learning(){return this.json<LearningStatus>("learning");}
+  saveLearning(settings:LearningSettings){return this.json<LearningSettings>("learning",{method:"PUT",body:JSON.stringify(settings)});}
+  retryLearning(){return this.json<{count:number}>("learning/retry",{method:"POST",body:"{}"});}
+  resolveLearning(id:number,action:"accept"|"dismiss"){return this.json("learning/review",{method:"POST",body:JSON.stringify({id,action})});}
   library(){return this.json<LibrarySnapshot>("library");}
   memoryAction<T=unknown>(action:string,args:object){return this.json<T>("library",{method:"POST",body:JSON.stringify({action,args})});}
   async chat(id:string,text:string,onDelta:(text:string)=>void){
