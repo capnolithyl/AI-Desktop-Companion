@@ -64,6 +64,7 @@ test("NAS HTTP requires a key, streams replies and persists them",async()=>{
     assert.equal((await fetch(base+"/api/library",{method:"POST",headers,body:JSON.stringify({action:"addFact",args:{fact:"A new owner-approved test fact"}})})).status,200);
     const library=await (await fetch(base+"/api/library",{headers})).json();
     assert.equal(library.facts[0].fact,"A new owner-approved test fact");
+    store.library.execute("pinFact",{id:library.facts[0].id,pinned:true});
     assert.equal((await fetch(base+"/api/library",{method:"POST",headers,body:JSON.stringify({action:"constructor"})})).status,400);
     const profile=exportCompanionProfile({...DEFAULT_COMPANION_PROFILE,
       personality:{...DEFAULT_COMPANION_PROFILE.personality,flirtiness:95},
