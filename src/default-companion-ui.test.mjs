@@ -69,3 +69,14 @@ test("recent chats copy their own debug log without switching the active convers
   assert.match(shell,/onClick=\{onOpenCurrentLog\}/);
   assert.match(app,/onOpenCurrentLog=\{\(\)=>setScreen\("log"\)\}/);
 });
+
+test("Default Iki portrait supports local selectable scenery without changing the rig",()=>{
+  assert.match(shell,/mikan\.workspace\.avatarBackground/);
+  assert.match(shell,/id:"reading-nook"/);
+  assert.match(shell,/id:"study-nook"/);
+  assert.match(shell,/id:"plain"/);
+  assert.match(shell,/mikan-backgrounds\/\$\{avatarBackground\}\.webp/);
+  assert.match(shell,/aria-label="Mikan portrait background"/);
+  assert.match(css,/var\(--workspace-avatar-background\)/);
+  assert.match(css,/mask-image:linear-gradient/);
+});

@@ -21,6 +21,20 @@ type Props={
   onHide:()=>void;
 };
 
+const AVATAR_BACKGROUNDS = [
+  {id:"reading-nook", label:"Reading nook"},
+  {id:"study-nook", label:"Study nook"},
+  {id:"plain", label:"Plain"},
+] as const;
+type AvatarBackground=typeof AVATAR_BACKGROUNDS[number]["id"];
+function readAvatarBackground():AvatarBackground{
+  try {
+    const saved=window.localStorage.getItem("mikan.workspace.avatarBackground");
+    const choice=AVATAR_BACKGROUNDS.find(item=>item.id===saved);
+    if(choice)return choice.id;
+  }catch { /* Keep the default when storage is not available. */ }
+  return "reading-nook";
+}
 type SidePanel = WorkspacePanel;
 const INITIAL_WIDTHS:WorkspaceWidths={chats:225,avatar:305};
 function readPanelWidths():WorkspaceWidths {
@@ -75,6 +89,12 @@ export function DefaultCompanionShell({
     return ()=>window.clearTimeout(timer);
   },[copyStatus]);
   const [expressionMenuOpen,setExpressionMenuOpen]=useState(false);
+  const [avatarBackground,setAvatarBackground]=useState<AvatarBackground>(readAvatarBackground);
+  useEffect(()=>{
+    try{window.localStorage.setItem("mikan.workspace.avatarBackground",avatarBackground);}catch { /* Session-only fallback. */ }
+  },[avatarBackground]);
+  const backgroundImage=avatarBackground==="plain"?undefined:
+    `url("${import.meta.env.BASE_URL}mikan-backgrounds/${avatarBackground}.webp")`;
   const [viewportWidth,setViewportWidth]=useState(()=>window.innerWidth);
   // Null means automatic responsive behavior. An explicit toggle is remembered.
   const [chatsPreference,setChatsPreference]=useState<boolean|null>(()=>readPanelPreference("chats"));
@@ -227,9 +247,18 @@ export function DefaultCompanionShell({
       {showAvatar&&renderDivider("avatar")}
       {showAvatar&&<aside className="workspace-avatar-pane" aria-label="Animated Mikan companion">
         <div className="workspace-avatar-glow" aria-hidden="true"/>
-        <div className="workspace-avatar-card">
+        <div className="workspace-avatar-card" data-background={avatarBackground}
+          style={backgroundImage?{"--workspace-avatar-background":backgroundImage} as CSSProperties:undefined}>
           <div className="workspace-avatar-top">
-            <PawPrint size={20}/><strong>Mikan ♡</strong><Sparkles size={15}/>
+            <PawPrint size={20}/><strong>Mikan ♡</strong>
+            <select className="workspace-background-select" value={avatarBackground}
+              aria-label="Mikan portrait background" title="Change Mikan's background"
+              onChange={event=>{
+                const choice=AVATAR_BACKGROUNDS.find(item=>item.id===event.target.value);
+                if(choice)setAvatarBackground(choice.id);
+              }}>
+              {AVATAR_BACKGROUNDS.map(item=><option key={item.id} value={item.id}>{item.label}</option>)}
+            </select>
           </div>
           <div className="workspace-iki-stage" aria-label="Animated Mikan portrait">{avatar}</div>
           <div className="workspace-avatar-status" role="status">

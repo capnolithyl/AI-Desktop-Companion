@@ -400,3 +400,24 @@
 .workspace-open-log:hover {background:#503127;border-color:#b57850;}
 @media(max-width:1100px){.workspace-open-log span{display:none;}}
 @media(hover:none){.workspace-chat-copy{opacity:1;}}
+
+/* Decorative scenery is local to the portrait card, behind the existing Iki canvas.
+   A solid gradient remains available even when optional artwork is not installed. */
+.workspace-avatar-card[data-background]:not([data-background="plain"]) {
+  background-image:linear-gradient(180deg,#26191545,transparent 24%,transparent 67%,#352321ef),var(--workspace-avatar-background),linear-gradient(180deg,#493026,#352321);
+  background-size:cover; background-position:center 29%; background-repeat:no-repeat;
+}
+.workspace-avatar-card[data-background]:not([data-background="plain"]) .workspace-iki-stage::after {display:none;}
+.workspace-avatar-card[data-background]:not([data-background="plain"]) .workspace-iki-stage :is(.iki-avatar-canvas,.character-portrait) {
+  mask-image:linear-gradient(to bottom,#000 0%,#000 76%,transparent 100%);
+}
+.workspace-avatar-card .workspace-avatar-top {flex-wrap:wrap;gap:7px;}
+.workspace-avatar-card .workspace-avatar-top strong {min-width:0;white-space:nowrap;}
+.workspace-background-select {
+  min-width:0;max-width:58%;font:inherit;font-size:11px;color:#ffe5d0;
+  border:1px solid #a97553;border-radius:7px;background:#342220;padding:5px 6px;
+  cursor:pointer;
+}
+.workspace-background-select:focus-visible {outline:2px solid #ffdfaa;outline-offset:2px;}
+.workspace-avatar-card[data-background]:not([data-background="plain"]) .workspace-avatar-top,
+.workspace-avatar-card[data-background]:not([data-background="plain"]) .workspace-avatar-status {background:#332220e8;}
