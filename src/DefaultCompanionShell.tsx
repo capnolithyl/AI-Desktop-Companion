@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode, type MouseEvent as ReactMouseEvent } from "react";
 import {
-  BookHeart, Cat, Eye, History, MessageCircle,
+  BookHeart, Cat, Eye, History, Layers3, MessageCircle, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen,
   Palette, PawPrint, Plus, Search, Settings2, Shirt, Smile, Sparkles, Volume2, VolumeX, X
 } from "lucide-react";
 import "./default-companion.css";
@@ -9,7 +9,7 @@ export type WorkspaceChat={id:string;title:string;updatedAt:number};
 type Props={
   avatar:ReactNode; modelPicker:ReactNode; transcript:ReactNode; composer:ReactNode;
   chats:ReadonlyArray<WorkspaceChat>; activeConversationId:string|null;
-  transcriptVersion:string; busy:boolean; muted:boolean; ready:boolean; visionActive:boolean;
+  transcriptVersion:string; busy:boolean; muted:boolean; ready:boolean; memoryIssue:boolean; visionActive:boolean;
   modelLabel:string; displayName:string; lastActivity:string;
   onDrag:(event:ReactMouseEvent<HTMLElement>)=>void;
   onNewChat:()=>void; onOpenChat:(id:string)=>void; onOpenHistory:()=>void;
@@ -19,25 +19,55 @@ type Props={
   onHide:()=>void;
 };
 
+type SidePanel = "chats" | "avatar";
+function readPanelPreference(panel:SidePanel):boolean|null {
+  try {
+    const value=window.localStorage.getItem("mikan.workspace.panel."+panel);
+    return value==="true"?true:value==="false"?false:null;
+  } catch { return null; }
+}
+function savePanelPreference(panel:SidePanel,visible:boolean){
+  try { window.localStorage.setItem("mikan.workspace.panel."+panel,String(visible)); }
+  catch { /* Private storage or blocked localStorage: toggles still work in this session. */ }
+}
+
 /** Presentation only. No independent inference, conversations, or Iki instance.
  * All actions and JSX slots come from the existing App state.
  */
 export function DefaultCompanionShell({
   avatar,modelPicker,transcript,composer,chats,activeConversationId,
-  transcriptVersion,busy,muted,ready,visionActive,modelLabel,displayName,lastActivity,
+  transcriptVersion,busy,muted,ready,memoryIssue,visionActive,modelLabel,displayName,lastActivity,
   onDrag,onNewChat,onOpenChat,onOpenHistory,onOpenMemory,onOpenSettings,onOpenSearch,
   onOpenVision,onAttach,onVoice,onMute,onExpression,onOutfit,onHide
 }:Props){
   const feedRef=useRef<HTMLDivElement>(null);
   const [expressionMenuOpen,setExpressionMenuOpen]=useState(false);
-  // Hide AND unmount the real Iki player when space cannot accommodate it.
-  // Merely CSS-hiding the canvas would leave an unnecessary GPU render loop.
-  const [showAvatar,setShowAvatar]=useState(()=>window.innerWidth>1030);
+  const [viewportWidth,setViewportWidth]=useState(()=>window.innerWidth);
+  // Null means automatic responsive behavior. An explicit toggle is remembered.
+  const [chatsPreference,setChatsPreference]=useState<boolean|null>(()=>readPanelPreference("chats"));
+  const [avatarPreference,setAvatarPreference]=useState<boolean|null>(()=>readPanelPreference("avatar"));
+  const showChats=chatsPreference??viewportWidth>830;
+  const showAvatar=avatarPreference??viewportWidth>1030;
   useEffect(()=>{
-    const resize=()=>setShowAvatar(window.innerWidth>1030);
+    const resize=()=>setViewportWidth(window.innerWidth);
     window.addEventListener("resize",resize);
     return ()=>window.removeEventListener("resize",resize);
   },[]);
+  const toggleChats=()=>{
+    const next=!showChats;
+    setChatsPreference(next);savePanelPreference("chats",next);
+    if(next&&viewportWidth<960&&showAvatar){
+      setAvatarPreference(false);savePanelPreference("avatar",false);
+    }
+  };
+  const toggleAvatar=()=>{
+    const next=!showAvatar;
+    setAvatarPreference(next);savePanelPreference("avatar",next);
+    if(next&&viewportWidth<960&&showChats){
+      setChatsPreference(false);savePanelPreference("chats",false);
+    }
+    if(!next)setExpressionMenuOpen(false);
+  };
   useEffect(()=>{
     const el=feedRef.current;
     if(el)el.scrollTop=el.scrollHeight;
@@ -50,21 +80,33 @@ export function DefaultCompanionShell({
         <Sparkles size={13} className="workspace-brand-sparkle"/>
       </div>
       <div className="workspace-model">{modelPicker}</div>
-      <span className={"workspace-status "+(ready?"ready":"starting")} role="status">
-        <span className="workspace-status-dot"/>{ready?"Ready":"Starting"}
+      <span className={"workspace-status "+(memoryIssue?"error":ready?"ready":"starting")} role="status"
+        title={memoryIssue?"Local memory needs attention":ready?"Local memory is available":"Local memory is loading"}>
+        <span className="workspace-status-dot" aria-hidden="true"/>
+        {memoryIssue?"Memory issue":ready?"Memory ready":"Memory loading"}
       </span>
       <div className="workspace-top-decoration" onMouseDown={onDrag} aria-hidden="true">
         <PawPrint size={21}/><span/><Sparkles size={13}/><PawPrint size={26}/>
       </div>
       <div className="workspace-top-actions">
+        <button type="button" onClick={toggleChats} aria-pressed={showChats}
+          aria-label={showChats?"Hide chat history panel":"Show chat history panel"}
+          title={showChats?"Hide chat history":"Show chat history"}>
+          {showChats?<PanelLeftClose size={19}/>:<PanelLeftOpen size={19}/>}
+        </button>
+        <button type="button" onClick={toggleAvatar} aria-pressed={showAvatar}
+          aria-label={showAvatar?"Hide Mikan avatar panel":"Show Mikan avatar panel"}
+          title={showAvatar?"Hide avatar panel":"Show avatar panel"}>
+          {showAvatar?<PanelRightClose size={19}/>:<PanelRightOpen size={19}/>}
+        </button>
         {visionActive&&<button type="button" className="workspace-vision-on" onClick={onOpenVision}
           title="Live Vision is on · Click to turn it off"><Eye size={17}/> Vision on</button>}
         <button type="button" onClick={onOpenSettings} title="Control Center" aria-label="Control Center"><Settings2 size={19}/></button>
         <button type="button" onClick={onHide} title="Hide Mikan" aria-label="Hide Mikan"><X size={19}/></button>
       </div>
     </header>
-    <div className="workspace-layout">
-      <aside className="workspace-sidebar" aria-label="Conversations">
+    <div className={"workspace-layout"+(showChats?" has-sidebar":"")+(showAvatar?" has-avatar":"")}>
+      {showChats&&<aside className="workspace-sidebar" aria-label="Conversations">
         <button type="button" className="workspace-new-chat" onClick={onNewChat} disabled={busy}>
           <Plus size={20}/> New chat
         </button>
@@ -85,7 +127,7 @@ export function DefaultCompanionShell({
           <button type="button" onClick={onOpenMemory} title="Open Memory & chats"><BookHeart size={20}/> Memory</button>
           <button type="button" onClick={onOpenSettings} title="Customize Mikan"><Palette size={20}/> Customize</button>
         </div>
-      </aside>
+      </aside>}
       <section className="workspace-chat" aria-label="Current chat">
         <div className="workspace-chat-heading">
           <div className="workspace-heading-icon"><MessageCircle size={22}/></div>
@@ -108,15 +150,43 @@ export function DefaultCompanionShell({
           {composer}
         </div>
       </section>
-      {showAvatar && <aside className="workspace-avatar-pane" aria-label="Animated Mikan companion">
+      {showAvatar&&<aside className="workspace-avatar-pane" aria-label="Animated Mikan companion">
         <div className="workspace-avatar-glow" aria-hidden="true"/>
-        <div className="workspace-avatar-top"><PawPrint size={20}/><strong>Mikan ♡</strong><Sparkles size={15}/></div>
-        <div className="workspace-iki-stage">{avatar}</div>
-        <div className="workspace-avatar-status">
-          <PawPrint size={23}/>
-          <span>{busy?"Thinking with you…":muted?"Here with you, quietly ♡":"Ready whenever you are ♡"}</span>
+        <div className="workspace-avatar-card">
+          <div className="workspace-avatar-top">
+            <PawPrint size={20}/><strong>Mikan ♡</strong><Sparkles size={15}/>
+          </div>
+          <div className="workspace-iki-stage" aria-label="Animated Mikan portrait">{avatar}</div>
+          <div className="workspace-avatar-status" role="status">
+            <PawPrint size={22}/>
+            <span>{busy?"Thinking with you…":muted?"Here with you, quietly ♡":"Ready whenever you are ♡"}</span>
+          </div>
         </div>
-        <div className="workspace-avatar-actions">
+        <div className="workspace-companion-details" aria-label="Companion status">
+          <div className="workspace-panel-heading">AT A GLANCE</div>
+          <div className="workspace-detail-row">
+            <span><Layers3 size={16}/> Selected model</span>
+            <strong title={modelLabel}>{modelLabel}</strong>
+          </div>
+          <div className="workspace-detail-row">
+            <span><BookHeart size={16}/> Local memory</span>
+            <strong className={memoryIssue?"warning":ready?"positive":""}>
+              {memoryIssue?"Issue":ready?"Ready":"Loading"}
+            </strong>
+          </div>
+          <div className="workspace-detail-row">
+            <span><Eye size={16}/> Live vision</span><strong>{visionActive?"Enabled":"Off"}</strong>
+          </div>
+          <div className="workspace-detail-row">
+            <span>{muted?<VolumeX size={16}/>:<Volume2 size={16}/>} Voice output</span>
+            <strong>{muted?"Muted":"Unmuted"}</strong>
+          </div>
+        </div>
+        <div className="workspace-companion-activity" role="status">
+          <div className="workspace-panel-heading">RIGHT NOW</div>
+          <p>{busy?(lastActivity||"Thinking…"):"Just hanging out with you ♡"}</p>
+        </div>
+        <div className="workspace-avatar-actions" role="group" aria-label="Companion actions">
           <button type="button" onClick={onMute} aria-pressed={muted}>
             {muted?<VolumeX size={17}/>:<Volume2 size={17}/>} {muted?"Unmute":"Mute"}
           </button>

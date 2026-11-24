@@ -3639,7 +3639,7 @@ export default function App() {
         chats={[...conversations].sort((a,b)=>b.updatedAt-a.updatedAt)}
         activeConversationId={activeConversationId}
         transcriptVersion={messages.length+":"+(messages[messages.length-1]?.content.length??0)+":"+busy}
-        busy={busy} muted={settings.voice.muted} ready={memoryReady}
+        busy={busy} muted={settings.voice.muted} ready={memoryReady} memoryIssue={Boolean(memoryError)}
         visionActive={liveVision.enabled} modelLabel={dockModel.label}
         displayName={conversations.find(c=>c.id===activeConversationId)?.title||"Desktop Companion"}
         lastActivity={activity}
