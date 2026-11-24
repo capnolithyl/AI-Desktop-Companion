@@ -57,6 +57,8 @@ export async function generateReply({config, system, history, onDelta=()=>{}, on
       ...(provider==="openrouter"?{"HTTP-Referer":"https://github.com/capnolithyl/AI-Desktop-Companion","X-Title":"Mikan NAS"}:{})},
     body:JSON.stringify({model,stream:!structuredTool,max_tokens:maxTokens,temperature,
       ...(structuredTool?{tools:[structuredTool],tool_choice:"required"}:{stream_options:{include_usage:true}}),
+      // Same model-specific evidence setting used by the desktop NVIDIA adapter.
+      ...(structuredTool&&provider==="nvidia"&&model==="nvidia/nemotron-3-ultra-550b-a55b"?{chat_template_kwargs:{enable_thinking:false,force_nonempty_content:true}}:{}),
       messages:[{role:"system",content:system},...history.map(m=>({role:m.role,content:m.content}))]}),
     signal:signal?AbortSignal.any([signal,AbortSignal.timeout(120000)]):AbortSignal.timeout(120000)
   });

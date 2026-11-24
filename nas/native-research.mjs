@@ -23,7 +23,7 @@ export function structuredResearchTool(){
 }
 const invalid=code=>Object.assign(Error(code),{code});
 export function structuredResearchPrompt(task){
-  return "\nSTRICT SOURCE EXTRACTION: Return only JSON {passages:[{source,quote,subject,when,where_at,detail}],suggestions:[{source,name,creator,identity_quote,fit_quote,measurements:[{source,value,unit,quote}],relations:[{source,role,name,quote}]}]}. Every quote and span must be literal and contiguous in the actual numbered source excerpts. Up to five passages or twelve candidate suggestions. No invented evidence, no prose outside JSON. For discovery or constrained verification supply suggestions satisfying ALL explicit constraints, otherwise passages. Do not put an unrelated result into the shortlist. The application independently validates the evidence. Task: "+JSON.stringify(task??{kind:"lookup"});
+  return "\nSTRICT SOURCE EXTRACTION: Return only JSON {passages:[{source,quote,subject,when,where_at,detail}],suggestions:[{source,name,creator,identity_quote,fit_quote,measurements:[{source,value,unit,quote}],relations:[{source,role,name,quote}]}]}. Every quote and span must be literal and contiguous in the actual numbered source excerpts. Up to five passages or six candidate suggestions. No invented evidence, no prose outside JSON. For discovery or constrained verification supply suggestions satisfying ALL explicit constraints, otherwise passages. Do not put an unrelated result into the shortlist. The application independently validates the evidence. Task: "+JSON.stringify(task??{kind:"lookup"});
 }
 export function reviewNativeResearch(raw,question,task,sources){
   const start=raw.indexOf("{"),end=raw.lastIndexOf("}");

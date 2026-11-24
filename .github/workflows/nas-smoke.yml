@@ -87,7 +87,34 @@ jobs:
           assert.equal(result.accepted,1);assert.equal(result.rejected,1);assert.match(result.text,/Pet Shop of Horrors/);assert.doesNotMatch(result.text,/Junji Ito Collection/);
           const passage=reviewNativeResearch(JSON.stringify({passages:[{source:1,quote:"Pet Shop of Horrors has 4 episodes."},{source:1,quote:"Pet Shop of Horrors was released in 2028."}]}),"Episode count",null,sources);
           assert.equal(passage.accepted,1);assert.equal(passage.rejected,1);assert.doesNotMatch(passage.text,/2028/);
-          console.log("Packaged shared native gates passed");
+          import {openStore} from "/app/nas/storage.mjs";
+          import {executeNasTurn,turnTrace} from "/app/nas/turn.mjs";
+          import {generateReply} from "/app/nas/providers.mjs";
+          const store=openStore(":memory:"),chat=store.newConversation();
+          const prompt="Recommend three horror anime with fewer than six episodes.";
+          store.append(chat.id,"user",prompt);
+          const trace=turnTrace("strict"),chunks=[],events=[];let calls=0,extractions=0;
+          const selected={provider:"nvidia",model:"nvidia/nemotron-3-ultra-550b-a55b",key:"synthetic-test-key",historyChars:16000};
+          const selectedTask={...task,requirements:[{quote:"fewer than six episodes",relation:"lt",limit:6,unit:"episodes"}]};
+          const turn=await executeNasTurn({store,conversationId:chat.id,question:prompt,selected,mode:"strict",trace,canRequest:()=>true,reserve:()=>calls++,
+            search:async()=>sources,read:async()=>{throw Error("unexpected read");},onDelta:piece=>chunks.push(piece),activity:event=>events.push(event),
+            requestModel:async args=>{
+              if(args.system.startsWith("You are a read-only research planner"))return JSON.stringify(calls===1?{action:"search",query:"horror anime fewer than six episodes",task:selectedTask}:{action:"none"});
+              assert.ok(args.structuredTool);assert.doesNotMatch(args.system,/PERSONAL DETAIL ACCURACY/);extractions++;
+              return generateReply({...args,fetchImpl:async(_url,options)=>{
+                const body=JSON.parse(options.body);assert.equal(body.stream,false);assert.equal(body.chat_template_kwargs.enable_thinking,false);
+                if(extractions===1)return Response.json({choices:[{finish_reason:"length",message:{content:""}}],usage:{completion_tokens:4096,completion_tokens_details:{reasoning_tokens:4096}}});
+                assert.equal(body.max_tokens,8192);
+                const raw=JSON.stringify({passages:[],suggestions:[suggestion(1,"Pet Shop of Horrors",4,"Pet Shop of Horrors is a horror anthology series with unusual stories."),suggestion(2,"Junji Ito Collection",12,"Junji Ito Collection is an animated horror series based on manga.")]});
+                return Response.json({choices:[{finish_reason:"tool_calls",message:{tool_calls:[{function:{name:"submit_source_evidence",arguments:raw}}]}}]});
+              }});
+            }});
+          assert.equal(calls,4);assert.equal(extractions,2);assert.match(turn.answer,/Pet Shop of Horrors/);assert.doesNotMatch(turn.answer,/Junji Ito Collection/);
+          assert.equal(chunks.join(""),turn.answer);assert.equal(trace.snapshot().stages.find(s=>s.stage==="answer").errorCode,"output-limit");
+          assert.equal(trace.snapshot().inference[0].reasoningTokens,4096);
+          assert.ok(events.some(e=>e.title==="Native research evidence audit"));
+          store.db.close();
+          console.log("Packaged shared native gates and full strict turn passed");
           JS
           curl -fsSL http://127.0.0.1:3847/ | grep -F 'Mikan · Beholder'
           curl -fsS http://127.0.0.1:3847/legacy | grep -F 'Beholder cloud preview'
