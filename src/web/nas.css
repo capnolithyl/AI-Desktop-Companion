@@ -75,3 +75,34 @@ html:has(.nas-app),body:has(.nas-app),body:has(.nas-gate){background:#211412!imp
 .nas-app .nas-knowledge-progress progress{width:100%;accent-color:#ffa65e;}
 .nas-app .nas-knowledge-preview pre{white-space:pre-wrap;overflow-wrap:anywhere;max-height:500px;overflow:auto;font:inherit;font-size:13px;line-height:1.6;}
 @media(max-width:650px){.nas-app .nas-knowledge-row{flex-wrap:wrap;}.nas-app .nas-knowledge-actions{justify-content:flex-start;}}
+
+/* Release channel cards: native keyboard-accessible radios, styled for Mikan. */
+.nas-app .nas-updates .nas-channel-picker{display:block;min-width:0;border:0;padding:0;margin:15px 0 18px;}
+.nas-app .nas-updates .nas-channel-picker legend{padding:0;margin-bottom:9px;color:#e8b9a0;font-size:12px;font-weight:650;letter-spacing:.035em;}
+.nas-app .nas-channel-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;}
+.nas-app .nas-updates .nas-channel-card{position:relative;display:flex;align-items:flex-start;gap:12px;min-width:0;margin:0;padding:15px;border-radius:14px;border:1px solid #785248;background:linear-gradient(145deg,#37272a,#2b2022);color:#fce5d5;cursor:pointer;transition:background .16s,border-color .16s,box-shadow .16s;}
+.nas-app .nas-channel-card:not(.is-selected):hover{border-color:#b47c61;background:#42302f;}
+.nas-app .nas-updates .nas-channel-card.is-selected{border-color:#efa06a;background:radial-gradient(ellipse at top left,#a65e3929,transparent 70%),linear-gradient(135deg,#4d302b,#37262a);box-shadow:0 0 15px #f68d3024,inset 0 0 12px #ffa65e0d;}
+.nas-app .nas-channel-card input[type=radio]{position:absolute;opacity:0;width:1px;height:1px;margin:0;}
+.nas-app .nas-channel-card:has(input:focus-visible){outline:2px solid #ffc18a;outline-offset:3px;}
+.nas-app .nas-channel-picker:disabled .nas-channel-card{opacity:.6;cursor:not-allowed;}
+.nas-app .nas-channel-icon{flex:0 0 40px;height:40px;display:grid;place-items:center;border:1px solid #a46d4f75;border-radius:12px;background:#f5a26714;color:#efb48c;}
+.nas-app .nas-channel-card.is-selected .nas-channel-icon{background:#ff9d5226;color:#ffbd87;}
+.nas-app .nas-channel-copy{display:grid;gap:6px;flex:1;min-width:0;}
+.nas-app .nas-channel-title{display:flex;align-items:center;gap:6px;flex-wrap:wrap;color:#ffdbbd;font-weight:700;font-size:15px;line-height:1.2;}
+.nas-app .nas-channel-active{border:1px solid #9e795b;background:#e4ae7a15;color:#f6cda4;border-radius:20px;padding:2px 7px;font-size:10px;font-weight:600;}
+.nas-app .nas-channel-description{font-size:12px;line-height:1.5;color:#d7b7a9;}
+.nas-app .nas-channel-branch{justify-self:start;font-size:10px;padding:2px 6px;border-radius:5px;background:#21191b80;color:#d2b3a2;}
+.nas-app .nas-channel-radio{flex:0 0 19px;height:19px;display:grid;place-items:center;border:1px solid #a67d6b;border-radius:50%;margin-top:2px;color:#35221e;}
+.nas-app .nas-channel-card.is-selected .nas-channel-radio{background:#ffb579;border-color:#ffb579;}
+.nas-app .nas-channel-confirm{display:grid;gap:12px;border:1px solid #b07a51;border-radius:12px;background:#e79c4f0b;padding:13px;margin-bottom:16px;}
+.nas-app .nas-channel-warning{display:flex;align-items:flex-start;gap:10px;color:#ffcc9e;}
+.nas-app .nas-channel-warning svg{flex-shrink:0;margin-top:2px;}
+.nas-app .nas-channel-warning strong{font-size:13px;}
+.nas-app .nas-channel-warning small{display:block;line-height:1.5;margin-top:4px;color:#e0bba5;}
+.nas-app .nas-channel-confirm-actions{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end;}
+.nas-app .nas-channel-switch{display:inline-flex;align-items:center;justify-content:center;gap:7px;border:1px solid #ffbb83;border-radius:10px;padding:10px 14px;background:linear-gradient(135deg,#ffc08e,#ee995d);color:#39221c;font:inherit;font-weight:700;cursor:pointer;box-shadow:0 0 14px #f68d3029;}
+.nas-app .nas-channel-switch:disabled{opacity:.5;cursor:not-allowed;}
+.nas-app .nas-channel-confirm-actions button:focus-visible{outline:2px solid #ffc18a;outline-offset:3px;}
+@media(max-width:780px){.nas-app .nas-channel-grid{grid-template-columns:minmax(0,1fr);}}
+@media(prefers-reduced-motion:reduce){.nas-app .nas-updates .nas-channel-card{transition:none;}}
