@@ -101,17 +101,17 @@ test("provider settings require valid selected credentials",()=>{
 });
 
 test("OpenAI-compatible streaming parser forwards only assistant output",async()=>{
-  const events='data: {"choices":[{"delta":{"content":"Hello"}}]}\n\n'+
+  const events='data: {"model":"actual/free-model","choices":[{"delta":{"content":"Hello"}}]}\n\n'+
     'data: {"choices":[{"delta":{"content":" there"}}]}\n\n'+'data: [DONE]\n\n';
-  const chunks=[];
+  const chunks=[],models=[];
   const answer=await generateReply({
     config:{provider:"nvidia",model:"test-model",key:"some-secret-key"},
     system:"You are Mikan",history:[{role:"user",content:"Hi"}],
-    onDelta:t=>chunks.push(t),
+    onDelta:t=>chunks.push(t),onModel:m=>models.push(m),
     fetchImpl:async()=>new Response(events,{status:200,headers:{"Content-Type":"text/event-stream"}})
   });
   assert.equal(answer,"Hello there");
-  assert.deepEqual(chunks,["Hello"," there"]);
+  assert.deepEqual(chunks,["Hello"," there"]);assert.deepEqual(models,["actual/free-model"]);
 });
 
 test("structured memory library preserves categories, pins, canon and interests; conversions roll back",()=>{
@@ -374,6 +374,7 @@ test("NAS provider selection persists, keeps keys write-only and budgets real re
     assert.throws(()=>reopened.reserve("openrouter"),/budget reached/);
     time+=61000;
     assert.equal(reopened.available("openrouter"),true);
+    reopened.cooldown("openrouter");assert.equal(models.available("openrouter"),false);time+=300001;assert.equal(reopened.available("openrouter"),true);
     assert.equal(boundedHistory([{role:"user",content:"old"},{role:"assistant",content:"past"},{role:"user",content:"latest"}],6).at(-1).content,"latest");
     reopened.save({provider:"openrouter",clearKey:true});
     assert.throws(()=>reopened.active(),/Configure/);

@@ -1,5 +1,7 @@
 # Mikan on Beholder: experimental NAS deployment
 
+**Current managed installations:** follow Automatic Beholder updates and Current NAS model settings below. The initial prototype instructions are historical; do not rebuild or copy an old source bundle over an existing managed deployment. Model management, shared workspace, Iki and memory learning have since been ported. Web tools, Notion, voice, vision and desktop sync remain unfinished.
+
 An independent, **cloud-inference-only** Mikan chat service for the Synology DS916+ (8 GB RAM). It runs in one lightweight Docker container, keeps a durable SQLite database on a NAS volume, and exposes a responsive browser chat on private Tailscale HTTPS.
 
 **This is an experimental vertical slice, not a drop-in replacement for desktop Mikan.** The existing Windows app, remote relay, and Android client are unchanged. This deployment supports chat, streaming NVIDIA/OpenRouter replies, Gemini replies, persistent conversations, explicit user facts, and simple relevance-based recall from an imported desktop SQLite database. Persona file overrides are supported.
@@ -157,3 +159,5 @@ The real-container deployment test also exercises the authenticated request endp
 
 ### Current NAS model settings
 The managed image supports authenticated Models & providers settings and chat dock switching. Existing .env credentials/model remain defaults; UI key replacements and selections are persisted atomically in a mode-0600 file alongside SQLite, included in private host backups. Keys are write-only and never included in API responses, conversation metadata or debug logs. OpenRouter routes must be free; Gemini project billing/free eligibility is the owner's responsibility. All outbound chat and extraction attempts share persisted conservative NAS limits (NVIDIA 30/min, OpenRouter 15/min and 40/UTC day, Gemini 5/min); other applications using the same key are not counted. No automatic provider fallback or retry. Text-only requests; native tools and image input are not implemented. The history budget is characters, not an exact token window. Actual response model is recorded only when the upstream response supplies it; older conversations retain no invented metadata. No host setup changes for existing managed deployments.
+
+Provider HTTP 429 starts a five-minute persisted provider-specific cooldown across chat and learning; no failed request is automatically retried. Queued learning waits while the local budget is exhausted. All quotas are local conservative safeguards, not a guarantee of provider free-tier availability.

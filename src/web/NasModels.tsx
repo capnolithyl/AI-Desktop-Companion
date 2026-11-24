@@ -39,7 +39,7 @@ export function NasModels({models,client,onChanged,busy}:{models:Models;client:N
     <section className="control-form-section">
       <label className="setting-field">Recent conversation character budget<select value={models.historyChars} disabled={saving||busy} onChange={async e=>{setSaving(true);setNotice("");try{onChanged(await client.saveModels({provider:models.provider,historyChars:Number(e.target.value)}));}catch(error){setNotice(String(error));}finally{setSaving(false);}}}>{[16000,32000,64000].map(n=><option key={n} value={n}>{n.toLocaleString()} characters</option>)}</select></label>
       <small>This is a history budget, not an exact model token window. Retrieved memories and instructions are additional.</small>
-      <p>NAS safeguards: NVIDIA 30 requests/min, OpenRouter 15/min and 40 per UTC day, Gemini 5/min. Chat and automatic learning share these budgets. Provider limits may be lower; no automatic retry on quota errors.</p>
+      <p>NAS safeguards: NVIDIA 30 requests/min, OpenRouter 15/min and 40 per UTC day, Gemini 5/min. Chat and automatic learning share these budgets. Provider limits may be lower; HTTP 429 pauses that provider for five minutes, with no automatic retry.</p>
       <p>Keys entered here are stored in a restricted server-side file on Beholder, included in private NAS backups. Gemini access depends on your API project's billing and quota settings.</p>
       {notice&&<p role="alert">{notice}</p>}
     </section>

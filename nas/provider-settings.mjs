@@ -70,10 +70,12 @@ export function providerSettings({initial,env={},file="",db,now=Date.now}){
     saved=next;return view();
   }
   // Count actual outbound attempts (not chat turns); retain counts across restarts.
-  db.exec("CREATE TABLE IF NOT EXISTS nas_provider_requests (provider TEXT NOT NULL,started_at INTEGER NOT NULL); CREATE INDEX IF NOT EXISTS nas_provider_request_time ON nas_provider_requests(provider,started_at)");
+  db.exec("CREATE TABLE IF NOT EXISTS nas_provider_requests (provider TEXT NOT NULL,started_at INTEGER NOT NULL); CREATE INDEX IF NOT EXISTS nas_provider_request_time ON nas_provider_requests(provider,started_at); CREATE TABLE IF NOT EXISTS nas_provider_cooldown(provider TEXT PRIMARY KEY,until_ms INTEGER NOT NULL)");
   const limits={nvidia:30,openrouter:15,gemini:5};
   function available(p){
     const t=now();
+    const cooldown=db.prepare("SELECT until_ms FROM nas_provider_cooldown WHERE provider=?").get(p)?.until_ms??0;
+    if(cooldown>t)return false;
     const recent=db.prepare("SELECT count(*) AS n FROM nas_provider_requests WHERE provider=? AND started_at>?").get(p,t-60000).n;
     const daily=p==="openrouter"?db.prepare("SELECT count(*) AS n FROM nas_provider_requests WHERE provider=? AND started_at>=?").get(p,Math.floor(t/86400000)*86400000).n:0;
     return recent<limits[p]&&daily<40;
@@ -84,7 +86,8 @@ export function providerSettings({initial,env={},file="",db,now=Date.now}){
     db.prepare("DELETE FROM nas_provider_requests WHERE started_at<?").run(t-2*86400000);
     db.prepare("INSERT INTO nas_provider_requests(provider,started_at) VALUES(?,?)").run(p,t);
   }
-  return {view,active,save,available,reserve};
+  function cooldown(p){db.prepare("INSERT INTO nas_provider_cooldown(provider,until_ms) VALUES(?,?) ON CONFLICT(provider) DO UPDATE SET until_ms=excluded.until_ms").run(p,now()+300000);}
+  return {view,active,save,available,reserve,cooldown};
 }
 export function boundedHistory(messages,budget){
   let remaining=budget;

@@ -216,7 +216,7 @@ export function NasApp(){
   const send=async(event?:FormEvent)=>{
     event?.preventDefault();
     const text=input.trim(),id=active;
-    if(!text||!id||busy||inFlight.current)return;
+    if(!text||!id||busy||switching||inFlight.current)return;
     inFlight.current=true;setBusy(true);setNotice("");setInput("");
     const stamp=Date.now(),pending="nas-pending-"+stamp;
     setMessages(previous=>[...previous,{id:pending+"-user",role:"user",content:text,createdAt:stamp},{id:pending,role:"assistant",content:"",createdAt:stamp+1}]);
@@ -295,7 +295,7 @@ export function NasApp(){
       composer={<form className="input-row" onSubmit={event=>void send(event)}>
         <textarea aria-label="Message Mikan" rows={2} placeholder="Message Mikan…" maxLength={4000} value={input} onChange={event=>setInput(event.target.value)}
           onKeyDown={event=>{if(event.key==="Enter"&&!event.shiftKey&&!event.nativeEvent.isComposing){event.preventDefault();void send();}}}/>
-        <button className="send-button chat-paw-send" type="submit" aria-label="Send message" disabled={busy||!input.trim()}>{busy?<LoaderCircle className="spin" size={20}/>:<WorkspaceSendPaw/>}</button>
+        <button className="send-button chat-paw-send" type="submit" aria-label="Send message" disabled={busy||switching||!input.trim()}>{busy?<LoaderCircle className="spin" size={20}/>:<WorkspaceSendPaw/>}</button>
       </form>}/>:<section className="drawer control-center-window" role="dialog" aria-label="Mikan Control Center">
       <header className="drawer-header control-center-header"><button type="button" className="back-button" onClick={()=>openPage("chat")} title="Back to chat"><ArrowLeft size={20}/></button>
         <span className="control-header-glyph"><Settings2 size={22}/></span><div className="drawer-title"><strong>{tabs.find(t=>t.id===page)?.label||"Conversation log"}</strong><span>Mikan's control center · Beholder</span></div>

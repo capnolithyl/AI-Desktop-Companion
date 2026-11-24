@@ -72,6 +72,10 @@ export function makeServer({store,config,key,promptFile="",maintenanceFile="/dat
   let busy=false,lastReplyAt=0,activeWrites=0;
   const maintenance=()=>existsSync(maintenanceFile);
   const unavailable=()=>busy||store.learning.isRunning();
+  const requestModel=async args=>{
+    try{return await generate(args);}
+    catch(error){if(error?.upstreamStatus===429)models.cooldown(args.config.provider);throw error;}
+  };
   const server=createServer(async(req,res)=>{
     let writing=false;
     try {
@@ -186,7 +190,7 @@ export function makeServer({store,config,key,promptFile="",maintenanceFile="/dat
         res.writeHead(200,{"Content-Type":"text/event-stream; charset=utf-8",
           "Cache-Control":"no-cache, no-transform","X-Accel-Buffering":"no",
           "X-Content-Type-Options":"nosniff"});
-          const answer=await generate({config:selected,system:instructions,history,onModel:model=>{actualModel=model;},
+          const answer=await requestModel({config:selected,system:instructions,history,onModel:model=>{actualModel=model;},
             onDelta:part=>sse(res,"delta",{text:part})});
           const saved=store.append(conversationId,"assistant",answer,{provider:selected.provider,requestedModel:selected.model,actualModel,outcome:"completed"});
           store.library.markRecalled(memory.ids);
@@ -219,7 +223,7 @@ export function makeServer({store,config,key,promptFile="",maintenanceFile="/dat
     if(maintenance()||unavailable()||Date.now()-lastReplyAt<15000)return;
     let selected;try{selected=models.active();}catch{return;}
     if(!models.available(selected.provider))return;
-    void store.learning.processNext(args=>{models.reserve(selected.provider);return generate(args);},selected).catch(()=>console.error("NAS memory worker failed"));
+    void store.learning.processNext(args=>{models.reserve(selected.provider);return requestModel(args);},selected).catch(()=>console.error("NAS memory worker failed"));
   },15000);
   timer.unref();server.once("close",()=>clearInterval(timer));
   return server;

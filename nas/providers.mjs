@@ -13,7 +13,7 @@ export function providerConfig(env = process.env) {
   if (!key || key.length < 12) throw new Error("Configure the selected provider API key in nas/.env");
   return { provider, model, key };
 }
-function remoteError(status, body, key) {
+function remoteError(status) {
   return Object.assign(new Error("Cloud model request failed ("+status+")"),{upstreamStatus:status});
 }
 export async function generateReply({config, system, history, onDelta, onModel=()=>{}, fetchImpl=fetch, temperature=0.7, maxTokens=1400}) {
@@ -30,9 +30,9 @@ export async function generateReply({config, system, history, onDelta, onModel=(
         signal:AbortSignal.timeout(120000)}
     );
     const raw = await response.text();
-    if (!response.ok) throw remoteError(response.status,raw,key);
+    if (!response.ok) throw remoteError(response.status);
     const json = JSON.parse(raw);
-    if(typeof json.modelVersion==="string")onModel(json.modelVersion.slice(0,160));
+    if(typeof json.modelVersion==="string"&&json.modelVersion.length<=160&&/^[\w./:-]+$/.test(json.modelVersion)&&!json.modelVersion.includes(key))onModel(json.modelVersion);
     const result = (json.candidates?.[0]?.content?.parts||[])
       .map(part=>part.text||"").join("").trim();
     if (!result) throw new Error("Cloud model returned an empty answer");
@@ -51,7 +51,7 @@ export async function generateReply({config, system, history, onDelta, onModel=(
       messages:[{role:"system",content:system},...history.map(m=>({role:m.role,content:m.content}))]}),
     signal:AbortSignal.timeout(120000)
   });
-  if (!response.ok) throw remoteError(response.status,await response.text(),key);
+  if (!response.ok) throw remoteError(response.status);
   if (!response.body) throw new Error("Provider did not return a response stream");
 
   const decoder = new TextDecoder();
@@ -62,8 +62,8 @@ export async function generateReply({config, system, history, onDelta, onModel=(
     if (!data || data==="[DONE]") return;
     let event;
     try {event=JSON.parse(data);}catch{return;}
-    if (event.error) throw new Error("Provider rejected the stream");
-    if(typeof event.model==="string")onModel(event.model.slice(0,160));
+    if (event.error) throw Object.assign(new Error("Provider rejected the stream"),{upstreamStatus:Number(event.error.code)===429?429:undefined});
+    if(typeof event.model==="string"&&event.model.length<=160&&/^[\w./:-]+$/.test(event.model)&&!event.model.includes(key))onModel(event.model);
     const delta=event.choices?.[0]?.delta?.content;
     const text = typeof delta==="string" ? delta :
       Array.isArray(delta) ? delta.filter(x=>x.type==="text").map(x=>x.text||"").join("") : "";
