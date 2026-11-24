@@ -1,7 +1,7 @@
 import { useMemo, useState, type ChangeEvent } from "react";
 import { Check, FileUp, Plus, Trash2, X } from "lucide-react";
 import type { InterestItem } from "./memory-client";
-import { parseTags } from "./memory-import";
+import { MEMORY_CATEGORIES,parseTags,type MemoryCategory } from "./memory-import";
 import {
   INTEREST_KINDS, INTEREST_STATUSES, interestKey, parseInterests,
   type ImportFormat, type IncomingInterest, type InterestKind, type InterestStatus
@@ -12,6 +12,7 @@ type Props = {
   onImport: (items: IncomingInterest[]) => Promise<{inserted:number;duplicates:number}>;
   onEdit: (id:number, item:IncomingInterest) => Promise<void>;
   onDelete: (id:number) => Promise<void>;
+  onMoveToFact: (id:number,fact:string,category:MemoryCategory,tags:string[])=>Promise<void>;
 };
 const nameOf = (value:string) => value.replace(/^./,s=>s.toUpperCase());
 const empty: IncomingInterest={name:"",kind:"band",status:"unknown",rating:null,notes:"",tags:[]};
@@ -19,7 +20,7 @@ function entryOf(value:InterestItem): IncomingInterest {
   return {name:value.name,kind:value.kind,status:value.status,rating:value.rating,
     notes:value.notes,tags:[...value.tags]};
 }
-export function InterestCollectionTab({items,onImport,onEdit,onDelete}:Props){
+export function InterestCollectionTab({items,onImport,onEdit,onDelete,onMoveToFact}:Props){
   const [format,setFormat]=useState<ImportFormat>("text");
   const [content,setContent]=useState("");
   const [kind,setKind]=useState<InterestKind>("band");
@@ -38,6 +39,10 @@ export function InterestCollectionTab({items,onImport,onEdit,onDelete}:Props){
   const [result,setResult]=useState<string|null>(null);
   const [working,setWorking]=useState(false);
   const [confirmDelete,setConfirmDelete]=useState<number|null>(null);
+  const [moveId,setMoveId]=useState<number|null>(null);
+  const [moveFact,setMoveFact]=useState("");
+  const [moveCategory,setMoveCategory]=useState<MemoryCategory>("interests");
+  const [moveTags,setMoveTags]=useState("");
   const existing=useMemo(()=>new Set(items.map(interestKey)),[items]);
   const duplicates=useMemo(()=>{
     const seen=new Set(existing),found=new Set<number>();
@@ -236,12 +241,41 @@ export function InterestCollectionTab({items,onImport,onEdit,onDelete}:Props){
         <div className="memory-actions">
           <small>#{item.id} · Added {new Date(item.createdAt*1000).toLocaleDateString()} · Updated {new Date(item.updatedAt*1000).toLocaleDateString()}</small>
           <button type="button" disabled={working} onClick={()=>{setEditing(item.id);setEditingEntry(entryOf(item));setEditTags(item.tags.join(", "));}}>Edit</button>
+          <button type="button" disabled={working} onClick={()=>{
+            const phrasing:Record<string,string>={
+              favorite:"considers one of their favorites",
+              like:"likes",dislike:"dislikes",
+              interested:"is interested in",experienced:"has experienced",unknown:"has mentioned"
+            };
+            const base=`The user ${phrasing[item.status]??"has mentioned"} the ${item.kind} "${item.name}".`;
+            setMoveFact(base+(item.notes?" "+item.notes:""));
+            setMoveCategory("interests");setMoveTags(item.tags.join(", "));
+            setMoveId(item.id);
+          }}>Move to About you</button>
           {confirmDelete===item.id ? <>
             <button type="button" className="memory-danger" disabled={working}
               onClick={()=>void run(async()=>{await onDelete(item.id);setConfirmDelete(null);})}>Confirm delete</button>
             <button type="button" onClick={()=>setConfirmDelete(null)}>Cancel</button>
           </> : <button type="button" disabled={working} onClick={()=>setConfirmDelete(item.id)}><Trash2 size={13}/> Delete</button>}
         </div>
+        {moveId===item.id && <div className="memory-organize" aria-label="Move interest to About you">
+          <strong>Move to About you</strong>
+          <small>Edit the wording before moving. The Interest will be removed only after the fact saves.</small>
+          <label>Fact <textarea aria-label="Converted About you memory" rows={3} maxLength={500}
+            value={moveFact} onChange={e=>setMoveFact(e.target.value)}/></label>
+          <label>Category <select value={moveCategory} onChange={e=>setMoveCategory(e.target.value as MemoryCategory)}>
+            {MEMORY_CATEGORIES.map(category=><option key={category.id} value={category.id}>{category.label}</option>)}
+          </select></label>
+          <label>Tags <input value={moveTags} onChange={e=>setMoveTags(e.target.value)}
+            placeholder="Comma-separated tags"/></label>
+          <div className="memory-actions">
+            <button type="button" disabled={working||!moveFact.trim()} onClick={()=>void run(async()=>{
+              await onMoveToFact(item.id,moveFact,moveCategory,parseTags(moveTags));
+              setMoveId(null);
+            })}><Check size={13}/> Confirm move</button>
+            <button type="button" onClick={()=>setMoveId(null)}>Cancel</button>
+          </div>
+        </div>}
       </>}
     </article>)}
     {filtered.length>100 && <p className="memory-explainer">Showing 100 matches. Search or filter to find more.</p>}
