@@ -24,3 +24,7 @@ nas/.env.*
 nas/data*
 nas/data*/**
 nas/*.sqlite3*
+
+# Host-only updater state and backup locations must never enter images.
+nas/.mikan-update-maintenance
+nas/update.log

@@ -20,8 +20,14 @@ on:
       - "package*.json"
       - ".dockerignore"
       - ".github/workflows/nas-smoke.yml"
+concurrency:
+  group: nas-smoke-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   nas:
+    permissions:
+      contents: read
+      packages: write
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -30,6 +36,7 @@ jobs:
           node-version: '22'
       - name: Syntax check
         run: |
+          sh -n nas/update-beholder.sh
           node --check nas/build-info.mjs
           node --check nas/server.mjs
           node --check nas/storage.mjs
@@ -41,7 +48,7 @@ jobs:
       - name: Build shared React workspace and deployment bundle
         run: npm ci && npm run build:nas
       - name: Validate Docker image
-        run: docker build -f .nas-deploy/nas/Dockerfile -t mikan-nas:ci .nas-deploy
+        run: docker build --platform linux/amd64 --label org.opencontainers.image.source=https://github.com/capnolithyl/AI-Desktop-Companion --label org.opencontainers.image.revision="$GITHUB_SHA" -f .nas-deploy/nas/Dockerfile -t mikan-nas:ci .nas-deploy
       - name: Smoke test packaged workspace
         run: |
           docker run --rm -d --name mikan-nas-ci -p 127.0.0.1:3847:3847 -e MIKAN_REMOTE_KEY=01234567890123456789012345678901 -e NVIDIA_API_KEY=synthetic-test-key -e MIKAN_PROVIDER=nvidia mikan-nas:ci
@@ -61,3 +68,15 @@ jobs:
           path: .nas-deploy/
           include-hidden-files: true
           if-no-files-found: error
+      - name: Publish tested experimental image
+        if: github.event_name == 'push' && github.ref == 'refs/heads/feature/nas-cloud-mikan-experimental'
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          printf '%s' "$GHCR_TOKEN" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+          image=ghcr.io/capnolithyl/mikan-nas
+          docker tag mikan-nas:ci "$image:sha-$GITHUB_SHA"
+          docker push "$image:sha-$GITHUB_SHA"
+          docker tag mikan-nas:ci "$image:experimental"
+          docker push "$image:experimental"
+          docker logout ghcr.io

@@ -65,11 +65,13 @@ function systemPrompt(promptFile,store,memory) {
     CHARACTER_VOICE_REMINDER].join("\n\n");
 }
 
-export function makeServer({store,config,key,promptFile="",generate=generateReply}) {
+export function makeServer({store,config,key,promptFile="",maintenanceFile="/data/.mikan-update-maintenance",generate=generateReply}) {
   if (typeof key!=="string" || key.length<32) throw new Error("MIKAN_REMOTE_KEY must be at least 32 characters");
-  let busy=false,lastReplyAt=0;
+  let busy=false,lastReplyAt=0,activeWrites=0;
+  const maintenance=()=>existsSync(maintenanceFile);
   const unavailable=()=>busy||store.learning.isRunning();
   const server=createServer(async(req,res)=>{
+    let writing=false;
     try {
       const path=new URL(req.url||"/","http://localhost").pathname;
       if (req.method==="GET" && (path==="/"||path==="/workspace") && existsSync(join(WEB_ROOT,"index.html"))) {
@@ -83,9 +85,13 @@ export function makeServer({store,config,key,promptFile="",generate=generateRepl
       if (req.method==="GET" && path==="/app.js") return serveFile(res,join(ROOT,"public/app.js"),"text/javascript; charset=utf-8");
       if (req.method==="GET" && path==="/style.css") return serveFile(res,join(ROOT,"public/style.css"),"text/css; charset=utf-8");
       if (req.method==="GET" && path==="/avatar.webp") return serveFile(res,join(ROOT,"assets/mikan-chat-avatar.webp"),"image/webp");
-      if (req.method==="GET" && path==="/api/health") return json(res,200,{ok:true,service:"mikan-nas"});
+      if (req.method==="GET" && path==="/api/health") return json(res,200,{ok:true,service:"mikan-nas",maintenance:maintenance(),idle:!unavailable()&&activeWrites===0});
       if (!safeEqual(req.headers.authorization?.replace(/^Bearer /i,""),key))
         return json(res,401,{error:"Enter your Mikan NAS access key"});
+      if(req.method!=="GET"&&req.method!=="HEAD"){
+        if(maintenance())return json(res,503,{error:"Mikan is installing an update. Please retry shortly."});
+        writing=true;activeWrites++;
+      }
       if (req.method==="GET" && path==="/api/status")
         return json(res,200,{provider:config.provider,model:config.model,busy:unavailable(),build:BUILD});
       if (req.method==="GET" && path==="/api/profile")
@@ -188,10 +194,10 @@ export function makeServer({store,config,key,promptFile="",generate=generateRepl
       console.error("NAS request error:",String(error?.message||error).slice(0,180));
       if (!res.headersSent) json(res,error.status||500,{error:error.status?error.message:"Request failed"});
       else res.end();
-    }
+    }finally{if(writing)activeWrites--;}
   });
   server.requestTimeout=30000;
-  const timer=setInterval(()=>{if(!unavailable()&&Date.now()-lastReplyAt>=15000)void store.learning.processNext(generate,config).catch(()=>console.error("NAS memory worker failed"));},15000);
+  const timer=setInterval(()=>{if(!maintenance()&&!unavailable()&&Date.now()-lastReplyAt>=15000)void store.learning.processNext(generate,config).catch(()=>console.error("NAS memory worker failed"));},15000);
   timer.unref();server.once("close",()=>clearInterval(timer));
   return server;
 }

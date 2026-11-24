@@ -2,7 +2,7 @@ import {nasActivity} from "../../src/web/nas-activity.ts";
 import {memoryNotice} from "../../src/web/memory-notifications.ts";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { openStore, recall } from "../storage.mjs";
@@ -290,4 +290,24 @@ test("NAS activity persists across reconnect and stays conversation-scoped",asyn
     assert.deepEqual(store.learning.diagnostics(chat.id),[]);
     assert.equal(store.learning.events().cursor,recovered);
   }finally{store.db.close();rmSync(root,{recursive:true,force:true});}
+});
+
+test("maintenance gate prevents writes and reports idle while allowing health and status",async()=>{
+  const root=mkdtempSync(join(tmpdir(),"mikan-maintenance-")),store=openStore(join(root,"db.sqlite3"));
+  const maintenanceFile=join(root,"maintenance"),key="0123456789abcdef0123456789abcdef";
+  const server=makeServer({store,key,maintenanceFile,config:{provider:"nvidia",model:"test",key:"not-a-real-provider-key"}});
+  await new Promise(resolve=>server.listen(0,"127.0.0.1",resolve));
+  const base="http://127.0.0.1:"+server.address().port,headers={Authorization:"Bearer "+key,"Content-Type":"application/json"};
+  try{
+    assert.equal((await (await fetch(base+"/api/health")).json()).maintenance,false);
+    writeFileSync(maintenanceFile,"");
+    const health=await (await fetch(base+"/api/health")).json();
+    assert.equal(health.maintenance,true);assert.equal(health.idle,true);
+    assert.equal((await fetch(base+"/api/conversations",{method:"POST",headers,body:"{}"})).status,503);
+    assert.equal((await fetch(base+"/api/library",{method:"POST",headers,body:JSON.stringify({action:"addFact",args:{fact:"Should not persist"}})})).status,503);
+    assert.equal((await fetch(base+"/api/status",{headers})).status,200);
+    assert.equal(store.conversations().length,0);
+    unlinkSync(maintenanceFile);
+    assert.equal((await fetch(base+"/api/conversations",{method:"POST",headers,body:"{}"})).status,201);
+  }finally{await new Promise(resolve=>server.close(resolve));store.db.close();rmSync(root,{recursive:true,force:true});}
 });

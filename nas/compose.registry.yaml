@@ -1,0 +1,5 @@
+# Preserve the existing Compose project, credentials, data mount and Tailscale port.
+services:
+  mikan:
+    image: ${MIKAN_IMAGE:-mikan-nas:managed}
+    pull_policy: never
