@@ -549,15 +549,22 @@ test("NAS knowledge turns use cached manuscript without public search or memory 
   const lib=createKnowledge({db:store.db,read:async()=>{throw Error("Unexpected network read");}});
   const id="11111111-1111-1111-1111-111111111111";
   store.db.prepare("INSERT INTO notion_pages(id,title,url,last_edited,synced_at) VALUES(?,?,?,?,?)").run(id,"Chapter 1","https://www.notion.so/"+id.replaceAll("-",""),"",1700000000);
-  const chunk=store.db.prepare("INSERT INTO notion_chunks(page_id,title,content) VALUES(?,?,?)").run(id,"Chapter 1","# Approved manuscript prose\n\nA lantern stood beside the window.");
-  store.db.prepare("INSERT INTO notion_fts(rowid,title,content) VALUES(?,?,?)").run(chunk.lastInsertRowid,"Chapter 1","A lantern stood beside the window.");
+  const sceneProse=["A lantern stood beside the window.","Rain fell against the roof.","The door opened into a quiet hall.","A candle burned on the table."];
+  for(const [index,prose] of sceneProse.entries()){
+    const sceneId="22222222-2222-2222-2222-"+String(index+1).padStart(12,"0"),title="1."+(index+1)+" Scene";
+    store.db.prepare("INSERT INTO notion_pages(id,title,url,last_edited,synced_at) VALUES(?,?,?,?,?)").run(sceneId,title,"https://www.notion.so/"+sceneId.replaceAll("-",""),"",1700000000);
+    const content="# Approved manuscript prose\n\n"+prose;
+    const chunk=store.db.prepare("INSERT INTO notion_chunks(page_id,title,content) VALUES(?,?,?)").run(sceneId,title,content);
+    store.db.prepare("INSERT INTO notion_fts(rowid,title,content) VALUES(?,?,?)").run(chunk.lastInsertRowid,title,content);
+    store.db.prepare("INSERT INTO notion_page_relations(page_id,property,target_id,position) VALUES(?,?,?,?)").run(id,"Scenes",sceneId,index);
+  }
   lib.settings({allowNotionCloud:true});
   let publicCalls=0,modelCalls=0,rejectNext=false;
   const server=makeServer({store,key,knowledge:lib,config:{provider:"nvidia",model:"test",key:"synthetic-test-key"},search:async()=>{publicCalls++;throw Error("No public search permitted");},
     generate:async({system,onDelta,history})=>{
       modelCalls++;
       if(system.startsWith("You are a read-only LOCAL reference-library planner"))return JSON.stringify({action:"knowledge",ids:[id],scope:"manuscript"});
-      assert.match(system,/A lantern stood beside the window/);
+      for(const prose of sceneProse)assert.ok(system.includes(prose));
       assert.equal(history.length,1);assert.equal(history[0].role,"user");
       const answer=rejectNext?(rejectNext=false,'The narrator says "The black dragon flew over the castle."'):"The chapter begins with a lantern [1].";
       onDelta(answer);return answer;
@@ -566,14 +573,15 @@ test("NAS knowledge turns use cached manuscript without public search or memory 
   try{
     assert.equal((await fetch(base+"/api/knowledge")).status,401);
     assert.equal((await fetch(base+"/api/knowledge/document?kind=notion&id="+id)).status,401);
-    assert.equal((await (await fetch(base+"/api/knowledge",{headers})).json()).pages.length,1);
+    assert.equal((await (await fetch(base+"/api/knowledge",{headers})).json()).pages.length,5);
     const c=store.newConversation();
     const r=await fetch(base+"/api/chat",{method:"POST",headers,body:JSON.stringify({conversationId:c.id,text:"Read the complete first chapter of Adikameg and tell me what you think"})});assert.match(await r.text(),/event: done/);
-    const saved=store.messages(c.id).at(-1);assert.equal(saved.inference.sources[0].kind,"notion");assert.ok(!JSON.stringify(saved.inference).includes("A lantern stood beside the window"));
+    const saved=store.messages(c.id).at(-1);assert.ok(saved.inference.sources?.length,saved.content);assert.equal(saved.inference.sources[0].kind,"notion");assert.match(saved.inference.sources[0].coverage,/4 scenes/);assert.ok(!JSON.stringify(saved.inference).includes("A lantern stood beside the window"));
     assert.equal(publicCalls,0);assert.equal(modelCalls,1);assert.equal(saved.inference.timing.modelCalls,1);
     // Repeated explicit request uses the same desktop selector, not LLM routing.
     const repeat=await fetch(base+"/api/chat",{method:"POST",headers,body:JSON.stringify({conversationId:c.id,text:"Read the complete first chapter of Adikameg and give me your opinion on the writing, pacing, atmosphere and characters. Discuss all four scenes, but paraphrase everything. Do not use any direct quotations."})});
     assert.match(await repeat.text(),/event: done/);
+    assert.ok(store.messages(c.id).at(-1).inference.sources?.length,store.messages(c.id).at(-1).content);
     assert.equal(store.messages(c.id).at(-1).inference.sources[0].id,id);
     assert.equal(modelCalls,2);
     rejectNext=true;

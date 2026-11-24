@@ -250,5 +250,5 @@ export function createKnowledge({db,file="",apiFactory=notionApi,now=Date.now,re
     }else if(kind==="web"){db.prepare("DELETE FROM nas_web_fts WHERE url=?").run(id);db.prepare("DELETE FROM nas_web_cache WHERE url=?").run(id);}else throw invalid("Unknown knowledge kind");});return status();
   }
   function inspect(kind,id){if(kind==="notion"){const doc=document(id);return {title:doc.title,url:doc.url,content:joinNotionChunks(doc.chunks).slice(0,30000),relatedPages:doc.relatedPages.map(s=>({title:s.title,url:s.url})),missingRelatedPages:doc.missingRelatedPages};}if(kind==="web"){const row=db.prepare("SELECT title,resolved_url AS url,content FROM nas_web_cache WHERE url=?").get(id);if(row)return row;}throw invalid("Cached document not found",404);}
-  return {status,connect,refresh,settings,sync,disconnect,candidates,notionPages:()=>enabled()?pages():[],load,cachedRead,remove,inspect,isRunning:()=>syncing,enabled,webEnabled};
+  return {status,connect,refresh,settings,sync,disconnect,candidates,notionPages:()=>enabled()?pages().map(p=>({...p,kind:"notion"})):[],load,cachedRead,remove,inspect,isRunning:()=>syncing,enabled,webEnabled};
 }
