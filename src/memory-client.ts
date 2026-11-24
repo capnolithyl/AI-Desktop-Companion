@@ -72,6 +72,7 @@ export type InterestStatusChange = {
 export type MemoryJobStatus = {
   processed: number; userSaved: number; characterSaved: number; interestsSaved: number;
   interestChanges: InterestStatusChange[];
+  entries?: MemoryOutcome["entries"];
   reviewQueued: number; queued: number; failed: number;
   lastOutcome: MemoryOutcome | null;
 };
@@ -150,6 +151,10 @@ export const memoryApi = {
   updateInterest: (id: number, item: IncomingInterest) =>
     invoke<void>("memory_update_interest", {id, item}),
   deleteInterest: (id: number) => invoke<void>("memory_delete_interest", {id}),
+  convertFactToInterest: (id: number,item: IncomingInterest) =>
+    invoke<void>("memory_convert_fact_to_interest",{id,item}),
+  convertInterestToFact: (id: number,fact:string,category:MemoryCategory,tags:string[]) =>
+    invoke<void>("memory_convert_interest_to_fact",{id,fact,category,tags}),
   searchInterests: (query: string) => invoke<InterestItem[]>("memory_search_interests", {query}),
   // The old direct command remains compatible, but normal chat now journals
   // its work before starting local Ollama so restarts cannot silently drop it.
