@@ -14,7 +14,7 @@ export type NasMessage={id:string;role:"user"|"assistant";content:string;created
 export type NasFact={id:number;fact:string;category:string;updatedAt:number};
 export type NasBuild={version:string;commit:string;backendHash:string|null;actualBackendHash:string};
 export type NasStatus={provider:string;model:string;busy:boolean;build?:NasBuild};
-export type LearningEvent={id:number;conversationId:string|null;assistantId:string|null;kind:"outcome"|"failed"|"queued"|"skipped";createdAt:number;payload:{saved?:number;reviewQueued?:number;entries?:{description:string;status:string;kind:string}[];stage?:string;validated?:number;proposed?:number;reason?:string}};
+export type LearningEvent={id:number;conversationId:string|null;assistantId:string|null;kind:"outcome"|"failed"|"queued"|"skipped"|"recall";createdAt:number;payload:{saved?:number;reviewQueued?:number;entries?:{description:string;status:string;kind:string}[];stage?:string;validated?:number;proposed?:number;reason?:string;lines?:string[]}};
 export class NasRequestError extends Error {
   constructor(message:string,readonly status:number){super(message);}
 }

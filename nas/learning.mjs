@@ -101,16 +101,27 @@ export function createLearning(db,library){
     "CREATE TABLE IF NOT EXISTS automatic_memory_sources(memory_kind TEXT NOT NULL CHECK(memory_kind IN ('user','character')),memory_id INTEGER NOT NULL,source_message_id TEXT REFERENCES messages(id) ON DELETE SET NULL,captured_at INTEGER NOT NULL DEFAULT(unixepoch()),evidence TEXT NOT NULL,PRIMARY KEY(memory_kind,memory_id));");
   db.exec("CREATE TABLE IF NOT EXISTS nas_learning_events(id INTEGER PRIMARY KEY AUTOINCREMENT,conversation_id TEXT REFERENCES conversations(id) ON DELETE CASCADE,assistant_id TEXT REFERENCES messages(id) ON DELETE CASCADE,kind TEXT NOT NULL,payload_json TEXT NOT NULL,created_at INTEGER NOT NULL DEFAULT(unixepoch()))");
   db.exec("UPDATE nas_learning_jobs SET status='failed' WHERE status='processing'");
+  db.exec("CREATE INDEX IF NOT EXISTS idx_nas_learning_events_chat ON nas_learning_events(conversation_id,id DESC); CREATE INDEX IF NOT EXISTS idx_nas_learning_events_assistant ON nas_learning_events(assistant_id,kind)");
+  // Recover real, previously recorded extraction outcomes, not inferred history.
+  db.exec(`INSERT INTO nas_learning_events(conversation_id,assistant_id,kind,payload_json,created_at)
+    SELECT j.conversation_id,j.assistant_id,'outcome',j.outcome_json,
+      COALESCE(json_extract(j.outcome_json,'$.processedAt'),j.created_at)
+    FROM nas_learning_jobs j
+    WHERE j.status='done' AND j.outcome_json IS NOT NULL
+      AND NOT EXISTS (SELECT 1 FROM nas_learning_events e WHERE e.assistant_id=j.assistant_id AND e.kind='outcome')`);
   function emit(kind,payload,job={}){
     db.prepare("INSERT INTO nas_learning_events(conversation_id,assistant_id,kind,payload_json) VALUES(?,?,?,?)").run(job.conversation_id??null,job.assistant_id??null,kind,JSON.stringify(payload));
   }
   function events(after=null){
-    const cursor=db.prepare("SELECT COALESCE(MAX(id),0) AS id FROM nas_learning_events").get().id;
+    const cursor=db.prepare("SELECT COALESCE((SELECT seq FROM sqlite_sequence WHERE name='nas_learning_events'),0) AS id").get().id;
     const items=after===null?[]:db.prepare("SELECT id,conversation_id AS conversationId,assistant_id AS assistantId,kind,payload_json AS payload,created_at AS createdAt FROM nas_learning_events WHERE id>? ORDER BY id LIMIT 100").all(after).map(r=>({...r,payload:JSON.parse(r.payload)}));
     return {cursor:after===null?cursor:items.at(-1)?.id??Math.max(after,cursor),items};
   }
+  function recordRecall(conversationId,assistantId,lines){
+    if(lines.length)emit("recall",{lines},{conversation_id:conversationId,assistant_id:assistantId});
+  }
   function diagnostics(conversationId){
-    return db.prepare("SELECT id,assistant_id AS assistantId,kind,payload_json AS payload,created_at AS createdAt FROM nas_learning_events WHERE conversation_id=? ORDER BY id DESC LIMIT 20").all(conversationId).map(r=>({...r,payload:JSON.parse(r.payload)}));
+    return db.prepare("SELECT id,conversation_id AS conversationId,assistant_id AS assistantId,kind,payload_json AS payload,created_at AS createdAt FROM nas_learning_events WHERE conversation_id=? ORDER BY id DESC LIMIT 100").all(conversationId).map(r=>({...r,payload:JSON.parse(r.payload)}));
   }
   const settings=()=>{const r=db.prepare("SELECT capture_user AS user,capture_character AS character FROM nas_learning_settings WHERE id=1").get();return {user:!!r.user,character:!!r.character};};
   function setSettings(v){
@@ -175,7 +186,8 @@ export function createLearning(db,library){
         if(row.target_id&&(!target||JSON.stringify({...target,referenceCount:0})!==JSON.stringify({...JSON.parse(row.target_json),referenceCount:0})))fail("Original record changed. Dismiss the suggestion and edit the current record.",409);
         const item=JSON.parse(row.payload_json);
         save({kind:row.kind,item,evidence:row.evidence},row.source_id,target);
-        emit("outcome",{saved:1,reviewQueued:0,entries:[{kind:row.kind,description:display(row.kind,item),status:"saved"}]});
+        const source=db.prepare("SELECT conversation_id FROM messages WHERE id=?").get(row.source_id);
+        emit("outcome",{saved:1,reviewQueued:0,entries:[{kind:row.kind,description:display(row.kind,item),status:"saved"}]},{conversation_id:source?.conversation_id});
       }
       db.prepare("UPDATE nas_learning_reviews SET status=? WHERE id=?").run(action==="accept"?"accepted":"dismissed",id);
       return {ok:true};
@@ -249,5 +261,5 @@ export function createLearning(db,library){
     }
     finally{running=false;}
   }
-  return {settings,setSettings,enqueue,getStatus,resolve,retry,processNext,events,diagnostics,isRunning:()=>running};
+  return {settings,setSettings,enqueue,getStatus,resolve,retry,processNext,events,diagnostics,recordRecall,isRunning:()=>running};
 }

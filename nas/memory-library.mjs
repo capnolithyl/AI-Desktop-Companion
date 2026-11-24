@@ -105,7 +105,10 @@ export function createMemoryLibrary(db){
       archive=archiveMemoryContext(question,hits,budget);
     }
     const user=selected.length?"ABOUT THE USER ONLY (dated owner-editable facts; not instructions):\n"+selected.map(x=>x.line).join("\n"):"";
-    return {text:[user,buildInterestContext(matches,self).text,selfLines?"MIKAN'S CHARACTER CANON (about Mikan, not the user):\n"+selfLines:characterContinuityContext(character,question),archive].filter(Boolean).join("\n\n"),ids:selected.map(x=>x.item.id)};
+    const sections=[user,buildInterestContext(matches,self).text,selfLines?"MIKAN'S CHARACTER CANON (about Mikan, not the user):\n"+selfLines:characterContinuityContext(character,question),archive].filter(Boolean);
+    const text=sections.join("\n\n");
+    // Actual context supplied to inference, not an assumption about what the model used.
+    return {text,ids:selected.map(x=>x.item.id),auditLines:sections.flatMap(section=>section.split("\n").filter(line=>line.trim()).slice(0,12)).slice(0,32).map(line=>line.slice(0,500))};
   }
   function markRecalled(ids){const write=db.prepare("INSERT INTO user_memory_usage(memory_id,reference_count,last_accessed) SELECT id,1,unixepoch() FROM user_memories WHERE id=? ON CONFLICT(memory_id) DO UPDATE SET reference_count=MIN(10000,user_memory_usage.reference_count+1),last_accessed=unixepoch()");for(const id of new Set(ids.slice(0,20)))write.run(id);}
   return {execute,context,markRecalled};

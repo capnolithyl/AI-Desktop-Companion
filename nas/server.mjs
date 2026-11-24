@@ -168,6 +168,7 @@ export function makeServer({store,config,key,promptFile="",generate=generateRepl
             onDelta:part=>sse(res,"delta",{text:part})});
           const saved=store.append(conversationId,"assistant",answer);
           store.library.markRecalled(memory.ids);
+          try{store.learning.recordRecall(conversationId,saved.id,memory.auditLines);}catch{console.error('Could not record NAS memory recall activity');}
           try{store.learning.enqueue(user,saved,conversationId,prior?.role==="assistant"?prior.content:"");}catch{console.error("Could not queue NAS memory extraction");}
           lastReplyAt=Date.now();
           sse(res,"done",{message:saved});
