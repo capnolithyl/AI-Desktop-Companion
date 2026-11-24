@@ -89,3 +89,39 @@ test("saving from standalone settings keeps the Control Center visible", () => {
   const app = readFileSync(new URL("./App.tsx", import.meta.url), "utf8");
   assert.match(app, /if \(standaloneSettings\) setSettingsSaved\(true\);\s+else goCompact\(\);/);
 });
+
+test("warm Control Center decor uses bundled Mikan artwork only where wide layouts allow it", () => {
+  const app=readFileSync(new URL("./App.tsx",import.meta.url),"utf8");
+  const styles=readFileSync(new URL("./styles.css",import.meta.url),"utf8");
+  assert.match(app,/CONTROL_CENTER_PORTRAIT = new URL\("\.\.\/assets\/iki\/mikan-reference\.png"/);
+  assert.match(app,/className="control-portrait-aside"/);
+  assert.match(app,/className="control-header-paws"/);
+  assert.match(styles,/@media\(min-width:1550px\)/);
+  assert.match(styles,/\.control-portrait-aside/);
+  assert.match(styles,/\.control-sidebar-decoration/);
+  assert.match(app,/control-inline-reset/);
+  assert.match(app,/control-outfit-remove/);
+});
+
+test("Memory starts with manageable browsing and preserves hidden maintenance operations", () => {
+  const memory=readFileSync(new URL("./MemoryPanel.tsx",import.meta.url),"utf8");
+  const styles=readFileSync(new URL("./styles.css",import.meta.url),"utf8");
+  assert.match(memory,/visibleLimit\]=useState\(12\)/);
+  assert.match(memory,/className="memory-facts-overview"/);
+  assert.match(memory,/className="memory-disclosure"/);
+  assert.match(memory,/className="memory-record-options"/);
+  assert.match(memory,/MemoryReviews onChanged=\{onRefresh\}/);
+  assert.match(memory,/MemoryImporter facts=\{facts\}/);
+  assert.match(memory,/Show 12 more/);
+  assert.match(styles,/\.memory-record-options/);
+});
+
+test("Brain Lab Mikanify controls cannot stretch past their settings grid", () => {
+  const brain=readFileSync(new URL("./BrainEvalPanel.tsx",import.meta.url),"utf8");
+  const css=readFileSync(new URL("./brain-eval.css",import.meta.url),"utf8");
+  assert.match(brain,/className="brain-mikanify-copy"/);
+  assert.match(brain,/aria-label="Mikanify answer \(experimental second local pass\)"/);
+  assert.match(css,/label\.brain-eval-mikanify/);
+  assert.match(css,/flex-direction:row/);
+  assert.match(css,/overflow-wrap:anywhere/);
+});
