@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode, type MouseEvent as ReactMouseEvent } from "react";
 import {
-  BookHeart, Cat, Eye, History, MessageCircle, Mic,
+  BookHeart, Cat, Eye, History, MessageCircle,
   Palette, PawPrint, Plus, Search, Settings2, Shirt, Smile, Sparkles, Volume2, VolumeX, X
 } from "lucide-react";
 import "./default-companion.css";
@@ -15,7 +15,7 @@ type Props={
   onNewChat:()=>void; onOpenChat:(id:string)=>void; onOpenHistory:()=>void;
   onOpenMemory:()=>void; onOpenSettings:()=>void; onOpenSearch:()=>void;
   onOpenVision:()=>void; onAttach:()=>void; onVoice:()=>void;
-  onMute:()=>void; onExpression:()=>void; onOutfit:()=>void;
+  onMute:()=>void; onExpression:(kind:"smile"|"laugh"|"surprised"|"sad"|"angry"|"nod"|"shake")=>void; onOutfit:()=>void;
   onHide:()=>void;
 };
 
@@ -29,6 +29,7 @@ export function DefaultCompanionShell({
   onOpenVision,onAttach,onVoice,onMute,onExpression,onOutfit,onHide
 }:Props){
   const feedRef=useRef<HTMLDivElement>(null);
+  const [expressionMenuOpen,setExpressionMenuOpen]=useState(false);
   // Hide AND unmount the real Iki player when space cannot accommodate it.
   // Merely CSS-hiding the canvas would leave an unnecessary GPU render loop.
   const [showAvatar,setShowAvatar]=useState(()=>window.innerWidth>1030);
@@ -57,7 +58,7 @@ export function DefaultCompanionShell({
       </div>
       <div className="workspace-top-actions">
         {visionActive&&<button type="button" className="workspace-vision-on" onClick={onOpenVision}
-          title="Live Vision is on · Review or change screen sharing"><Eye size={17}/> Vision on</button>}
+          title="Live Vision is on · Click to turn it off"><Eye size={17}/> Vision on</button>}
         <button type="button" onClick={onOpenSettings} title="Control Center" aria-label="Control Center"><Settings2 size={19}/></button>
         <button type="button" onClick={onHide} title="Hide Mikan" aria-label="Hide Mikan"><X size={19}/></button>
       </div>
@@ -97,7 +98,7 @@ export function DefaultCompanionShell({
         <div className="workspace-composer">
           <div className="workspace-action-chips" role="group" aria-label="Chat tools">
             <button type="button" onClick={onAttach}><Plus size={16}/> Attach</button>
-            <button type="button" onClick={onVoice}><Mic size={16}/> Voice</button>
+            <button type="button" onClick={onVoice} title="Voice settings"><Volume2 size={16}/> Voice</button>
             <button type="button" onClick={onOpenVision} aria-pressed={visionActive}>
               <Eye size={17}/> {visionActive?"Vision on":"Vision"}
             </button>
@@ -119,7 +120,17 @@ export function DefaultCompanionShell({
           <button type="button" onClick={onMute} aria-pressed={muted}>
             {muted?<VolumeX size={17}/>:<Volume2 size={17}/>} {muted?"Unmute":"Mute"}
           </button>
-          <button type="button" onClick={onExpression}><Smile size={17}/> Expression</button>
+          <div className="workspace-expression-wrap">
+            <button type="button" onClick={()=>setExpressionMenuOpen(open=>!open)}
+              aria-haspopup="true" aria-expanded={expressionMenuOpen}
+              title="Choose an Iki expression"><Smile size={17}/> Expression</button>
+            {expressionMenuOpen&&<div className="workspace-expression-menu" role="group" aria-label="Play an Iki expression">
+              {(["smile","laugh","surprised","sad","angry","nod","shake"] as const).map(kind=>
+                <button type="button" key={kind} onClick={()=>{onExpression(kind);setExpressionMenuOpen(false);}}>
+                  {kind[0].toUpperCase()+kind.slice(1)}
+                </button>)}
+            </div>}
+          </div>
           <button type="button" onClick={onOutfit}><Shirt size={17}/> Outfit</button>
         </div>
       </aside>}
