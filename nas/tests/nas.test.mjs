@@ -1,3 +1,6 @@
+import "../../tests/assistant-instructions.test.mjs";
+import "../../src/runtime-context.test.mjs";
+import "../../src/evidence-verification.test.mjs";
 // Run the original desktop regression suites against the same shared modules.
 import "../../src/notion-knowledge.test.mjs";
 import "../../src/notion-reading.test.mjs";
@@ -46,6 +49,7 @@ test("NAS HTTP requires a key, streams replies and persists them",async()=>{
     store,key,config:{provider:"nvidia",model:"test",key:"not-a-real-provider-key"},
     generate:async ({history,onDelta,system})=>{
       assert.match(system,/Flirtiness 95\/100/);
+      assert.match(system,/PERSONAL DETAIL ACCURACY/);assert.match(system,/CONVERSATION FOCUS/);assert.match(system,/America\/Detroit/);
       assert.match(system,/Never call me by my name/);
       assert.equal(history.at(-1).content,"Testing one two");
       onDelta("Me");onDelta("ow!");
@@ -578,6 +582,7 @@ test("NAS knowledge turns use cached manuscript without public search or memory 
     const r=await fetch(base+"/api/chat",{method:"POST",headers,body:JSON.stringify({conversationId:c.id,text:"Read the complete first chapter of Adikameg and tell me what you think"})});assert.match(await r.text(),/event: done/);
     const saved=store.messages(c.id).at(-1);assert.ok(saved.inference.sources?.length,saved.content);assert.equal(saved.inference.sources[0].kind,"notion");assert.match(saved.inference.sources[0].coverage,/4 scenes/);assert.ok(!JSON.stringify(saved.inference).includes("A lantern stood beside the window"));
     assert.equal(publicCalls,0);assert.equal(modelCalls,1);assert.equal(saved.inference.timing.modelCalls,1);
+    assert.ok(store.learning.diagnostics(c.id).filter(e=>e.kind==="recall").every(e=>e.payload.lines.length===0));
     // Repeated explicit request uses the same desktop selector, not LLM routing.
     const repeat=await fetch(base+"/api/chat",{method:"POST",headers,body:JSON.stringify({conversationId:c.id,text:"Read the complete first chapter of Adikameg and give me your opinion on the writing, pacing, atmosphere and characters. Discuss all four scenes, but paraphrase everything. Do not use any direct quotations."})});
     assert.match(await repeat.text(),/event: done/);
@@ -601,4 +606,27 @@ test("NAS knowledge turns use cached manuscript without public search or memory 
     assert.ok(store.learning.diagnostics(c.id).some(e=>e.kind==="skipped"&&e.payload.reason.includes("reference knowledge")));
     assert.equal(store.listMemories().length,0);
   }finally{await new Promise(r=>server.close(r));store.db.close();rmSync(root,{recursive:true,force:true});}
+});
+
+test("NAS strict public research uses shared evidence guard and never streams rejected claims",async()=>{
+  const {executeNasTurn}=await import("../turn.mjs");
+  const root=mkdtempSync(join(tmpdir(),"mikan-strict-grounding-")),store=openStore(join(root,"db.sqlite3"));
+  try{
+    const chat=store.newConversation(),question="What is the release year of the studio album Winterglass?";
+    store.append(chat.id,"user",question);
+    const source={title:"Winterglass studio album release",url:"https://example.org/release",content:"The studio album Winterglass was released in 2023.",kind:"page",publishedDate:"2023-01-01"};
+    let reserved=0;const chunks=[],events=[];
+    const result=await executeNasTurn({store,conversationId:chat.id,question,selected:{provider:"nvidia",model:"test",historyChars:16000},mode:"strict",
+      reserve:()=>reserved++,canRequest:()=>true,search:async()=>[source],read:async()=>source,
+      requestModel:async({system,onDelta})=>{
+        if(system.startsWith("You are a read-only research planner"))return JSON.stringify(reserved===1?{action:"search",query:"Winterglass studio album"}:{action:"none"});
+        assert.match(system,/PERSONAL DETAIL ACCURACY/);assert.match(system,/America\/Detroit/);
+        assert.match(system,/Winterglass was released in 2023/);
+        const answer='The studio album "Winterglass" was released in 2023. [1]\nThey released an album titled "Invented Album" in 2028. [1]';
+        onDelta(answer);return answer;
+      },onDelta:part=>chunks.push(part),activity:e=>events.push(e)});
+    assert.equal(reserved,3);assert.match(result.answer,/2023/);assert.doesNotMatch(result.answer,/Invented Album|2028/);
+    assert.equal(chunks.join(""),result.answer);
+    assert.ok(events.some(e=>e.title==="Research evidence audit"&&e.detail.includes("rejected 1")));
+  }finally{store.db.close();rmSync(root,{recursive:true,force:true});}
 });

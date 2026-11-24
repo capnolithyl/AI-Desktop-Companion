@@ -2,7 +2,7 @@ import {createHash} from "node:crypto";
 import {readFileSync} from "node:fs";
 import {execFileSync} from "node:child_process";
 // Hash the actual running service files, not only the build's claimed revision.
-const files=["build-info.mjs","server.mjs","storage.mjs","memory-library.mjs","learning.mjs","providers.mjs","provider-settings.mjs","research.mjs","turn.mjs","brain-lab.mjs","knowledge.mjs","knowledge-plan.mjs","update-control.mjs","../src/notion-reading.ts","../src/notion-knowledge.ts"];
+const files=["build-info.mjs","server.mjs","storage.mjs","memory-library.mjs","learning.mjs","providers.mjs","provider-settings.mjs","research.mjs","turn.mjs","brain-lab.mjs","knowledge.mjs","knowledge-plan.mjs","update-control.mjs","../src/notion-reading.ts","../src/notion-knowledge.ts","../src/assistant-instructions.ts","../src/personal-grounding.ts","../src/runtime-context.ts","../src/conversation-engine.ts","../src/narration-filter.ts","../src/evidence-verification.ts"];
 export function backendHash(){
   const hash=createHash("sha256");
   for(const name of files){hash.update(name+"\0");hash.update(readFileSync(new URL(name,import.meta.url)));}
