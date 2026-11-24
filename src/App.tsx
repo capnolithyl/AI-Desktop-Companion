@@ -12,6 +12,8 @@ import { invoke } from "@tauri-apps/api/core";
 import { emit, listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { getCurrentWindow, currentMonitor, LogicalSize } from "@tauri-apps/api/window";
 import { companionWindowSize } from "./companion-layout";
+import { AVATAR_BACKGROUNDS, AVATAR_BACKGROUND_KEY, AVATAR_BACKGROUND_EVENT, loadAvatarBackground, readAvatarBackground, saveAvatarBackground, type AvatarBackground } from "./avatar-background";
+import { WorkspacePawSeal, WorkspaceAvatarRays } from "./WorkspaceDecor";
 
 import { initialSettingsTab, initialMemoryTab, isStandaloneSettingsWindow, validSettingsTab, validMemoryTab } from "./settings-window";
 import { register, unregister } from "@tauri-apps/plugin-global-shortcut";
@@ -155,10 +157,10 @@ const WORKSPACE_CHAT_PORTRAIT = new URL("../assets/iki/mikan-chat-avatar.webp", 
 // The open right edge overlaps the balloon border; the fill hides that seam.
 // The same shape mirrors for user messages, including failed/streaming turns.
 function WorkspaceBubbleTail() {
-  return <svg className="workspace-bubble-tail" viewBox="0 0 18 22" aria-hidden="true" focusable="false">
-    <path d="M17 3 H2 Q1 3 2 4 Q10 10 17 18"
-      fill="var(--bubble-tail)" stroke="var(--bubble-edge)" strokeWidth="1.25"
-      strokeLinecap="round" strokeLinejoin="round"/>
+  return <svg className="workspace-bubble-tail" viewBox="0 0 22 24" aria-hidden="true" focusable="false">
+    <path d="M22 3 H16 Q10 7 2 9 Q10 13 16 21 H22Z" fill="var(--bubble-tail)"/>
+    <path d="M16 3 Q10 7 2 9 Q10 13 16 21" fill="none"
+      stroke="var(--bubble-edge)" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
   </svg>;
 }
 
@@ -418,6 +420,26 @@ export default function App() {
   const [portrait, setPortrait] = useState<string | null>(BUNDLED_PORTRAIT);
   const [imageError, setImageError] = useState<string | null>(null);
   const [avatarDisplay, setAvatarDisplay] = useState<AvatarDisplay>(loadAvatarDisplay);
+  const [avatarBackground,setAvatarBackground]=useState<AvatarBackground>(loadAvatarBackground);
+  // The wardrobe is in a separate WebView: synchronize scenery without reloading Iki.
+  useEffect(()=>{
+    const onStorage=(event:StorageEvent)=>{
+      if(event.key===AVATAR_BACKGROUND_KEY)setAvatarBackground(readAvatarBackground(event.newValue));
+    };
+    window.addEventListener("storage",onStorage);
+    let disposed=false;
+    let unlisten:UnlistenFn|undefined;
+    if("__TAURI_INTERNALS__" in window){
+      void listen<AvatarBackground>(AVATAR_BACKGROUND_EVENT,event=>{
+        setAvatarBackground(readAvatarBackground(event.payload));
+      }).then(stop=>{if(disposed)stop();else unlisten=stop;}).catch(console.warn);
+    }
+    return ()=>{disposed=true;window.removeEventListener("storage",onStorage);unlisten?.();};
+  },[]);
+  const changeAvatarBackground=(value:AvatarBackground)=>{
+    setAvatarBackground(value);saveAvatarBackground(value);
+    if("__TAURI_INTERNALS__" in window)void emit(AVATAR_BACKGROUND_EVENT,value).catch(console.warn);
+  };
   const [avatarPresence, setAvatarPresence] = useState(loadAvatarPresencePreferences);
   const [avatarDragging, setAvatarDragging] = useState(false);
   const [portraitMenuAt, setPortraitMenuAt] = useState<MenuPoint | null>(null);
@@ -3399,6 +3421,11 @@ export default function App() {
         selected: avatarDisplay === "animated" && (ikiRig?.id ?? null) === choice.id,
         onSelect: () => { void selectSavedIkiOutfit(choice.id); }
       })) },
+    ...(defaultUi?[{id:"backgrounds",label:"Change background",icon:<Palette size={16}/>,
+      children:AVATAR_BACKGROUNDS.map(choice=>({
+        id:"background:"+choice.id,label:choice.label,selected:avatarBackground===choice.id,
+        onSelect:()=>changeAvatarBackground(choice.id)
+      }))}]:[]),
     { id: "mute", label: settings.voice.muted ? "Unmute Mikan" : "Mute Mikan",
       icon: settings.voice.muted ? <VolumeX size={16}/> : <Volume2 size={16}/>,
       onSelect: toggleVoiceMute },
@@ -3664,10 +3691,9 @@ export default function App() {
       </div>}>
       <DefaultCompanionShell
         avatar={<div className="workspace-avatar-rig" title="Drag Mikan to move this window"
-          onMouseDown={dragPortrait}
-          onContextMenu={event => {event.preventDefault();setPortraitMenuAt({x:event.clientX,y:event.clientY});}}>
-          {avatarContents}
-        </div>}
+           onMouseDown={dragPortrait}>{avatarContents}</div>}
+         avatarBackground={avatarBackground}
+         onAvatarContextMenu={event=>{event.preventDefault();setPortraitMenuAt({x:event.clientX,y:event.clientY});}}
         modelPicker={modelFooter}
         chats={[...conversations].sort((a,b)=>b.updatedAt-a.updatedAt)}
         activeConversationId={activeConversationId}
@@ -3703,6 +3729,7 @@ export default function App() {
           </div>}
           {messages.map(message=><article key={message.id}
             className={"workspace-message "+message.role+(message.failed?" failed":"")}>
+            {message.role==="assistant"&&!message.failed&&message.id===lastReply?.id&&<WorkspaceAvatarRays/>}
             <span className="workspace-message-avatar" aria-hidden="true">
               {message.role==="assistant"?<img className="workspace-chat-portrait" src={WORKSPACE_CHAT_PORTRAIT} alt="" width={40} height={40} draggable={false}/>:<UserRound size={19}/>}
             </span>
@@ -3717,7 +3744,10 @@ export default function App() {
               </div>
               <div className="workspace-message-bubble">
                 <WorkspaceBubbleTail/>
-                <MarkdownText text={message.content||(busy?"Thinking…":"")}/>
+                <div className="workspace-bubble-content">
+                  <MarkdownText text={message.content||(busy?"Thinking…":"")}/>
+                  {message.role==="assistant"&&!message.failed&&message.content.length>=120&&<WorkspacePawSeal/>}
+                </div>
                 <div className="workspace-bubble-footer">
                   <time dateTime={new Date(message.createdAt).toISOString()}>
                     {new Date(message.createdAt).toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"})}
@@ -4896,6 +4926,17 @@ export default function App() {
             </div>
             <small className="wardrobe-hint">Favorites and outfit tags save immediately. The bundled outfit and all imported .iki files remain intact.</small>
           </div>
+          <div className="settings-section-title">Companion background</div>
+          <div className="control-background-options" role="group" aria-label="Default companion background">
+            {AVATAR_BACKGROUNDS.map(choice=><button key={choice.id} type="button"
+              className={"control-background-choice"+(avatarBackground===choice.id?" selected":"")}
+              aria-pressed={avatarBackground===choice.id} onClick={()=>changeAvatarBackground(choice.id)}>
+              <span className="control-background-preview" aria-hidden="true"
+                style={choice.id==="plain"?undefined:{backgroundImage:`url("${import.meta.env.BASE_URL}mikan-backgrounds/${choice.id}.webp")`}}/>
+              <span>{choice.label}</span>{avatarBackground===choice.id&&<Check size={15}/>}
+            </button>)}
+          </div>
+          <small className="wardrobe-hint">Changes apply immediately to the Default desktop portrait. Minimal stays transparent.</small>
           <div className="settings-section-title">Automatic outfits</div>
           <label className="avatar-debug-toggle">
             <input type="checkbox" checked={wardrobeConfig.auto}

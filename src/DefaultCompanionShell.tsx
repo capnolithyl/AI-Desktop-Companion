@@ -1,14 +1,17 @@
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode, type PointerEvent as ReactPointerEvent, type MouseEvent as ReactMouseEvent } from "react";
 import {
-  BookHeart, Cat, Check, Copy, Eye, History, Layers3, LoaderCircle, MessageCircle, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen,
+  BookHeart, Check, Copy, Eye, History, Layers3, LoaderCircle, MessageCircle, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen,
   Palette, PawPrint, Plus, Search, Settings2, Shirt, Smile, Sparkles, Volume2, VolumeX, X
 } from "lucide-react";
 import { clampPanelWidth, resolveWorkspaceWidths, resizeWorkspacePanel, type WorkspaceActivityEntry, type WorkspacePanel, type WorkspaceWidths } from "./workspace-activity";
+import { type AvatarBackground } from "./avatar-background";
+import { WorkspaceBrandEars, WorkspaceHeaderFlourish, WorkspacePeekCat } from "./WorkspaceDecor";
 import "./default-companion.css";
 
 export type WorkspaceChat={id:string;title:string;updatedAt:number};
 type Props={
   avatar:ReactNode; modelPicker:ReactNode; transcript:ReactNode; composer:ReactNode;
+  avatarBackground:AvatarBackground; onAvatarContextMenu:(event:ReactMouseEvent<HTMLElement>)=>void;
   chats:ReadonlyArray<WorkspaceChat>; activeConversationId:string|null;
   transcriptVersion:string; busy:boolean; muted:boolean; ready:boolean; memoryIssue:boolean; visionActive:boolean;
   displayName:string; lastActivity:string; visionBusy:boolean; activityEntries:ReadonlyArray<WorkspaceActivityEntry>;
@@ -21,20 +24,6 @@ type Props={
   onHide:()=>void;
 };
 
-const AVATAR_BACKGROUNDS = [
-  {id:"reading-nook", label:"Reading nook"},
-  {id:"study-nook", label:"Study nook"},
-  {id:"plain", label:"Plain"},
-] as const;
-type AvatarBackground=typeof AVATAR_BACKGROUNDS[number]["id"];
-function readAvatarBackground():AvatarBackground{
-  try {
-    const saved=window.localStorage.getItem("mikan.workspace.avatarBackground");
-    const choice=AVATAR_BACKGROUNDS.find(item=>item.id===saved);
-    if(choice)return choice.id;
-  }catch { /* Keep the default when storage is not available. */ }
-  return "reading-nook";
-}
 type SidePanel = WorkspacePanel;
 const INITIAL_WIDTHS:WorkspaceWidths={chats:225,avatar:305};
 function readPanelWidths():WorkspaceWidths {
@@ -61,7 +50,7 @@ function savePanelPreference(panel:SidePanel,visible:boolean){
  * All actions and JSX slots come from the existing App state.
  */
 export function DefaultCompanionShell({
-  avatar,modelPicker,transcript,composer,chats,activeConversationId,
+  avatar,avatarBackground,onAvatarContextMenu,modelPicker,transcript,composer,chats,activeConversationId,
   transcriptVersion,busy,muted,ready,memoryIssue,visionActive,visionBusy,displayName,lastActivity,activityEntries,
   onDrag,onNewChat,onOpenChat,onOpenHistory,onCopyChatDebug,onOpenCurrentLog,onOpenMemory,onOpenSettings,onOpenSearch,
   onToggleVision,onVoice,onMute,onExpression,onOutfit,onHide
@@ -89,10 +78,6 @@ export function DefaultCompanionShell({
     return ()=>window.clearTimeout(timer);
   },[copyStatus]);
   const [expressionMenuOpen,setExpressionMenuOpen]=useState(false);
-  const [avatarBackground,setAvatarBackground]=useState<AvatarBackground>(readAvatarBackground);
-  useEffect(()=>{
-    try{window.localStorage.setItem("mikan.workspace.avatarBackground",avatarBackground);}catch { /* Session-only fallback. */ }
-  },[avatarBackground]);
   const backgroundImage=avatarBackground==="plain"?undefined:
     `url("${import.meta.env.BASE_URL}mikan-backgrounds/${avatarBackground}.webp")`;
   const [viewportWidth,setViewportWidth]=useState(()=>window.innerWidth);
@@ -165,12 +150,13 @@ export function DefaultCompanionShell({
   return <section className="mikan-workspace" aria-label="Mikan Desktop workspace">
     <header className="workspace-topbar">
       <div className="workspace-brand" onMouseDown={onDrag} title="Drag Mikan">
+        <WorkspaceBrandEars/>
         <PawPrint size={28} strokeWidth={2.2}/>
         <span><strong>Mikan</strong><small>Your desktop companion</small></span>
         <Sparkles size={13} className="workspace-brand-sparkle"/>
       </div>
       <div className="workspace-top-decoration" onMouseDown={onDrag} aria-hidden="true">
-        <PawPrint size={21}/><span/><Sparkles size={13}/><PawPrint size={26}/>
+        <WorkspaceHeaderFlourish/>
       </div>
       <div className="workspace-top-actions">
         <button type="button" onClick={toggleChats} aria-pressed={showChats}
@@ -220,7 +206,7 @@ export function DefaultCompanionShell({
           <History size={17}/> Chat history
         </button>
         <div className="workspace-sidebar-bottom">
-          <div className="workspace-sidebar-cat" aria-hidden="true"><Cat size={44}/><Sparkles size={13}/></div>
+          <div className="workspace-sidebar-cat" aria-hidden="true"><WorkspacePeekCat/></div>
           <button type="button" onClick={onOpenSettings} title="Customize Mikan"><Palette size={20}/> Customize</button>
         </div>
       </aside>}
@@ -248,17 +234,11 @@ export function DefaultCompanionShell({
       {showAvatar&&<aside className="workspace-avatar-pane" aria-label="Animated Mikan companion">
         <div className="workspace-avatar-glow" aria-hidden="true"/>
         <div className="workspace-avatar-card" data-background={avatarBackground}
+          onContextMenu={onAvatarContextMenu}
           style={backgroundImage?{"--workspace-avatar-background":backgroundImage} as CSSProperties:undefined}>
           <div className="workspace-avatar-top">
             <PawPrint size={20}/><strong>Mikan ♡</strong>
-            <select className="workspace-background-select" value={avatarBackground}
-              aria-label="Mikan portrait background" title="Change Mikan's background"
-              onChange={event=>{
-                const choice=AVATAR_BACKGROUNDS.find(item=>item.id===event.target.value);
-                if(choice)setAvatarBackground(choice.id);
-              }}>
-              {AVATAR_BACKGROUNDS.map(item=><option key={item.id} value={item.id}>{item.label}</option>)}
-            </select>
+            <Sparkles size={15}/>
           </div>
           <div className="workspace-iki-stage" aria-label="Animated Mikan portrait">{avatar}</div>
           <div className="workspace-avatar-status" role="status">

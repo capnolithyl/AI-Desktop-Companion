@@ -70,27 +70,44 @@ test("recent chats copy their own debug log without switching the active convers
   assert.match(app,/onOpenCurrentLog=\{\(\)=>setScreen\("log"\)\}/);
 });
 
-test("Default Iki portrait supports local selectable scenery without changing the rig",()=>{
-  assert.match(shell,/mikan\.workspace\.avatarBackground/);
-  assert.match(shell,/id:"reading-nook"/);
-  assert.match(shell,/id:"study-nook"/);
-  assert.match(shell,/id:"plain"/);
+test("Default scene preference is shared by wardrobe and portrait context menu",()=>{
+  const background=readFileSync(new URL("./avatar-background.ts",import.meta.url),"utf8");
+  assert.match(background,/mikan\.workspace\.avatarBackground/);
+  assert.match(background,/id:"reading-nook"/);
+  assert.match(background,/id:"study-nook"/);
+  assert.match(background,/id:"plain"/);
   assert.match(shell,/mikan-backgrounds\/\$\{avatarBackground\}\.webp/);
-  assert.match(shell,/aria-label="Mikan portrait background"/);
+  assert.doesNotMatch(shell,/workspace-background-select/);
+  assert.match(shell,/onContextMenu=\{onAvatarContextMenu\}/);
+  assert.match(app,/label:"Change background"/);
+  assert.match(app,/aria-label="Default companion background"/);
+  assert.match(app,/emit\(AVATAR_BACKGROUND_EVENT,value\)/);
+  assert.match(app,/listen<AvatarBackground>\(AVATAR_BACKGROUND_EVENT/);
   assert.match(css,/var\(--workspace-avatar-background\)/);
   assert.match(css,/mask-image:linear-gradient/);
 });
 
-test("Default chat uses seamless mirrored SVG tails and bubble-local timestamps",()=>{
+test("Default chat uses continuous filled mirrored SVG tails and bubble-local timestamps",()=>{
   assert.match(app,/function WorkspaceBubbleTail\(\)/);
-  assert.match(app,/d="M17 3 H2 Q1 3 2 4 Q10 10 17 18"/);
-  assert.match(app,/fill="var\(--bubble-tail\)" stroke="var\(--bubble-edge\)"/);
+  assert.match(app,/d="M22 3 H16 Q10 7 2 9 Q10 13 16 21 H22Z" fill="var\(--bubble-tail\)"/);
+  assert.match(app,/stroke="var\(--bubble-edge\)"/);
   assert.equal((app.match(/<WorkspaceBubbleTail\/>/g)||[]).length,2);
-  assert.match(css,/\.workspace-message\.user \.workspace-bubble-tail \{left:auto;right:-15px;transform:scaleX\(-1\)/);
+  assert.match(css,/\.workspace-message\.user \.workspace-bubble-tail \{left:auto;right:-17px;transform:scaleX\(-1\)/);
   assert.doesNotMatch(css,/\.workspace-message-bubble::before/);
   assert.match(css,/\.workspace-message\.failed \.workspace-message-bubble \{--bubble-edge:#f09090/);
   assert.match(app,/<div className="workspace-bubble-footer">\s*<time/);
-  assert.match(app,/<WorkspaceBubbleTail\/>\s*<MarkdownText/);
+  assert.match(app,/<WorkspaceBubbleTail\/>\s*<div className="workspace-bubble-content">/);
+});
+
+test("Default ornaments are scalable decorative vectors and do not overlap text",()=>{
+  const decor=readFileSync(new URL("./WorkspaceDecor.tsx",import.meta.url),"utf8");
+  assert.match(shell,/<WorkspaceHeaderFlourish\/>/);
+  assert.match(shell,/<WorkspaceBrandEars\/>/);
+  assert.match(shell,/<WorkspacePeekCat\/>/);
+  assert.match(app,/<WorkspaceAvatarRays\/>/);
+  assert.match(app,/<WorkspacePawSeal\/>/);
+  assert.match(decor,/aria-hidden="true"/);
+  assert.match(css,/\.workspace-bubble-content \{display:flex/);
 });
 
 test("Default chat uses the bundled cropped Mikan portrait, including while thinking",()=>{
