@@ -60,7 +60,7 @@ USER root
 RUN node -e 'const fs=require("fs");const p="/app/nas/build-info.json";const v=JSON.parse(fs.readFileSync(p));v.commit="invalid";fs.writeFileSync(p,JSON.stringify(v));'
 USER node
 EOF
-docker build -t mikan-nas:test-candidate -f "$root/bad.Dockerfile" "$root"
+docker build -t mikan-nas:test-candidate - <"$root/bad.Dockerfile"
 if sudo sh "$root/update.sh"; then echo "Invalid candidate unexpectedly passed"; exit 1; fi
 [ "$(current)" = "$good" ]
 health | grep -Fq '"maintenance":false'
