@@ -319,7 +319,7 @@ async function executeOne(
       // Model-led NVIDIA may execute search_web/read_webpage after this prompt.
       // Do not tell it research already failed just because no query was preplanned.
       publicWebRequested:webRequest?.autoSearch===true ||
-        (nativeWebAllowed===true && researchPlanned),
+        (nativeWebAllowed===true && researchPlanned===true),
       plannedPublicSearch:!!researchQuery,
       plannedButNotExecuted:researchPlanned&&!webRequest?.autoSearch &&
         nativeWebAllowed!==true
