@@ -3646,7 +3646,7 @@ export default function App() {
         onDrag={dragPortrait}
         onNewChat={clearChat}
         onOpenChat={id=>{void openConversation(id);}}
-        onOpenHistory={()=>setScreen("log")}
+        onOpenHistory={()=>openMemory("chats")}
         onOpenMemory={()=>openMemory("facts")}
         onOpenSettings={openSettings}
         onOpenSearch={()=>setScreen("search")}
