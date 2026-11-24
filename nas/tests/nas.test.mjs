@@ -47,6 +47,12 @@ test("NAS HTTP requires a key, streams replies and persists them",async()=>{
   await new Promise(resolve=>server.listen(0,"127.0.0.1",resolve));
   const base="http://127.0.0.1:"+server.address().port;
   try {
+    const page=await fetch(base+"/legacy");
+    assert.equal(page.status,200);
+    const csp=page.headers.get("content-security-policy");
+    const connect=csp.split(";").map(part=>part.trim()).find(part=>part.startsWith("connect-src "));
+    assert.equal(connect,"connect-src 'self' data:");
+    assert.match(csp,/script-src 'self';/);
     assert.equal((await fetch(base+"/api/status")).status,401);
     const headers={Authorization:"Bearer "+key,"Content-Type":"application/json"};
     assert.equal((await fetch(base+"/api/profile")).status,401);

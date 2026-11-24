@@ -30,10 +30,11 @@ async function readJson(req,max=8192) {
   try {return JSON.parse(Buffer.concat(chunks).toString("utf8")||"{}");}
   catch {const error=new Error("Invalid JSON request");error.status=400;throw error;}
 }
+// Iki fetches embedded PNG data URLs during texture decoding. Keep external network origins blocked.
 function serveFile(res,filename,type) {
   const headers={"Content-Type":type,"X-Content-Type-Options":"nosniff",
     "Referrer-Policy":"no-referrer","Cache-Control":"no-store",
-    "Content-Security-Policy":"default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; worker-src 'self' blob:; connect-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'"};
+    "Content-Security-Policy":"default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; worker-src 'self' blob:; connect-src 'self' data:; base-uri 'none'; form-action 'self'; frame-ancestors 'none'"};
   res.writeHead(200,headers);
   res.end(readFileSync(filename));
 }
