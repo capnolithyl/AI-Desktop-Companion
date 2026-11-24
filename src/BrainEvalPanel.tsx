@@ -225,6 +225,31 @@ export function BrainEvalPanel({settings,availableModels}:{settings:Settings;ava
     catch(error){setMessage("Clipboard unavailable: "+String(error))}
   }
 
+  const metricRows = metrics ? ([
+          ["No detected failures",metrics.passRate+"%",metrics.passed+"/"+metrics.turns+" turns, includes unverified"],
+          ["Verified checks",metrics.verifiedPassRate+"%",metrics.verifiedPassed+"/"+metrics.turns+" turns"],
+          ["Exact route labels",metrics.routes+"%","diagnostic; labels alone don't fail a test"],
+          ["Functional routing",metrics.behavioralRouting+"%","search-intent behavior"],
+          ["Web decisions",metrics.webAgreement+"%",metrics.webChecks+" observed · "+metrics.unnecessaryWeb+" extra · "+metrics.missedWeb+" missed"],
+          ["Real web searches",String(metrics.liveSearches),metrics.liveSearchesWithSources+
+            " with sources · "+metrics.liveSources+" returned snippets"],
+          ["Evidence failures",String(metrics.evidenceFailures),"searches with no accepted evidence; not a verified answer"],
+          ["Source-anchored facts",String(metrics.evidenceFacts),metrics.evidencePasses+
+            " search turns with exact quotes · "+metrics.evidenceUnavailable+
+            " without matched extracts · not independently fact-verified"],
+          ["Recommendation shortlist",String(metrics.shortlistedItems)+" admitted",metrics.rejectedItems+
+            " rejected · "+metrics.noSupportedMatches+" turns with no supported matches"],
+          ["Verified roles",String(metrics.attributedRoles),metrics.excludedReferences+
+            " prior reference(s) excluded"],
+          ["Memory fact coverage",metrics.recall+"%",metrics.memoryRecordMisses+" exact row misses · "+
+            metrics.memoryDistractors+" extra records"],
+          ["Factual answers",metrics.answers===null?"Not run":metrics.answers+"%",metrics.answerChecks+" graded turns"],
+          ["Conversation reviews",String(metrics.reviewTurns),metrics.qualityFlagTurns+" potential quality warnings"],
+          ["Read-only memory previews",String(metrics.memoryPreviews),metrics.memoryPreviewMisses+" minimum-fact misses; review meaning manually"],
+          ["Model speed",metrics.tokensPerSecond===null?"Not measured":metrics.tokensPerSecond+" tok/s","generation only"],
+          ["Elapsed",formatMs(metrics.elapsedMs),metrics.cases+" scenario runs"]
+        ] as const) : [];
+
   return <div className="brain-eval-panel">
     <header className="brain-workspace-header">
       <div className="brain-workspace-icon"><BrainCircuit size={27}/></div>
@@ -587,34 +612,20 @@ export function BrainEvalPanel({settings,availableModels}:{settings:Settings;ava
       <div ref={resultsRef} className="settings-section-title brain-eval-results-anchor">
         <Activity size={17}/> Results dashboard · {report.model}
       </div>
+      <div className="brain-section-heading"><h3>Core results</h3><span>Latest model · key outcomes</span></div>
       <div className="brain-eval-metrics">
-        {([
-          ["No detected failures",metrics.passRate+"%",metrics.passed+"/"+metrics.turns+" turns, includes unverified"],
-          ["Verified checks",metrics.verifiedPassRate+"%",metrics.verifiedPassed+"/"+metrics.turns+" turns"],
-          ["Exact route labels",metrics.routes+"%","diagnostic; labels alone don't fail a test"],
-          ["Functional routing",metrics.behavioralRouting+"%","search-intent behavior"],
-          ["Web decisions",metrics.webAgreement+"%",metrics.webChecks+" observed · "+metrics.unnecessaryWeb+" extra · "+metrics.missedWeb+" missed"],
-          ["Real web searches",String(metrics.liveSearches),metrics.liveSearchesWithSources+
-            " with sources · "+metrics.liveSources+" returned snippets"],
-          ["Evidence failures",String(metrics.evidenceFailures),"searches with no accepted evidence; not a verified answer"],
-          ["Source-anchored facts",String(metrics.evidenceFacts),metrics.evidencePasses+
-            " search turns with exact quotes · "+metrics.evidenceUnavailable+
-            " without matched extracts · not independently fact-verified"],
-          ["Recommendation shortlist",String(metrics.shortlistedItems)+" admitted",metrics.rejectedItems+
-            " rejected · "+metrics.noSupportedMatches+" turns with no supported matches"],
-          ["Verified roles",String(metrics.attributedRoles),metrics.excludedReferences+
-            " prior reference(s) excluded"],
-          ["Memory fact coverage",metrics.recall+"%",metrics.memoryRecordMisses+" exact row misses · "+
-            metrics.memoryDistractors+" extra records"],
-          ["Factual answers",metrics.answers===null?"Not run":metrics.answers+"%",metrics.answerChecks+" graded turns"],
-          ["Conversation reviews",String(metrics.reviewTurns),metrics.qualityFlagTurns+" potential quality warnings"],
-          ["Read-only memory previews",String(metrics.memoryPreviews),metrics.memoryPreviewMisses+" minimum-fact misses; review meaning manually"],
-          ["Model speed",metrics.tokensPerSecond===null?"Not measured":metrics.tokensPerSecond+" tok/s","generation only"],
-          ["Elapsed",formatMs(metrics.elapsedMs),metrics.cases+" scenario runs"]
-        ] as const).map(([label,value,note])=><div key={label} className="brain-eval-metric">
+        {metricRows.slice(0,6).map(([label,value,note])=><div key={label} className="brain-eval-metric">
           <span>{label}</span><strong>{value}</strong><small>{note}</small>
         </div>)}
       </div>
+      <details className="brain-eval-explainer brain-metric-extra">
+        <summary>Detailed diagnostics <span>Evidence, roles, recall, speed and more</span></summary>
+        <div className="brain-eval-metrics">
+          {metricRows.slice(6).map(([label,value,note])=><div key={label} className="brain-eval-metric">
+          <span>{label}</span><strong>{value}</strong><small>{note}</small>
+        </div>)}
+        </div>
+      </details>
       {previousRun&&<p className="brain-eval-subtitle">
         Previous run: {previousRun.passRate}% ({previousRun.model}, {previousRun.mode})
         {previousRun.mode===report.mode?" · change "+(metrics.passRate-previousRun.passRate>=0?"+":"")+
