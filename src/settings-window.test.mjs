@@ -13,10 +13,10 @@ test("standalone settings route is opt-in and does not affect the compact chat w
 });
 test("deep-link and reopen targets are validated", () => {
   assert.equal(initialSettingsTab("?settings=1&tab=brain"), "brain");
-  assert.equal(initialSettingsTab("?tab=garbage"), "appearance");
+  assert.equal(initialSettingsTab("?tab=garbage"), "home");
   assert.equal(initialMemoryTab("?memoryTab=chats"), "chats");
   assert.equal(validSettingsTab("memory"), "memory");
-  assert.equal(validSettingsTab(""), "appearance");
+  assert.equal(validSettingsTab(""), "home");
   assert.equal(validMemoryTab("../../foo"), "facts");
 });
 
@@ -50,4 +50,10 @@ test("failed desktop bundle loading reports an error instead of a perpetual spin
   const entry = readFileSync(new URL("./main.tsx", import.meta.url), "utf8");
   assert.match(entry, /\.catch\(error => \{/);
   assert.match(entry, /Could not start Mikan/);
+});
+
+test("modern settings has a home and a dedicated vision section", () => {
+  assert.equal(validSettingsTab("home"), "home");
+  assert.equal(validSettingsTab("vision"), "vision");
+  assert.equal(initialSettingsTab("?settings=1"), "home");
 });
