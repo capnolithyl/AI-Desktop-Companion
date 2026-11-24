@@ -3419,9 +3419,15 @@ export default function App() {
           </div>
           <div className="dock-actions">
             {liveVision.enabled && <button type="button" className="chat-vision-active"
-              aria-label="Live Vision is active. Turn it off" title="Live Vision is ON · Turn off screen capture"
+              aria-label="Live Vision is active. Turn it off" title={`Live Vision captures every ${liveVision.captureIntervalSeconds}s and is analyzed only during chat · Click to disable`}
               disabled={liveVisionBusy} onClick={()=>void setLiveVisionEnabled(false)}>
               <Eye size={13}/><span>Vision on</span><span aria-hidden="true" className="chat-live-dot"/>
+            </button>}
+            {!settings.voice.muted && voiceState!=="idle" && <button type="button"
+              className="dock-icon chat-voice-active"
+              title={voiceState==="synthesizing"?"Cancel speech preparation":"Stop Mikan speaking"}
+              aria-label="Stop speaking" onClick={stopSpeech}>
+              {voiceState==="synthesizing"?<LoaderCircle size={17} className="spin"/>:<Square size={15} fill="currentColor"/>}
             </button>}
             <button type="button" className="dock-icon chat-history-action"
               title="Conversation history (/log)" aria-label="Conversation history"
@@ -3429,13 +3435,13 @@ export default function App() {
             <div className="chat-menu-wrap" ref={chatMenuRef}>
               <button type="button" ref={chatMenuButtonRef} className={"dock-icon chat-menu-trigger"+(chatMenuOpen?" active":"")}
                 title="More chat actions" aria-label="More chat actions"
-                aria-haspopup="true" aria-expanded={chatMenuOpen} aria-controls="chat-quick-menu"
+                aria-haspopup="dialog" aria-expanded={chatMenuOpen} aria-controls="chat-quick-menu"
                 onClick={()=>{
                   const opening=!chatMenuOpen;
                   setChatMenuOpen(opening);setChatToolsOpen(false);
                   if(opening) requestAnimationFrame(()=>chatMenuRef.current?.querySelector<HTMLButtonElement>(".chat-quick-menu button")?.focus());
                 }}><Ellipsis size={21}/></button>
-              {chatMenuOpen && <div className="chat-quick-menu" id="chat-quick-menu" aria-label="Chat actions" role="group">
+              {chatMenuOpen && <div className="chat-quick-menu" id="chat-quick-menu" aria-label="Quick chat actions" role="dialog">
                 <div className="chat-quick-menu-title"><Sparkles size={14}/> QUICK ACTIONS</div>
                 <button type="button" disabled={busy||!memoryReady}
                   onClick={()=>{setChatMenuOpen(false);clearChat();}}>
@@ -3453,16 +3459,15 @@ export default function App() {
                   <span>{liveVision.enabled?"Turn Live Vision off":"Turn Live Vision on"}</span>
                   {liveVision.enabled&&<span className="chat-menu-active-dot" aria-hidden="true"/>}
                 </button>
-                <button type="button" disabled={!settings.voice.muted&&(!lastReply?.content||lastReply.failed)}
+                {!settings.voice.muted && <button type="button" disabled={!lastReply?.content||lastReply.failed}
                   onClick={()=>{
                     setChatMenuOpen(false);
-                    if(settings.voice.muted) toggleVoiceMute();
-                    else if(voiceState==="idle") void speak(lastReply?.content??"");
+                    if(voiceState==="idle") void speak(lastReply?.content??"");
                     else stopSpeech();
                   }}>
-                  {voiceState!=="idle"&&!settings.voice.muted?<Square size={16}/>:<Volume2 size={17}/>}
-                  <span>{settings.voice.muted?"Unmute Mikan":voiceState==="idle"?"Read latest reply aloud":"Stop speaking"}</span>
-                </button>
+                  {voiceState!=="idle"?<Square size={16}/>:<Volume2 size={17}/>}
+                  <span>{voiceState==="idle"?"Read latest reply aloud":"Stop speaking"}</span>
+                </button>}
                 <button type="button" aria-pressed={settings.voice.muted}
                   onClick={()=>{setChatMenuOpen(false);toggleVoiceMute();}}>
                   {settings.voice.muted?<VolumeX size={17}/>:<Volume2 size={17}/>}
@@ -3589,8 +3594,9 @@ export default function App() {
         <textarea
           ref={inputRef}
           aria-label="Message Mikan"
+          title="Enter sends · Shift+Enter adds a line · /help lists commands"
           rows={2}
-          placeholder="Message Mikan…  /help for commands"
+          placeholder="Message Mikan…"
           value={input}
           onChange={event => setInput(event.target.value)}
           onKeyDown={event => {
