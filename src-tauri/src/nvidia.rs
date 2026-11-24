@@ -493,6 +493,10 @@ async fn grounded_public_reply(
         }
     }else{initial};
     let (verified,rejected)=cloud_evidence::verified_passages(&final_plan.passages,sources);
+    let simple=request.research_mode.as_deref()==Some("simple");
+    let summary=if simple {
+        cloud_evidence::supported_simple_answer(&final_plan,&verified,sources)
+    }else{None};
     let source_ids=verified.iter().map(|item|item.source).collect::<Vec<_>>();
     // Accepted source text can include a verified but nonfactual page heading.
     // Count actual displayable items, not all model-proposed subject labels.
@@ -500,12 +504,13 @@ async fn grounded_public_reply(
         .iter().filter(|item|item.subject.is_some()).count();
     let _=app.emit("mikan://evidence-tool",json!({
         "requestId":request.request_id,
-        "status":if verified.is_empty(){"insufficient"}else{"grounded"},
+        "status":if summary.is_some(){"citation-only"}else if verified.is_empty(){"insufficient"}else{"grounded"},
         "accepted":verified.len(),"rejected":rejected,
         "structured":structured,
         "pagesRead":pages_read,"sourceIds":source_ids
     }));
-    cloud_evidence::render_grounded_with_tone(&verified,sources,final_plan.tone.as_deref())
+    summary.unwrap_or_else(||
+        cloud_evidence::render_grounded_with_tone(&verified,sources,final_plan.tone.as_deref()))
 }
 
 
