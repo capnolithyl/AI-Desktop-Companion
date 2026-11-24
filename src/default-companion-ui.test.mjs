@@ -118,3 +118,12 @@ test("Default chat uses the bundled cropped Mikan portrait, including while thin
   assert.equal(portrait.toString("ascii",0,4),"RIFF");
   assert.equal(portrait.toString("ascii",8,12),"WEBP");
 });
+
+test("short balloons leave a straight side edge for the tail and wardrobe styles load independently",()=>{
+  const globalCss=readFileSync(new URL("./styles.css",import.meta.url),"utf8");
+  assert.match(css,/border-radius:25px;min-height:60px/);
+  assert.match(css,/border-top-left-radius:19px;border-bottom-left-radius:16px/);
+  assert.match(css,/border-top-right-radius:19px;border-bottom-right-radius:16px/);
+  assert.match(globalCss,/\.control-background-options \{display:grid/);
+  assert.doesNotMatch(css,/\.control-background-options \{/);
+});
