@@ -1794,3 +1794,18 @@ button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px
 .settings-standalone .settings-body input[type=file] {color:#d6b6ab;}
 .settings-standalone .settings-body .personality-presets,
 .settings-standalone .settings-body .personality-sliders {color:#fff0e5;}
+
+@keyframes mikan-control-reveal {
+  from { opacity:0; transform:translateY(7px); }
+  to { opacity:1; transform:translateY(0); }
+}
+.settings-standalone .control-provider-pane,
+.settings-standalone .control-home,
+.settings-standalone .settings-body details[open] > :not(summary) {
+  animation:mikan-control-reveal .23s ease-out both;
+}
+@media(prefers-reduced-motion:reduce){
+  .settings-standalone .control-provider-pane,
+  .settings-standalone .control-home,
+  .settings-standalone .settings-body details[open] > :not(summary) {animation:none;}
+}
