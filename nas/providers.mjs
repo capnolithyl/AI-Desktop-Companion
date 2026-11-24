@@ -3,7 +3,7 @@ export function providerConfig(env = process.env) {
   const provider = (env.MIKAN_PROVIDER || "nvidia").toLowerCase();
   if (!["nvidia","openrouter","gemini"].includes(provider)) throw new Error("Unsupported MIKAN_PROVIDER");
   const defaults = {
-    nvidia:"nvidia/nemotron-3.5-lightning-30b-a3b",
+    nvidia:"nvidia/nemotron-3-ultra-550b-a55b",
     openrouter:"openrouter/free",
     gemini:"gemini-2.5-flash"
   };
