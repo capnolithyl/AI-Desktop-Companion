@@ -356,6 +356,7 @@ async function executeOne(
         // Explicitly supplied synthetic memory fixtures are a valid answer
         // source even when the coarse research route over-classifies a turn.
         cloudHasRelevantMemories:selectedMemories.length>0,
+        currentYear:new Date().getFullYear(),
         // NVIDIA model-led Lab turns use native read-only tools under the same
         // permission gate as production. Other providers retain planned routes.
         cloudAllowWeb:selection.provider==="nvidia"

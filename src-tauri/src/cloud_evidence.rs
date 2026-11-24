@@ -267,7 +267,13 @@ pub(crate) fn render_grounded_with_tone(
         return if refs.is_empty(){
             "I couldn't verify the requested details from any public sources. I don't want to guess.".into()
         } else {
-            format!("I found relevant pages {refs}, but the retrieved evidence didn't establish the specific details. I'd rather not make up dates, places, or other facts.")
+            // The absence of a verified *new* fact should not hide what the
+            // search actually found. Show bounded source titles as search
+            // context, never imply that these sources prove a new announcement.
+            let found=sources.iter().take(2).enumerate()
+                .map(|(i,source)|format!("“{}” [{}]",plain(&source.title,110),i+1))
+                .collect::<Vec<_>>().join(" and ");
+            format!("I checked, but these results didn't establish the specific update you asked about. The pages included {found}. Those aren't confirmation of a newer announcement or release date, so I can't verify one from this search.")
         };
     }
     // Model-requested passages still require presentation filtering.
@@ -382,6 +388,15 @@ mod tests {
         assert!(answer.contains("Sonic Temple"));
         assert!(!answer.contains("only upcoming"));
         assert!(!answer.contains("Comedy Show"));
+    }
+    #[test]
+    fn missing_confirmation_reports_actual_search_context_not_vague_source_numbers(){
+        let sources=docs();
+        let answer=render_grounded(&[],&sources);
+        assert!(answer.contains("Concert calendar"));
+        assert!(answer.contains("Shadows Fall official tour"));
+        assert!(!answer.contains("I found relevant pages"));
+        assert!(answer.contains("didn't establish"));
     }
     #[test]
     fn generic_calendar_excerpts_cannot_prove_event_details(){

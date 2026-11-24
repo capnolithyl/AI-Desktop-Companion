@@ -738,12 +738,18 @@ pub(crate) async fn chat(app:&AppHandle,request:&ChatRequest,key:&str,emitted:&A
                             json!({"error":"Public web tools are disabled for this turn"})
                         } else {
                             public_tool_used=true;
-                            if name=="search_web" && direct_document.is_none() {
+                            let mut tool_args=args.clone();
+                            if name=="search_web" && direct_document.is_none(){
                                 if let Some(query)=args["query"].as_str(){
-                                    search_query=Some(query.to_owned());
+                                    if let Some(fresher)=cloud_web_tools::repair_stale_news_query(
+                                        query,request.current_year){
+                                        tool_args["query"]=json!(fresher);
+                                        tool_args["recent"]=json!(true);
+                                    }
+                                    search_query=tool_args["query"].as_str().map(str::to_owned);
                                 }
                             }
-                            let response=cloud_web_tools::execute_tool(app,request,name,&args,
+                            let response=cloud_web_tools::execute_tool(app,request,name,&tool_args,
                                 &mut sources,"NVIDIA").await;
                             if name=="read_webpage" && response.get("error").is_none(){
                                 if let Some(url)=args["url"].as_str(){

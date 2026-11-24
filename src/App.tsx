@@ -2821,6 +2821,7 @@ export default function App() {
           openrouterModel: settings.openrouterModel,
           nvidiaModel: settings.nvidiaModel,
           cloudAllowWeb: cloudMaySearch,
+          currentYear:new Date().getFullYear(),
           cloudAllowMemory: modelLed && !groundedChapterTurn && !withSearch &&
             !useNotion && !attachment && !screenshot && !liveFrame && !allowRoleplay,
           researchMode:settings.researchMode,

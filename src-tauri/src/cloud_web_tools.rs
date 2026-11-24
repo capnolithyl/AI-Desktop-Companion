@@ -16,6 +16,32 @@ pub(crate) fn add_sources(
 }
 
 
+/// The model sometimes asks for *new announcements* using a string of only
+/// earlier years. If at least two previous years are constraining a
+/// clearly current-looking query, remove those stale year filters and include
+/// the owner's current year. This is search-query repair after the model chose
+/// to browse, not another automatic web-routing classifier.
+pub(crate) fn repair_stale_news_query(query:&str,current_year:Option<u16>)->Option<String>{
+    let year=current_year.filter(|year|(2020..=2099).contains(year))?;
+    let lower=query.to_ascii_lowercase();
+    let current_terms=["latest","newest","upcoming","new album","new release",
+        "new record","announcement","announced","recent news"];
+    if !current_terms.iter().any(|term|lower.contains(term)){return None;}
+    let parse_year=|word:&str|->Option<u16>{
+        let cleaned=word.trim_matches(|c:char|!c.is_ascii_digit());
+        if cleaned.len()==4 && cleaned.bytes().all(|c|c.is_ascii_digit()){
+            cleaned.parse::<u16>().ok().filter(|year|(2020..=2099).contains(year))
+        }else{None}
+    };
+    let words=query.split_whitespace().collect::<Vec<_>>();
+    let years=words.iter().filter_map(|word|parse_year(word)).collect::<Vec<_>>();
+    if years.len()<2 || years.iter().any(|found|*found>=year){return None;}
+    let base=words.into_iter().filter(|word|parse_year(word).is_none())
+        .collect::<Vec<_>>().join(" ");
+    let refreshed=format!("{base} {year}");
+    (refreshed.chars().count()<=250).then_some(refreshed)
+}
+
 /// Upgrade an existing search result in place, preserving its citation index.
 /// A webpage read must not silently disappear because its search URL was
 /// already present among the original snippets.
@@ -55,7 +81,8 @@ pub(crate) async fn execute_tool(
                 "requestId":request.request_id,"text":format!("{provider} searching: {query}")
             }));
             match source_priority::search(
-                request.searxng_endpoint.clone(),query.to_owned(),false,
+                request.searxng_endpoint.clone(),query.to_owned(),
+                request.research_recent || args["recent"].as_bool()==Some(true),
                 &request.source_preferences,request.source_topic.as_deref()
             ).await {
                 Ok(found) => {
@@ -87,6 +114,19 @@ pub(crate) async fn execute_tool(
 #[cfg(test)]
 mod tests{
     use super::*;
+    #[test]
+    fn news_query_repair_anchors_stale_multi_year_search_to_current_year(){
+        assert_eq!(repair_stale_news_query(
+            "Cattle Decapitation Terrasite 2023 new album announcement 2024 2025",
+            Some(2026)).as_deref(),
+            Some("Cattle Decapitation Terrasite new album announcement 2026"));
+        assert!(repair_stale_news_query("Napoleon wars 1805 1815",Some(2026)).is_none());
+        assert!(repair_stale_news_query("2023 2024 tax filing",Some(2026)).is_none());
+        assert!(repair_stale_news_query("latest Vulkan release 2026",Some(2026)).is_none());
+        assert!(repair_stale_news_query("new album announced 2025",Some(2026)).is_none());
+        assert!(repair_stale_news_query(
+            "new album announcement 2024 2025",None).is_none());
+    }
     #[test]
     fn evidence_enrichment_cannot_erase_a_direct_document_read(){
         let url="https://example.org/readme";
