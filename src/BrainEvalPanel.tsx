@@ -107,7 +107,7 @@ export function BrainEvalPanel({settings,availableModels}:{settings:Settings;ava
     }
     const numbers=[...new Set(entries.map(value=>Number(value.replace(/^#/,""))))];
     selectOnly(numbers.map(number=>EVAL_SCENARIOS[number-1].id));
-    setCatalogOpen(true);
+    setWorkspaceTab("scenarios");
     setNumberFeedback("Selected "+numbers.length+" scenario(s): "+numbers.map(number=>"#"+number).join(", "));
   };
   const unresolved=new Set<BrainCaseStatus>(["failed","review","incomplete","untested","stale"]);
@@ -157,7 +157,7 @@ export function BrainEvalPanel({settings,availableModels}:{settings:Settings;ava
     setStatusFilter(config.statusFilter);
     setSearch(config.search);
     setPresetName(preset.name);
-    setCatalogOpen(true);
+    setWorkspaceTab("scenarios");
     setMessage("Loaded "+preset.name+" ("+knownIds.length+" scenarios, "+
       (config.mode==="live"?knownModels.length:1)+" model(s))."+
       (unknownIds.length?" "+unknownIds.length+" unavailable scenario(s) skipped.":"")+
@@ -196,9 +196,8 @@ export function BrainEvalPanel({settings,availableModels}:{settings:Settings;ava
       setMessage("");
       setLastExportFolder(null);
       setViewModel("");
-      // The large checklist used to bury progress and completion results.
-      // Collapse it during a run, retaining the exact owner selection.
-      setCatalogOpen(false);
+      // The Scenario catalog is a separate workspace; show progress on Run.
+      setWorkspaceTab("run");
     }catch(error){setMessage("Could not start: "+String(error))}
   }
   function stop(){
