@@ -16,7 +16,7 @@ import { register, unregister } from "@tauri-apps/plugin-global-shortcut";
 import {
   ArrowLeft, ArrowUp, Brain, Camera, Cat, Check, House, FlaskConical, ChevronLeft, ChevronRight, Clock3, Copy, Crop, Eye, EyeOff, FileText, Heart, History, Paperclip,
   BookOpen, ExternalLink, HardDrive, LoaderCircle, MessageCircle, RotateCw, Search, Settings2, Shuffle, SlidersHorizontal, Sparkles, Square, SquarePen, Volume2, X,
-  Palette, Shirt, Globe2, Cpu, WandSparkles, Plug2, AudioLines, VolumeX
+  Palette, Shirt, Globe2, Cpu, WandSparkles, Plug2, AudioLines, VolumeX, PawPrint
 } from "lucide-react";
 import {
   DEFAULT_SETTINGS, DEFAULT_APPEARANCE, DEFAULT_VOICE, loadPortrait, loadSettings, savePortrait, saveSettings,
@@ -143,6 +143,8 @@ type ChatCompletion = { content: string; modelUsed?: string; fallbackReason?: st
 type LogMessage = Message & { createdAt: number; diagnostics?: Diagnostics; failed?: boolean; sources?: WebResult[]; searchQuery?: string; sourcesCarriedOver?: boolean };
 const HOTKEY = "Control+Alt+M";
 const BUNDLED_PORTRAIT = "/mikan.png";
+// Bundled reference artwork: local asset, no cloud request or missing /mikan.png URL.
+const CONTROL_CENTER_PORTRAIT = new URL("../assets/iki/mikan-reference.png", import.meta.url).href;
 
 function restoreMessage(saved: PersistedMessage): LogMessage {
   const metadata = readMessageMetadata(saved.metadataJson);
@@ -3759,6 +3761,7 @@ export default function App() {
       <header className="drawer-header control-center-header">
         <button className="back-button" title="Close Control Center" aria-label="Close Control Center" onClick={goCompact}><ArrowLeft size={20}/></button>
         <span className="control-header-glyph"><Settings2 size={22}/></span>
+        <span className="control-header-paws" aria-hidden="true"><PawPrint/><Sparkles size={13}/><PawPrint/></span>
         <div className="drawer-title"><strong>{SETTINGS_PAGE_COPY[settingsTab].title}</strong><span>{SETTINGS_PAGE_COPY[settingsTab].description}</span></div>
         <span className="control-local-indicator"><span aria-hidden="true"/> Local first</span>
         {(["ai", "internet", "voice", "appearance", "interface"] as SettingsTab[]).includes(settingsTab) &&
@@ -3826,6 +3829,9 @@ export default function App() {
               </button>
             )}
           </div>)}
+          <div className="control-sidebar-decoration" aria-hidden="true">
+            <Sparkles size={13}/><PawPrint size={34}/><Sparkles size={10}/>
+          </div>
         </nav>
         <div key={settingsTab} className={settingsTab === "brain" ? "settings-body settings-brain"
           : settingsTab === "memory" ? "settings-body settings-embedded settings-memory-view"
@@ -3882,6 +3888,7 @@ export default function App() {
             }}/>} 
         {settingsTab === "home" && <div className="control-home">
           <section className="control-home-hero">
+            <span className="control-hero-paws" aria-hidden="true"><PawPrint size={31}/><Sparkles size={14}/><PawPrint size={22}/></span>
             <div className="control-home-copy">
               <span className="control-eyebrow"><Sparkles size={17}/> MAKE MIKAN YOURS</span>
               <h2>Your companion.<br/><em>Your rules.</em></h2>
@@ -3890,7 +3897,7 @@ export default function App() {
                 <Cpu size={18}/> Configure Mikan's brain <ChevronRight size={18}/>
               </button>
             </div>
-            <img className="control-home-portrait" src="/mikan.png" alt="" loading="lazy"/>
+            <img className="control-home-portrait" src={CONTROL_CENTER_PORTRAIT} alt="" loading="lazy" decoding="async"/>
           </section>
           <div className="control-home-heading">
             <div><h3>Explore your settings</h3><p>Choose an area to customize. Advanced options stay tucked away until you need them.</p></div>
@@ -4539,7 +4546,7 @@ export default function App() {
             </span>
             <small>Move Mikan inside her compact avatar viewport to reveal more or less of an outfit. Save to apply the position.</small>
           </label>
-          <button type="button" className="inline-action"
+          <button type="button" className="inline-action control-inline-reset"
             disabled={avatarDisplay !== "animated" || draft.appearance.avatarVerticalOffset === DEFAULT_AVATAR_VERTICAL_OFFSET}
             onClick={() => setDraft(current => ({ ...current, appearance: {
               ...current.appearance, avatarVerticalOffset: DEFAULT_AVATAR_VERTICAL_OFFSET
@@ -4631,12 +4638,13 @@ export default function App() {
               onClick={() => void browseIkiOutfit()}>Add outfit (.iki)</button>
             <button type="button" disabled={ikiBusy}
               onClick={() => void changeIkiOutfitFolder()}>Choose outfits folder</button>
+            {previewChoice.id && <button type="button" className="control-outfit-remove" disabled={ikiBusy}
+              onClick={() => void forgetSelectedIkiOutfit(previewChoice.id!)}>Remove from wardrobe list</button>}
           </div>
           <small className="iki-wardrobe-path" title={ikiOutfitFolder || "Uses project outfits folder when available"}>
             Folder: {ikiOutfitFolder || "Project outfits folder (or last-used location)"}
           </small>
-          {previewChoice.id && <button type="button" className="inline-action" disabled={ikiBusy}
-            onClick={() => void forgetSelectedIkiOutfit(previewChoice.id!)}>Remove previewed outfit from list</button>}
+
           {ikiError && <p className="field-error" role="alert">{ikiError}</p>}
           <div className="settings-section-title">Live avatar movement</div>
           <label className="avatar-debug-toggle">
@@ -4679,6 +4687,21 @@ export default function App() {
           </label>
         </>}
         </div>
+        {(["home","appearance","personality","voice","ai","internet","vision","notion","interface"] as SettingsTab[]).includes(settingsTab) &&
+          <aside className="control-portrait-aside" aria-label="Mikan's companion artwork">
+            <div className="control-portrait-card">
+              <div className="control-portrait-glow" aria-hidden="true"/>
+              <div className="control-portrait-title"><PawPrint size={20}/><strong>Mikan</strong><Sparkles size={15}/></div>
+              <div className="control-portrait-illustration">
+                <img src={CONTROL_CENTER_PORTRAIT} alt="Mikan in her reference outfit" loading="lazy" decoding="async"/>
+              </div>
+              <div className="control-portrait-message">
+                <PawPrint size={21} aria-hidden="true"/>
+                <span>{settingsTab==="home"?"Make yourself at home!":settingsTab==="appearance"?"A new look? I'm all ears.":"Your companion, your way."}</span>
+              </div>
+              <div className="control-portrait-sparkles" aria-hidden="true"><Sparkles size={19}/><PawPrint size={26}/></div>
+            </div>
+          </aside>}
       </div>
       <footer className="control-commandbar" title={"Built: "+BUILD_INFO.builtAt+" · Commit: "+BUILD_INFO.commit}>
         <div className="control-build-label">
