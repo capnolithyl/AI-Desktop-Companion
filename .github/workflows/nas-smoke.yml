@@ -113,8 +113,23 @@ jobs:
           assert.equal(chunks.join(""),turn.answer);assert.equal(trace.snapshot().stages.find(s=>s.stage==="answer").errorCode,"output-limit");
           assert.equal(trace.snapshot().inference[0].reasoningTokens,4096);
           assert.ok(events.some(e=>e.title==="Native research evidence audit"));
+          const recoveryChat=store.newConversation();store.append(recoveryChat.id,"user",prompt);
+          let recoveryCalls=0,recoverySearches=0;
+          const lead={title:"Lantern Tale",url:"https://example.org/lead",kind:"preview",content:"Lantern Tale is a horror anime."};
+          const details={title:"Lantern Tale episode guide",url:"https://example.org/details",kind:"preview",content:"Lantern Tale has 4 episodes."};
+          const recoveredTurn=await executeNasTurn({store,conversationId:recoveryChat.id,question:prompt,selected,mode:"strict",canRequest:()=>true,reserve:()=>recoveryCalls++,
+            search:async query=>{recoverySearches++;if(recoverySearches===1)return [lead];assert.match(query,/Lantern Tale.*episode count/);return [details];},
+            read:async()=>{throw Error("unexpected read");},requestModel:async args=>{
+              if(args.system.startsWith("You are a read-only research planner"))return JSON.stringify(recoveryCalls===1?{action:"search",query:"short horror anime",task:selectedTask}:{action:"none"});
+              return JSON.stringify({passages:[],suggestions:[{source:1,name:"Lantern Tale",identity_quote:lead.content,fit_quote:lead.content,measurements:recoverySearches===2?[{source:2,value:4,unit:"episodes",quote:details.content}]:[],relations:[]}],answer:""});
+            }});
+          assert.equal(recoverySearches,2);assert.equal(recoveryCalls,4);assert.match(recoveredTurn.answer,/Lantern Tale/);assert.match(recoveredTurn.answer,/4 episodes/);
+          const synthesized=reviewNativeResearch(JSON.stringify({passages:[{source:1,quote:"Pet Shop of Horrors has 4 episodes."}],suggestions:[],answer:"Pet Shop of Horrors has 4 episodes [1]."}),"Episode count",null,sources);
+          assert.equal(synthesized.presentation,"checked synthesis");
+          const invented=reviewNativeResearch(JSON.stringify({passages:[{source:1,quote:"Pet Shop of Horrors has 4 episodes."}],suggestions:[],answer:"Pet Shop of Horrors has 40 episodes [1]."}),"Episode count",null,sources);
+          assert.equal(invented.presentation,"verified excerpts");assert.doesNotMatch(invented.text,/40 episodes/);
           store.db.close();
-          console.log("Packaged shared native gates and full strict turn passed");
+          console.log("Packaged shared native gates, recovery and full strict turn passed");
           JS
           curl -fsSL http://127.0.0.1:3847/ | grep -F 'Mikan · Beholder'
           curl -fsS http://127.0.0.1:3847/legacy | grep -F 'Beholder cloud preview'

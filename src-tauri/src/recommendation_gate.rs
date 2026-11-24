@@ -787,3 +787,23 @@ mod tests {
         assert!(screen("short horror books",vec![],vec![item],&[src(text)]).approved.is_empty());
     }
 }
+
+#[cfg(test)]
+mod release_constraint_tests {
+    use super::*;
+    #[test]
+    fn followup_date_limit_cannot_admit_an_old_release(){
+        let task=ResearchTask{kind:ResearchKind::Discover,requirements:vec![
+            HardRequirement{quote:"fewer than six episodes".into(),relation:"lt".into(),limit:6.0,unit:"episodes".into()},
+            HardRequirement{quote:"after 2010".into(),relation:"gt".into(),limit:2010.0,unit:"release year".into()}
+        ],..Default::default()};
+        let sources=vec![SearchResult{title:"Lantern Tale".into(),url:"https://example.org".into(),engine:"test".into(),published_date:None,
+            content:"Lantern Tale is a horror anime. Lantern Tale has 4 episodes. Lantern Tale was released in 2009.".into()}];
+        let item=Suggestion{source:1,title:"Lantern Tale".into(),creator:String::new(),identity_quote:"Lantern Tale is a horror anime.".into(),fit_quote:"Lantern Tale is a horror anime.".into(),
+            measurements:vec![Measurement{source:1,value:4.0,unit:"episodes".into(),quote:"Lantern Tale has 4 episodes.".into()},Measurement{source:1,value:2009.0,unit:"release year".into(),quote:"Lantern Tale was released in 2009.".into()}],relations:vec![]};
+        let gate=screen_task("Recommend horror anime with fewer than six episodes. Only ones released after 2010.",&task,vec![item],&sources);
+        assert_eq!(gate.requirements.len(),2);
+        assert!(gate.approved.is_empty());
+        assert_eq!(gate.rejected,1);
+    }
+}

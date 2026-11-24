@@ -115,7 +115,7 @@ export function researchSettings(db){
   function save(mode){if(!["off","simple","strict"].includes(mode))throw Object.assign(Error("Invalid research mode"),{status:400});db.prepare("INSERT INTO nas_research_settings(id,mode) VALUES(1,?) ON CONFLICT(id) DO UPDATE SET mode=excluded.mode").run(mode);return get();}
   return {get,save};
 }
-export async function researchTurn({mode,history,generate,canRequest,search=searchWeb,read=readWeb,activity=()=>{},now=new Date()}){
+export async function researchTurn({mode,history,generate,canRequest,search=searchWeb,read=readWeb,activity=()=>{},now=new Date(),activeTask}){
   if(mode==="off")return {sources:[],note:""};
   const sources=[],errors=[];const last=history.at(-1)?.content??"";
   const recent=publicPlanningHistory(history.slice(0,-1)).map(content=>({role:"user",content}));
@@ -138,13 +138,22 @@ export async function researchTurn({mode,history,generate,canRequest,search=sear
     try{const page=await read(value,options);const index=sources.findIndex(s=>s.url===value);if(index>=0)sources[index]={...page,publishedDate:sources[index].publishedDate??null};else add(page);record(page.fromCache?"Cached webpage read":"Webpage read",page.title,[page.url,...(page.fetchedAt?["Fetched: "+new Date(page.fetchedAt).toISOString()]:[])]);}
     catch{errors.push("Page could not be read");record("Webpage read failed","Page unavailable");}
   };
-  const plan=await planner({currentTime:now.toISOString(),recentConversation:recent,currentUser:last});
+  const plan=await planner({currentTime:now.toISOString(),recentConversation:recent,previousPublicTask:activeTask??null,currentUser:last});
   if(!plan){record("Research planning unavailable","No public research performed");return {sources,note:"Research planning was unavailable. Do not claim any web research occurred."};}
   if(plan.action==="none")return {sources,note:""};
   // Narrow consistency guard for explicit public recommendation requests.
   const explicitDiscovery=/\b(?:recommend|suggest)\b/i.test(last)&&!/\b(?:my|our)\b/i.test(last);
   const previousDiscovery=plan.intent==="refine"&&recent.some(m=>/\b(?:recommend|suggest)\b/i.test(m.content));
   if(plan.action==="search"&&(explicitDiscovery||previousDiscovery)&&plan.task?.kind!=="discover")plan.task={...plan.task,kind:"discover",subject:undefined};
+  if(plan.action==="search"&&plan.intent==="refine"&&activeTask?.kind==="discover"){
+    // A refinement is not a reset. Only replace a prior typed constraint if
+    // the new turn explicitly supplies a different quote for that unit.
+    const requested=Array.isArray(plan.task?.requirements)?plan.task.requirements:[];
+    const previous=(activeTask.requirements??[]).filter(old=>recent.some(m=>m.content.toLowerCase().includes(old.quote.toLowerCase())));
+    const replacements=requested.filter(v=>typeof v?.quote==="string"&&last.toLowerCase().includes(v.quote.toLowerCase()));
+    const requirements=[...previous.filter(old=>!replacements.some(v=>v.unit===old.unit)),...requested].filter((v,i,all)=>all.findIndex(other=>other.quote===v.quote&&other.unit===v.unit)===i).slice(0,4);
+    plan.task={...activeTask,...plan.task,kind:"discover",requirements};
+  }
   if(plan.action==="search")await find(plan);
   if(plan.action==="read"){
     const url=webURL(plan.url);

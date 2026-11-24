@@ -62,11 +62,11 @@ export function createBrainLab({db,models,requestModel,search,read,build,pace=pa
             let result;
             try{result=await executeNasTurn({store:sandbox,conversationId:chat.id,question:step.user,selected,mode:report.mode,requestModel,search,read,signal,trace,
               reserve:()=>models.reserve(selected.provider),canRequest:(slots=1)=>models.available(selected.provider,slots),activity:e=>events.push(e)});
-            }catch(e){row.steps.push({user:step.user,error:signal.aborted?"Stopped":typeof e?.code==="string"?e.code:"Provider or turn failed",timing:trace.snapshot(),events,actualModel:trace.actualModel()});save(report);throw e;}
+            }catch(e){row.steps.push({user:step.user,error:signal.aborted?"Stopped":typeof e?.code==="string"?e.code:"Provider or turn failed",timing:trace.snapshot(),events,actualModel:trace.actualModel()});report.done++;save(report);if(signal.aborted||e?.status===429||e?.upstreamStatus===429)throw e;continue;}
             signal.throwIfAborted();
-            sandbox.append(chat.id,"assistant",result.answer);
+            sandbox.append(chat.id,"assistant",result.answer,result.researched.task?{researchTask:result.researched.task}:null);
             sandbox.library.markRecalled(result.memory.ids);
-            row.steps.push({user:step.user,answer:result.answer,timing:trace.snapshot(),actualModel:trace.actualModel(),selectedMemoryIds:result.memory.ids,
+            row.steps.push({user:step.user,answer:result.answer,timing:trace.snapshot(),actualModel:trace.actualModel(),selectedMemoryIds:result.memory.ids,...(result.researched.task?{researchTask:result.researched.task}:{}),
               sources:result.researched.sources.map(s=>({...s,content:s.content.slice(0,3500)})),events});
             report.done++;save(report);
           }

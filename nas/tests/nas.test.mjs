@@ -705,3 +705,11 @@ test("structured public planner preserves discovery task and quoted constraints"
  assert.equal(result.task.kind,"discover");assert.equal(result.task.requirements.length,2);assert.match(result.constraintQuestion,/fewer than six episodes/);
  assert.ok(events.some(e=>e.title==="Research task"));
 });
+
+test("followup retains previously validated task constraints even when planner omits the old limit",async()=>{
+ const old={kind:"discover",requirements:[{quote:"fewer than six episodes",relation:"lt",limit:6,unit:"episodes"}],roles:[],exclude:[]};
+ const history=[{role:"user",content:"Recommend horror anime with fewer than six episodes."},{role:"user",content:"Only ones released after 2010."}];
+ const result=await researchTurn({mode:"strict",history,activeTask:old,canRequest:()=>true,generate:async()=>JSON.stringify({action:"search",intent:"refine",query:"short horror anime",task:{kind:"discover",requirements:[{quote:"after 2010",relation:"gt",limit:2010,unit:"release year"}],roles:[],exclude:[]}}),search:async()=>[]});
+ assert.equal(result.task.requirements.length,2);
+ assert.equal(result.task.requirements[0].unit,"episodes");
+});

@@ -52,7 +52,8 @@ export async function executeNasTurn({store,conversationId,question,selected,mod
   const recentSources=rawHistory.filter(m=>m.role==="assistant").reverse().flatMap(m=>(m.inference?.sources??[]).filter(s=>s.kind==="notion"||s.kind==="cached-web"));
   const previous=recentSources.filter((s,i)=>recentSources.findIndex(other=>other.id===s.id)===i).slice(0,12);
   const local=knowledge?await trace.measure("knowledge",()=>planKnowledge({knowledge,history,previous,question,provider:selected.provider,canRequest:()=>!signal?.aborted&&canRequest(2),generate:args=>trace.measure("knowledge-planner",()=>{signal?.throwIfAborted();reserve();return requestModel({...args,config:selected,signal,onUsage:v=>trace.usage("knowledge-planner",v)});}),activity})):null;
-  const researched=local??await researchTurn({mode,history,canRequest:()=>!signal?.aborted&&canRequest(2),generate:args=>trace.measure("planner",()=>{
+  const activeTask=rawHistory.filter(m=>m.role==="assistant").at(-1)?.inference?.researchTask;
+  const researched=local??await researchTurn({mode,history,activeTask,canRequest:()=>!signal?.aborted&&canRequest(2),generate:args=>trace.measure("planner",()=>{
     signal?.throwIfAborted();reserve();return requestModel({...args,config:selected,signal,onUsage:v=>trace.usage("planner",v)});
   }),search:(query,recent)=>trace.measure("search",()=>{signal?.throwIfAborted();return search(query,recent);}),
     read:(url,options)=>trace.measure("read",()=>{signal?.throwIfAborted();return read(url,options);}),activity});
