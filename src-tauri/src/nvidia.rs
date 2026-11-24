@@ -506,6 +506,18 @@ async fn grounded_public_reply(
     cloud_evidence::render_grounded_with_tone(&verified,sources,final_plan.tone.as_deref())
 }
 
+
+// Only owner-supplied HTTPS document locators may be marked as direct reads.
+// A search-result URL is never promoted to an owner-directed document.
+#[allow(non_snake_case)]
+fn publicDocumentUrlsInText(text:&str,url:&str)->bool {
+    text.split_whitespace().any(|piece| {
+        let candidate=piece.trim_matches(|c:char|
+            matches!(c,','|'.'|')'|'('|'\''|'"'|';'));
+        candidate==url && candidate.starts_with("https://")
+    })
+}
+
 pub(crate) async fn chat(app:&AppHandle,request:&ChatRequest,key:&str,emitted:&AtomicBool)
     -> Result<ChatCompletion,String>
 {
@@ -572,9 +584,30 @@ pub(crate) async fn chat(app:&AppHandle,request:&ChatRequest,key:&str,emitted:&A
     let mut sources=Vec::<web_search::SearchResult>::new();
     let mut search_query=None;
     let mut sources_carried_over=false;
-    // Preserve Mikan's deterministic search for explicit public research.
+    // A user-directed URL read must open the exact resource, not a generic
+    // search for its hostname. The reader enforces HTTPS and SSRF restrictions.
+    let direct_document=request.research_task.as_ref().and_then(|task|
+        if task.kind==crate::recommendation_gate::ResearchKind::Document {
+            task.source_url.as_deref()
+        } else {None});
     if allow_web {
-        if let Some(query)=request.research_query.as_deref().filter(|q|!q.trim().is_empty()) {
+        if let Some(url)=direct_document {
+            let read=cloud_web_tools::execute_tool(app,request,"read_webpage",
+                &json!({"url":url}),&mut sources,"NVIDIA").await;
+            if read.get("error").is_some(){
+                return Err("Requested public document could not be read; no answer was generated".into());
+            }
+            if let Some(page)=sources.iter_mut().find(|page|page.url==url){
+                page.engine="direct webpage".into();
+            }else if let Some(page)=sources.last_mut(){
+                page.engine="direct webpage".into();
+            }
+            public_tool_used=true;
+            search_query=request.research_query.clone().or_else(||
+                Some("Owner-approved public document read".into()));
+        }
+        if let Some(query)=request.research_query.as_deref()
+            .filter(|q|direct_document.is_none() && !q.trim().is_empty()) {
             let _=app.emit("mikan://activity",json!({"requestId":request.request_id,
                 "text":format!("Searching: {query}")}));
             if let Ok(found)=source_priority::search(
@@ -676,8 +709,24 @@ pub(crate) async fn chat(app:&AppHandle,request:&ChatRequest,key:&str,emitted:&A
                                     search_query=Some(query.to_owned());
                                 }
                             }
-                            cloud_web_tools::execute_tool(app,request,name,&args,
-                                &mut sources,"NVIDIA").await
+                            let response=cloud_web_tools::execute_tool(app,request,name,&args,
+                                &mut sources,"NVIDIA").await;
+                            if name=="read_webpage" && response.get("error").is_none(){
+                                if let Some(url)=args["url"].as_str(){
+                                    // A URL literally supplied by the owner is
+                                    // an authorized document, not a search hit.
+                                    if request.messages.iter().any(|message|
+                                        message.role=="user" && publicDocumentUrlsInText(&message.content,url)){
+                                        if let Some(page)=sources.iter_mut().find(|page|page.url==url){
+                                            page.engine="direct webpage".into();
+                                        }
+                                    }
+                                    if search_query.is_none(){
+                                        search_query=Some("Public webpage read".into());
+                                    }
+                                }
+                            }
+                            response
                         }
                     } else {
                         json!({"error":"Unsupported function"})
@@ -698,7 +747,11 @@ pub(crate) async fn chat(app:&AppHandle,request:&ChatRequest,key:&str,emitted:&A
         if draft.trim().is_empty() {return Err(missing_reply_reason(&result));}
         // This model may have drafted unsupported facts even with accurate source
         // snippets. Do not stream or store that draft as a verified answer.
-        let content=if !sources.is_empty() && public_tool_used {
+        let content=if request.research_route.as_deref()==Some("research") &&
+            sources.is_empty() {
+            // A failed required lookup must not be answered from model memory.
+            "I couldn't verify that from current public sources, so I won't invent an answer.".into()
+        }else if !sources.is_empty() && public_tool_used {
             let _=app.emit("mikan://activity",json!({
                 "requestId":request.request_id,
                 "text":"Checking factual claims against source passages…"

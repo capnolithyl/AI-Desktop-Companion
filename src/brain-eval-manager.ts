@@ -280,7 +280,8 @@ async function executeOne(
     );
   }
   const infer:EvalInference=async({
-    messages,selectedMemories,evidence,researchPlanned,researchQuery,replyEffort,webRequest
+    messages,selectedMemories,evidence,researchPlanned,researchQuery,replyEffort,webRequest,
+    nativeWebAllowed
   })=>{
     if(controller.signal.aborted)throw new Error("Stopped by owner");
     if(selection.provider!=="local"){
@@ -341,7 +342,11 @@ async function executeOne(
         // Synthetic fixture data was explicitly supplied in the system
         // message. Never open production personal-memory/Notion tools in lab.
         cloudAllowMemory:false,
-        cloudAllowWeb:selection.provider!=="local"&&webRequest?.autoSearch===true,
+        // NVIDIA model-led Lab turns use native read-only tools under the same
+        // permission gate as production. Other providers retain planned routes.
+        cloudAllowWeb:selection.provider==="nvidia"
+          ? nativeWebAllowed===true
+          : selection.provider!=="local"&&webRequest?.autoSearch===true,
         messages:[{role:"system",content:system},...messages.map(m=>({role:m.role,content:m.content}))],
         ...(webRequest??{autoSearch:false,researchRoute:"chat"}),
         sourcePreferences:settings.sourcePreferences,
@@ -441,7 +446,11 @@ async function executeOne(
     researchMode:request.researchMode??settings.researchMode,
     mikanifyAnswer:request.mikanifyAnswer??settings.mikanifyAnswer,
     scenarios,repetitions:request.repetitions,
-    signal:controller.signal,...(request.mode==="live"?{infer,planWeb,previewMemory,liveWeb:true}:{}),
+    // NVIDIA's production model-led mode must not depend on the local Ollama
+    // planner. The other provider paths continue to exercise hybrid planning.
+    modelLedWeb:selection.provider==="nvidia",
+    signal:controller.signal,...(request.mode==="live"?{infer,
+      ...(selection.provider==="nvidia"?{}:{planWeb}),previewMemory,liveWeb:true}:{}),
     onProgress:(done,_total,label)=>setStatus({done:progressOffset+done,
       label:"Model "+(modelIndex+1)+"/"+modelCount+" ("+selection.id+"): "+label})
   });

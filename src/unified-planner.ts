@@ -260,6 +260,20 @@ export function withLocalWebPreferences(prompt:string, query:string,
     :prompt+"\n"+block;
 }
 
+/** Classify local planner failures without leaking endpoints or credentials. */
+export function localPlannerErrorReason(error:unknown):string {
+  const message=String(error);
+  if(/timed?\s*out|timeout|deadline exceeded/i.test(message))
+    return "Local Ollama planner timed out";
+  const status=message.match(/(?:returned\s+)?HTTP\s+(\d{3})/i);
+  if(status)return "Local Ollama planner returned HTTP "+status[1];
+  if(/cannot reach|connection refused|connect error|network error/i.test(message))
+    return "Local Ollama planner connection failed";
+  if(/invalid.*(?:json|response)|parse error|unexpected token/i.test(message))
+    return "Local Ollama planner returned an invalid response";
+  return "Local Ollama planner failed (native error hidden for privacy)";
+}
+
 /** Interpret the requested operation before deciding whether optional research
  * would help. A document handle identifies a resource, never a search query. */
 export async function planPublicWebTools(
@@ -301,8 +315,8 @@ export async function planPublicWebTools(
   try {
     raw=await localSelect(withLocalWebPreferences(withPublicPlanningHistory(
       prompt,query,history,prior && prior.search ? prior.query : undefined),query,options.relevantUserFacts??ownerFacts));
-  } catch {
-    return {...defaultWeb,method:"planner-error",reason:"Local tool planner unavailable"};
+  } catch (error) {
+    return {...defaultWeb,method:"planner-error",reason:localPlannerErrorReason(error)};
   }
   const chosen=parseWebToolDecision(raw,true,options.sourcePreferences,ownerFacts,urls);
   // The model may recognize a continued document question (intent=refine)
