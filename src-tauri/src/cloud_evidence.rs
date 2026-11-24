@@ -318,7 +318,7 @@ pub(crate) fn checked_cited_draft(draft:&str,sources:&[SearchResult])->Option<Ve
     if references.is_empty(){None}else{Some(references)}
 }
 
-pub(crate) fn requested_pages(plan:&EvidencePlan,sources:&[SearchResult]>{
+pub(crate) fn requested_pages(plan:&EvidencePlan,sources:&[SearchResult])->Vec<(usize,String)>{
     let mut selected=Vec::new();
     let mut seen=HashSet::new();
     for number in plan.read_source_indices.iter().take(MAX_READ_PAGES){
