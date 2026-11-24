@@ -2069,3 +2069,133 @@ button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px
   .settings-standalone .control-provider-choice,
   .settings-standalone .control-center-header * {transition:none;}
 }
+
+
+/* Memory library: show the essentials first, disclose management only on request. */
+.settings-standalone .memory-body .memory-explainer {margin-bottom:12px;}
+.settings-standalone .memory-body .memory-facts-overview {
+  display:flex;align-items:center;gap:23px;flex-wrap:wrap;
+  margin:0 0 19px;padding:20px 24px;
+  border:1px solid #996345;border-radius:17px;
+  background:linear-gradient(110deg,#47302a,#312327);
+  box-shadow:0 0 22px #ef873126,inset 0 1px 0 #ffc48324;
+}
+.settings-standalone .memory-facts-overview > div {
+  display:flex;flex-direction:column;gap:3px;flex:0 0 100px;
+}
+.settings-standalone .memory-facts-overview strong {
+  color:#ffb574;font-size:35px;line-height:1.05;font-variant-numeric:tabular-nums;
+  text-shadow:0 0 22px #ffb56b60;
+}
+.settings-standalone .memory-facts-overview span {font-size:13px;font-weight:700;color:#ffd6b8;}
+.settings-standalone .memory-facts-overview p {
+  margin:0;flex:1 1 240px;font-size:14px;line-height:1.6;color:#e8c8b8;
+}
+.settings-standalone .memory-facts-actions {
+  display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:0 0 24px;
+}
+.settings-standalone .memory-disclosure {
+  min-width:0;border:1px solid #785345;border-radius:14px;
+  background:#382629;overflow:hidden;
+}
+.settings-standalone .memory-disclosure[open] {
+  grid-column:1/-1;border-color:#a46a46;box-shadow:0 0 19px #ef8b3228;
+}
+.settings-standalone .memory-disclosure > summary {
+  display:flex;align-items:center;gap:13px;min-height:62px;
+  padding:14px 17px;list-style:none;cursor:pointer;
+  color:#ffcfab;font-size:14px;
+}
+.settings-standalone .memory-disclosure > summary::-webkit-details-marker {display:none;}
+.settings-standalone .memory-disclosure > summary svg {color:#ffa85f;flex:0 0 19px;}
+.settings-standalone .memory-disclosure > summary span {display:grid;gap:3px;flex:1;min-width:0;}
+.settings-standalone .memory-disclosure > summary strong {font-size:14px;color:#ffe6d5;}
+.settings-standalone .memory-disclosure > summary small {
+  color:#d3ad9e;font-size:12px;line-height:1.45;overflow-wrap:anywhere;
+}
+.settings-standalone .memory-disclosure > summary:after {
+  content:"";flex:0 0 9px;width:9px;height:9px;transform:rotate(45deg);
+  border-bottom:2px solid #ffb06b;border-right:2px solid #ffb06b;
+  transition:transform .18s ease;
+}
+.settings-standalone .memory-disclosure[open] > summary:after {transform:rotate(225deg);}
+.settings-standalone .memory-disclosure > summary:hover {background:#58372b;}
+.settings-standalone .memory-disclosure-body {
+  display:grid;gap:12px;padding:14px 18px 18px;border-top:1px solid #735046;
+  background:#291e21;min-width:0;
+}
+.settings-standalone .memory-disclosure-body .memory-add {margin:0;}
+.settings-standalone .memory-disclosure-body textarea,
+.settings-standalone .memory-disclosure-body input:not([type="checkbox"]) {
+  box-sizing:border-box;min-width:0;width:100%;
+  background:#211719;color:#ffe5d9;border:1px solid #936048;
+  border-radius:10px;padding:12px 14px;font-size:14px;
+}
+.settings-standalone .memory-disclosure-body .save-button {
+  width:fit-content;align-self:flex-start;min-height:41px;
+  background:#ffa85b;color:#2f1d15;border-radius:11px;
+  border:1px solid #ffc48c;font-size:14px;
+}
+.settings-standalone .memory-disclosure-body .memory-auto-toggle {
+  padding:13px 15px;border:1px solid #68463f;border-radius:11px;
+  background:#3b292b;color:#ffe7d8;font-size:14px;
+}
+.settings-standalone .memory-body .memory-filter {
+  display:grid;grid-template-columns:minmax(190px,1.25fr) minmax(135px,.85fr) minmax(135px,.85fr);
+  align-items:center;gap:11px;margin:0 0 17px;
+  padding:14px;border:1px solid #705048;border-radius:15px;background:#2f2225;
+}
+.settings-standalone .memory-body .memory-filter input,
+.settings-standalone .memory-body .memory-filter select {
+  width:100%;min-width:0;min-height:43px;
+}
+.settings-standalone .memory-body .memory-filter small {
+  grid-column:1/-1;margin:0 1px;color:#d4b3a4;font-size:13px;
+}
+.settings-standalone .memory-body .memory-item {
+  margin:9px 0;padding:15px 18px;border-radius:12px;
+  background:linear-gradient(120deg,#382627,#302326);
+  box-shadow:none;
+}
+.settings-standalone .memory-body .memory-item p {margin:0 0 8px;line-height:1.5;}
+.settings-standalone .memory-body .memory-labels {margin:4px 0 0;}
+.settings-standalone .memory-body .memory-record-options {
+  padding-top:6px;margin-top:9px;border-top:1px solid #563a35;
+}
+.settings-standalone .memory-record-options > summary {
+  display:inline-flex;align-items:center;gap:7px;cursor:pointer;list-style:none;
+  padding:5px 0;font-size:12px;font-weight:650;color:#ecb994;
+}
+.settings-standalone .memory-record-options > summary::-webkit-details-marker {display:none;}
+.settings-standalone .memory-record-options > summary:hover {color:#ffcb99;}
+.settings-standalone .memory-record-options .memory-actions {
+  padding:11px 0 3px;justify-content:flex-start;gap:9px;
+}
+.settings-standalone .memory-record-options .memory-actions > small {
+  flex:1 1 155px;font-size:12px;color:#cca79e;
+}
+.settings-standalone .memory-record-options .memory-actions > button {
+  min-height:35px;padding:8px 12px;font-size:12px;
+}
+.settings-standalone .memory-load-more {
+  display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;
+  gap:14px;margin:18px 0;padding:17px 21px;
+  border:1px solid #765044;border-radius:14px;background:#332427;
+  color:#e8c5b2;font-size:13px;
+}
+.settings-standalone .memory-load-more button {
+  flex:0 0 auto;background:#54372c;border-color:#a86c46;
+}
+@media(max-width:1020px){
+  .settings-standalone .memory-body .memory-filter {grid-template-columns:1fr 1fr;}
+  .settings-standalone .memory-body .memory-filter input {grid-column:1/-1;}
+}
+@media(max-width:700px){
+  .settings-standalone .memory-facts-actions {grid-template-columns:1fr;}
+  .settings-standalone .memory-body .memory-filter {grid-template-columns:1fr;}
+  .settings-standalone .memory-body .memory-filter input {grid-column:auto;}
+  .settings-standalone .memory-body .memory-filter small {grid-column:auto;}
+}
+@media(prefers-reduced-motion:reduce) {
+  .settings-standalone .memory-disclosure > summary:after {transition:none;}
+}
