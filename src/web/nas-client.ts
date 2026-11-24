@@ -13,6 +13,9 @@ export type LibrarySnapshot={facts:UserFact[];characterFacts:CharacterFact[];int
 export type NasMessage={id:string;role:"user"|"assistant";content:string;createdAt:number};
 export type NasFact={id:number;fact:string;category:string;updatedAt:number};
 export type NasBuild={version:string;commit:string;backendHash:string|null;actualBackendHash:string};
+export type UpdatePhase="checking"|"current"|"available"|"installing"|"deferred"|"updated"|"failed"|"rolled-back";
+export type UpdateRecord={phase:UpdatePhase;installed:string|null;available:string|null;at:number};
+export type NasUpdateStatus={build:NasBuild;pending:"check"|"install"|null;host:(UpdateRecord&{checkedAt:number|null;lastBackup:number|null;history:UpdateRecord[]})|null};
 export type NasStatus={provider:string;model:string;busy:boolean;build?:NasBuild};
 export type LearningEvent={id:number;conversationId:string|null;assistantId:string|null;kind:"outcome"|"failed"|"queued"|"skipped"|"recall";createdAt:number;payload:{saved?:number;reviewQueued?:number;entries?:{description:string;status:string;kind:string}[];stage?:string;validated?:number;proposed?:number;reason?:string;lines?:string[]}};
 export class NasRequestError extends Error {
@@ -27,6 +30,8 @@ export class NasClient {
     return response;
   }
   private async json<T>(path:string,options?:RequestInit):Promise<T>{return (await this.request(path,options)).json();}
+  updates(){return this.json<NasUpdateStatus>("updates");}
+  requestUpdate(action:"check"|"install"){return this.json<{queued:string}>("updates",{method:"POST",body:JSON.stringify({action})});}
   status(){return this.json<NasStatus>("status");}
   async profile(){return importCompanionProfile(await this.json<unknown>("profile"));}
   async saveProfile(profile:CompanionProfile){return importCompanionProfile(await this.json<unknown>("profile",{method:"PUT",body:JSON.stringify(exportCompanionProfile(profile))}));}

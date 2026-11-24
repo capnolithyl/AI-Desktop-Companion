@@ -37,6 +37,8 @@ jobs:
       - name: Syntax check
         run: |
           sh -n nas/update-beholder.sh
+          sh -n nas/update-control-host.sh
+          node --check nas/update-control.mjs
           node --check nas/build-info.mjs
           node --check nas/server.mjs
           node --check nas/storage.mjs

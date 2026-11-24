@@ -1,3 +1,4 @@
+import {updateControl} from "../update-control.mjs";
 import {nasActivity} from "../../src/web/nas-activity.ts";
 import {memoryNotice} from "../../src/web/memory-notifications.ts";
 import test from "node:test";
@@ -331,4 +332,24 @@ test("maintenance waits for an admitted reply to finish and rejects later writes
     assert.equal((await (await fetch(base+"/api/health")).json()).idle,true);
     assert.equal(store.messages(chat.id).at(-1).content,"Finished");
   }finally{release();if(pending)await pending.catch(()=>{});await new Promise(resolve=>server.close(resolve));store.db.close();rmSync(root,{recursive:true,force:true});}
+});
+
+test("host update control only accepts fixed actions and tracks committed host results",()=>{
+  const root=mkdtempSync(join(tmpdir(),"mikan-updates-"));
+  try{
+    const control=updateControl(root);
+    assert.equal(control.get().host,null);
+    assert.throws(()=>control.queue("check"),/not connected/);
+    control.publish("current","a".repeat(40),"a".repeat(40));
+    assert.throws(()=>control.queue("shell"),/Invalid update action/);
+    assert.deepEqual(control.queue("check"),{queued:"check"});
+    assert.throws(()=>control.queue("install"),/already queued/);
+    assert.equal(control.take(),"check");assert.equal(control.take(),null);
+    control.publish("available","a".repeat(40),"b".repeat(40));
+    control.queue("install");assert.equal(control.take(),"install");
+    control.publish("updated","b".repeat(40),"b".repeat(40));
+    assert.equal(control.get().host.history[0].phase,"updated");
+    assert.ok(control.get().host.lastBackup);
+    assert.equal(control.get().pending,null);
+  }finally{rmSync(root,{recursive:true,force:true});}
 });

@@ -4,6 +4,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { join, dirname, resolve, extname, sep } from "node:path";
 import { timingSafeEqual } from "node:crypto";
 import { runningBuildInfo } from "./build-info.mjs";
+import { updateControl } from "./update-control.mjs";
 import { openStore } from "./storage.mjs";
 import { assistantVoiceGuidance, CHARACTER_VOICE_REMINDER } from "../src/assistant-voice.ts";
 import { exportCompanionProfile, importCompanionProfile } from "../src/companion-profile.ts";
@@ -65,7 +66,7 @@ function systemPrompt(promptFile,store,memory) {
     CHARACTER_VOICE_REMINDER].join("\n\n");
 }
 
-export function makeServer({store,config,key,promptFile="",maintenanceFile="/data/.mikan-update-maintenance",generate=generateReply}) {
+export function makeServer({store,config,key,promptFile="",maintenanceFile="/data/.mikan-update-maintenance",updates=updateControl(),generate=generateReply}) {
   if (typeof key!=="string" || key.length<32) throw new Error("MIKAN_REMOTE_KEY must be at least 32 characters");
   let busy=false,lastReplyAt=0,activeWrites=0;
   const maintenance=()=>existsSync(maintenanceFile);
@@ -91,6 +92,11 @@ export function makeServer({store,config,key,promptFile="",maintenanceFile="/dat
       if(req.method!=="GET"&&req.method!=="HEAD"){
         if(maintenance())return json(res,503,{error:"Mikan is installing an update. Please retry shortly."});
         writing=true;activeWrites++;
+      }
+      if(req.method==="GET"&&path==="/api/updates")return json(res,200,{build:BUILD,...updates.get()});
+      if(req.method==="POST"&&path==="/api/updates"){
+        const body=await readJson(req,1024);
+        return json(res,202,updates.queue(body?.action));
       }
       if (req.method==="GET" && path==="/api/status")
         return json(res,200,{provider:config.provider,model:config.model,busy:unavailable(),build:BUILD});
