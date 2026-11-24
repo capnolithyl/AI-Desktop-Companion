@@ -124,7 +124,7 @@ if MIKAN_IMAGE="$MANAGED" compose up -d --no-build --pull never mikan >>"$LOG" 2
   rm -f "$JOURNAL"
   rm -f "$MARK"
   log "Update successful: $revision"
-  if [ -n "$retired" ] && [ "$retired" != "$old" ] && [ "$retired" != "$candidate" ]; then docker image rm "$retired" >>"$LOG" 2>&1 || true; fi
+  if [ -n "$retired" ] && [ "$retired" != "$old" ] && [ "$retired" != "$candidate" ] && [ "$(docker image inspect -f '{{len .RepoTags}}' "$retired" 2>/dev/null || true)" = 0 ]; then docker image rm "$retired" >>"$LOG" 2>&1 || true; fi
   # Retain five most recent pre-update snapshots; failed data is kept separately.
   # Only our own numeric timestamp directories are eligible for pruning.
   count=0
