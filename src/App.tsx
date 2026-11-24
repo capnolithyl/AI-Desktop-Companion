@@ -251,6 +251,23 @@ function ReplyMetrics({ diagnostics }: { diagnostics?: Diagnostics }) {
 
 export default function App() {
   const standaloneSettings = isStandaloneSettingsWindow();
+  // The second WebView shows its inline HTML loading screen until React has mounted.
+  // The main transparent companion never gets a splash screen.
+  useEffect(() => {
+    if (!standaloneSettings) return;
+    let cleanupTimer: number | undefined;
+    const frame = window.requestAnimationFrame(() => {
+      document.documentElement.classList.add("mikan-settings-ready");
+      cleanupTimer = window.setTimeout(() => {
+        document.getElementById("settings-startup")?.remove();
+        document.documentElement.classList.remove("mikan-settings-loading", "mikan-settings-ready");
+      }, 280);
+    });
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.clearTimeout(cleanupTimer);
+    };
+  }, [standaloneSettings]);
   const brainEvalStatus = useSyncExternalStore(subscribeBrainEval, getBrainEvalStatus, getBrainEvalStatus);
   useEffect(()=>{void restoreBrainEvalReport()},[]);
   const [screen, setScreen] = useState<Screen>(standaloneSettings ? "settings" : "compact");
