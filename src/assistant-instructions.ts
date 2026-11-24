@@ -2,6 +2,7 @@ import { assistantVoiceGuidance, CHARACTER_VOICE_REMINDER } from "./assistant-vo
 import { PERSONAL_DETAIL_GROUNDING_GUIDANCE } from "./personal-grounding.ts";
 import { runtimeContext, chatRuntimeContext } from "./runtime-context.ts";
 import { contextGuidance, ownerConversationAnchor, responseFocusGuidance } from "./conversation-engine.ts";
+import {isCasualObservation,CASUAL_OBSERVATION_REPLY_CONTRACT} from "./conversational-scope.ts";
 import type { ConversationTurn } from "./conversation-engine.ts";
 import type { Settings } from "./storage.ts";
 
@@ -48,6 +49,9 @@ export function assistantTurnInstructionParts(input:AssistantTurnInstructionOpti
     ]:[]),
     responseFocusGuidance([...history],question),
     ownerConversationAnchor(history,question),
+    ...(isCasualObservation(question,{researchActive,roleplay:allowRoleplay,
+      publicWebRequested:publicWebRequested||plannedPublicSearch})
+      ? [CASUAL_OBSERVATION_REPLY_CONTRACT] : []),
     CHARACTER_VOICE_REMINDER
   ];
   return {beforeContext,afterContext};

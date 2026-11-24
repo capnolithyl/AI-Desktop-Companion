@@ -104,7 +104,7 @@ test("beginner tutoring gets a simple next step", () => {
 test("multi-part research questions request every component and avoid discography guessing",()=>{
   const detailed=responseFocusGuidance([], "When was it released, and who's the vocalist?");
   assert.match(detailed,/MULTI-PART REQUEST/);
-  assert.match(detailed,/MUSIC DISCOGRAPHY/);
+  assert.match(detailed,/FACTUAL SPECIFICITY/);
   assert.doesNotMatch(responseFocusGuidance([], "I love this album"),/MULTI-PART REQUEST/);
 });
 

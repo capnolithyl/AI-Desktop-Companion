@@ -77,3 +77,25 @@ test("a single primary model receives a character reminder after context",()=>{
   assert.ok(joined.indexOf("IMPORTED CONTEXT:")<joined.lastIndexOf("VOICE CONTINUITY:"));
   assert.doesNotMatch(joined,/You are Mikan/);
 });
+
+test("casual observations receive non-refusal scope; real questions and tasks do not",()=>{
+  const base={settings,history:[{role:"user",content:"I like this game."}],
+    allowRoleplay:false,researchActive:false,publicWebRequested:false,
+    plannedPublicSearch:false,now};
+  const smallTalk=joinAssistantInstructionParts(
+    assistantTurnInstructionParts({...base,question:"That song has some killer riffs."}));
+  assert.match(smallTalk,/CASUAL RESPONSE, NOT A FACT QUIZ/);
+  assert.match(smallTalk,/NO EMPTY DISCLAIMER/);
+  assert.match(smallTalk,/VOICE CONTINUITY/);
+  for(const question of [
+    "What actually happens in chapter six?",
+    "Tell me which medications are safe.",
+    "Can you fix this code?",
+    "We should merge that PR."
+  ]){
+    const detailed=joinAssistantInstructionParts(
+      assistantTurnInstructionParts({...base,question}));
+    assert.doesNotMatch(detailed,/CASUAL RESPONSE, NOT A FACT QUIZ/,question);
+    assert.match(detailed,/HONEST UNCERTAINTY/,question);
+  }
+});
