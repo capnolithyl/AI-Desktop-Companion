@@ -44,26 +44,34 @@ final class MusicPanel {
     private long optimisticUntil,optimisticPosition;
     private String track;
     private Bitmap displayedArtwork;
-    MusicPanel(Context context){
+    MusicPanel(Context context){this(context,false);}
+    MusicPanel(Context context,boolean compact){
         this.context=context;
-        root=new LinearLayout(context);root.setOrientation(LinearLayout.VERTICAL);root.setPadding(dp(12),dp(9),dp(12),dp(7));
+        root=new LinearLayout(context);root.setOrientation(LinearLayout.VERTICAL);root.setPadding(dp(compact?9:12),dp(9),dp(compact?9:12),dp(7));
         GradientDrawable bg=new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,new int[]{0xf13d2a28,0xed2a2022});
         bg.setCornerRadius(dp(23));bg.setStroke(dp(1),0xff906044);root.setBackground(bg);root.setElevation(dp(2));
         LinearLayout row=new LinearLayout(context);row.setGravity(Gravity.CENTER_VERTICAL);root.addView(row);
         artwork=new ImageView(context);artwork.setScaleType(ImageView.ScaleType.CENTER_CROP);
         GradientDrawable artBg=new GradientDrawable();artBg.setColor(0xff50332b);artBg.setCornerRadius(dp(8));artwork.setBackground(artBg);artwork.setClipToOutline(true);
-        row.addView(artwork,new LinearLayout.LayoutParams(dp(48),dp(48)));
-        LinearLayout copy=new LinearLayout(context);copy.setOrientation(LinearLayout.VERTICAL);copy.setPadding(dp(10),0,0,0);row.addView(copy,new LinearLayout.LayoutParams(0,-2,1));
-        title=label("Now playing",15,CREAM);title.setTypeface(Typeface.DEFAULT,Typeface.BOLD);title.setMaxLines(1);title.setEllipsize(android.text.TextUtils.TruncateAt.END);copy.addView(title);
-        artist=label("",12,MUTED);artist.setMaxLines(2);copy.addView(artist);
+        row.addView(artwork,new LinearLayout.LayoutParams(dp(compact?37:48),dp(compact?37:48)));
+        LinearLayout copy=new LinearLayout(context);copy.setOrientation(LinearLayout.VERTICAL);copy.setPadding(dp(compact?6:10),0,0,0);row.addView(copy,new LinearLayout.LayoutParams(0,-2,1));
+        title=label("Now playing",compact?13:15,CREAM);title.setTypeface(Typeface.DEFAULT,Typeface.BOLD);title.setMaxLines(1);title.setEllipsize(android.text.TextUtils.TruncateAt.END);copy.addView(title);
+        artist=label("",compact?10:12,MUTED);artist.setMaxLines(2);copy.addView(artist);
 
         timeline=new LinearLayout(context);timeline.setGravity(Gravity.CENTER_VERTICAL);
-        root.addView(timeline,new LinearLayout.LayoutParams(-1,dp(30)));
-        elapsed=label("0:00",10,MUTED);elapsed.setGravity(Gravity.CENTER);timeline.addView(elapsed,new LinearLayout.LayoutParams(dp(42),-1));
+        timeline.setOrientation(compact?LinearLayout.VERTICAL:LinearLayout.HORIZONTAL);
+        root.addView(timeline,new LinearLayout.LayoutParams(-1,dp(compact?39:30)));
+        elapsed=label("0:00",10,MUTED);elapsed.setGravity(Gravity.CENTER);
         seek=new SeekBar(context);seek.setMax(STEPS);seek.setContentDescription("Playback position");seek.setPadding(dp(5),0,dp(5),0);
         seek.setProgressTintList(ColorStateList.valueOf(PEACH));seek.setProgressBackgroundTintList(ColorStateList.valueOf(0xff72503f));seek.setThumbTintList(ColorStateList.valueOf(PEACH));
-        timeline.addView(seek,new LinearLayout.LayoutParams(0,-1,1));
-        total=label("0:00",10,MUTED);total.setGravity(Gravity.CENTER);timeline.addView(total,new LinearLayout.LayoutParams(dp(42),-1));
+        total=label("0:00",10,MUTED);total.setGravity(Gravity.CENTER);
+        if(compact){
+            timeline.addView(seek,new LinearLayout.LayoutParams(-1,dp(24)));
+            LinearLayout times=new LinearLayout(context);times.setGravity(Gravity.CENTER_VERTICAL);timeline.addView(times,new LinearLayout.LayoutParams(-1,dp(15)));
+            elapsed.setGravity(Gravity.LEFT);total.setGravity(Gravity.RIGHT);times.addView(elapsed,new LinearLayout.LayoutParams(0,-1,1));times.addView(total,new LinearLayout.LayoutParams(0,-1,1));
+        }else{
+            timeline.addView(elapsed,new LinearLayout.LayoutParams(dp(42),-1));timeline.addView(seek,new LinearLayout.LayoutParams(0,-1,1));timeline.addView(total,new LinearLayout.LayoutParams(dp(42),-1));
+        }
         seek.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener(){
             @Override public void onProgressChanged(SeekBar bar,int progress,boolean fromUser){if(fromUser){elapsed.setText(format(positionFor(progress,scrubbing?scrubDuration:duration)));if(!scrubbing)seekTo(progress,controller==null?null:controller.getSessionToken(),track,duration);}}
             @Override public void onStartTrackingTouch(SeekBar bar){scrubbing=true;scrubToken=controller==null?null:controller.getSessionToken();scrubTrack=track;scrubDuration=duration;bar.getParent().requestDisallowInterceptTouchEvent(true);}

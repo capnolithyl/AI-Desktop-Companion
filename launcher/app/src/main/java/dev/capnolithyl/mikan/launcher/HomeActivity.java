@@ -45,6 +45,9 @@ public class HomeActivity extends Activity {
     private LauncherUpdater updater;
     private PortraitStore portraits,characterArt;
     private MikanCard mikanCard;
+    private DashboardCards dashboard;
+    private TextView ampm;
+    private boolean compactClock;
     private String checkedWebUrl="",webStatus="";
     private boolean checkingWeb;
     private HomeFolders folders;
@@ -73,6 +76,7 @@ public class HomeActivity extends Activity {
         portraits=new PortraitStore(this);
         characterArt=new PortraitStore(this,"mikan-character-art.webp",new String[]{"portraits/character.webp"});
         folders=new HomeFolders(prefs);
+        dashboard=new DashboardCards(this,prefs,this::showSettings);
         loadApps();
         restoreFavorites();
         showHome();
@@ -84,8 +88,10 @@ public class HomeActivity extends Activity {
         handler.removeCallbacks(tick); handler.post(tick);
         handler.removeCallbacks(refreshExtras);handler.post(refreshExtras);
         handler.removeCallbacks(progressTick);handler.post(progressTick);
+        dashboard.resume();
     }
-    @Override protected void onPause(){handler.removeCallbacks(tick);handler.removeCallbacks(refreshExtras);handler.removeCallbacks(progressTick);super.onPause();}
+    @Override protected void onPause(){dashboard.pause();handler.removeCallbacks(tick);handler.removeCallbacks(refreshExtras);handler.removeCallbacks(progressTick);super.onPause();}
+    @Override protected void onDestroy(){if(dashboard!=null)dashboard.close();super.onDestroy();}
     @Override protected void onNewIntent(Intent intent){super.onNewIntent(intent);setIntent(intent);hideKeyboard();homePage=0;showHome();}
     @Override public void onBackPressed(){if(drawer||settings){hideKeyboard();showHome();}else if(homePage!=0){homePage=0;showHome();}}
     private int dp(float n){return Math.round(n*getResources().getDisplayMetrics().density);}
@@ -103,7 +109,7 @@ public class HomeActivity extends Activity {
     private void gap(LinearLayout parent,int size){View v=new View(this);parent.addView(v,new LinearLayout.LayoutParams(1,dp(size)));}
     private Drawable asset(String name){try(java.io.InputStream in=getAssets().open(name)){return Drawable.createFromStream(in,name);}catch(Exception e){return null;}}
     private void createPage(){
-        badgeViews.clear();music=null;mikanCard=null;clock=null;date=null;greeting=null;
+        badgeViews.clear();music=null;mikanCard=null;clock=null;date=null;greeting=null;ampm=null;dashboard.detach();
         root=new FrameLayout(this);root.setBackgroundColor(0xff191417);
         ImageView bg=new ImageView(this);bg.setScaleType(ImageView.ScaleType.CENTER_CROP);bg.setImageDrawable(asset(prefs.getString("wallpaper","reading-nook.webp")));
         root.addView(bg,new FrameLayout.LayoutParams(-1,-1));
@@ -169,10 +175,15 @@ public class HomeActivity extends Activity {
         page.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
         LinearLayout body=vertical();scroll.addView(body,new ScrollView.LayoutParams(-1,-2));
         gap(body,6);
-        if(widgetHere("clockPage",1)){
-        LinearLayout timeRow=horizontal();clock=text("",44,CREAM,false);clock.setIncludeFontPadding(false);timeRow.addView(clock);
-        ImageView paw=new ImageView(this);paw.setImageDrawable(new MikanMark(MikanMark.PAW,PEACH));LinearLayout.LayoutParams pawParams=new LinearLayout.LayoutParams(dp(23),dp(23));pawParams.leftMargin=dp(8);timeRow.addView(paw,pawParams);body.addView(timeRow);
-        gap(body,3);date=text("",15,MUTED,false);date.setIncludeFontPadding(false);body.addView(date);gap(body,12);}
+        boolean showClock=widgetHere("clockPage",1),showWeather=widgetHere("weatherPage",1);
+        compactClock=showClock&&showWeather&&canPair();
+        LinearLayout clockBlock=vertical();
+        if(showClock){
+        LinearLayout timeRow=horizontal();clock=text("",compactClock?36:44,CREAM,false);clock.setIncludeFontPadding(false);timeRow.addView(clock);
+        ImageView paw=new ImageView(this);paw.setImageDrawable(new MikanMark(MikanMark.PAW,PEACH));LinearLayout.LayoutParams pawParams=new LinearLayout.LayoutParams(dp(23),dp(23));pawParams.leftMargin=dp(8);timeRow.addView(paw,pawParams);clockBlock.addView(timeRow);
+        if(compactClock){ampm=text("",11,PEACH,false);ampm.setIncludeFontPadding(false);clockBlock.addView(ampm);}
+        gap(clockBlock,3);date=text("",15,MUTED,false);date.setIncludeFontPadding(false);clockBlock.addView(date);}
+        if(showClock||showWeather){addWidgetRow(body,showClock?clockBlock:null,showWeather?dashboard.weatherView():null,compactClock);gap(body,12);}
         if(widgetHere("mikanPage",1)){
             Drawable art=characterArt.get();
             String url=prefs.getString("mikanWebUrl","");
@@ -187,7 +198,10 @@ public class HomeActivity extends Activity {
         int start=Math.min(pinned.size(),dockCount+homePage*perPage),end=Math.min(pinned.size(),start+perPage);
         if(start==end)body.addView(text("Pin apps from the drawer or create a folder in settings.",14,MUTED,false));else addGrid(body,pinned.subList(start,end),columns);
         gap(body,10);
-        if(widgetHere("musicPage",1)){music=new MusicPanel(this);body.addView(music.view());gap(body,10);}
+        boolean showMusic=widgetHere("musicPage",1),showAgenda=widgetHere("agendaPage",1);
+        boolean pair=showMusic&&showAgenda&&canPair();
+        if(showMusic)music=new MusicPanel(this,pair);
+        if(showMusic||showAgenda){addWidgetRow(body,showMusic?music.view():null,showAgenda?dashboard.agendaView():null,pair);gap(body,10);}
         LinearLayout dock=horizontal();dock.setPadding(dp(4),dp(5),dp(4),dp(5));dock.setBackground(panelShape(24));dock.setElevation(dp(2));
         for(int i=0;i<dockCount;i++){if(i<pinned.size())dock.addView(tile(pinned.get(i),false),new LinearLayout.LayoutParams(0,-2,1));else{View blank=new View(this);dock.addView(blank,new LinearLayout.LayoutParams(0,dp(56),1));}}
         LinearLayout nav=horizontal();nav.setGravity(Gravity.CENTER);int count=pageCount();
@@ -203,7 +217,7 @@ public class HomeActivity extends Activity {
     private TextView pageArrow(String label,Runnable r){TextView v=action(label,r);v.setMinHeight(dp(36));v.setPadding(dp(16),dp(4),dp(16),dp(4));return v;}
     private void updateClock(){
         if(drawer||settings)return;
-        Date now=new Date();if(clock!=null)clock.setText(android.text.format.DateFormat.getTimeFormat(this).format(now));
+        Date now=new Date();if(clock!=null){boolean use24=android.text.format.DateFormat.is24HourFormat(this);clock.setText(compactClock?new java.text.SimpleDateFormat(use24?"HH:mm":"h:mm",Locale.getDefault()).format(now):android.text.format.DateFormat.getTimeFormat(this).format(now));if(ampm!=null){ampm.setText(use24?"":new java.text.SimpleDateFormat("a",Locale.getDefault()).format(now));ampm.setVisibility(use24?View.GONE:View.VISIBLE);}}
         if(date!=null)date.setText(new java.text.SimpleDateFormat("EEE, MMM d",Locale.getDefault()).format(now));
         int hour=Calendar.getInstance().get(Calendar.HOUR_OF_DAY);
         if(mikanCard!=null)mikanCard.updateGreeting(hour);
@@ -258,6 +272,13 @@ public class HomeActivity extends Activity {
         gap(body,18);body.addView(text("PAGES & WIDGETS",12,PEACH,true));gap(body,10);
         setting(body,"Minimum home pages: "+prefs.getInt("minPages",1),()->chooseNumber("minPages","Minimum home pages",new int[]{1,2,3,4,5}));
         widgetSetting(body,"Clock","clockPage",1);widgetSetting(body,"Mikan","mikanPage",1);widgetSetting(body,"Music","musicPage",1);
+        widgetSetting(body,"Weather","weatherPage",1);widgetSetting(body,"Upcoming events","agendaPage",1);
+        setting(body,"Widget layout: "+(prefs.getBoolean("pairWidgets",true)?"Side by side":"Stacked"),()->{prefs.edit().putBoolean("pairWidgets",!prefs.getBoolean("pairWidgets",true)).apply();showSettings();});
+        gap(body,10);setting(body,"Weather city: "+dashboard.city(),dashboard::chooseCity);
+        setting(body,"Weather units: "+(prefs.getBoolean("weatherF",true)?"°F":"°C"),()->{dashboard.toggleUnits();showSettings();});
+        setting(body,"Refresh weather",dashboard::manualWeatherRefresh);
+        setting(body,"Calendar access",dashboard::requestCalendar);
+        setting(body,"Calendar titles: "+(prefs.getBoolean("agendaTitles",true)?"Shown":"Hidden"),()->{prefs.edit().putBoolean("agendaTitles",!prefs.getBoolean("agendaTitles",true)).apply();showSettings();});
         setting(body,"Notification dots: "+(prefs.getBoolean("badges",false)?"On":"Off"),()->{boolean on=!prefs.getBoolean("badges",false);prefs.edit().putBoolean("badges",on).apply();LauncherNotifications.refreshIfConnected();if(on&&!LauncherNotifications.allowed(this))notificationAccess();showSettings();});
         setting(body,"Notification / music access",this::notificationAccess);
         gap(body,18);body.addView(text("MIKAN",12,PEACH,true));gap(body,10);
@@ -301,6 +322,13 @@ public class HomeActivity extends Activity {
         }
         return LauncherIcons.create(this,app.component.getPackageName(),app.label,app.icon);
     }
+    private boolean canPair(){return prefs.getBoolean("pairWidgets",true)&&getResources().getConfiguration().screenWidthDp>=350&&getResources().getConfiguration().fontScale<=1.2f;}
+    private void addWidgetRow(LinearLayout body,View left,View right,boolean pair){
+        if(left==null&&right==null)return;
+        if(pair&&left!=null&&right!=null){LinearLayout row=horizontal();row.setGravity(Gravity.CENTER_VERTICAL);row.setBaselineAligned(false);row.addView(left,new LinearLayout.LayoutParams(0,-2,1));LinearLayout.LayoutParams rp=new LinearLayout.LayoutParams(0,-2,1);rp.leftMargin=dp(8);row.addView(right,rp);body.addView(row,new LinearLayout.LayoutParams(-1,-2));}
+        else{if(left!=null)body.addView(left,new LinearLayout.LayoutParams(-1,-2));if(left!=null&&right!=null)gap(body,8);if(right!=null)body.addView(right,new LinearLayout.LayoutParams(-1,-2));}
+    }
+    @Override public void onRequestPermissionsResult(int request,String[] permissions,int[] grants){super.onRequestPermissionsResult(request,permissions,grants);if(request==DashboardCards.CALENDAR_REQUEST&&dashboard!=null){dashboard.calendarPermissionChanged();if(!settings&&!drawer)showHome();}}
     private void pickPortrait(){pickImage(73);}
     private void pickImage(int request){
         Intent i=new Intent(Intent.ACTION_OPEN_DOCUMENT).setType("image/*").addCategory(Intent.CATEGORY_OPENABLE);
@@ -372,7 +400,7 @@ public class HomeActivity extends Activity {
         int count=0;for(String key:favorites)if(find(key)!=null)count++;
         int cap=prefs.getInt("columns",4)*2,dock=prefs.getInt("dockCount",5);
         int pages=Math.max(prefs.getInt("minPages",1),(Math.max(0,count-dock)+cap-1)/cap);
-        for(String key:new String[]{"clockPage","mikanPage","musicPage"})pages=Math.max(pages,prefs.getInt(key,1));
+        for(String key:new String[]{"clockPage","mikanPage","musicPage","weatherPage","agendaPage"})pages=Math.max(pages,prefs.getInt(key,1));
         return Math.max(1,pages);
     }
     private void changePage(int delta){int next=Math.max(0,Math.min(pageCount()-1,homePage+delta));if(next!=homePage){homePage=next;showHome();}}
