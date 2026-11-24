@@ -14,7 +14,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { initialSettingsTab, initialMemoryTab, isStandaloneSettingsWindow, validSettingsTab, validMemoryTab } from "./settings-window";
 import { register, unregister } from "@tauri-apps/plugin-global-shortcut";
 import {
-  ArrowLeft, ArrowUp, Brain, Camera, Cat, Check, ChevronLeft, ChevronRight, Clock3, Copy, Crop, Eye, EyeOff, FileText, Heart, History, Paperclip,
+  ArrowLeft, ArrowUp, Brain, Camera, Cat, Check, House, FlaskConical, ChevronLeft, ChevronRight, Clock3, Copy, Crop, Eye, EyeOff, FileText, Heart, History, Paperclip,
   BookOpen, ExternalLink, HardDrive, LoaderCircle, MessageCircle, RotateCw, Search, Settings2, Shuffle, SlidersHorizontal, Sparkles, Square, SquarePen, Volume2, X,
   Palette, Shirt, Globe2, Cpu, WandSparkles, Plug2, AudioLines, VolumeX
 } from "lucide-react";
@@ -114,6 +114,21 @@ const IkiAvatar = lazy(() => import("./IkiAvatar").then(module => ({ default: mo
 
 type Screen = "compact" | "log" | "settings" | "search" | "page" | "help";
 type SettingsTab = "home" | "vision" | "ai" | "internet" | "notion" | "voice" | "appearance" | "interface" | "personality" | "memory" | "capabilities" | "brain";
+const SETTINGS_PAGE_COPY: Record<SettingsTab,{title:string;description:string}> = {
+  home: { title: "Welcome home", description: "Your personal Mikan control center" },
+  appearance: { title: "Character", description: "Outfits, avatar movement and presence" },
+  personality: { title: "Personality", description: "Mikan's character and conversation style" },
+  voice: { title: "Voice", description: "Voices, speech and playback" },
+  memory: { title: "Memory & chats", description: "Your conversations and long-term memory" },
+  ai: { title: "AI & models", description: "Inference providers and local models" },
+  internet: { title: "Web & Mikanify", description: "Search permissions, research and response styling" },
+  vision: { title: "Live Vision", description: "Screen awareness and capture permissions" },
+  notion: { title: "Notion", description: "Connected pages and knowledge" },
+  brain: { title: "Brain Lab", description: "Evaluate, compare and inspect Mikan's reasoning" },
+  interface: { title: "Look & feel", description: "Colors, typography and reactions" },
+  capabilities: { title: "Capabilities", description: "Everything Mikan can do today" }
+};
+
 type VoiceHealth = { ready: boolean; modelLoaded: boolean; device: string | null };
 type VoiceReference = { configured: boolean; transcript: string | null; durationSeconds: number | null; fileName: string | null };
 type SearchService = { state: string; message: string };
@@ -3733,10 +3748,12 @@ export default function App() {
       <footer className="drawer-footer">Commands are handled locally, without sending them to Ollama.</footer>
     </section>}
 
-    {screen === "settings" && <section className="drawer" role="dialog" aria-label="Mikan settings">
-      <header className="drawer-header">
-        <button className="back-button" title="Back to companion" onClick={goCompact}><ArrowLeft size={19}/></button>
-        <div className="drawer-title"><strong>Settings</strong><span>Mikan Desktop v{DESKTOP_VERSION} · Local first</span></div>
+    {screen === "settings" && <section className="drawer control-center-window" role="dialog" aria-label="Mikan settings">
+      <header className="drawer-header control-center-header">
+        <button className="back-button" title="Close Control Center" aria-label="Close Control Center" onClick={goCompact}><ArrowLeft size={20}/></button>
+        <span className="control-header-glyph"><Settings2 size={22}/></span>
+        <div className="drawer-title"><strong>{SETTINGS_PAGE_COPY[settingsTab].title}</strong><span>{SETTINGS_PAGE_COPY[settingsTab].description}</span></div>
+        <span className="control-local-indicator"><span aria-hidden="true"/> Local first</span>
         {(["ai", "internet", "voice", "appearance", "interface"] as SettingsTab[]).includes(settingsTab) &&
           <button className="secondary-action" onClick={() => setDraft(current => ({
             ...current,
@@ -3759,20 +3776,28 @@ export default function App() {
       </header>
       <div className={settingsTab === "brain" ? "settings-layout brain-lab-layout" : "settings-layout"}>
         <nav className="settings-tabs" aria-label="Settings categories">
+          <div className="control-brand">
+            <div className="control-brand-icon"><Cat size={25}/></div>
+            <div><strong>Mikan</strong><small>CONTROL CENTER</small></div>
+          </div>
           {([
-            { group: "MIKAN", items: [
+            { group: "START HERE", items: [
+              ["home", "Overview", House]
+            ] },
+            { group: "YOUR COMPANION", items: [
               ["appearance", "Character", Shirt],
               ["personality", "Personality", WandSparkles],
               ["voice", "Voice", AudioLines]
             ] },
-            { group: "KNOWLEDGE & TOOLS", items: [
-              ["memory", "Memory & chats", Brain],
+            { group: "INTELLIGENCE", items: [
               ["ai", "AI & models", Cpu],
-              ["internet", "Web & research", Globe2],
-              ["notion", "Notion notes", BookOpen],
-              ["brain", "Brain lab", Brain]
+              ["internet", "Web & Mikanify", Globe2],
+              ["vision", "Live Vision", Eye],
+              ["memory", "Memory & chats", Brain],
+              ["notion", "Notion", BookOpen]
             ] },
-            { group: "APPLICATION", items: [
+            { group: "WORKSPACE", items: [
+              ["brain", "Brain Lab", FlaskConical],
               ["interface", "Look & feel", Palette],
               ["capabilities", "Capabilities", Plug2]
             ] }
@@ -3791,7 +3816,7 @@ export default function App() {
                   if (tab === "capabilities") void checkCapabilities();
                   if (tab === "voice") void checkVoice(voiceEndpoint(draft.voice));
                 }}>
-                <Icon size={16} strokeWidth={1.9}/><span>{label}</span>
+                <span className="control-nav-icon"><Icon size={19} strokeWidth={1.85}/></span><span>{label}</span>
               </button>
             )}
           </div>)}
@@ -3831,6 +3856,41 @@ export default function App() {
               if (standaloneSettings) void emit("mikan://settings-chat", { action: "prefill", text: question });
               else { setInput(question); goCompact(); focusInput(); }
             }}/>} 
+        {settingsTab === "home" && <div className="control-home">
+          <section className="control-home-hero">
+            <div className="control-home-copy">
+              <span className="control-eyebrow"><Sparkles size={17}/> MAKE MIKAN YOURS</span>
+              <h2>Your companion.<br/><em>Your rules.</em></h2>
+              <p>From her voice and personality to the AI behind her answers, everything has a place now.</p>
+              <button type="button" className="control-primary-link" onClick={() => openSettingsTab("ai")}>
+                <Cpu size={18}/> Configure Mikan's brain <ChevronRight size={18}/>
+              </button>
+            </div>
+            <img className="control-home-portrait" src="/mikan.png" alt="" loading="lazy"/>
+          </section>
+          <div className="control-home-heading">
+            <div><h3>Explore your settings</h3><p>Choose an area to customize. Advanced options stay tucked away until you need them.</p></div>
+          </div>
+          <div className="control-home-grid">
+            {([
+              { tab: "appearance", title: "Character", description: "Outfits, wardrobe & animation", Icon: Shirt },
+              { tab: "ai", title: "AI & models", description: draft.provider === "local" ? "Local Ollama" : draft.provider === "auto" ? "Automatic provider" : "Using "+draft.provider, Icon: Cpu },
+              { tab: "voice", title: "Voice", description: draft.voice.muted ? "Muted right now" : draft.voice.engine === "pocket" ? "Pocket TTS" : "Qwen3-TTS", Icon: AudioLines },
+              { tab: "internet", title: "Web & Mikanify", description: "Mikanify: "+(draft.mikanifyAnswer ? "on" : "off")+" · search: "+(draft.autoSearch ? "automatic" : "manual"), Icon: Sparkles },
+              { tab: "memory", title: "Memory & chats", description: "Remembered facts and conversation history", Icon: Brain },
+              { tab: "vision", title: "Live Vision", description: liveVision.enabled ? "Screen capture enabled" : "Screen capture off", Icon: Eye },
+              { tab: "brain", title: "Brain Lab", description: "Scenarios, runs & diagnostics", Icon: FlaskConical },
+              { tab: "interface", title: "Look & feel", description: "Typography, colors & reactions", Icon: Palette }
+            ] as const).map(({tab,title,description,Icon}) =>
+              <button type="button" key={tab} className="control-home-card" onClick={()=>openSettingsTab(tab)}>
+                <span className="control-home-card-icon"><Icon size={22} strokeWidth={1.9}/></span>
+                <span><strong>{title}</strong><small>{description}</small></span>
+                <ChevronRight className="control-home-card-arrow" size={19}/>
+              </button>
+            )}
+          </div>
+          <div className="control-home-note"><Cat size={19}/> Settings are saved to this PC. Cloud credentials stay in Windows Credential Manager.</div>
+        </div>}
         {settingsTab === "ai" && <>
           <section className="control-intro"><h2>Choose how Mikan thinks</h2><p>Pick a model provider. Only its configuration appears below. Cloud keys remain in Windows Credential Manager.</p></section>
           <div className="control-provider-choices" role="group" aria-label="Inference provider">
@@ -4602,19 +4662,22 @@ export default function App() {
         </>}
         </div>
       </div>
-      {(["ai", "internet", "voice", "appearance", "interface", "personality"] as SettingsTab[]).includes(settingsTab) &&
-        <footer className="settings-footer">
-          <button className="save-button" onClick={saveConfiguration}><Check size={17}/> Save settings</button>
-        </footer>}
-      <footer className="settings-build-footer" title={"Built: "+BUILD_INFO.builtAt+" · Commit: "+BUILD_INFO.commit}>
-        <span>Desktop {buildIdentityLabel()}</span>
-        <button type="button" className="inline-action" aria-label="Copy desktop build information"
-          onClick={() => void copyTextToClipboard([
-            "Desktop: "+buildIdentityLabel(),
-            "Commit: "+BUILD_INFO.commit,
-            "Build timestamp: "+BUILD_INFO.builtAt,
-            "Build type: "+BUILD_INFO.kind
-          ].join("\n"))}><Copy size={12}/> Copy</button>
+      <footer className="control-commandbar" title={"Built: "+BUILD_INFO.builtAt+" · Commit: "+BUILD_INFO.commit}>
+        <div className="control-build-label">
+          <span className="control-build-dot" aria-hidden="true"/>
+          <span>Mikan v{DESKTOP_VERSION}</span>
+          <button type="button" className="control-build-copy"
+            aria-label="Copy desktop build information"
+            title={"Copy "+buildIdentityLabel()}
+            onClick={() => void copyTextToClipboard([
+              "Desktop: "+buildIdentityLabel(),
+              "Commit: "+BUILD_INFO.commit,
+              "Build timestamp: "+BUILD_INFO.builtAt,
+              "Build type: "+BUILD_INFO.kind
+            ].join("\n"))}><Copy size={14}/> Build details</button>
+        </div>
+        {(["ai", "internet", "voice", "appearance", "interface", "personality"] as SettingsTab[]).includes(settingsTab) &&
+          <button type="button" className="save-button" onClick={saveConfiguration}><Check size={18}/> Save changes</button>}
       </footer>
     </section>}
   </main>;
