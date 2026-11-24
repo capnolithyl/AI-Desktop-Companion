@@ -1,5 +1,7 @@
 # Mikan Desktop Companion
 
+Development guidance: [Model-first language understanding and engineering principles](AGENTS.md). Prefer LLM interpretation over hand-written natural-language rules; deterministic code validates and safely executes decisions.
+
 **v0.9.51 (Simple vs Strict web research, experimental):** Under Settings → Internet, choose **Simple** (new default) to have Mikan read the retrieved SearXNG results and relevant HTTPS page excerpts directly, then answer using numbered source citations. The prior structured JSON evidence pipeline remains available as **Strict** for comparison; it is not removed or silently mixed into Simple mode. Simple deliberately bypasses the old extractor and post-generation lexical rejection gate, so source accuracy and temporal comparisons must be reviewed in live tests. Both modes receive the current Detroit desktop date and preserve search result publication metadata; changing facts should be judged against relevant event dates, while historical/static facts need not be treated as stale solely due to source age. Brain Lab and the connected browser relay expose a separate interpreter selector, and live reports record which mode generated the answer. No change to stored memories or tool permissions. Tests were added but live Windows/Ollama validation is still required.
 
 

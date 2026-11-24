@@ -13,7 +13,7 @@ export function NasLearningReviews({status,client,onChanged}:{status:LearningSta
   const kind=(k:string)=>k==="fact"?"About you":k==="canon"?"About Mikan":"Interests";
   return <section className="memory-reviews" aria-label="NAS memory suggestions">
     <div className="memory-review-heading"><strong>Memory suggestions ({status.reviews.length})</strong><button className="secondary-action" disabled={working} onClick={()=>void act(async()=>{})}><RotateCw size={13}/> Refresh</button></div>
-    <p className="memory-explainer">Simple explicit new preferences can save automatically. Other proposals and changes to established facts, interests or canon need your approval. Learning uses a separate cloud request; sensitive and temporary details are conservatively filtered.</p>
+    <p className="memory-explainer">The model decides which durable memories to save, suggest for review or skip. Changes to established facts, interests or canon need your approval. Learning uses a separate cloud request for each privacy-eligible completed turn; evidence and permissions are validated before writing.</p>
     <p className="memory-explainer">Extraction queue: {status.queued} waiting or processing, {status.failed} requiring attention.
       {status.failed>0&&<button className="secondary-action" disabled={working} onClick={()=>void act(()=>client.retryLearning())}>Retry failed jobs</button>}
     </p>

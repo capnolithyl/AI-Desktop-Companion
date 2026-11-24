@@ -132,27 +132,32 @@ test("structured memory library preserves categories, pins, canon and interests;
   }finally{store.db.close();rmSync(root,{recursive:true,force:true});}
 });
 
-test("NAS learning is opt-in, quote-grounded and reviewable",async()=>{
+
+test("NAS learning follows model decisions while enforcing consent, evidence and review",async()=>{
   const root=mkdtempSync(join(tmpdir(),"mikan-learn-")),store=openStore(join(root,"memory.sqlite3"));
   const c=store.newConversation(),l=store.learning;
   const turn=(u,a)=>[store.append(c.id,"user",u),store.append(c.id,"assistant",a)];
-  const response=async facts=>await l.processNext(async()=>JSON.stringify({facts,interests:[],canon:[]}),{});
+  const response=async facts=>l.processNext(async()=>JSON.stringify({facts,interests:[],canon:[]}),{});
+  const fact=(fact,evidence,extra={})=>({fact,evidence,scope:"long_term",action:"save",category:"preferences",tags:[],...extra});
   try{
     assert.equal(l.enqueue(...turn("I love coffee","Nice!"),c.id),false);
     l.setSettings({user:true,character:false});
     assert.equal(l.enqueue(...turn("My password is abc123","Okay"),c.id),false);
     assert.equal(l.enqueue(...turn("I love coffee","Nice!"),c.id),true);
-    await response([{fact:"The user loves coffee",evidence:"I love coffee",scope:"long_term"},{fact:"The user likes tea",evidence:"I love tea",scope:"long_term"}]);
-    assert.equal(store.library.execute("snapshot",{}).facts[0].fact,"The user loves coffee");
+    await response([fact("Coffee is a drink the user loves","I love coffee",{tags:["coffee"]}),fact("The user likes tea","I love tea"),fact("The user likes coffee","I love coffee",{action:"skip"})]);
+    const record=store.library.execute("snapshot",{}).facts[0];
+    assert.equal(record.fact,"Coffee is a drink the user loves");assert.deepEqual(record.tags,["coffee"]);
     assert.equal(l.getStatus().lastOutcome.saved,1);
     l.enqueue(...turn("Actually, I prefer tea instead of coffee","Got it"),c.id);
-    const id=store.library.execute("snapshot",{}).facts[0].id;
-    await response([{fact:"The user prefers tea instead of coffee",evidence:"Actually, I prefer tea instead of coffee",scope:"long_term",relatedId:id}]);
-    const review=l.getStatus().reviews[0];assert.equal(review.targetId,id);
-    assert.equal(store.library.execute("snapshot",{}).facts[0].fact,"The user loves coffee");
+    await response([fact("The user prefers tea instead of coffee","Actually, I prefer tea instead of coffee",{relatedId:record.id,action:"save"})]);
+    const review=l.getStatus().reviews[0];assert.equal(review.targetId,record.id);
+    assert.equal(store.library.execute("snapshot",{}).facts[0].fact,record.fact);
     l.resolve(review.id,"accept");
     assert.equal(store.library.execute("snapshot",{}).facts[0].fact,"The user prefers tea instead of coffee");
     assert.equal(l.getStatus().history.length,1);
+    l.enqueue(...turn("I like pizza","Good"),c.id);
+    await response([fact("The user likes pizza","I like pizza",{relatedId:99999}),fact("The user likes pizza","I like pizza",{scope:"session"})]);
+    assert.equal(l.getStatus().lastOutcome.saved,0);
     l.enqueue(...turn("I like pizza","Good"),c.id);
     await l.processNext(async()=>{throw Error("quota");},{});
     assert.equal(l.getStatus().failed,1);assert.equal(l.retry().count,1);
@@ -160,7 +165,7 @@ test("NAS learning is opt-in, quote-grounded and reviewable",async()=>{
   }finally{store.db.close();rmSync(root,{recursive:true,force:true});}
 });
 
-test("NAS extraction separates canon and interests, preserves existing favorite ratings and resumes failed work",async()=>{
+test("NAS extraction separates canon and interests, protects existing records and resumes queued work",async()=>{
   const root=mkdtempSync(join(tmpdir(),"mikan-learn-media-")),path=join(root,"memory.sqlite3");
   let store=openStore(path);
   try{
@@ -168,55 +173,61 @@ test("NAS extraction separates canon and interests, preserves existing favorite 
     const c=store.newConversation();
     const enqueue=(u,a)=>store.learning.enqueue(store.append(c.id,"user",u),store.append(c.id,"assistant",a),c.id);
     const run=async data=>store.learning.processNext(async()=>JSON.stringify({facts:[],interests:[],canon:[],...data}),{});
-    assert.equal(enqueue("Pretend I love coffee","My favorite drink is tea"),false);
+    const band={name:"Example Band",kind:"band",status:"favorite",evidence:"My favorite band is Example Band",action:"save",scope:"long_term"};
     enqueue("My favorite band is Example Band","Nice!");
-    await run({interests:[{name:"Example Band",kind:"band",status:"favorite",evidence:"My favorite band is Example Band"}]});
+    await run({interests:[band]});
     let s=store.library.execute("snapshot",{});
     assert.equal(s.interests[0].status,"favorite");
     store.library.execute("editInterest",{id:s.interests[0].id,item:{...s.interests[0],rating:9,notes:"Keep this"}});
     enqueue("I like Example Band","Nice!");
-    await run({interests:[{name:"Example Band",kind:"band",status:"like",evidence:"I like Example Band"}]});
+    await run({interests:[{...band,status:"like",evidence:"I like Example Band",action:"skip"}]});
     assert.equal(store.learning.getStatus().reviews.length,0);
-    enqueue("What is your favorite color?","My favorite color is orange.");
-    await run({canon:[{category:"favorites",label:"Favorite color",value:"orange",evidence:"My favorite color is orange."}]});
+    enqueue("I no longer enjoy Example Band","Got it");
+    await run({interests:[{...band,status:"dislike",evidence:"I no longer enjoy Example Band"}]});
+    assert.equal(store.learning.getStatus().reviews.length,1);
+    assert.equal(store.library.execute("snapshot",{}).interests[0].status,"favorite");
+    enqueue("What is your favorite color?","I have always been drawn to orange.");
+    await run({canon:[{category:"favorites",label:"Favorite color",value:"orange",evidence:"I have always been drawn to orange.",action:"save",scope:"long_term"}]});
     s=store.library.execute("snapshot",{});
-    assert.equal(s.characterFacts[0].value,"orange");
-    assert.equal(s.facts.length,0);
-    assert.equal(s.interests[0].rating,9);
+    assert.equal(s.characterFacts[0].value,"orange");assert.equal(s.facts.length,0);assert.equal(s.interests[0].rating,9);
     enqueue("I love tea","Nice!");
     store.db.close();store=openStore(path);
-    assert.equal(store.learning.settings().user,true);
-    assert.equal(store.learning.getStatus().queued,1);
-    await run({facts:[{fact:"The user loves tea",evidence:"I love tea",scope:"long_term"}]});
+    assert.equal(store.learning.settings().user,true);assert.equal(store.learning.getStatus().queued,1);
+    await run({facts:[{fact:"The user loves tea",evidence:"I love tea",action:"save",scope:"long_term",category:"preferences",tags:[]}]});
     assert.equal(store.library.execute("snapshot",{}).facts[0].fact,"The user loves tea");
   }finally{store.db.close();rmSync(root,{recursive:true,force:true});}
 });
 
-test("Schnitzel preference survives rhetorical banter without a model request",async()=>{
-  const root=mkdtempSync(join(tmpdir(),"mikan-favorite-")),store=openStore(join(root,"memory.sqlite3"));
+test("Natural banter, hypothetical statements and contextual answers all reach the semantic model",async()=>{
+  const root=mkdtempSync(join(tmpdir(),"mikan-semantic-")),store=openStore(join(root,"memory.sqlite3"));
   try{
     const c=store.newConversation(),l=store.learning;
     l.setSettings({user:true,character:true});
     const enqueue=(u,a="Nice!")=>l.enqueue(store.append(c.id,"user",u),store.append(c.id,"assistant",a),c.id);
-    assert.equal(enqueue("Imagine that my favorite food is lobster"),false);
-    assert.equal(enqueue("Pretend my favorite food is lobster"),false);
-    assert.equal(enqueue("one of my favorite foods is Schnitzel. imagine that a german who likes schnitzel"),true);
+    const exact="one of my favorite foods is Schnitzel. imagine that a german who likes schnitzel";
+    const proposed={fact:"One of the user's favorite foods is Schnitzel",evidence:"one of my favorite foods is Schnitzel",action:"save",scope:"long_term",category:"preferences",tags:["food"]};
     let calls=0;
-    await l.processNext(async()=>{calls++;throw Error("Unexpected extra model call");},{});
-    const s=store.library.execute("snapshot",{});
-    assert.equal(calls,0);
-    assert.equal(s.facts[0].fact,"One of the user's favorite foods is Schnitzel");
-    assert.equal(s.facts[0].category,"preferences");
+    assert.equal(enqueue(exact),true);
+    await l.processNext(async req=>{calls++;const input=JSON.parse(req.history[0].content);assert.equal(input.currentUser,exact);return JSON.stringify({facts:[proposed],interests:[],canon:[]});},{});
+    assert.equal(calls,1);
+    assert.equal(store.library.execute("snapshot",{}).facts[0].fact,proposed.fact);
     assert.equal(l.getStatus().lastOutcome.saved,1);
-    assert.equal(l.getStatus().lastOutcome.entries[0].evidence,"one of my favorite foods is Schnitzel");
-    assert.equal(enqueue("one of my favorite foods is Schnitzel. imagine that a german who likes schnitzel"),true);
-    await l.processNext(async()=>{throw Error("Unexpected extra model call");},{});
-    assert.equal(store.library.execute("snapshot",{}).facts.length,1);
+    enqueue(exact);
+    await l.processNext(async()=>JSON.stringify({facts:[proposed],interests:[],canon:[]}),{});
     assert.equal(l.getStatus().lastOutcome.saved,0);
-    enqueue("My favorite food is sushi. But actually I hate sushi.");
-    let modelCalls=0;
-    await l.processNext(async()=>{modelCalls++;return JSON.stringify({facts:[],interests:[],canon:[]});},{});
-    assert.equal(modelCalls,1);
-    assert.equal(store.library.execute("snapshot",{}).facts.length,1);
+    for(const phrase of ["Imagine that my favorite food is lobster","Pretend I love coffee","I am testing a feature today","Thanks!","My favorite food is sushi. But actually I hate sushi."]){
+      assert.equal(enqueue(phrase),true);
+      await l.processNext(async req=>{assert.equal(JSON.parse(req.history[0].content).currentUser,phrase);return JSON.stringify({facts:[],interests:[],canon:[]});},{});
+    }
+    enqueue("What else should we talk about?","What flavor of ice cream do you like best?");
+    await l.processNext(async()=>JSON.stringify({facts:[],interests:[],canon:[]}),{});
+    enqueue("Vanilla, hands down");
+    await l.processNext(async req=>{
+      const input=JSON.parse(req.history[0].content);
+      assert.ok(input.recent.some(m=>m.content==="What flavor of ice cream do you like best?"));
+      assert.ok(input.existing.facts.some(f=>f.fact===proposed.fact));
+      return JSON.stringify({facts:[{fact:"The user prefers vanilla ice cream",evidence:"Vanilla, hands down",scope:"long_term",action:"save",category:"preferences",tags:["food"]}],interests:[],canon:[]});
+    },{});
+    assert.equal(store.library.execute("snapshot",{}).facts.length,2);
   }finally{store.db.close();rmSync(root,{recursive:true,force:true});}
 });
