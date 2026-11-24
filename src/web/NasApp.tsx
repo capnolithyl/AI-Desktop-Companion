@@ -11,9 +11,10 @@ import {AVATAR_BACKGROUNDS} from "../avatar-background";
 import {PortraitContextMenu,type PortraitMenuItem} from "../PortraitContextMenu";
 import {reactionFromReply,type AvatarReaction,type AvatarReactionKind} from "../avatar-reactions";
 import {DEFAULT_COMPANION_PROFILE,importCompanionProfile,exportCompanionProfile,type CompanionProfile} from "../companion-profile";
-import {NasClient,NasRequestError,type NasMessage,type NasChat,type LibrarySnapshot,type NasStatus,type LearningStatus,type LearningSettings,type LearningEvent} from "./nas-client";
+import {NasClient,NasRequestError,type NasMessage,type NasChat,type LibrarySnapshot,type NasStatus,type LearningStatus,type LearningSettings} from "./nas-client";
 import {MemoryPanel} from "../MemoryPanel";
 import {NasLearningReviews} from "./NasLearningReviews";
+import {memoryNotice} from "./memory-notifications";
 const portrait=new URL("../../assets/iki/mikan-chat-avatar.webp",import.meta.url).href;
 const referencePortrait=new URL("../../assets/iki/mikan-reference.png",import.meta.url).href;
 const KEY="mikan-nas-key";
@@ -116,14 +117,9 @@ export function NasApp(){
         const result=await client.learningEvents(eventCursor.current);
         if(cancelled)return;
         eventCursor.current=result.cursor;
-        const messages=result.items.flatMap((e:LearningEvent)=>{
-          if(e.kind==="failed")return ["Memory extraction failed ("+(e.payload.stage??"unknown")+")"];
-          const entries=(e.payload.entries??[]).filter(x=>x.status==="saved").map(x=>"Remembered: "+x.description);
-          if(e.payload.reviewQueued)entries.push(e.payload.reviewQueued+" memory suggestion(s) to review");
-          return entries;
-        });
-        if(messages.length)setMemoryToast({key:++toastSerial.current,message:messages.join("\n"),warning:result.items.some(e=>e.kind==="failed")});
-        if(result.items.length){
+        const notification=memoryNotice(result.items);
+        if(notification)setMemoryToast({key:++toastSerial.current,...notification});
+        if(result.items.some(e=>e.kind==="outcome"||e.kind==="failed")){
           const [snapshot,learn]=await Promise.all([client.library(),client.learning()]);
           if(!cancelled){setLibrary(snapshot);setLearning(learn);}
         }

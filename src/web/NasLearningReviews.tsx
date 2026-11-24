@@ -19,6 +19,7 @@ export function NasLearningReviews({status,client,onChanged}:{status:LearningSta
     </p>
     {error&&<p className="memory-error" role="alert">{error}</p>}
     {status.lastOutcome&&<details className="memory-session-notes"><summary>Last extraction: {status.lastOutcome.saved} saved, {status.lastOutcome.reviewQueued} suggested</summary>
+      {status.lastOutcome.proposed!==undefined&&<p className="memory-explainer">Model proposed {status.lastOutcome.proposed}; {status.lastOutcome.validated??0} passed validation.</p>}
       {status.lastOutcome.entries.map((e,i)=><div key={i} className="memory-item"><small>{kind(e.kind)} · {e.status}</small><p>{e.description}</p><small>Evidence: “{e.evidence}”</small></div>)}
     </details>}
     {status.reviews.map(r=><article className="memory-item" key={r.id}>

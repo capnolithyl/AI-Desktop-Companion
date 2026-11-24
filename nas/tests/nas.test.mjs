@@ -1,3 +1,4 @@
+import {memoryNotice} from "../../src/web/memory-notifications.ts";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, rmSync } from "node:fs";
@@ -242,13 +243,15 @@ test("committed memory outcomes and failures are delivered once per cursor",asyn
     enqueue("I like pears");
     await l.processNext(async()=>JSON.stringify({facts:[{fact:"The user likes pears",evidence:"I like pears",action:"save",scope:"long_term",category:"preferences",tags:[]}],interests:[],canon:[]}),{});
     const first=l.events(baseline.cursor);
-    assert.equal(first.items.length,1);assert.equal(first.items[0].payload.saved,1);
+    assert.equal(first.items.length,2);assert.equal(first.items[0].kind,"queued");assert.equal(first.items[1].payload.saved,1);
+    assert.match(memoryNotice(first.items).message,/Remembered: The user likes pears/);
     assert.equal(store.library.execute("snapshot",{}).facts[0].fact,"The user likes pears");
     assert.deepEqual(l.events(first.cursor).items,[]);
     enqueue("Thanks");await l.processNext(async()=>JSON.stringify({facts:[],interests:[],canon:[]}),{});
     enqueue("I like tea");await l.processNext(async()=>{throw Error("synthetic private upstream failure");},{});
     const next=l.events(first.cursor);
-    assert.equal(next.items.length,2);assert.equal(next.items[0].payload.saved,0);assert.equal(next.items[1].kind,"failed");assert.equal(next.items[1].payload.stage,"provider");
-    assert.equal(l.diagnostics(c.id).length,3);assert.ok(!JSON.stringify(next).includes("synthetic private"));
+    assert.equal(next.items.length,4);assert.equal(next.items[1].payload.saved,0);assert.equal(next.items[3].kind,"failed");assert.equal(next.items[3].payload.stage,"provider");
+    assert.equal(memoryNotice(next.items.slice(0,2)),null);assert.equal(memoryNotice(next.items).warning,true);
+    assert.equal(l.diagnostics(c.id).length,6);assert.ok(!JSON.stringify(next).includes("synthetic private"));
   }finally{store.db.close();rmSync(root,{recursive:true,force:true});}
 });

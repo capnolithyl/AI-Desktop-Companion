@@ -5,7 +5,7 @@ export type NasChat=MemoryConversation;
 export type LearningSettings={user:boolean;character:boolean};
 export type LearningStatus={
   settings:LearningSettings;queued:number;failed:number;
-  lastOutcome:{saved:number;reviewQueued:number;processedAt:number;entries:{kind:string;description:string;evidence:string;status:string}[]}|null;
+  lastOutcome:{saved:number;reviewQueued:number;processedAt:number;proposed?:number;validated?:number;entries:{kind:string;description:string;evidence:string;status:string}[]}|null;
   reviews:{id:number;kind:string;description:string;evidence:string;targetId:number|null;current:string|null}[];
   history:{id:number;kind:string;previous:string;replacement:string;changedAt:number}[];
 };
@@ -14,7 +14,7 @@ export type NasMessage={id:string;role:"user"|"assistant";content:string;created
 export type NasFact={id:number;fact:string;category:string;updatedAt:number};
 export type NasBuild={version:string;commit:string;backendHash:string|null;actualBackendHash:string};
 export type NasStatus={provider:string;model:string;busy:boolean;build?:NasBuild};
-export type LearningEvent={id:number;conversationId:string|null;assistantId:string|null;kind:"outcome"|"failed";createdAt:number;payload:{saved?:number;reviewQueued?:number;entries?:{description:string;status:string;kind:string}[];stage?:string;validated?:number}};
+export type LearningEvent={id:number;conversationId:string|null;assistantId:string|null;kind:"outcome"|"failed"|"queued"|"skipped";createdAt:number;payload:{saved?:number;reviewQueued?:number;entries?:{description:string;status:string;kind:string}[];stage?:string;validated?:number;proposed?:number;reason?:string}};
 export class NasRequestError extends Error {
   constructor(message:string,readonly status:number){super(message);}
 }

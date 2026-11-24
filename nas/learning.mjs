@@ -38,6 +38,7 @@ function parseCandidates(raw,user,assistant,flags,relatedIds){
   const obj=JSON.parse(source);
   if(!obj||!["facts","interests","canon"].every(k=>Array.isArray(obj[k])))fail("Invalid extraction output");
   const list=[];
+  const proposed=["facts","interests","canon"].reduce((n,k)=>n+obj[k].filter(v=>v&&["save","review"].includes(v.action)).length,0);
   const groups=[
     {key:"facts",kind:"fact",enabled:flags.user,source:user},
     {key:"interests",kind:"interest",enabled:flags.user,source:user},
@@ -74,7 +75,8 @@ function parseCandidates(raw,user,assistant,flags,relatedIds){
     }
   }
   // Identical evidence for a generic media fact and structured interest is redundant.
-  return list.filter(c=>c.kind!=="fact"||!list.some(i=>i.kind==="interest"&&i.evidence===c.evidence));
+  const candidates=list.filter(c=>c.kind!=="fact"||!list.some(i=>i.kind==="interest"&&i.evidence===c.evidence));
+  return {candidates,proposed,validated:candidates.length};
 }
 
 // Retrieval only: lexical overlap chooses a bounded reference set, never
@@ -124,9 +126,17 @@ export function createLearning(db,library){
   const find=(k,id)=>records(snap(),k).find(x=>x.id===id);
   const display=(k,p)=>k==="fact"?p.fact:k==="interest"?p.name+" ("+p.kind+", "+p.status+")":p.label+": "+p.value;
   function enqueue(user,assistant,conversationId,prior=""){
-    const flags=eligibleTurn(user.content,assistant.content,settings(),prior);
-    if(!flags.user&&!flags.character)return false;
-    return !!db.prepare("INSERT OR IGNORE INTO nas_learning_jobs(assistant_id,user_id,conversation_id,capture_user,capture_character) VALUES(?,?,?,?,?)").run(assistant.id,user.id,conversationId,+flags.user,+flags.character).changes;
+    const prefs=settings(),flags=eligibleTurn(user.content,assistant.content,prefs,prior);
+    return tx(db,()=>{
+      const ref={conversation_id:conversationId,assistant_id:assistant.id};
+      if(!flags.user&&!flags.character){
+        emit("skipped",{reason:prefs.user||prefs.character?"privacy filter":"learning disabled"},ref);
+        return false;
+      }
+      const inserted=db.prepare("INSERT OR IGNORE INTO nas_learning_jobs(assistant_id,user_id,conversation_id,capture_user,capture_character) VALUES(?,?,?,?,?)").run(assistant.id,user.id,conversationId,+flags.user,+flags.character).changes;
+      if(inserted)emit("queued",{capture:flags},ref);
+      return !!inserted;
+    });
   }
   function save(c,source,target){
     const {kind,item,evidence}=c;let id;
@@ -228,9 +238,9 @@ export function createLearning(db,library){
       stage="provider";
       const raw=await generate({config,system:LEARNING_PROMPT,history:[{role:"user",content:JSON.stringify(input)}],onDelta:()=>{},temperature:0.1,maxTokens:2400});
       stage="validation";
-      const candidates=parseCandidates(raw,input.currentUser,input.currentAssistant,capture,new Set(existing.facts.map(x=>x.id)));
+      const {candidates,proposed,validated}=parseCandidates(raw,input.currentUser,input.currentAssistant,capture,new Set(existing.facts.map(x=>x.id)));
       stage="persist";
-      apply(job,candidates,{validated:candidates.length});
+      apply(job,candidates,{proposed,validated});
     }catch{
       tx(db,()=>{
         const changed=db.prepare("UPDATE nas_learning_jobs SET status='failed' WHERE assistant_id=?").run(job.assistant_id).changes;
