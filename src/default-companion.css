@@ -250,3 +250,24 @@
 @media(prefers-reduced-motion:reduce) {
   .mikan-workspace button,.mikan-workspace .workspace-new-chat {transition:none!important;animation:none!important;}
 }
+
+
+.workspace-system-feedback {
+  align-self:center;display:flex;align-items:center;gap:10px;
+  padding:12px 17px;margin:5px 0;border:1px solid #a56a4b;border-radius:13px;
+  color:#ffe4cc;background:#4e3228;font-size:13px;max-width:90%;white-space:pre-wrap;
+}
+.workspace-system-feedback svg {color:#ffba6e;flex:0 0 auto;}
+.workspace-expression-wrap {position:relative;display:flex;min-width:0;}
+.workspace-expression-wrap > button {width:100%;}
+.workspace-expression-menu {
+  position:absolute;bottom:calc(100% + 9px);left:50%;transform:translateX(-50%);
+  z-index:20;min-width:185px;max-width:225px;padding:8px;
+  display:grid;grid-template-columns:1fr 1fr;gap:5px;
+  border:1px solid #f3a263;border-radius:14px;background:#3d2626;
+  box-shadow:0 0 20px #fa894c99,0 10px 25px #160b0dce;
+}
+.workspace-avatar-actions .workspace-expression-menu button {
+  display:block;padding:10px 6px;text-align:center;min-height:37px;
+  border-radius:8px;font-size:12px;
+}
