@@ -16,7 +16,7 @@ fn tools_for_round(permitted:bool, round:usize)->bool {
     permitted && round<MAX_TOOL_ROUNDS
 }
 const FINAL_TOOL_GUIDANCE:&str=
-    "The web lookup phase is complete. No additional tool calls are available for this answer. Answer the latest owner question directly, in natural language. Use the facts and saved-memory context actually available. If public sources were retrieved, cite the exact numbered source [1], [2], etc. supporting each external claim. If the sources don't establish a new release, event, change or date, distinguish 'not confirmed in the retrieved results' from 'definitely never announced'. Don't present old tours as new album announcements. Do not invent citations or facts. If a source is a repository README/changelog, synthesize what the README describes; don't dump verbatim fragments.";
+    "The web lookup phase is complete. No additional tool calls are available for this answer. Answer the latest owner question directly, in natural language. Use the facts and saved-memory context actually available. If public sources were retrieved, cite the exact numbered source [1], [2], etc. supporting each external claim. If the sources don't establish a new release, event, change or date, distinguish 'not confirmed in the retrieved results' from 'definitely never announced'. Don't present old tours as new album announcements. Do not invent concert dates, citations or facts; if a local event request lacks necessary location context, ask for a city or region. If a source is a repository README/changelog, synthesize what the README describes; don't dump verbatim fragments.";
 const SERVICE: &str = "dev.capnolithyl.mikan.nvidia";
 const ACCOUNT: &str = "default";
 pub(crate) const DEFAULT_MODEL: &str = "nvidia/nemotron-3-ultra-550b-a55b";
