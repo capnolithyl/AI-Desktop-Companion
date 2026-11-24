@@ -6,5 +6,11 @@ if (import.meta.env.MODE === "mobile") {
 } else if (new URLSearchParams(window.location.search).has("region-picker")) {
   void import("./RegionPicker").then(({default:RegionPicker}) => root.render(<RegionPicker/>));
 } else {
-  void Promise.all([import("./App"), import("./styles.css")]).then(([{ default: App }]) => root.render(<App/>));
+  void Promise.all([import("./App"), import("./styles.css")])
+    .then(([{ default: App }]) => root.render(<App/>))
+    .catch(error => {
+      console.error("Mikan desktop failed to initialize:", error);
+      document.querySelector(".mikan-startup-title")?.replaceChildren("Could not start Mikan");
+      document.querySelector(".mikan-startup-subtitle")?.replaceChildren("The interface failed to load. Check the development console or restart Mikan.");
+    });
 }

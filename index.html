@@ -5,9 +5,72 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#17151d" />
     <title>Mikan · Desktop Companion</title>
+    <!-- Inline splash: visible before the React bundle, without loading fonts or JS dependencies. -->
+    <style>
+      #mikan-startup { display: none; }
+      html.mikan-booting #root { opacity: 0; }
+      html.mikan-ready #root { opacity: 1; transition: opacity 180ms ease; }
+      html.mikan-booting #mikan-startup,
+      html.mikan-ready #mikan-startup {
+        position: fixed; inset: 0; z-index: 9999;
+        display: flex; justify-content: center; align-items: center;
+        color: #f6eae2; font: 13px "Segoe UI Variable", "Segoe UI", system-ui, sans-serif;
+      }
+      html.mikan-boot-settings #mikan-startup { background: #1d2228; }
+      html.mikan-ready #mikan-startup { opacity: 0; pointer-events: none; transition: opacity 240ms ease; }
+      .mikan-startup-card {
+        display: flex; flex-direction: column; justify-content: center; align-items: center;
+        gap: 12px; padding: 30px 36px; max-width: calc(100% - 36px); text-align: center;
+        background: #29242d; border: 1px solid #6b5564; border-radius: 20px;
+        box-shadow: 0 16px 48px #0e0b1080;
+      }
+      html.mikan-boot-settings .mikan-startup-card { background: #252b32; border-color: #4d5965; }
+      .mikan-startup-spinner {
+        width: 36px; height: 36px; box-sizing: border-box;
+        border: 3px solid #776470; border-top-color: #ffb88a; border-radius: 50%;
+        animation: mikan-startup-spin 850ms linear infinite;
+      }
+      html.mikan-boot-settings .mikan-startup-spinner { border-color: #48535e; border-top-color: #a2ced2; }
+      .mikan-startup-title { font-size: 17px; font-weight: 700; }
+      .mikan-startup-subtitle { color: #c7b6c2; font-size: 12px; line-height: 1.5; }
+      @keyframes mikan-startup-spin { to { transform: rotate(360deg); } }
+      @media (prefers-reduced-motion: reduce) {
+        .mikan-startup-spinner { animation: none; border-color: #ffb88a; }
+        html.mikan-ready #mikan-startup, html.mikan-ready #root { transition: none; }
+      }
+    </style>
+    <script>
+      if (!new URLSearchParams(location.search).has("region-picker") && !/Android/i.test(navigator.userAgent)) {
+        document.documentElement.classList.add("mikan-booting");
+        if (new URLSearchParams(location.search).get("settings") === "1") {
+          document.documentElement.classList.add("mikan-boot-settings");
+        }
+      }
+    </script>
   </head>
   <body>
     <div id="root"></div>
+    <div id="mikan-startup" role="status" aria-live="polite" aria-label="Mikan is starting">
+      <div class="mikan-startup-card">
+        <div class="mikan-startup-spinner" aria-hidden="true"></div>
+        <div class="mikan-startup-title">Waking Mikan…</div>
+        <div id="mikan-startup-subtitle" class="mikan-startup-subtitle">Preparing the companion</div>
+      </div>
+    </div>
+    <script>
+      if (document.documentElement.classList.contains("mikan-boot-settings")) {
+        document.querySelector(".mikan-startup-title").textContent = "Opening Control Center…";
+        document.querySelector("#mikan-startup-subtitle").textContent = "Preparing your settings";
+      }
+      if (document.documentElement.classList.contains("mikan-booting")) {
+        window.setTimeout(() => {
+          const subtitle = document.getElementById("mikan-startup-subtitle");
+          if (subtitle && document.documentElement.classList.contains("mikan-booting")) {
+            subtitle.textContent = "Still starting. This can take longer after an update…";
+          }
+        }, 10000);
+      }
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

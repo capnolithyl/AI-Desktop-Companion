@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type CSSProperties, type MouseEvent as ReactMouseEvent } from "react";
+import { lazy, Suspense, useCallback, useEffect, useRef, useState, useSyncExternalStore, type CSSProperties, type MouseEvent as ReactMouseEvent } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { openUrl } from "@tauri-apps/plugin-opener";
@@ -52,7 +52,6 @@ import {
   type CharacterCategory, type CharacterFact, type InterestItem
 } from "./memory-client";
 import { MemoryPanel } from "./MemoryPanel";
-import { BrainEvalPanel } from "./BrainEvalPanel";
 import {
   subscribeBrainEval, getBrainEvalStatus, getBrainEvalReport, restoreBrainEvalReport,
   startBrainEvaluation, stopBrainEvaluation, reviewBrainEvalScenario,
@@ -84,7 +83,6 @@ import {
 import { CAPTURE_INTERVAL_MIN,CAPTURE_INTERVAL_MAX,ANALYSIS_POLICY,type RegionChoice } from "./capture-region";
 import { attachmentQuestion, attachmentPromptText, loadChatAttachment, type PendingAttachment, type ExtractedDocument } from "./chat-attachments";
 import { parseIkiModel } from "@ikijs/format";
-import { IkiAvatar } from "./IkiAvatar";
 import { resolveDisplayedIkiRig } from "./iki-avatar-selection";
 import { PortraitContextMenu, type PortraitMenuItem } from "./PortraitContextMenu";
 import type { MenuPoint } from "./portrait-context-menu";
@@ -110,6 +108,9 @@ import {
   localWardrobeDay, pickDailyOutfit, type WardrobeChoice, type WardrobeConfig,
   type OutfitMetadata
 } from "./iki-wardrobe";
+
+const BrainEvalPanel = lazy(() => import("./BrainEvalPanel").then(module => ({ default: module.BrainEvalPanel })));
+const IkiAvatar = lazy(() => import("./IkiAvatar").then(module => ({ default: module.IkiAvatar })));
 
 type Screen = "compact" | "log" | "settings" | "search" | "page" | "help";
 type SettingsTab = "ai" | "internet" | "notion" | "voice" | "appearance" | "interface" | "personality" | "memory" | "capabilities" | "brain";
@@ -251,6 +252,27 @@ function ReplyMetrics({ diagnostics }: { diagnostics?: Diagnostics }) {
 
 export default function App() {
   const standaloneSettings = isStandaloneSettingsWindow();
+  // The HTML splash paints before the large desktop bundle. Dismiss only after
+  // React has committed its first frame; model/voice/memory health stays async.
+  useEffect(() => {
+    if (!document.documentElement.classList.contains("mikan-booting")) return;
+    let secondFrame = 0;
+    const firstFrame = window.requestAnimationFrame(() => {
+      secondFrame = window.requestAnimationFrame(() => {
+        document.documentElement.classList.remove("mikan-booting");
+        document.documentElement.classList.add("mikan-ready");
+        window.setTimeout(() => {
+          document.getElementById("mikan-startup")?.remove();
+          document.documentElement.classList.remove("mikan-ready", "mikan-boot-settings");
+        }, 300);
+      });
+    });
+    return () => {
+      window.cancelAnimationFrame(firstFrame);
+      window.cancelAnimationFrame(secondFrame);
+    };
+  }, []);
+
   const brainEvalStatus = useSyncExternalStore(subscribeBrainEval, getBrainEvalStatus, getBrainEvalStatus);
   useEffect(()=>{void restoreBrainEvalReport()},[]);
   const [screen, setScreen] = useState<Screen>(standaloneSettings ? "settings" : "compact");
@@ -3263,6 +3285,8 @@ export default function App() {
     {!standaloneSettings && <div className="portrait-space" title="Drag Mikan to move the window" onMouseDown={dragPortrait}
       onContextMenu={event => { event.preventDefault(); setPortraitMenuAt({ x: event.clientX, y: event.clientY }); }}>
       {avatarDisplay === "animated" && ikiReady ? (
+        <Suspense fallback={<img className="character-portrait" src={portrait ?? BUNDLED_PORTRAIT}
+          alt="Mikan is getting ready" draggable={false}/>}>
         <IkiAvatar customRig={displayedIkiRig.customRig} rigUrl={displayedIkiRig.rigUrl} speaking={voiceState === "playing"}
           reaction={avatarReaction}
           rigLabel={displayedIkiRig.rigLabel}
@@ -3281,6 +3305,7 @@ export default function App() {
               saveAvatarDisplay("portrait");
             }
           }}/>
+        </Suspense>
       ) : portrait ? (
         <img className="character-portrait" src={portrait} alt="Mikan, your desktop companion" draggable={false}
           onError={() => setPortrait(null)}/>
@@ -3774,7 +3799,9 @@ export default function App() {
         <div key={settingsTab} className={settingsTab === "brain" ? "settings-body settings-brain"
           : settingsTab === "memory" || settingsTab === "capabilities" ? "settings-body settings-embedded"
           : "settings-body"}>
-        {settingsTab === "brain" && <BrainEvalPanel settings={settings} availableModels={availableModels} />}
+        {settingsTab === "brain" && <Suspense fallback={<div className="settings-section-title">Opening Brain Lab…</div>}>
+          <BrainEvalPanel settings={settings} availableModels={availableModels} />
+        </Suspense>}
         {settingsTab === "memory" && <MemoryPanel embedded key={memoryInitialTab} initialTab={memoryInitialTab}
           conversations={conversations} sessionSummaries={sessionSummaries} facts={userFacts}
           characterFacts={characterFacts} interests={interests} currentId={activeConversationId}
