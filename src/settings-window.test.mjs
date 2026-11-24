@@ -227,5 +227,5 @@ test("Default reuses native Iki and composer without duplicating memory state",(
   assert.match(app,/modelPicker=\{modelFooter\}/);
   assert.match(avatar,/new IkiPlayer\(canvas\)/);
   assert.match(app,/onOpenChat=\{id=>\{void openConversation\(id\);\}\}/);
-  assert.match(app,/onExpression=\{\(\)=>/);
+  assert.match(app,/onExpression=\{kind=>testAvatarReaction\(kind\)\}/);
 });
