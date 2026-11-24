@@ -13,7 +13,7 @@ import { emit, listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { getCurrentWindow, currentMonitor, LogicalSize } from "@tauri-apps/api/window";
 import { companionWindowSize } from "./companion-layout";
 import { AVATAR_BACKGROUNDS, AVATAR_BACKGROUND_KEY, AVATAR_BACKGROUND_EVENT, loadAvatarBackground, readAvatarBackground, saveAvatarBackground, type AvatarBackground } from "./avatar-background";
-import { WorkspacePawSeal, WorkspaceAvatarRays } from "./WorkspaceDecor";
+import { WorkspacePawSeal, WorkspaceAvatarRays, WorkspaceSendPaw } from "./WorkspaceDecor";
 
 import { initialSettingsTab, initialMemoryTab, isStandaloneSettingsWindow, validSettingsTab, validMemoryTab } from "./settings-window";
 import { register, unregister } from "@tauri-apps/plugin-global-shortcut";
@@ -157,9 +157,9 @@ const WORKSPACE_CHAT_PORTRAIT = new URL("../assets/iki/mikan-chat-avatar.webp", 
 // The open right edge overlaps the balloon border; the fill hides that seam.
 // The same shape mirrors for user messages, including failed/streaming turns.
 function WorkspaceBubbleTail() {
-  return <svg className="workspace-bubble-tail" viewBox="0 0 22 24" aria-hidden="true" focusable="false">
-    <path d="M22 3 H16 Q10 7 2 9 Q10 13 16 21 H22Z" fill="var(--bubble-tail)"/>
-    <path d="M16 3 Q10 7 2 9 Q10 13 16 21" fill="none"
+  return <svg className="workspace-bubble-tail" viewBox="0 0 18 22" aria-hidden="true" focusable="false">
+    <path d="M18 2 H13 Q11 8 2 8 Q8 12 13 20 H18Z" fill="var(--bubble-tail)"/>
+    <path d="M13 2 Q11 8 2 8 Q8 12 13 20" fill="none"
       stroke="var(--bubble-edge)" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
   </svg>;
 }
@@ -3634,7 +3634,7 @@ export default function App() {
           </button>
         ) : (
           <button type="button" className="send-button chat-paw-send" aria-label="Send message" title="Send message · Enter"
-            disabled={!memoryReady || attachmentBusy || (!input.trim() && !pendingAttachment && !pendingScreenshot && !liveVision.enabled)} onClick={() => {setChatToolsOpen(false);void send();}}><PawPrint size={23} fill="currentColor" strokeWidth={1.6}/></button>
+            disabled={!memoryReady || attachmentBusy || (!input.trim() && !pendingAttachment && !pendingScreenshot && !liveVision.enabled)} onClick={() => {setChatToolsOpen(false);void send();}}>{defaultUi?<WorkspaceSendPaw/>:<PawPrint size={23} fill="currentColor" strokeWidth={1.6}/>}</button>
         )}
       </div>
   </>;
@@ -3731,7 +3731,7 @@ export default function App() {
             className={"workspace-message "+message.role+(message.failed?" failed":"")}>
             {message.role==="assistant"&&!message.failed&&message.id===lastReply?.id&&<WorkspaceAvatarRays/>}
             <span className="workspace-message-avatar" aria-hidden="true">
-              {message.role==="assistant"?<img className="workspace-chat-portrait" src={WORKSPACE_CHAT_PORTRAIT} alt="" width={40} height={40} draggable={false}/>:<UserRound size={19}/>}
+              {message.role==="assistant"?<img className="workspace-chat-portrait" src={WORKSPACE_CHAT_PORTRAIT} alt="" width={58} height={58} draggable={false}/>:<UserRound size={19}/>}
             </span>
             <div className="workspace-message-body">
               <div className="workspace-message-author">
@@ -3768,7 +3768,7 @@ export default function App() {
           </article>)}
           {busy && messages[messages.length-1]?.role!=="assistant" &&
             <div className="workspace-message assistant workspace-thinking" role="status">
-              <span className="workspace-message-avatar" aria-hidden="true"><img className="workspace-chat-portrait" src={WORKSPACE_CHAT_PORTRAIT} alt="" width={40} height={40} draggable={false}/></span>
+              <span className="workspace-message-avatar" aria-hidden="true"><img className="workspace-chat-portrait" src={WORKSPACE_CHAT_PORTRAIT} alt="" width={58} height={58} draggable={false}/></span>
               <div className="workspace-message-bubble"><WorkspaceBubbleTail/><LoaderCircle size={17} className="spin"/> {activity}</div>
             </div>}
           {voiceError&&<div className="vision-error" role="alert">Voice: {voiceError}</div>}

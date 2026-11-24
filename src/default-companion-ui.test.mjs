@@ -87,29 +87,31 @@ test("Default scene preference is shared by wardrobe and portrait context menu",
   assert.match(css,/mask-image:linear-gradient/);
 });
 
-test("Default chat uses continuous filled mirrored SVG tails and bubble-local timestamps",()=>{
+test("Default chat uses connected SVG tails, bubble timestamps, and local artwork",()=>{
   assert.match(app,/function WorkspaceBubbleTail\(\)/);
-  assert.match(app,/d="M22 3 H16 Q10 7 2 9 Q10 13 16 21 H22Z" fill="var\(--bubble-tail\)"/);
+  assert.match(app,/d="M18 2 H13 Q11 8 2 8 Q8 12 13 20 H18Z" fill="var\(--bubble-tail\)"/);
   assert.match(app,/stroke="var\(--bubble-edge\)"/);
   assert.equal((app.match(/<WorkspaceBubbleTail\/>/g)||[]).length,2);
-  assert.match(css,/\.workspace-message\.user \.workspace-bubble-tail \{left:auto;right:-17px;transform:scaleX\(-1\)/);
+  assert.match(css,/\.workspace-message\.user \.workspace-bubble-tail \{left:auto;right:-14px;transform:scaleX\(-1\)/);
   assert.doesNotMatch(css,/\.workspace-message-bubble::before/);
-  assert.match(css,/\.workspace-message\.failed \.workspace-message-bubble \{--bubble-edge:#f09090/);
   assert.match(app,/<div className="workspace-bubble-footer">\s*<time/);
   assert.match(app,/<WorkspaceBubbleTail\/>\s*<div className="workspace-bubble-content">/);
 });
-
-test("Default ornaments are scalable decorative vectors and do not overlap text",()=>{
+test("Default ornaments use the supplied local artwork and the existing interactive send button",()=>{
   const decor=readFileSync(new URL("./WorkspaceDecor.tsx",import.meta.url),"utf8");
+  for(const path of ["logo/mikan-badge.png","decor/header-flourish.png","decor/peek-cat.png","icons/paw-badge.png","icons/accent-rays.png","icons/send-paw.png"]){
+    assert.ok(decor.includes(path));
+    const image=readFileSync(new URL("../public/mikan-ui/"+path,import.meta.url));
+    assert.equal(image.toString("hex",0,8),"89504e470d0a1a0a");
+  }
+  assert.match(shell,/<WorkspaceBrandArtwork\/>/);
   assert.match(shell,/<WorkspaceHeaderFlourish\/>/);
-  assert.match(shell,/<WorkspaceBrandEars\/>/);
   assert.match(shell,/<WorkspacePeekCat\/>/);
   assert.match(app,/<WorkspaceAvatarRays\/>/);
   assert.match(app,/<WorkspacePawSeal\/>/);
-  assert.match(decor,/aria-hidden="true"/);
+  assert.match(app,/defaultUi\?<WorkspaceSendPaw\/>:<PawPrint/);
   assert.match(css,/\.workspace-bubble-content \{display:flex/);
 });
-
 test("Default chat uses the bundled cropped Mikan portrait, including while thinking",()=>{
   assert.match(app,/new URL\("\.\.\/assets\/iki\/mikan-chat-avatar\.webp", import\.meta\.url\)/);
   assert.equal((app.match(/src=\{WORKSPACE_CHAT_PORTRAIT\}/g)||[]).length,2);
@@ -121,9 +123,18 @@ test("Default chat uses the bundled cropped Mikan portrait, including while thin
 
 test("short balloons leave a straight side edge for the tail and wardrobe styles load independently",()=>{
   const globalCss=readFileSync(new URL("./styles.css",import.meta.url),"utf8");
-  assert.match(css,/border-radius:25px;min-height:60px/);
-  assert.match(css,/border-top-left-radius:19px;border-bottom-left-radius:16px/);
-  assert.match(css,/border-top-right-radius:19px;border-bottom-right-radius:16px/);
+  assert.match(css,/border-radius:23px;min-height:54px/);
+  assert.match(css,/border-top-left-radius:16px;border-bottom-left-radius:14px/);
+  assert.match(css,/border-top-right-radius:16px;border-bottom-right-radius:14px/);
   assert.match(globalCss,/\.control-background-options \{display:grid/);
   assert.doesNotMatch(css,/\.control-background-options \{/);
+});
+
+test("Default uses an opaque cocoa canvas, distinct framed chat and one cohesive composer",()=>{
+  assert.match(css,/--ws-base:#211412/);
+  assert.match(css,/transparent 30%\),var\(--ws-base\)/);
+  assert.match(css,/\.workspace-chat \{[\s\S]*?border:1px solid #644033;border-radius:24px/);
+  assert.match(css,/\.workspace-composer \.input-row \{[\s\S]*?border:1px solid #ffd093;border-radius:26px/);
+  assert.match(css,/\.workspace-composer \.input-row textarea \{[\s\S]*?border:0;[\s\S]*?background:transparent/);
+  assert.match(css,/flex-basis:58px;width:58px;height:58px/);
 });

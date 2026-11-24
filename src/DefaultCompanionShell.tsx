@@ -5,7 +5,7 @@ import {
 } from "lucide-react";
 import { clampPanelWidth, resolveWorkspaceWidths, resizeWorkspacePanel, type WorkspaceActivityEntry, type WorkspacePanel, type WorkspaceWidths } from "./workspace-activity";
 import { type AvatarBackground } from "./avatar-background";
-import { WorkspaceBrandEars, WorkspaceHeaderFlourish, WorkspacePeekCat } from "./WorkspaceDecor";
+import { WorkspaceBrandArtwork, WorkspaceHeaderFlourish, WorkspacePeekCat } from "./WorkspaceDecor";
 import "./default-companion.css";
 
 export type WorkspaceChat={id:string;title:string;updatedAt:number};
@@ -150,10 +150,7 @@ export function DefaultCompanionShell({
   return <section className="mikan-workspace" aria-label="Mikan Desktop workspace">
     <header className="workspace-topbar">
       <div className="workspace-brand" onMouseDown={onDrag} title="Drag Mikan">
-        <WorkspaceBrandEars/>
-        <PawPrint size={28} strokeWidth={2.2}/>
-        <span><strong>Mikan</strong><small>Your desktop companion</small></span>
-        <Sparkles size={13} className="workspace-brand-sparkle"/>
+        <WorkspaceBrandArtwork/>
       </div>
       <div className="workspace-top-decoration" onMouseDown={onDrag} aria-hidden="true">
         <WorkspaceHeaderFlourish/>
