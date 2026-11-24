@@ -3700,6 +3700,16 @@ export default function App() {
         </>}
       /></Suspense>}
 
+    {!standaloneSettings && defaultUi && screen==="compact" && memoryToast &&
+      <div className={"workspace-memory-toast"+(memoryToast.detailed?" detailed":"")} key={memoryToast.key}
+        role="status" aria-live="polite">
+        <Check size={17}/><span>{memoryToast.message}</span>
+        {memoryToast.detailed&&<button type="button" onClick={()=>{
+          setMemoryToast(null);openMemory("facts");
+        }}>Review memories</button>}
+        <button type="button" aria-label="Dismiss memory notice"
+          onClick={()=>setMemoryToast(null)}><X size={15}/></button>
+      </div>}
     {!standaloneSettings && !defaultUi && <section className="dock" aria-label="Chat with Mikan">
       {memoryToast && <div key={memoryToast.key}
         className={memoryToast.detailed?"desktop-memory-toast detailed":"desktop-memory-toast"}
