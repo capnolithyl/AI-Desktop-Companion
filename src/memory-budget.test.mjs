@@ -46,3 +46,9 @@ test("older session notes use topic relevance instead of arbitrary age",()=>{
  const casual=sessionMemoryContext("How's it going?",null,discussions,memoryBudget(8192),300);
  assert.equal(casual,"");
 });
+
+test("generic conversational wording does not retrieve unrelated old session notes",()=>{
+ const old=[{conversationId:"old",summary:"- User has spare GPUs\n- User needs entertainment after dinner",lastMessageRowid:2,updatedAt:100}];
+ assert.equal(sessionMemoryContext("I'm bored. Entertain me.",null,old,memoryBudget(16384)),"");
+ assert.equal(sessionMemoryContext("Based on my professional experience, what freelance services would you recommend I offer?",null,old,memoryBudget(16384)),"");
+});

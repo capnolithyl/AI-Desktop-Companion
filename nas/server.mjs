@@ -217,8 +217,8 @@ export function makeServer({store,config,key,promptFile="",maintenanceFile="/dat
         } catch(error) {
           // Do not leak upstream response bodies or credentials to the browser.
           const upstreamStatus=Number.isInteger(error?.upstreamStatus)?error.upstreamStatus:null;
-          if(user)store.recordInference(user.id,{provider:selected.provider,requestedModel:selected.model,actualModel:trace.actualModel(),outcome:"failed",upstreamStatus,timing:trace.snapshot()});
-          console.error("NAS cloud chat failed:",selected.provider,selected.model,upstreamStatus??"request/stream error");
+          if(user)store.recordInference(user.id,{provider:selected.provider,requestedModel:selected.model,actualModel:trace.actualModel(),outcome:"failed",upstreamStatus,...(typeof error?.code==="string"&&/^[a-zA-Z0-9_-]{1,64}$/.test(error.code)?{errorCode:error.code}:{}),timing:trace.snapshot()});
+          console.error("NAS cloud chat failed:",selected.provider,selected.model,upstreamStatus??(typeof error?.code==="string"&&/^[a-zA-Z0-9_-]{1,64}$/.test(error.code)?error.code:"request/stream error"));
           if (!res.headersSent) json(res,500,{error:"Could not prepare the conversation"});
           else sse(res,"error",{error:(upstreamStatus===429||error?.status===429)?"Provider quota reached (HTTP 429). No automatic retry.":"Cloud reply failed ("+selected.provider+(upstreamStatus?" HTTP "+upstreamStatus:"")+"). Check the selected model and provider quota."});
         } finally {

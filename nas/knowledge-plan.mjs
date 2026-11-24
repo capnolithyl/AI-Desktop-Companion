@@ -38,6 +38,18 @@ export async function planKnowledge({knowledge,history,previous,question,provide
       return direct(unavailableChapterResponse(question,selected,"NOTION FULL READING FAILED: "+reason,pages.length)||"I found "+selected.title+", but couldn't complete the manuscript read: "+reason);
     }
   }
+  // A library being enabled is not evidence that this turn needs it.
+  // Preserve explicit private/reference requests, exact page title matches,
+  // and follow-ups with an active source. Public questions must not send the
+  // entire private catalogue to an extra cloud planning call.
+  const normalize=value=>value.toLowerCase().replace(/[^\p{L}\p{N}]+/gu," ").trim();
+  const q=" "+normalize(question)+" ";
+  const exactTitle=candidates.some(p=>{
+    const title=normalize(p.title);return title.length>=5&&q.includes(" "+title+" ");
+  });
+  const referenceRequest=/\b(?:notion|chapter|manuscript|cached (?:page|document|website)|my (?:book|story|novel|writing|notes|document|file|library))\b/i.test(question);
+  const followsReference=previous.length>0&&/\b(?:it|that|those|this|previous|again|scene|chapter|page|continue|more)\b/i.test(question);
+  if(!exactTitle&&!referenceRequest&&!followsReference&&!desktop.relevant)return null;
   if(!canRequest())return fail("Local reference planning unavailable (provider budget); no public research performed.");
   let plan;
   try{

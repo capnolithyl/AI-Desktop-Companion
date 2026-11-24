@@ -663,3 +663,32 @@ test("session summary opt-in uses original evidence-checked merge and persists w
     await store.learning.processNext(generate,config);assert.equal(calls,1);
   }finally{store.db.close();rmSync(root,{recursive:true,force:true});}
 });
+
+test("structured NVIDIA evidence uses tool arguments and reports reasoning budget without exposing reasoning",async()=>{
+ const usage=[],chunks=[];
+ const tool={type:"function",function:{name:"submit_source_evidence",parameters:{type:"object"}}};
+ const args='{"passages":[],"suggestions":[]}';
+ const config={provider:"nvidia",model:"test",key:"synthetic-test-key"};
+ const answer=await generateReply({config,system:"Evidence",history:[{role:"user",content:"Test"}],structuredTool:tool,onDelta:t=>chunks.push(t),onUsage:v=>usage.push(v),fetchImpl:async(_url,options)=>{
+   const body=JSON.parse(options.body);assert.equal(body.stream,false);assert.equal(body.tool_choice,"required");assert.equal(body.max_tokens,4096);
+   return Response.json({choices:[{finish_reason:"tool_calls",message:{reasoning_content:"private reasoning",tool_calls:[{function:{name:"submit_source_evidence",arguments:args}}]}}],usage:{completion_tokens:900,completion_tokens_details:{reasoning_tokens:800}}});
+ }});
+ assert.equal(answer,args);assert.deepEqual(chunks,[]);assert.equal(usage[0].reasoningTokens,800);assert.equal(usage[0].finishReason,"tool_calls");
+ assert.doesNotMatch(JSON.stringify(usage),/private reasoning/);
+ await assert.rejects(generateReply({config,system:"Test",history:[],structuredTool:tool,fetchImpl:async()=>Response.json({choices:[{finish_reason:"length",message:{content:""}}]})}),e=>e.code==="output-limit");
+});
+test("ordinary chat bypasses unrelated enabled knowledge catalogue and does not duplicate latest user message",async()=>{
+ const {executeNasTurn}=await import("../turn.mjs");
+ const root=mkdtempSync(join(tmpdir(),"mikan-route-")),store=openStore(join(root,"db.sqlite3"));
+ try{
+   const chat=store.newConversation(),question="I'm bored. Entertain me.";store.append(chat.id,"user",question);
+   const knowledge={enabled:()=>true,notionPages:()=>[],candidates:()=>[{id:"doc",title:"Architecture Notes",kind:"notion"}]};
+   let calls=0;
+   const result=await executeNasTurn({store,conversationId:chat.id,question,selected:{provider:"nvidia",model:"test",historyChars:16000},mode:"strict",knowledge,reserve:()=>calls++,canRequest:()=>true,search:async()=>{throw Error("unexpected web");},requestModel:async({system,history,onDelta})=>{
+     if(system.startsWith("You are a read-only research planner"))return '{"action":"none"}';
+     assert.equal(history.length,1);assert.doesNotMatch(system,/Earlier owner message 1: I'm bored/);
+     onDelta("Let's invent a ridiculous story.");return "Let's invent a ridiculous story.";
+   }});
+   assert.equal(calls,2);assert.match(result.answer,/story/);
+ }finally{store.db.close();rmSync(root,{recursive:true,force:true});}
+});
