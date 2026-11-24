@@ -514,3 +514,15 @@
 .companion.default-layout-active .workspace-composer .input-row textarea:focus {
   height:52px;min-height:48px;padding:12px 6px 8px;border:0;background:transparent;box-shadow:none;
 }
+
+/* Destructive chat actions stay separate from navigation and clipboard actions. */
+.workspace-chat-entry{min-width:0;flex:0 0 auto;}
+.workspace-chat-delete{flex:0 0 27px;width:27px;min-width:0;align-self:center;display:grid;place-items:center;height:29px;margin-right:4px;padding:0;border:1px solid transparent;border-radius:7px;background:transparent;color:#ffd0a6;opacity:0;transition:opacity .12s;}
+.workspace-chat-row:hover .workspace-chat-delete,.workspace-chat-row:focus-within .workspace-chat-delete,.workspace-chat-delete:focus-visible,.workspace-chat-delete.confirming{opacity:1;}
+.workspace-chat-delete:hover:not(:disabled),.workspace-chat-delete.confirming{background:#663132;border-color:#d6887e;color:#ffc2ba;}
+.workspace-chat-delete-confirm{display:grid;gap:7px;margin:4px 0 6px;padding:9px;border:1px solid #a76660;border-radius:10px;background:#3b2423;color:#ffe4db;font-size:12px;}
+.workspace-chat-delete-confirm>div{display:flex;gap:5px;flex-wrap:wrap;}
+.workspace-chat-delete-confirm button{display:flex;align-items:center;justify-content:center;gap:4px;flex:1;padding:5px 7px;border:1px solid #906054;border-radius:7px;background:#4b3029;color:#ffe4db;font-size:11px;}
+.workspace-chat-delete-confirm .workspace-chat-delete-accept{background:#753638;border-color:#c77970;}
+.workspace-chat-delete-confirm small{color:#ffb5ac;overflow-wrap:anywhere;}
+@media(hover:none){.workspace-chat-delete{opacity:1;}}

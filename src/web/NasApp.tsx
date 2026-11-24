@@ -191,8 +191,22 @@ export function NasApp(){
     return {path:"mikan-user-memories.json (browser download)",count:memories.length};
   };
   const deleteChat=async(id:string)=>{
-    await changeMemory("deleteChat",{id});
-    if(active===id){setActive(null);setMessages([]);localStorage.removeItem("mikan-nas-chat");await newChat();}
+    if(inFlight.current||busy)throw new Error("Wait for the current reply before deleting a chat.");
+    inFlight.current=true;setBusy(true);
+    try{
+      await client.memoryAction("deleteChat",{id});
+      setChats(previous=>previous.filter(chat=>chat.id!==id));
+      if(active===id){
+        setActive(null);setMessages([]);setInput("");localStorage.removeItem("mikan-nas-chat");
+        // Deletion is already committed; failure to create a replacement must
+        // not resurrect the deleted chat or report that deletion failed.
+        try{
+          const chat=await client.createChat();
+          setChats(previous=>[chat,...previous]);setActive(chat.id);localStorage.setItem("mikan-nas-chat",chat.id);
+        }catch(error){report(error);}
+      }
+      try{await refreshLibrary();}catch(error){report(error);}
+    }finally{inFlight.current=false;setBusy(false);}
   };
   if(!authenticated)return <main className="nas-gate"><form className="nas-login control-form-section" onSubmit={event=>{event.preventDefault();if(token.trim()===key){setKey("");window.setTimeout(()=>setKey(token.trim()),0);}else setKey(token.trim());}}>
     <img src={portrait} alt="Mikan"/><h1>Welcome home ♡</h1><p>Mikan · Beholder</p>
@@ -222,6 +236,7 @@ export function NasApp(){
       webMode unavailable={{voice:true,vision:true,search:true}} onDrag={()=>{}} onHide={lock}
       onNewChat={()=>void newChat()} onOpenChat={id=>void openChat(id)} onOpenHistory={()=>openPage("history")}
       onCopyChatDebug={async id=>{const [history,live,diagnostics]=await Promise.all([client.messages(id),client.status(),client.learningDiagnostics(id).catch(()=>({events:[]}))]);await navigator.clipboard.writeText(JSON.stringify({service:"nas",model:live.model,browserBuild:CLIENT_BUILD,serverBuild:live.build??null,conversation:id,messages:history,memoryEvents:diagnostics.events},null,2));}}
+      onDeleteChat={deleteChat}
       onOpenCurrentLog={()=>openPage("log")} onOpenMemory={()=>openPage("memory")} onOpenSettings={()=>openPage("personality")}
       onOpenSearch={()=>openPage("capabilities")} onToggleVision={()=>{}} onVoice={()=>{}} onMute={()=>{}}
       onExpression={express} onOutfit={()=>openPage("appearance")}

@@ -3814,6 +3814,7 @@ export default function App() {
         onNewChat={clearChat}
         onOpenChat={id=>{void openConversation(id);}}
         onCopyChatDebug={copyConversationDebugLog}
+        onDeleteChat={deleteConversation}
         onOpenCurrentLog={()=>setScreen("log")}
         onOpenHistory={()=>openMemory("chats")}
         onOpenMemory={()=>openMemory("facts")}
