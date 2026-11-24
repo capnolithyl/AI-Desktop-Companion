@@ -1,5 +1,5 @@
 import {useState,useRef,useEffect,useMemo,type FormEvent,type ChangeEvent,type CSSProperties} from "react";
-import {ArrowLeft,Cat,Brain,Shirt,WandSparkles,Settings2,PawPrint,Sparkles,History,UserRound,Download,Upload,Plug2,Lock,LoaderCircle,Check,Copy,X,AlertTriangle,RefreshCw,Cpu,Globe} from "lucide-react";
+import {ArrowLeft,Cat,Brain,Shirt,WandSparkles,Settings2,PawPrint,Sparkles,History,UserRound,Download,Upload,Plug2,Lock,LoaderCircle,Check,Copy,X,AlertTriangle,RefreshCw,Cpu,Globe,BookOpen} from "lucide-react";
 import {DefaultCompanionShell} from "../DefaultCompanionShell";
 import {WorkspaceAvatarRays,WorkspacePawSeal,WorkspaceSendPaw} from "../WorkspaceDecor";
 import {ChatMarkdown} from "../components/ChatMarkdown";
@@ -16,6 +16,7 @@ import {MemoryPanel} from "../MemoryPanel";
 import {NasLearningReviews} from "./NasLearningReviews";
 import {NasUpdates} from "./NasUpdates";
 import {NasResearch} from "./NasResearch";
+import {NasKnowledge} from "./NasKnowledge";
 import {NasBrainLab} from "./NasBrainLab";
 import {NasTiming} from "./NasTiming";
 import {NasModels} from "./NasModels";
@@ -26,7 +27,7 @@ const portrait=new URL("../../assets/iki/mikan-chat-avatar.webp",import.meta.url
 const referencePortrait=new URL("../../assets/iki/mikan-reference.png",import.meta.url).href;
 const KEY="mikan-nas-key";
 const CLIENT_BUILD=__MIKAN_NAS_BUILD__;
-type Page="chat"|"personality"|"appearance"|"memory"|"history"|"capabilities"|"models"|"research"|"brain-lab"|"updates"|"log";
+type Page="chat"|"personality"|"appearance"|"memory"|"history"|"capabilities"|"models"|"research"|"knowledge"|"brain-lab"|"updates"|"log";
 const tabs=[
   {id:"personality",label:"Personality",icon:WandSparkles},
   {id:"appearance",label:"Character",icon:Shirt},
@@ -35,6 +36,7 @@ const tabs=[
   {id:"capabilities",label:"Capabilities",icon:Plug2},
   {id:"models",label:"Models & providers",icon:Cpu},
   {id:"research",label:"Web research",icon:Globe},
+  {id:"knowledge",label:"Knowledge & Notion",icon:BookOpen},
   {id:"brain-lab",label:"Brain Lab",icon:Brain},
   {id:"updates",label:"Software Updates",icon:RefreshCw}
 ] as const;
@@ -53,7 +55,7 @@ function Bubble({message,latest,busy}:{message:NasMessage;latest:boolean;busy:bo
     <div className="workspace-message-body"><div className="workspace-message-author"><strong>{assistant?"Mikan ♡":"You"}</strong></div>
       <div className="workspace-message-bubble"><svg className="workspace-bubble-tail" viewBox="0 0 18 22" aria-hidden="true"><path d="M18 2 H13 Q11 8 2 8 Q8 12 13 20 H18Z" fill="var(--bubble-tail)"/><path d="M13 2 Q11 8 2 8 Q8 12 13 20" fill="none" stroke="var(--bubble-edge)" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/></svg>
       <div className="workspace-bubble-content"><ChatMarkdown text={message.content||(busy?"Thinking…":"")} onOpenLink={openLink}/>{assistant&&message.content.length>=120&&<WorkspacePawSeal/>}</div>
-      {message.inference?.sources?.length?<div className="nas-source-list"><strong>Sources</strong>{message.inference.sources.map((source,index)=><div key={index}><a href={source.url} onClick={e=>{e.preventDefault();openLink(source.url);}}>[{index+1}] {source.title}</a> <small>{source.kind==="page"?"Page excerpt":"Search preview"}{source.publishedDate?" · "+source.publishedDate:""}</small></div>)}</div>:null}
+      {message.inference?.sources?.length?<div className="nas-source-list"><strong>Sources</strong>{message.inference.sources.map((source,index)=><div key={index}><a href={source.url} onClick={e=>{e.preventDefault();openLink(source.url);}}>[{index+1}] {source.title}</a> <small>{source.kind==="notion"?(source.coverage??"Notion reference"):source.kind==="cached-web"||source.fromCache?"Cached webpage":source.kind==="page"?"Page excerpt":"Search preview"}{source.publishedDate?" · "+source.publishedDate:source.syncedAt?" · synced "+new Date(source.syncedAt*1000).toLocaleDateString():source.fetchedAt?" · fetched "+new Date(source.fetchedAt).toLocaleDateString():""}</small></div>)}</div>:null}
       <div className="workspace-bubble-footer"><time dateTime={date.toISOString()}>{date.toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"})}</time></div></div>
     </div>
   </article>;
@@ -346,9 +348,10 @@ export function NasApp(){
         {page==="log"&&<><div className="settings-section-title">Conversation log</div><p className="settings-note">Currently selected: {status?.provider} · {status?.model}</p>{messages.map(message=><div key={message.id} className="control-form-section"><strong>{message.role==="assistant"?"Mikan":"You"}</strong>{message.inference&&<p className="settings-note">{message.inference.provider} · {message.inference.actualModel||message.inference.requestedModel} · {message.inference.outcome}{!message.inference.actualModel?" (actual model not reported)":""}</p>}{message.inference?.timing&&<NasTiming timing={message.inference.timing}/>}<ChatMarkdown text={message.content} onOpenLink={openLink}/></div>)}</>}
         {page==="models"&&status?.providers&&<NasModels models={status} client={client} onChanged={applyModels} busy={busy||switching||status.busy}/>}
         {page==="brain-lab"&&status?.providers&&<NasBrainLab client={client} models={status} busy={busy||!!status.busy}/>}
+        {page==="knowledge"&&<NasKnowledge client={client} busy={busy||!!status?.busy}/>}
         {page==="research"&&<NasResearch client={client} busy={busy||!!status?.busy}/>}
         {page==="updates"&&<NasUpdates client={client}/>}
-        {page==="capabilities"&&<><div className="settings-section-title">Beholder runtime</div><section className="control-form-section"><p>Cloud chat · {status?.provider} · {status?.model}</p><p>Persistent conversations, owner facts, pins, character canon, structured interests, historical archive retrieval, opt-in automatic learning and review, shared persona, animated Iki, bundled outfits and backgrounds.</p><p>Not connected yet: Qdrant, Notion, voice synthesis, screen capture and desktop synchronization. Windows window controls and global hotkeys stay native.</p><p>The old prototype is still available at <a href="/legacy">/legacy</a>.</p></section></>}
+        {page==="capabilities"&&<><div className="settings-section-title">Beholder runtime</div><section className="control-form-section"><p>Cloud chat · {status?.provider} · {status?.model}</p><p>Persistent conversations, owner facts, pins, character canon, structured interests, historical archive retrieval, opt-in automatic learning and review, shared persona, animated Iki, bundled outfits and backgrounds.</p><p>Not connected yet: Qdrant, voice synthesis, screen capture and desktop synchronization. Windows window controls and global hotkeys stay native.</p><p>The old prototype is still available at <a href="/legacy">/legacy</a>.</p></section></>}
         {notice&&<p className="settings-note" role="status">{notice}</p>}
         {(page==="personality"||page==="appearance")&&<div className="nas-save-row"><button className="secondary-action" disabled={saving} onClick={()=>void save(draft)}>{saving?"Saving…":"Save settings"}</button></div>}
       </div></div>

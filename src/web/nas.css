@@ -56,3 +56,22 @@ html:has(.nas-app),body:has(.nas-app),body:has(.nas-gate){background:#211412!imp
 .nas-app .nas-timing progress::-webkit-progress-value{background:#ee9b5a;border-radius:20px;}
 .nas-app .nas-timing small{display:block;margin-top:12px;color:#c9a79b;line-height:1.5;}
 @media(max-width:760px){.nas-app .nas-brain-lab .brain-eval-toolbar{grid-template-columns:minmax(0,1fr);}.nas-app .nas-brain-lab .brain-workspace-header{min-height:0;gap:12px;}.nas-app .nas-brain-lab .brain-workspace-header h2{font-size:23px;}.nas-app .nas-brain-lab .brain-eval-number-row{flex-wrap:wrap;}.nas-app .nas-brain-lab .brain-eval-number-row input{flex:1 1 100%;}.nas-app .nas-brain-lab .brain-workspace-tabs{flex-direction:row;gap:5px;}.nas-app .nas-brain-lab .brain-workspace-tabs button{flex:1 1 auto;justify-content:center;font-size:12px;padding:8px;}.nas-app .nas-brain-lab .brain-workspace-tabs button small{display:none;}}
+
+/* Knowledge controls use the same warm Control Center tokens. */
+.nas-app .nas-knowledge-section{display:grid;gap:15px;min-width:0;}
+.nas-app .nas-knowledge-heading,.nas-app .nas-knowledge-tabs{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;}
+.nas-app .nas-knowledge-tabs{justify-content:flex-start;}
+.nas-app .nas-knowledge-tabs button[aria-pressed=true]{border-color:#eea36c;background:#62402e;color:#ffe2bb;}
+.nas-app .nas-knowledge button{display:inline-flex;align-items:center;justify-content:center;gap:7px;width:max-content;max-width:100%;}
+.nas-app .nas-knowledge button:disabled{opacity:.45;cursor:not-allowed;}
+.nas-app .nas-knowledge-link{display:inline-flex;align-items:center;gap:7px;color:#ffbb88;text-decoration:underline;width:max-content;}
+.nas-app .nas-knowledge-roots,.nas-app .nas-knowledge-rows{display:grid;gap:7px;max-height:420px;overflow:auto;scrollbar-width:thin;}
+.nas-app .nas-knowledge-roots label,.nas-app .nas-knowledge-row{display:flex;gap:11px;align-items:center;justify-content:space-between;padding:12px;background:#302123;border:1px solid #65453c;border-radius:10px;min-width:0;}
+.nas-app .nas-knowledge-roots label{justify-content:flex-start;}
+.nas-app .nas-knowledge-row>div:first-child{display:grid;gap:4px;min-width:0;overflow-wrap:anywhere;}
+.nas-app .nas-knowledge-actions{display:flex;gap:6px;flex-wrap:wrap;}
+.nas-app .nas-knowledge-actions button{padding:8px;}
+.nas-app .nas-knowledge-progress,.nas-app .nas-knowledge-preview{display:grid;gap:10px;padding:14px;border-radius:12px;border:1px solid #86543f;background:#2a1d1d;min-width:0;}
+.nas-app .nas-knowledge-progress progress{width:100%;accent-color:#ffa65e;}
+.nas-app .nas-knowledge-preview pre{white-space:pre-wrap;overflow-wrap:anywhere;max-height:500px;overflow:auto;font:inherit;font-size:13px;line-height:1.6;}
+@media(max-width:650px){.nas-app .nas-knowledge-row{flex-wrap:wrap;}.nas-app .nas-knowledge-actions{justify-content:flex-start;}}

@@ -12,7 +12,7 @@ export type LearningStatus={
 export type LibrarySnapshot={facts:UserFact[];characterFacts:CharacterFact[];interests:InterestItem[];sessionSummaries:SessionSummary[]};
 export type CloudProvider="nvidia"|"openrouter"|"gemini";
 export type ResearchMode="off"|"simple"|"strict";
-export type NasSource={url:string;title:string;kind:"preview"|"page";publishedDate:string|null};
+export type NasSource={url:string;title:string;kind:"preview"|"page"|"notion"|"cached-web";publishedDate:string|null;id?:string;syncedAt?:number;fetchedAt?:number;fromCache?:boolean;coverage?:string};
 export type NasTiming={mode:ResearchMode;totalMs:number;firstTextMs:number|null;modelCalls:number;stages:{stage:string;startMs:number;elapsedMs:number;success:boolean}[]};
 export type NasInference={provider:CloudProvider;requestedModel:string;actualModel:string|null;outcome:"completed"|"failed";upstreamStatus?:number|null;sources?:NasSource[];timing?:NasTiming};
 export type NasMessage={id:string;role:"user"|"assistant";content:string;createdAt:number;inference?:NasInference};
@@ -30,6 +30,9 @@ export type BrainScenario={id:string;number:number;label:string;group:string;tur
 export type BrainStep={user:string;answer?:string;grade:"passed"|"failed"|"review";failures:string[];qualityFlags?:string[];reviewGoal?:string|null;timing:NasTiming;actualModel:string|null;selectedMemoryIds?:number[];sources?:(NasSource&{content:string})[];events:{title:string;detail:string;lines:string[]}[]};
 export type BrainSummary={id:string;state:string;startedAt:number;finishedAt:number|null;provider:CloudProvider;model:string;mode:ResearchMode;repetitions:number;scenarioIds:string[];total:number;done:number;currentLabel:string};
 export type BrainReport=BrainSummary&{cases:{id:string;label:string;number:number;repeat:number;steps:BrainStep[]}[]};
+export type KnowledgePage={id:string;title:string;url:string;characters:number;syncedAt?:number;fetchedAt?:number;chunkCount?:number;lastEdited?:string};
+export type KnowledgeStatus={connected:boolean;allowNotionCloud:boolean;cacheWeb:boolean;allPages:boolean;selected:string[];available:{id:string;title:string;kind:string;url:string}[];job:{state:string;done:number;title:string;error:string|null};pages:KnowledgePage[];webPages:KnowledgePage[]};
+export type KnowledgeDocument={title:string;url:string;content:string;relatedPages?:{title:string;url:string}[];missingRelatedPages?:number};
 export class NasRequestError extends Error {
   constructor(message:string,readonly status:number){super(message);}
 }
@@ -49,6 +52,9 @@ export class NasClient {
   brainReport(id:string){return this.json<BrainReport>("brain-lab/report/"+encodeURIComponent(id));}
   startBrain(config:{provider:CloudProvider;model:string;mode:ResearchMode;scenarioIds:string[];repetitions:number}){return this.json<{id:string}>("brain-lab/start",{method:"POST",body:JSON.stringify(config)});}
   stopBrain(){return this.json<{running:boolean}>("brain-lab/stop",{method:"POST",body:"{}"});}
+  knowledge(){return this.json<KnowledgeStatus>("knowledge");}
+  knowledgeAction(action:string,args:object={}){return this.json<KnowledgeStatus>("knowledge",{method:"POST",body:JSON.stringify({action,...args})});}
+  knowledgeDocument(kind:"notion"|"web",id:string){return this.json<KnowledgeDocument>("knowledge/document?"+new URLSearchParams({kind,id}));}
   research(){return this.json<{mode:ResearchMode}>("research");}
   saveResearch(mode:ResearchMode){return this.json<{mode:ResearchMode}>("research",{method:"PUT",body:JSON.stringify({mode})});}
   testResearch(){return this.json<{ok:boolean;count:number}>("research/test",{method:"POST",body:"{}"});}

@@ -98,7 +98,7 @@ async function collect(api,roots,progress){
       }
     }
     await visit(id,0);
-    const content=[...properties,...text].join("\n\n");chars+=content.length;
+    const content=[...properties,...text].join("\n\n");if(content.length>1000000)throw invalid("A Notion page exceeds safe text budget");chars+=content.length;
     if(chars>MAX_CHARS)throw invalid("Knowledge library exceeds safe text budget");
     pages.push({...page,chunks:notionChunks(content),relations});
   }
@@ -176,11 +176,11 @@ export function createKnowledge({db,file="",apiFactory=notionApi,now=Date.now,re
       const rows=query?db.prepare("SELECT c.page_id AS id FROM notion_fts JOIN notion_chunks c ON c.id=notion_fts.rowid WHERE notion_fts MATCH ? ORDER BY bm25(notion_fts) LIMIT 100").all(query):[];
       const all=pages();const wanted=[...new Set([...prior,...rows.map(r=>r.id)])];
       const chosen=[...wanted.map(id=>all.find(p=>p.id===id)).filter(Boolean),...all.filter(p=>!wanted.includes(p.id))].slice(0,120);
-      for(const p of chosen)out.push({id:p.id,title:p.title,kind:"notion",url:p.url,syncedAt:p.syncedAt});
+      for(const p of chosen)out.push({id:p.id,title:p.title.slice(0,180),kind:"notion",url:p.url,syncedAt:p.syncedAt});
     }
     if(webEnabled()&&query){
       const rows=db.prepare("SELECT url,title FROM nas_web_fts WHERE nas_web_fts MATCH ? ORDER BY bm25(nas_web_fts) LIMIT 12").all(query);
-      for(const p of rows){const row=db.prepare("SELECT fetched_at AS fetchedAt,resolved_url AS url FROM nas_web_cache WHERE url=?").get(p.url);if(row)out.push({id:p.url,title:p.title,kind:"cached-web",...row});}
+      for(const p of rows){const row=db.prepare("SELECT fetched_at AS fetchedAt,resolved_url AS url FROM nas_web_cache WHERE url=?").get(p.url);if(row&&now()-row.fetchedAt<86400000)out.push({id:p.url,title:p.title.slice(0,180),kind:"cached-web",...row});}
     }
     return out;
   }

@@ -49,6 +49,8 @@ jobs:
           node --check nas/research.mjs
           node --check nas/turn.mjs
           node --check nas/brain-lab.mjs
+          node --check nas/knowledge.mjs
+          node --check nas/knowledge-plan.mjs
           node --check nas/public/app.js
       - name: Run NAS smoke tests
         timeout-minutes: 2

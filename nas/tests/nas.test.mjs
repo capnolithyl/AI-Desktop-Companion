@@ -502,3 +502,36 @@ test("Brain Lab uses shared fixtures in isolated SQLite, preserves owner memory 
     const fixture=seedEvalStore();try{assert.ok(fixture.listMemories().length>10);}finally{fixture.db.close();}
   }finally{store.db.close();rmSync(root,{recursive:true,force:true});}
 });
+
+test("NAS knowledge preserves approved scenes and separates cloud permission and public cache",async()=>{
+  const {createKnowledge,notionChunks}=await import("../knowledge.mjs");
+  const {planKnowledge}=await import("../knowledge-plan.mjs");
+  const {joinNotionChunks}=await import("../../src/notion-reading.ts");
+  const root=mkdtempSync(join(tmpdir(),"mikan-knowledge-")),store=openStore(join(root,"db.sqlite3"));
+  const chapter="11111111-1111-1111-1111-111111111111",scene="22222222-2222-2222-2222-222222222222";
+  const rich=text=>[{plain_text:text}];
+  const page=(id,title,properties={})=>({object:"page",id,properties:{Name:{type:"title",title:rich(title)},...properties}});
+  const ch=page(chapter,"Chapter 1",{Scenes:{type:"relation",relation:[{id:scene}]}}),sc=page(scene,"1.1 Arrival");
+  let fail=false,reads=0,clock=1700000000000;
+  const lib=createKnowledge({db:store.db,file:join(root,"secret"),now:()=>clock,read:async url=>{reads++;return {url,title:"Public docs",kind:"page",content:"Original public documentation",publishedDate:null};},
+    apiFactory:()=>({request:async path=>{if(path==="users/me")return {};if(fail)throw Error("offline");return path.endsWith(chapter)?ch:sc;},list:async path=>path==="search"?[ch,sc]:path.includes(scene)?[{type:"heading_1",heading_1:{rich_text:rich("Approved manuscript prose")}},{type:"paragraph",paragraph:{rich_text:rich("A lantern stood beside the window.")}}]:[{type:"heading_1",heading_1:{rich_text:rich("Planning notes")}},{type:"paragraph",paragraph:{rich_text:rich("Do not substitute this.")}}]})});
+  try{
+    assert.equal(joinNotionChunks(notionChunks("ü😀".repeat(2500))),"ü😀".repeat(2500));
+    const status=await lib.connect("synthetic-notion-secret-only");
+    assert.equal(status.connected,true);assert.equal(status.allowNotionCloud,false);assert.ok(!JSON.stringify(status).includes("synthetic-notion-secret-only"));
+    lib.settings({allPages:true});lib.sync();for(let i=0;i<100&&lib.isRunning();i++)await new Promise(r=>setTimeout(r,5));
+    assert.equal(lib.status().job.state,"finished");assert.equal(lib.status().pages.length,2);
+    assert.equal(lib.candidates("Chapter 1",[]).length,0);
+    lib.settings({allowNotionCloud:true});
+    const candidates=lib.candidates("Chapter 1",[]);assert.ok(candidates.some(p=>p.id===chapter));
+    const result=await lib.load(candidates.find(p=>p.id===chapter),"manuscript","Chapter 1","nvidia");
+    assert.match(result.content,/A lantern stood beside the window/);assert.doesNotMatch(result.content,/Do not substitute this/);assert.match(result.coverage,/complete approved manuscript/);
+    const planned=await planKnowledge({knowledge:lib,question:"Read chapter",history:[],previous:[],provider:"nvidia",canRequest:()=>true,generate:async()=>JSON.stringify({action:"knowledge",ids:[chapter],scope:"manuscript"})});
+    assert.equal(planned.sources.length,1);assert.equal(planned.local,true);
+    fail=true;lib.sync();for(let i=0;i<100&&lib.isRunning();i++)await new Promise(r=>setTimeout(r,5));assert.equal(lib.status().job.state,"failed");assert.equal(lib.status().pages.length,2);
+    await lib.cachedRead("https://example.com/");const cached=await lib.cachedRead("https://example.com/");assert.equal(cached.fromCache,true);assert.equal(reads,1);
+    clock+=3600001;await lib.cachedRead("https://example.com/",{recent:true});assert.equal(reads,2);
+    lib.remove("notion",scene);await assert.rejects(lib.load(candidates.find(p=>p.id===chapter),"manuscript","Chapter 1","nvidia"),/Linked scenes are missing/);
+    lib.disconnect();assert.equal(lib.status().pages.length,0);assert.equal(lib.status().webPages.length,1);assert.equal(store.listMemories().length,0);
+  }finally{store.db.close();rmSync(root,{recursive:true,force:true});}
+});

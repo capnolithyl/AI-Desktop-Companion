@@ -117,6 +117,7 @@ export function createLearning(db,library){
     const items=after===null?[]:db.prepare("SELECT id,conversation_id AS conversationId,assistant_id AS assistantId,kind,payload_json AS payload,created_at AS createdAt FROM nas_learning_events WHERE id>? ORDER BY id LIMIT 100").all(after).map(r=>({...r,payload:JSON.parse(r.payload)}));
     return {cursor:after===null?cursor:items.at(-1)?.id??Math.max(after,cursor),items};
   }
+  function recordKnowledgeSkip(conversationId,assistantId){emit("skipped",{reason:"reference knowledge kept separate from personal memory"},{conversation_id:conversationId,assistant_id:assistantId});}
   function recordSearch(conversationId,messageId,event){emit("search",event,{conversation_id:conversationId,assistant_id:messageId});}
   function recordRecall(conversationId,assistantId,lines){
     if(lines.length)emit("recall",{lines},{conversation_id:conversationId,assistant_id:assistantId});
@@ -262,5 +263,5 @@ export function createLearning(db,library){
     }
     finally{running=false;}
   }
-  return {settings,setSettings,enqueue,getStatus,resolve,retry,processNext,events,diagnostics,recordRecall,recordSearch,isRunning:()=>running};
+  return {settings,setSettings,enqueue,getStatus,resolve,retry,processNext,events,diagnostics,recordRecall,recordSearch,recordKnowledgeSkip,isRunning:()=>running};
 }
