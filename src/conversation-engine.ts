@@ -138,6 +138,27 @@ export async function resolveConversationQuestion(
 }
 
 /**
+ * Short-lived, owner-authored topic anchors. We intentionally do not ask a
+ * second model to invent a topic summary, and never promote earlier assistant
+ * guesses to facts. A fresh prompt is built each turn; nothing is saved.
+ */
+export function ownerConversationAnchor(
+  turns:readonly ConversationTurn[],question:string
+):string {
+  const ownerTurns=turns.filter(turn=>turn.role==="user")
+    .slice(-3).map(turn=>turn.content.trim().replace(/\s+/g," ").slice(0,260))
+    .filter(Boolean);
+  if(!ownerTurns.length)return "";
+  return [
+    "CURRENT CONVERSATION ANCHOR (owner-authored words, not independent public evidence):",
+    ...ownerTurns.map((message,index)=>`Earlier owner message ${index+1}: ${message}`),
+    "CURRENT owner message: "+question.trim().replace(/\s+/g," ").slice(0,420),
+    "Keep the current named subject anchored to the LATEST owner message. An explicit owner correction overrides a conflicting earlier assistant claim. Do not silently transfer lyrics, vocals, riffs, credits or album placement between related songs, even after you have acknowledged a correction.",
+    "Precision without hesitation: ordinary friendly conversation does not require exact lyrics, timestamps, guest credits or historical firsts. Do not volunteer such details merely to sound knowledgeable. If the owner explicitly asks for a precise fact, verify when available or express uncertainty about THAT detail while still answering everything else."
+  ].join("\n");
+}
+
+/**
  * Per-turn conversational novelty guidance, independent of the user's custom
  * persona and of web search. A small model imitates recently repeated phrases,
  * so remind it which incidental topics it already covered. Nothing here

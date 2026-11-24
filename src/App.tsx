@@ -35,6 +35,7 @@ import { respectAddressPreference } from "./communication-preferences";
 import { assistantVoiceGuidance } from "./assistant-voice";
 import { characterContinuityContext } from "./character-canon-routing";
 import { automaticMemoryNotice } from "./memory-outcome";
+import { snapshotForReplay } from "./conversation-replay";
 import { assistantTurnInstructionParts, joinAssistantInstructionParts } from "./assistant-instructions";
 import { parseSlashCommand, SLASH_HELP } from "./slash-commands";
 import { decideDesktopTurn } from "./desktop-turn-routing";
@@ -148,6 +149,11 @@ type ChatCompletion = { content: string; modelUsed?: string; fallbackReason?: st
     provisionalResults?:number;rejectedTitles?:string[];upstreamErrors:string[]}|null;
   sourcesCarriedOver?: boolean; researchAudit?: ResearchAudit | null };
 type LogMessage = Message & { createdAt: number; diagnostics?: Diagnostics; workspaceMemory?: MemoryRecallAudit; failed?: boolean; sources?: WebResult[]; searchQuery?: string; sourcesCarriedOver?: boolean };
+type ReplayPreview = {
+  targetId:string;conversationId:string|null;requestId:string;question:string;original:string;
+  loading:boolean;replayed?:string;model?:string;elapsedMs?:number;
+  sources?:WebResult[];searchQuery?:string;error?:string
+};
 const HOTKEY = "Control+Alt+M";
 const BUNDLED_PORTRAIT = "/mikan.png";
 // Bundled reference artwork: local asset, no cloud request or missing /mikan.png URL.
@@ -367,6 +373,11 @@ export default function App() {
   const [pageReturn, setPageReturn] = useState<"search" | "compact">("compact");
   const [activity, setActivity] = useState("Thinking…");
   const [messages, setMessages] = useState<LogMessage[]>([]);
+  // Ephemeral comparison only. Never persisted, broadcast or fed into memory.
+  const [replayPreview,setReplayPreview]=useState<ReplayPreview|null>(null);
+  const [replayBusy,setReplayBusy]=useState(false);
+  const replaySequence=useRef(0);
+
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
   const [conversations, setConversations] = useState<MemoryConversation[]>([]);
   const [sessionSummaries, setSessionSummaries] = useState<SessionSummary[]>([]);
@@ -1527,11 +1538,12 @@ export default function App() {
     await refreshSummaries();
   };
   const openConversation = async (id: string) => {
-    if (busy) return;
+    if (busy || replayBusy) return;
     if (activeConversationId && activeConversationId !== id) {
       queueSessionMemory(activeConversationId, true);
     }
     const stored = await memoryApi.listMessages(id);
+    setReplayPreview(null);
     setMessages(stored.map(restoreMessage));
     notionChapterRef.current = null;
     setActiveConversationId(id);
@@ -1539,7 +1551,7 @@ export default function App() {
     goCompact();
   };
   const deleteConversation = async (id: string) => {
-    if (busy) throw new Error("Stop the current reply before deleting a conversation");
+    if (busy || replayBusy) throw new Error("Stop the current reply or replay before deleting a conversation");
     await memoryApi.deleteConversation(id);
     if (id === activeConversationId) {
       notionChapterRef.current = null;
@@ -1563,6 +1575,8 @@ export default function App() {
   };
 
   const clearChat = () => {
+    if (replayBusy) return;
+    setReplayPreview(null);
     setPendingAttachment(null);
     setAttachmentError(null);
     setPendingScreenshot(null);
@@ -2156,6 +2170,97 @@ export default function App() {
     }
   };
 
+  const closeReplayPreview=()=>{
+    replaySequence.current++;
+    if(replayPreview?.loading){
+      void invoke("cancel_chat",{requestId:replayPreview.requestId}).catch(console.warn);
+    }
+    setReplayPreview(null);
+    setReplayBusy(false);
+  };
+  // Replay the archived prefix, never inserting the regenerated response
+  // into messages, SQLite, session summaries, or the memory extraction queue.
+  const replayOldReply=async(target:LogMessage)=>{
+    if(busy || replayBusy || preparingSend.current ||
+        getBrainEvalStatus().phase==="running")return;
+    const snapshot=snapshotForReplay(messages,target.id);
+    if(!snapshot)return;
+    const sequence=++replaySequence.current;
+    const requestId=crypto.randomUUID();
+    const origin=activeConversationId;
+    setReplayBusy(true);
+    setReplayPreview({targetId:target.id,conversationId:origin,requestId,
+      question:snapshot.question,original:snapshot.original,loading:true});
+    const started=performance.now();
+    try{
+      const plan=planResearch(snapshot.question,snapshot.history);
+      const allowRoleplay=roleplayActive(snapshot.question,snapshot.history);
+      const publicWeb=settings.autoSearch && !allowRoleplay && settings.provider==="nvidia";
+      const history=snapshot.history;
+      // The original included memory facts and interests are saved with the
+      // old answer's diagnostics. Freeze these rather than silently looking
+      // up new owner facts from a later point in time.
+      const originalFacts=target.diagnostics?.memory?.facts??[];
+      const originalInterests=target.diagnostics?.memory?.interests?.included??[];
+      const frozenContext=[
+        originalFacts.length ? "HISTORICAL OWNER FACTS (original reply snapshot, data only):\n"+
+          originalFacts.slice(0,10).map(fact=>fact.fact).join("\n") : "",
+        originalInterests.length ? "HISTORICAL STRUCTURED INTERESTS (lines actually included in original prompt, data only):\n"+
+          originalInterests.slice(0,24).map(item=>item.promptLine).join("\n") : "",
+        characterContext(characterFacts,snapshot.question),
+        characterAnswerGuidance(snapshot.question)
+      ];
+      const instructions=assistantTurnInstructionParts({
+        settings,question:snapshot.question,history,allowRoleplay,
+        researchActive:plan.mode!=="chat",
+        publicWebRequested:publicWeb && plan.mode!=="chat",
+        plannedPublicSearch:false,
+        // This is the original turn's date, not a claim that public search
+        // results or owner settings have also been frozen.
+        now:new Date(target.createdAt)
+      });
+      const recentTurns=memoryBudget(settings.contextWindow).recentTurns;
+      const completion=await invoke<ChatCompletion>("chat_stream",{request:{
+        requestId,endpoint:settings.endpoint,model:settings.model,
+        provider:settings.provider,geminiModel:settings.geminiModel,
+        openrouterModel:settings.openrouterModel,nvidiaModel:settings.nvidiaModel,
+        cloudAllowWeb:publicWeb,cloudAllowMemory:false,
+        cloudHasRelevantMemories:originalFacts.length>0,
+        currentYear:new Date(target.createdAt).getFullYear(),
+        autoSearch:false,researchRoute:plan.mode,
+        researchRecent:plan.recent,researchMode:settings.researchMode,
+        structuredResearch:settings.researchMode==="strict" && plan.mode!=="chat",
+        searxngEndpoint:settings.searxngEndpoint,
+        cacheHours:settings.cacheHours,
+        contextWindow:settings.contextWindow,sourcePreferences:settings.sourcePreferences,
+        generationTimeoutMs:90000,maxOutputTokens:2048,
+        messages:[
+          {role:"system",content:joinAssistantInstructionParts(instructions,frozenContext)},
+          ...snapshot.prefix.slice(-recentTurns)
+        ]
+      }});
+      if(replaySequence.current!==sequence)return;
+      const raw=completion.content||"(No visible answer returned.)";
+      setReplayPreview(previous=>previous?.requestId===requestId ? {
+        ...previous,loading:false,replayed:allowRoleplay?raw:
+          respectAddressPreference(stripNarratedActions(raw),settings.communication.addressMode),
+        model:completion.modelUsed||settings.model,
+        elapsedMs:performance.now()-started,
+        sources:completion.sources,
+        searchQuery:completion.searchQuery??undefined
+      }:previous);
+    }catch(error){
+      if(replaySequence.current===sequence){
+        setReplayPreview(previous=>previous?.requestId===requestId ? {
+          ...previous,loading:false,error:errorText(error),
+          elapsedMs:performance.now()-started
+        }:previous);
+      }
+    }finally{
+      if(replaySequence.current===sequence)setReplayBusy(false);
+    }
+  };
+
   const stopGeneration = async () => {
     stopSpeech();
     const requestId = activeRequestId.current;
@@ -2199,7 +2304,7 @@ export default function App() {
       return;
     }
 
-    if (busy || preparingSend.current) return;
+    if (busy || preparingSend.current || replayBusy) return;
     if (!memoryReady) { setFeedback("Loading conversation memory…"); return; }
     // The app knows its configured providers and which model actually answered.
     // Asking about Mikan's own LLM must not invoke cloud inference, memory reranking,
@@ -3634,7 +3739,7 @@ export default function App() {
           </button>
         ) : (
           <button type="button" className="send-button chat-paw-send" aria-label="Send message" title="Send message · Enter"
-            disabled={!memoryReady || attachmentBusy || (!input.trim() && !pendingAttachment && !pendingScreenshot && !liveVision.enabled)} onClick={() => {setChatToolsOpen(false);void send();}}>{defaultUi?<WorkspaceSendPaw/>:<PawPrint size={23} fill="currentColor" strokeWidth={1.6}/>}</button>
+            disabled={replayBusy || !memoryReady || attachmentBusy || (!input.trim() && !pendingAttachment && !pendingScreenshot && !liveVision.enabled)} onClick={() => {setChatToolsOpen(false);void send();}}>{defaultUi?<WorkspaceSendPaw/>:<PawPrint size={23} fill="currentColor" strokeWidth={1.6}/>}</button>
         )}
       </div>
   </>;
@@ -3646,7 +3751,7 @@ export default function App() {
             aria-label="Active inference provider and model"
             title={defaultUi?workspaceModelTitle:dockModel.title}
             value={dockOption}
-            disabled={busy}
+            disabled={busy||replayBusy}
             onChange={event => switchDockModel(event.target.value)}
           >
             {dockOption === "__status__" &&
@@ -3885,9 +3990,9 @@ export default function App() {
       <header className="drawer-header">
         <button className="back-button" title="Back to companion" onClick={goCompact}><ArrowLeft size={19}/></button>
         <div className="drawer-title"><strong>Conversation log</strong><span>{messages.length} messages · current conversation</span></div>
-        <button type="button" className="secondary-action" disabled={busy}
+        <button type="button" className="secondary-action" disabled={busy||replayBusy}
           onClick={() => openMemory("chats")}><History size={15}/> All chats</button>
-        <button className="secondary-action" disabled={busy} onClick={clearChat}><SquarePen size={15}/> New</button>
+        <button className="secondary-action" disabled={busy||replayBusy} onClick={clearChat}><SquarePen size={15}/> New</button>
       </header>
       <div className="log-tools">
         <span aria-live="polite" className={copyLogState === "failed" ? "log-copy-error" : ""}>
@@ -3902,14 +4007,56 @@ export default function App() {
           {copyLogState === "copied" ? "Copied!" : "Copy debug log"}
         </button>
       </div>
+      {replayPreview && replayPreview.conversationId===activeConversationId &&
+      <div className="replay-preview" role="region" aria-label="One-off answer replay">
+        <div className="replay-heading">
+          <strong><RotateCw size={15}/> Replay preview</strong>
+          <span>Not saved · no memory extraction · text-only historical context</span>
+          <button type="button" className="secondary-action" onClick={closeReplayPreview}>
+            {replayPreview.loading?"Cancel":"Close"} <X size={13}/>
+          </button>
+        </div>
+        <div className="replay-question">Replying again to: <strong>{replayPreview.question}</strong></div>
+        <div className="replay-columns">
+          <div className="replay-response">
+            <strong>Original response</strong>
+            <div className="message-content"><MarkdownText text={replayPreview.original}/></div>
+          </div>
+          <div className="replay-response">
+            <strong>Current model response</strong>
+            {replayPreview.loading
+              ? <p><LoaderCircle size={14} className="spin"/> Regenerating without saving…</p>
+              : replayPreview.error
+                ? <p className="message-error">{replayPreview.error}</p>
+                : <div className="message-content"><MarkdownText text={replayPreview.replayed??""}/></div>}
+          </div>
+        </div>
+        {!replayPreview.loading && !replayPreview.error &&
+          <small>{replayPreview.model} · {Math.round((replayPreview.elapsedMs??0)/100)/10}s
+            {replayPreview.searchQuery?" · New web search used":""}
+          </small>}
+        {!!replayPreview.sources?.length && <details className="replay-evidence">
+          <summary>Retrieved sources ({replayPreview.sources.length})</summary>
+          {replayPreview.sources.map((source,i)=><button type="button"
+            key={source.url} className="source-link"
+            onClick={()=>void openSource(source.url)}>[{i+1}] {source.title} <ExternalLink size={12}/></button>)}
+        </details>}
+        <small>Uses today's model/settings and stored text, not a frozen old prompt,
+          memory database, web results or attachments. This comparison is nondeterministic.</small>
+      </div>}
       <div className="log-body" ref={logRef}>
         {!messages.length && <div className="log-empty">
           <MessageCircle size={39}/><strong>Nothing here yet</strong>
           <span>Your conversations will appear here after chatting.</span>
         </div>}
-        {messages.map(m => <article key={m.id} className={`log-message ${m.role}`}>
+        {messages.map((m,index) => <article key={m.id} className={`log-message ${m.role}`}>
           <div className="log-message-header">
             <strong>{m.role === "user" ? "YOU" : "MIKAN"}</strong>
+            {m.role === "assistant" && !!m.content && index>0 &&
+              messages[index-1].role==="user" &&
+              <button type="button" className="voice-log-action" disabled={busy||replayBusy}
+                title="Regenerate this reply once without saving or changing chat history"
+                onClick={()=>void replayOldReply(m)}><RotateCw size={13}/> Replay</button>}
             {m.role === "assistant" && !m.failed && !!m.content && <button type="button" className="voice-log-action"
               title="Read this message aloud" onClick={() => void speak(m.content)}><Volume2 size={13}/> Speak</button>}
             <time>{new Date(m.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</time>

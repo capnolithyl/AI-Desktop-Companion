@@ -79,6 +79,7 @@ const SUPPORTED_MODELS: &[&str] = &[
     "moonshotai/kimi-k3.1-pro",
     "z-ai/glm-5.3-flash",
     "mistralai/mistral-large-4-1t-a52b",
+    "deepseek-ai/deepseek-v4.1-flash",
 ];
 fn free_model(name:Option<&str>) -> Result<&str,String> {
     let model=name.filter(|s|!s.trim().is_empty()).unwrap_or(DEFAULT_MODEL);
@@ -925,7 +926,7 @@ mod tests {
     #[test]
     fn only_owner_selected_nvidia_models() {
         assert!(free_model(None).is_ok());
-        assert_eq!(SUPPORTED_MODELS.len(),8);
+        assert_eq!(SUPPORTED_MODELS.len(),9);
         for &name in SUPPORTED_MODELS {
             assert!(free_model(Some(name)).is_ok());
         }
@@ -933,7 +934,8 @@ mod tests {
                      "nvidia/nemotron-3.5-bolt-e4b",
                      "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
                      "poolside/laguna-xs-2.1",
-                     "moonshotai/kimi-k3.1-pro"] {
+                     "moonshotai/kimi-k3.1-pro",
+                     "deepseek-ai/deepseek-v4.1-flash"] {
             assert!(free_model(Some(name)).is_ok());
         }
         assert!(free_model(Some("nvidia/other-model")).is_err());
