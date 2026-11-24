@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode, type PointerEvent as ReactPointerEvent, type MouseEvent as ReactMouseEvent } from "react";
 import {
   BookHeart, Check, Copy, Eye, History, Layers3, LoaderCircle, MessageCircle, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen,
-  Palette, PawPrint, Plus, Search, Settings2, Shirt, Smile, Sparkles, Volume2, VolumeX, X
+  Palette, PawPrint, Plus, Search, Settings2, Shirt, Smile, Volume2, VolumeX, X
 } from "lucide-react";
 import { clampPanelWidth, resolveWorkspaceWidths, resizeWorkspacePanel, type WorkspaceActivityEntry, type WorkspacePanel, type WorkspaceWidths } from "./workspace-activity";
 import { type AvatarBackground } from "./avatar-background";
@@ -233,10 +233,6 @@ export function DefaultCompanionShell({
         <div className="workspace-avatar-card" data-background={avatarBackground}
           onContextMenu={onAvatarContextMenu}
           style={backgroundImage?{"--workspace-avatar-background":backgroundImage} as CSSProperties:undefined}>
-          <div className="workspace-avatar-top">
-            <PawPrint size={20}/><strong>Mikan ♡</strong>
-            <Sparkles size={15}/>
-          </div>
           <div className="workspace-iki-stage" aria-label="Animated Mikan portrait">{avatar}</div>
           <div className="workspace-avatar-status" role="status">
             <PawPrint size={22}/>

@@ -138,3 +138,14 @@ test("Default uses an opaque cocoa canvas, distinct framed chat and one cohesive
   assert.match(css,/\.workspace-composer \.input-row textarea \{[\s\S]*?border:0;[\s\S]*?background:transparent/);
   assert.match(css,/flex-basis:58px;width:58px;height:58px/);
 });
+
+test("Default portrait has no redundant title and the illustrated send button has only one frame",()=>{
+  assert.doesNotMatch(shell,/workspace-avatar-top/);
+  assert.doesNotMatch(css,/workspace-avatar-top/);
+  assert.match(shell,/className="workspace-iki-stage" aria-label="Animated Mikan portrait"/);
+  assert.match(shell,/className="workspace-avatar-status"/);
+  assert.match(css,/\.companion\.default-layout-active \.workspace-composer \.send-button\.chat-paw-send:disabled \{\s*display:grid;[\s\S]*?padding:0;border:0;border-radius:16px;background:transparent;box-shadow:none/);
+  assert.match(css,/\.workspace-send-art \{display:block;width:66px;height:66px/);
+  assert.match(app,/defaultUi\?<WorkspaceSendPaw\/>:<PawPrint/);
+  assert.match(css,/\.companion\.default-layout-active \.workspace-composer \.input-row textarea:focus \{[\s\S]*?border:0;background:transparent;box-shadow:none/);
+});
