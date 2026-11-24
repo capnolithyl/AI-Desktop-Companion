@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ArrowLeft, Check, MessageCircle, Plus, RotateCw, Star, Trash2, X } from "lucide-react";
+import { ArrowLeft, Check, MessageCircle, Plus, RotateCw, Star, Trash2, X, Settings2, BookPlus } from "lucide-react";
 import type { CharacterCategory, CharacterFact, InterestItem, MemoryConversation, UserFact } from "./memory-client";
 import type { IncomingCanon, IncomingInterest } from "./interest-import";
 import { InterestCollectionTab } from "./InterestCollectionTab";
@@ -70,7 +70,7 @@ export function MemoryPanel({
   const [filterCategory,setFilterCategory]=useState<MemoryCategory|"all">("all");
   const [filterText,setFilterText]=useState("");
   const [factSort,setFactSort]=useState<"newest"|"oldest"|"updated"|"alpha">("newest");
-  const [visibleLimit,setVisibleLimit]=useState(100);
+  const [visibleLimit,setVisibleLimit]=useState(12);
   const [organizeId,setOrganizeId]=useState<number|null>(null);
   const [organizeCategory,setOrganizeCategory]=useState<MemoryCategory>("other");
   const [organizeTags,setOrganizeTags]=useState("");
@@ -97,8 +97,8 @@ export function MemoryPanel({
   return <section className={embedded ? "drawer settings-inner-panel" : "drawer"}
     role={embedded ? "region" : "dialog"} aria-label="Mikan memory">
     <header className="drawer-header">
-      <button type="button" className="back-button" title="Back to companion" onClick={onClose}><ArrowLeft size={19}/></button>
-      <div className="drawer-title"><strong>Memory</strong><span>Private SQLite storage on this PC</span></div>
+      {!embedded && <button type="button" className="back-button" title="Back to companion" onClick={onClose}><ArrowLeft size={19}/></button>}
+      <div className="drawer-title"><strong>{embedded?"Your memory library":"Memory"}</strong><span>Private SQLite storage on this PC</span></div>
       <button type="button" className="secondary-action" disabled={working}
         onClick={() => void run(onRefresh)}><RotateCw size={14}/> Refresh</button>
     </header>
@@ -122,15 +122,15 @@ export function MemoryPanel({
         <p className="memory-auto-warning" role="status">{automaticError}</p>}
       {tab === "facts" ? <>
         <p className="memory-explainer">Facts about you that Mikan can refer to across conversations. You can save, correct, or delete any entry.</p>
-        <label className="memory-auto-toggle">
-          <input type="checkbox" checked={autoRememberUser}
-            onChange={event => onAutoRememberUserChange(event.target.checked)}/>
-          <span><strong>Automatically remember useful facts about you</strong>
-            <small>Checks explicit, lasting details after a reply. Sensitive information is skipped by default.</small>
-          </span>
-        </label>
-        <MemoryReviews onChanged={onRefresh}/>
-        <MemoryImporter facts={facts} onImport={onImportFacts} onExport={onExportFacts} onReplace={onReplaceFacts}/>
+
+        <div className="memory-facts-overview">
+          <div><strong>{facts.length}</strong><span>saved facts</span></div>
+          <p>Find what Mikan knows, correct it or save something new. The rest stays out of your way.</p>
+        </div>
+        <div className="memory-facts-actions">
+          <details className="memory-disclosure" open={facts.length===0}>
+            <summary><BookPlus size={18}/><span><strong>Add a memory</strong><small>Save a new detail about yourself</small></span></summary>
+            <div className="memory-disclosure-body">
         <form className="memory-add" onSubmit={e => {
           e.preventDefault();
           if (!newFact.trim()) return;
@@ -143,12 +143,29 @@ export function MemoryPanel({
             <Plus size={15}/> Remember
           </button>
         </form>
+            </div>
+          </details>
+          <details className="memory-disclosure">
+            <summary><Settings2 size={18}/><span><strong>Automatic memory &amp; tools</strong><small>{autoRememberUser?"Automatic recall is on":"Automatic recall is off"} · corrections, import and export</small></span></summary>
+            <div className="memory-disclosure-body">
+        <label className="memory-auto-toggle">
+          <input type="checkbox" checked={autoRememberUser}
+            onChange={event => onAutoRememberUserChange(event.target.checked)}/>
+          <span><strong>Automatically remember useful facts about you</strong>
+            <small>Checks explicit, lasting details after a reply. Sensitive information is skipped by default.</small>
+          </span>
+        </label>
+        <MemoryReviews onChanged={onRefresh}/>
+        <MemoryImporter facts={facts} onImport={onImportFacts} onExport={onExportFacts} onReplace={onReplaceFacts}/>
+            </div>
+          </details>
+        </div>
         {!facts.length && <p className="memory-empty">Nothing saved yet. Use this form or /remember followed by a fact.</p>}
         {!!facts.length && <div className="memory-filter">
           <input value={filterText} placeholder="Search facts or tags…" aria-label="Filter memories"
-            onChange={e=>{setFilterText(e.target.value);setVisibleLimit(100);}}/>
+            onChange={e=>{setFilterText(e.target.value);setVisibleLimit(12);}}/>
           <select value={filterCategory} aria-label="Filter by memory category"
-            onChange={e=>{setFilterCategory(e.target.value as MemoryCategory|"all");setVisibleLimit(100);}}>
+            onChange={e=>{setFilterCategory(e.target.value as MemoryCategory|"all");setVisibleLimit(12);}}>
             <option value="all">All categories ({facts.length})</option>
             {MEMORY_CATEGORIES.map(cat=><option value={cat.id} key={cat.id}>{cat.label}</option>)}
           </select>
@@ -190,6 +207,8 @@ export function MemoryPanel({
                 <button type="button" onClick={()=>setOrganizeId(null)}>Cancel</button>
               </div>
             </div>}
+            <details className="memory-record-options">
+              <summary><Settings2 size={14}/> Manage · #{fact.id}</summary>
             <div className="memory-actions">
               <small>#{fact.id} · {shortDate(fact.updatedAt)}
                 {(fact.referenceCount ?? 0) > 0 && " · Recalled " + fact.referenceCount + "×"}</small>
@@ -209,11 +228,15 @@ export function MemoryPanel({
                 <button type="button" onClick={() => setConfirmId(null)}>Cancel</button>
               </> : <button type="button" onClick={() => setConfirmId(`fact:${fact.id}`)}><Trash2 size={13}/> Delete</button>}
             </div>
+            </details>
           </>}
         </article>)}
-        {filteredFacts.length>visibleLimit && <button type="button" className="secondary-action" onClick={()=>setVisibleLimit(n=>n+100)}>
-          Show 100 more ({filteredFacts.length-visibleLimit} remaining)
-        </button>}
+        {filteredFacts.length>visibleLimit && <div className="memory-load-more">
+          <span>Showing {Math.min(visibleLimit,filteredFacts.length)} of {filteredFacts.length} matching memories</span>
+          <button type="button" className="secondary-action" onClick={()=>setVisibleLimit(n=>n+12)}>
+            Show 12 more ({filteredFacts.length-visibleLimit} remaining)
+          </button>
+        </div>}
       </> : tab === "collections" ? <>
         <InterestCollectionTab items={interests} onImport={onImportInterests}
           onEdit={onEditInterest} onDelete={onDeleteInterest}/>

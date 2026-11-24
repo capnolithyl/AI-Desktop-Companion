@@ -24,6 +24,8 @@ const totalFixtureTurns=EVAL_SCENARIOS.reduce((n,s)=>n+s.steps.length,0);
 
 export function BrainEvalPanel({settings,availableModels}:{settings:Settings;availableModels:readonly string[]}){
   const [mode,setMode]=useState<EvalMode>("routing");
+  const [scenarioPage,setScenarioPage]=useState(0);
+  const [workspaceTab,setWorkspaceTab]=useState<"run"|"scenarios"|"results">("run");
   const [researchMode,setResearchMode]=useState<Settings["researchMode"]>(settings.researchMode);
   const [mikanifyAnswer,setMikanifyAnswer]=useState(settings.mikanifyAnswer);
   const [presets,setPresets]=useState(readBrainEvalPresets);
@@ -48,7 +50,6 @@ export function BrainEvalPanel({settings,availableModels}:{settings:Settings;ava
   const cloudSelected=cloudModels.filter(choice=>modelsToRun.includes(choice.id));
   const [numberSelection,setNumberSelection]=useState("");
   const [numberFeedback,setNumberFeedback]=useState("Enter scenario numbers such as 20, 21, 83.");
-  const [catalogOpen,setCatalogOpen]=useState(true);
   const [message,setMessage]=useState("");
   const [lastExportFolder,setLastExportFolder]=useState<string|null>(null);
   const resultsRef=useRef<HTMLDivElement>(null);
@@ -74,6 +75,10 @@ export function BrainEvalPanel({settings,availableModels}:{settings:Settings;ava
     (!searchTerm||[s.id,s.group,brainScenarioLabel(s.id,s.label)]
       .some(value=>value.toLocaleLowerCase().includes(searchTerm)))
   );
+  const pageSize=20;
+  const totalPages=Math.max(1,Math.ceil(visible.length/pageSize));
+  const currentPage=Math.min(scenarioPage,totalPages-1);
+  const pageScenarios=visible.slice(currentPage*pageSize,(currentPage+1)*pageSize);
   const selected=EVAL_SCENARIOS.filter(s=>selectedIds.has(s.id));
   const turnsPerModel=selected.reduce((total,scenario)=>total+scenario.steps.length,0)*repeats;
   const cloudLimit=cloudTurnLimit(cloudSelected);
@@ -102,7 +107,7 @@ export function BrainEvalPanel({settings,availableModels}:{settings:Settings;ava
     }
     const numbers=[...new Set(entries.map(value=>Number(value.replace(/^#/,""))))];
     selectOnly(numbers.map(number=>EVAL_SCENARIOS[number-1].id));
-    setCatalogOpen(true);
+    setWorkspaceTab("scenarios");
     setNumberFeedback("Selected "+numbers.length+" scenario(s): "+numbers.map(number=>"#"+number).join(", "));
   };
   const unresolved=new Set<BrainCaseStatus>(["failed","review","incomplete","untested","stale"]);
@@ -152,7 +157,7 @@ export function BrainEvalPanel({settings,availableModels}:{settings:Settings;ava
     setStatusFilter(config.statusFilter);
     setSearch(config.search);
     setPresetName(preset.name);
-    setCatalogOpen(true);
+    setWorkspaceTab("scenarios");
     setMessage("Loaded "+preset.name+" ("+knownIds.length+" scenarios, "+
       (config.mode==="live"?knownModels.length:1)+" model(s))."+
       (unknownIds.length?" "+unknownIds.length+" unavailable scenario(s) skipped.":"")+
@@ -191,9 +196,8 @@ export function BrainEvalPanel({settings,availableModels}:{settings:Settings;ava
       setMessage("");
       setLastExportFolder(null);
       setViewModel("");
-      // The large checklist used to bury progress and completion results.
-      // Collapse it during a run, retaining the exact owner selection.
-      setCatalogOpen(false);
+      // The Scenario catalog is a separate workspace; show progress on Run.
+      setWorkspaceTab("run");
     }catch(error){setMessage("Could not start: "+String(error))}
   }
   function stop(){
@@ -220,8 +224,56 @@ export function BrainEvalPanel({settings,availableModels}:{settings:Settings;ava
     catch(error){setMessage("Clipboard unavailable: "+String(error))}
   }
 
+  const metricRows = metrics ? ([
+          ["No detected failures",metrics.passRate+"%",metrics.passed+"/"+metrics.turns+" turns, includes unverified"],
+          ["Verified checks",metrics.verifiedPassRate+"%",metrics.verifiedPassed+"/"+metrics.turns+" turns"],
+          ["Exact route labels",metrics.routes+"%","diagnostic; labels alone don't fail a test"],
+          ["Functional routing",metrics.behavioralRouting+"%","search-intent behavior"],
+          ["Web decisions",metrics.webAgreement+"%",metrics.webChecks+" observed · "+metrics.unnecessaryWeb+" extra · "+metrics.missedWeb+" missed"],
+          ["Real web searches",String(metrics.liveSearches),metrics.liveSearchesWithSources+
+            " with sources · "+metrics.liveSources+" returned snippets"],
+          ["Evidence failures",String(metrics.evidenceFailures),"searches with no accepted evidence; not a verified answer"],
+          ["Source-anchored facts",String(metrics.evidenceFacts),metrics.evidencePasses+
+            " search turns with exact quotes · "+metrics.evidenceUnavailable+
+            " without matched extracts · not independently fact-verified"],
+          ["Recommendation shortlist",String(metrics.shortlistedItems)+" admitted",metrics.rejectedItems+
+            " rejected · "+metrics.noSupportedMatches+" turns with no supported matches"],
+          ["Verified roles",String(metrics.attributedRoles),metrics.excludedReferences+
+            " prior reference(s) excluded"],
+          ["Memory fact coverage",metrics.recall+"%",metrics.memoryRecordMisses+" exact row misses · "+
+            metrics.memoryDistractors+" extra records"],
+          ["Factual answers",metrics.answers===null?"Not run":metrics.answers+"%",metrics.answerChecks+" graded turns"],
+          ["Conversation reviews",String(metrics.reviewTurns),metrics.qualityFlagTurns+" potential quality warnings"],
+          ["Read-only memory previews",String(metrics.memoryPreviews),metrics.memoryPreviewMisses+" minimum-fact misses; review meaning manually"],
+          ["Model speed",metrics.tokensPerSecond===null?"Not measured":metrics.tokensPerSecond+" tok/s","generation only"],
+          ["Elapsed",formatMs(metrics.elapsedMs),metrics.cases+" scenario runs"]
+        ] as const) : [];
+
   return <div className="brain-eval-panel">
-    <div className="settings-section-title"><BrainCircuit size={17}/> Brain lab · P0 reliability</div>
+    <header className="brain-workspace-header">
+      <div className="brain-workspace-icon"><BrainCircuit size={27}/></div>
+      <div><span className="control-eyebrow">MIKAN LABORATORY</span>
+        <h2>Brain Lab</h2>
+        <p>Run isolated tests, browse scenarios and inspect model behavior without mixing everything into one page.</p>
+      </div>
+    </header>
+    <nav className="brain-workspace-tabs" aria-label="Brain Lab sections">
+      {([
+        {tab:"run",label:"Run tests",Icon:Play},
+        {tab:"scenarios",label:"Scenario catalog",Icon:BrainCircuit},
+        {tab:"results",label:"Results & traces",Icon:Activity}
+      ] as const).map(({tab,label,Icon})=>
+        <button type="button" key={tab} className={workspaceTab===tab?"active":""}
+          aria-current={workspaceTab===tab?"page":undefined}
+          onClick={()=>setWorkspaceTab(tab)}>
+          <Icon size={18}/><span>{label}</span>
+          {tab==="scenarios"&&<small>{selected.length} selected</small>}
+          {tab==="results"&&report&&<small>Latest run</small>}
+        </button>)}
+    </nav>
+    {workspaceTab==="run"&&<div className="brain-workspace-view brain-workspace-run">
+      <div className="brain-section-heading"><h3>Run configuration</h3><span>{selected.length} scenarios · {modelsToRun.length} model(s)</span></div>
+      
     <details className="brain-eval-explainer">
       <summary>What Brain Lab tests <span>Isolated memories · Live uses real SearXNG</span></summary>
       <p>Brain Lab tests Mikan's routing and model responses using synthetic facts.
@@ -237,6 +289,9 @@ export function BrainEvalPanel({settings,availableModels}:{settings:Settings;ava
         Conversation quality still needs human review. Simple uses source-reading without the JSON fact extractor;
         Strict keeps the previous experimental extraction path. Each gets separate scenario grades.</p>
     </details>
+
+          <details className="control-disclosure brain-eval-preset-disclosure">
+      <summary><strong>Saved test presets</strong><span>Load, save and manage configurations</span></summary>
     <section className="brain-eval-presets" aria-label="Saved Brain Lab configurations">
       <div className="brain-eval-presets-header">
         <strong>Saved test presets</strong>
@@ -269,7 +324,9 @@ export function BrainEvalPanel({settings,availableModels}:{settings:Settings;ava
       </div>
       <small>Saving with an existing name updates that preset. Presets stay on this device.</small>
     </section>
-    <div className="brain-eval-toolbar">
+    </details>
+
+          <div className="brain-eval-toolbar">
       <label>Test mode
         <select value={mode} disabled={busy} onChange={e=>setMode(e.target.value as EvalMode)}>
           <option value="routing">Fast · production routing and lexical recall</option>
@@ -284,43 +341,22 @@ export function BrainEvalPanel({settings,availableModels}:{settings:Settings;ava
         </select>
       </label>
       <label className="brain-eval-mikanify">
-        <span>Mikanify answer 🐈</span>
+        <span className="brain-mikanify-copy"><strong>Mikanify answer 🐈</strong>
+          <small>Optional local restyle. Both original and rewritten answers stay in the report.</small></span>
         <input type="checkbox" checked={mikanifyAnswer}
           disabled={busy||mode!=="live"||researchMode!=="simple"}
           aria-label="Mikanify answer (experimental second local pass)"
           onChange={e=>setMikanifyAnswer(e.target.checked)}/>
-        <small>Optional local restyle; the report saves both original and rewritten research answers.</small>
-      </label>
-      <label>Category
-        <select value={category} disabled={busy} onChange={e=>setCategory(e.target.value)}>
-          <option>All categories</option>
-          {groups.map(group=><option key={group}>{group}</option>)}
-        </select>
-      </label>
-      <label>Show status
-        <select value={statusFilter} disabled={busy}
-          onChange={e=>setStatusFilter(e.target.value as typeof statusFilter)}>
-          <option value="all">All statuses</option>
-          <option value="failed">Failed</option>
-          <option value="review">Needs review</option>
-          <option value="stale">Stale / newer build</option>
-          <option value="untested">Never tested</option>
-          <option value="incomplete">Incomplete</option>
-          <option value="passed">Passed</option>
-        </select>
       </label>
       <label>Repeat each scenario
         <select value={repeats} disabled={busy} onChange={e=>setRepeats(Number(e.target.value))}>
           {[1,2,3,5].map(n=><option key={n} value={n}>{n}×</option>)}
         </select>
       </label>
-      <label className="brain-eval-find">Find scenario
-        <input type="search" value={search}
-          onChange={e=>setSearch(e.target.value)}
-          placeholder="Search #65, anime, singer…" aria-label="Find Brain Lab scenario" />
-      </label>
+
     </div>
-    {mode==="live"&&<section className="brain-eval-model-picker" aria-label="Models to compare">
+
+          {mode==="live"&&<section className="brain-eval-model-picker" aria-label="Models to compare">
       <div className="brain-eval-model-heading">
         <strong>Compare local and free cloud models</strong>
         <span>{modelsToRun.length} selected · sequential only</span>
@@ -360,40 +396,20 @@ export function BrainEvalPanel({settings,availableModels}:{settings:Settings;ava
         })}
       </div>}
     </section>}
-    <div className="brain-eval-status-summary">
-      {(["passed","failed","review","stale","untested","incomplete"] as const).map(status=>
-        <span className={"brain-eval-status "+status} key={status}>{status}: {totals[status]}</span>
-      )}
-    </div>
-    {totals.stale>0&&<p className="brain-eval-muted-note">
-      Stale means tested with an older build or fixture. Those are previous results, not new failures.
-    </p>}
-    <div className="brain-eval-number-select">
-      <label htmlFor="brain-eval-numbers">Select scenario numbers</label>
-      <div className="brain-eval-number-row">
-        <input id="brain-eval-numbers" type="text" value={numberSelection}
-          disabled={busy} placeholder="20, 21, 83"
-          aria-describedby="brain-eval-number-feedback"
-          onChange={e=>setNumberSelection(e.target.value)}
-          onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();selectScenarioNumbers();}}}/>
-        <button type="button" disabled={busy} onClick={selectScenarioNumbers}>Select these</button>
+
+      <div className="brain-eval-select-actions">
+        <button type="button" onClick={()=>setWorkspaceTab("scenarios")}>
+          <BrainCircuit size={16}/> Choose scenarios ({selected.length} selected)
+        </button>
       </div>
-      <small id="brain-eval-number-feedback" role="status">{numberFeedback}</small>
-    </div>
-    <div className="brain-eval-select-actions">
-      <button type="button" disabled={busy} onClick={()=>selectOnly(visible.map(s=>s.id))}>Select visible ({visible.length})</button>
-      <button type="button" disabled={busy} onClick={selectUnresolved}>Select unresolved</button>
-      <button type="button" disabled={busy} onClick={selectRegression}>Passed regression sample</button>
-      <button type="button" disabled={busy} onClick={()=>selectOnly([])}>Clear selection</button>
-    </div>
-    <div className="brain-eval-actionbar">
+          <div className="brain-eval-actionbar">
       <div className="brain-eval-actions brain-eval-action-buttons">
         <button type="button" className="save-button" disabled={busy||selected.length===0||modelsToRun.length===0} onClick={run}>
           <Play size={15}/> Run {selected.length} scenarios × {modelsToRun.length} model{modelsToRun.length===1?"":"s"} ({selected.reduce((n,s)=>n+s.steps.length,0)*repeats*modelsToRun.length} turns)
         </button>
         {busy&&<button type="button" className="secondary-action" onClick={stop}><Square size={14}/> Stop</button>}
         {report&&!busy&&<button type="button" className="secondary-action"
-          onClick={()=>resultsRef.current?.scrollIntoView({behavior:"smooth",block:"start"})}>
+          onClick={()=>setWorkspaceTab("results")}>
           <Activity size={14}/> View results
         </button>}
         {report&&<button type="button" className="secondary-action" onClick={()=>void exportReport()}>
@@ -460,16 +476,74 @@ export function BrainEvalPanel({settings,availableModels}:{settings:Settings;ava
         </small>}
       </section>
     </div>
-    <details className="brain-eval-catalog-disclosure" open={catalogOpen}
-      onToggle={e=>setCatalogOpen(e.currentTarget.open)}>
-      <summary className="brain-eval-catalog-header">
-        <strong>Scenarios {catalogOpen?"▾":"▸"}</strong>
-        <span>Showing {visible.length} of {EVAL_SCENARIOS.length} · {selected.length} selected
-          {catalogOpen?" · click to collapse":" · click to expand"}</span>
-      </summary>
+
+    </div>}
+    {workspaceTab==="scenarios"&&<div className="brain-workspace-view brain-workspace-scenarios">
+      <div className="brain-section-heading"><h3>Select scenarios</h3><span>{EVAL_SCENARIOS.length} available</span></div>
+          <div className="brain-eval-status-summary">
+      {(["passed","failed","review","stale","untested","incomplete"] as const).map(status=>
+        <span className={"brain-eval-status "+status} key={status}>{status}: {totals[status]}</span>
+      )}
+    </div>
+    {totals.stale>0&&<p className="brain-eval-muted-note">
+      Stale means tested with an older build or fixture. Those are previous results, not new failures.
+    </p>}
+
+      <div className="brain-eval-toolbar brain-eval-filters">
+              <label>Category
+        <select value={category} disabled={busy} onChange={e=>setCategory(e.target.value)}>
+          <option>All categories</option>
+          {groups.map(group=><option key={group}>{group}</option>)}
+        </select>
+      </label>
+      <label>Show status
+        <select value={statusFilter} disabled={busy}
+          onChange={e=>{setStatusFilter(e.target.value as typeof statusFilter);setScenarioPage(0);}}>
+          <option value="all">All statuses</option>
+          <option value="failed">Failed</option>
+          <option value="review">Needs review</option>
+          <option value="stale">Stale / newer build</option>
+          <option value="untested">Never tested</option>
+          <option value="incomplete">Incomplete</option>
+          <option value="passed">Passed</option>
+        </select>
+      </label>
+
+              <label className="brain-eval-find">Find scenario
+        <input type="search" value={search}
+          onChange={e=>{setSearch(e.target.value);setScenarioPage(0);}}
+          placeholder="Search #65, anime, singer…" aria-label="Find Brain Lab scenario" />
+      </label>
+      </div>
+          <div className="brain-eval-number-select">
+      <label htmlFor="brain-eval-numbers">Select scenario numbers</label>
+      <div className="brain-eval-number-row">
+        <input id="brain-eval-numbers" type="text" value={numberSelection}
+          disabled={busy} placeholder="20, 21, 83"
+          aria-describedby="brain-eval-number-feedback"
+          onChange={e=>setNumberSelection(e.target.value)}
+          onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();selectScenarioNumbers();}}}/>
+        <button type="button" disabled={busy} onClick={selectScenarioNumbers}>Select these</button>
+      </div>
+      <small id="brain-eval-number-feedback" role="status">{numberFeedback}</small>
+    </div>
+
+
+      <div className="brain-eval-select-actions">
+        <button type="button" disabled={busy} onClick={()=>selectOnly(visible.map(s=>s.id))}>Select visible ({visible.length})</button>
+        <button type="button" disabled={busy} onClick={selectUnresolved}>Select unresolved</button>
+        <button type="button" disabled={busy} onClick={selectRegression}>Passed regression sample</button>
+        <button type="button" disabled={busy} onClick={()=>selectOnly([])}>Clear selection</button>
+        <button type="button" className="brain-return-to-run" onClick={()=>setWorkspaceTab("run")}><Play size={15}/> Back to run</button>
+      </div>
+          <section className="brain-eval-catalog-disclosure">
+      <header className="brain-eval-catalog-header">
+        <strong>Scenario catalog</strong>
+        <span>Showing {visible.length} of {EVAL_SCENARIOS.length} · {selected.length} selected</span>
+      </header>
       <div className="brain-eval-catalog" role="group" aria-label="Select Brain Lab scenarios">
       {visible.length===0&&<p className="brain-eval-subtitle">No scenarios match this filter.</p>}
-      {visible.map(s=>{
+      {pageScenarios.map(s=>{
         const view=statuses.get(s.id)!;
         return <div className="brain-eval-test-row" key={s.id}>
           <label title={s.note??s.group}>
@@ -492,11 +566,24 @@ export function BrainEvalPanel({settings,availableModels}:{settings:Settings;ava
         </div>;
       })}
       </div>
-    </details>
+      <div className="brain-scenario-pagination" role="navigation" aria-label="Scenario pages">
+        <button type="button" disabled={currentPage===0} onClick={()=>setScenarioPage(page=>Math.max(0,page-1))}>Previous</button>
+        <span>Page {currentPage+1} of {totalPages} · {visible.length} matching</span>
+        <button type="button" disabled={currentPage>=totalPages-1} onClick={()=>setScenarioPage(page=>Math.min(totalPages-1,page+1))}>Next</button>
+      </div>
+    </section>
     <p className="brain-eval-muted-note">
       Catalog: {EVAL_SCENARIOS.length} scenarios, {totalFixtureTurns} turns. Use the category, status or search filters to narrow the list.
     </p>
-    {runtime.comparison && runtime.comparison.length>1&&<section className="brain-eval-comparison">
+
+    </div>}
+    {workspaceTab==="results"&&<div className="brain-workspace-view brain-workspace-results">
+      <div className="brain-section-heading"><h3>Results &amp; diagnostics</h3><span>{report?.model??"No run yet"}</span></div>
+      {!report&&<div className="brain-empty-results"><BrainCircuit size={42}/><strong>No test report yet</strong>
+        <p>Run a scenario to see results, model comparisons and evidence traces.</p>
+        <button type="button" className="secondary-action" onClick={()=>setWorkspaceTab("run")}>Configure a run</button>
+      </div>}
+          {runtime.comparison && runtime.comparison.length>1&&<section className="brain-eval-comparison">
       <strong>Model comparison · same scenarios and repetitions</strong>
       <label className="brain-eval-model-trace-picker">Inspect a model's full run
         <select value={viewModel} onChange={event=>setViewModel(event.target.value)}>
@@ -524,34 +611,20 @@ export function BrainEvalPanel({settings,availableModels}:{settings:Settings;ava
       <div ref={resultsRef} className="settings-section-title brain-eval-results-anchor">
         <Activity size={17}/> Results dashboard · {report.model}
       </div>
+      <div className="brain-section-heading"><h3>Core results</h3><span>Latest model · key outcomes</span></div>
       <div className="brain-eval-metrics">
-        {([
-          ["No detected failures",metrics.passRate+"%",metrics.passed+"/"+metrics.turns+" turns, includes unverified"],
-          ["Verified checks",metrics.verifiedPassRate+"%",metrics.verifiedPassed+"/"+metrics.turns+" turns"],
-          ["Exact route labels",metrics.routes+"%","diagnostic; labels alone don't fail a test"],
-          ["Functional routing",metrics.behavioralRouting+"%","search-intent behavior"],
-          ["Web decisions",metrics.webAgreement+"%",metrics.webChecks+" observed · "+metrics.unnecessaryWeb+" extra · "+metrics.missedWeb+" missed"],
-          ["Real web searches",String(metrics.liveSearches),metrics.liveSearchesWithSources+
-            " with sources · "+metrics.liveSources+" returned snippets"],
-          ["Evidence failures",String(metrics.evidenceFailures),"searches with no accepted evidence; not a verified answer"],
-          ["Source-anchored facts",String(metrics.evidenceFacts),metrics.evidencePasses+
-            " search turns with exact quotes · "+metrics.evidenceUnavailable+
-            " without matched extracts · not independently fact-verified"],
-          ["Recommendation shortlist",String(metrics.shortlistedItems)+" admitted",metrics.rejectedItems+
-            " rejected · "+metrics.noSupportedMatches+" turns with no supported matches"],
-          ["Verified roles",String(metrics.attributedRoles),metrics.excludedReferences+
-            " prior reference(s) excluded"],
-          ["Memory fact coverage",metrics.recall+"%",metrics.memoryRecordMisses+" exact row misses · "+
-            metrics.memoryDistractors+" extra records"],
-          ["Factual answers",metrics.answers===null?"Not run":metrics.answers+"%",metrics.answerChecks+" graded turns"],
-          ["Conversation reviews",String(metrics.reviewTurns),metrics.qualityFlagTurns+" potential quality warnings"],
-          ["Read-only memory previews",String(metrics.memoryPreviews),metrics.memoryPreviewMisses+" minimum-fact misses; review meaning manually"],
-          ["Model speed",metrics.tokensPerSecond===null?"Not measured":metrics.tokensPerSecond+" tok/s","generation only"],
-          ["Elapsed",formatMs(metrics.elapsedMs),metrics.cases+" scenario runs"]
-        ] as const).map(([label,value,note])=><div key={label} className="brain-eval-metric">
+        {metricRows.slice(0,6).map(([label,value,note])=><div key={label} className="brain-eval-metric">
           <span>{label}</span><strong>{value}</strong><small>{note}</small>
         </div>)}
       </div>
+      <details className="brain-eval-explainer brain-metric-extra">
+        <summary>Detailed diagnostics <span>Evidence, roles, recall, speed and more</span></summary>
+        <div className="brain-eval-metrics">
+          {metricRows.slice(6).map(([label,value,note])=><div key={label} className="brain-eval-metric">
+          <span>{label}</span><strong>{value}</strong><small>{note}</small>
+        </div>)}
+        </div>
+      </details>
       {previousRun&&<p className="brain-eval-subtitle">
         Previous run: {previousRun.passRate}% ({previousRun.model}, {previousRun.mode})
         {previousRun.mode===report.mode?" · change "+(metrics.passRate-previousRun.passRate>=0?"+":"")+
@@ -705,5 +778,7 @@ export function BrainEvalPanel({settings,availableModels}:{settings:Settings;ava
         <RotateCw size={14}/> Clear local history
       </button>
     </details>}
+
+    </div>}
   </div>;
 }
