@@ -1809,3 +1809,68 @@ button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px
   .settings-standalone .control-home,
   .settings-standalone .settings-body details[open] > :not(summary) {animation:none;}
 }
+
+
+/* The embedded Memory and Capability workspaces inherit the same readable UI. */
+.settings-standalone .memory-tabs {
+  gap:9px;padding:16px 23px;flex-wrap:wrap;border-bottom:1px solid #583c36;background:#2c2023;
+}
+.settings-standalone .memory-tabs button {
+  flex:1 1 130px;min-height:43px;padding:10px 14px;
+  border:1px solid #65433c;border-radius:11px;
+  background:#3c2a2a;color:#e6c2b6;font-size:14px;font-weight:650;
+}
+.settings-standalone .memory-tabs button.active {
+  background:#5b3628;border-color:#ea9150;color:#ffdbaf;
+}
+.settings-standalone .memory-tabs button:hover {background:#5a382e;}
+.settings-standalone .settings-inner-panel .memory-body {padding:24px clamp(20px,3vw,38px) 35px;background:#21191a;}
+.settings-standalone .memory-body .memory-explainer {
+  font-size:14px;line-height:1.65;color:#d5b3a8;margin-bottom:17px;
+}
+.settings-standalone .memory-body .memory-item {
+  padding:18px 20px;margin:11px 0;border:1px solid #694940;border-radius:14px;
+  background:linear-gradient(140deg,#3a2929,#302327);
+}
+.settings-standalone .memory-body .memory-item p {font-size:14px;line-height:1.65;color:#ffeadd;}
+.settings-standalone .memory-body .memory-actions {gap:10px;}
+.settings-standalone .memory-body .memory-actions small {font-size:12px;color:#cfa99b;}
+.settings-standalone .memory-body .memory-filter,
+.settings-standalone .memory-body .memory-add {gap:12px;}
+.settings-standalone .memory-body input:not([type="checkbox"]),
+.settings-standalone .memory-body select,
+.settings-standalone .memory-body textarea {
+  min-height:43px;background:#21191c;color:#fff0e4;border:1px solid #775348;
+  border-radius:10px;padding:10px 13px;font:inherit;font-size:14px;
+}
+.settings-standalone .memory-body .memory-auto-toggle {font-size:14px;line-height:1.5;}
+.settings-standalone .settings-inner-panel .drawer-footer {background:#2c2022;color:#d4b1a5;font-size:12.5px;}
+.settings-standalone .settings-inner-panel .capability-search {padding:16px 24px;}
+.settings-standalone .settings-inner-panel .capability-search input {
+  min-height:43px;font-size:14px;color:#ffecdd;background:#21191c;border-color:#81584e;
+}
+.settings-standalone .settings-inner-panel .capability-list {
+  gap:13px;padding:24px clamp(18px,3vw,36px);background:#201819;
+}
+.settings-standalone .capability-card {
+  padding:19px 21px;border:1px solid #755044;border-radius:15px;
+  background:linear-gradient(130deg,#3a2828,#2e2225);
+}
+.settings-standalone .capability-card-head strong {font-size:16px;color:#ffe3cd;}
+.settings-standalone .capability-stage {font-size:11px;color:#e9b18b;}
+.settings-standalone .capability-card p {font-size:14px;line-height:1.65;color:#d9b7ac;margin:11px 0;}
+.settings-standalone .capability-foot {font-size:13px;color:#d7b4a5;}
+.settings-standalone .capability-foot button {
+  padding:9px 13px;min-height:38px;border:1px solid #935d45;
+  border-radius:9px;background:#553329;color:#ffe0ca;font-size:13px;
+}
+.settings-standalone .preset-grid {gap:12px;}
+.settings-standalone .preset-button {
+  min-height:85px;padding:15px 18px;border-radius:13px;
+  background:#382729;border-color:#694840;color:#ffe5d6;
+}
+.settings-standalone .preset-heading strong {color:#ffdfcc;font-size:16px;}
+.settings-standalone .preset-heading span {color:#c7a99f;font-size:13px;}
+.settings-standalone .personality-field {margin-bottom:20px;}
+.settings-standalone .personality-label {font-size:15px;}
+.settings-standalone .personality-label output {color:#ffb06d;}
