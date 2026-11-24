@@ -47,6 +47,7 @@ jobs:
           node --check nas/providers.mjs
           node --check nas/provider-settings.mjs
           node --check nas/research.mjs
+          node --check nas/agent-research.mjs
           node --check nas/turn.mjs
           node --check nas/brain-lab.mjs
           node --check nas/knowledge.mjs

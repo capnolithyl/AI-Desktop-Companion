@@ -713,3 +713,30 @@ test("followup retains previously validated task constraints even when planner o
  assert.equal(result.task.requirements.length,2);
  assert.equal(result.task.requirements[0].unit,"episodes");
 });
+
+test("native agent adapter preserves real tool calls and tool result messages",async()=>{
+ const config={provider:"nvidia",model:"nvidia/nemotron-3-ultra-550b-a55b",key:"synthetic-test-key"};
+ const call={id:"call_1",type:"function",function:{name:"search_web",arguments:'{"query":"Brian Fair Shadows Fall birth year"}'}};
+ const agentTools=[{type:"function",function:{name:"search_web",parameters:{type:"object"}}}];
+ const result=await generateReply({config,system:"test",agentTools,history:[{role:"user",content:"test"},{role:"assistant",content:null,tool_calls:[call]},{role:"tool",tool_call_id:"call_1",content:"test result"}],fetchImpl:async(_url,opts)=>{
+   const body=JSON.parse(opts.body);assert.equal(body.stream,false);assert.equal(body.tool_choice,"auto");assert.equal(body.messages.at(-1).tool_call_id,"call_1");assert.deepEqual(body.messages.at(-2).tool_calls,[call]);
+   return Response.json({choices:[{finish_reason:"tool_calls",message:{content:null,tool_calls:[call]}}]});
+ }});
+ assert.deepEqual(result.toolCalls,[call]);
+});
+test("agent executes actual calls, preserves natural queries and prevents unapproved reads",async()=>{
+ const {agentResearch}=await import("../agent-research.mjs");let round=0,reads=0;const queries=[],events=[];
+ const call=(id,name,args)=>({id,type:"function",function:{name,arguments:JSON.stringify(args)}});
+ const result=await agentResearch({mode:"simple",history:[{role:"user",content:"What is the latest official model?"}],canRequest:()=>true,activity:e=>events.push(e),
+   search:async q=>{queries.push(q);return [{url:"https://example.org/release",title:"Example model release",content:"Example Model 4 officially released."}]},
+   read:async()=>{reads++;return {url:"https://example.org/release",title:"Release",content:"Example Model 4 officially released."};},
+   generate:async args=>{
+     round++;
+     if(round===1)return {content:"",toolCalls:[call("a","search_web",{query:"Example model official release"})]};
+     assert.equal(args.history.at(-1).role,"tool");
+     if(round===2)return {content:"",toolCalls:[call("b","read_webpage",{url:"http://127.0.0.1/private"})]};
+     assert.match(args.history.at(-1).content,/explicitly supplied/);
+     return {content:"Example Model 4 officially released [1].",toolCalls:[]};
+   }});
+ assert.deepEqual(queries,["Example model official release"]);assert.equal(reads,0);assert.match(result.answer,/Example Model 4/);assert.equal(round,3);
+});

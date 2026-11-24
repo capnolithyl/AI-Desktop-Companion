@@ -74,7 +74,7 @@ export function pageText(body,type){
   // Bounded, best-effort markup-to-text only; no scripts, DOM or remote assets.
   const title=body.match(/<title\b[^>]*>([\s\S]*?)<\/title>/i)?.[1]??"";
   const clean=s=>s.replace(/&(?:amp|lt|gt|quot|apos|nbsp|#39);/g,x=>({"&amp;":"&","&lt;":"<","&gt;":">","&quot;":'"',"&apos;":"'","&#39;":"'","&nbsp;":" "})[x]);
-  const content=body.replace(/<!--[\s\S]*?-->/g," ").replace(/<(script|style|noscript|svg|template)\b[^>]*>[\s\S]*?<\/\1\s*>/gi," ").replace(/<\/(?:p|div|h[1-6]|li|article|section|tr)>/gi,"\n").replace(/<[^>]*>/g," ").replace(/[ \t]+/g," ").replace(/\n\s*\n/g,"\n").trim();
+  const content=body.replace(/<!--[\s\S]*?-->/g," ") .replace(/<(nav|header|footer|aside)\b[^>]*>[\s\S]*?<\/\1\s*>/gi," ").replace(/<(script|style|noscript|svg|template)\b[^>]*>[\s\S]*?<\/\1\s*>/gi," ").replace(/<\/(?:p|div|h[1-6]|li|article|section|tr)>/gi,"\n").replace(/<[^>]*>/g," ").replace(/[ \t]+/g," ").replace(/\n\s*\n/g,"\n").trim();
   return {title:clean(title).slice(0,180),content:clean(content).slice(0,10000)};
 }
 export async function readWeb(value,request=pageRequest){
