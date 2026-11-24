@@ -2004,7 +2004,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px
 /* The portrait is an unobtrusive side companion only when there is room.
    Keep full horizontal workspace for Memory, Brain Lab and narrow windows. */
 .settings-standalone .control-portrait-aside {display:none;}
-@media(min-width:1550px) {
+@media(min-width:1360px) {
   .settings-standalone .control-portrait-aside {
     display:block;position:relative;isolation:isolate;
     flex:0 0 clamp(270px,21vw,360px);width:clamp(270px,21vw,360px);
