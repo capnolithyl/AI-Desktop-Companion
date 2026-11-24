@@ -157,6 +157,15 @@ export function NasApp(){
     return ()=>{cancelled=true;window.clearInterval(timer);document.removeEventListener("visibilitychange",resume);};
   },[authenticated,client,active]);
   const lock=()=>{if(busy||saving)return;setAuthenticated(false);setKey("");setToken("");sessionStorage.removeItem(KEY);setMessages([]);setChats([]);setLibrary({facts:[],characterFacts:[],interests:[],sessionSummaries:[]});setLearning(null);setMemoryToast(null);setActivity(null);setActivityError("");setEventError("");eventCursor.current=undefined;setActive(null);setPage("chat");setNotice("");};
+  useEffect(()=>{
+    if(!authenticated)return;
+    let cancelled=false;
+    const check=async()=>{try{const live=await client.status();if(!cancelled)setStatus(live);}catch{/* Server may be restarting. */}};
+    const timer=window.setInterval(()=>void check(),30000);
+    const resume=()=>{if(document.visibilityState==="visible")void check();};
+    document.addEventListener("visibilitychange",resume);
+    return ()=>{cancelled=true;window.clearInterval(timer);document.removeEventListener("visibilitychange",resume);};
+  },[authenticated,client]);
   const versionMismatch=!!status&&(!status.build||CLIENT_BUILD.commit!==status.build.commit||CLIENT_BUILD.backendHash!==status.build.actualBackendHash);
   const copyVersion=async()=>{try{const live=await client.status();setStatus(live);await navigator.clipboard.writeText(JSON.stringify({service:"nas",browser:CLIENT_BUILD,server:live.build??null},null,2));setVersionCopied(true);}catch(error){setNotice(error instanceof Error?error.message:String(error));}};
   const report=(error:unknown)=>setNotice(error instanceof Error?error.message:String(error));
@@ -203,7 +212,7 @@ export function NasApp(){
     let full="";
     try{await client.chat(id,text,delta=>{full+=delta;setMessages(previous=>previous.map(m=>m.id===pending?{...m,content:full}:m));});
       const kind=reactionFromReply(full);if(kind)setReaction({kind,serial:++serial.current,source:"reply"});
-    }catch(error){if(error instanceof NasRequestError&&error.status===409)setInput(previous=>previous||text);report(error);}
+    }catch(error){if(error instanceof NasRequestError&&[409,503].includes(error.status))setInput(previous=>previous||text);report(error);}
     finally{
       try{const [history,list]=await Promise.all([client.messages(id),client.chats()]);if(mounted.current){setMessages(history);setChats(list);}}
       catch(error){report(error);}
@@ -323,6 +332,7 @@ export function NasApp(){
         {(page==="personality"||page==="appearance")&&<div className="nas-save-row"><button className="secondary-action" disabled={saving} onClick={()=>void save(draft)}>{saving?"Saving…":"Save settings"}</button></div>}
       </div></div>
     </section>}
+    {versionMismatch&&<div className="nas-update-notice" role="status"><AlertTriangle size={16}/><span>Browser and server builds differ.</span><button type="button" onClick={()=>{if((input.trim()||busy||saving||((page==="personality"||page==="appearance")&&JSON.stringify(profile)!==JSON.stringify(draft)))&&!window.confirm("Reload Mikan? Unsaved changes or an active reply may be lost."))return;window.location.reload();}}>Reload</button></div>}
     {memoryToast&&<div className={"workspace-memory-toast detailed nas-memory-toast"+(memoryToast.warning?" warning":"")} key={memoryToast.key} role="status" aria-live="polite">{memoryToast.warning?<AlertTriangle size={17}/>:<Check size={17}/>}<span>{memoryToast.message}</span><button type="button" onClick={()=>{setMemoryToast(null);openPage("memory");}}>Review memories</button><button type="button" aria-label="Dismiss memory notice" onClick={()=>setMemoryToast(null)}><X size={15}/></button></div>}
     {menu&&page==="chat"&&<PortraitContextMenu position={menu} items={menuItems} onClose={()=>setMenu(null)}/>}
   </main>;

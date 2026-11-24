@@ -311,3 +311,24 @@ test("maintenance gate prevents writes and reports idle while allowing health an
     assert.equal((await fetch(base+"/api/conversations",{method:"POST",headers,body:"{}"})).status,201);
   }finally{await new Promise(resolve=>server.close(resolve));store.db.close();rmSync(root,{recursive:true,force:true});}
 });
+
+test("maintenance waits for an admitted reply to finish and rejects later writes",async()=>{
+  const root=mkdtempSync(join(tmpdir(),"mikan-drain-")),store=openStore(join(root,"db.sqlite3"));
+  const maintenanceFile=join(root,"maintenance"),key="0123456789abcdef0123456789abcdef",chat=store.newConversation();
+  let entered,release;
+  const started=new Promise(resolve=>entered=resolve),finish=new Promise(resolve=>release=resolve);
+  const server=makeServer({store,key,maintenanceFile,config:{provider:"nvidia",model:"test",key:"not-real"},generate:async()=>{entered();await finish;return "Finished";}});
+  await new Promise(resolve=>server.listen(0,"127.0.0.1",resolve));
+  const base="http://127.0.0.1:"+server.address().port,headers={Authorization:"Bearer "+key,"Content-Type":"application/json"};
+  let pending;
+  try{
+    pending=fetch(base+"/api/chat",{method:"POST",headers,body:JSON.stringify({conversationId:chat.id,text:"Hello"})}).then(r=>r.text());
+    await started;
+    writeFileSync(maintenanceFile,"");
+    assert.equal((await (await fetch(base+"/api/health")).json()).idle,false);
+    assert.equal((await fetch(base+"/api/conversations",{method:"POST",headers,body:"{}"})).status,503);
+    release();await pending;
+    assert.equal((await (await fetch(base+"/api/health")).json()).idle,true);
+    assert.equal(store.messages(chat.id).at(-1).content,"Finished");
+  }finally{release();if(pending)await pending.catch(()=>{});await new Promise(resolve=>server.close(resolve));store.db.close();rmSync(root,{recursive:true,force:true});}
+});

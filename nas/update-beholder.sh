@@ -40,11 +40,11 @@ has(){ printf '%s' "$1" | grep -Fq "$2"; }
 # Verify an exact image ID, its compiled revision/fingerprint and the actual
 # mounted database. Credentials are read only inside the running container.
 verify(){
-  expected="$1"; attempts=0
+  expected="$1"; expected_revision="$2"; attempts=0
   while [ "$attempts" -lt 24 ]; do
     cid="$(current 2>/dev/null || true)"
     if [ -n "$cid" ] && [ "$(docker inspect -f '{{.Image}}' "$cid" 2>/dev/null || true)" = "$expected" ] && health >/dev/null 2>&1; then
-      if docker exec "$cid" node --input-type=module -e '
+      if docker exec -e "MIKAN_EXPECTED_REVISION=$expected_revision" "$cid" node --input-type=module -e '
         import {DatabaseSync} from "node:sqlite";
         const base="http://127.0.0.1:3847";
         const h=await (await fetch(base+"/api/health")).json();
@@ -52,7 +52,7 @@ verify(){
         const r=await fetch(base+"/api/status",{headers:{Authorization:"Bearer "+process.env.MIKAN_REMOTE_KEY}});
         if(!r.ok)process.exit(3);
         const b=(await r.json()).build;
-        if(!b||!b.commit||b.commit==="unknown"||b.backendHash!==b.actualBackendHash)process.exit(4);
+        if(!b||!b.commit||b.commit==="unknown"||b.backendHash!==b.actualBackendHash||(process.env.MIKAN_EXPECTED_REVISION&&b.commit!==process.env.MIKAN_EXPECTED_REVISION))process.exit(4);
         const w=await fetch(base+"/workspace/");if(!w.ok||!(await w.text()).includes("Mikan"))process.exit(5);
         const db=new DatabaseSync(process.env.MIKAN_DB_PATH||"/data/mikan-memory.sqlite3",{readOnly:true});
         const rows=db.prepare("PRAGMA quick_check").all();
@@ -101,20 +101,31 @@ stamp="$(date '+%Y%m%d-%H%M%S')-$$"
 backup="$STATE/backups/$stamp"
 # Record the recovery plan before stopping the current container.
 printf 'old=%s\ncandidate=%s\nbackup=%s\nrevision=%s\n' "$old" "$candidate" "$backup" "$revision" >"$JOURNAL"
+retired="$(docker image inspect -f '{{.Id}}' "$PREVIOUS" 2>/dev/null || true)"
 docker image tag "$old" "$PREVIOUS"
 log "Stopping Mikan and backing up data."
 if ! compose stop -t 150 mikan; then log "Stop failed; maintenance retained for manual recovery."; exit 1; fi
-if ! cp -a "$DATA" "$backup"; then log "Backup failed; original data untouched. Restart manually using rollback image."; exit 1; fi
+if ! cp -a "$DATA" "$backup"; then
+  log "Backup failed; original data untouched. Restarting the old image."
+  docker image tag "$old" "$MANAGED"
+  if MIKAN_IMAGE="$MANAGED" compose up -d --no-build --pull never mikan >>"$LOG" 2>&1 && verify "$old" ""; then
+    rm -f "$JOURNAL"; rm -f "$MARK"
+  fi
+  exit 1
+fi
+printf 'stage=backup_complete\n' >>"$JOURNAL"
+sync
 # Snapshot was made while all database writers were stopped.
 docker image tag "$candidate" "$MANAGED"
 log "Starting candidate in maintenance mode."
-if MIKAN_IMAGE="$MANAGED" compose up -d --no-build --pull never mikan >>"$LOG" 2>&1 && verify "$candidate"; then
+if MIKAN_IMAGE="$MANAGED" compose up -d --no-build --pull never mikan >>"$LOG" 2>&1 && verify "$candidate" "$revision"; then
   rm -f "$STATE/failed-image"
   # Journal cleared only after validated startup; release the gate last.
   rm -f "$JOURNAL"
   rm -f "$MARK"
   log "Update successful: $revision"
-  # Retain five successful pre-update snapshots, plus failed ones for inspection.
+  if [ -n "$retired" ] && [ "$retired" != "$old" ] && [ "$retired" != "$candidate" ]; then docker image rm "$retired" >>"$LOG" 2>&1 || true; fi
+  # Retain five most recent pre-update snapshots; failed data is kept separately.
   # Only our own numeric timestamp directories are eligible for pruning.
   count=0
   for name in $(ls -1t "$STATE/backups"); do
@@ -134,7 +145,7 @@ mv "$DATA" "$failed"
 if ! cp -a "$backup" "$DATA"; then log "Restore failed; preserve $failed and $backup; manual recovery required."; exit 1; fi
 touch "$MARK"
 docker image tag "$old" "$MANAGED"
-if MIKAN_IMAGE="$MANAGED" compose up -d --no-build --pull never mikan >>"$LOG" 2>&1 && verify "$old"; then
+if MIKAN_IMAGE="$MANAGED" compose up -d --no-build --pull never mikan >>"$LOG" 2>&1 && verify "$old" ""; then
   rm -f "$JOURNAL"; rm -f "$MARK"
   log "Rollback successful. Failed candidate data preserved at $failed"
   exit 1
