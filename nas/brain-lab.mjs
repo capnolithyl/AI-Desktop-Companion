@@ -76,7 +76,7 @@ export function createBrainLab({db,models,requestModel,search,read,build,pace=pa
             if(!models.available(selected.provider))throw Object.assign(Error("NAS cloud request budget reached"),{status:429});
             let result;
             try{result=await executeNasTurn({store:sandbox,conversationId:chat.id,question:step.user,selected,mode:report.mode,requestModel,search,read,signal,trace,
-              reserve:()=>models.reserve(selected.provider),canRequest:()=>models.available(selected.provider),activity:e=>events.push(e)});
+              reserve:()=>models.reserve(selected.provider),canRequest:(slots=1)=>models.available(selected.provider,slots),activity:e=>events.push(e)});
             }catch(e){row.steps.push({user:step.user,grade:"failed",failures:[signal.aborted?"Stopped":"Provider or turn failed"],timing:trace.snapshot(),events,actualModel:trace.actualModel()});save(report);throw e;}
             signal.throwIfAborted();
             sandbox.append(chat.id,"assistant",result.answer);

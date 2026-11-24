@@ -206,7 +206,7 @@ export function makeServer({store,config,key,promptFile="",maintenanceFile="/dat
           "Cache-Control":"no-cache, no-transform","X-Accel-Buffering":"no",
           "X-Content-Type-Options":"nosniff"});
           const {answer,memory,researched}=await executeNasTurn({store,conversationId,question,selected,mode,promptFile,requestModel,trace,search,read:(url,opts)=>knowledge.cachedRead(url,opts),knowledge,
-            canRequest:()=>models.available(selected.provider),reserve:()=>models.reserve(selected.provider),
+            canRequest:(slots=1)=>models.available(selected.provider,slots),reserve:()=>models.reserve(selected.provider),
             onDelta:part=>sse(res,"delta",{text:part}),activity:event=>{try{store.learning.recordSearch(conversationId,user.id,event);}catch{console.error("Could not record NAS research activity");}}});
           const saved=store.append(conversationId,"assistant",answer,{provider:selected.provider,requestedModel:selected.model,actualModel:trace.actualModel(),outcome:"completed",timing:trace.snapshot(),...(researched.sources.length?{sources:researched.sources.map(({content,...source})=>source)}:{})});
           store.library.markRecalled(memory.ids);

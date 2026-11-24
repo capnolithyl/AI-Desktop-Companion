@@ -375,7 +375,10 @@ test("NAS provider selection persists, keeps keys write-only and budgets real re
     assert.equal(reopened.active().provider,"openrouter");
     assert.equal(reopened.active().key,"synthetic-router-secret");
     assert.equal(reopened.active().historyChars,16000);
-    for(let i=0;i<15;i++)reopened.reserve("openrouter");
+    for(let i=0;i<14;i++)reopened.reserve("openrouter");
+    assert.equal(reopened.available("openrouter",2),false);
+    assert.equal(reopened.available("openrouter",1),true);
+    reopened.reserve("openrouter");
     assert.throws(()=>reopened.reserve("openrouter"),/budget reached/);
     time+=61000;
     assert.equal(reopened.available("openrouter"),true);
@@ -565,11 +568,11 @@ test("NAS knowledge turns use cached manuscript without public search or memory 
     assert.equal((await fetch(base+"/api/knowledge/document?kind=notion&id="+id)).status,401);
     assert.equal((await (await fetch(base+"/api/knowledge",{headers})).json()).pages.length,1);
     const c=store.newConversation();
-    const r=await fetch(base+"/api/chat",{method:"POST",headers,body:JSON.stringify({conversationId:c.id,text:"Read chapter 1 of my book and give me your opinion"})});assert.match(await r.text(),/event: done/);
+    const r=await fetch(base+"/api/chat",{method:"POST",headers,body:JSON.stringify({conversationId:c.id,text:"Read the complete first chapter of Adikameg and tell me what you think"})});assert.match(await r.text(),/event: done/);
     const saved=store.messages(c.id).at(-1);assert.equal(saved.inference.sources[0].kind,"notion");assert.ok(!JSON.stringify(saved.inference).includes("A lantern stood beside the window"));
     assert.equal(publicCalls,0);assert.equal(modelCalls,1);assert.equal(saved.inference.timing.modelCalls,1);
     // Repeated explicit request uses the same desktop selector, not LLM routing.
-    const repeat=await fetch(base+"/api/chat",{method:"POST",headers,body:JSON.stringify({conversationId:c.id,text:"Read the complete first chapter of my book and give me your opinion. Paraphrase everything."})});
+    const repeat=await fetch(base+"/api/chat",{method:"POST",headers,body:JSON.stringify({conversationId:c.id,text:"Read the complete first chapter of Adikameg and give me your opinion on the writing, pacing, atmosphere and characters. Discuss all four scenes, but paraphrase everything. Do not use any direct quotations."})});
     assert.match(await repeat.text(),/event: done/);
     assert.equal(store.messages(c.id).at(-1).inference.sources[0].id,id);
     assert.equal(modelCalls,2);
