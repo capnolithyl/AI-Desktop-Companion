@@ -2,6 +2,7 @@ import { DatabaseSync } from "node:sqlite";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { randomUUID } from "node:crypto";
+import { readCompanionProfile } from "../src/companion-profile.ts";
 
 // Compatible with desktop Mikan's core SQLite tables. Never delete or rebuild imported tables.
 export function openStore(path) {
@@ -31,6 +32,17 @@ export function openStore(path) {
       updated_at INTEGER NOT NULL DEFAULT (unixepoch())
     );`);
 
+  // Dedicated table; never changes the desktop-owned memory schema.
+  db.exec("CREATE TABLE IF NOT EXISTS nas_companion_profile (id INTEGER PRIMARY KEY CHECK(id=1), profile_json TEXT NOT NULL)");
+  function getProfile(fallback) {
+    const row=db.prepare("SELECT profile_json FROM nas_companion_profile WHERE id=1").get();
+    return readCompanionProfile(row ? JSON.parse(row.profile_json) : fallback);
+  }
+  function saveProfile(profile) {
+    const validated=readCompanionProfile(profile);
+    db.prepare("INSERT INTO nas_companion_profile(id,profile_json) VALUES(1,?) ON CONFLICT(id) DO UPDATE SET profile_json=excluded.profile_json").run(JSON.stringify(validated));
+    return validated;
+  }
   function hasTable(name) {
     return !!db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?").get(name);
   }
@@ -76,7 +88,7 @@ export function openStore(path) {
   function removeMemory(id) {
     return db.prepare("DELETE FROM user_memories WHERE id=?").run(id).changes > 0;
   }
-  return { db, hasTable, conversations, newConversation, exists, messages, append, listMemories, addMemory, removeMemory };
+  return { db, getProfile, saveProfile, hasTable, conversations, newConversation, exists, messages, append, listMemories, addMemory, removeMemory };
 }
 
 // Lexical recall first. Existing FTS5 and optional Qdrant remain intact for a later integration.
@@ -104,4 +116,22 @@ export function recall(store, question) {
     .filter(row=>row.score>0)
     .sort((a,b)=>b.score-a.score)
     .slice(0,16).map(row=>row.text);
+}
+
+/** Keep the two identities distinct and make general self-recall useful. */
+export function recallProfileContext(store, question) {
+  const terms=words(question);
+  const isSelf=/\b(?:yourself|your (?:favorite|favourite|likes|dislikes|hobbies|personality|interests|memories)|who are you)\b/i.test(question);
+  const top=(rows,limit,includeUnmatched=false)=>rows
+    .map(row=>({text:row.text,score:ranking(row.text,terms)}))
+    .filter(row=>includeUnmatched || row.score>0)
+    .sort((a,b)=>b.score-a.score).slice(0,limit).map(row=>row.text);
+  const user=top(store.db.prepare("SELECT fact AS text FROM user_memories ORDER BY updated_at DESC LIMIT 3000").all(),12);
+  const interests=store.hasTable("interest_items")?top(store.db.prepare("SELECT name || ' (' || kind || ', ' || status || ')' || CASE WHEN notes<>'' THEN ': ' || substr(notes,1,220) ELSE '' END AS text FROM interest_items ORDER BY updated_at DESC LIMIT 1200").all(),8):[];
+  const character=store.hasTable("character_facts")?top(store.db.prepare("SELECT category || ': ' || label || ': ' || value AS text FROM character_facts ORDER BY updated_at DESC LIMIT 600").all(),isSelf?12:4,isSelf):[];
+  const section=(label,rows)=>rows.length?label+"\n"+rows.map(x=>"- "+x.replaceAll("\n"," ").slice(0,1000)).join("\n"):"";
+  return [section("Owner facts (about the human, not Mikan):",user),
+    section("Owner interests (not Mikan's tastes):",interests),
+    section("Mikan's character canon (about the assistant, not the human):",character)]
+    .filter(Boolean).join("\n\n") || "No matching stored memories.";
 }

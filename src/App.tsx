@@ -33,6 +33,7 @@ import {
 import { PersonalityPresets, PersonalitySliders } from "./PersonalityControls";
 import { respectAddressPreference } from "./communication-preferences";
 import { assistantVoiceGuidance } from "./assistant-voice";
+import { exportCompanionProfile } from "./companion-profile";
 import { characterContinuityContext } from "./character-canon-routing";
 import { automaticMemoryNotice } from "./memory-outcome";
 import { snapshotForReplay } from "./conversation-replay";
@@ -4854,6 +4855,17 @@ export default function App() {
           <div className="settings-section-title">Fine-tune her personality</div>
           <PersonalitySliders value={settings.personality} onChange={updatePersonality}/>
           <small className="wardrobe-hint">These preferences guide future replies without requiring a restart.</small>
+          <button type="button" className="secondary-action" onClick={() => {
+            const profile=exportCompanionProfile({
+              systemPrompt:draft.systemPrompt,personality:settings.personality,communication:draft.communication,
+              avatarBackground,outfitId:ikiRig?.id??null,avatarDisplay,
+              verticalOffset:settings.appearance.avatarVerticalOffset,followCursor:avatarPresence.followCursor
+            });
+            const url=URL.createObjectURL(new Blob([JSON.stringify(profile,null,2)],{type:"application/json"}));
+            const link=document.createElement("a");link.href=url;link.download="mikan-companion-profile.json";
+            document.body.appendChild(link);link.click();link.remove();window.setTimeout(()=>URL.revokeObjectURL(url),1000);
+          }}><FileText size={15}/> Export companion profile for NAS</button>
+          <small className="wardrobe-hint">Exports persona, sliders, communication rules and bundled avatar preferences. No provider keys, custom asset files or memories.</small>
           <section className="control-form-section" aria-label="Conversation and communication">          <label className="setting-field">System/persona prompt
             <textarea rows={9} value={draft.systemPrompt}
               onChange={event => setDraft({ ...draft, systemPrompt: event.target.value })}/>

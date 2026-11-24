@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import { openStore, recall } from "../storage.mjs";
 import { makeServer } from "../server.mjs";
 import { generateReply, providerConfig } from "../providers.mjs";
+import { exportCompanionProfile, DEFAULT_COMPANION_PROFILE } from "../../src/companion-profile.ts";
 
 test("NAS storage preserves and reuses desktop-compatible SQLite records",()=>{
   const root=mkdtempSync(join(tmpdir(),"mikan-nas-"));
@@ -21,7 +22,11 @@ test("NAS storage preserves and reuses desktop-compatible SQLite records",()=>{
     const reopened=openStore(path);
     assert.equal(reopened.messages(chat.id).length,2);
     assert.equal(reopened.listMemories().length,1);
+    reopened.saveProfile({...DEFAULT_COMPANION_PROFILE,personality:{...DEFAULT_COMPANION_PROFILE.personality,flirtiness:95}});
     reopened.db.close();
+    const again=openStore(path);
+    assert.equal(again.getProfile().personality.flirtiness,95);
+    again.db.close();
   } finally {rmSync(root,{recursive:true,force:true});}
 });
 
@@ -31,7 +36,9 @@ test("NAS HTTP requires a key, streams replies and persists them",async()=>{
   const key="0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
   const server=makeServer({
     store,key,config:{provider:"nvidia",model:"test",key:"not-a-real-provider-key"},
-    generate:async ({history,onDelta})=>{
+    generate:async ({history,onDelta,system})=>{
+      assert.match(system,/Flirtiness 95\/100/);
+      assert.match(system,/Never call me by my name/);
       assert.equal(history.at(-1).content,"Testing one two");
       onDelta("Me");onDelta("ow!");
       return "Meow!";
@@ -42,6 +49,13 @@ test("NAS HTTP requires a key, streams replies and persists them",async()=>{
   try {
     assert.equal((await fetch(base+"/api/status")).status,401);
     const headers={Authorization:"Bearer "+key,"Content-Type":"application/json"};
+    assert.equal((await fetch(base+"/api/profile")).status,401);
+    const profile=exportCompanionProfile({...DEFAULT_COMPANION_PROFILE,
+      personality:{...DEFAULT_COMPANION_PROFILE.personality,flirtiness:95},
+      communication:{...DEFAULT_COMPANION_PROFILE.communication,customGuidance:"Never call me by my name"}});
+    assert.equal((await fetch(base+"/api/profile",{method:"PUT",headers,body:JSON.stringify(profile)})).status,200);
+    const stored=await (await fetch(base+"/api/profile",{headers})).json();
+    assert.equal(stored.profile.personality.flirtiness,95);
     const created=await (await fetch(base+"/api/conversations",{method:"POST",headers,body:"{}"})).json();
     const res=await fetch(base+"/api/chat",{method:"POST",headers,
       body:JSON.stringify({conversationId:created.id,text:"Testing one two"})});
