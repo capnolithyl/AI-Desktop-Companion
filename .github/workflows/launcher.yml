@@ -39,10 +39,40 @@ jobs:
           "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | grep "package: name='dev.capnolithyl.mikan.launcher'"
           CERTS="$("$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs "$APK")"
           echo "$CERTS" | grep -i 'certificate SHA-256 digest: f6879570f13b54e2d2f3cc3b32246a72c48e8023ec2b76088c57629fa4e5d609'
-          cp "$APK" Mikan-Launcher-v0.1.apk
+          cp "$APK" Mikan-Launcher.apk
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" > launcher-version.txt
       - uses: actions/upload-artifact@v4
         with:
-          name: Mikan-Launcher-v0.1
-          path: Mikan-Launcher-v0.1.apk
+          name: Mikan-Launcher
+          path: |
+            Mikan-Launcher.apk
+            launcher-version.txt
           if-no-files-found: error
           retention-days: 30
+
+  publish:
+    if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/feature/mikan-launcher-v01')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: Mikan-Launcher
+      - name: Publish versioned launcher preview
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          SOURCE_SHA: ${{ github.sha }}
+        run: |
+          set -eu
+          CODE="$(grep -o "versionCode='[0-9]*'" launcher-version.txt | head -n1 | cut -d"'" -f2)"
+          VERSION="$(grep -o "versionName='[0-9.]*'" launcher-version.txt | head -n1 | cut -d"'" -f2)"
+          test -n "$CODE" && test -n "$VERSION"
+          TAG="launcher-build-$CODE"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release already exists; increment versionCode for the next update."
+          else
+            gh release create "$TAG" Mikan-Launcher.apk --target "$SOURCE_SHA" --title "Mikan Launcher v$VERSION" --notes "Signed experimental Android launcher APK, build $CODE." --prerelease --latest=false
+          fi
