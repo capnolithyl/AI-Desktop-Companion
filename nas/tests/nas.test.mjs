@@ -191,3 +191,32 @@ test("NAS extraction separates canon and interests, preserves existing favorite 
     assert.equal(store.library.execute("snapshot",{}).facts[0].fact,"The user loves tea");
   }finally{store.db.close();rmSync(root,{recursive:true,force:true});}
 });
+
+test("Schnitzel preference survives rhetorical banter without a model request",async()=>{
+  const root=mkdtempSync(join(tmpdir(),"mikan-favorite-")),store=openStore(join(root,"memory.sqlite3"));
+  try{
+    const c=store.newConversation(),l=store.learning;
+    l.setSettings({user:true,character:true});
+    const enqueue=(u,a="Nice!")=>l.enqueue(store.append(c.id,"user",u),store.append(c.id,"assistant",a),c.id);
+    assert.equal(enqueue("Imagine that my favorite food is lobster"),false);
+    assert.equal(enqueue("Pretend my favorite food is lobster"),false);
+    assert.equal(enqueue("one of my favorite foods is Schnitzel. imagine that a german who likes schnitzel"),true);
+    let calls=0;
+    await l.processNext(async()=>{calls++;throw Error("Unexpected extra model call");},{});
+    const s=store.library.execute("snapshot",{});
+    assert.equal(calls,0);
+    assert.equal(s.facts[0].fact,"One of the user's favorite foods is Schnitzel");
+    assert.equal(s.facts[0].category,"preferences");
+    assert.equal(l.getStatus().lastOutcome.saved,1);
+    assert.equal(l.getStatus().lastOutcome.entries[0].evidence,"one of my favorite foods is Schnitzel");
+    assert.equal(enqueue("one of my favorite foods is Schnitzel. imagine that a german who likes schnitzel"),true);
+    await l.processNext(async()=>{throw Error("Unexpected extra model call");},{});
+    assert.equal(store.library.execute("snapshot",{}).facts.length,1);
+    assert.equal(l.getStatus().lastOutcome.saved,0);
+    enqueue("My favorite food is sushi. But actually I hate sushi.");
+    let modelCalls=0;
+    await l.processNext(async()=>{modelCalls++;return JSON.stringify({facts:[],interests:[],canon:[]});},{});
+    assert.equal(modelCalls,1);
+    assert.equal(store.library.execute("snapshot",{}).facts.length,1);
+  }finally{store.db.close();rmSync(root,{recursive:true,force:true});}
+});
