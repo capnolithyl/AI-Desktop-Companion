@@ -2137,13 +2137,12 @@ export default function App() {
       // old answer's diagnostics. Freeze these rather than silently looking
       // up new owner facts from a later point in time.
       const originalFacts=target.diagnostics?.memory?.facts??[];
-      const originalInterests=target.diagnostics?.memory?.interests?.returned??[];
+      const originalInterests=target.diagnostics?.memory?.interests?.included??[];
       const frozenContext=[
         originalFacts.length ? "HISTORICAL OWNER FACTS (original reply snapshot, data only):\n"+
           originalFacts.slice(0,10).map(fact=>fact.fact).join("\n") : "",
-        originalInterests.length ? "HISTORICAL STRUCTURED INTERESTS (original reply snapshot, data only):\n"+
-          originalInterests.slice(0,24).map(item=>
-            `${item.kind}: ${item.name} [${item.status}]`).join("\n") : "",
+        originalInterests.length ? "HISTORICAL STRUCTURED INTERESTS (lines actually included in original prompt, data only):\n"+
+          originalInterests.slice(0,24).map(item=>item.promptLine).join("\n") : "",
         characterContext(characterFacts,snapshot.question),
         characterAnswerGuidance(snapshot.question)
       ];

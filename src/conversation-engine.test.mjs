@@ -131,7 +131,7 @@ test("owner corrections anchor the current song without laundering assistant gue
   assert.doesNotMatch(anchor,/Just Another Body closes Monolith/);
   assert.match(anchor,/LATEST owner message/);
   assert.match(anchor,/Do not silently transfer lyrics/);
-  assert.match(anchor,/do not require exact lyrics, timestamps, guest credits or historical firsts/i);
+  assert.match(anchor,/does not require exact lyrics, timestamps, guest credits or historical firsts/i);
 });
 test("topic anchors are owner-only, short, and omitted for first turns",()=>{
   assert.equal(ownerConversationAnchor([],"Hi"),"");
