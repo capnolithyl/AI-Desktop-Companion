@@ -42,6 +42,7 @@ import { modelSwitcherStatus, modelSwitcherChoice, NVIDIA_MODELS, unsuccessfulIn
 import { isModelLedConversation, modelLedWebToolsAllowed, preserveModelLedChatAnswer } from "./model-led-routing";
 import { modelLedBrainExecution } from "./brain-eval-model-led";
 import { formatDebugLog, type Diagnostics, type MemoryRecallAudit, type OllamaStats, type ResearchAudit } from "./debug-log";
+import { workspaceActivity } from "./workspace-activity";
 import { remoteDiagnosticMessages, remoteAvatarDiagnostics } from "./remote-report";
 import { strongSemanticIds } from "./memory-ranking";
 import { localThinkingChoice } from "./reasoning-mode";
@@ -144,7 +145,7 @@ type ChatCompletion = { content: string; modelUsed?: string; fallbackReason?: st
   searchTrace?: {attemptedQueries:string[];rawResults:number;returnedResults:number;
     provisionalResults?:number;rejectedTitles?:string[];upstreamErrors:string[]}|null;
   sourcesCarriedOver?: boolean; researchAudit?: ResearchAudit | null };
-type LogMessage = Message & { createdAt: number; diagnostics?: Diagnostics; failed?: boolean; sources?: WebResult[]; searchQuery?: string; sourcesCarriedOver?: boolean };
+type LogMessage = Message & { createdAt: number; diagnostics?: Diagnostics; workspaceMemory?: MemoryRecallAudit; failed?: boolean; sources?: WebResult[]; searchQuery?: string; sourcesCarriedOver?: boolean };
 const HOTKEY = "Control+Alt+M";
 const BUNDLED_PORTRAIT = "/mikan.png";
 // Bundled reference artwork: local asset, no cloud request or missing /mikan.png URL.
@@ -2320,7 +2321,7 @@ export default function App() {
     const requestId = crypto.randomUUID();
     setMessages([...history, {
       id: assistantId, role: "assistant", content: "", createdAt: Date.now(),
-      ...(withSearch ? { sources: withSearch.results } : {})
+      ...(withSearch ? { sources: withSearch.results, searchQuery: withSearch.query } : {})
     }]);
     setInput("");
     setPendingAttachment(null);
@@ -2637,6 +2638,10 @@ export default function App() {
           }] : [];
         })
       };
+      if(defaultUi) {
+        const recallSnapshot=memoryAudit;
+        setMessages(current=>current.map(m=>m.id===assistantId?{...m,workspaceMemory:recallSnapshot}:m));
+      }
       const archivedSessions = await sessionsPromise;
       const currentSession = archivedSessions.find(s => s.conversationId === conversationId) ?? null;
       const earlierSessions = archivedSessions.filter(s => s.conversationId !== conversationId);
@@ -2791,8 +2796,13 @@ export default function App() {
       }>("mikan://memory-tool",event=>{
         if(event.payload.requestId!==requestId || !memoryAudit) return;
         memoryAudit.onDemand?.push({
-          query:event.payload.query,ids:event.payload.ids,error:event.payload.error
+          query:event.payload.query,ids:event.payload.ids,error:event.payload.error,
+          facts:event.payload.ids.flatMap(id=>{const fact=factsById.get(id);return fact?[{id,fact:fact.fact}]:[];})
         });
+        if(defaultUi){
+          const recallSnapshot={...memoryAudit,onDemand:[...(memoryAudit.onDemand??[])]};
+          setMessages(current=>current.map(m=>m.id===assistantId?{...m,workspaceMemory:recallSnapshot}:m));
+        }
       });
       if(modelLed) unlistenEvidence=await listen<{
         requestId:string;status:string;accepted:number;rejected:number;
@@ -3332,7 +3342,11 @@ export default function App() {
   const dockModel = modelSwitcherStatus(settings,lastModelReply?.diagnostics,busy,activity);
   const dockOption = !busy && settings.provider==="nvidia" ? `nvidia:${settings.nvidiaModel}`
     : settings.provider === "local" && availableModels.includes(settings.model) && !busy
-    ? `local:${settings.model}` : "__status__";
+    ? `local:${settings.model}` : defaultUi&&!busy&&settings.provider!=="local"?settings.provider:"__status__";
+  const workspaceModelTitle=settings.provider==="nvidia"?`Selected NVIDIA model: ${settings.nvidiaModel}`
+    :settings.provider==="gemini"?`Selected Gemini model: ${settings.geminiModel}`
+    :settings.provider==="openrouter"?`Selected OpenRouter model: ${settings.openrouterModel}`
+    :settings.provider==="auto"?"Auto: OpenRouter with local Ollama fallback":`Selected Ollama model: ${settings.model}`;
   const dockDot = dockModel.cloudActive ? "online"
     : settings.provider !== "local" && !dockModel.label.includes("Local")
       ? "loading" : connection.mode;
@@ -3580,11 +3594,11 @@ export default function App() {
   </>;
   const modelFooter = <>
       <div className="dock-footer">
-        <div className="model-switcher" title={dockModel.title}>
+        <div className="model-switcher" title={defaultUi?workspaceModelTitle:dockModel.title}>
           <span className={`status-dot ${dockDot}`} />
           <select
             aria-label="Active inference provider and model"
-            title={dockModel.title}
+            title={defaultUi?workspaceModelTitle:dockModel.title}
             value={dockOption}
             disabled={busy}
             onChange={event => switchDockModel(event.target.value)}
@@ -3640,7 +3654,8 @@ export default function App() {
         activeConversationId={activeConversationId}
         transcriptVersion={messages.length+":"+(messages[messages.length-1]?.content.length??0)+":"+busy}
         busy={busy} muted={settings.voice.muted} ready={memoryReady} memoryIssue={Boolean(memoryError)}
-        visionActive={liveVision.enabled} modelLabel={dockModel.label}
+        visionActive={liveVision.enabled} visionBusy={liveVisionBusy}
+        activityEntries={workspaceActivity(messages)}
         displayName={conversations.find(c=>c.id===activeConversationId)?.title||"Desktop Companion"}
         lastActivity={activity}
         onDrag={dragPortrait}
@@ -3650,8 +3665,7 @@ export default function App() {
         onOpenMemory={()=>openMemory("facts")}
         onOpenSettings={openSettings}
         onOpenSearch={()=>setScreen("search")}
-        onOpenVision={()=>{if(liveVision.enabled)void setLiveVisionEnabled(false);else void openCapturePicker();}}
-        onAttach={()=>uploadRef.current?.click()}
+        onToggleVision={()=>{void setLiveVisionEnabled(!liveVision.enabled);}}
         onVoice={()=>openSettingsTab("voice")}
         onMute={toggleVoiceMute}
         onExpression={kind=>testAvatarReaction(kind)}

@@ -64,7 +64,7 @@ export type MemoryRecallAudit = {
   semanticScores?: {id:number;score:number|null}[];
   maxFacts: number;
   /** On-demand native tool returns only the IDs it disclosed to the model. */
-  onDemand?: {query:string;ids:number[];error?:string|null}[];
+  onDemand?: {query:string;ids:number[];error?:string|null;facts?:{id:number;fact:string}[]}[];
   facts: {
     id: number;
     fact: string;
