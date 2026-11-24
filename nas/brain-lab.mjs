@@ -1,5 +1,5 @@
 import {randomUUID} from "node:crypto";
-import {EVAL_FACTS,EVAL_SCENARIOS,brainMemoryEvidence,scoreAnswer,brainReplyQualityFlags,sameMeaning} from "../src/brain-eval-fixtures.ts";
+import {EVAL_FACTS,EVAL_SCENARIOS} from "../src/brain-eval-fixtures.ts";
 import {CLOUD_EVAL_BUDGETS,paceCloudBrainTurn} from "../src/brain-eval-cloud.ts";
 import {openStore} from "./storage.mjs";
 import {executeNasTurn,turnTrace} from "./turn.mjs";
@@ -14,21 +14,6 @@ export function seedEvalStore(){
     for(const f of EVAL_FACTS){fact.run(f.id,f.fact,f.category,JSON.stringify(f.tags??[]),f.updatedAt,f.updatedAt);usage.run(f.id,f.importance??50);}
     return store;
   }catch(e){store.db.close();throw e;}
-}
-export function gradeNasStep(step,result,events){
-  const expected=step.expect,failures=scoreAnswer(result.answer,expected);
-  const webEvents=events.filter(e=>e.title==="Web search"||e.title==="Webpage read"||e.title==="Web search failed"||e.title==="Webpage read failed");
-  const attempted=webEvents.length>0,hasEvidence=result.researched.sources.length>0;
-  const webExpected=expected.web??(expected.route==="research"?true:["chat","non-research"].includes(expected.route)?false:undefined);
-  if(webExpected===false&&attempted)failures.push("Unexpected public web activity");
-  if(webExpected===true&&!hasEvidence)failures.push("No retrieved public evidence");
-  if(expected.document==="current"&&!result.researched.sources.some(s=>s.kind==="page"))failures.push("No webpage read");
-  for(const row of brainMemoryEvidence(expected.memory??[],result.memory.ids))if(!row.supportingIds.length)failures.push("Missing synthetic memory #"+row.expectedId);
-  for(const id of expected.excludeMemory??[])if(result.memory.ids.includes(id))failures.push("Unexpected synthetic memory #"+id);
-  for(const phrase of expected.publicQueryIncludes??[])if(!webEvents.some(e=>e.title==="Web search"&&e.lines.some(q=>sameMeaning(q,phrase))))failures.push("Missing public query term: "+phrase);
-  // Current facts, evidence entailment and conversational intent need human review.
-  const review=!!(expected.conversationGoal||webExpected===true||expected.route==="factual"||!(expected.answerIncludes?.length||expected.answerAny?.length||expected.answerExcludes?.length));
-  return {grade:failures.length?"failed":review?"review":"passed",failures,qualityFlags:brainReplyQualityFlags(result.answer,expected),reviewGoal:expected.conversationGoal??null};
 }
 export function createBrainLab({db,models,requestModel,search,read,build,pace=paceCloudBrainTurn}){
   db.exec("CREATE TABLE IF NOT EXISTS nas_brain_reports(id TEXT PRIMARY KEY,created_at INTEGER NOT NULL,report_json TEXT NOT NULL)");
@@ -77,11 +62,11 @@ export function createBrainLab({db,models,requestModel,search,read,build,pace=pa
             let result;
             try{result=await executeNasTurn({store:sandbox,conversationId:chat.id,question:step.user,selected,mode:report.mode,requestModel,search,read,signal,trace,
               reserve:()=>models.reserve(selected.provider),canRequest:(slots=1)=>models.available(selected.provider,slots),activity:e=>events.push(e)});
-            }catch(e){row.steps.push({user:step.user,grade:"failed",failures:[signal.aborted?"Stopped":"Provider or turn failed"],timing:trace.snapshot(),events,actualModel:trace.actualModel()});save(report);throw e;}
+            }catch(e){row.steps.push({user:step.user,error:signal.aborted?"Stopped":typeof e?.code==="string"?e.code:"Provider or turn failed",timing:trace.snapshot(),events,actualModel:trace.actualModel()});save(report);throw e;}
             signal.throwIfAborted();
             sandbox.append(chat.id,"assistant",result.answer);
             sandbox.library.markRecalled(result.memory.ids);
-            row.steps.push({user:step.user,answer:result.answer,...gradeNasStep(step,result,events),timing:trace.snapshot(),actualModel:trace.actualModel(),selectedMemoryIds:result.memory.ids,
+            row.steps.push({user:step.user,answer:result.answer,timing:trace.snapshot(),actualModel:trace.actualModel(),selectedMemoryIds:result.memory.ids,
               sources:result.researched.sources.map(s=>({...s,content:s.content.slice(0,3500)})),events});
             report.done++;save(report);
           }

@@ -510,6 +510,7 @@ test("Brain Lab uses shared fixtures in isolated SQLite, preserves owner memory 
     for(let i=0;i<100&&lab.isRunning();i++)await new Promise(r=>setTimeout(r,10));
     const report=lab.get(started.id);assert.equal(report.state,"finished");assert.equal(report.done,3);
     assert.ok(report.cases[0].steps.every(s=>s.timing.modelCalls===1));
+    assert.ok(report.cases[0].steps.every(s=>!("grade" in s)&&!("failures" in s)&&!("qualityFlags" in s)));
     assert.equal(store.listMemories().length,1);assert.equal(store.conversations().length,0);
     assert.equal(store.db.prepare("SELECT count(*) AS n FROM nas_provider_requests").get().n,3);
     const fixture=seedEvalStore();try{assert.ok(fixture.listMemories().length>10);}finally{fixture.db.close();}
@@ -691,4 +692,16 @@ test("ordinary chat bypasses unrelated enabled knowledge catalogue and does not 
    }});
    assert.equal(calls,2);assert.match(result.answer,/story/);
  }finally{store.db.close();rmSync(root,{recursive:true,force:true});}
+});
+
+test("structured public planner preserves discovery task and quoted constraints",async()=>{
+ const history=[{role:"user",content:"Recommend three horror anime with fewer than six episodes."},{role:"user",content:"Only ones that were released after 2010, please."}];
+ const task={kind:"discover",requirements:[{quote:"fewer than six episodes",relation:"lt",limit:6,unit:"episodes"},{quote:"after 2010",relation:"gt",limit:2010,unit:"release year"}],roles:[],exclude:[]};
+ const events=[];
+ const result=await researchTurn({mode:"strict",history,canRequest:()=>true,generate:async args=>{
+   assert.equal(args.structuredTool.function.name,"plan_public_research");assert.equal(args.maxTokens,2048);
+   return JSON.stringify({action:"search",intent:"refine",query:"short horror anime",task,readIndices:[]});
+ },search:async()=>[],activity:e=>events.push(e)});
+ assert.equal(result.task.kind,"discover");assert.equal(result.task.requirements.length,2);assert.match(result.constraintQuestion,/fewer than six episodes/);
+ assert.ok(events.some(e=>e.title==="Research task"));
 });
