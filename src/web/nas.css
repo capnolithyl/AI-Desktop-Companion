@@ -19,3 +19,40 @@ html:has(.nas-app),body:has(.nas-app),body:has(.nas-gate){background:#211412!imp
 @media(max-width:620px){.nas-app .nas-memory-toast{flex-wrap:wrap;}.nas-app .nas-memory-toast>span{flex-basis:calc(100% - 35px);}}
 
 .nas-app .nas-update-notice{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);z-index:2147482999;display:flex;align-items:center;gap:8px;padding:8px 12px;max-width:calc(100vw - 24px);border:1px solid #e3a968;border-radius:10px;background:#453023;color:#ffe3be;font-size:12px;box-shadow:0 4px 15px #1a110c88;}.nas-update-notice button{padding:4px 8px;border:1px solid #a77a50;border-radius:7px;background:#65472e;color:inherit;}
+
+/* NAS Brain Lab reuses the desktop workspace stylesheet and native control palette. */
+.nas-app .nas-brain-lab .brain-eval-toolbar{grid-template-columns:repeat(2,minmax(0,1fr));}
+.nas-app .nas-brain-model-field,.nas-app .nas-brain-report-picker label{grid-column:1/-1;}
+.nas-app .nas-brain-lab input:not([type=checkbox]),.nas-app .nas-brain-lab select{width:100%;min-width:0;min-height:43px;border:1px solid #805548;border-radius:10px;background:#291e20;color:#fff0e5;padding:10px 12px;font:inherit;font-size:14px;}
+.nas-app .nas-brain-lab button:not(:disabled){cursor:pointer;}
+.nas-app .nas-brain-lab button:disabled{opacity:.45;cursor:not-allowed;}
+.nas-app .nas-brain-lab :is(input,select,button,summary):focus-visible{outline:2px solid #ffc18a;outline-offset:3px;}
+.nas-app .nas-brain-lab .brain-eval-actionbar{position:static;margin:0;}
+.nas-app .nas-brain-lab .brain-eval-action-buttons .save-button{display:flex;align-items:center;gap:9px;justify-content:center;box-shadow:0 0 20px #ff91352b;}
+.nas-app .nas-brain-monitor{margin-bottom:20px;overflow-wrap:anywhere;}
+.nas-app .nas-brain-monitor .secondary-action,.nas-app .nas-brain-report-picker .secondary-action{display:flex;gap:8px;align-items:center;width:max-content;}
+.nas-app .nas-brain-error{margin:0 0 16px;border:1px solid #a56660;color:#ffbfb2;}
+.nas-app .nas-brain-search{position:relative;min-width:0;}
+.nas-app .nas-brain-search svg{position:absolute;left:12px;top:50%;transform:translateY(-50%);color:#d7ab95;pointer-events:none;}
+.nas-app .nas-brain-search input{padding-left:36px!important;}
+.nas-app .nas-brain-lab .nas-brain-selected{border-color:#bb784d;background:linear-gradient(120deg,#52332b,#3e2a2b);box-shadow:inset 0 0 15px #ff9b4811;}
+.nas-app .nas-brain-selected-label{font-size:12px;color:#ffbc84;font-weight:650;}
+.nas-app .nas-brain-lab .brain-scenario-pagination button{display:flex;align-items:center;justify-content:center;gap:5px;}
+.nas-app .nas-brain-lab .brain-eval-metric .nas-brain-grade-passed{color:#a5dfb9;}
+.nas-app .nas-brain-lab .brain-eval-metric .nas-brain-grade-failed{color:#ffaaa1;}
+.nas-app .nas-brain-lab .brain-eval-metric .nas-brain-grade-review{color:#f3c981;}
+.nas-app .nas-brain-source{border:1px solid #65423c;background:#291e20;border-radius:9px;padding:10px;overflow-wrap:anywhere;}
+.nas-app .nas-brain-source summary{cursor:pointer;color:#ffccaa;font-weight:600;}
+.nas-app .nas-brain-source a{color:#ffb67d;text-decoration:underline;}
+.nas-app .nas-brain-source p{white-space:pre-wrap;font-size:13px;}
+.nas-app .nas-timing{display:block;margin:8px 0;padding:14px;border:1px solid #785044;border-radius:12px;background:#291d1e;min-width:0;}
+.nas-app .nas-timing summary{cursor:pointer;font-weight:650;color:#ffd8b5;overflow-wrap:anywhere;}
+.nas-app .nas-timing-grid{display:grid;gap:12px;margin-top:13px;}
+.nas-app .nas-timing-row{display:grid;gap:6px;}
+.nas-app .nas-timing-label{display:flex;justify-content:space-between;gap:12px;align-items:baseline;color:#ebcbb9;font-size:12px;}
+.nas-app .nas-timing-label strong{font-variant-numeric:tabular-nums;color:#ffd3ad;}
+.nas-app .nas-timing progress{width:100%;height:8px;border:0;border-radius:20px;overflow:hidden;accent-color:#ffa65e;background:#543734;}
+.nas-app .nas-timing progress::-webkit-progress-bar{background:#543734;border-radius:20px;}
+.nas-app .nas-timing progress::-webkit-progress-value{background:#ee9b5a;border-radius:20px;}
+.nas-app .nas-timing small{display:block;margin-top:12px;color:#c9a79b;line-height:1.5;}
+@media(max-width:760px){.nas-app .nas-brain-lab .brain-eval-toolbar{grid-template-columns:minmax(0,1fr);}.nas-app .nas-brain-lab .brain-workspace-header{min-height:0;gap:12px;}.nas-app .nas-brain-lab .brain-workspace-header h2{font-size:23px;}.nas-app .nas-brain-lab .brain-eval-number-row{flex-wrap:wrap;}.nas-app .nas-brain-lab .brain-eval-number-row input{flex:1 1 100%;}.nas-app .nas-brain-lab .brain-workspace-tabs{flex-direction:row;gap:5px;}.nas-app .nas-brain-lab .brain-workspace-tabs button{flex:1 1 auto;justify-content:center;font-size:12px;padding:8px;}.nas-app .nas-brain-lab .brain-workspace-tabs button small{display:none;}}
