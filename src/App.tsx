@@ -293,6 +293,8 @@ export default function App() {
   const [screen, setScreen] = useState<Screen>(standaloneSettings ? "settings" : "compact");
   const [settings, setSettings] = useState<Settings>(loadSettings);
   const [draft, setDraft] = useState<Settings>(settings);
+  const [settingsSaved, setSettingsSaved] = useState(false);
+  useEffect(() => { setSettingsSaved(false); }, [draft]);
   const [localConfigOpen,setLocalConfigOpen]=useState(settings.provider==="local"||settings.provider==="auto");
   useEffect(() => {
     setLocalConfigOpen(draft.provider==="local"||draft.provider==="auto");
@@ -1763,7 +1765,8 @@ export default function App() {
     setSettings(updated);
     saveSettings(updated);
     setVoiceHealth(null);
-    goCompact();
+    if (standaloneSettings) setSettingsSaved(true);
+    else goCompact();
   };
 
   const settingsChatRef = useRef({
@@ -3872,7 +3875,7 @@ export default function App() {
           onAddCharacter={addCharacter} onEditCharacter={editCharacter}
           onDeleteCharacter={deleteCharacter} onRefresh={refreshMemory}/>}
         {settingsTab === "capabilities" && <CapabilitiesPanel embedded health={capabilityHealth}
-          checking={capabilitiesChecking} onClose={() => setSettingsTab("appearance")}
+          checking={capabilitiesChecking} onClose={() => setSettingsTab("home")}
           onRefresh={() => void checkCapabilities()}
           onAsk={question => {
               if (standaloneSettings) void emit("mikan://settings-chat", { action: "prefill", text: question });
@@ -4693,7 +4696,7 @@ export default function App() {
             ].join("\n"))}><Copy size={14}/> Build details</button>
         </div>
         {(["ai", "internet", "voice", "appearance", "interface", "personality"] as SettingsTab[]).includes(settingsTab) &&
-          <button type="button" className="save-button" onClick={saveConfiguration}><Check size={18}/> Save changes</button>}
+          <button type="button" className="save-button" onClick={saveConfiguration}><Check size={18}/> {settingsSaved ? "Saved" : "Save changes"}</button>}
       </footer>
     </section>}
   </main>;
