@@ -125,3 +125,47 @@ test("Brain Lab Mikanify controls cannot stretch past their settings grid", () =
   assert.match(css,/flex-direction:row/);
   assert.match(css,/overflow-wrap:anywhere/);
 });
+
+test("floating chat uses an accessible paw send action without losing Enter / Escape shortcuts", () => {
+  const app=readFileSync(new URL("./App.tsx",import.meta.url),"utf8");
+  const styles=readFileSync(new URL("./styles.css",import.meta.url),"utf8");
+  assert.match(app,/className="send-button chat-paw-send" aria-label="Send message"/);
+  assert.match(app,/\<PawPrint size=\{23\} fill="currentColor"/);
+  assert.match(app,/event\.key === "Enter" && !event\.shiftKey/);
+  assert.match(app,/event\.key === "Escape" && busy/);
+  assert.match(app,/stopGeneration\(\)/);
+  assert.match(styles,/\.companion:not\(\.settings-standalone\) > \.dock/);
+  assert.match(styles,/\.chat-paw-send/);
+  assert.match(styles,/prefers-reduced-motion/);
+});
+
+test("chat overflow preserves search, voice, privacy, settings and hide controls", () => {
+  const app=readFileSync(new URL("./App.tsx",import.meta.url),"utf8");
+  const menuStart=app.indexOf('className="chat-quick-menu"');
+  const menuEnd=app.indexOf('className="latest-reply"',menuStart);
+  assert.ok(menuStart>0&&menuEnd>menuStart);
+  const menu=app.slice(menuStart,menuEnd);
+  assert.match(menu,/setScreen\("search"\)/);
+  assert.match(menu,/setLiveVisionEnabled\(!liveVision\.enabled\)/);
+  assert.match(menu,/toggleVoiceMute\(\)/);
+  assert.match(menu,/openSettings\(\)/);
+  assert.match(menu,/invoke\("hide_companion"\)/);
+  assert.match(menu,/clearChat\(\)/);
+  assert.match(app,/chat-vision-active/);
+  assert.match(app,/title=\{\`Live Vision captures every/);
+  assert.doesNotMatch(app,/className="live-vision-strip"/);
+});
+
+test("chat file/screen actions stay accessible behind one contextual plus", () => {
+  const app=readFileSync(new URL("./App.tsx",import.meta.url),"utf8");
+  const styles=readFileSync(new URL("./styles.css",import.meta.url),"utf8");
+  assert.match(app,/chatToolsOpen && <div className="chat-tool-tray"/);
+  assert.match(app,/uploadRef\.current\?\.click\(\)/);
+  assert.match(app,/openCapturePicker\(\)/);
+  assert.match(app,/aria-label="Add an attachment or share screen"/);
+  assert.match(app,/aria-expanded=\{chatToolsOpen\}/);
+  assert.match(app,/chatMenuRef\.current\?\.contains\(target\)/);
+  assert.match(styles,/\.chat-quick-menu/);
+  assert.match(styles,/\.chat-tool-tray/);
+  assert.match(styles,/--panel-rgb/);
+});
