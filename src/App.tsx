@@ -18,7 +18,7 @@ import { register, unregister } from "@tauri-apps/plugin-global-shortcut";
 import {
   ArrowLeft, Brain, Camera, Cat, Check, House, FlaskConical, ChevronLeft, ChevronRight, Clock3, Copy, Crop, Eye, EyeOff, FileText, Heart, History, Paperclip,
   BookOpen, ExternalLink, HardDrive, LoaderCircle, MessageCircle, RotateCw, Search, Settings2, Shuffle, SlidersHorizontal, Sparkles, Square, SquarePen, Volume2, X,
-  Palette, Shirt, Globe2, Cpu, WandSparkles, Plug2, AudioLines, VolumeX, PawPrint, Ellipsis, Plus, PanelsTopLeft
+  Palette, Shirt, Globe2, Cpu, WandSparkles, Plug2, AudioLines, VolumeX, PawPrint, Ellipsis, Plus, PanelsTopLeft, UserRound
 } from "lucide-react";
 import {
   DEFAULT_SETTINGS, DEFAULT_APPEARANCE, DEFAULT_VOICE, loadPortrait, loadSettings, savePortrait, saveSettings,
@@ -3382,9 +3382,7 @@ export default function App() {
       .finally(() => setAvatarDragging(false));
   };
 
-  return <main className={standaloneSettings ? "companion settings-standalone" : "companion"} style={theme}>
-    {!standaloneSettings && <div className="portrait-space" title="Drag Mikan to move the window" onMouseDown={dragPortrait}
-      onContextMenu={event => { event.preventDefault(); setPortraitMenuAt({ x: event.clientX, y: event.clientY }); }}>
+  const avatarContents = <>
       {avatarDisplay === "animated" && ikiReady ? (
         <Suspense fallback={<img className="character-portrait" src={portrait ?? BUNDLED_PORTRAIT}
           alt="Mikan is getting ready" draggable={false}/>}>
@@ -3442,101 +3440,9 @@ export default function App() {
         <span>Cursor: {avatarDebug?.gazeX?.toFixed(2) ?? "n/a"} / {avatarDebug?.gazeY?.toFixed(2) ?? "n/a"}</span>
         <span>Hair momentum: {avatarDebug?.dragMomentum?.toFixed(2) ?? "n/a"}</span>
       </div>}
-    </div>}
 
-    {portraitMenuAt && <PortraitContextMenu position={portraitMenuAt} items={portraitMenuItems}
-      onClose={() => setPortraitMenuAt(null)}/>}
-
-    {!standaloneSettings && <section className="dock" aria-label="Chat with Mikan">
-      {memoryToast && <div key={memoryToast.key}
-        className={memoryToast.detailed?"desktop-memory-toast detailed":"desktop-memory-toast"}
-        role="status" aria-live="polite" aria-atomic="true">
-        <Check size={15} aria-hidden="true"/>
-        <span>{memoryToast.message}</span>
-        {memoryToast.detailed && <button type="button" onClick={()=>{
-          setMemoryToast(null);openMemory("facts");
-        }}>Review</button>}
-        <button type="button" className="memory-toast-dismiss" aria-label="Dismiss memory notice"
-          onClick={()=>setMemoryToast(null)}><X size={13}/></button>
-      </div>}
-      <div className="reply-panel" aria-live="polite">
-        <div className="reply-header">
-          <div className="reply-title">
-            <span className="chat-brand-mark" aria-hidden="true"><PawPrint size={17}/></span>
-            <div className="chat-brand-label"><strong>Mikan</strong><small>Your desktop companion</small></div>
-            {busy && <LoaderCircle size={15} className="spin" aria-label="Mikan is thinking"/>}
-            {!busy && lastReply?.failed && <span className="error-caption">Error</span>}
-          </div>
-          <div className="dock-actions">
-            {liveVision.enabled && <button type="button" className="chat-vision-active"
-              aria-label="Live Vision is active. Turn it off" title={`Live Vision captures every ${liveVision.captureIntervalSeconds}s and is analyzed only during chat · Click to disable`}
-              disabled={liveVisionBusy} onClick={()=>void setLiveVisionEnabled(false)}>
-              <Eye size={13}/><span>Vision on</span><span aria-hidden="true" className="chat-live-dot"/>
-            </button>}
-            {!settings.voice.muted && voiceState!=="idle" && <button type="button"
-              className="dock-icon chat-voice-active"
-              title={voiceState==="synthesizing"?"Cancel speech preparation":"Stop Mikan speaking"}
-              aria-label="Stop speaking" onClick={stopSpeech}>
-              {voiceState==="synthesizing"?<LoaderCircle size={17} className="spin"/>:<Square size={15} fill="currentColor"/>}
-            </button>}
-            <button type="button" className="dock-icon chat-history-action"
-              title="Conversation history (/log)" aria-label="Conversation history"
-              onClick={()=>setScreen("log")}><History size={18}/></button>
-            <div className="chat-menu-wrap" ref={chatMenuRef}>
-              <button type="button" ref={chatMenuButtonRef} className={"dock-icon chat-menu-trigger"+(chatMenuOpen?" active":"")}
-                title="More chat actions" aria-label="More chat actions"
-                aria-haspopup="dialog" aria-expanded={chatMenuOpen} aria-controls="chat-quick-menu"
-                onClick={()=>{
-                  const opening=!chatMenuOpen;
-                  setChatMenuOpen(opening);setChatToolsOpen(false);
-                  if(opening) requestAnimationFrame(()=>chatMenuRef.current?.querySelector<HTMLButtonElement>(".chat-quick-menu button")?.focus());
-                }}><Ellipsis size={21}/></button>
-              {chatMenuOpen && <div className="chat-quick-menu" id="chat-quick-menu" aria-label="Quick chat actions" role="dialog">
-                <div className="chat-quick-menu-title"><Sparkles size={14}/> QUICK ACTIONS</div>
-                <button type="button" disabled={busy||!memoryReady}
-                  onClick={()=>{setChatMenuOpen(false);clearChat();}}>
-                  <SquarePen size={17}/><span>New conversation</span>
-                </button>
-                <button type="button" onClick={()=>{setChatMenuOpen(false);setScreen("search");}}>
-                  <Search size={17}/><span>Web search</span>
-                  <span className={`chat-menu-status search-health-dot ${service?.state || "checking"}`}
-                    aria-hidden="true" title={service?.message || "Checking search service"}/>
-                </button>
-                <button type="button" disabled={liveVisionBusy}
-                  aria-pressed={liveVision.enabled}
-                  onClick={()=>{setChatMenuOpen(false);void setLiveVisionEnabled(!liveVision.enabled);}}>
-                  {liveVision.enabled?<EyeOff size={17}/>:<Eye size={17}/>}
-                  <span>{liveVision.enabled?"Turn Live Vision off":"Turn Live Vision on"}</span>
-                  {liveVision.enabled&&<span className="chat-menu-active-dot" aria-hidden="true"/>}
-                </button>
-                {!settings.voice.muted && <button type="button" disabled={!lastReply?.content||lastReply.failed}
-                  onClick={()=>{
-                    setChatMenuOpen(false);
-                    if(voiceState==="idle") void speak(lastReply?.content??"");
-                    else stopSpeech();
-                  }}>
-                  {voiceState!=="idle"?<Square size={16}/>:<Volume2 size={17}/>}
-                  <span>{voiceState==="idle"?"Read latest reply aloud":"Stop speaking"}</span>
-                </button>}
-                <button type="button" aria-pressed={settings.voice.muted}
-                  onClick={()=>{setChatMenuOpen(false);toggleVoiceMute();}}>
-                  {settings.voice.muted?<VolumeX size={17}/>:<Volume2 size={17}/>}
-                  <span>{settings.voice.muted?"Voice muted · unmute":"Mute voice replies"}</span>
-                </button>
-                <div className="chat-quick-menu-divider"/>
-                <button type="button" onClick={()=>{setChatMenuOpen(false);openSettings();}}>
-                  <Settings2 size={17}/><span>Control Center</span>
-                </button>
-                <button type="button" onClick={()=>{setChatMenuOpen(false);void invoke("hide_companion");}}>
-                  <EyeOff size={17}/><span>Hide Mikan</span>
-                </button>
-              </div>}
-            </div>
-          </div>
-        </div>
-        <div className="latest-reply"><MarkdownText text={visibleReplyText}/></div>
-        {voiceError && <div className="voice-error" role="alert">Voice: {voiceError}</div>}
-      </div>
+  </>;
+  const composerControls = <>
       {(liveVisionError||liveVision.error)&&
         <div className="vision-error" role="alert">{liveVisionError||liveVision.error}</div>}
       {capturePickerOpen && <div className="vision-panel">
@@ -3671,6 +3577,8 @@ export default function App() {
             disabled={!memoryReady || attachmentBusy || (!input.trim() && !pendingAttachment && !pendingScreenshot && !liveVision.enabled)} onClick={() => {setChatToolsOpen(false);void send();}}><PawPrint size={23} fill="currentColor" strokeWidth={1.6}/></button>
         )}
       </div>
+  </>;
+  const modelFooter = <>
       <div className="dock-footer">
         <div className="model-switcher" title={dockModel.title}>
           <span className={`status-dot ${dockDot}`} />
@@ -3704,6 +3612,182 @@ export default function App() {
           {memoryError?"Memory issue":!memoryReady?"Loading…":"Ready"}
         </span>
       </div>
+  </>;
+
+  return <main className={standaloneSettings ? "companion settings-standalone" : defaultUi ? "companion default-layout-active" : "companion"} style={theme}>
+    {!standaloneSettings && !defaultUi && <div className="portrait-space" title="Drag Mikan to move the window" onMouseDown={dragPortrait}
+      onContextMenu={event => { event.preventDefault(); setPortraitMenuAt({ x: event.clientX, y: event.clientY }); }}>
+      {avatarContents}
+    </div>}
+
+    {portraitMenuAt && <PortraitContextMenu position={portraitMenuAt} items={portraitMenuItems}
+      onClose={() => setPortraitMenuAt(null)}/>}
+
+    {!standaloneSettings && defaultUi && screen === "compact" &&
+      <DefaultCompanionShell
+        avatar={<div className="workspace-avatar-rig" title="Drag Mikan to move this window"
+          onMouseDown={dragPortrait}
+          onContextMenu={event => {event.preventDefault();setPortraitMenuAt({x:event.clientX,y:event.clientY});}}>
+          {avatarContents}
+        </div>}
+        modelPicker={modelFooter}
+        chats={[...conversations].sort((a,b)=>b.updatedAt-a.updatedAt)}
+        activeConversationId={activeConversationId}
+        transcriptVersion={messages.length+":"+(messages[messages.length-1]?.content.length??0)+":"+busy}
+        busy={busy} muted={settings.voice.muted} ready={memoryReady}
+        visionActive={liveVision.enabled} modelLabel={dockModel.label}
+        displayName={conversations.find(c=>c.id===activeConversationId)?.title||"Desktop Companion"}
+        lastActivity={activity}
+        onDrag={dragPortrait}
+        onNewChat={clearChat}
+        onOpenChat={id=>{void openConversation(id);}}
+        onOpenHistory={()=>setScreen("log")}
+        onOpenMemory={()=>openMemory("facts")}
+        onOpenSettings={openSettings}
+        onOpenSearch={()=>setScreen("search")}
+        onOpenVision={()=>{void openCapturePicker();}}
+        onAttach={()=>uploadRef.current?.click()}
+        onVoice={()=>openSettingsTab("voice")}
+        onMute={toggleVoiceMute}
+        onExpression={()=>{
+          const reactions=(["smile","laugh","surprised","nod"] as const);
+          testAvatarReaction(reactions[workspaceExpressionIndex%reactions.length]);
+          setWorkspaceExpressionIndex(index=>index+1);
+        }}
+        onOutfit={()=>openSettingsTab("appearance")}
+        onHide={()=>{void invoke("hide_companion");}}
+        composer={composerControls}
+        transcript={<>
+          {messages.length===0 && <div className="workspace-greeting">
+            <PawPrint size={42}/><strong>Ready for a little conversation?</strong>
+            <span>Mikan's right here. Say hello! ♡</span>
+          </div>}
+          {messages.map(message=><article key={message.id}
+            className={"workspace-message "+message.role+(message.failed?" failed":"")}>
+            <span className="workspace-message-avatar" aria-hidden="true">
+              {message.role==="assistant"?<PawPrint size={19}/>:<UserRound size={19}/>}
+            </span>
+            <div className="workspace-message-body">
+              <div className="workspace-message-author">
+                <strong>{message.role==="assistant"?"Mikan ♡":"You"}</strong>
+                <time dateTime={new Date(message.createdAt).toISOString()}>
+                  {new Date(message.createdAt).toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"})}
+                </time>
+              </div>
+              <div className="workspace-message-bubble"><MarkdownText text={message.content||(busy?"Thinking…":"")}/></div>
+              {(message.sources?.length||message.searchQuery)&&
+                <details className="workspace-message-sources">
+                  <summary>Sources &amp; research details ({message.sources?.length??0})</summary>
+                  {message.searchQuery&&<div>Search: {message.searchQuery}</div>}
+                  {message.sources?.map((source,i)=><button type="button" key={source.url}
+                    onClick={()=>void openSource(source.url)} title={source.url}>
+                    [{i+1}] {source.title}
+                  </button>)}
+                  {message.sourcesCarriedOver&&<small>Sources carried from prior research, not refreshed.</small>}
+                </details>}
+            </div>
+          </article>)}
+          {busy && messages[messages.length-1]?.role!=="assistant" &&
+            <div className="workspace-message assistant workspace-thinking" role="status">
+              <span className="workspace-message-avatar"><PawPrint size={19}/></span>
+              <div className="workspace-message-bubble"><LoaderCircle size={17} className="spin"/> {activity}</div>
+            </div>}
+          {voiceError&&<div className="vision-error" role="alert">Voice: {voiceError}</div>}
+        </>}
+      />}
+
+    {!standaloneSettings && !defaultUi && <section className="dock" aria-label="Chat with Mikan">
+      {memoryToast && <div key={memoryToast.key}
+        className={memoryToast.detailed?"desktop-memory-toast detailed":"desktop-memory-toast"}
+        role="status" aria-live="polite" aria-atomic="true">
+        <Check size={15} aria-hidden="true"/>
+        <span>{memoryToast.message}</span>
+        {memoryToast.detailed && <button type="button" onClick={()=>{
+          setMemoryToast(null);openMemory("facts");
+        }}>Review</button>}
+        <button type="button" className="memory-toast-dismiss" aria-label="Dismiss memory notice"
+          onClick={()=>setMemoryToast(null)}><X size={13}/></button>
+      </div>}
+      <div className="reply-panel" aria-live="polite">
+        <div className="reply-header">
+          <div className="reply-title">
+            <span className="chat-brand-mark" aria-hidden="true"><PawPrint size={17}/></span>
+            <div className="chat-brand-label"><strong>Mikan</strong><small>Your desktop companion</small></div>
+            {busy && <LoaderCircle size={15} className="spin" aria-label="Mikan is thinking"/>}
+            {!busy && lastReply?.failed && <span className="error-caption">Error</span>}
+          </div>
+          <div className="dock-actions">
+            {liveVision.enabled && <button type="button" className="chat-vision-active"
+              aria-label="Live Vision is active. Turn it off" title={`Live Vision captures every ${liveVision.captureIntervalSeconds}s and is analyzed only during chat · Click to disable`}
+              disabled={liveVisionBusy} onClick={()=>void setLiveVisionEnabled(false)}>
+              <Eye size={13}/><span>Vision on</span><span aria-hidden="true" className="chat-live-dot"/>
+            </button>}
+            {!settings.voice.muted && voiceState!=="idle" && <button type="button"
+              className="dock-icon chat-voice-active"
+              title={voiceState==="synthesizing"?"Cancel speech preparation":"Stop Mikan speaking"}
+              aria-label="Stop speaking" onClick={stopSpeech}>
+              {voiceState==="synthesizing"?<LoaderCircle size={17} className="spin"/>:<Square size={15} fill="currentColor"/>}
+            </button>}
+            <button type="button" className="dock-icon chat-history-action"
+              title="Conversation history (/log)" aria-label="Conversation history"
+              onClick={()=>setScreen("log")}><History size={18}/></button>
+            <div className="chat-menu-wrap" ref={chatMenuRef}>
+              <button type="button" ref={chatMenuButtonRef} className={"dock-icon chat-menu-trigger"+(chatMenuOpen?" active":"")}
+                title="More chat actions" aria-label="More chat actions"
+                aria-haspopup="dialog" aria-expanded={chatMenuOpen} aria-controls="chat-quick-menu"
+                onClick={()=>{
+                  const opening=!chatMenuOpen;
+                  setChatMenuOpen(opening);setChatToolsOpen(false);
+                  if(opening) requestAnimationFrame(()=>chatMenuRef.current?.querySelector<HTMLButtonElement>(".chat-quick-menu button")?.focus());
+                }}><Ellipsis size={21}/></button>
+              {chatMenuOpen && <div className="chat-quick-menu" id="chat-quick-menu" aria-label="Quick chat actions" role="dialog">
+                <div className="chat-quick-menu-title"><Sparkles size={14}/> QUICK ACTIONS</div>
+                <button type="button" disabled={busy||!memoryReady}
+                  onClick={()=>{setChatMenuOpen(false);clearChat();}}>
+                  <SquarePen size={17}/><span>New conversation</span>
+                </button>
+                <button type="button" onClick={()=>{setChatMenuOpen(false);setScreen("search");}}>
+                  <Search size={17}/><span>Web search</span>
+                  <span className={`chat-menu-status search-health-dot ${service?.state || "checking"}`}
+                    aria-hidden="true" title={service?.message || "Checking search service"}/>
+                </button>
+                <button type="button" disabled={liveVisionBusy}
+                  aria-pressed={liveVision.enabled}
+                  onClick={()=>{setChatMenuOpen(false);void setLiveVisionEnabled(!liveVision.enabled);}}>
+                  {liveVision.enabled?<EyeOff size={17}/>:<Eye size={17}/>}
+                  <span>{liveVision.enabled?"Turn Live Vision off":"Turn Live Vision on"}</span>
+                  {liveVision.enabled&&<span className="chat-menu-active-dot" aria-hidden="true"/>}
+                </button>
+                {!settings.voice.muted && <button type="button" disabled={!lastReply?.content||lastReply.failed}
+                  onClick={()=>{
+                    setChatMenuOpen(false);
+                    if(voiceState==="idle") void speak(lastReply?.content??"");
+                    else stopSpeech();
+                  }}>
+                  {voiceState!=="idle"?<Square size={16}/>:<Volume2 size={17}/>}
+                  <span>{voiceState==="idle"?"Read latest reply aloud":"Stop speaking"}</span>
+                </button>}
+                <button type="button" aria-pressed={settings.voice.muted}
+                  onClick={()=>{setChatMenuOpen(false);toggleVoiceMute();}}>
+                  {settings.voice.muted?<VolumeX size={17}/>:<Volume2 size={17}/>}
+                  <span>{settings.voice.muted?"Voice muted · unmute":"Mute voice replies"}</span>
+                </button>
+                <div className="chat-quick-menu-divider"/>
+                <button type="button" onClick={()=>{setChatMenuOpen(false);openSettings();}}>
+                  <Settings2 size={17}/><span>Control Center</span>
+                </button>
+                <button type="button" onClick={()=>{setChatMenuOpen(false);void invoke("hide_companion");}}>
+                  <EyeOff size={17}/><span>Hide Mikan</span>
+                </button>
+              </div>}
+            </div>
+          </div>
+        </div>
+        <div className="latest-reply"><MarkdownText text={visibleReplyText}/></div>
+        {voiceError && <div className="voice-error" role="alert">Voice: {voiceError}</div>}
+      </div>
+      {composerControls}
+      {modelFooter}
     </section>}
 
     {screen !== "compact" && screen !== "settings" && <div className="panel-scrim" onMouseDown={goCompact} />}
