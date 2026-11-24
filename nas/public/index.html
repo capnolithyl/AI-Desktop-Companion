@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#211924">
+  <title>Mikan · Beholder</title>
+  <link rel="stylesheet" href="/style.css">
+  <script type="module" src="/app.js"></script>
+</head>
+<body>
+  <div class="shell">
+    <header class="topbar">
+      <img src="/avatar.webp" alt="Mikan" class="avatar">
+      <div class="heading"><strong>Mikan <span class="heart">♥</span></strong><small id="status">Beholder cloud preview</small></div>
+      <button class="icon-button" id="sidebarToggle" title="Conversations and memories" aria-label="Conversations and memories">☰</button>
+      <button class="icon-button" id="lock" title="Lock" aria-label="Lock">♙</button>
+    </header>
+    <div class="content">
+      <aside id="sidebar" class="sidebar">
+        <div class="side-title"><strong>Conversations</strong><button id="newChat" class="small-button">＋ New</button></div>
+        <nav id="chats" aria-label="Conversations"></nav>
+        <div class="side-title"><strong>Saved facts</strong></div>
+        <p class="note">Explicit memories on Beholder. Relevant ones are recalled automatically.</p>
+        <form id="rememberForm" class="memory-form"><textarea id="memoryText" maxlength="800" rows="2" placeholder="Remember that…"></textarea><button class="small-button" type="submit">Save fact</button></form>
+        <div id="memories" class="memories"></div>
+        <p class="note">Experimental NAS mode. Desktop tools, web research, and Iki animation are not yet connected.</p>
+      </aside>
+      <main class="chat">
+        <div id="messages" class="messages" aria-live="polite"><p class="welcome">Beholder is awake. Mikan is ready to chat. 🐾</p></div>
+        <div id="notice" class="notice" role="status"></div>
+        <form id="chatForm" class="composer">
+          <textarea id="prompt" placeholder="Message Mikan…" rows="1" maxlength="4000" aria-label="Message Mikan"></textarea>
+          <button type="submit" id="send" aria-label="Send message" title="Send message">🐾</button>
+        </form>
+      </main>
+    </div>
+  </div>
+  <div id="gate" class="gate">
+    <form id="unlockForm" class="login">
+      <img src="/avatar.webp" alt="" class="login-avatar">
+      <h1>Welcome to Beholder</h1>
+      <p>Mikan's private cloud home. Enter the access key from your NAS configuration.</p>
+      <input id="accessKey" type="password" autocomplete="off" spellcheck="false" required placeholder="Mikan NAS access key" aria-label="NAS access key">
+      <button type="submit">Unlock Mikan</button>
+      <small id="loginError" role="alert"></small>
+    </form>
+  </div>
+</body>
+</html>
