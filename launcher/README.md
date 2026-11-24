@@ -1,11 +1,14 @@
-# Mikan Launcher v0.3
-Independent native Android home app. All home functions and art remain local. Optional manual update check and launching the browser are the only network-related features; NAS not required for home.
-- Settings: wallpaper, amber/original icons, grid/dock size, default home app, favorite management and updates.
-- Home: hold and drag pinned icons onto other pinned icons to reorder, including dock. Drawer long-press shows pin/move actions. Settings > Manage favorites also supports movement/unpin.
-- Update: install v0.2 over v0.1 (do not uninstall). Settings > Check for launcher updates. Allow installs from Mikan Launcher if Android asks, then recheck and approve the installer. Checks package, newer version and matching APK certificate. No GitHub credentials.
-- CI verifies package and pinned signer, publishes separate prerelease tags launcher-build-N (not repository Latest), APK named Mikan-Launcher.apk. Increment versionCode and versionName for each release; no overwrites.
-- Test offline boot, app launches, drag reorder, persistent settings, v0.3 update, network failure and switching back to stock launcher.
-- No lock screen, external widgets or AI in this release. Existing portrait remains; themed icons use Android monochrome where available and custom/fallback treatment otherwise.
+# Mikan Launcher v0.4
+Offline-first native Android home app, same package ID and signing key. Optional web shortcut and updater remain independent of core home functions.
 
-## Portraits and Mikan Web
-Tap the Mikan card to open your configured HTTPS web interface in the default browser; set the address on first tap or in Settings. The address is local, no NAS host or token is committed. Choose portrait imports an image into app-private storage at up to 768 px; no network required and source file may be removed after import. Bundled portrait path: app/src/main/assets/portraits/coffee.webp (optional; small legacy avatar fallback). Reset returns to bundled/default portrait. Future outfit variants can use the same portraits directory. Test import, update persistence, reset, browser launch and NAS offline boot.
+## Home pages & folders
+Favorites retain their old order; first N valid entries remain dock items, remaining entries flow into two rows per page. Swipe left/right or tap arrows. Settings > Minimum home pages adds empty pages. Settings > Create app folder picks installed apps, preserving existing shortcuts; folders are additional shortcuts and can be edited, renamed, moved or deleted. Manage favorites and drag onto a visible pinned tile to reorder; cross-page movement via menu. No free-position grid or drag-to-create-folder yet.
+
+## Built-in widgets
+Clock, Mikan and music can be assigned to a page or hidden in Settings > Pages & widgets. No third-party AppWidget hosting or arbitrary pixel placement yet. Music uses Android MediaSession metadata/album art and supported previous/play/pause/next controls. Enable notification access explicitly under launcher settings. Optional notification dots show active non-ongoing, non-summary notifications (not unread message counts), including folder member notifications. Only app identifiers are retained temporarily in memory; no notification content is stored or transmitted. Android may restrict notification access for sideloaded apps; leave disabled if desired.
+
+## Existing features
+Wallpaper, icons, grid/dock sizes, persistent favorites, custom portrait and HTTPS Mikan Web link, signed GitHub release updater. No NAS requirement or startup network requests. Existing portrait, web address and favorites remain intact on upgrade. Reset portrait returns to default.
+
+## Verification
+Test update from v0.3; app launches, page changes, folder CRUD and restart persistence, widget page/visibility, music controls in Spotify or another player, notification dots after grant and revoke, airplane-mode cold boot with NAS offline, stock launcher fallback. Device validation is required.
