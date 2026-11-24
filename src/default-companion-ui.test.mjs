@@ -89,3 +89,12 @@ test("Default chat has directional speech balloon tails and consistent error sty
   assert.match(css,/\.workspace-message\.failed \.workspace-message-bubble \{--bubble-edge:#f09090/);
   assert.match(app,/<div className="workspace-message-bubble"><MarkdownText/);
 });
+
+test("Default chat uses the bundled cropped Mikan portrait, including while thinking",()=>{
+  assert.match(app,/new URL\("\.\.\/assets\/iki\/mikan-chat-avatar\.webp", import\.meta\.url\)/);
+  assert.equal((app.match(/src=\{WORKSPACE_CHAT_PORTRAIT\}/g)||[]).length,2);
+  assert.match(css,/\.workspace-chat-portrait \{display:block;width:100%;height:100%;object-fit:cover;border-radius:50%;\}/);
+  const portrait=readFileSync(new URL("../assets/iki/mikan-chat-avatar.webp",import.meta.url));
+  assert.equal(portrait.toString("ascii",0,4),"RIFF");
+  assert.equal(portrait.toString("ascii",8,12),"WEBP");
+});

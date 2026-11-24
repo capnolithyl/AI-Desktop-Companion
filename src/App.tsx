@@ -150,6 +150,7 @@ const HOTKEY = "Control+Alt+M";
 const BUNDLED_PORTRAIT = "/mikan.png";
 // Bundled reference artwork: local asset, no cloud request or missing /mikan.png URL.
 const CONTROL_CENTER_PORTRAIT = new URL("../assets/iki/mikan-reference.png", import.meta.url).href;
+const WORKSPACE_CHAT_PORTRAIT = new URL("../assets/iki/mikan-chat-avatar.webp", import.meta.url).href;
 
 function restoreMessage(saved: PersistedMessage): LogMessage {
   const metadata = readMessageMetadata(saved.metadataJson);
@@ -3693,7 +3694,7 @@ export default function App() {
           {messages.map(message=><article key={message.id}
             className={"workspace-message "+message.role+(message.failed?" failed":"")}>
             <span className="workspace-message-avatar" aria-hidden="true">
-              {message.role==="assistant"?<PawPrint size={19}/>:<UserRound size={19}/>}
+              {message.role==="assistant"?<img className="workspace-chat-portrait" src={WORKSPACE_CHAT_PORTRAIT} alt="" width={40} height={40} draggable={false}/>:<UserRound size={19}/>}
             </span>
             <div className="workspace-message-body">
               <div className="workspace-message-author">
@@ -3722,7 +3723,7 @@ export default function App() {
           </article>)}
           {busy && messages[messages.length-1]?.role!=="assistant" &&
             <div className="workspace-message assistant workspace-thinking" role="status">
-              <span className="workspace-message-avatar"><PawPrint size={19}/></span>
+              <span className="workspace-message-avatar" aria-hidden="true"><img className="workspace-chat-portrait" src={WORKSPACE_CHAT_PORTRAIT} alt="" width={40} height={40} draggable={false}/></span>
               <div className="workspace-message-bubble"><LoaderCircle size={17} className="spin"/> {activity}</div>
             </div>}
           {voiceError&&<div className="vision-error" role="alert">Voice: {voiceError}</div>}

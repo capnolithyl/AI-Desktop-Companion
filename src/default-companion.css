@@ -450,3 +450,10 @@
 .workspace-background-select:focus-visible {outline:2px solid #ffdfaa;outline-offset:2px;}
 .workspace-avatar-card[data-background]:not([data-background="plain"]) .workspace-avatar-top,
 .workspace-avatar-card[data-background]:not([data-background="plain"]) .workspace-avatar-status {background:#332220e8;}
+
+/* Face-focused portrait replaces the generic paw next to Mikan's speech bubbles. */
+.workspace-message.assistant .workspace-message-avatar {
+  flex-basis:40px;width:40px;height:40px;overflow:hidden;
+  border-color:#ffc08a;box-shadow:0 0 10px #f6934b66;
+}
+.workspace-chat-portrait {display:block;width:100%;height:100%;object-fit:cover;border-radius:50%;}
