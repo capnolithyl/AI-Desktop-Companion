@@ -106,7 +106,7 @@ test("warm Control Center decor uses bundled Mikan artwork only where wide layou
 test("Memory starts with manageable browsing and preserves hidden maintenance operations", () => {
   const memory=readFileSync(new URL("./MemoryPanel.tsx",import.meta.url),"utf8");
   const styles=readFileSync(new URL("./styles.css",import.meta.url),"utf8");
-  assert.match(memory,/visibleLimit\]=useState\(12\)/);
+  assert.match(memory,/setVisibleLimit\]=useState\(12\)/);
   assert.match(memory,/className="memory-facts-overview"/);
   assert.match(memory,/className="memory-disclosure"/);
   assert.match(memory,/className="memory-record-options"/);
