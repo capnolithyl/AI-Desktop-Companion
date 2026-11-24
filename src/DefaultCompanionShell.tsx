@@ -1,6 +1,6 @@
-import { useEffect, useRef, type ReactNode } from "react";
+import { useEffect, useRef, type ReactNode, type MouseEvent as ReactMouseEvent } from "react";
 import {
-  Bell, BookHeart, Cat, Eye, Heart, History, MessageCircle, Mic, Moon,
+  BookHeart, Cat, Eye, History, MessageCircle, Mic,
   Palette, PawPrint, Plus, Search, Settings2, Shirt, Smile, Sparkles, Volume2, VolumeX, X
 } from "lucide-react";
 import "./default-companion.css";
@@ -11,7 +11,7 @@ type Props={
   chats:ReadonlyArray<WorkspaceChat>; activeConversationId:string|null;
   transcriptVersion:string; busy:boolean; muted:boolean; ready:boolean; visionActive:boolean;
   modelLabel:string; displayName:string; lastActivity:string;
-  onDrag:(event:React.MouseEvent<HTMLElement>)=>void;
+  onDrag:(event:ReactMouseEvent<HTMLElement>)=>void;
   onNewChat:()=>void; onOpenChat:(id:string)=>void; onOpenHistory:()=>void;
   onOpenMemory:()=>void; onOpenSettings:()=>void; onOpenSearch:()=>void;
   onOpenVision:()=>void; onAttach:()=>void; onVoice:()=>void;
