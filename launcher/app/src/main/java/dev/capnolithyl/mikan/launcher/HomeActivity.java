@@ -43,7 +43,10 @@ public class HomeActivity extends Activity {
     private boolean drawer=false;
     private boolean settings=false;
     private LauncherUpdater updater;
-    private PortraitStore portraits;
+    private PortraitStore portraits,characterArt;
+    private MikanCard mikanCard;
+    private String checkedWebUrl="",webStatus="";
+    private boolean checkingWeb;
     private HomeFolders folders;
     private int homePage=0;
     private MusicPanel music;
@@ -68,6 +71,7 @@ public class HomeActivity extends Activity {
         prefs=getSharedPreferences("launcher",MODE_PRIVATE);
         updater=new LauncherUpdater(this);
         portraits=new PortraitStore(this);
+        characterArt=new PortraitStore(this,"mikan-character-art.webp",new String[]{"portraits/character.webp"});
         folders=new HomeFolders(prefs);
         loadApps();
         restoreFavorites();
@@ -99,7 +103,7 @@ public class HomeActivity extends Activity {
     private void gap(LinearLayout parent,int size){View v=new View(this);parent.addView(v,new LinearLayout.LayoutParams(1,dp(size)));}
     private Drawable asset(String name){try(java.io.InputStream in=getAssets().open(name)){return Drawable.createFromStream(in,name);}catch(Exception e){return null;}}
     private void createPage(){
-        badgeViews.clear();music=null;clock=null;date=null;greeting=null;
+        badgeViews.clear();music=null;mikanCard=null;clock=null;date=null;greeting=null;
         root=new FrameLayout(this);root.setBackgroundColor(0xff191417);
         ImageView bg=new ImageView(this);bg.setScaleType(ImageView.ScaleType.CENTER_CROP);bg.setImageDrawable(asset(prefs.getString("wallpaper","reading-nook.webp")));
         root.addView(bg,new FrameLayout.LayoutParams(-1,-1));
@@ -157,7 +161,8 @@ public class HomeActivity extends Activity {
     private void showHome(){
         drawer=false;settings=false;search=null;results=null;homePage=Math.max(0,Math.min(homePage,pageCount()-1));createPage();
         LinearLayout header=horizontal();
-        TextView brand=text("MIKAN OS  ♡",13,PEACH,true);
+        TextView brand=text("Mikan OS",15,CREAM,true);
+        ImageView mark=new ImageView(this);mark.setImageDrawable(new MikanMark(MikanMark.CAT,PEACH));LinearLayout.LayoutParams markParams=new LinearLayout.LayoutParams(dp(23),dp(23));markParams.rightMargin=dp(7);header.addView(mark,markParams);
         header.addView(brand,new LinearLayout.LayoutParams(0,-2,1));
         header.addView(action("⚙",this::showSettings));page.addView(header);
         ScrollView scroll=new ScrollView(this);scroll.setFillViewport(false);scroll.setVerticalScrollBarEnabled(true);scroll.setScrollbarFadingEnabled(true);
@@ -165,26 +170,24 @@ public class HomeActivity extends Activity {
         LinearLayout body=vertical();scroll.addView(body,new ScrollView.LayoutParams(-1,-2));
         gap(body,6);
         if(widgetHere("clockPage",1)){
-        clock=text("",44,CREAM,false);clock.setIncludeFontPadding(false);body.addView(clock);
+        LinearLayout timeRow=horizontal();clock=text("",44,CREAM,false);clock.setIncludeFontPadding(false);timeRow.addView(clock);
+        ImageView paw=new ImageView(this);paw.setImageDrawable(new MikanMark(MikanMark.PAW,PEACH));LinearLayout.LayoutParams pawParams=new LinearLayout.LayoutParams(dp(23),dp(23));pawParams.leftMargin=dp(8);timeRow.addView(paw,pawParams);body.addView(timeRow);
         gap(body,3);date=text("",15,MUTED,false);date.setIncludeFontPadding(false);body.addView(date);gap(body,12);}
         if(widgetHere("mikanPage",1)){
-        LinearLayout card=horizontal();card.setPadding(dp(10),dp(10),dp(12),dp(10));card.setBackground(panelShape(23));card.setElevation(dp(2));
-        ImageView portrait=new ImageView(this);portrait.setImageDrawable(portraits.get());portrait.setScaleType(ImageView.ScaleType.CENTER_CROP);portrait.setBackground(shape(0xff50332b,24,false));portrait.setClipToOutline(true);
-        card.addView(portrait,new LinearLayout.LayoutParams(dp(104),dp(108)));
-        LinearLayout copy=vertical();copy.setPadding(dp(12),0,0,0);card.addView(copy,new LinearLayout.LayoutParams(0,-2,1));
-        copy.addView(text("Mikan ♡",19,PEACH,true));gap(copy,3);
-        greeting=text("",17,CREAM,true);copy.addView(greeting);gap(copy,3);
-        copy.addView(text("Tap to chat with Mikan",12,MUTED,false));gap(copy,4);
-        copy.addView(text("♡  Open Mikan Web ↗",12,PEACH,false));
-        card.setContentDescription("Open Mikan Web");card.setFocusable(true);card.setOnClickListener(v->openMikan());body.addView(card);gap(body,12);}
-        if(widgetHere("musicPage",1)){music=new MusicPanel(this);body.addView(music.view());gap(body,10);}
-        body.addView(text("YOUR FAVORITES",12,MUTED,true));gap(body,4);
+            Drawable art=characterArt.get();
+            String url=prefs.getString("mikanWebUrl","");
+            String status=url.isEmpty()?"Set up Mikan Web":url.equals(checkedWebUrl)&&!webStatus.isEmpty()?webStatus:"Web shortcut";
+            mikanCard=new MikanCard(this,art!=null?art:portraits.get(),art!=null,status,this::openMikan);
+            body.addView(mikanCard.view());gap(body,12);
+        }
+        if(prefs.getBoolean("showFavoritesLabel",false)){body.addView(text("YOUR FAVORITES",12,MUTED,true));gap(body,4);}
         ArrayList<App> pinned=new ArrayList<>();for(String key:favorites){App a=find(key);if(a!=null)pinned.add(a);}
         int dockCount=prefs.getInt("dockCount",5);
         int columns=prefs.getInt("columns",4), perPage=columns*2;
         int start=Math.min(pinned.size(),dockCount+homePage*perPage),end=Math.min(pinned.size(),start+perPage);
         if(start==end)body.addView(text("Pin apps from the drawer or create a folder in settings.",14,MUTED,false));else addGrid(body,pinned.subList(start,end),columns);
-        gap(body,6);
+        gap(body,10);
+        if(widgetHere("musicPage",1)){music=new MusicPanel(this);body.addView(music.view());gap(body,10);}
         LinearLayout dock=horizontal();dock.setPadding(dp(4),dp(5),dp(4),dp(5));dock.setBackground(panelShape(24));dock.setElevation(dp(2));
         for(int i=0;i<dockCount;i++){if(i<pinned.size())dock.addView(tile(pinned.get(i),false),new LinearLayout.LayoutParams(0,-2,1));else{View blank=new View(this);dock.addView(blank,new LinearLayout.LayoutParams(0,dp(56),1));}}
         LinearLayout nav=horizontal();nav.setGravity(Gravity.CENTER);int count=pageCount();
@@ -201,9 +204,9 @@ public class HomeActivity extends Activity {
     private void updateClock(){
         if(drawer||settings)return;
         Date now=new Date();if(clock!=null)clock.setText(android.text.format.DateFormat.getTimeFormat(this).format(now));
-        if(date!=null)date.setText(DateFormat.getDateInstance(DateFormat.FULL).format(now));
+        if(date!=null)date.setText(new java.text.SimpleDateFormat("EEE, MMM d",Locale.getDefault()).format(now));
         int hour=Calendar.getInstance().get(Calendar.HOUR_OF_DAY);
-        if(greeting!=null)greeting.setText(hour<5?"Still awake? ♡":hour<12?"Good morning ♡":hour<18?"Good afternoon ♡":"Good evening ♡");
+        if(mikanCard!=null)mikanCard.updateGreeting(hour);
     }
     private View tile(App app,boolean label){
         LinearLayout cell=vertical();cell.setGravity(Gravity.CENTER);cell.setPadding(dp(2),dp(3),dp(2),dp(3));
@@ -248,6 +251,7 @@ public class HomeActivity extends Activity {
         setting(body,"Icons: "+(prefs.getBoolean("themed",true)?"Amber":"Original"),()->{prefs.edit().putBoolean("themed",!prefs.getBoolean("themed",true)).apply();showSettings();});
         setting(body,"Grid: "+prefs.getInt("columns",4)+" columns",()->chooseNumber("columns","Grid columns",new int[]{4,5}));
         setting(body,"Dock: "+prefs.getInt("dockCount",5)+" apps",()->chooseNumber("dockCount","Dock size",new int[]{3,4,5}));
+        setting(body,"Favorites heading: "+(prefs.getBoolean("showFavoritesLabel",false)?"Shown":"Hidden"),()->{prefs.edit().putBoolean("showFavoritesLabel",!prefs.getBoolean("showFavoritesLabel",false)).apply();showSettings();});
         setting(body,"Manage favorites",this::manageFavorites);
         setting(body,"Create app folder",this::createFolder);
         setting(body,"Manage folders",this::manageFolders);
@@ -258,8 +262,11 @@ public class HomeActivity extends Activity {
         setting(body,"Notification / music access",this::notificationAccess);
         gap(body,18);body.addView(text("MIKAN",12,PEACH,true));gap(body,10);
         setting(body,"Choose portrait",this::pickPortrait);
+        setting(body,"Choose character artwork (transparent PNG)",()->pickImage(74));
+        setting(body,"Remove character artwork",()->new AlertDialog.Builder(this).setTitle("Return to portrait?").setNegativeButton("Cancel",null).setPositiveButton("Remove",(d,w)->{characterArt.reset();showSettings();}).show());
         setting(body,"Reset portrait",()->new AlertDialog.Builder(this).setTitle("Reset portrait?").setNegativeButton("Cancel",null).setPositiveButton("Reset",(d,w)->{portraits.reset();showSettings();}).show());
         setting(body,"Mikan Web address",()->editMikanUrl(false));
+        setting(body,"Check Mikan Web connection",this::checkMikanWeb);
         gap(body,18);body.addView(text("SYSTEM",12,PEACH,true));gap(body,10);
         setting(body,"Default home app",this::chooseHome);
         setting(body,"Check for launcher updates",()->updater.check());
@@ -294,22 +301,49 @@ public class HomeActivity extends Activity {
         }
         return LauncherIcons.create(this,app.component.getPackageName(),app.label,app.icon);
     }
-    private void pickPortrait(){
+    private void pickPortrait(){pickImage(73);}
+    private void pickImage(int request){
         Intent i=new Intent(Intent.ACTION_OPEN_DOCUMENT).setType("image/*").addCategory(Intent.CATEGORY_OPENABLE);
-        try{startActivityForResult(i,73);}catch(Exception e){Toast.makeText(this,"No image picker available.",Toast.LENGTH_SHORT).show();}
+        try{startActivityForResult(i,request);}catch(Exception e){Toast.makeText(this,"No image picker available.",Toast.LENGTH_SHORT).show();}
     }
     @Override protected void onActivityResult(int request,int result,Intent data){
         super.onActivityResult(request,result,data);
-        if(request!=73||result!=RESULT_OK||data==null||data.getData()==null)return;
+        if((request!=73&&request!=74)||result!=RESULT_OK||data==null||data.getData()==null)return;
         final android.net.Uri uri=data.getData();
         new Thread(()->{
-            boolean ok=portraits.importImage(uri);
+            boolean ok=(request==74?characterArt:portraits).importImage(uri);
             runOnUiThread(()->{
                 if(isFinishing()||isDestroyed())return;
-                Toast.makeText(this,ok?"Mikan portrait saved locally ♡":"Could not read this image.",Toast.LENGTH_SHORT).show();
+                Toast.makeText(this,ok?"Mikan artwork saved locally ♡":"Could not read this image.",Toast.LENGTH_SHORT).show();
                 if(settings)showSettings();else if(!drawer)showHome();
             });
         },"mikan-portrait-import").start();
+    }
+    private void checkMikanWeb(){
+        String url=prefs.getString("mikanWebUrl","");
+        if(url.isEmpty()){editMikanUrl(false);return;}
+        if(checkingWeb)return;
+        checkingWeb=true;Toast.makeText(this,"Checking Mikan Web…",Toast.LENGTH_SHORT).show();
+        new Thread(()->{
+            String result="Web unreachable";
+            java.net.HttpURLConnection connection=null;
+            try{
+                java.net.URL endpoint=new java.net.URL(url);
+                if(!"https".equalsIgnoreCase(endpoint.getProtocol())||endpoint.getUserInfo()!=null)throw new java.io.IOException("HTTPS required");
+                connection=(java.net.HttpURLConnection)endpoint.openConnection();
+                connection.setRequestMethod("HEAD");connection.setInstanceFollowRedirects(false);connection.setConnectTimeout(5000);connection.setReadTimeout(5000);connection.setUseCaches(false);
+                int code=connection.getResponseCode();
+                if(code>=200&&code<400)result="Web responded";
+                else if(code==401||code==403)result="Web requires access";
+                else result="Web HTTP "+code;
+            }catch(Exception ignored){}finally{if(connection!=null)connection.disconnect();}
+            final String status=result;
+            runOnUiThread(()->{
+                checkingWeb=false;if(isFinishing()||isDestroyed()||!url.equals(prefs.getString("mikanWebUrl","")))return;
+                checkedWebUrl=url;webStatus=status;Toast.makeText(this,status+" · last check only",Toast.LENGTH_LONG).show();
+                if(!settings&&!drawer&&mikanCard!=null)mikanCard.setStatus(status);
+            });
+        },"mikan-web-check").start();
     }
     private void openMikan(){
         String url=prefs.getString("mikanWebUrl","");
@@ -328,7 +362,7 @@ public class HomeActivity extends Activity {
             try{
                 java.net.URI uri=new java.net.URI(value);
                 if(!"https".equalsIgnoreCase(uri.getScheme())||uri.getHost()==null||uri.getUserInfo()!=null)throw new IllegalArgumentException();
-                prefs.edit().putString("mikanWebUrl",value).apply();dialog.dismiss();if(openAfter)openMikan();
+                prefs.edit().putString("mikanWebUrl",value).apply();checkedWebUrl="";webStatus="";dialog.dismiss();if(openAfter)openMikan();
             }catch(Exception e){field.setError("Enter a valid HTTPS web address.");}
         }));dialog.show();
     }

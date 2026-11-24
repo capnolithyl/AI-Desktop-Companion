@@ -12,16 +12,20 @@ import java.io.*;
 final class PortraitStore {
     private final Context context;
     private final AtomicFile file;
+    private final String[] assets;
     PortraitStore(Context context){
-        this.context=context.getApplicationContext();
-        file=new AtomicFile(new File(context.getFilesDir(),"mikan-launcher-portrait.webp"));
+        this(context,"mikan-launcher-portrait.webp",new String[]{"portraits/coffee.webp","mikan-chat-avatar.webp"});
+    }
+    PortraitStore(Context context,String filename,String[] assets){
+        this.context=context.getApplicationContext();this.assets=assets.clone();
+        file=new AtomicFile(new File(context.getFilesDir(),filename));
     }
     synchronized Drawable get(){
         try(InputStream in=file.openRead()){
             Bitmap b=BitmapFactory.decodeStream(in);
             if(b!=null)return new BitmapDrawable(context.getResources(),b);
         }catch(Exception ignored){}
-        for(String name:new String[]{"portraits/coffee.webp","mikan-chat-avatar.webp"}){
+        for(String name:assets){
             try(InputStream in=context.getAssets().open(name)){
                 Bitmap b=BitmapFactory.decodeStream(in);
                 if(b!=null)return new BitmapDrawable(context.getResources(),b);
@@ -42,7 +46,7 @@ final class PortraitStore {
             int max=Math.max(bitmap.getWidth(),bitmap.getHeight());
             if(max>768){float scale=768f/max;Bitmap resized=Bitmap.createScaledBitmap(bitmap,Math.max(1,Math.round(bitmap.getWidth()*scale)),Math.max(1,Math.round(bitmap.getHeight()*scale)),true);if(resized!=bitmap){bitmap.recycle();bitmap=resized;}}
             out=file.startWrite();
-            if(!bitmap.compress(Bitmap.CompressFormat.WEBP,92,out))throw new IOException("Encode failed");
+            if(!bitmap.compress(assets.length==1?Bitmap.CompressFormat.PNG:Bitmap.CompressFormat.WEBP,92,out))throw new IOException("Encode failed");
             file.finishWrite(out);out=null;return true;
         }catch(Exception e){if(out!=null)file.failWrite(out);return false;}
         finally{if(bitmap!=null)bitmap.recycle();}
