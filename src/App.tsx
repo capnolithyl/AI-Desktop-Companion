@@ -38,6 +38,7 @@ import { planDesktopWebExecution, resolvePublicWebExecution } from "./turn-execu
 import { isModelStatusQuestion, modelStatusAnswer } from "./model-status";
 import { modelSwitcherStatus, modelSwitcherChoice, NVIDIA_MODELS, unsuccessfulInferenceLabel } from "./model-switcher";
 import { isModelLedConversation, modelLedWebToolsAllowed, preserveModelLedChatAnswer } from "./model-led-routing";
+import { modelLedBrainExecution } from "./brain-eval-model-led";
 import { formatDebugLog, type Diagnostics, type MemoryRecallAudit, type OllamaStats, type ResearchAudit } from "./debug-log";
 import { remoteDiagnosticMessages, remoteAvatarDiagnostics } from "./remote-report";
 import { strongSemanticIds } from "./memory-ranking";
@@ -2520,9 +2521,10 @@ export default function App() {
       );
       if(stopRequested.current)throw new Error("Generation stopped");
       const webExecution = modelLed
-        ? {autoSearch:false,researchRoute:"chat",researchQuery:undefined,
-           researchTask:undefined,researchRecent:false,researchCompact:false,
-           researchGeneralFallback:false}
+        ? modelLedBrainExecution(webPolicy,researchPlan,text,messages,{
+            activePublicQuery:priorPublicQuery,
+            activeTask:priorPublicQuery ? lastAssistant?.diagnostics?.toolPlan?.task : undefined
+          })
         : resolvePublicWebExecution(webPolicy,researchPlan,plannerWeb,liveFacts,performance.now()-plannerStarted);
       const reasoningChoice=localThinkingChoice(settings.reasoningMode,text,settings.model,
         plannerWeb.replyEffort);
@@ -2804,7 +2806,9 @@ export default function App() {
       const sharedTurnInstructions=assistantTurnInstructionParts({
         settings,question:text,history:groundedChapterTurn?[]:messages,
         allowRoleplay,researchActive:researchPlan.mode!=="chat",
-        publicWebRequested:effectiveWeb,plannedPublicSearch,
+        publicWebRequested:effectiveWeb ||
+          (modelLed && cloudMaySearch && researchPlan.mode!=="chat"),
+        plannedPublicSearch,
         plannedButNotExecuted:plannedPublicSearch&&!effectiveWeb
       });
       const completion = await invoke<ChatCompletion>("chat_stream", {
@@ -2817,6 +2821,7 @@ export default function App() {
           openrouterModel: settings.openrouterModel,
           nvidiaModel: settings.nvidiaModel,
           cloudAllowWeb: cloudMaySearch,
+          currentYear:new Date().getFullYear(),
           cloudAllowMemory: modelLed && !groundedChapterTurn && !withSearch &&
             !useNotion && !attachment && !screenshot && !liveFrame && !allowRoleplay,
           researchMode:settings.researchMode,

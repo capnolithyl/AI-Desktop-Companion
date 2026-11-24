@@ -70,6 +70,14 @@ struct ChatRequest {
     cloud_allow_web: bool,
     #[serde(default)]
     cloud_allow_memory: bool,
+    /// The caller already supplied relevant local, owner-controlled facts.
+    /// This is not permission to substitute memory for an explicit web lookup.
+    #[serde(default)]
+    cloud_has_relevant_memories: bool,
+    // Owner desktop's calendar year. Used only to correct stale year ranges
+    // in model-proposed CURRENT public searches; optional for older clients.
+    #[serde(default)]
+    current_year: Option<u16>,
     messages: Vec<ChatMessage>,
     #[serde(default)]
     auto_search: bool,

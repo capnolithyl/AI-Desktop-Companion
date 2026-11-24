@@ -13,6 +13,9 @@ import type { ResearchTurn } from "./research-routing.ts";
 import type { WebResult } from "./web-search.ts";
 import type { ResearchAudit, ToolPlanningAudit } from "./debug-log.ts";
 import { publicDocumentUrls, type PublicResearchContext, type ResearchTask } from "./unified-planner.ts";
+import { modelLedWebToolsAllowed } from "./model-led-routing.ts";
+import { modelLedBrainExecution } from "./brain-eval-model-led.ts";
+import { contextualMemoryQuery } from "./brain-eval-memory-context.ts";
 
 export type EvalRoute = "chat" | "research" | "factual" | "non-research" | "any";
 export type MemoryCaptureExpectation = {
@@ -143,6 +146,8 @@ import type { BuildInfo } from "./build-info";
 export type EvalReport = {
   version:1; runId:string; startedAt:string; finishedAt:string;
   researchMode?:"simple"|"strict";
+  /** Explicit orchestration mode to prevent mixing hybrid and native benchmarks. */
+  webPlanningMode?:"native-model-led"|"local-auxiliary";
   /** Presentation-only second local pass; false/omitted for older reports. */
   mikanifyAnswer?:boolean;
   mode:EvalMode; model:string; attempts:number; scenarios:string[];
@@ -174,6 +179,8 @@ export type EvalInference = (args:{
   webRequest?:ReturnType<typeof resolvePublicWebExecution> & {priorSources:WebResult[]};
   scenarioId:string;
   stepIndex:number;
+  /** Native provider tool permission, independently gated from preplanned search. */
+  nativeWebAllowed?:boolean;
 })=>Promise<EvalInferenceResult>;
 export type EvalMemoryCapture = (input:{
   user:string;assistant:string;priorAssistant:string;priorUser:string;
@@ -194,6 +201,8 @@ export type EvalOptions = {
   signal?:AbortSignal;
   infer?:EvalInference;
   planWeb?:EvalPlanner;
+  /** NVIDIA provider owns read-only web planning; no local Ollama planner. */
+  modelLedWeb?:boolean;
   previewMemory?:EvalMemoryCapture;
   /** Live mode only: use actual public SearXNG via production Rust chat_stream. */
   liveWeb?:boolean;
@@ -709,6 +718,7 @@ export async function runBrainEvaluation(options:EvalOptions):Promise<EvalReport
     version:1,runId:"eval-"+Date.now()+"-"+Math.random().toString(36).slice(2,7),
     startedAt:new Date().toISOString(),finishedAt:"",mode:options.mode,model:options.model,
     ...(options.researchMode?{researchMode:options.researchMode}:{}),
+    ...(options.mode==="live"?{webPlanningMode:options.modelLedWeb?"native-model-led":"local-auxiliary"}:{}),
     ...(options.mode==="live"&&options.researchMode==="simple"
       ?{mikanifyAnswer:options.mikanifyAnswer===true}:{}),
     attempts:Math.max(1,Math.min(5,Math.trunc(options.repetitions))),
@@ -739,10 +749,13 @@ export async function runBrainEvaluation(options:EvalOptions):Promise<EvalReport
         personalTurn:isPersonalMemoryQuestion(step.user),capabilityQuestion:decision.capabilityQuestion,
         existingSearch:false,attachment:false,screenshot:false,liveFrame:false,roleplay:scenario.id==="search-in-roleplay"
       });
-      const lexicalIds=rankMemories([...EVAL_FACTS],step.user).slice(0,30).map(f=>f.id);
+      // Short pronoun follow-ups need earlier USER-named referents to retrieve
+      // a relevant fixture. This is local memory recall, never a web query.
+      const memoryQuery=contextualMemoryQuery(step.user,previous);
+      const lexicalIds=rankMemories([...EVAL_FACTS],memoryQuery).slice(0,30).map(f=>f.id);
       // No fabricated vector scores. The fixture tests the actual lexical/fusion fallback
       // without Qdrant, then reports when semantic retrieval would have been necessary.
-      const memory=selectDeterministicMemoryIds([...EVAL_FACTS],step.user,[],lexicalIds,8);
+      const memory=selectDeterministicMemoryIds([...EVAL_FACTS],memoryQuery,[],lexicalIds,8);
       const selectedFacts=memory.ids.map(id=>EVAL_FACTS.find(f=>f.id===id))
         .filter((fact):fact is EvalMemoryFact=>!!fact);
       const selected=selectedFacts.map(f=>({id:f.id,fact:f.fact}));
@@ -771,7 +784,7 @@ export async function runBrainEvaluation(options:EvalOptions):Promise<EvalReport
       let memoryCapturePreview:MemoryCapturePreview|undefined;
       const messages:EvalTurn[]=[...previous,{role:"user",content:step.user}];
       try {
-        if(options.mode==="live" && webPolicy.canPlanPublicWeb && options.planWeb) {
+        if(options.mode==="live" && !options.modelLedWeb && webPolicy.canPlanPublicWeb && options.planWeb) {
           const plannerStarted=Date.now();
           try {
             // Give the planner a stable snapshot. Brain Lab appends the current
@@ -786,7 +799,9 @@ export async function runBrainEvaluation(options:EvalOptions):Promise<EvalReport
         if(options.mode==="live" && options.infer){
           // Never search when the private permission boundary blocks web.
           // The local planner has already validated its proposed public query.
-          const execution=resolvePublicWebExecution(webPolicy,decision.plan,planned,selectedFacts,plannerElapsedMs);
+          const execution=options.modelLedWeb
+            ? modelLedBrainExecution(webPolicy,decision.plan,step.user,previous,publicContext)
+            : resolvePublicWebExecution(webPolicy,decision.plan,planned,selectedFacts,plannerElapsedMs);
           executedTask=execution.researchTask;
           const publicQuery=execution.researchQuery;
           const response=await options.infer({
@@ -796,7 +811,9 @@ export async function runBrainEvaluation(options:EvalOptions):Promise<EvalReport
             researchTask:options.liveWeb && publicQuery ? execution.researchTask : undefined,
             replyEffort:planned?.replyEffort,
             webRequest:options.liveWeb ? {...execution,priorSources:priorResearchSources(previous,step.user)} : undefined,
-            scenarioId:scenario.id,stepIndex
+            scenarioId:scenario.id,stepIndex,
+            nativeWebAllowed:options.modelLedWeb &&
+              modelLedWebToolsAllowed(true,webPolicy)
           });
           if(typeof response==="string")answer=response;
           else {answer=response.text;inferenceStats=response.stats;modelUsed=response.modelUsed;
@@ -840,7 +857,7 @@ export async function runBrainEvaluation(options:EvalOptions):Promise<EvalReport
       const routeLabelMatch=routeMatches(decision.plan.mode,step.expect.route);
       // A model decision takes precedence over legacy route labels. Fast mode
       // cannot observe optional semantic planning or native tool execution.
-      const plannedWeb:boolean|null=planned
+      const plannedWeb:boolean|null=options.modelLedWeb ? null : planned
         ? planned.method==="fallback" ? null : planned.search
         : decision.plan.mode==="research" ? true
         : decision.plan.mode==="factual" ? null
