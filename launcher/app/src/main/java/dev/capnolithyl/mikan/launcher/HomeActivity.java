@@ -72,6 +72,7 @@ public class HomeActivity extends Activity {
     }
     @Override protected void onResume(){
         super.onResume(); loadApps();
+        if(LauncherNotifications.allowed(this))LauncherNotifications.refreshIfConnected();
         if(settings) showSettings(); else if(drawer && search!=null) renderResults(search.getText().toString()); else showHome();
         handler.removeCallbacks(tick); handler.post(tick);
         handler.removeCallbacks(refreshExtras);handler.post(refreshExtras);
@@ -222,9 +223,9 @@ public class HomeActivity extends Activity {
         page.setFocusableInTouchMode(true);page.requestFocus();renderResults("");
     }
     private void renderResults(String query){
-        if(results==null)return;results.removeAllViews();ArrayList<App> matches=new ArrayList<>();String q=query.trim().toLowerCase(Locale.ROOT);
+        if(results==null)return;badgeViews.clear();results.removeAllViews();ArrayList<App> matches=new ArrayList<>();String q=query.trim().toLowerCase(Locale.ROOT);
         for(App a:apps)if(a.label.toLowerCase(Locale.ROOT).contains(q)||a.component.getPackageName().toLowerCase(Locale.ROOT).contains(q))matches.add(a);
-        if(matches.isEmpty())results.addView(text("No matching apps.",16,MUTED,false));else addGrid(results,matches,prefs.getInt("columns",4));
+        if(matches.isEmpty())results.addView(text("No matching apps.",16,MUTED,false));else addGrid(results,matches,prefs.getInt("columns",4));refreshExtras();
     }
     private void hideKeyboard(){if(search!=null){((InputMethodManager)getSystemService(INPUT_METHOD_SERVICE)).hideSoftInputFromWindow(search.getWindowToken(),0);search.clearFocus();}}
 
@@ -243,7 +244,7 @@ public class HomeActivity extends Activity {
         gap(body,18);body.addView(text("PAGES & WIDGETS",12,PEACH,true));gap(body,10);
         setting(body,"Minimum home pages: "+prefs.getInt("minPages",1),()->chooseNumber("minPages","Minimum home pages",new int[]{1,2,3,4,5}));
         widgetSetting(body,"Clock","clockPage",1);widgetSetting(body,"Mikan","mikanPage",1);widgetSetting(body,"Music","musicPage",1);
-        setting(body,"Notification dots: "+(prefs.getBoolean("badges",false)?"On":"Off"),()->{boolean on=!prefs.getBoolean("badges",false);prefs.edit().putBoolean("badges",on).apply();if(on&&!LauncherNotifications.allowed(this))notificationAccess();showSettings();});
+        setting(body,"Notification dots: "+(prefs.getBoolean("badges",false)?"On":"Off"),()->{boolean on=!prefs.getBoolean("badges",false);prefs.edit().putBoolean("badges",on).apply();LauncherNotifications.refreshIfConnected();if(on&&!LauncherNotifications.allowed(this))notificationAccess();showSettings();});
         setting(body,"Notification / music access",this::notificationAccess);
         gap(body,18);body.addView(text("MIKAN",12,PEACH,true));gap(body,10);
         setting(body,"Choose portrait",this::pickPortrait);
