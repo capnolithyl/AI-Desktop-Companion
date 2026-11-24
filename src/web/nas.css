@@ -14,3 +14,6 @@ html:has(.nas-app),body:has(.nas-app),body:has(.nas-gate){background:#211412!imp
 
 .nas-app .workspace-sidebar-bottom .nas-build-label{justify-content:center;gap:8px;min-height:30px;padding:4px 8px;font-size:11px;color:#d5aea1;text-align:center;}
 .nas-build-label span{display:grid;gap:2px;}.nas-build-label small{font-size:10px;opacity:.8;}.nas-build-label.mismatch{color:#ffbf84!important;}.nas-app .nas-memory-toast{position:fixed;top:20px;z-index:1000;}.nas-app .nas-memory-toast.warning{background:#453023;border-color:#e3a968;color:#ffe3be;box-shadow:0 0 18px #c4875055;}
+
+.nas-app .nas-memory-toast{z-index:2147483000;width:max-content;max-width:min(600px,calc(100vw - 24px));box-sizing:border-box;}
+@media(max-width:620px){.nas-app .nas-memory-toast{flex-wrap:wrap;}.nas-app .nas-memory-toast>span{flex-basis:calc(100% - 35px);}}

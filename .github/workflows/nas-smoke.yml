@@ -14,6 +14,11 @@ on:
       - feature/nas-cloud-mikan-experimental
     paths:
       - "nas/**"
+      - "src/**"
+      - "public/**"
+      - "assets/iki/**"
+      - "package*.json"
+      - ".dockerignore"
       - ".github/workflows/nas-smoke.yml"
 jobs:
   nas:

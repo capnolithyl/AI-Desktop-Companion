@@ -1,3 +1,4 @@
+import {nasActivity} from "../../src/web/nas-activity.ts";
 import {memoryNotice} from "../../src/web/memory-notifications.ts";
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -81,6 +82,9 @@ test("NAS HTTP requires a key, streams replies and persists them",async()=>{
     assert.deepEqual(saved.messages.map(x=>x.role),["user","assistant"]);
     assert.equal(saved.messages.at(-1).content,"Meow!");
     assert.equal((await fetch(base+"/api/memories",{headers:{Authorization:"Bearer wrong"}})).status,401);
+    const activity=await (await fetch(base+"/api/learning/diagnostics/"+created.id,{headers})).json();
+    assert.ok(activity.events.some(e=>e.kind==="recall"&&e.payload.lines.length));
+    assert.equal((await fetch(base+"/api/learning/diagnostics/"+created.id)).status,401);
   } finally {
     await new Promise(resolve=>server.close(resolve));store.db.close();
     rmSync(root,{recursive:true,force:true});
@@ -253,5 +257,36 @@ test("committed memory outcomes and failures are delivered once per cursor",asyn
     assert.equal(next.items.length,4);assert.equal(next.items[1].payload.saved,0);assert.equal(next.items[3].kind,"failed");assert.equal(next.items[3].payload.stage,"provider");
     assert.equal(memoryNotice(next.items.slice(0,2)),null);assert.equal(memoryNotice(next.items).warning,true);
     assert.equal(l.diagnostics(c.id).length,6);assert.ok(!JSON.stringify(next).includes("synthetic private"));
+  }finally{store.db.close();rmSync(root,{recursive:true,force:true});}
+});
+
+test("NAS activity persists across reconnect and stays conversation-scoped",async()=>{
+  const root=mkdtempSync(join(tmpdir(),"mikan-activity-")),path=join(root,"db.sqlite3");
+  let store=openStore(path);
+  try{
+    const chat=store.newConversation(),other=store.newConversation();
+    store.learning.setSettings({user:true,character:false});
+    const user=store.append(chat.id,"user","I love apricots"),assistant=store.append(chat.id,"assistant","Nice!");
+    store.learning.recordRecall(chat.id,assistant.id,["Earlier saved context"]);
+    store.learning.enqueue(user,assistant,chat.id);
+    assert.ok(nasActivity(store.learning.diagnostics(chat.id)).some(e=>e.title==="Memory check queued"));
+    await store.learning.processNext(async()=>JSON.stringify({facts:[{fact:"The user loves apricots",evidence:"I love apricots",action:"save",scope:"long_term",category:"preferences",tags:[]}],interests:[],canon:[]}),{});
+    const entries=nasActivity(store.learning.diagnostics(chat.id));
+    assert.ok(entries.some(e=>e.title==="Memory saved"&&e.lines.includes("The user loves apricots")));
+    assert.ok(entries.some(e=>e.title==="Memory recalled"&&e.lines.includes("Earlier saved context")));
+    assert.ok(!entries.some(e=>e.title==="Memory check queued"));
+    assert.deepEqual(nasActivity(store.learning.diagnostics(other.id)),[]);
+    const oldCursor=store.learning.events().cursor;
+    store.db.prepare("DELETE FROM nas_learning_events WHERE kind='outcome' AND conversation_id=?").run(chat.id);
+    store.db.close();store=openStore(path);
+    assert.ok(nasActivity(store.learning.diagnostics(chat.id)).some(e=>e.title==="Memory saved"));
+    assert.ok(store.learning.events().cursor>oldCursor);
+    const recovered=store.learning.events().cursor;
+    store.db.close();store=openStore(path);
+    assert.equal(store.learning.events().cursor,recovered);
+    assert.equal(nasActivity(store.learning.diagnostics(chat.id)).filter(e=>e.title==="Memory saved").length,1);
+    store.library.execute("deleteChat",{id:chat.id});
+    assert.deepEqual(store.learning.diagnostics(chat.id),[]);
+    assert.equal(store.learning.events().cursor,recovered);
   }finally{store.db.close();rmSync(root,{recursive:true,force:true});}
 });

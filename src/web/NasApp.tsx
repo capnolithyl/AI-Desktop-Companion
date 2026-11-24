@@ -11,10 +11,11 @@ import {AVATAR_BACKGROUNDS} from "../avatar-background";
 import {PortraitContextMenu,type PortraitMenuItem} from "../PortraitContextMenu";
 import {reactionFromReply,type AvatarReaction,type AvatarReactionKind} from "../avatar-reactions";
 import {DEFAULT_COMPANION_PROFILE,importCompanionProfile,exportCompanionProfile,type CompanionProfile} from "../companion-profile";
-import {NasClient,NasRequestError,type NasMessage,type NasChat,type LibrarySnapshot,type NasStatus,type LearningStatus,type LearningSettings} from "./nas-client";
+import {NasClient,NasRequestError,type NasMessage,type NasChat,type LibrarySnapshot,type NasStatus,type LearningStatus,type LearningSettings,type LearningEvent} from "./nas-client";
 import {MemoryPanel} from "../MemoryPanel";
 import {NasLearningReviews} from "./NasLearningReviews";
 import {memoryNotice} from "./memory-notifications";
+import {nasActivity} from "./nas-activity";
 const portrait=new URL("../../assets/iki/mikan-chat-avatar.webp",import.meta.url).href;
 const referencePortrait=new URL("../../assets/iki/mikan-reference.png",import.meta.url).href;
 const KEY="mikan-nas-key";
@@ -67,6 +68,9 @@ export function NasApp(){
   const [versionCopied,setVersionCopied]=useState(false);
   const toastSerial=useRef(0);
   const eventCursor=useRef<number|undefined>(undefined);
+  const [activity,setActivity]=useState<{conversationId:string;events:LearningEvent[]}|null>(null);
+  const [activityError,setActivityError]=useState("");
+  const [eventError,setEventError]=useState("");
   const [learning,setLearning]=useState<LearningStatus|null>(null);
   const [library,setLibrary]=useState<LibrarySnapshot>({facts:[],characterFacts:[],interests:[],sessionSummaries:[]});
   const [rigError,setRigError]=useState("");
@@ -88,7 +92,11 @@ export function NasApp(){
         let selected=list.find(c=>c.id===localStorage.getItem("mikan-nas-chat"))??list[0];
         if(!selected)selected=await client.createChat();
         const history=await client.messages(selected.id);
+        // Establish the cursor before the chat can send its first message.
+        const baseline=await client.learningEvents().catch(()=>null);
         if(!valid)return;
+        eventCursor.current=baseline?.cursor;
+        setEventError(baseline?"":"Memory notifications are unavailable; check the NAS build.");
         setStatus(info);setProfile(stored);setDraft(stored);setChats(list.length?list:[selected]);setActive(selected.id);setMessages(history);
         localStorage.setItem("mikan-nas-chat",selected.id);sessionStorage.setItem(KEY,key);setAuthenticated(true);
       }catch(error){if(valid){setAuthenticated(false);sessionStorage.removeItem(KEY);setNotice(String(error instanceof Error?error.message:error));}}
@@ -110,26 +118,45 @@ export function NasApp(){
   useEffect(()=>{
     if(!authenticated)return;
     let cancelled=false,polling=false;
-    eventCursor.current=undefined;
     const poll=async()=>{
       if(polling||cancelled)return;polling=true;
       try{
         const result=await client.learningEvents(eventCursor.current);
         if(cancelled)return;
-        eventCursor.current=result.cursor;
+        eventCursor.current=result.cursor;setEventError("");
         const notification=memoryNotice(result.items);
         if(notification)setMemoryToast({key:++toastSerial.current,...notification});
         if(result.items.some(e=>e.kind==="outcome"||e.kind==="failed")){
           const [snapshot,learn]=await Promise.all([client.library(),client.learning()]);
           if(!cancelled){setLibrary(snapshot);setLearning(learn);}
         }
-      }catch{/* Retry lightweight event feed; do not interrupt chat or older deployments. */}
+      }catch{if(!cancelled)setEventError("Memory notifications disconnected. Retrying…");}
       finally{polling=false;}
     };
     void poll();const timer=window.setInterval(()=>void poll(),3000);
-    return ()=>{cancelled=true;window.clearInterval(timer);};
+    const resume=()=>{if(document.visibilityState==="visible")void poll();};
+    document.addEventListener("visibilitychange",resume);
+    return ()=>{cancelled=true;window.clearInterval(timer);document.removeEventListener("visibilitychange",resume);};
   },[authenticated,client]);
-  const lock=()=>{if(busy||saving)return;setAuthenticated(false);setKey("");setToken("");sessionStorage.removeItem(KEY);setMessages([]);setChats([]);setLibrary({facts:[],characterFacts:[],interests:[],sessionSummaries:[]});setLearning(null);setMemoryToast(null);setActive(null);setPage("chat");setNotice("");};
+  // Historical conversation activity is independent of the toast cursor.
+  useEffect(()=>{
+    if(!authenticated||!active)return;
+    let cancelled=false,polling=false;
+    setActivity(null);setActivityError("");
+    const poll=async()=>{
+      if(polling||cancelled)return;polling=true;
+      try{
+        const result=await client.learningDiagnostics(active);
+        if(!cancelled){setActivity({conversationId:active,events:result.events});setActivityError("");}
+      }catch{if(!cancelled)setActivityError("Activity log disconnected. Retrying…");}
+      finally{polling=false;}
+    };
+    void poll();const timer=window.setInterval(()=>void poll(),3000);
+    const resume=()=>{if(document.visibilityState==="visible")void poll();};
+    document.addEventListener("visibilitychange",resume);
+    return ()=>{cancelled=true;window.clearInterval(timer);document.removeEventListener("visibilitychange",resume);};
+  },[authenticated,client,active]);
+  const lock=()=>{if(busy||saving)return;setAuthenticated(false);setKey("");setToken("");sessionStorage.removeItem(KEY);setMessages([]);setChats([]);setLibrary({facts:[],characterFacts:[],interests:[],sessionSummaries:[]});setLearning(null);setMemoryToast(null);setActivity(null);setActivityError("");setEventError("");eventCursor.current=undefined;setActive(null);setPage("chat");setNotice("");};
   const versionMismatch=!!status&&(!status.build||CLIENT_BUILD.commit!==status.build.commit||CLIENT_BUILD.backendHash!==status.build.actualBackendHash);
   const copyVersion=async()=>{try{const live=await client.status();setStatus(live);await navigator.clipboard.writeText(JSON.stringify({service:"nas",browser:CLIENT_BUILD,server:live.build??null},null,2));setVersionCopied(true);}catch(error){setNotice(error instanceof Error?error.message:String(error));}};
   const report=(error:unknown)=>setNotice(error instanceof Error?error.message:String(error));
@@ -226,13 +253,14 @@ export function NasApp(){
     {id:"background",label:"Background",children:AVATAR_BACKGROUNDS.map(item=>({id:item.id,label:item.label,selected:profile.avatarBackground===item.id,onSelect:()=>void save({...profile,avatarBackground:item.id})}))},
     {id:"appearance",label:"Character settings",onSelect:()=>openPage("appearance")}
   ];
+  const activityEntries=activity&&activity.conversationId===active?nasActivity(activity.events):[];
   const latest=[...messages].reverse().find(m=>m.role==="assistant")?.id;
   return <main className={"companion nas-app "+(page==="chat"?"default-layout-active":"settings-mode settings-standalone")}
     style={{"--mikan-font":"Segoe UI, system-ui, sans-serif"} as CSSProperties}>
     {page==="chat"?<DefaultCompanionShell sidebarVersion={<button type="button" className={"nas-build-label"+(versionMismatch?" mismatch":"")} onClick={()=>void copyVersion()} title="Copy browser and backend build identity" aria-label="Copy NAS version"><span>v{CLIENT_BUILD.version}<small>{CLIENT_BUILD.commit.slice(0,8)}{versionMismatch?" · build mismatch":""}</small></span>{versionCopied?<Check size={14}/>:<Copy size={14}/>}</button>} avatar={avatar} avatarBackground={profile.avatarBackground} onAvatarContextMenu={event=>{event.preventDefault();setMenu({x:event.clientX,y:event.clientY});}}
       chats={chats} activeConversationId={active} transcriptVersion={messages.length+":"+(messages.at(-1)?.content.length||0)+":"+busy}
-      busy={busy} muted ready memoryIssue={false} visionActive={false} visionBusy={false}
-      displayName={chats.find(c=>c.id===active)?.title||"Beholder Companion"} lastActivity={busy?"Thinking…":"Ready"} activityEntries={[]}
+      busy={busy} muted ready memoryIssue={!!(activityError||eventError||learning?.failed)} visionActive={false} visionBusy={false}
+      displayName={chats.find(c=>c.id===active)?.title||"Beholder Companion"} lastActivity={busy?"Thinking…":"Ready"} activityEntries={activityEntries} activityError={activityError||eventError}
       webMode unavailable={{voice:true,vision:true,search:true}} onDrag={()=>{}} onHide={lock}
       onNewChat={()=>void newChat()} onOpenChat={id=>void openChat(id)} onOpenHistory={()=>openPage("history")}
       onCopyChatDebug={async id=>{const [history,live,diagnostics]=await Promise.all([client.messages(id),client.status(),client.learningDiagnostics(id).catch(()=>({events:[]}))]);await navigator.clipboard.writeText(JSON.stringify({service:"nas",model:live.model,browserBuild:CLIENT_BUILD,serverBuild:live.build??null,conversation:id,messages:history,memoryEvents:diagnostics.events},null,2));}}

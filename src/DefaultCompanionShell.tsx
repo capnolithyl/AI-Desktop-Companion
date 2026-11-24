@@ -25,6 +25,7 @@ type Props={
   unavailable?:{search?:boolean;voice?:boolean;vision?:boolean};
   webMode?:boolean;
   sidebarVersion?:ReactNode;
+  activityError?:string;
 };
 
 type SidePanel = WorkspacePanel;
@@ -56,7 +57,7 @@ export function DefaultCompanionShell({
   avatar,avatarBackground,onAvatarContextMenu,modelPicker,transcript,composer,chats,activeConversationId,
   transcriptVersion,busy,muted,ready,memoryIssue,visionActive,visionBusy,displayName,lastActivity,activityEntries,
   onDrag,onNewChat,onOpenChat,onOpenHistory,onCopyChatDebug,onDeleteChat,onOpenCurrentLog,onOpenMemory,onOpenSettings,onOpenSearch,
-  onToggleVision,onVoice,onMute,onExpression,onOutfit,onHide,unavailable,webMode=false,sidebarVersion
+  onToggleVision,onVoice,onMute,onExpression,onOutfit,onHide,unavailable,webMode=false,sidebarVersion,activityError
 }:Props){
   const feedRef=useRef<HTMLDivElement>(null);
   const [copyStatus,setCopyStatus]=useState<{id:string;state:"copying"|"copied"|"failed"}|null>(null);
@@ -321,7 +322,8 @@ export function DefaultCompanionShell({
           </div>
           {busy&&<p className="workspace-activity-live" role="status"><span className="workspace-live-pulse"/>{lastActivity||"Working…"}</p>}
           <div className="workspace-activity-feed" role="log" aria-live="polite" aria-relevant="additions text">
-            {!activityEntries.length&&<p className="workspace-activity-empty">Memories recalled and web searches will appear here as Mikan works.</p>}
+            {activityError&&<p className="workspace-activity-empty" role="status">{activityError}</p>}
+            {!activityEntries.length&&!activityError&&<p className="workspace-activity-empty">{webMode?"Saved and recalled memories will appear here. Web searches will join them when connected.":"Memories recalled and web searches will appear here as Mikan works."}</p>}
             {activityEntries.map(entry=><article key={entry.id} className="workspace-activity-entry">
               <div className="workspace-activity-entry-title">
                 {entry.kind==="memory"?<BookHeart size={16}/>:<Search size={16}/>}

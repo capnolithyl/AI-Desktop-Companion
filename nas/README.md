@@ -135,3 +135,6 @@ Independent NAS switches enable user and character capture. A persisted NAS-only
 
 ### Deployment identity and memory notifications
 The sidebar below the peek cat displays the compiled browser version and Git revision. Click to copy both browser and running backend identities, including a hash of actual backend service files. Use a full build/deployment for matching fingerprints. Authenticated event polling delivers committed memory saves, pending reviews and extraction failure stages to the shared toast style; no-op decisions produce no success toast. Conversation debug copies include recent extraction events. No raw provider errors, keys or raw model responses are exposed.
+
+### Conversation activity
+The shared right sidebar reads authenticated per-conversation NAS memory events. Actual supplied recall context, committed saves, suggestions, pending checks, no-op results and failures are shown. Previously recorded extraction outcomes are recovered idempotently if no corresponding event exists. The notification cursor is initialized before chat is enabled, independent of historical activity. Web search events will be connected when NAS research is implemented.
