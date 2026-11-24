@@ -509,8 +509,7 @@ async fn grounded_public_reply(
 
 // Only owner-supplied HTTPS document locators may be marked as direct reads.
 // A search-result URL is never promoted to an owner-directed document.
-#[allow(non_snake_case)]
-fn publicDocumentUrlsInText(text:&str,url:&str)->bool {
+fn public_document_url_in_text(text:&str,url:&str)->bool {
     text.split_whitespace().any(|piece| {
         let candidate=piece.trim_matches(|c:char|
             matches!(c,','|'.'|')'|'('|'\''|'"'|';'));
@@ -716,7 +715,7 @@ pub(crate) async fn chat(app:&AppHandle,request:&ChatRequest,key:&str,emitted:&A
                                     // A URL literally supplied by the owner is
                                     // an authorized document, not a search hit.
                                     if request.messages.iter().any(|message|
-                                        message.role=="user" && publicDocumentUrlsInText(&message.content,url)){
+                                        message.role=="user" && public_document_url_in_text(&message.content,url)){
                                         if let Some(page)=sources.iter_mut().find(|page|page.url==url){
                                             page.engine="direct webpage".into();
                                         }
@@ -813,6 +812,15 @@ pub(crate) async fn nvidia_test_connection(model:String)->Result<String,String>{
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn exact_url_provenance_requires_owner_supplied_locator() {
+        let url="https://github.com/capnolithyl/AI-Desktop-Companion";
+        assert!(public_document_url_in_text(
+            &format!("Check my GitHub repository at {url}"),url));
+        assert!(!public_document_url_in_text("search GitHub for repos",url));
+        assert!(!public_document_url_in_text(
+            "https://github.com/capnolithyl/AI-Desktop-Companion-extra",url));
+    }
     #[test]
     fn only_owner_selected_nvidia_models() {
         assert!(free_model(None).is_ok());

@@ -70,3 +70,12 @@ test("planner error diagnostics distinguish timeout and connection failures safe
     "Local Ollama planner connection failed");
   assert.doesNotMatch(localPlannerErrorReason("token=secretX at http://private.host"),/secretX|private.host/);
 });
+
+test("model-led explicit public research uses provider tools, not generic deterministic search",()=>{
+  const run=modelLedBrainExecution(policy(),{mode:"research",query:"search term",recent:true},
+    "What's the latest Vulkan release?",[],{});
+  assert.equal(run.researchRoute,"research");
+  assert.equal(run.researchQuery,undefined);
+  assert.equal(run.autoSearch,false);
+  assert.equal(run.researchGeneralFallback,false);
+});
