@@ -455,7 +455,16 @@ export const EVAL_SCENARIOS:ReadonlyArray<EvalScenario>=[
       route:"research",web:true,
       conversationGoal:"The model must actually execute a current public web lookup, distinguish released versions from previews and older model cards, and communicate what the retrieved evidence does and does not establish. Review whether its answer cites relevant trustworthy sources, avoids confidently inventing a release, and retains a natural conversational voice.",
       stubReply:"I'd check the latest official release information before naming a model."
-    }))
+    })),
+  scenario("casual-quoted-support-ticket","Laugh at shared anecdotes, don't answer quoted tickets","Memory and conversation",
+    conversation("Our support inbox is full of hilarious tickets. Let me find some to show you.",
+      "Establish the conversational intent: the owner is sharing funny examples, not requesting customer service.","These ought to be good."),
+    conversation("Subject: Missing newsletter\nMessage body: I want to be the mission.",
+      "React to the absurdity of the quoted message, not as if the sender is speaking to you. No reply draft or advice.","Forget joining the mission. They ARE the mission."),
+    conversation("I'm just showing you these to laugh at them. I don't need replies for them.",
+      "Accept the correction and preserve it across subsequent examples.","Got it, we're just enjoying the absurdity."),
+    conversation("Here's another gem:\nSubject: Newsletter picture\nMessage body: What required field haven't I filled in? All I want is for the picture on page 1 to be identified.",
+      "Continue the established humorous conversation. Do not answer the quoted question, invent a bulletin editor, produce troubleshooting steps, or draft a response.","The mysterious required field: apparently an explanation of what they're even asking." ))
 ];
 
 /** Display numbers follow the complete catalog, not filtered or selected positions. */

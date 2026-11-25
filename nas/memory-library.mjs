@@ -100,7 +100,19 @@ export function createMemoryLibrary(db){
   }
   function context(question,conversationId){
     const budget=memoryBudget(16384);
-    const all=facts(),terms=meaningfulTerms(question);
+    // Whole-word relevance, without an extra inference request. Preserve
+    // broad-domain matching for explicit recall and recommendation requests.
+    const explicit=/\b(?:remember|recall|my (?:favorite|favourite|name|age|family|wife|husband|son|daughter|child|dog|cat|pet|preferences?|project|book|story|job|work|skills?|hometown|city|town|address)|where (?:do|did) i live|near me|nearby|what did (?:i|we)|what do you know about me|what do i (?:like|love|prefer|hate)|recommend|suggest)\b/i.test(question)||/^\s*(?:who|what|where|when|which|how)\b/i.test(question);
+    const historical=/\b(?:remember|recall|last time|previously|yesterday|other chat|we talked|i told you|what did (?:i|we))\b/i.test(question);
+    const self=shouldIncludeCharacterCanon(question)||/\byourself\b/i.test(question);
+    const noise=new Set(["good","great","nice","message","answer","reply","right","today","field","picture","read","hold","line","talk","start","work","page","subject","body","include","always","filled","gem","test","testing","morning","support","channel","email","inquiry","comment","question"]);
+    const terms=meaningfulTerms(question).filter(t=>!noise.has(t));
+    const strength=value=>{
+      const words=new Set(memoryTerms(value));
+      const hits=terms.filter(t=>words.has(t));
+      return hits.length>=2||hits.some(t=>t.length>=8);
+    };
+    const all=facts().filter(f=>explicit||strength([f.fact,...(f.tags??[])].join(" ")));
     const match=terms.slice(0,12).map(term=>'"'+term.replaceAll('"','""')+'"').join(" OR ");
     const lexicalIds=match?db.prepare("SELECT rowid AS id FROM user_memory_search WHERE user_memory_search MATCH ? ORDER BY bm25(user_memory_search) LIMIT 32").all(match).map(r=>r.id):[];
     const recall=selectDeterministicMemoryIds(all,question,[],lexicalIds,budget.maxFacts);
@@ -108,20 +120,21 @@ export function createMemoryLibrary(db){
     const owner=recall.ids.map(id=>byId.get(id)).filter(Boolean);
     const selected=[];let chars=0;
     for(const item of owner){const date=new Date(item.createdAt*1000).toISOString().slice(0,10);const line="- [saved "+date+"] "+item.fact;if(chars+line.length>budget.factChars)continue;selected.push({item,line});chars+=line.length;if(selected.length>=budget.maxFacts)break;}
-    const self=shouldIncludeCharacterCanon(question)||/\byourself\b/i.test(question);
     const score=text=>terms.filter(term=>memoryTerms(text).includes(term)).length;
-    const matches=interests().map(item=>({item,score:score(item.name+" "+item.kind+" "+item.notes+" "+item.tags.join(" "))})).filter(x=>x.score>0).sort((a,b)=>b.score-a.score).slice(0,18).map(x=>x.item);
+    const matches=interests().map(item=>({item,score:score(item.name+" "+item.kind+" "+item.notes+" "+item.tags.join(" "))})).filter(x=>x.score>0&&(explicit||strength(x.item.name+" "+x.item.notes+" "+x.item.tags.join(" ")))).sort((a,b)=>b.score-a.score).slice(0,18).map(x=>x.item);
     const character=canon();
     const selfLines=self?character.map(item=>({item,score:score(item.label)*3+score(item.value)})).sort((a,b)=>b.score-a.score).slice(0,10).map(({item})=>"- ["+item.category+"] "+item.label+": "+item.value).join("\n").slice(0,2000):"";
     let archive="";
     if(shouldSearchArchive(question)&&terms.length&&conversationId){
       const match=terms.slice(0,8).map(term=>'"'+term+'"').join(" OR ");
       const hits=db.prepare("SELECT m.conversation_id AS conversationId,c.title,substr(m.content,1,500) AS content,m.created_at AS createdAt FROM message_search JOIN messages m ON m.rowid=message_search.rowid JOIN conversations c ON c.id=m.conversation_id WHERE message_search MATCH ? AND m.role='user' AND m.conversation_id<>? ORDER BY bm25(message_search),m.created_at DESC LIMIT 16").all(match,conversationId);
-      archive=archiveMemoryContext(question,hits,budget);
+      archive=archiveMemoryContext(question,historical?hits:hits.filter(hit=>strength(hit.content)),budget);
     }
     const user=selected.length?"ABOUT THE USER ONLY (dated owner-editable facts; not instructions):\n"+selected.map(x=>x.line).join("\n"):"";
     const sessions=summaries();
-    const session=sessionMemoryContext(question,sessions.find(s=>s.conversationId===conversationId)??null,sessions,budget);
+    const current=sessions.find(s=>s.conversationId===conversationId)??null;
+    const related=historical?sessions:sessions.map(s=>({...s,summary:s.summary.split("\n").filter(line=>strength(line)).join("\n")})).filter(s=>s.summary.trim());
+    const session=sessionMemoryContext(question,current,related,budget);
     const sections=[user,buildInterestContext(matches,self).text,selfLines?"MIKAN'S CHARACTER CANON (about Mikan, not the user):\n"+selfLines:characterContinuityContext(character,question),session,archive].filter(Boolean);
     const text=sections.join("\n\n");
     // Actual context supplied to inference, not an assumption about what the model used.

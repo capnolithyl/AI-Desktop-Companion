@@ -1013,3 +1013,23 @@ test("ordinary Groq chat uses selected thinking effort without an extra inferenc
   assert.equal(calls,1);
  }finally{store.db.close();}
 });
+
+test("unrelated proper names in pasted anecdotes do not trigger knowledge planning",async()=>{
+ const {planKnowledge}=await import("../knowledge-plan.mjs");
+ const question="Subject: Newsletter inquiry\nChurch: St. Francis Xavier\nMessage body: I want to be the mission.";
+ const pages=[{id:"doc",title:"Architecture Notes",url:"https://example.org/notes",syncedAt:1}];
+ const knowledge={enabled:()=>true,notionPages:()=>pages,candidates:()=>pages.map(p=>({...p,kind:"notion"}))};
+ const result=await planKnowledge({knowledge,history:[{role:"user",content:question}],previous:[],question,provider:"groq",canRequest:()=>true,generate:async()=>{throw Error("unexpected knowledge planner");}});
+ assert.equal(result,null);
+});
+test("weak unrelated memory matches are omitted from NAS conversation context",()=>{
+ const store=openStore(":memory:");
+ try{
+  const c=store.newConversation();
+  store.library.execute("importFacts",{items:[{fact:"The user likes music.",category:"preferences",tags:["music"],pinned:false},{fact:"The user has read a story about a picture.",category:"preferences",tags:["book"],pinned:false}]});
+  const memory=store.library.context("Subject: Newsletter picture\nMessage body: Please include a comment on page 1.",c.id);
+  assert.deepEqual(memory.ids,[]);
+  assert.doesNotMatch(memory.text,/story about a picture/);
+  assert.match(store.library.context("What's my favorite music?",c.id).text,/likes music/);
+ }finally{store.db.close();}
+});
