@@ -39,14 +39,16 @@ export class NasRequestError extends Error {
   constructor(message:string,readonly status:number){super(message);}
 }
 export class NasClient {
-  constructor(private readonly key:string){}
+  constructor(private readonly key:string=""){}
   private async request(path:string,options:RequestInit={}){
-    const response=await fetch("/api/"+path,{...options,cache:"no-store",headers:{
-      Authorization:"Bearer "+this.key,...(options.body?{"Content-Type":"application/json"}:{}),...options.headers}});
+    const response=await fetch("/api/"+path,{...options,credentials:"same-origin",cache:"no-store",headers:{
+      "X-Mikan-Client":"workspace",...(this.key?{Authorization:"Bearer "+this.key}:{}),...(options.body?{"Content-Type":"application/json"}:{}),...options.headers}});
     if(!response.ok){const body=await response.json().catch(()=>({}));throw new NasRequestError(body.error||"NAS request failed ("+response.status+")",response.status);}
     return response;
   }
   private async json<T>(path:string,options?:RequestInit):Promise<T>{return (await this.request(path,options)).json();}
+  login(key:string,remember:boolean){return this.json<{ok:boolean}>("auth/login",{method:"POST",body:JSON.stringify({key,remember})});}
+  logout(){return this.json<{ok:boolean}>("auth/logout",{method:"POST",body:"{}"});}
   updates(){return this.json<NasUpdateStatus>("updates");}
   requestUpdate(action:UpdateAction){return this.json<{queued:string}>("updates",{method:"POST",body:JSON.stringify({action})});}
   brainCatalog(){return this.json<BrainScenario[]>("brain-lab/catalog");}

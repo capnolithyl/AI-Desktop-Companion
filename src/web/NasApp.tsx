@@ -62,10 +62,11 @@ function Bubble({message,latest,busy}:{message:NasMessage;latest:boolean;busy:bo
 }
 
 export function NasApp(){
-  const [key,setKey]=useState(()=>sessionStorage.getItem(KEY)||"");
+  const [attempt,setAttempt]=useState<number|null>(0);
+  const [remember,setRemember]=useState(true);
   const [token,setToken]=useState("");
   const [authenticated,setAuthenticated]=useState(false);
-  const [connecting,setConnecting]=useState(false);
+  const [connecting,setConnecting]=useState(true);
   const [status,setStatus]=useState<NasStatus|null>(null);
   const [profile,setProfile]=useState<CompanionProfile>(DEFAULT_COMPANION_PROFILE);
   const [draft,setDraft]=useState<CompanionProfile>(DEFAULT_COMPANION_PROFILE);
@@ -91,16 +92,17 @@ export function NasApp(){
   const [menu,setMenu]=useState<{x:number;y:number}|null>(null);
   const serial=useRef(0);
   const inFlight=useRef(false);
-  const client=useMemo(()=>new NasClient(key),[key]);
+  const client=useMemo(()=>new NasClient(),[]);
   const file=useRef<HTMLInputElement>(null);
   const mounted=useRef(true);
-  useEffect(()=>{mounted.current=true;return()=>{mounted.current=false;};},[]);
+  useEffect(()=>{mounted.current=true;sessionStorage.removeItem(KEY);return()=>{mounted.current=false;};},[]);
   useEffect(()=>{
-    if(!key)return;
+    if(attempt===null)return;
     let valid=true;setConnecting(true);setNotice("");
     void (async()=>{
       try{
-        const [info,stored,list]=await Promise.all([client.status(),client.profile(),client.chats()]);
+        const info=await client.status();
+        const [stored,list]=await Promise.all([client.profile(),client.chats()]);
         if(!valid)return;
         let selected=list.find(c=>c.id===localStorage.getItem("mikan-nas-chat"))??list[0];
         if(!selected)selected=await client.createChat();
@@ -111,12 +113,17 @@ export function NasApp(){
         eventCursor.current=baseline?.cursor;
         setEventError(baseline?"":"Memory notifications are unavailable; check the NAS build.");
         setStatus(info);setProfile(stored);setDraft(stored);setChats(list.length?list:[selected]);setActive(selected.id);setMessages(history);
-        localStorage.setItem("mikan-nas-chat",selected.id);sessionStorage.setItem(KEY,key);setAuthenticated(true);
-      }catch(error){if(valid){setAuthenticated(false);sessionStorage.removeItem(KEY);setNotice(String(error instanceof Error?error.message:error));}}
+        localStorage.setItem("mikan-nas-chat",selected.id);setAuthenticated(true);
+      }catch(error){if(valid){setAuthenticated(false);if(!(attempt===0&&error instanceof NasRequestError&&error.status===401))setNotice(error instanceof NasRequestError&&error.status===401?"Session unavailable. Make sure you are using the HTTPS Beholder URL.":String(error instanceof Error?error.message:error));}}
       finally{if(valid)setConnecting(false);}
     })();
     return()=>{valid=false;};
-  },[key,client]);
+  },[attempt,client]);
+  const login=async(event:FormEvent)=>{
+    event.preventDefault();if(connecting)return;setConnecting(true);setNotice("");
+    try{await client.login(token.trim(),remember);setToken("");setAttempt(previous=>(previous??0)+1);}
+    catch(error){setNotice(error instanceof Error?error.message:String(error));setConnecting(false);}
+  };
   useEffect(()=>{setRigError("");},[profile.outfitId,profile.avatarDisplay]);
   useEffect(()=>{
     if(!memoryToast)return;
@@ -169,11 +176,12 @@ export function NasApp(){
     document.addEventListener("visibilitychange",resume);
     return ()=>{cancelled=true;window.clearInterval(timer);document.removeEventListener("visibilitychange",resume);};
   },[authenticated,client,active]);
-  const lock=()=>{if(busy||saving)return;setAuthenticated(false);setKey("");setToken("");sessionStorage.removeItem(KEY);setMessages([]);setChats([]);setLibrary({facts:[],characterFacts:[],interests:[],sessionSummaries:[]});setLearning(null);setMemoryToast(null);setActivity(null);setActivityError("");setEventError("");eventCursor.current=undefined;setActive(null);setPage("chat");setNotice("");};
+  const resetSession=()=>{setAuthenticated(false);setAttempt(null);setToken("");setMessages([]);setChats([]);setLibrary({facts:[],characterFacts:[],interests:[],sessionSummaries:[]});setLearning(null);setMemoryToast(null);setActivity(null);setActivityError("");setEventError("");eventCursor.current=undefined;setActive(null);setPage("chat");setNotice("");setConnecting(false);};
+  const lock=async()=>{if(busy||saving)return;setSaving(true);try{await client.logout();resetSession();}catch(error){setNotice(error instanceof Error?error.message:String(error));}finally{setSaving(false);}};
   useEffect(()=>{
     if(!authenticated)return;
     let cancelled=false;
-    const check=async()=>{try{const live=await client.status();if(!cancelled)setStatus(live);}catch{/* Server may be restarting. */}};
+    const check=async()=>{try{const live=await client.status();if(!cancelled)setStatus(live);}catch(error){if(!cancelled&&error instanceof NasRequestError&&error.status===401){resetSession();setNotice("Your session expired. Please unlock Mikan again.");}}};
     const timer=window.setInterval(()=>void check(),30000);
     const resume=()=>{if(document.visibilityState==="visible")void check();};
     document.addEventListener("visibilitychange",resume);
@@ -263,9 +271,10 @@ export function NasApp(){
       try{await refreshLibrary();}catch(error){report(error);}
     }finally{inFlight.current=false;setBusy(false);}
   };
-  if(!authenticated)return <main className="nas-gate"><form className="nas-login control-form-section" onSubmit={event=>{event.preventDefault();if(token.trim()===key){setKey("");window.setTimeout(()=>setKey(token.trim()),0);}else setKey(token.trim());}}>
+  if(!authenticated)return <main className="nas-gate"><form className="nas-login control-form-section" onSubmit={login}>
     <img src={portrait} alt="Mikan"/><h1>Welcome home ♡</h1><p>Mikan · Beholder</p>
     <label className="setting-field">NAS access key<input type="password" value={token} autoComplete="off" onChange={event=>setToken(event.target.value)} required/></label>
+    <label className="nas-remember-device"><input type="checkbox" checked={remember} onChange={event=>setRemember(event.target.checked)}/> Remember this device for 30 days</label>
     <button className="secondary-action" disabled={connecting}>{connecting?<LoaderCircle className="spin" size={16}/>:<Lock size={16}/>} {connecting?"Connecting…":"Unlock Mikan"}</button>
     {notice&&<p role="alert">{notice}</p>}
   </form></main>;

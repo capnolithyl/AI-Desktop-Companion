@@ -3,6 +3,7 @@ import { readFileSync, existsSync } from "node:fs";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { join, dirname, resolve, extname, sep } from "node:path";
 import { timingSafeEqual } from "node:crypto";
+import {createSessions,readSessionCookie,clearSessionCookie,sameOriginRequest} from "./auth-sessions.mjs";
 import { runningBuildInfo } from "./build-info.mjs";
 import { updateControl } from "./update-control.mjs";
 import { openStore } from "./storage.mjs";
@@ -59,6 +60,7 @@ function sse(res,kind,value) {
 }
 export function makeServer({store,config,key,promptFile="",maintenanceFile="/data/.mikan-update-maintenance",updates=updateControl(),models=providerSettings({initial:config,db:store.db}),generate=generateReply,research=researchSettings(store.db),search=searchWeb,read=readWeb,knowledge=createKnowledge({db:store.db,read})}) {
   if (typeof key!=="string" || key.length<32) throw new Error("MIKAN_REMOTE_KEY must be at least 32 characters");
+  const sessions=createSessions(store.db,key);
   let busy=false,lastReplyAt=0,activeWrites=0;
   const maintenance=()=>existsSync(maintenanceFile);
   const unavailable=()=>busy||store.learning.isRunning()||brain.isRunning()||knowledge.isRunning();
@@ -83,8 +85,26 @@ export function makeServer({store,config,key,promptFile="",maintenanceFile="/dat
       if (req.method==="GET" && path==="/style.css") return serveFile(res,join(ROOT,"public/style.css"),"text/css; charset=utf-8");
       if (req.method==="GET" && path==="/avatar.webp") return serveFile(res,join(ROOT,"assets/mikan-chat-avatar.webp"),"image/webp");
       if (req.method==="GET" && path==="/api/health") return json(res,200,{ok:true,service:"mikan-nas",maintenance:maintenance(),idle:!unavailable()&&activeWrites===0});
-      if (!safeEqual(req.headers.authorization?.replace(/^Bearer /i,""),key))
-        return json(res,401,{error:"Enter your Mikan NAS access key"});
+      // Existing bearer clients remain supported. Browser sessions never expose the
+      // access secret to storage or to JavaScript after the login request.
+      if(req.method==="POST"&&(path==="/api/auth/login"||path==="/api/auth/logout")){
+        if(!sameOriginRequest(req))return json(res,403,{error:"Cross-origin authentication request blocked"});
+        const previous=readSessionCookie(req);
+        if(path==="/api/auth/logout"){
+          sessions.revoke(previous);
+          res.setHeader("Set-Cookie",clearSessionCookie());
+          return json(res,200,{ok:true});
+        }
+        const body=await readJson(req,4096);
+        if(!safeEqual(body?.key,key))return json(res,401,{error:"Incorrect NAS access key"});
+        res.setHeader("Set-Cookie",sessions.issue(body.remember===true,previous));
+        return json(res,200,{ok:true});
+      }
+      const bearer=req.headers.authorization;
+      const authorized=bearer!==undefined
+        ? safeEqual(bearer.replace(/^Bearer /i,""),key)
+        : sameOriginRequest(req)&&sessions.valid(readSessionCookie(req));
+      if (!authorized)return json(res,401,{error:"Enter your Mikan NAS access key"});
       if(req.method!=="GET"&&req.method!=="HEAD"){
         if(maintenance())return json(res,503,{error:"Mikan is installing an update. Please retry shortly."});
         writing=true;activeWrites++;
