@@ -1057,3 +1057,42 @@ test("owner dialogue examples persist as private voice configuration",async()=>{
  assert.match(assistantVoiceGuidance(store.getProfile()),/Victory!/);assert.match(assistantVoiceGuidance(store.getProfile()),/DIALOGUE STYLE/);}
  finally{store.db.close();}
 });
+
+test("persistent token meter separates model, provider, source, windows and unknown usage",()=>{
+ const store=openStore(":memory:");
+ let time=Date.UTC(2026,10,25,16);
+ try{
+  const models=providerSettings({db:store.db,env:{GROQ_API_KEY:"synthetic-groq-secret"},now:()=>time});
+  models.save({provider:"groq",select:true});
+  const add=(model,source,age,usage,failed=false)=>models.recordUsage({provider:"groq",model,source,startedAt:time-age,usage,failed});
+  add("openai/gpt-oss-120b","chat",1000,{inputTokens:2000,outputTokens:300,reasoningTokens:100});
+  add("openai/gpt-oss-120b","memory",120000,{inputTokens:800,outputTokens:20});
+  add("openai/gpt-oss-120b","brain-lab",7200000,{inputTokens:1000,outputTokens:500});
+  add("openai/gpt-oss-120b","chat",100,null,true);
+  add("openai/gpt-oss-20b","chat",1000,{inputTokens:500,outputTokens:100});
+  const snapshot=models.tokenUsage().groups.groq;
+  const m=snapshot.models["openai/gpt-oss-120b"];
+  assert.equal(m.minute.input,2000);assert.equal(m.minute.output,300);assert.equal(m.minute.reasoning,100);
+  assert.equal(m.minute.missingInput,1);assert.equal(m.minute.failed,1);
+  assert.equal(m.hour.input,2800);assert.equal(m.day.input,3800);assert.equal(snapshot.total.minute.input,2500);
+  assert.equal(snapshot.sources.memory.input,800);assert.equal(snapshot.sources["brain-lab"].output,500);
+  time+=61000;
+  assert.equal(providerSettings({db:store.db,now:()=>time}).tokenUsage().groups.groq.models["openai/gpt-oss-120b"].minute.calls,0);
+ }finally{store.db.close();}
+});
+test("token endpoint is authenticated and includes real provider adapter usage via chat",async()=>{
+ const store=openStore(":memory:"),key="12345678901234567890123456789012";
+ const server=makeServer({store,key,config:{provider:"groq",model:"openai/gpt-oss-120b",key:"synthetic-groq-secret"},generate:async args=>{
+  args.onUsage({inputTokens:900,outputTokens:80,reasoningTokens:30,maxTokens:2048});args.onDelta("Hello.");return "Hello.";
+ }});
+ await new Promise(resolve=>server.listen(0,"127.0.0.1",resolve));
+ const base="http://127.0.0.1:"+server.address().port,headers={Authorization:"Bearer "+key,"Content-Type":"application/json"};
+ try{
+  assert.equal((await fetch(base+"/api/token-usage")).status,401);
+  const chat=store.newConversation();
+  const response=await fetch(base+"/api/chat",{method:"POST",headers,body:JSON.stringify({conversationId:chat.id,text:"Hi"})});await response.text();
+  const data=await (await fetch(base+"/api/token-usage",{headers})).json();
+  assert.equal(data.groups.groq.total.minute.input,900);assert.equal(data.groups.groq.total.minute.output,80);
+  assert.equal(data.groups.groq.sources.chat.calls,1);assert.ok(!JSON.stringify(data).includes("synthetic-groq-secret"));
+ }finally{await new Promise(resolve=>server.close(resolve));store.db.close();}
+});

@@ -61,7 +61,8 @@ export async function generateReply({config, system, history, onDelta=()=>{}, on
     if(typeof json.modelVersion==="string"&&json.modelVersion.length<=160&&/^[\w./:-]+$/.test(json.modelVersion)&&!json.modelVersion.includes(key))onModel(json.modelVersion);
     const candidate=json.candidates?.[0];
     const finish=safeReason(candidate?.finishReason);
-    onUsage({finishReason:finish,outputTokens:tokenCount(json.usageMetadata?.candidatesTokenCount),reasoningTokens:tokenCount(json.usageMetadata?.thoughtsTokenCount),maxTokens});
+    const candidateTokens=tokenCount(json.usageMetadata?.candidatesTokenCount),thoughtTokens=tokenCount(json.usageMetadata?.thoughtsTokenCount);
+    onUsage({finishReason:finish,inputTokens:tokenCount(json.usageMetadata?.promptTokenCount),outputTokens:candidateTokens===null?null:candidateTokens+(thoughtTokens??0),reasoningTokens:thoughtTokens,maxTokens});
     const result = (candidate?.content?.parts||[]).filter(part=>!part.thought)
       .map(part=>part.text||"").join("").trim();
     if (!result) throw inferenceError(finish==="MAX_TOKENS"?"output-limit":"empty-output");
@@ -89,7 +90,7 @@ export async function generateReply({config, system, history, onDelta=()=>{}, on
   if(structuredTool||agentTools){
     const data=await response.json(),choice=data.choices?.[0],message=choice?.message;
     const finish=safeReason(choice?.finish_reason);
-    onUsage({finishReason:finish,outputTokens:tokenCount(data.usage?.completion_tokens),reasoningTokens:tokenCount(data.usage?.completion_tokens_details?.reasoning_tokens),maxTokens,...(effort||groq?{reasoningEffort:effort??groqEffort}:{}),...(groq?{inputTokens:tokenCount(data.usage?.prompt_tokens)}:{})});
+    onUsage({finishReason:finish,outputTokens:tokenCount(data.usage?.completion_tokens),reasoningTokens:tokenCount(data.usage?.completion_tokens_details?.reasoning_tokens),maxTokens,...(effort||groq?{reasoningEffort:effort??groqEffort}:{}),inputTokens:tokenCount(data.usage?.prompt_tokens)});
     if(typeof data.model==="string"&&data.model.length<=160&&/^[\w./:-]+$/.test(data.model)&&!data.model.includes(key))onModel(data.model);
     if(finish==="length")throw Object.assign(inferenceError("output-limit"),agentTools&&typeof message?.content==="string"&&!message?.tool_calls?.length?{partial:message.content.trim().slice(0,60000)}:{});
     if(agentTools){
@@ -143,7 +144,7 @@ export async function generateReply({config, system, history, onDelta=()=>{}, on
     }
   }
   if (buffer.trim()) readLine(buffer.trim());
-  onUsage({finishReason,outputTokens,reasoningTokens,maxTokens,sawDone,...(effort||groq?{reasoningEffort:effort??groqEffort}:{}),...(groq?{inputTokens}:{})});
+  onUsage({finishReason,outputTokens,reasoningTokens,maxTokens,sawDone,...(effort||groq?{reasoningEffort:effort??groqEffort}:{}),inputTokens});
   if(rejectTruncated&&finishReason==="length")throw Object.assign(inferenceError("output-limit"),{partial:result.trim()});
   if (!result.trim()) throw inferenceError(finishReason==="length"?"output-limit":"empty-output");
   if(!sawDone&&!finishReason)throw inferenceError("incomplete-stream");

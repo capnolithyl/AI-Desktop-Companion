@@ -19,6 +19,9 @@ export type NasInference={researchTask?:unknown;provider:CloudProvider;requested
 export type NasMessage={id:string;role:"user"|"assistant";content:string;createdAt:number;inference?:NasInference};
 export type ProviderEntry={provider:CloudProvider;model:string;models:string[];configured:boolean;credentialSource:"nas"|"environment"|"missing";imageInput:"unsupported";nativeTools:"unverified"};
 export type ReasoningEffort="auto"|"none"|"low"|"medium"|"high";
+export type TokenTotals={calls:number;input:number;output:number;reasoning:number;failed:number;missingInput:number;missingOutput:number};
+export type TokenWindows=Record<"minute"|"hour"|"day"|"utcToday",TokenTotals>;
+export type TokenUsage={observedAt:number;since:number;groups:Record<CloudProvider,{total:TokenWindows;models:Record<string,TokenWindows>;sources:Record<"chat"|"brain-lab"|"memory",TokenTotals>;quota:ProviderQuota}>};
 export type NasModels={provider:CloudProvider;model:string;historyChars:number;reasoningEffort?:ReasoningEffort|null;reasoningOptions?:ReasoningEffort[];providers:ProviderEntry[]};
 export type NasModelPatch={provider:CloudProvider;model?:string;apiKey?:string;clearKey?:boolean;select?:boolean;historyChars?:number;reasoningEffort?:ReasoningEffort};
 export type NasFact={id:number;fact:string;category:string;updatedAt:number};
@@ -64,6 +67,7 @@ export class NasClient {
   research(){return this.json<{mode:ResearchMode;engine?:ResearchEngine}>("research");}
   saveResearch(mode:ResearchMode,engine?:ResearchEngine){return this.json<{mode:ResearchMode;engine?:ResearchEngine}>("research",{method:"PUT",body:JSON.stringify({mode,engine})});}
   testResearch(){return this.json<{ok:boolean;count:number}>("research/test",{method:"POST",body:"{}"});}
+  tokenUsage(){return this.json<TokenUsage>("token-usage",{signal:AbortSignal.timeout(10000)});}
   models(){return this.json<NasModels>("models");}
   saveModels(patch:NasModelPatch){return this.json<NasModels>("models",{method:"PUT",body:JSON.stringify(patch)});}
   status(){return this.json<NasStatus>("status");}

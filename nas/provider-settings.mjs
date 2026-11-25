@@ -79,6 +79,29 @@ export function providerSettings({initial,env={},file="",db,now=Date.now}){
   }
   // Count actual outbound attempts (not chat turns); retain counts across restarts.
   db.exec("CREATE TABLE IF NOT EXISTS nas_provider_requests (provider TEXT NOT NULL,started_at INTEGER NOT NULL); CREATE INDEX IF NOT EXISTS nas_provider_request_time ON nas_provider_requests(provider,started_at); CREATE TABLE IF NOT EXISTS nas_provider_cooldown(provider TEXT PRIMARY KEY,until_ms INTEGER NOT NULL)");
+  // Separate metering from request admission. Record only numeric metadata, never
+  // prompts, credentials or generated text. Missing provider usage stays unknown.
+  db.exec("CREATE TABLE IF NOT EXISTS nas_token_usage(id INTEGER PRIMARY KEY,provider TEXT NOT NULL,model TEXT NOT NULL,source TEXT NOT NULL,started_at INTEGER NOT NULL,finished_at INTEGER NOT NULL,input_tokens INTEGER,output_tokens INTEGER,reasoning_tokens INTEGER,failed INTEGER NOT NULL); CREATE INDEX IF NOT EXISTS nas_token_usage_time ON nas_token_usage(provider,model,started_at); CREATE TABLE IF NOT EXISTS nas_token_tracking(id INTEGER PRIMARY KEY CHECK(id=1),since_ms INTEGER NOT NULL)");
+  db.prepare("INSERT OR IGNORE INTO nas_token_tracking VALUES(1,?)").run(now());
+  const validTokens=n=>Number.isSafeInteger(n)&&n>=0&&n<=10000000?n:null;
+  function recordUsage({provider,model,source,startedAt,usage,failed}){
+    if(!PROVIDERS.includes(provider)||typeof model!=="string"||!["chat","brain-lab","memory"].includes(source))return;
+    const t=now();
+    db.prepare("INSERT INTO nas_token_usage(provider,model,source,started_at,finished_at,input_tokens,output_tokens,reasoning_tokens,failed) VALUES(?,?,?,?,?,?,?,?,?)").run(provider,model,source,startedAt,t,validTokens(usage?.inputTokens),validTokens(usage?.outputTokens),validTokens(usage?.reasoningTokens),failed?1:0);
+    // Thirty days of numeric request metadata is plenty for rolling windows.
+    db.prepare("DELETE FROM nas_token_usage WHERE started_at<?").run(t-30*86400000);
+  }
+  function tokenUsage(){
+    const t=now(),since=db.prepare("SELECT since_ms AS since FROM nas_token_tracking WHERE id=1").get().since;
+    const windows=[["minute",t-60000],["hour",t-3600000],["day",t-86400000],["utcToday",Math.floor(t/86400000)*86400000]];
+    const sum=(provider,model,from,source=null)=>db.prepare("SELECT count(*) AS calls,coalesce(sum(input_tokens),0) AS input,coalesce(sum(output_tokens),0) AS output,coalesce(sum(reasoning_tokens),0) AS reasoning,coalesce(sum(failed),0) AS failed,coalesce(sum(input_tokens IS NULL),0) AS missingInput,coalesce(sum(output_tokens IS NULL),0) AS missingOutput FROM nas_token_usage WHERE provider=? AND (? IS NULL OR model=?) AND started_at>? AND (? IS NULL OR source=?)").get(provider,model,model,from,source,source);
+    const groups=Object.fromEntries(PROVIDERS.map(provider=>{
+      const names=[...new Set([saved.models[provider],...db.prepare("SELECT DISTINCT model FROM nas_token_usage WHERE provider=? AND started_at>?").all(provider,t-86400000).map(r=>r.model)])];
+      const aggregate=model=>Object.fromEntries(windows.map(([name,from])=>[name,sum(provider,model,from)]));
+      return [provider,{total:aggregate(null),models:Object.fromEntries(names.map(model=>[model,aggregate(model)])),sources:Object.fromEntries(["chat","brain-lab","memory"].map(source=>[source,sum(provider,saved.models[provider],t-86400000,source)])),quota:quota(provider)}];
+    }));
+    return {observedAt:t,since,groups};
+  }
   const limits={nvidia:30,openrouter:15,gemini:5,groq:30};
   const lastResponse=new Map(),lastRejection=new Map();
   function quota(p,slots=1){
@@ -107,7 +130,7 @@ export function providerSettings({initial,env={},file="",db,now=Date.now}){
     db.prepare("INSERT INTO nas_provider_requests(provider,started_at) VALUES(?,?)").run(p,t);
   }
   function cooldown(p){db.prepare("INSERT INTO nas_provider_cooldown(provider,until_ms) VALUES(?,?) ON CONFLICT(provider) DO UPDATE SET until_ms=excluded.until_ms").run(p,now()+300000);}
-  return {view,active,configFor,save,available,reserve,cooldown,quota,quotaError,observe,diagnostics:()=>PROVIDERS.map(p=>quota(p))};
+  return {view,active,configFor,save,available,reserve,cooldown,quota,quotaError,observe,recordUsage,tokenUsage,diagnostics:()=>PROVIDERS.map(p=>quota(p))};
 }
 export function boundedHistory(messages,budget){
   let remaining=budget;

@@ -62,11 +62,18 @@ export function makeServer({store,config,key,promptFile="",maintenanceFile="/dat
   let busy=false,lastReplyAt=0,activeWrites=0;
   const maintenance=()=>existsSync(maintenanceFile);
   const unavailable=()=>busy||store.learning.isRunning()||brain.isRunning()||knowledge.isRunning();
-  const requestModel=async args=>{
-    try{return await generate({...args,onResponse:response=>models.observe(args.config.provider,response)});}
-    catch(error){if(error?.upstreamStatus===429){models.cooldown(args.config.provider);error.quota=models.quota(args.config.provider);}throw error;}
+  const requestModel=async(args,source="chat")=>{
+    const startedAt=Date.now();let usage=null,failed=true;
+    try{
+      const result=await generate({...args,onUsage:value=>{usage=value;args.onUsage?.(value);},onResponse:response=>models.observe(args.config.provider,response)});
+      failed=false;return result;
+    }catch(error){if(error?.upstreamStatus===429){models.cooldown(args.config.provider);error.quota=models.quota(args.config.provider);}throw error;}
+    finally{
+      try{models.recordUsage({provider:args.config.provider,model:args.config.model,source,startedAt,usage,failed});}
+      catch{console.error("Could not record provider token usage");}
+    }
   };
-  const brain=createBrainLab({db:store.db,models,requestModel,search,read,build:BUILD});
+  const brain=createBrainLab({db:store.db,models,requestModel:args=>requestModel(args,"brain-lab"),search,read,build:BUILD});
   const server=createServer(async(req,res)=>{
     let writing=false;
     try {
@@ -126,6 +133,7 @@ export function makeServer({store,config,key,promptFile="",maintenanceFile="/dat
         if(unavailable())return json(res,409,{error:"Wait for current reply"});
         try{const results=await search("SearXNG search engine",false);return json(res,200,{ok:true,count:results.length});}catch{return json(res,503,{error:"Cannot reach SearXNG or its upstream engines"});}
       }
+      if(req.method==="GET"&&path==="/api/token-usage")return json(res,200,models.tokenUsage());
       if(req.method==="GET"&&path==="/api/models")return json(res,200,models.view());
       if(req.method==="PUT"&&path==="/api/models"){
         const patch=await readJson(req,4096);
@@ -242,7 +250,7 @@ export function makeServer({store,config,key,promptFile="",maintenanceFile="/dat
     if(maintenance()||unavailable()||Date.now()-lastReplyAt<15000)return;
     let selected;try{selected=models.active();}catch{return;}
     if(!models.available(selected.provider))return;
-    void store.learning.processNext(args=>{models.reserve(selected.provider);return requestModel(args);},selected).catch(()=>console.error("NAS memory worker failed"));
+    void store.learning.processNext(args=>{models.reserve(selected.provider);return requestModel(args,"memory");},selected).catch(()=>console.error("NAS memory worker failed"));
   },15000);
   timer.unref();server.once("close",()=>clearInterval(timer));
   return server;

@@ -113,3 +113,12 @@ html:has(.nas-app),body:has(.nas-app),body:has(.nas-gate){background:#211412!imp
 .nas-app .nas-thinking-select select{font:inherit;color:#ffd29d;background:transparent;border:0;padding:2px 4px;cursor:pointer;outline-offset:3px;}
 .nas-app .nas-thinking-select select option{background:#392820;color:#ffe0b9;}
 .nas-app .nas-thinking-select select:disabled{opacity:.65;cursor:default;}
+
+.nas-app .nas-model-controls{min-width:0;width:100%;display:grid;gap:9px;}
+.nas-app .nas-token-usage{display:grid;gap:8px;min-width:0;font-variant-numeric:tabular-nums;}
+.nas-app .nas-token-usage.compact{border:1px solid #9c69443d;border-radius:12px;padding:9px;background:#281b1955;font-size:11px;gap:5px;}
+.nas-app .nas-token-heading{display:flex;align-items:center;justify-content:space-between;gap:8px;color:#ffd29d;}
+.nas-app .nas-token-table{width:100%;border-collapse:collapse;font-size:inherit;line-height:1.4;}
+.nas-app .nas-token-table th,.nas-app .nas-token-table td{text-align:right;padding:4px 5px;border-bottom:1px solid #ae74502c;white-space:nowrap;}
+.nas-app .nas-token-table th:first-child{text-align:left;font-weight:400;}.nas-app .nas-token-table thead{color:#cfaa90;}.nas-app .nas-token-table td{color:#ffe0bc;}
+.nas-app .nas-token-usage small{color:#c9a98f;font-size:11px;line-height:1.35;white-space:normal;}.nas-app .nas-token-meter{display:grid;gap:3px;}.nas-app .nas-token-meter progress{width:100%;height:6px;accent-color:#f5a453;}.nas-app .nas-token-usage .nas-token-warning{color:#ffb974;}

@@ -19,7 +19,7 @@ import {NasResearch} from "./NasResearch";
 import {NasKnowledge} from "./NasKnowledge";
 import {NasBrainLab} from "./NasBrainLab";
 import {NasTiming} from "./NasTiming";
-import {NasModels} from "./NasModels";
+import {NasModels,NasTokenUsage} from "./NasModels";
 import type {NasModels as ModelSettings,CloudProvider,ReasoningEffort} from "./nas-client";
 import {memoryNotice} from "./memory-notifications";
 import {nasActivity} from "./nas-activity";
@@ -300,7 +300,7 @@ export function NasApp(){
       onOpenCurrentLog={()=>openPage("log")} onOpenMemory={()=>openPage("memory")} onOpenSettings={()=>openPage("personality")}
       onOpenSearch={()=>openPage("research")} onToggleVision={()=>{}} onVoice={()=>{}} onMute={()=>{}}
       onExpression={express} onOutfit={()=>openPage("appearance")}
-      modelPicker={<div className="model-switcher"><select aria-label="Select NAS model" value={status?JSON.stringify([status.provider,status.model]):""} disabled={busy||switching||!!status?.busy||!status?.providers?.length} onChange={e=>void switchModel(e.target.value)}>{status?.providers?.filter(p=>p.configured||p.provider===status.provider).map(p=><optgroup key={p.provider} label={p.provider}>{p.models.map(model=><option key={model} value={JSON.stringify([p.provider,model])} disabled={!p.configured}>{model}</option>)}</optgroup>)??<option value="">Cloud model</option>}</select></div>}
+      modelPicker={<div className="nas-model-controls"><div className="model-switcher"><select aria-label="Select NAS model" value={status?JSON.stringify([status.provider,status.model]):""} disabled={busy||switching||!!status?.busy||!status?.providers?.length} onChange={e=>void switchModel(e.target.value)}>{status?.providers?.filter(p=>p.configured||p.provider===status.provider).map(p=><optgroup key={p.provider} label={p.provider}>{p.models.map(model=><option key={model} value={JSON.stringify([p.provider,model])} disabled={!p.configured}>{model}</option>)}</optgroup>)??<option value="">Cloud model</option>}</select></div>{status&&<NasTokenUsage client={client} models={status} compact/>}</div>}
       transcript={<>{!messages.length&&<div className="workspace-greeting"><PawPrint size={42}/><strong>Ready for a little conversation?</strong><span>Beholder is awake.</span></div>}
         {messages.map(message=><Bubble key={message.id} message={message} latest={message.id===latest} busy={busy}/>)}
         {notice&&<div className="workspace-system-feedback" role="status"><Sparkles size={18}/><span>{notice}</span></div>}</>}
