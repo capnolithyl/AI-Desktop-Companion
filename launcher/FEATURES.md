@@ -152,8 +152,17 @@ Planned milestones; version targets flexible. See [Trello roadmap](https://trell
 ### v0.11.1 — Performance pass (implemented, validation pending)
 Warm Home retains existing view; package events trigger debounced background catalog scans; cold start still queries labels synchronously, icons lazy-loaded with bounded caches. Bundled backgrounds and imported bitmaps cached with invalidation and memory-pressure eviction (normal app switches do not clear caches). Media/notification refresh deferred after entry; existing timers stop when paused. Settings > System & updates > Performance diagnostics reports local in-memory rolling count, median, p95 and max for Activity callback-to-pre-draw (not touch-to-display), home build, catalog and media/badge refresh. Copy/reset available. Owner reports perceived improvement. Cold start optimization, true frame/jank/battery profiling and before/after measurements remain pending.
 
+### v0.11.4 — App drawer performance (proposed before editor)
+- Owner reports roughly half-second app drawer opening delay (subjective, not measured). Inspected v0.11.3: showDrawer recreates page and calls renderResults; renderResults clears and reconstructs every matching app tile via addGrid in a ScrollView, including icons, labels, badges and listeners, even for offscreen rows and on each search change. Candidate bottleneck, not measured root cause.
+- Replace eager drawer grid with a recycled/virtualized adapter-backed grid (prefer built-in Android GridView if adequate; no unnecessary dependencies). Keep existing themed tiles, click/long-press actions, badge updates and search; recycle/rebind only visible rows, avoid stale badges and listeners, avoid full view rebuild per keystroke.
+- Measure drawer entry-to-pre-draw, search filtering/binding and repeated open/close, test cold vs warm with large app catalog, memory and scrolling jank. Target immediate-feeling first visible frame; no performance claim until device testing. Keep home return fast and NAS-independent.
+- Establish foundation for v0.12.1 alphabetical sections and right-edge drag-to-scroll index. This is a performance-only milestone, not the full drawer redesign.
+
 ### v0.12 — Home screen editor
 Long-press edit mode, collision-safe free grid placement, drag-to-create folders, page management, widget resizing and preservation of old layout.
+
+### v0.12.1 — App drawer overhaul (proposed)
+App sorting (A–Z/Z–A and candidate local launch-history/install-date/manual orders), confirmed right-edge A–Z drag-to-scroll index with active-letter overlay, optional haptics and # bucket in alphabetical mode, hide index when searching or nonalphabetical. Candidate categories/folders, hidden apps and independent density. Preserve offline search, app actions and responsive recycled-grid foundation. Usage sorting based on launcher-recorded launches unless broader access explicitly approved. Final scope subject to owner examples.
 
 ### v0.13 — Theme engine
 Accent colors, multiple schemes, adjustable wallpaper darkness/widget transparency, complete theme import/export including art, seasonal and optional local time/cached-weather themes.
