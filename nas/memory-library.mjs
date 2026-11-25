@@ -1,6 +1,6 @@
 import {parseMemoryImport,parseTags,MEMORY_CATEGORIES} from "../src/memory-import.ts";
 import {parseCanon,parseInterests,canonKey} from "../src/interest-import.ts";
-import {meaningfulTerms,memoryTerms} from "../src/memory-ranking.ts";
+import {meaningfulTerms,memoryTerms,rankMemories} from "../src/memory-ranking.ts";
 import {selectDeterministicMemoryIds} from "../src/memory-retrieval.ts";
 import {shouldIncludeCharacterCanon,characterContinuityContext} from "../src/character-canon-routing.ts";
 import {buildInterestContext} from "../src/interest-context.ts";
@@ -98,13 +98,14 @@ export function createMemoryLibrary(db){
     if(!args||typeof args!=="object"||Array.isArray(args))invalid("Invalid memory arguments");
     try{return commands[action](args);}catch(e){if(/UNIQUE constraint failed/.test(e.message))throw Object.assign(new Error("A matching record already exists; nothing was overwritten"),{status:409});throw e;}
   }
-  function context(question,conversationId){
+  function context(question,conversationId,{includeSessions=true,explicitRecall=false,modelLed=false}={}){
+    if(modelLed)return modelContext(question,explicitRecall);
     const budget=memoryBudget(16384);
     // Whole-word relevance, without an extra inference request. Preserve
     // broad-domain matching for explicit recall and recommendation requests.
-    const explicit=/\b(?:remember|recall|my (?:favorite|favourite|name|age|family|wife|husband|son|daughter|child|dog|cat|pet|preferences?|project|book|story|job|work|skills?|hometown|city|town|address)|where (?:do|did) i live|near me|nearby|what did (?:i|we)|what do you know about me|what do i (?:like|love|prefer|hate)|recommend|suggest)\b/i.test(question)||/^\s*(?:who|what|where|when|which|how)\b/i.test(question);
-    const historical=/\b(?:remember|recall|last time|previously|yesterday|other chat|we talked|i told you|what did (?:i|we))\b/i.test(question);
-    const self=shouldIncludeCharacterCanon(question)||/\byourself\b/i.test(question);
+    const explicit=explicitRecall||/\b(?:remember|recall|my (?:favorite|favourite|name|age|family|wife|husband|son|daughter|child|dog|cat|pet|preferences?|project|book|story|job|work|skills?|hometown|city|town|address)|where (?:do|did) i live|near me|nearby|what did (?:i|we)|what do you know about me|what do i (?:like|love|prefer|hate)|recommend|suggest)\b/i.test(question)||/^\s*(?:who|what|where|when|which|how)\b/i.test(question);
+    const historical=explicitRecall||/\b(?:remember|recall|last time|previously|yesterday|other chat|we talked|i told you|what did (?:i|we))\b/i.test(question);
+    const self=explicitRecall||shouldIncludeCharacterCanon(question)||/\byourself\b/i.test(question);
     const noise=new Set(["good","great","nice","message","answer","reply","right","today","field","picture","read","hold","line","talk","start","work","page","subject","body","include","always","filled","gem","test","testing","morning","support","channel","email","inquiry","comment","question"]);
     const terms=meaningfulTerms(question).filter(t=>!noise.has(t));
     const strength=value=>{
@@ -125,7 +126,7 @@ export function createMemoryLibrary(db){
     const character=canon();
     const selfLines=self?character.map(item=>({item,score:score(item.label)*3+score(item.value)})).sort((a,b)=>b.score-a.score).slice(0,10).map(({item})=>"- ["+item.category+"] "+item.label+": "+item.value).join("\n").slice(0,2000):"";
     let archive="";
-    if(shouldSearchArchive(question)&&terms.length&&conversationId){
+    if((explicitRecall||shouldSearchArchive(question))&&terms.length&&conversationId){
       const match=terms.slice(0,8).map(term=>'"'+term+'"').join(" OR ");
       const hits=db.prepare("SELECT m.conversation_id AS conversationId,c.title,substr(m.content,1,500) AS content,m.created_at AS createdAt FROM message_search JOIN messages m ON m.rowid=message_search.rowid JOIN conversations c ON c.id=m.conversation_id WHERE message_search MATCH ? AND m.role='user' AND m.conversation_id<>? ORDER BY bm25(message_search),m.created_at DESC LIMIT 16").all(match,conversationId);
       archive=archiveMemoryContext(question,historical?hits:hits.filter(hit=>strength(hit.content)),budget);
@@ -134,12 +135,49 @@ export function createMemoryLibrary(db){
     const sessions=summaries();
     const current=sessions.find(s=>s.conversationId===conversationId)??null;
     const related=historical?sessions:sessions.map(s=>({...s,summary:s.summary.split("\n").filter(line=>strength(line)).join("\n")})).filter(s=>s.summary.trim());
-    const session=sessionMemoryContext(question,current,related,budget);
+    const session=includeSessions?sessionMemoryContext(question,current,related,budget):"";
     const sections=[user,buildInterestContext(matches,self).text,selfLines?"MIKAN'S CHARACTER CANON (about Mikan, not the user):\n"+selfLines:characterContinuityContext(character,question),session,archive].filter(Boolean);
     const text=sections.join("\n\n");
     // Actual context supplied to inference, not an assumption about what the model used.
     return {text,ids:selected.map(x=>x.item.id),recall,auditLines:sections.flatMap(section=>section.split("\n").filter(line=>line.trim()).slice(0,12)).slice(0,32).map(line=>line.slice(0,500))};
   }
+  // Native companion path: retrieval ranks data, not conversational intent.
+  // No "is this a personal question?" or character-canon regex gates.
+  function modelContext(query,explicitRecall){
+    const budget=memoryBudget(16384),terms=meaningfulTerms(query);
+    const overlap=value=>{const words=new Set(memoryTerms(value));return terms.reduce((n,t)=>n+Number(words.has(t)),0);};
+    const candidates=facts().filter(f=>f.importance>=90||overlap([f.fact,f.category,...(f.tags??[])].join(" "))>0);
+    const pinned=rankMemories(candidates.filter(f=>f.importance>=90),query).slice(0,2);
+    const matched=rankMemories(candidates.filter(f=>!pinned.some(p=>p.id===f.id)&&overlap([f.fact,f.category,...(f.tags??[])].join(" "))>0),query);
+    const rows=[];let length=0;
+    for(const f of [...pinned,...matched]){
+      const stamp=new Date(f.createdAt<1e12?f.createdAt*1000:f.createdAt);
+      const date=Number.isFinite(stamp.getTime())?stamp.toISOString().slice(0,10):"unknown date";
+      const line="- ["+date+"] "+f.fact;
+      if(rows.length>=budget.maxFacts||length+line.length>budget.factChars)continue;
+      rows.push({id:f.id,line});length+=line.length;
+    }
+    const tastes=interests().map(i=>({i,score:overlap([i.name,i.kind,i.status,i.notes,...i.tags].join(" "))})).filter(x=>x.score>0).sort((a,b)=>b.score-a.score).slice(0,12).map(({i})=>"- "+i.kind+": "+i.name+" ("+i.status+(i.rating!==null?", rating "+i.rating:"")+")");
+    const character=canon().map(i=>({i,score:overlap(i.label+" "+i.value)})).sort((a,b)=>b.score-a.score).slice(0,10).map(({i})=>"- "+i.label+": "+i.value);
+    const sections=[rows.length?"Owner facts (date saved):\n"+rows.map(r=>r.line).join("\n"):"",tastes.length?"Owner interests:\n"+tastes.join("\n").slice(0,2000):"",character.length?"Character canon:\n"+character.join("\n").slice(0,2000):""].filter(Boolean);
+    return {text:sections.join("\n\n"),ids:rows.map(r=>r.id),auditLines:sections.flatMap(s=>s.split("\n")).slice(0,32)};
+  }
   function markRecalled(ids){const write=db.prepare("INSERT INTO user_memory_usage(memory_id,reference_count,last_accessed) SELECT id,1,unixepoch() FROM user_memories WHERE id=? ON CONFLICT(memory_id) DO UPDATE SET reference_count=MIN(10000,user_memory_usage.reference_count+1),last_accessed=unixepoch()");for(const id of new Set(ids.slice(0,20)))write.run(id);}
-  return {execute,context,markRecalled};
+  // Search the original user-authored FTS index, then include the surrounding
+  // actual dialogue, preserving roles and dates instead of lossy summaries.
+  function recallDialogue(query){
+    const terms=meaningfulTerms(query).slice(0,8);
+    if(!terms.length)return [];
+    const match=terms.map(term=>'"'+term.replaceAll('"','""')+'"').join(" OR ");
+    const hits=db.prepare("SELECT m.rowid AS rowid,m.conversation_id AS conversationId,c.title FROM message_search JOIN messages m ON m.rowid=message_search.rowid JOIN conversations c ON c.id=m.conversation_id WHERE message_search MATCH ? ORDER BY bm25(message_search),m.created_at DESC LIMIT 6").all(match);
+    const windows=[],seen=new Set();
+    for(const hit of hits){
+      const before=db.prepare("SELECT id,role,content,created_at AS createdAt FROM messages WHERE conversation_id=? AND rowid<=? ORDER BY rowid DESC LIMIT 2").all(hit.conversationId,hit.rowid).reverse();
+      const after=db.prepare("SELECT id,role,content,created_at AS createdAt FROM messages WHERE conversation_id=? AND rowid>? ORDER BY rowid LIMIT 2").all(hit.conversationId,hit.rowid);
+      const messages=[...before,...after].filter(m=>!seen.has(m.id)).map(({id,role,content,createdAt})=>{seen.add(id);return {role,content:content.slice(0,1000),createdAt};});
+      if(messages.length)windows.push({title:hit.title,messages});
+    }
+    return windows;
+  }
+  return {execute,context,markRecalled,recallDialogue};
 }
