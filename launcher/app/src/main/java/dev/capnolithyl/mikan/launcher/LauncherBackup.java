@@ -29,7 +29,7 @@ final class LauncherBackup {
         switch(key){
             case "columns":return integer(v,4,5);
             case "dockCount":return integer(v,3,5);
-            case "minPages":return integer(v,1,5);
+            case "minPages":return integer(v,1,1000);
             case "homeRows":return integer(v,1,4);
             case "sectionOrder":return integer(v,0,2);
             case "iconSize":int size=integer(v,42,58);if(size!=42&&size!=50&&size!=58)throw new IOException("Invalid icon size");return size;

@@ -42,7 +42,7 @@ final class HomeSlots {
     }
     boolean emptyPage(int page,int capacity){int start=page*capacity;return slots.subMap(start,true,start+capacity,false).isEmpty();}
     void swapPages(int a,int b,int capacity){
-        if(a==b)return;TreeMap<Integer,String> next=new TreeMap<>();
+        if(a==b)return;if(a<0||b<0||capacity<=0||(long)(Math.max(a,b)+1)*capacity>MAX_SLOT+1L)throw new IllegalArgumentException("Page out of range");TreeMap<Integer,String> next=new TreeMap<>();
         for(Map.Entry<Integer,String> e:slots.entrySet()){
             int n=e.getKey(),page=n/capacity,offset=n%capacity;
             next.put((page==a?b:page==b?a:page)*capacity+offset,e.getValue());
