@@ -9,7 +9,6 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Message;
 import android.text.InputType;
-import android.view.View;
 import android.view.WindowInsets;
 import android.view.WindowManager;
 import android.webkit.CookieManager;
@@ -70,7 +69,7 @@ public final class NasActivity extends Activity {
         s.setJavaScriptEnabled(true);
         s.setDomStorageEnabled(true);
         s.setAllowFileAccess(false);
-        s.setAllowContentAccess(false);
+        s.setAllowContentAccess(true); // User-selected files via Android's document picker.
         s.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
         s.setJavaScriptCanOpenWindowsAutomatically(false);
         s.setSupportMultipleWindows(true);
@@ -86,7 +85,7 @@ public final class NasActivity extends Activity {
                 return true;
             }
             @Override public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error) {
-                if (request.isForMainFrame()) showConnectionError();
+                if (request.isForMainFrame() && sameOrigin(endpoint, request.getUrl().toString())) showConnectionError();
             }
             @Override public void onReceivedSslError(WebView view, android.webkit.SslErrorHandler handler,
                     android.net.http.SslError error) {
@@ -100,6 +99,9 @@ public final class NasActivity extends Activity {
                 // The web app opens source links with window.open(..., "_blank").
                 // Route those links to the regular browser, never give them a native bridge.
                 WebView popup = new WebView(NasActivity.this);
+                popup.getSettings().setAllowFileAccess(false);
+                popup.getSettings().setAllowContentAccess(false);
+                popup.getSettings().setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
                 popup.setWebViewClient(new WebViewClient() {
                     @Override public boolean shouldOverrideUrlLoading(WebView v, WebResourceRequest r) {
                         openBrowser(r.getUrl().toString());
