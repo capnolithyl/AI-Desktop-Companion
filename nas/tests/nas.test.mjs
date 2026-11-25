@@ -769,7 +769,7 @@ test("agent reserves a separate normal answer request instead of disabling tools
  const result=await agentResearch({mode:"simple",history:[{role:"user",content:"Recommend short horror anime."}],canRequest:slots=>calls+composed+(slots??1)<=3,activity:e=>events.push(e),
   search:async()=>[{url:"https://example.org/anime",title:"Lantern",content:"Lantern has four episodes."}],read:async()=>{throw Error("unexpected read");},
   generate:async args=>{calls++;assert.equal(args.agentToolChoice,"auto");assert.deepEqual(args.agentTools.map(t=>t.function.name),["search_web","read_webpage"]);return {content:"",toolCalls:[{id:"call"+calls,type:"function",function:{name:"search_web",arguments:JSON.stringify({query:"short horror anime "+calls})}}]};},
-  compose:async args=>{composed++;assert.equal(args.agentTools,undefined);assert.equal(args.structuredTool,undefined);assert.equal(args.maxTokens,6144);assert.match(args.history[0].content,/Lantern has four episodes/);return "Lantern looks promising, with four episodes.";}}); 
+  compose:async args=>{composed++;assert.equal(args.agentTools,undefined);assert.equal(args.structuredTool,undefined);assert.equal(args.maxTokens,4096);assert.equal(args.agentEffort,"medium");assert.match(args.history[0].content,/Lantern has four episodes/);return "Lantern looks promising, with four episodes.";}}); 
  assert.equal(calls,2);assert.equal(composed,1);assert.match(result.answer,/Lantern looks promising/);assert.match(result.answer,/unverified/);assert.ok(events.some(e=>e.detail==="quota-reserve"));
 });
 test("agent strict synthesis retains earlier constraints and qualifies invalid citations without erasing prose",async()=>{
@@ -821,4 +821,66 @@ test("native adapter explicitly enables thinking only for the experimental tool 
  return Response.json({choices:[{finish_reason:"stop",message:{content:"Natural answer",reasoning_content:"not returned"}}]});
  }});
  assert.deepEqual(result,{content:"Natural answer",toolCalls:[]});
+});
+
+test("year sequences are not telephone numbers, while ordinary contact details remain blocked",async()=>{
+ const {validateAgentQuery}=await import("../agent-research.mjs");
+ for(const q of ["latest officially released Qwen model 2024 2025","horror anime 2011 2012 2013 2024 episodes","horror anime 2010-2020"]){
+   assert.equal(validateAgentQuery(q).search,true,q);
+ }
+ for(const q of ["555 123 4567","search +1 (989) 555-0123","contact 2024 2025","person example@example.org","search https://example.org/private"]){
+   assert.equal(validateAgentQuery(q).search,false,q);
+ }
+});
+test("medium effort uses the documented Ultra template without changing legacy requests",async()=>{
+ const config={provider:"nvidia",model:"nvidia/nemotron-3-ultra-550b-a55b",key:"synthetic-test-key"};
+ const bodyList=[];let usage;
+ const result=await generateReply({config,system:"test",history:[{role:"user",content:"test"}],agentTools:[{type:"function",function:{name:"search_web",parameters:{type:"object"}}}],agentEffort:"medium",onUsage:v=>usage=v,fetchImpl:async(_url,opts)=>{
+   bodyList.push(JSON.parse(opts.body));return Response.json({choices:[{finish_reason:"stop",message:{content:"Natural answer"}}]});
+ }});
+ assert.equal(result.content,"Natural answer");assert.deepEqual(bodyList[0].chat_template_kwargs,{enable_thinking:true,medium_effort:true});assert.equal(usage.reasoningEffort,"medium");
+});
+test("native fallback rejects length-truncated streaming prose and reports the partial output",async()=>{
+ const config={provider:"nvidia",model:"nvidia/nemotron-3-ultra-550b-a55b",key:"synthetic-test-key"};
+ const fetchImpl=async(_url,opts)=>{
+   assert.deepEqual(JSON.parse(opts.body).chat_template_kwargs,{enable_thinking:false,force_nonempty_content:true});
+   return new Response('data: {"choices":[{"delta":{"content":"Partial reply"},"finish_reason":"length"}]}\n\ndata: [DONE]\n\n');
+ };
+ await assert.rejects(()=>generateReply({config,system:"test",history:[{role:"user",content:"test"}],agentEffort:"none",rejectTruncated:true,fetchImpl}),e=>e.code==="output-limit"&&e.partial==="Partial reply");
+});
+test("native agent recovers a truncated final answer once without repeating research",async()=>{
+ const {agentResearch}=await import("../agent-research.mjs");let rounds=0,searches=0;const attempts=[],events=[];
+ const result=await agentResearch({mode:"simple",history:[{role:"user",content:"Find a short horror anime."}],canRequest:()=>true,activity:e=>events.push(e),
+ search:async()=>{searches++;return [{url:"https://example.org/anime",title:"Lantern",content:"Lantern has four episodes."}];},
+ generate:async args=>{assert.equal(args.agentEffort,"medium");assert.equal(args.maxTokens,4096);return ++rounds===1?{content:"",toolCalls:[{id:"1",type:"function",function:{name:"search_web",arguments:'{"query":"short horror anime"}'}}]}:{content:"RESEARCH_DONE",toolCalls:[]};},
+ compose:async args=>{attempts.push(args);assert.equal(args.rejectTruncated,true);if(attempts.length===1)throw Object.assign(Error("output-limit"),{code:"output-limit",partial:"Lantern has"});return "Lantern has four episodes [1].";}});
+ assert.equal(searches,1);assert.equal(attempts.length,2);assert.equal(attempts[0].agentEffort,"medium");assert.equal(attempts[1].agentEffort,"none");assert.equal(attempts[1].maxTokens,2048);assert.equal(result.answer,"Lantern has four episodes [1].");assert.ok(events.some(e=>e.title==="Answer recovery"));
+});
+test("truncated response is explicitly marked if no further quota remains",async()=>{
+ const {agentResearch}=await import("../agent-research.mjs");let remaining=3;
+ const result=await agentResearch({mode:"simple",history:[{role:"user",content:"Find a short horror anime."}],canRequest:(n=1)=>remaining>=n,
+ search:async()=>[{url:"https://example.org/anime",title:"Lantern",content:"Lantern has four episodes."}],
+ generate:async()=>{remaining--;return remaining===2?{content:"",toolCalls:[{id:"1",type:"function",function:{name:"search_web",arguments:'{"query":"short horror anime"}'}}]}:{content:"RESEARCH_DONE",toolCalls:[]};},
+ compose:async()=>{remaining--;throw Object.assign(Error("output-limit"),{code:"output-limit",partial:"Lantern has four episodes [1]."});}});
+ assert.match(result.answer,/Response incomplete: output limit reached/);assert.equal(remaining,0);
+});
+test("independent page reads execute concurrently with stable source IDs and ordered tool results",async()=>{
+ const {agentResearch}=await import("../agent-research.mjs");let round=0,active=0,maxActive=0,reads=0;
+ const call=(id,name,args)=>({id,type:"function",function:{name,arguments:JSON.stringify(args)}});
+ const result=await agentResearch({mode:"simple",history:[{role:"user",content:"Find facts about Lantern."}],canRequest:()=>true,
+ search:async()=>["a","b"].map(x=>({url:"https://example.org/"+x,title:x,content:"Preview "+x})),
+ read:async url=>{reads++;active++;maxActive=Math.max(maxActive,active);await new Promise(r=>setTimeout(r,url.endsWith("/a")?20:5));active--;return {url,title:url,content:"Source evidence ".repeat(12)};},
+ generate:async args=>{round++;if(round===1)return {content:"",toolCalls:[call("s","search_web",{query:"Lantern facts"})]};
+ if(round===2)return {content:"",toolCalls:[call("a","read_webpage",{source:1}),call("b","read_webpage",{source:2}),call("duplicate","read_webpage",{source:1})]};
+ assert.deepEqual(args.history.slice(-3).map(m=>m.tool_call_id),["a","b","duplicate"]);assert.equal(JSON.parse(args.history.at(-3).content).source.number,1);assert.equal(JSON.parse(args.history.at(-2).content).source.number,2);assert.match(args.history.at(-1).content,/Already read/);
+ return {content:"Two sources agree [1][2].",toolCalls:[]};},
+ compose:async()=>{throw Error("unexpected compose")}});
+ assert.equal(reads,2);assert.equal(maxActive,2);assert.equal(result.researched.sources.length,2);
+});
+test("same-batch search cannot authorize a guessed source handle",async()=>{
+ const {agentResearch}=await import("../agent-research.mjs");let round=0;
+ const call=(id,name,args)=>({id,type:"function",function:{name,arguments:JSON.stringify(args)}});
+ await agentResearch({mode:"simple",history:[{role:"user",content:"Find Lantern."}],canRequest:()=>true,search:async()=>[{url:"https://example.org/a",title:"Lantern",content:"Preview"}],
+ read:async()=>{throw Error("guessed handle must never be read");},
+ generate:async args=>{if(++round===1)return {content:"",toolCalls:[call("s","search_web",{query:"Lantern facts"}),call("r","read_webpage",{source:1})]};assert.match(args.history.at(-1).content,/explicitly supplied/);return {content:"Found Lantern [1].",toolCalls:[]};}});
 });
