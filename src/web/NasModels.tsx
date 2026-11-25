@@ -1,5 +1,5 @@
 import {useState,useEffect} from "react";
-import {Cpu,KeyRound} from "lucide-react";
+import {Cpu,KeyRound,Copy,Check} from "lucide-react";
 import type {NasClient,NasModels as Models,ProviderEntry,NasModelPatch,CloudProvider,TokenUsage,TokenWindows} from "./nas-client";
 const names:Record<CloudProvider,string>={nvidia:"NVIDIA",openrouter:"OpenRouter",gemini:"Gemini",groq:"Groq",cerebras:"Cerebras"};
 function ProviderForm({entry,selected,client,onChanged,busy,cerebrasTier}:{entry:ProviderEntry;cerebrasTier?:"trial"|"paid";selected:boolean;client:NasClient;onChanged:(models:Models)=>void;busy:boolean}){
@@ -39,14 +39,37 @@ export function NasTokenUsage({client,models,compact=false}:{client:NasClient;mo
     document.addEventListener("visibilitychange",refresh);
     return()=>{live=false;window.clearInterval(timer);document.removeEventListener("visibilitychange",refresh);};
   },[client]);
+  const [copyState,setCopyState]=useState<"idle"|"copied"|"failed">("idle");
+  useEffect(()=>{if(copyState==="idle")return;const timer=window.setTimeout(()=>setCopyState("idle"),3000);return()=>window.clearTimeout(timer);},[copyState]);
   const group=data?.groups[models.provider],windows=scope==="provider"?group?.total:group?.models[models.model];
+  async function copyUsage(){
+    if(!data||!group)return;
+    // Use the already displayed snapshot so mobile clipboard writes remain
+    // within the user gesture. Explicitly select safe metering fields.
+    const snapshot={
+      schema:"mikan-inference-usage",version:1,
+      observedAt:new Date(data.observedAt).toISOString(),
+      trackingSince:new Date(data.since).toISOString(),
+      provider:models.provider,model:models.model,scope,
+      reasoningEffort:models.reasoningEffort??null,historyChars:models.historyChars,
+      ...(models.provider==="cerebras"?{localTier:models.cerebrasTier??"trial"}:{}),
+      selectedModel:group.models[models.model]??null,
+      providerTotals:group.total,models:group.models,
+      selectedModelSourceBreakdown24h:group.sources,
+      quota:group.quota,
+      staleSnapshot:error,
+      note:"Provider-reported Beholder usage; rolling minute/hour/day, UTC today. Output includes reported reasoning, not counted twice. Missing token counts and rejected requests may make totals incomplete."
+    };
+    try{await navigator.clipboard.writeText(JSON.stringify(snapshot,null,2));setCopyState("copied");}
+    catch{setCopyState("failed");}
+  }
   const fmt=(n:number)=>n.toLocaleString(),labels:Record<keyof TokenWindows,string>={minute:"1 min",hour:"1 hour",day:"24 hours",utcToday:"Today (UTC)"};
   const groqLimit=models.provider==="groq"&&scope==="model"?8000:null;
   const table=windows?<><table className="nas-token-table"><thead><tr><th>Window</th><th>Input</th><th>Output</th></tr></thead><tbody>{(["minute","hour","day","utcToday"] as const).map(key=>{const v=windows[key];return <tr key={key}><th scope="row">{labels[key]}</th><td title={v.missingInput+" calls without input counts"}>{fmt(v.input)}{v.missingInput?"*":""}</td><td title={v.missingOutput+" calls without output counts"}>{fmt(v.output)}{v.missingOutput?"*":""}</td></tr>;})}</tbody></table>
     {groqLimit!==null&&<div className="nas-token-meter"><progress max={groqLimit} value={Math.min(groqLimit,windows.minute.input+windows.minute.output)} aria-label="Recorded tokens against advertised Groq free tier limit"/><small>{fmt(windows.minute.input+windows.minute.output)} / 8,000 tokens · free-tier reference</small></div>}
     <small>{windows.minute.calls} calls in the past minute{models.provider==="cerebras"&&group?" / "+group.quota.minuteLimit+" local RPM":""} · {windows.day.failed} failed calls / 24h</small>
     {windows.day.missingInput+windows.day.missingOutput>0&&<small>* Partial totals: some calls did not return usage. Failed requests may have consumed tokens.</small>}</>:<small>{error?"Token tracker unavailable.":"Loading token usage…"}</small>;
-  const body=<><div className="nas-token-heading"><strong>Token usage</strong>{!compact&&<select aria-label="Token usage scope" value={scope} onChange={e=>setScope(e.target.value as "model"|"provider")}><option value="model">Selected model</option><option value="provider">All models on provider</option></select>}</div>{table}
+  const body=<><div className="nas-token-heading"><strong>Token usage</strong><button type="button" className="nas-token-copy" disabled={!data||!group} aria-label="Copy inference usage" title="Copy inference usage as JSON" onClick={()=>void copyUsage()}>{copyState==="copied"?<Check size={13}/>:<Copy size={13}/>}<span>{copyState==="copied"?"Copied!":"Copy"}</span></button></div>{!compact&&<div className="nas-token-heading"><select aria-label="Token usage scope" value={scope} onChange={e=>setScope(e.target.value as "model"|"provider")}><option value="model">Selected model</option><option value="provider">All models on provider</option></select></div>}{table}<span className="nas-token-copy-feedback" role="status">{copyState==="failed"?"Clipboard unavailable. Try opening Mikan in a secure browser context.":copyState==="copied"?"Inference usage copied.":""}</span>
     {group?.quota.reason==="cooldown"&&<small className="nas-token-warning">Provider cooldown · {Math.ceil(group.quota.waitMs/1000)}s remaining</small>}
     {!compact&&group&&scope==="model"&&<><div className="nas-token-heading"><strong>24-hour breakdown</strong></div><table className="nas-token-table"><thead><tr><th>Source</th><th>Input</th><th>Output</th></tr></thead><tbody>{(["chat","brain-lab","memory"] as const).map(key=><tr key={key}><th scope="row">{({chat:"Chat & research","brain-lab":"Brain Lab",memory:"Memory worker"})[key]}</th><td>{fmt(group.sources[key].input)}{group.sources[key].missingInput?"*":""}</td><td>{fmt(group.sources[key].output)}{group.sources[key].missingOutput?"*":""}</td></tr>)}</tbody></table></>}
     {!compact&&data&&<small>Tracking since {new Date(data.since).toLocaleString()}. Rolling minute/hour/24h windows use request start times. Today uses UTC. Output includes reasoning when reported; reasoning is not added twice. Recorded Beholder usage, not your provider's remaining balance or other apps' usage.</small>}{error&&data&&<small>Refresh failed; showing last recorded snapshot.</small>}</>;
