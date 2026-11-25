@@ -1,6 +1,6 @@
 # Mikan Launcher — living feature reference
 
-**Source baseline:** v0.11.3 (versionCode 14), Pocket Mikan shortcut, 2026-11-24. See Git history for implementation commit.
+**Source baseline:** v0.11.4 (versionCode 15), recycled drawer, 2026-11-24. See Git history for implementation commit.
 **Development:** [PR #117](https://github.com/capnolithyl/AI-Desktop-Companion/pull/117), branch `feature/mikan-launcher-v01`. Check current branch and Gradle version before changing this document.
 **Purpose:** a free, personal, offline-first Android launcher inspired by the Mikan OS home-screen mockup. Separate from Pocket Mikan, desktop Mikan and the NAS. This document tracks the launcher only.
 
@@ -17,7 +17,7 @@ Build success, release publication, installation and individual feature verifica
 | Feature | Introduced | Current implementation / use | Evidence |
 | --- | --- | --- | --- |
 | Independent Android home app | 0.1 | HOME/DEFAULT role and normal launch entry; Settings > Default home app to select or switch home. | Initial install and home UI observed; stock fallback and cold boot still pending. |
-| App drawer | 0.1 | Search installed launchable apps by label or package; tap search field or swipe up near bottom; field opens keyboard. | Implemented; full search and launch regression pending. |
+| App drawer | 0.1 / 0.11.4 | Search installed launchable apps by label or package; tap search field or swipe up near bottom; field opens keyboard. Native adapter-backed GridView creates/recycles visible cells, filters existing catalog without recreating the grid; 4/5 columns, existing icons, badge updates, and click/long-press actions. | Implemented; device latency, search, scroll and launch regression pending. |
 | Favorites | 0.1 | Long-press drawer app to pin; drawer/Manage favorites menu to unpin and move; saved locally. | Favorites visible across screenshots; persistence on updates observed, complete CRUD pending. |
 | Dock | 0.1–0.2 | First 3–5 available pinned entries, configurable, persists across pages. Default 5; floating dock (default on in v0.8) or framed dock. | Floating dock observed in v0.8; toggle pending. |
 | App rearrangement | 0.2 | Hold and drag pinned app onto another visible pinned tile; menu-based ordering and moving between pages. | Implemented; gesture and cross-page tests pending. |
@@ -115,7 +115,8 @@ Weather card also exposes refresh, city, units and clear location. No full-scree
 
 | 0.11.1 | Reuse Home on warm resume, event-driven catalog refresh, bounded image/icon caches, delayed widget refresh, local timing diagnostics | Owner reports perceived improvement; measured comparison and regression checks pending. |
 | 0.11.2 | Music, weather and clock tap shortcuts; configurable installed app targets | Implemented; CI and device tests pending. |
-| 0.11.3 | Prefer Pocket Mikan app on character card, retain explicit browser and missing-app fallback | Implemented; CI and device tests pending. |
+| 0.11.3 | Prefer Pocket Mikan app on character card, retain explicit browser and missing-app fallback | Owner reports looking good; detailed device regression pending. |
+| 0.11.4 | Virtualized native drawer grid, recycled cells and local drawer timing diagnostics | Implemented; CI and device performance/regression pending. |
 
 ## 7. Outstanding verification checklist
 
@@ -145,6 +146,8 @@ Weather card also exposes refresh, city, units and clear location. No full-scree
 
 - [ ] v0.11.3 tap card with Pocket Mikan installed (including when Tailscale/NAS is down), verify native app launches rather than browser; remove/disable app and test saved URL fallback and unset URL prompt, reinstall and verify updated label; explicit browser settings action and manual web check remain independent. No shared authentication or settings migration.
 
+- [ ] v0.11.4 test first/repeated drawer opening (swipe and search tap), compare timings, scroll large catalog, rapid search and clearing/no results, app launch and long-press pin/folder/icon actions, icon import while drawer open, install/remove/update, notification dots on reused cells and permission revoke, 4/5 columns and large font, keyboard resize, Home/Back and offline operation. Confirm no stale icons/labels/badges and no Home latency regression.
+
 ## 8. Roadmap (not implemented)
 
 Planned milestones; version targets flexible. See [Trello roadmap](https://trello.com/c/VEk6xVz6). No arbitrary deadlines.
@@ -152,11 +155,8 @@ Planned milestones; version targets flexible. See [Trello roadmap](https://trell
 ### v0.11.1 — Performance pass (implemented, validation pending)
 Warm Home retains existing view; package events trigger debounced background catalog scans; cold start still queries labels synchronously, icons lazy-loaded with bounded caches. Bundled backgrounds and imported bitmaps cached with invalidation and memory-pressure eviction (normal app switches do not clear caches). Media/notification refresh deferred after entry; existing timers stop when paused. Settings > System & updates > Performance diagnostics reports local in-memory rolling count, median, p95 and max for Activity callback-to-pre-draw (not touch-to-display), home build, catalog and media/badge refresh. Copy/reset available. Owner reports perceived improvement. Cold start optimization, true frame/jank/battery profiling and before/after measurements remain pending.
 
-### v0.11.4 — App drawer performance (proposed before editor)
-- Owner reports roughly half-second app drawer opening delay (subjective, not measured). Inspected v0.11.3: showDrawer recreates page and calls renderResults; renderResults clears and reconstructs every matching app tile via addGrid in a ScrollView, including icons, labels, badges and listeners, even for offscreen rows and on each search change. Candidate bottleneck, not measured root cause.
-- Replace eager drawer grid with a recycled/virtualized adapter-backed grid (prefer built-in Android GridView if adequate; no unnecessary dependencies). Keep existing themed tiles, click/long-press actions, badge updates and search; recycle/rebind only visible rows, avoid stale badges and listeners, avoid full view rebuild per keystroke.
-- Measure drawer entry-to-pre-draw, search filtering/binding and repeated open/close, test cold vs warm with large app catalog, memory and scrolling jank. Target immediate-feeling first visible frame; no performance claim until device testing. Keep home return fast and NAS-independent.
-- Establish foundation for v0.12.1 alphabetical sections and right-edge drag-to-scroll index. This is a performance-only milestone, not the full drawer redesign.
+### v0.11.4 — App drawer performance (implemented; validation pending)
+Owner reported roughly half-second opening delay on v0.11.3. Replaced eager ScrollView/all-app tile construction with a viewport-constrained Android GridView and BaseAdapter that recycles cells, rebinds icon/label/badge safely, handles clicks and long presses using current adapter items, filters existing catalog and preserves existing Home grid, appearance and settings. Visible badges refreshed separately from non-recycled Home views; imported icons refresh drawer too. Diagnostics include first/repeat drawer open to pre-draw, setup, filter/submit, and cell binding (not actual display latency or jank). Target warm open <100ms is aspirational, not measured. CI/device verification, memory/scroll-jank profiling pending. A–Z index and sorting still planned for v0.12.1.
 
 ### v0.12 — Home screen editor
 Long-press edit mode, collision-safe free grid placement, drag-to-create folders, page management, widget resizing and preservation of old layout.

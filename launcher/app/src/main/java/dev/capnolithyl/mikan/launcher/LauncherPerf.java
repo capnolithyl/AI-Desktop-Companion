@@ -9,14 +9,14 @@ final class LauncherPerf {
     }
     void clear(){samples.clear();}
     String report(){
-        StringBuilder out=new StringBuilder("v0.11.3 · This process only\nMilliseconds, last 60 samples per category. Pre-draw is an app-side proxy, not actual display or Home-button latency.\n");
+        StringBuilder out=new StringBuilder("v0.11.4 · This process only\nMilliseconds, last 60 samples per category. Pre-draw is an app-side proxy, not actual display or Home-button latency.\n");
         for(Map.Entry<String,ArrayDeque<Long>> e:samples.entrySet()){
             ArrayList<Long> sorted=new ArrayList<>(e.getValue());Collections.sort(sorted);int n=sorted.size();
             if(n==0)continue;
             double median=(sorted.get((n-1)/2)+sorted.get(n/2))/2.0;long p95=sorted.get(Math.max(0,(int)Math.ceil(n*.95)-1)),max=sorted.get(n-1);
             out.append("\n").append(e.getKey()).append("\n").append("n=").append(n).append("  median=").append(median).append("  p95=").append(p95).append("  max=").append(max).append(" ms\n");
         }
-        if(samples.isEmpty())out.append("\nNo samples yet. Return Home from several apps.");
+        if(samples.isEmpty())out.append("\nNo samples yet. Return Home from several apps or open the drawer.");
         return out.toString();
     }
 }

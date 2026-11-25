@@ -45,3 +45,6 @@ Tap the music card outside its interactive controls to open Spotify by default, 
 
 ## v0.11.3 Pocket Mikan shortcut
 The Mikan character card now opens installed Pocket Mikan (`dev.capnolithyl.mikan.pocket`) through its standard Android launch intent. The card label reflects app availability. If unavailable, the existing saved web URL is a fallback; Settings > Mikan also retains an explicit browser action. Pocket Mikan manages its own NAS address, login and WebView session. No new permissions, connection checks on tap, or changes to Pocket itself. Device validation pending.
+
+## v0.11.4 drawer performance
+Replaces the eager all-app ScrollView with native adapter-backed GridView in a constrained viewport. Only needed cells are created/recycled; filtered results update the existing adapter, existing icons and click/long-press actions are preserved, visible badges are rebound and refreshed separately, imported icons refresh in the drawer. No new permissions or dependencies. Performance diagnostics include first/repeat drawer open to pre-draw, setup, filter/submit and individual cell binds. Measurements are app-side only, no claimed speedup until device testing. A–Z index and sorting remain planned for v0.12.1.
