@@ -48,3 +48,6 @@ The Mikan character card now opens installed Pocket Mikan (`dev.capnolithyl.mika
 
 ## v0.11.4 drawer performance
 Replaces the eager all-app ScrollView with native adapter-backed GridView in a constrained viewport. Only needed cells are created/recycled; filtered results update the existing adapter, existing icons and click/long-press actions are preserved, visible badges are rebound and refreshed separately, imported icons refresh in the drawer. No new permissions or dependencies. Performance diagnostics include first/repeat drawer open to pre-draw, setup, filter/submit and individual cell binds. Measurements are app-side only, no claimed speedup until device testing. A–Z index and sorting remain planned for v0.12.1.
+
+## v0.11.5 calendar correction
+Use Android's documented visible-occurrence query and exclude only explicitly canceled statuses (SQL != previously excluded NULL). Refresh after resume and allow widget long-press refresh/diagnostics. Calendar diagnostics in Weather & calendar settings reports only local/visible calendar counts, occurrence/filter counts and error class; no account names, event titles, or network. Differentiate no local calendars, no visible calendars and no upcoming events. The reported false empty agenda may also reflect provider sync/profile state; physical validation pending.

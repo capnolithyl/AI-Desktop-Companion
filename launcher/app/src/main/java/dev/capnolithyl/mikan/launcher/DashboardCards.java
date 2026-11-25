@@ -53,7 +53,7 @@ final class DashboardCards {
     private boolean resumed,closed,weatherBusy,calendarBusy,cityBusy,weatherFailed;
     private long lastAttempt=-RETRY_DELAY,lastCalendar=-60000;
     private int locationRevision=0;
-    private boolean forcePending;
+    private boolean forcePending,calendarRefreshPending,calendarDiagnosticsBusy;
     private LinearLayout weatherRoot,agendaRoot;
     private TextView weatherTemp,weatherCondition,weatherRange,weatherNote;
     private WeatherGlyph weatherGlyph;
@@ -62,7 +62,7 @@ final class DashboardCards {
     };
 
     DashboardCards(Activity activity,SharedPreferences prefs,Runnable settingsRefresh,Runnable openWeather){this.activity=activity;this.prefs=prefs;this.settingsRefresh=settingsRefresh;this.openWeather=openWeather;}
-    void resume(){resumed=true;handler.removeCallbacks(tick);handler.postDelayed(tick,120);}
+    void resume(){resumed=true;lastCalendar=-60000;if(calendarBusy)calendarRefreshPending=true;handler.removeCallbacks(tick);handler.postDelayed(tick,120);}
     void pause(){resumed=false;handler.removeCallbacks(tick);}
     void close(){closed=true;pause();detach();io.shutdownNow();}
     void detach(){weatherRoot=null;agendaRoot=null;weatherTemp=null;weatherCondition=null;weatherRange=null;weatherNote=null;weatherGlyph=null;}
@@ -225,8 +225,23 @@ final class DashboardCards {
         new AlertDialog.Builder(activity).setTitle("Upcoming events").setMessage("Allow read-only access to your Android calendars to display the next two events on your home screen. No calendar data leaves the phone.").setNegativeButton("Cancel",null).setPositiveButton("Allow",(d,w)->activity.requestPermissions(new String[]{Manifest.permission.READ_CALENDAR},CALENDAR_REQUEST)).show();
     }
     void calendarPermissionChanged(){lastCalendar=-60000;refreshCalendar(true);}
+    void manualCalendarRefresh(){if(!calendarAllowed()){requestCalendar();return;}toast("Refreshing calendar…");refreshCalendar(true);}
+    void calendarDiagnostics(){
+        if(!calendarAllowed()){requestCalendar();return;}
+        if(calendarDiagnosticsBusy)return;calendarDiagnosticsBusy=true;toast("Checking Android calendar…");
+        io.execute(()->{
+            AgendaResult result=readAgenda(true);
+            handler.post(()->{calendarDiagnosticsBusy=false;if(!canDialog())return;
+                new AlertDialog.Builder(activity).setTitle("Calendar diagnostics").setMessage(result.report()).setPositiveButton("OK",null).setNeutralButton("Copy",(dialog,which)->{
+                    android.content.ClipboardManager clipboard=(android.content.ClipboardManager)activity.getSystemService(android.content.Context.CLIPBOARD_SERVICE);
+                    if(clipboard!=null)clipboard.setPrimaryClip(android.content.ClipData.newPlainText("Calendar diagnostics",result.report()));
+                }).show();
+            });
+        });
+    }
     View agendaView(){
         agendaRoot=panel();agendaRoot.setMinimumHeight(dp(128));agendaRoot.setFocusable(true);agendaRoot.setOnClickListener(v->{if(calendarAllowed())openCalendar();else requestCalendar();});
+        agendaRoot.setOnLongClickListener(v->{if(!calendarAllowed())requestCalendar();else new AlertDialog.Builder(activity).setTitle("Upcoming events").setItems(new String[]{"Refresh events","Calendar diagnostics","Open calendar"},(dialog,which)->{if(which==0)manualCalendarRefresh();else if(which==1)calendarDiagnostics();else openCalendar();}).show();return true;});
         renderAgenda(null,calendarAllowed()?"Loading events…":"Tap to enable calendar");
         if(resumed)refreshCalendar(true);return agendaRoot;
     }
@@ -238,30 +253,76 @@ final class DashboardCards {
         final String title;final long begin,end;final boolean allDay;
         Event(String title,long begin,long end,boolean allDay){this.title=title;this.begin=begin;this.end=end;this.allDay=allDay;}
     }
+    private static final class AgendaResult {
+        final List<Event> events=new ArrayList<>();
+        int visibleRows,canceled,outside,eligible,unsetStatus;
+        int calendars=-1,visibleCalendars=-1;
+        String error;
+        String report(){
+            return "Calendar permission: granted at query start\n"+
+                "Local calendars: "+(calendars<0?"unavailable":calendars)+"\n"+
+                "Visible calendars: "+(visibleCalendars<0?"unavailable":visibleCalendars)+"\n"+
+                "Visible occurrence rows (buffered range): "+visibleRows+"\n"+
+                "Rows with unset status: "+unsetStatus+"\n"+
+                "Canceled rows: "+canceled+"\n"+
+                "Outside agenda window: "+outside+"\n"+
+                "Eligible upcoming events: "+eligible+"\n"+
+                "Widget displays up to: 2\n"+
+                (error==null?"Query completed.":"Query failed: "+error)+"\n\n"+
+                "Only counts are included. No calendar names, accounts or event titles. Android may not expose calendars that are unsynced or in another profile.";
+        }
+    }
+    private AgendaResult readAgenda(boolean diagnostics){
+        AgendaResult result=new AgendaResult();
+        long start=System.currentTimeMillis(),end=start+7*24*60*60*1000L;
+        try{
+            String[] columns={CalendarContract.Instances.TITLE,CalendarContract.Instances.BEGIN,CalendarContract.Instances.END,CalendarContract.Instances.ALL_DAY,CalendarContract.Instances.STATUS};
+            java.util.Calendar local=java.util.Calendar.getInstance(),utc=java.util.Calendar.getInstance(TimeZone.getTimeZone("UTC"));
+            utc.clear();utc.set(local.get(java.util.Calendar.YEAR),local.get(java.util.Calendar.MONTH),local.get(java.util.Calendar.DAY_OF_MONTH));long utcToday=utc.getTimeInMillis(),utcEnd=utcToday+8*86400000L;
+            // Android's documented helper selects visible calendars. Do NOT use
+            // status != CANCELED in SQL: NULL is neither true nor false there.
+            try(Cursor c=CalendarContract.Instances.query(activity.getContentResolver(),columns,start-86400000L,end+86400000L)){
+                if(c==null)throw new IOException("No calendar provider");
+                while(c.moveToNext()){
+                    result.visibleRows++;
+                    if(c.isNull(4))result.unsetStatus++;
+                    else if(c.getInt(4)==CalendarContract.Events.STATUS_CANCELED){result.canceled++;continue;}
+                    long begin=c.getLong(1),finish=c.getLong(2);boolean allDay=c.getInt(3)!=0;
+                    if(allDay?(finish<=utcToday||begin>=utcEnd):(finish<start||begin>end)){result.outside++;continue;}
+                    result.eligible++;
+                    if(result.events.size()<2){
+                        String title=c.getString(0);
+                        result.events.add(new Event(title==null||title.isEmpty()?"Calendar event":title,begin,finish,allDay));
+                    }
+                    if(!diagnostics&&result.events.size()==2)break;
+                }
+            }
+        }catch(Exception ex){result.error=ex.getClass().getSimpleName();result.events.clear();}
+        // No account names or identifiers are read here. Counts distinguish an
+        // empty provider from an empty date range without exposing hidden events.
+        if(diagnostics||result.events.isEmpty()){
+            try(Cursor c=activity.getContentResolver().query(CalendarContract.Calendars.CONTENT_URI,new String[]{CalendarContract.Calendars.VISIBLE},null,null,null)){
+                if(c!=null){result.calendars=0;result.visibleCalendars=0;while(c.moveToNext()){result.calendars++;if(c.getInt(0)==1)result.visibleCalendars++;}}
+            }catch(Exception ignored){}
+        }
+        return result;
+    }
     private void refreshCalendar(boolean force){
         if(closed||agendaRoot==null||!resumed)return;
         if(!calendarAllowed()){renderAgenda(null,"Tap to enable calendar");return;}
-        if(calendarBusy)return;
+        if(calendarBusy){if(force)calendarRefreshPending=true;return;}
         long now=SystemClock.elapsedRealtime();if(!force&&now-lastCalendar<60000)return;
-        lastCalendar=now;calendarBusy=true;
+        lastCalendar=now;calendarBusy=true;calendarRefreshPending=false;
         io.execute(()->{
-            List<Event> events=new ArrayList<>();String error=null;
-            long start=System.currentTimeMillis(),end=start+7*24*60*60*1000L;
-            try{
-                Uri.Builder builder=CalendarContract.Instances.CONTENT_URI.buildUpon();ContentUris.appendId(builder,start-86400000L);ContentUris.appendId(builder,end+86400000L);
-                String[] columns={CalendarContract.Instances.TITLE,CalendarContract.Instances.BEGIN,CalendarContract.Instances.END,CalendarContract.Instances.ALL_DAY};
-                java.util.Calendar local=java.util.Calendar.getInstance();java.util.Calendar utc=java.util.Calendar.getInstance(TimeZone.getTimeZone("UTC"));utc.clear();utc.set(local.get(java.util.Calendar.YEAR),local.get(java.util.Calendar.MONTH),local.get(java.util.Calendar.DAY_OF_MONTH));long utcToday=utc.getTimeInMillis(),utcEnd=utcToday+8*86400000L;
-                try(Cursor c=activity.getContentResolver().query(builder.build(),columns,CalendarContract.Instances.VISIBLE+"=1 AND "+CalendarContract.Instances.STATUS+"!="+CalendarContract.Events.STATUS_CANCELED,null,CalendarContract.Instances.BEGIN+" ASC")){
-                    if(c==null)throw new IOException("No calendar provider");
-                    while(events.size()<2&&c.moveToNext()){
-                        String title=c.getString(0);long begin=c.getLong(1),finish=c.getLong(2);boolean allDay=c.getInt(3)!=0;
-                        if(allDay?(finish<=utcToday||begin>=utcEnd):(finish<start||begin>end))continue;
-                        events.add(new Event(title==null||title.isEmpty()?"Calendar event":title,begin,finish,allDay));
-                    }
-                }
-            }catch(Exception ignored){error="Calendar unavailable";}
-            final String message=error;
-            handler.post(()->{calendarBusy=false;if(closed||!resumed||agendaRoot==null)return;if(!calendarAllowed()){renderAgenda(null,"Tap to enable calendar");return;}renderAgenda(events,message);});
+            AgendaResult result=readAgenda(false);
+            handler.post(()->{
+                calendarBusy=false;
+                if(closed||!resumed||agendaRoot==null){lastCalendar=-60000;return;}
+                if(!calendarAllowed()){renderAgenda(null,"Tap to enable calendar");return;}
+                String message=result.error!=null?"Calendar unavailable":result.events.isEmpty()&&result.calendars==0?"No local calendars found":result.events.isEmpty()&&result.visibleCalendars==0?"No visible calendars":null;
+                renderAgenda(result.events,message);
+                if(calendarRefreshPending)refreshCalendar(true);
+            });
         });
     }
     private String eventDate(Event e){

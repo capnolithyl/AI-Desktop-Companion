@@ -585,6 +585,8 @@ public class HomeActivity extends Activity {
                 settingsUi.heading(body,"CALENDAR");
                 settingsUi.row(body,"Calendar access",checkSelfPermission(android.Manifest.permission.READ_CALENDAR)==android.content.pm.PackageManager.PERMISSION_GRANTED?"Allowed":"Not granted",dashboard::requestCalendar);
                 settingsUi.toggle(body,"Show calendar titles","Hide event names for more privacy",prefs.getBoolean("agendaTitles",true),on->{prefs.edit().putBoolean("agendaTitles",on).apply();showSettings();});
+                setting(body,"Calendar diagnostics",dashboard::calendarDiagnostics);
+                settingsUi.note(body,"Long-press Upcoming to refresh events or check local calendar availability.");
                 break;
             case MIKAN:
                 settingsUi.heading(body,"CHARACTER ART");

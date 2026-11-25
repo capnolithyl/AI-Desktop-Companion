@@ -1,6 +1,6 @@
 # Mikan Launcher — living feature reference
 
-**Source baseline:** v0.11.4 (versionCode 15), recycled drawer, 2026-11-24. See Git history for implementation commit.
+**Source baseline:** v0.11.5 (versionCode 16), calendar query fix, 2026-11-24. See Git history for implementation commit.
 **Development:** [PR #117](https://github.com/capnolithyl/AI-Desktop-Companion/pull/117), branch `feature/mikan-launcher-v01`. Check current branch and Gradle version before changing this document.
 **Purpose:** a free, personal, offline-first Android launcher inspired by the Mikan OS home-screen mockup. Separate from Pocket Mikan, desktop Mikan and the NAS. This document tracks the launcher only.
 
@@ -57,7 +57,7 @@ All five built-in widgets (clock, Mikan, music, weather, upcoming events) can be
 | Compact music panel | 0.7 | Smaller art/text, elapsed and total time below scrubber when paired. | v0.7 screenshot observed. |
 | Weather | 0.7 | Choose a city through Open-Meteo geocoding. Current temperature/condition, high/low, custom weather glyph, city and attribution. Fahrenheit default, Celsius toggle. | Owner v0.7 screenshot shows current conditions, temperature and range; refresh/units/cache still pending. |
 | Weather cache | 0.7 | Selected city/coordinates and snapshot saved locally; 30-min freshness window, 5-min retry throttling, stale/cached label. Refresh while visible and foregrounded, or explicit action. Can clear city/cache. | Implemented; offline and retry tests pending. |
-| Upcoming calendar | 0.7 | Android CalendarContract.Instances, read-only permission; up to two visible upcoming/ongoing events within next seven days, dates/times and all-day support. Tap opens calendar app or permission prompt. | Owner v0.7 screenshot shows empty agenda; populated events, recurrence, all-day and denied permission tests pending. |
+| Upcoming calendar | 0.7 / 0.11.5 | Android visible Instances query, read-only permission; up to two upcoming/ongoing events in next seven days, dates/times and all-day support. Explicitly canceled events excluded; unset status accepted. Refresh on resume, manual refresh/diagnostics on long-press; tap opens calendar app or permission prompt. Distinguish absent local/visible calendars from empty agenda. | Owner screenshot reported false empty agenda despite events in Calendar; fix implemented, actual cause/device validation pending. |
 | Calendar privacy | 0.7 | Optional title hiding; no calendar data persisted or transmitted by launcher. | Implemented; grant/revoke and privacy behavior pending. |
 | Notification dots | 0.4 | Off by default; opt-in Android notification access; active non-ongoing, non-group-summary notification package identifiers in memory. Folder dots aggregate members. Not unread counts. | Implemented; dot behavior and revocation pending. |
 
@@ -71,7 +71,7 @@ v0.9 replaces the long list with a themed category hub, icons, descriptions and 
 | Lockscreen | Import image, preview screen-ratio crop with horizontal/vertical position and zoom, apply lock-only wallpaper or current home wallpaper, Android wallpaper settings |
 | Home screen | Grid (4/5 columns), rows (1–4), icon size, Dock (3–5 apps), Floating dock, Favorites heading, Minimum home pages (1–5), Manage favorites, Customize app icons, Create app folder, Manage folders |
 | Widgets | Clock, Mikan, Music, Weather, Upcoming events placement/visibility, Widget layout (Side by side/Stacked), independent pair toggles, section order |
-| Weather & calendar | Weather city, Temperature units, Refresh weather, Calendar access, Show calendar titles |
+| Weather & calendar | Weather city, Temperature units, Refresh weather, Calendar access, Show calendar titles, Calendar diagnostics |
 | Mikan | Active artwork preview, Choose portrait, Choose character artwork, Remove character artwork, Reset portrait, Open Pocket Mikan, Open Mikan Web in browser, Mikan Web address, Check Mikan Web connection |
 | Permissions & privacy | Notification dots, Notification / music access, Calendar access, Android app settings |
 | System & updates | Default home app, Check for launcher updates, Export/Restore layout and settings |
@@ -117,6 +117,7 @@ Weather card also exposes refresh, city, units and clear location. No full-scree
 | 0.11.2 | Music, weather and clock tap shortcuts; configurable installed app targets | Implemented; CI and device tests pending. |
 | 0.11.3 | Prefer Pocket Mikan app on character card, retain explicit browser and missing-app fallback | Owner reports looking good; detailed device regression pending. |
 | 0.11.4 | Virtualized native drawer grid, recycled cells and local drawer timing diagnostics | Implemented; CI and device performance/regression pending. |
+| 0.11.5 | Null-safe calendar filtering, resume/manual refresh, counts-only provider diagnostics | Implemented; CI and owner calendar regression pending. |
 
 ## 7. Outstanding verification checklist
 
@@ -147,6 +148,8 @@ Weather card also exposes refresh, city, units and clear location. No full-scree
 - [ ] v0.11.3 tap card with Pocket Mikan installed (including when Tailscale/NAS is down), verify native app launches rather than browser; remove/disable app and test saved URL fallback and unset URL prompt, reinstall and verify updated label; explicit browser settings action and manual web check remain independent. No shared authentication or settings migration.
 
 - [ ] v0.11.4 test first/repeated drawer opening (swipe and search tap), compare timings, scroll large catalog, rapid search and clearing/no results, app launch and long-press pin/folder/icon actions, icon import while drawer open, install/remove/update, notification dots on reused cells and permission revoke, 4/5 columns and large font, keyboard resize, Home/Back and offline operation. Confirm no stale icons/labels/badges and no Home latency regression.
+
+- [ ] v0.11.5 verify upcoming timed/all-day/recurring events from multiple visible calendars; unset and canceled statuses, local date/time boundaries, permission grant/revoke, empty and hidden/unsynced calendars, resume/long-press refresh, diagnostics from settings and widget; no event titles/accounts in diagnostic copy. Owner screenshot reported false empty state, exact device root cause unconfirmed.
 
 ## 8. Roadmap (not implemented)
 
