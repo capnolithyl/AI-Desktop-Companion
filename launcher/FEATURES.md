@@ -132,7 +132,7 @@ Weather card also exposes refresh, city, units and clear location. No full-scree
 
 | 0.12.0 | Independent Home quick search, ranked matches, keyboard launch, local recent/pinned suggestions and diagnostics | Implemented; CI/device verification pending. |
 
-| 0.12.1 | Sparse app slots, edit mode, swap/folder, pages and widget page assignment | Implemented; CI/device pending. |
+| 0.12.1 | Sparse app slots, edit mode, swap/folder, pages and widget page assignment | Initial CI run [45611729553](https://github.com/capnolithyl/AI-Desktop-Companion/actions/runs/45611729553): both ranking and slot tests passed; Java compilation failed due to duplicate local variable `key` in backup validation. Renamed loop variable; rebuild and device validation pending. |
 
 ## 7. Outstanding verification checklist
 

@@ -35,7 +35,7 @@ final class LauncherBackup {
             case "iconSize":int size=integer(v,42,58);if(size!=42&&size!=50&&size!=58)throw new IOException("Invalid icon size");return size;
             case "wallpaper":if(!"reading-nook.webp".equals(v)&&!"study-nook.webp".equals(v))throw new IOException("Invalid wallpaper");return v;
             case "homeSlotsV1":{
-                if(!(v instanceof String))throw new IOException("Invalid home slots");HomeSlots slots=HomeSlots.parse((String)v);for(String key:slots.keys())if(!component(key)&&!folder(key))throw new IOException("Invalid shortcut");return slots.encode();
+                if(!(v instanceof String))throw new IOException("Invalid home slots");HomeSlots slots=HomeSlots.parse((String)v);for(String shortcut:slots.keys())if(!component(shortcut)&&!folder(shortcut))throw new IOException("Invalid shortcut");return slots.encode();
             }
             case "favorites":{
                 if(!(v instanceof String)||((String)v).length()>250000)throw new IOException("Invalid favorites");
