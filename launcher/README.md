@@ -122,3 +122,7 @@ Themed searchable picker groups widgets under installed app names and icons. Tap
 ## v0.15.3 native widgets in the mixed grid
 
 Enable Home screen > Mixed app & widget grid, then long-press empty Home space or Mikan OS. Native widgets can now be dragged with apps and built-in widgets, resized using the existing handle or size menu, and removed with the minus button and confirmation. Provider minimum sizes and resize axes constrain spans; oversized or unplaceable widgets remain below the grid. Native grid coordinates are device-local and survive restart, but are not exported with portable settings. Section mode still uses full-width widgets with the separate height setting. The previous picker passed launcher CI and owner approved appearance; v0.15.3 CI and actual widget rendering/gesture tests pending.
+
+## v0.15.4 local tasks & reminders
+
+Settings > Widgets > Tasks & reminders selects a Home page or Hidden (default). Manage local tasks from settings even when hidden. The card shows up to three open tasks by due date, highlights overdue/due today, supports adding and checking off tasks; tap a title to edit, or Manage tasks to reopen/delete completed items. Optional date only, no alarm notifications, sync, network or background service. Up to 100 tasks, 200 characters each; contents remain in local preferences and are excluded from portable settings backups, which retain placement. Both Home layouts supported. v0.15.3 launcher CI passed; v0.15.4 model tests added to CI and physical validation pending.

@@ -45,6 +45,11 @@ jobs:
           mkdir -p /tmp/mikan-grid-tests
           javac -d /tmp/mikan-grid-tests launcher/app/src/main/java/dev/capnolithyl/mikan/launcher/MixedLayout.java launcher/tests/MixedLayoutTest.java
           java -cp /tmp/mikan-grid-tests dev.capnolithyl.mikan.launcher.MixedLayoutTest
+      - name: Test local tasks and due dates
+        run: |
+          mkdir -p /tmp/mikan-task-tests
+          javac -d /tmp/mikan-task-tests launcher/app/src/main/java/dev/capnolithyl/mikan/launcher/LocalTasks.java launcher/tests/LocalTasksTest.java
+          java -cp /tmp/mikan-task-tests dev.capnolithyl.mikan.launcher.LocalTasksTest
       - name: Test drawer preferences and alphabetical index
         run: |
           mkdir -p /tmp/mikan-drawer-tests

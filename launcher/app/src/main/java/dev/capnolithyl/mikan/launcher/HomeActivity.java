@@ -81,6 +81,7 @@ public class HomeActivity extends Activity {
     private MikanCard mikanCard;
     private final MikanRemarks remarks=new MikanRemarks();
     private DashboardCards dashboard;
+    private TaskPanel tasks;
     private NativeWidgets nativeWidgets;
     private TextView ampm;
     private boolean compactClock;
@@ -95,10 +96,10 @@ public class HomeActivity extends Activity {
     private boolean editingHome,editingMixed;
     private int mixedScrollY;
     private ScrollView mixedScroll;
-    private static final String[] WIDGET_NAMES={"Clock","Mikan","Music","Weather","Upcoming events","Device information"};
+    private static final String[] WIDGET_NAMES={"Clock","Mikan","Music","Weather","Upcoming events","Device information","Tasks & reminders"};
     private HomeSlots homeSlots;
     private int selectedSlot=-1;
-    private static final String[] WIDGET_PAGES={"clockPage","mikanPage","musicPage","weatherPage","agendaPage","devicePage"};
+    private static final String[] WIDGET_PAGES={"clockPage","mikanPage","musicPage","weatherPage","agendaPage","devicePage","tasksPage"};
     private MusicPanel music;
     private final Map<TextView,String> badgeViews=new HashMap<>();
     private final Runnable refreshExtras=new Runnable(){public void run(){refreshExtras();handler.postDelayed(this,2500);}};
@@ -120,6 +121,7 @@ public class HomeActivity extends Activity {
         getWindow().setNavigationBarColor(Color.TRANSPARENT);
         getWindow().getDecorView().setSystemUiVisibility(0);
         prefs=getSharedPreferences("launcher",MODE_PRIVATE);
+        tasks=new TaskPanel(this,prefs);
         nativeWidgets=new NativeWidgets(this,prefs,state!=null,this::refreshScreen);
         updater=new LauncherUpdater(this);
         portraits=new PortraitStore(this);expressionArt=new ExpressionArt(this);
@@ -243,7 +245,7 @@ public class HomeActivity extends Activity {
     }
     private Drawable homeWallpaper(){String name=prefs.getString("wallpaper","reading-nook.webp");Drawable d="custom".equals(name)?wallpaperArt.get():asset(name);return d!=null?d:asset("reading-nook.webp");}
     private void createPage(){
-        nativeWidgets.detach();
+        nativeWidgets.detach();tasks.detach();
         closeQuickSearch();mixedScroll=null;results=null;drawerAdapter=null;drawerIndex=null;drawerSortButton=null;drawerCategoryButton=null;systemStats=null;deviceBattery=null;deviceMemory=null;deviceCharge=null;handler.removeCallbacks(statsRefresh);
         badgeViews.clear();music=null;mikanCard=null;clock=null;date=null;greeting=null;ampm=null;dashboard.detach();
         root=new FrameLayout(this);root.setBackgroundColor(0xff191417);
@@ -373,6 +375,7 @@ public class HomeActivity extends Activity {
         if(showMusic){music=new MusicPanel(this,pair);widgetLink(music.view(),"Open music app",()->openWidgetApp("music"));}
         if(showMusic||showAgenda){addWidgetRow(bottomWidgets,showMusic?music.view():null,showAgenda?dashboard.agendaView():null,pair);gap(bottomWidgets,10);}
         if(widgetHere("devicePage",0)){bottomWidgets.addView(deviceWidget());gap(bottomWidgets,10);}
+        if(widgetHere("tasksPage",0)){bottomWidgets.addView(tasks.view());gap(bottomWidgets,10);}
         int order=prefs.getInt("sectionOrder",0);
         LinearLayout[] sections=order==1?new LinearLayout[]{topWidgets,characterBlock,bottomWidgets,appBlock}:order==2?new LinearLayout[]{appBlock,topWidgets,characterBlock,bottomWidgets}:new LinearLayout[]{topWidgets,characterBlock,appBlock,bottomWidgets};
         for(LinearLayout section:sections)if(section.getChildCount()>0)body.addView(section);
@@ -576,6 +579,7 @@ public class HomeActivity extends Activity {
     }
     private void updateClock(){
         if(drawer||settings)return;
+        tasks.refreshDate();
         Date now=new Date();if(clock!=null){boolean use24=android.text.format.DateFormat.is24HourFormat(this);clock.setText(compactClock?new java.text.SimpleDateFormat(use24?"HH:mm":"h:mm",Locale.getDefault()).format(now):android.text.format.DateFormat.getTimeFormat(this).format(now));if(ampm!=null){ampm.setText(use24?"":new java.text.SimpleDateFormat("a",Locale.getDefault()).format(now));ampm.setVisibility(use24?View.GONE:View.VISIBLE);}}
         if(date!=null)date.setText(new java.text.SimpleDateFormat("EEE, MMM d",Locale.getDefault()).format(now));
         int hour=Calendar.getInstance().get(Calendar.HOUR_OF_DAY);
@@ -905,6 +909,8 @@ public class HomeActivity extends Activity {
                 widgetSetting(body,"Clock","clockPage",1);widgetSetting(body,"Mikan","mikanPage",1);widgetSetting(body,"Music","musicPage",1);
                 widgetSetting(body,"Weather","weatherPage",1);widgetSetting(body,"Upcoming events","agendaPage",1);
                 widgetSetting(body,"Device information","devicePage",0);
+                widgetSetting(body,"Tasks & reminders","tasksPage",0);
+                settingsUi.row(body,"Manage local tasks","Add, edit or complete tasks",tasks::manage);
                 settingsUi.heading(body,"ANDROID WIDGETS");
                 settingsUi.row(body,"Add Android widget","Choose an installed app's widget",()->chooseNativeWidgetPage());
                 for(NativeWidgets.Entry entry:nativeWidgets.entries())settingsUi.row(body,nativeWidgets.label(entry),"Page "+entry.page+" · "+entry.height+" dp",()->nativeWidgetOptions(entry));
@@ -1179,7 +1185,7 @@ public class HomeActivity extends Activity {
     }
 
     private boolean widgetHere(String key,int def){return prefs.getInt(key,def)==homePage+1;}
-    private int widgetPage(String key){return prefs.getInt(key,"devicePage".equals(key)?0:1);}
+    private int widgetPage(String key){return prefs.getInt(key,("devicePage".equals(key)||"tasksPage".equals(key))?0:1);}
     private int pageCount(){
         int count=0;for(String key:favorites)if(find(key)!=null)count++;
         int cap=prefs.getInt("columns",4)*prefs.getInt("homeRows",2),dock=prefs.getInt("dockCount",5);
@@ -1209,6 +1215,7 @@ public class HomeActivity extends Activity {
         else if(key.equals("musicPage"))w=large?columns:(canPair()&&prefs.getBoolean("pairBottom",true)?2:columns);
         else if(key.equals("agendaPage"))w=large?columns:(canPair()&&prefs.getBoolean("pairBottom",true)?columns-2:columns);
         else if(key.equals("devicePage"))w=columns;
+        else if(key.equals("tasksPage")){w=columns;h=3;}
         return new MixedLayout.Spec(widgetGridKey(key),min,key.equals("mikanPage")?2:1,w,h);
     }
     private void renderMixedHome(LinearLayout body){
@@ -1221,6 +1228,7 @@ public class HomeActivity extends Activity {
         if(widgetHere("musicPage",1))bottom.add(mixedWidgetSpec("musicPage",columns));
         if(widgetHere("agendaPage",1))bottom.add(mixedWidgetSpec("agendaPage",columns));
         if(widgetHere("devicePage",0))bottom.add(mixedWidgetSpec("devicePage",columns));
+        if(widgetHere("tasksPage",0))bottom.add(mixedWidgetSpec("tasksPage",columns));
         int order=prefs.getInt("sectionOrder",0);
         if(order==2)specs.addAll(shortcuts);specs.addAll(top);specs.addAll(middle);if(order==0)specs.addAll(shortcuts);specs.addAll(bottom);if(order==1)specs.addAll(shortcuts);
         MixedLayout model=mixedLayout();LinkedHashMap<String,MixedLayout.Rect> layout=model.resolve(specs,columns);
@@ -1283,6 +1291,7 @@ public class HomeActivity extends Activity {
             case "musicPage":music=new MusicPanel(this,compact);widgetLink(music.view(),"Open music app",()->openWidgetApp("music"));return music.view();
             case "agendaPage":return dashboard.agendaView();
             case "devicePage":return deviceWidget();
+            case "tasksPage":return tasks.view();
             default:return null;
         }
     }
