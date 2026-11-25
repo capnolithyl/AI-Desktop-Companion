@@ -23,9 +23,11 @@ final class MikanCard {
     private static final int PEACH=0xffffbf88,CREAM=0xffffe9d5,MUTED=0xffe1bda9;
     private final Context context;
     private final FrameLayout root;
-    private final TextView greeting,subtitle,status;
-    MikanCard(Context context,Drawable artwork,boolean transparent,String initialStatus,String shortcutLabel,Runnable open){
-        this.context=context;
+    private final TextView greeting,subtitle;
+    private final String shortcutLabel;
+    private String fallback="";
+    MikanCard(Context context,Drawable artwork,boolean transparent,String shortcutLabel,Runnable open){
+        this.context=context;this.shortcutLabel=shortcutLabel;
         root=new FrameLayout(context);root.setMinimumHeight(dp(172));root.setClipToOutline(true);
         GradientDrawable background=MikanTheme.panel(context,25);
         root.setBackground(background);root.setElevation(dp(2));
@@ -51,23 +53,20 @@ final class MikanCard {
         LinearLayout bubble=new LinearLayout(context);bubble.setOrientation(LinearLayout.VERTICAL);
         bubble.setBackground(new Bubble(context));bubble.setPadding(dp(16),dp(9),dp(9),dp(9));copy.addView(bubble,new LinearLayout.LayoutParams(-1,-2));
         greeting=label("",16,CREAM,true);bubble.addView(greeting);
-        space(bubble,3);subtitle=label("",12,MUTED,false);bubble.addView(subtitle);
-        space(copy,7);
-        status=label(initialStatus,11,PEACH,false);status.setGravity(Gravity.CENTER_VERTICAL);status.setPadding(dp(8),dp(5),dp(8),dp(5));status.setBackground(gradient(0x55402825,0x55402825,11,0x887d543e));copy.addView(status,new LinearLayout.LayoutParams(-1,-2));
-        space(copy,4);
-        TextView shortcut=label(shortcutLabel+" ↗",11,CREAM,false);shortcut.setPadding(dp(4),0,0,0);copy.addView(shortcut);
+        space(bubble,3);subtitle=label("",13,MUTED,false);subtitle.setMinLines(3);bubble.addView(subtitle);
         updateGreeting(java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY));
         GradientDrawable mask=new GradientDrawable();mask.setColor(Color.WHITE);mask.setCornerRadius(dp(25));
         root.setForeground(new RippleDrawable(ColorStateList.valueOf(0x22ffbf88),null,mask));
-        root.setFocusable(true);root.setOnClickListener(v->open.run());root.setContentDescription(shortcutLabel);
+        root.setFocusable(true);root.setOnClickListener(v->open.run());root.setContentDescription(shortcutLabel+". "+greeting.getText()+". "+subtitle.getText());
     }
     View view(){return root;}
-    void setStatus(String value){status.setText(value);}
+    void setRemark(String value){String note=value==null?fallback:value;if(!note.contentEquals(subtitle.getText()))subtitle.setText(note);root.setContentDescription(shortcutLabel+". "+greeting.getText()+". "+note);}
     void updateGreeting(int hour){
         String hello=hour<5?"Still awake? ♡":hour<12?"Good morning ♡":hour<18?"Good afternoon ♡":"Good evening ♡";
         String note=hour<5?"A little rest sounds nice.":hour<12?"Ready for a fresh start?":hour<18?"Take a little coffee break.":"Time to get cozy.";
         if(!hello.contentEquals(greeting.getText()))greeting.setText(hello);
-        if(!note.contentEquals(subtitle.getText()))subtitle.setText(note);
+        boolean showingFallback=subtitle.getText().length()==0||fallback.contentEquals(subtitle.getText());fallback=note;
+        if(showingFallback)setRemark(null);
     }
     private int dp(float n){return Math.round(n*context.getResources().getDisplayMetrics().density);}
     private void space(LinearLayout parent,int n){parent.addView(new View(context),new LinearLayout.LayoutParams(1,dp(n)));}

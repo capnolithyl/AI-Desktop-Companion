@@ -22,12 +22,14 @@ public final class LauncherNotifications extends NotificationListenerService {
         return false;
     }
     static boolean has(String pkg){return packages.contains(pkg);}
+    static Set<String> snapshot(){return packages;}
     @Override public void onListenerConnected(){connected=this;refresh();}
     @Override public void onListenerDisconnected(){if(connected==this)connected=null;packages=Collections.emptySet();}
     @Override public void onNotificationPosted(StatusBarNotification n){refresh();}
     @Override public void onNotificationRemoved(StatusBarNotification n){refresh();}
     private void refresh(){
-        if(!getSharedPreferences("launcher",MODE_PRIVATE).getBoolean("badges",false)){packages=Collections.emptySet();return;}
+        android.content.SharedPreferences prefs=getSharedPreferences("launcher",MODE_PRIVATE);
+        if(!prefs.getBoolean("badges",false)&&!MikanRemarks.notificationHintsEnabled(prefs)){packages=Collections.emptySet();return;}
         updateSnapshot();
     }
     // Refresh on demand after enabling dots, including notifications that were already posted.

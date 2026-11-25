@@ -54,6 +54,7 @@ final class DashboardCards {
     private long lastAttempt=-RETRY_DELAY,lastCalendar=-60000;
     private int locationRevision=0;
     private boolean forcePending,calendarRefreshPending,calendarDiagnosticsBusy;
+    private long nextTimedEvent,agendaSampleAt;
     private LinearLayout weatherRoot,agendaRoot;
     private TextView weatherTemp,weatherCondition,weatherRange,weatherNote;
     private WeatherGlyph weatherGlyph;
@@ -219,6 +220,13 @@ final class DashboardCards {
         }finally{c.disconnect();}
     }
 
+    String upcomingHint(){
+        if(!calendarAllowed()||agendaSampleAt==0)return null;
+        long age=SystemClock.elapsedRealtime()-agendaSampleAt,delta=nextTimedEvent-System.currentTimeMillis();
+        if(age<0||age>120000||delta<=0||delta>2*60*60*1000L)return null;
+        long minutes=(delta+59999)/60000;
+        return minutes<=5?"You have a calendar event starting soon ♡":"Heads up! An event starts in about "+minutes+" min.";
+    }
     private boolean calendarAllowed(){return activity.checkSelfPermission(Manifest.permission.READ_CALENDAR)==PackageManager.PERMISSION_GRANTED;}
     void requestCalendar(){
         if(calendarAllowed()){new AlertDialog.Builder(activity).setTitle("Calendar access enabled").setMessage("Events are read from calendars visible on this phone, and never sent to Mikan or stored by the launcher. Revoke permission in Android app settings.").setPositiveButton("OK",null).show();return;}
@@ -309,7 +317,7 @@ final class DashboardCards {
     }
     private void refreshCalendar(boolean force){
         if(closed||agendaRoot==null||!resumed)return;
-        if(!calendarAllowed()){renderAgenda(null,"Tap to enable calendar");return;}
+        if(!calendarAllowed()){nextTimedEvent=0;agendaSampleAt=0;renderAgenda(null,"Tap to enable calendar");return;}
         if(calendarBusy){if(force)calendarRefreshPending=true;return;}
         long now=SystemClock.elapsedRealtime();if(!force&&now-lastCalendar<60000)return;
         lastCalendar=now;calendarBusy=true;calendarRefreshPending=false;
@@ -320,6 +328,8 @@ final class DashboardCards {
                 if(closed||!resumed||agendaRoot==null){lastCalendar=-60000;return;}
                 if(!calendarAllowed()){renderAgenda(null,"Tap to enable calendar");return;}
                 String message=result.error!=null?"Calendar unavailable":result.events.isEmpty()&&result.calendars==0?"No local calendars found":result.events.isEmpty()&&result.visibleCalendars==0?"No visible calendars":null;
+                nextTimedEvent=0;agendaSampleAt=SystemClock.elapsedRealtime();
+                if(result.error==null)for(Event event:result.events){if(!event.allDay&&event.begin>System.currentTimeMillis()){nextTimedEvent=event.begin;break;}}
                 renderAgenda(result.events,message);
                 if(calendarRefreshPending)refreshCalendar(true);
             });

@@ -1,6 +1,6 @@
 # Mikan Launcher — living feature reference
 
-**Source baseline:** v0.11.6 (versionCode 17), system stats header, 2026-11-24. See Git history for implementation commit.
+**Source baseline:** v0.11.7 (versionCode 18), dynamic Mikan remarks, 2026-11-24. See Git history for implementation commit.
 **Development:** [PR #117](https://github.com/capnolithyl/AI-Desktop-Companion/pull/117), branch `feature/mikan-launcher-v01`. Check current branch and Gradle version before changing this document.
 **Purpose:** a free, personal, offline-first Android launcher inspired by the Mikan OS home-screen mockup. Separate from Pocket Mikan, desktop Mikan and the NAS. This document tracks the launcher only.
 
@@ -37,8 +37,9 @@ Build success, release publication, installation and individual feature verifica
 | Favorites heading | 0.6 | Optional, hidden by default. | Hidden in v0.6 screenshot. |
 | Local portrait | 0.3 | Settings > Choose portrait; downscale to at most 768 px on longest edge, store privately. Reset returns to bundled coffee portrait if available, otherwise legacy small chat avatar. | Owner confirmed coffee portrait import; survives updates. |
 | Character artwork | 0.6 | Separate import/remove control for transparent art, local alpha-preserving storage. Existing portrait remains fallback; full-bleed image with blend when no cutout. | Full-bleed portrait observed; transparent import not yet confirmed. Coffee/cutout artwork is not bundled by default at this baseline. |
-| Mikan card | 0.1–0.6 | Local time-based greeting/subtitle, speech bubble, integrated art and tappable whole card. | v0.6 card observed. |
-| Pocket Mikan shortcut | 0.11.3 | Card prefers installed Pocket Mikan (`dev.capnolithyl.mikan.pocket`) via Android launch intent; uses saved HTTPS web fallback if unavailable. Card status and label reflect the installed app catalog, refreshed on package changes. No credential or URL transfer to Pocket; its own connection settings remain independent. | Implemented; device validation pending. |
+| Mikan card | 0.1–0.6 / 0.11.7 | Time-based greeting plus rotating contextual/local remarks in expanded speech bubble; removed two shortcut/status lines. Whole card still opens Pocket Mikan or web fallback. | Dynamic remarks implemented; device validation pending. |
+| Dynamic remarks | 0.11.7 | Local templates rotate roughly every 45 seconds while Home visible, refresh on context changes; notification presence for supported messaging/mail apps, fresh cached weather, imminent timed events from existing agenda snapshot, and playful idle messages. Individual toggles in Mikan settings, enabled by default but existing Android permissions required; no contents, sender names, exact unread counts, event titles, extra network or AI. Settings backed up; notification identifiers only in memory. | Implemented; CI/device tests pending. |
+| Pocket Mikan shortcut | 0.11.3 | Card prefers installed Pocket Mikan (`dev.capnolithyl.mikan.pocket`) via Android launch intent; uses saved HTTPS web fallback if unavailable. Card accessibility action reflects installed app availability; visible shortcut/status text removed in 0.11.7. No credential or URL transfer to Pocket; its own connection settings remain independent. | Implemented; device validation pending. |
 | Mikan Web shortcut | 0.3 | Saved HTTPS address remains browser fallback, and Settings > Mikan > Open Mikan Web in browser provides explicit access. URL stored locally, not hardcoded. | Owner confirmed web shortcut working in 0.3; fallback regression pending. |
 | Web connection check | 0.6 | Manual Settings action makes an HTTPS HEAD request, no redirects; shows last response for current session. No background polling. | Implemented; device validation pending. It is not a NAS/AI health check. |
 
@@ -60,7 +61,7 @@ All five built-in widgets (clock, Mikan, music, weather, upcoming events) can be
 | Weather cache | 0.7 | Selected city/coordinates and snapshot saved locally; 30-min freshness window, 5-min retry throttling, stale/cached label. Refresh while visible and foregrounded, or explicit action. Can clear city/cache. | Implemented; offline and retry tests pending. |
 | Upcoming calendar | 0.7 / 0.11.5 | Android visible Instances query, read-only permission; up to two upcoming/ongoing events in next seven days, dates/times and all-day support. Explicitly canceled events excluded; unset status accepted. Refresh on resume, manual refresh/diagnostics on long-press; tap opens calendar app or permission prompt. Distinguish absent local/visible calendars from empty agenda. | Owner confirmed upcoming events displayed after enabling Google Calendar data sharing and synchronizing. Basic populated agenda verified; remaining regressions pending. |
 | Calendar privacy | 0.7 | Optional title hiding; no calendar data persisted or transmitted by launcher. | Implemented; grant/revoke and privacy behavior pending. |
-| Notification dots | 0.4 | Off by default; opt-in Android notification access; active non-ongoing, non-group-summary notification package identifiers in memory. Folder dots aggregate members. Not unread counts. | Implemented; dot behavior and revocation pending. |
+| Notification dots | 0.4 | Dots off by default; opt-in Android notification access; active non-ongoing, non-group-summary notification package identifiers in memory for dots and optional Mikan hints. Folder dots aggregate members. Not unread counts. | Implemented; dot behavior and revocation pending. |
 
 ## 4. Settings quick reference
 
@@ -73,7 +74,7 @@ v0.9 replaces the long list with a themed category hub, icons, descriptions and 
 | Home screen | Header system stats, Grid (4/5 columns), rows (1–4), icon size, Dock (3–5 apps), Floating dock, Favorites heading, Minimum home pages (1–5), Manage favorites, Customize app icons, Create app folder, Manage folders |
 | Widgets | Clock, Mikan, Music, Weather, Upcoming events placement/visibility, Widget layout (Side by side/Stacked), independent pair toggles, section order |
 | Weather & calendar | Weather city, Temperature units, Refresh weather, Calendar access, Show calendar titles, Calendar diagnostics |
-| Mikan | Active artwork preview, Choose portrait, Choose character artwork, Remove character artwork, Reset portrait, Open Pocket Mikan, Open Mikan Web in browser, Mikan Web address, Check Mikan Web connection |
+| Mikan | Dynamic messages, notification/weather/calendar hints, notification access, Active artwork preview, Choose portrait, Choose character artwork, Remove character artwork, Reset portrait, Open Pocket Mikan, Open Mikan Web in browser, Mikan Web address, Check Mikan Web connection |
 | Permissions & privacy | Notification dots, Notification / music access, Calendar access, Android app settings |
 | System & updates | Default home app, Check for launcher updates, Export/Restore layout and settings |
 
@@ -122,6 +123,8 @@ Weather card also exposes refresh, city, units and clear location. No full-scree
 
 | 0.11.6 | Compact header RAM/storage stats, details, toggle and backup support | Implemented; CI/device validation pending. |
 
+| 0.11.7 | Contextual Mikan speech bubble, local rotation, source toggles and streamlined card | Implemented; CI/device verification pending. |
+
 ## 7. Outstanding verification checklist
 
 - [ ] Cold boot/reboot with airplane mode and NAS down; open drawer, favorites and folders.
@@ -157,6 +160,8 @@ Weather card also exposes refresh, city, units and clear location. No full-scree
 
 - [ ] v0.11.6 verify header RAM and storage values, tap details, hide/show, backup/restore preference, narrow screens/large fonts, unavailable metrics, normal Home return and no refresh while paused or in drawer/settings. Compare resource overhead; no benchmark yet.
 
+- [ ] v0.11.7 verify WhatsApp/messages/mail notification appearance and dismissal, dots off with hints on, access revoke, fresh/stale weather, imminent event without title, idle rotation, source toggles, backup/restore, offline and tap-to-open Pocket fallback; no disclosure of notification content. Verify card layout and no Home latency regression.
+
 ## 8. Roadmap (not implemented)
 
 Planned milestones; version targets flexible. See [Trello roadmap](https://trello.com/c/VEk6xVz6). No arbitrary deadlines.
@@ -177,7 +182,7 @@ App sorting (A–Z/Z–A and candidate local launch-history/install-date/manual 
 Accent colors, multiple schemes, adjustable wallpaper darkness/widget transparency, complete theme import/export including art, seasonal and optional local time/cached-weather themes.
 
 ### v0.14 — Bring Mikan to life
-Time-based expressions/artwork, local greetings using optional weather/calendar, configurable occasional messages, optional bounded NAS responses/status and offline personality.
+Time-based expressions/artwork, extend local remarks (basic contextual rotation implemented in v0.11.7), optional bounded NAS responses/status and offline personality.
 
 ### v0.15 — Expanded widgets
 Native Android widget hosting (subject to compatibility), battery/device information, tasks/reminders, quick contacts, optional daily briefing and local fallback.

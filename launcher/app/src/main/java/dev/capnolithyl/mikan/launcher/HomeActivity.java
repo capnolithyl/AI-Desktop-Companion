@@ -71,6 +71,7 @@ public class HomeActivity extends Activity {
     private String pendingIconKey;
     private boolean fileBusy;
     private MikanCard mikanCard;
+    private final MikanRemarks remarks=new MikanRemarks();
     private DashboardCards dashboard;
     private TextView ampm;
     private boolean compactClock;
@@ -123,7 +124,7 @@ public class HomeActivity extends Activity {
         if(catalogRenderPending){catalogRenderPending=false;refreshScreen();}
         else if(settings&&(media!=lastMediaPermission||calendar!=lastCalendarPermission))showSettings();
         lastMediaPermission=media;lastCalendarPermission=calendar;
-        if(media&&prefs.getBoolean("badges",false))handler.postDelayed(()->{if(foreground&&!closed)LauncherNotifications.refreshIfConnected();},120);
+        if(media&&(prefs.getBoolean("badges",false)||MikanRemarks.notificationHintsEnabled(prefs)))handler.postDelayed(()->{if(foreground&&!closed)LauncherNotifications.refreshIfConnected();},120);
         updateClock();observeEntry();
         handler.removeCallbacks(tick);handler.postDelayed(tick,15000);
         handler.removeCallbacks(refreshExtras);handler.postDelayed(refreshExtras,2500);
@@ -318,10 +319,8 @@ public class HomeActivity extends Activity {
         if(showClock||showWeather){addWidgetRow(topWidgets,showClock?clockBlock:null,showWeather?dashboard.weatherView():null,compactClock);gap(topWidgets,12);}
         if(widgetHere("mikanPage",1)){
             Drawable art=characterArt.get();
-            String url=prefs.getString("mikanWebUrl","");
             boolean pocket=pocketAvailable();
-            String status=pocket?"Pocket Mikan app":url.isEmpty()?"Set up Mikan Web":url.equals(checkedWebUrl)&&!webStatus.isEmpty()?webStatus:"Web fallback";
-            mikanCard=new MikanCard(this,art!=null?art:portraits.get(),art!=null,status,pocket?"Open Pocket Mikan":"Open Mikan Web",this::openMikan);
+            mikanCard=new MikanCard(this,art!=null?art:portraits.get(),art!=null,pocket?"Open Pocket Mikan":"Open Mikan Web",this::openMikan);
             characterBlock.addView(mikanCard.view());gap(characterBlock,12);
         }
         if(prefs.getBoolean("showFavoritesLabel",false)){appBlock.addView(text("YOUR FAVORITES",12,MUTED,true));gap(appBlock,4);}
@@ -639,6 +638,13 @@ public class HomeActivity extends Activity {
                 setting(body,"Remove character artwork",()->new AlertDialog.Builder(this).setTitle("Return to portrait?").setNegativeButton("Cancel",null).setPositiveButton("Remove",(d,w)->{characterArt.reset();showSettings();}).show());
                 setting(body,"Reset portrait",()->new AlertDialog.Builder(this).setTitle("Reset portrait?").setNegativeButton("Cancel",null).setPositiveButton("Reset",(d,w)->{portraits.reset();showSettings();}).show());
                 settingsUi.note(body,"Use a transparent PNG for character artwork. Images are stored on this phone.");
+                settingsUi.heading(body,"LITTLE REMARKS");
+                settingsUi.toggle(body,"Dynamic messages","Contextual remarks and playful greetings",prefs.getBoolean("mikanRemarks",true),on->{prefs.edit().putBoolean("mikanRemarks",on).apply();LauncherNotifications.refreshIfConnected();showSettings();});
+                settingsUi.toggle(body,"Notification hints","Mention active messaging and email notifications, never their contents",prefs.getBoolean("mikanNotifyHints",true),on->{prefs.edit().putBoolean("mikanNotifyHints",on).apply();LauncherNotifications.refreshIfConnected();if(on&&!LauncherNotifications.allowed(this))notificationAccess();showSettings();});
+                settingsUi.toggle(body,"Weather remarks","Use the existing fresh weather snapshot",prefs.getBoolean("mikanWeatherHints",true),on->{prefs.edit().putBoolean("mikanWeatherHints",on).apply();showSettings();});
+                settingsUi.toggle(body,"Calendar reminders","Mention an upcoming event without revealing its title",prefs.getBoolean("mikanCalendarHints",true),on->{prefs.edit().putBoolean("mikanCalendarHints",on).apply();showSettings();});
+                settingsUi.row(body,"Notification access",LauncherNotifications.allowed(this)?"Allowed":"Not granted",this::notificationAccess);
+                settingsUi.note(body,"Remarks rotate while Home is visible. No AI, additional network calls, message contents or sender names.");
                 settingsUi.heading(body,"COMPANION CONNECTION");
                 settingsUi.row(body,"Open Pocket Mikan",pocketAvailable()?"App installed":"App unavailable",this::openMikan);
                 settingsUi.note(body,"The home card prefers Pocket Mikan. The saved web address is only a fallback; Pocket Mikan manages its own connection.");
@@ -651,7 +657,7 @@ public class HomeActivity extends Activity {
                 settingsUi.heading(body,"NOTIFICATIONS & MEDIA");
                 settingsUi.toggle(body,"Notification dots","Show active app and folder notifications",prefs.getBoolean("badges",false),on->{prefs.edit().putBoolean("badges",on).apply();LauncherNotifications.refreshIfConnected();if(on&&!LauncherNotifications.allowed(this))notificationAccess();showSettings();});
                 settingsUi.row(body,"Notification / music access",LauncherNotifications.allowed(this)?"Allowed":"Not granted",this::notificationAccess);
-                settingsUi.note(body,"Notification access is optional. Music controls and dots use local Android data.");
+                settingsUi.note(body,"Notification access is optional. Music controls, dots and optional Mikan notification hints use local Android data.");
                 settingsUi.heading(body,"ANDROID PERMISSIONS");
                 settingsUi.row(body,"Calendar access",checkSelfPermission(android.Manifest.permission.READ_CALENDAR)==android.content.pm.PackageManager.PERMISSION_GRANTED?"Allowed":"Not granted",dashboard::requestCalendar);
                 setting(body,"Android app settings",()->{try{startActivity(new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,android.net.Uri.parse("package:"+getPackageName())));}catch(Exception ex){Toast.makeText(this,"Open Android app settings manually.",Toast.LENGTH_SHORT).show();}});
@@ -830,7 +836,7 @@ public class HomeActivity extends Activity {
                 checkingWeb=false;if(isFinishing()||isDestroyed()||!url.equals(prefs.getString("mikanWebUrl","")))return;
                 checkedWebUrl=url;webStatus=status;Toast.makeText(this,status+" · last check only",Toast.LENGTH_LONG).show();
                 if(settings&&settingsSection==SettingsHub.Section.MIKAN)showSettings();
-                if(!settings&&!drawer&&mikanCard!=null&&!pocketAvailable())mikanCard.setStatus(status);
+                // Web check status stays in settings; the character bubble is for remarks.
             });
         },"mikan-web-check").start();
     }
@@ -884,14 +890,17 @@ public class HomeActivity extends Activity {
         });
     }
     private void notificationAccess(){
-        new AlertDialog.Builder(this).setTitle("Notification access").setMessage("Android grants broad notification access. Mikan Launcher uses only app identifiers for dots and active media sessions for playback controls. Nothing is sent to Mikan Web or stored. You can revoke access at any time.").setNegativeButton("Cancel",null).setPositiveButton("Open Android settings",(d,w)->{
+        new AlertDialog.Builder(this).setTitle("Notification access").setMessage("Android grants broad notification access. Mikan Launcher uses app identifiers for dots and optional notification hints, and active media sessions for playback controls. Message bodies and sender names are not read for hints. No notification data is sent to Mikan Web or persisted. You can revoke access at any time.").setNegativeButton("Cancel",null).setPositiveButton("Open Android settings",(d,w)->{
             try{startActivity(new Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS));}catch(Exception e){Toast.makeText(this,"Open Android notification access settings.",Toast.LENGTH_LONG).show();}
         }).show();
     }
     private void refreshExtras(){
         if(!foreground||closed)return;
         long started=android.os.SystemClock.elapsedRealtime();
-        boolean enabled=prefs.getBoolean("badges",false)&&LauncherNotifications.allowed(this);
+        boolean hints=mikanCard!=null&&MikanRemarks.notificationHintsEnabled(prefs);
+        boolean access=(prefs.getBoolean("badges",false)||hints)&&LauncherNotifications.allowed(this);
+        boolean enabled=prefs.getBoolean("badges",false)&&access;
+        if(mikanCard!=null){String note=remarks.choose(prefs,access&&hints?LauncherNotifications.snapshot():Collections.emptySet(),dashboard.upcomingHint(),Calendar.getInstance().get(Calendar.HOUR_OF_DAY));mikanCard.setRemark(note);}
         for(Map.Entry<TextView,String> e:badgeViews.entrySet()){
             boolean show=false;
             if(enabled){App a=find(e.getValue());if(a!=null){if(a.folderKey!=null){for(String k:folders.members(a.folderKey)){App child=find(k);if(child!=null&&child.component!=null&&LauncherNotifications.has(child.component.getPackageName())){show=true;break;}}}else show=LauncherNotifications.has(a.component.getPackageName());}}
