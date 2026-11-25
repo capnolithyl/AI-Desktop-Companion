@@ -144,7 +144,7 @@ Weather card also exposes refresh, city, units and clear location. No full-scree
 
 | 0.12.4 | Grouped letter headers, recycled drawer rows, finger-following magnification wave and release animation | Implemented; CI/device pending. |
 
-| 0.12.5 | Direct long-press removal, editor minus controls and dock removal | Implemented; CI/device pending. |
+| 0.12.5 | Direct long-press removal, editor minus controls and dock removal | Initial [CI 45617367747](https://github.com/capnolithyl/AI-Desktop-Companion/actions/runs/45617367747): all five model test suites passed; Java compile failed due to missing closing brace on MixedHomeGrid.Callbacks. Brace restored; rebuild/device verification pending. |
 
 ## 7. Outstanding verification checklist
 

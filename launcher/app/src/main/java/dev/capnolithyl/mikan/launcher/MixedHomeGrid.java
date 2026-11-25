@@ -15,7 +15,7 @@ import java.util.*;
 
 /** Scrollable grid with content-aware row heights. Editing handles do not intercept normal widget actions. */
 final class MixedHomeGrid extends ViewGroup {
-    interface Callbacks {void changed(Map<String,MixedLayout.Rect> layout);void rejected();void editItem(String key);void removeItem(String key);
+    interface Callbacks {void changed(Map<String,MixedLayout.Rect> layout);void rejected();void editItem(String key);void removeItem(String key);}
     private final Map<String,MixedLayout.Rect> positions;
     private final Map<String,MixedLayout.Spec> specs=new HashMap<>();
     private final Map<View,String> keys=new LinkedHashMap<>();

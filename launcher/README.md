@@ -80,3 +80,5 @@ Alphabetical drawer modes show full-width letter headers only for populated sect
 
 ## v0.12.5 direct shortcut removal
 Long-press a pinned app or folder on normal Home or the dock to open the shortcut menu; Remove from Home/dock unpins it, Move/edit layout opens the editor. Both editor modes show a minus control on shortcuts, separate from the drag surface. Live dock picker also offers Remove from dock. Removal does not uninstall or hide the app, delete folders or remove folder membership. Sparse positions are retained and the removed mixed-grid placement is cleared. Packed legacy layout and ordered dock prefix still reflow as before. CI and device validation pending.
+
+Build correction: initial v0.12.5 CI passed all five model test suites but failed Java compilation because the MixedHomeGrid.Callbacks interface was missing its closing brace. Restored the brace; versionCode 25 retained because the failed build published no APK. Rebuild and device validation pending.
