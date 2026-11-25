@@ -5,13 +5,15 @@ export type CommunicationPreferences = {
   replyLength: "concise" | "balanced" | "detailed";
   followUps: "necessary" | "natural";
   customGuidance: string;
+  dialogueExamples?: string;
 };
 export const DEFAULT_COMMUNICATION: CommunicationPreferences = {
   addressMode: "endearments",
   endearments: "honey, sweetheart, darling",
   replyLength: "balanced",
   followUps: "necessary",
-  customGuidance: ""
+  customGuidance: "",
+  dialogueExamples: ""
 };
 export function readCommunicationPreferences(value: unknown): CommunicationPreferences {
   const v = value && typeof value === "object" ? value as Partial<CommunicationPreferences> : {};
@@ -21,7 +23,8 @@ export function readCommunicationPreferences(value: unknown): CommunicationPrefe
       ? v.endearments.slice(0, 240).replace(/[\r\n]/g, " ").trim() : DEFAULT_COMMUNICATION.endearments,
     replyLength: v.replyLength === "concise" || v.replyLength === "detailed" ? v.replyLength : "balanced",
     followUps: v.followUps === "natural" ? "natural" : "necessary",
-    customGuidance: typeof v.customGuidance === "string" ? v.customGuidance.trim().slice(0, 1000) : ""
+    customGuidance: typeof v.customGuidance === "string" ? v.customGuidance.trim().slice(0, 1000) : "",
+    dialogueExamples: typeof v.dialogueExamples === "string" ? v.dialogueExamples.trim().slice(0, 1600) : ""
   };
 }
 export function communicationGuidance(value: CommunicationPreferences): string {
@@ -43,7 +46,8 @@ export function communicationGuidance(value: CommunicationPreferences): string {
     : "Ask relevant follow-up questions when a conversation naturally invites them; do not make it formulaic.";
   return ["OWNER COMMUNICATION PREFERENCES (user-selected behavior rules; higher priority than recalled personal facts):",
     address, length, followups,
-    p.customGuidance ? "Additional instructions entered by the owner: " + p.customGuidance : ""].filter(Boolean).join("\n");
+    p.customGuidance ? "Additional instructions entered by the owner: " + p.customGuidance : "",
+    p.dialogueExamples ? "Owner-selected dialogue examples (illustrative voice only; not factual memories or mandatory phrases):\n" + p.dialogueExamples : ""].filter(Boolean).join("\n");
 }
 
 

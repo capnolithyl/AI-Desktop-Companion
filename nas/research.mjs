@@ -136,11 +136,14 @@ function planFrom(raw){
   }catch{return null;}
 }
 const evidenceText=sources=>JSON.stringify(sources.map((s,i)=>({number:i+1,...s,content:s.content.slice(0,3500)})));
-export function researchSettings(db){
+export function researchSettings(db,{defaultEngine="native"}={}){
   db.exec("CREATE TABLE IF NOT EXISTS nas_research_settings(id INTEGER PRIMARY KEY CHECK(id=1),mode TEXT NOT NULL)");
   const get=()=>db.prepare("SELECT mode FROM nas_research_settings WHERE id=1").get()?.mode??"off";
   function save(mode){if(!["off","simple","strict"].includes(mode))throw Object.assign(Error("Invalid research mode"),{status:400});db.prepare("INSERT INTO nas_research_settings(id,mode) VALUES(1,?) ON CONFLICT(id) DO UPDATE SET mode=excluded.mode").run(mode);return get();}
-  return {get,save};
+  db.exec("CREATE TABLE IF NOT EXISTS nas_research_engine(id INTEGER PRIMARY KEY CHECK(id=1),engine TEXT NOT NULL)");
+  const engine=()=>db.prepare("SELECT engine FROM nas_research_engine WHERE id=1").get()?.engine??defaultEngine;
+  function saveEngine(value){if(!["legacy","native"].includes(value))throw Object.assign(Error("Invalid research engine"),{status:400});db.prepare("INSERT INTO nas_research_engine(id,engine) VALUES(1,?) ON CONFLICT(id) DO UPDATE SET engine=excluded.engine").run(value);return engine();}
+  return {get,save,engine,saveEngine};
 }
 export async function researchTurn({mode,history,generate,canRequest,search=searchWeb,read=readWeb,activity=()=>{},now=new Date(),activeTask}){
   if(mode==="off")return {sources:[],note:""};

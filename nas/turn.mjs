@@ -57,11 +57,18 @@ export async function executeNasTurn({store,conversationId,question,selected,mod
   // Interactive effort applies to answers and native tool decisions, not auxiliary inference.
   const effort=selected.reasoningEffort==="auto"?undefined:selected.reasoningEffort;
   const activeTask=rawHistory.filter(m=>m.role==="assistant").at(-1)?.inference?.researchTask;
+  // Narrow, cheap conversational fast path for self-expressions of emotion.
+  // Questions, explicit requests and longer messages still use the agent.
+  const reaction=/^(?:(?:dude|man|wow|damn|lol|haha)[,!\s]+)*(?:i(?:['’]m| am) (?:so |really |super |pretty |very )?(?:excited|hyped|happy|sad|frustrated|annoyed|tired|relieved|disappointed|impatient)|(?:that(?:['’]s| is) (?:so |really |pretty )?(?:awesome|great|amazing|hilarious|funny|sad|annoying|frustrating|disappointing)))[.!\s]*$/i.test(question.trim());
+  if(!local&&reaction&&mode!=="off"){
+    activity({title:"Conversational reaction",detail:"No public lookup needed; retain full conversation and persona",lines:[]});
+    mode="off";
+  }
   if(!local&&publicAgent&&mode!=="off"&&["nvidia","groq"].includes(selected.provider)){
     const profile=currentProfile(promptFile,store);
     // Only typed behavior preferences are included in the public tool prompt.
     // Freeform persona, custom guidance, memories and raw assistant history remain private.
-    const publicVoice=assistantVoiceGuidance({...profile,systemPrompt:"You are the user\x27s expressive desktop companion. Be natural, warm and accurate.",communication:{...profile.communication,endearments:"honey, sweetheart, darling",customGuidance:""}},roleplayActive(question,history));
+    const publicVoice=assistantVoiceGuidance({...profile,systemPrompt:"You are the user\x27s expressive desktop companion. Be natural, warm and accurate.",communication:{...profile.communication,endearments:"honey, sweetheart, darling",customGuidance:"",dialogueExamples:""}},roleplayActive(question,history));
     const agent=await agentResearch({mode,history,signal,publicVoice,compact:selected.provider==="groq",reasoningEffort:effort,previousEvidence:rawHistory.at(-2)?.role==="assistant"?rawHistory.at(-2)?.inference?.agentEvidence:undefined,ownerFacts:store.listMemories(),canRequest:(slots=1)=>!signal?.aborted&&canRequest(slots),activity,diagnostics:agentDiagnostics,
       answerSystem:systemPrompt(promptFile,store,{text:"",ids:[],auditLines:[]},{question,history:[],mode,researchActive:true,plannedPublicSearch:true,publicWebRequested:true}),
       generate:args=>trace.measure("agent",()=>{signal?.throwIfAborted();reserve();return requestModel({...args,config:selected,signal,onModel:v=>trace.model(v),onUsage:v=>trace.usage("agent",v)});}),

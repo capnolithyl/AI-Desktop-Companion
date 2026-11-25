@@ -57,7 +57,7 @@ function workspaceFile(path) {
 function sse(res,kind,value) {
   if (!res.destroyed) res.write("event: "+kind+"\ndata: "+JSON.stringify(value)+"\n\n");
 }
-export function makeServer({store,config,key,promptFile="",maintenanceFile="/data/.mikan-update-maintenance",updates=updateControl(),models=providerSettings({initial:config,db:store.db}),generate=generateReply,research=researchSettings(store.db),search=searchWeb,read=readWeb,knowledge=createKnowledge({db:store.db,read})}) {
+export function makeServer({store,config,key,promptFile="",maintenanceFile="/data/.mikan-update-maintenance",updates=updateControl(),models=providerSettings({initial:config,db:store.db}),generate=generateReply,research=researchSettings(store.db,{defaultEngine:"legacy"}),search=searchWeb,read=readWeb,knowledge=createKnowledge({db:store.db,read})}) {
   if (typeof key!=="string" || key.length<32) throw new Error("MIKAN_REMOTE_KEY must be at least 32 characters");
   let busy=false,lastReplyAt=0,activeWrites=0;
   const maintenance=()=>existsSync(maintenanceFile);
@@ -114,10 +114,13 @@ export function makeServer({store,config,key,promptFile="",maintenanceFile="/dat
         return json(res,202,brain.start(body));
       }
       if(req.method==="POST"&&path==="/api/brain-lab/stop")return json(res,200,brain.stop());
-      if(req.method==="GET"&&path==="/api/research")return json(res,200,{mode:research.get()});
+      if(req.method==="GET"&&path==="/api/research")return json(res,200,{mode:research.get(),engine:research.engine()});
       if(req.method==="PUT"&&path==="/api/research"){
         const body=await readJson(req,1024);if(unavailable())return json(res,409,{error:"Wait for current reply"});
-        return json(res,200,{mode:research.save(body?.mode)});
+        if(body?.engine!==undefined&&!["legacy","native"].includes(body.engine))return json(res,400,{error:"Invalid research engine"});
+        if(body?.mode!==undefined)research.save(body.mode);
+        if(body?.engine!==undefined)research.saveEngine(body.engine);
+        return json(res,200,{mode:research.get(),engine:research.engine()});
       }
       if(req.method==="POST"&&path==="/api/research/test"){
         if(unavailable())return json(res,409,{error:"Wait for current reply"});
@@ -205,7 +208,7 @@ export function makeServer({store,config,key,promptFile="",maintenanceFile="/dat
         res.writeHead(200,{"Content-Type":"text/event-stream; charset=utf-8",
           "Cache-Control":"no-cache, no-transform","X-Accel-Buffering":"no",
           "X-Content-Type-Options":"nosniff"});
-          const {answer,memory,researched}=await executeNasTurn({store,conversationId,question,selected,mode,promptFile,requestModel,trace,search,read:(url,opts)=>knowledge.cachedRead(url,opts),knowledge,
+          const {answer,memory,researched}=await executeNasTurn({store,conversationId,question,selected,mode,promptFile,requestModel,trace,publicAgent:research.engine()==="native",search,read:(url,opts)=>knowledge.cachedRead(url,opts),knowledge,
             canRequest:(slots=1)=>models.available(selected.provider,slots),reserve:()=>models.reserve(selected.provider),
             onDelta:part=>sse(res,"delta",{text:part}),activity:event=>{try{store.learning.recordSearch(conversationId,user.id,event);}catch{console.error("Could not record NAS research activity");}}});
           const saved=store.append(conversationId,"assistant",answer,{provider:selected.provider,requestedModel:selected.model,actualModel:trace.actualModel(),outcome:"completed",timing:trace.snapshot(),...(researched.task?{researchTask:researched.task}:{}),...(researched.agentEvidence?.length?{agentEvidence:researched.agentEvidence}:{}),...(researched.sources.length?{sources:researched.sources.map(({content,...source})=>source)}:{})});
@@ -249,7 +252,7 @@ export function startServer(env=process.env) {
   const store=openStore(env.MIKAN_DB_PATH||"/data/mikan-memory.sqlite3");
   const models=providerSettings({env,db:store.db,file:join(dirname(env.MIKAN_DB_PATH||"/data/mikan-memory.sqlite3"),".mikan-provider-settings.json")});
   const knowledge=createKnowledge({db:store.db,read:readWeb,file:join(dirname(env.MIKAN_DB_PATH||"/data/mikan-memory.sqlite3"),".mikan-notion-secret")});
-  const server=makeServer({store,models,knowledge,key:env.MIKAN_REMOTE_KEY,
+  const server=makeServer({store,models,knowledge,research:researchSettings(store.db),key:env.MIKAN_REMOTE_KEY,
     promptFile:env.MIKAN_SYSTEM_PROMPT_FILE||"/data/persona.txt"});
   const port=Number(env.PORT||3847);
   server.listen(port,"0.0.0.0",()=>console.log("Mikan NAS ready on port "+port+" ("+models.view().provider+")"));

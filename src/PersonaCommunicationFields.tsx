@@ -44,6 +44,11 @@ export function PersonaCommunicationFields({value,onChange}:{value:VoiceFields;o
               onChange={event => onChange({communication:{...value.communication,customGuidance:event.target.value}})}/>
             <small>These are behavioral preferences, not memories of facts about you.</small>
           </label>
-          
+          <label className="setting-field">Example dialogue (optional)
+            <textarea rows={5} maxLength={1600} value={value.communication.dialogueExamples??""}
+              placeholder={"You: I finally fixed it!\nMikan: The bug has been slain. Now please tell me it stays dead."}
+              onChange={event=>onChange({communication:{...value.communication,dialogueExamples:event.target.value}})}/>
+            <small>Examples of how she should sound, not lines to repeat. Private examples are used in normal chat, not public tool prompts.</small>
+          </label>
 </section>;
 }

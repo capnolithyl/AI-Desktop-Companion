@@ -1033,3 +1033,27 @@ test("weak unrelated memory matches are omitted from NAS conversation context",(
   assert.match(store.library.context("What's my favorite music?",c.id).text,/likes music/);
  }finally{store.db.close();}
 });
+
+test("live research engine defaults to native and persists explicit legacy selection",()=>{
+ const store=openStore(":memory:");
+ try{const settings=researchSettings(store.db);assert.equal(settings.engine(),"native");settings.saveEngine("legacy");assert.equal(researchSettings(store.db).engine(),"legacy");assert.throws(()=>settings.saveEngine("unknown"),/Invalid research engine/);assert.equal(settings.get(),"off");}
+ finally{store.db.close();}
+});
+test("excited follow-up uses full conversation in one private answer without repeated public search",async()=>{
+ const {executeNasTurn}=await import("../turn.mjs"),store=openStore(":memory:");
+ try{
+  const chat=store.newConversation();store.append(chat.id,"user","Any news about the new album?");
+  store.append(chat.id,"assistant","They plan to record next year.",{researchTask:{kind:"lookup",subject:"new album"}});
+  const question="dude i'm so excited";store.append(chat.id,"user",question);
+  let calls=0;
+  const result=await executeNasTurn({store,conversationId:chat.id,question,selected:{provider:"groq",model:"openai/gpt-oss-120b",historyChars:16000,reasoningEffort:"medium"},mode:"simple",publicAgent:true,reserve:()=>calls++,canRequest:()=>true,search:async()=>{throw Error("unexpected search");},requestModel:async args=>{assert.equal(args.agentTools,undefined);assert.equal(args.history.at(-2).content,"They plan to record next year.");assert.match(args.system,/DIALOGUE STYLE/);return "That is going to be a long wait!";}});
+  assert.equal(calls,1);assert.deepEqual(result.researched.sources,[]);
+ }finally{store.db.close();}
+});
+test("owner dialogue examples persist as private voice configuration",async()=>{
+ const {assistantVoiceGuidance}=await import("../../src/assistant-voice.ts");
+ const store=openStore(":memory:");
+ try{store.saveProfile({...DEFAULT_COMPANION_PROFILE,communication:{...DEFAULT_COMPANION_PROFILE.communication,dialogueExamples:"User: Fixed it.\nAssistant: Victory!"}});
+ assert.match(assistantVoiceGuidance(store.getProfile()),/Victory!/);assert.match(assistantVoiceGuidance(store.getProfile()),/DIALOGUE STYLE/);}
+ finally{store.db.close();}
+});

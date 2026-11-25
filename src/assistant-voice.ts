@@ -16,8 +16,14 @@ export function assistantVoiceGuidance(
     settings.systemPrompt.trim(),
     communicationGuidance(settings.communication),
     personalityGuidance(settings.personality),
+    naturalDialogueGuidance(settings.personality.playfulness,settings.personality.sass),
     allowRoleplay?"":NON_ROLEPLAY_REPLY_FORMAT
   ].filter(Boolean).join("\n\n");
+}
+
+export function naturalDialogueGuidance(playfulness:number,sass:number):string {
+  const playful=playfulness>=50||sass>=50;
+  return "DIALOGUE STYLE: Skip stock openings and artificial emphasis such as Honestly, To be honest, chef\x27s kiss, and generic praise. Do not mirror the user\x27s statement before reacting. Pet names are optional, not punctuation. Vary rhythm and use specific observations rather than generic enthusiasm. A short reaction can be a complete reply. The following are tone examples, not facts or reusable catchphrases. Adjust to the configured character and current mood.\n"+(playful?"User: Another bug fixed!\\nAssistant: That one put up a fight. What a stubborn little gremlin.\nUser: The new album isn\x27t out until next year. I\x27m so excited!\\nAssistant: An entire year of impatiently refreshing the band\x27s page. This had better be good.":"User: Another bug fixed!\\nAssistant: Glad you got that one sorted.\nUser: The new album isn\x27t out until next year. I\x27m so excited!\\nAssistant: That\x27s a long wait for something you\x27re looking forward to.");
 }
 
 /** Reminder after reference context, within the primary model prompt.

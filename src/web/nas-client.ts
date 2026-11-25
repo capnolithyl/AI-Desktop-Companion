@@ -12,6 +12,7 @@ export type LearningStatus={
 export type LibrarySnapshot={facts:UserFact[];characterFacts:CharacterFact[];interests:InterestItem[];sessionSummaries:SessionSummary[]};
 export type CloudProvider="nvidia"|"openrouter"|"gemini"|"groq";
 export type ResearchMode="off"|"simple"|"strict";
+export type ResearchEngine="legacy"|"native";
 export type NasSource={url:string;title:string;kind:"preview"|"page"|"notion"|"cached-web";publishedDate:string|null;id?:string;syncedAt?:number;fetchedAt?:number;fromCache?:boolean;coverage?:string};
 export type NasTiming={mode:ResearchMode;totalMs:number;firstTextMs:number|null;modelCalls:number;stages:{stage:string;startMs:number;elapsedMs:number;success:boolean;errorCode?:string}[];inference?:{stage:string;finishReason:string|null;inputTokens?:number|null;outputTokens:number|null;reasoningTokens:number|null;maxTokens:number;reasoningEffort?:string;sawDone?:boolean}[]};
 export type NasInference={researchTask?:unknown;provider:CloudProvider;requestedModel:string;actualModel:string|null;outcome:"completed"|"failed";upstreamStatus?:number|null;errorCode?:string;sources?:NasSource[];timing?:NasTiming};
@@ -60,8 +61,8 @@ export class NasClient {
   knowledge(){return this.json<KnowledgeStatus>("knowledge");}
   knowledgeAction(action:string,args:object={}){return this.json<KnowledgeStatus>("knowledge",{method:"POST",body:JSON.stringify({action,...args})});}
   knowledgeDocument(kind:"notion"|"web",id:string){return this.json<KnowledgeDocument>("knowledge/document?"+new URLSearchParams({kind,id}));}
-  research(){return this.json<{mode:ResearchMode}>("research");}
-  saveResearch(mode:ResearchMode){return this.json<{mode:ResearchMode}>("research",{method:"PUT",body:JSON.stringify({mode})});}
+  research(){return this.json<{mode:ResearchMode;engine?:ResearchEngine}>("research");}
+  saveResearch(mode:ResearchMode,engine?:ResearchEngine){return this.json<{mode:ResearchMode;engine?:ResearchEngine}>("research",{method:"PUT",body:JSON.stringify({mode,engine})});}
   testResearch(){return this.json<{ok:boolean;count:number}>("research/test",{method:"POST",body:"{}"});}
   models(){return this.json<NasModels>("models");}
   saveModels(patch:NasModelPatch){return this.json<NasModels>("models",{method:"PUT",body:JSON.stringify(patch)});}
