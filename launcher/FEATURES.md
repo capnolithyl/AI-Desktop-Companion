@@ -1,6 +1,6 @@
 # Mikan Launcher — living feature reference
 
-**Source baseline:** v0.12.5 (versionCode 25), direct home shortcut removal, 2026-11-25. See Git history for implementation commit.
+**Source baseline:** v0.12.6 (versionCode 26), searchable shortcut picker, 2026-11-25. See Git history for implementation commit.
 **Development:** [PR #117](https://github.com/capnolithyl/AI-Desktop-Companion/pull/117), branch `feature/mikan-launcher-v01`. Check current branch and Gradle version before changing this document.
 **Purpose:** a free, personal, offline-first Android launcher inspired by the Mikan OS home-screen mockup. Separate from Pocket Mikan, desktop Mikan and the NAS. This document tracks the launcher only.
 
@@ -22,6 +22,7 @@ Build success, release publication, installation and individual feature verifica
 | Drawer customization | 0.12.3 | Right-edge #/A–Z scrubber (nearest populated section, animated enlarged active/neighbor letters since v0.12.4, haptics); alphabetical ascending/descending, local recent/frequent sorting, user-assigned categories, hide/unhide, independent 3–5 columns. Index hidden while searching or nonalphabetical. Hidden applies to drawer only; Home and quick search retained. Sort/category/hide/density settings backed up; launch history local and excluded, clearable. | Implemented; CI/device pending. |
 | Alphabet sections and wave | 0.12.4 | Default alphabetical modes group apps beneath full-width populated #/A–Z headings; partial rows do not mix letters. Virtualized ListView recycles headers and rows of app cells; index jumps to headers. Continuous finger-position wave expands active/neighbor letters leftward, then settles on release; respects disabled system animations. No centered popup; wave replaces it. Search and history sorts use flat rows. | Implemented; CI/device pending. |
 | App drawer | 0.1 / 0.11.4 / 0.12.4 | Search installed launchable apps by label or package; swipe up near bottom opens full drawer; its own search field opens keyboard. Native adapter-backed ListView creates/recycles visible header and app rows, filters existing catalog without rebuilding the drawer; 3–5 independently configurable columns, existing icons, badge updates, and click/long-press actions. | Implemented; device latency, search, scroll and launch regression pending. |
+| Searchable shortcut picker | 0.12.6 | Home empty-slot and live dock picker use themed searchable, recycled icon rows, cached normalized label/package ranking, result count, tap/Go selection (never launches app), close/cancel and empty state. Home filters already pinned apps; dock includes pinned apps/folders and retains removal action. Keyboard opens on search tap so browsing remains available. No network or permissions. Existing dock-prefix restriction remains. | Implemented; CI/device pending. |
 | Direct shortcut removal | 0.12.5 | Long-press pinned Home/dock icon for anchored Remove from Home/dock and Move/edit layout menu. Visible minus controls on app/folder tiles in both editors; live dock picker has Remove action. Unpins only, leaves app installed, folders/membership and icons intact; preserves sparse positions, clears removed mixed placement. Legacy packed mode and dock prefix still shift remaining apps. | Implemented; CI/device pending. |
 | Favorites | 0.1 | Long-press drawer app to pin; drawer/Manage favorites menu to unpin and move; saved locally. | Favorites visible across screenshots; persistence on updates observed, complete CRUD pending. |
 | Dock | 0.1–0.2 | First 3–5 available pinned entries, configurable, persists across pages. Default 5; floating dock (default on in v0.8) or framed dock. | Floating dock observed in v0.8; toggle pending. |
@@ -146,6 +147,8 @@ Weather card also exposes refresh, city, units and clear location. No full-scree
 
 | 0.12.5 | Direct long-press removal, editor minus controls and dock removal | Initial [CI 45617367747](https://github.com/capnolithyl/AI-Desktop-Companion/actions/runs/45617367747): all five model test suites passed; Java compile failed due to missing closing brace on MixedHomeGrid.Callbacks. Brace restored; rebuild/device verification pending. |
 
+| 0.12.6 | Shared searchable Home/dock shortcut picker | Implemented; CI/device pending. |
+
 ## 7. Outstanding verification checklist
 
 - [ ] Cold boot/reboot with airplane mode and NAS down; open drawer, favorites and folders.
@@ -196,6 +199,8 @@ Weather card also exposes refresh, city, units and clear location. No full-scree
 - [ ] v0.12.4 verify wave follows fractional finger position, neighbors extend progressively, smooth release, disabled animation setting, missing letters, both alphabetical sorts, heading alignment, partial rows, # section, search and nonalphabetical flat rows, category filter, hide/unhide, density, recycled icons/badges, long-press/tap, scrolling and latency. Pure Java row/wave tests in CI.
 
 - [ ] v0.12.5 verify normal Home and dock long-press menu, both editor minus controls, unavailable shortcuts, mixed dock picker removal, sparse position persistence, folder preservation, re-pin, ordinary tap/drag, backup and restart. Mixed model tests include forgetting removed placement.
+
+- [ ] v0.12.6 verify Home empty-slot picker and dock picker, themed recycled icons, alphabetical browsing, ranked name/package search, no matches, Go/tap selection without launching, cancel/Back, pinned filtering and dock remove, stale app/slot, keyboard/landscape and latency. Existing QuickAppRank cases cover ranking.
 
 ## 8. Roadmap (not implemented)
 

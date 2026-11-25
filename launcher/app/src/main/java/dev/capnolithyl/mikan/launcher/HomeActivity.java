@@ -1238,18 +1238,25 @@ public class HomeActivity extends Activity {
         ArrayList<App> choices=new ArrayList<>(apps);for(String id:folders.keys()){App folder=find(id);if(folder!=null)choices.add(folder);}
         final String existing=slot<favorites.size()?favorites.get(slot):null;
         if(choices.isEmpty()&&existing==null)return;
-        int offset=existing==null?0:1;String[] labels=new String[choices.size()+offset];
-        if(existing!=null)labels[0]="Remove from dock";
-        for(int i=0;i<choices.size();i++)labels[i+offset]=choices.get(i).label;
-        new AlertDialog.Builder(this).setTitle("Dock slot "+(slot+1)).setItems(labels,(d,i)->{
-            if(existing!=null&&i==0){if(editingMixed&&slot<favorites.size()&&existing.equals(favorites.get(slot)))removeHomeShortcut(existing);return;}
-            String key=choices.get(i-offset).key();if(find(key)==null||!editingMixed)return;int from=favorites.indexOf(key);
+        showAppPicker("Dock slot "+(slot+1),choices,choice->{
+            if(!editingMixed||slot>favorites.size()||!Objects.equals(existing,slot<favorites.size()?favorites.get(slot):null))return;
+            String key=choice.key();if(find(key)==null)return;int from=favorites.indexOf(key);
             if(from==slot)return;
             if(slot<favorites.size()&&from>=0)Collections.swap(favorites,from,slot);
             else if(slot<favorites.size()){String previous=favorites.set(slot,key);favorites.add(previous);}
             else if(from<0)favorites.add(key);
             saveFavorites();showHome();
-        }).setNegativeButton("Cancel",null).show();
+        },existing==null?null:()->{if(editingMixed&&slot<favorites.size()&&existing.equals(favorites.get(slot)))removeHomeShortcut(existing);});
+    }
+    private void showAppPicker(String title,List<App> options,java.util.function.Consumer<App> select,Runnable remove){
+        AppPickerDialog<App> picker=new AppPickerDialog<>(this,title,options,new AppPickerDialog.Source<App>(){
+            public String label(App app){return app.label;}
+            public String normalizedLabel(App app){return app.searchLabel;}
+            public String normalizedPackage(App app){return app.searchPackage;}
+            public Drawable icon(App app){return themedIcon(app);}
+            public String detail(App app){return app.folderKey!=null?"Folder":favorites.contains(app.key())?"Already pinned":"";}
+        },select,remove);
+        picker.open();
     }
     private List<String> homeKeys(){
         ArrayList<String> ordered=new ArrayList<>(favorites);
@@ -1345,14 +1352,14 @@ public class HomeActivity extends Activity {
         if(homeSlots.at(slot)!=null){selectedSlot=slot;showHomeEditor();return;}
         ArrayList<App> options=new ArrayList<>();for(App app:apps)if(!favorites.contains(app.key()))options.add(app);
         if(options.isEmpty()){Toast.makeText(this,"All available apps are already pinned.",Toast.LENGTH_SHORT).show();return;}
-        String[] labels=new String[options.size()];for(int i=0;i<labels.length;i++)labels[i]=options.get(i).label;
-        new AlertDialog.Builder(this).setTitle("Add app to this slot").setItems(labels,(d,i)->{
-            App app=appIndex.get(options.get(i).key());if(app==null||!editingHome)return;
+        showAppPicker("Add app to this slot",options,choice->{
+            App app=appIndex.get(choice.key());if(app==null||!editingHome||favorites.contains(app.key()))return;
+            ensureHomeSlots();
             if(homeSlots.at(slot)!=null)return;
             // Legacy dock takes the first N pinned apps; do not silently replace it.
             if(favorites.size()<prefs.getInt("dockCount",5)){Toast.makeText(this,"Fill the dock first, or reduce its size in Home settings.",Toast.LENGTH_LONG).show();return;}
             favorites.add(app.key());saveFavorites();ensureHomeSlots();int from=homeSlots.locate(app.key());if(from>=0&&from!=slot)homeSlots.move(from,slot);persistSlots();showHomeEditor();
-        }).setNegativeButton("Cancel",null).show();
+        },null);
     }
     private void moveHomeSlot(int from,int to){
         if(!editingHome)return;ensureHomeSlots();selectedSlot=-1;
