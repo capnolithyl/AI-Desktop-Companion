@@ -20,7 +20,7 @@ function remoteError(status) {
 const safeReason=value=>typeof value==="string"&&/^[a-zA-Z0-9_-]{1,40}$/.test(value)?value:null;
 const tokenCount=value=>Number.isSafeInteger(value)&&value>=0&&value<=10000000?value:null;
 export function inferenceError(code){return Object.assign(Error(code),{code});}
-export async function generateReply({config, system, history, onDelta=()=>{}, onModel=()=>{}, onUsage=()=>{}, fetchImpl=fetch, temperature=0.7, maxTokens=4096,signal,structuredTool,agentTools,agentToolChoice="auto"}) {
+export async function generateReply({config, system, history, onDelta=()=>{}, onModel=()=>{}, onUsage=()=>{}, fetchImpl=fetch, temperature=0.7, maxTokens=4096,signal,structuredTool,agentTools,agentToolChoice="auto",agentThinking=false}) {
   const {provider,model,key} = config;
   if(agentTools&&provider!=="nvidia")throw inferenceError("agent-provider-not-supported");
   if (provider === "gemini") {
@@ -59,7 +59,7 @@ export async function generateReply({config, system, history, onDelta=()=>{}, on
     body:JSON.stringify({model,stream:!structuredTool&&!agentTools,max_tokens:maxTokens,temperature,
       ...(agentTools?{tools:agentTools,tool_choice:agentToolChoice}:structuredTool?{tools:[structuredTool],tool_choice:"required"}:{stream_options:{include_usage:true}}),
       // Same model-specific evidence setting used by the desktop NVIDIA adapter.
-      ...((structuredTool||agentTools)&&provider==="nvidia"&&model==="nvidia/nemotron-3-ultra-550b-a55b"?{chat_template_kwargs:{enable_thinking:false,force_nonempty_content:true}}:{}),
+      ...((structuredTool||agentTools)&&provider==="nvidia"&&model==="nvidia/nemotron-3-ultra-550b-a55b"?{chat_template_kwargs:agentTools&&agentThinking?{enable_thinking:true}:{enable_thinking:false,force_nonempty_content:true}}:{}),
       messages:[{role:"system",content:system},...history.map(m=>agentTools&&m.role==="tool"?{role:"tool",tool_call_id:m.tool_call_id,content:m.content}:agentTools&&m.role==="assistant"&&m.tool_calls?{role:"assistant",content:m.content??null,tool_calls:m.tool_calls}:{role:m.role,content:m.content})]}),
     signal:signal?AbortSignal.any([signal,AbortSignal.timeout(120000)]):AbortSignal.timeout(120000)
   });

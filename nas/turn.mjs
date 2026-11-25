@@ -1,6 +1,7 @@
 import {readFileSync,existsSync} from "node:fs";
 import {performance} from "node:perf_hooks";
 import {assistantTurnInstructionParts,joinAssistantInstructionParts} from "../src/assistant-instructions.ts";
+import {assistantVoiceGuidance} from "../src/assistant-voice.ts";
 import {roleplayActive} from "../src/narration-filter.ts";
 import {reviewResearchCompletion,groundedResearchFallback} from "../src/evidence-verification.ts";
 import {boundedHistory} from "./provider-settings.mjs";
@@ -55,14 +56,18 @@ export async function executeNasTurn({store,conversationId,question,selected,mod
   const local=knowledge?await trace.measure("knowledge",()=>planKnowledge({knowledge,history,previous,question,provider:selected.provider,canRequest:()=>!signal?.aborted&&canRequest(2),generate:args=>trace.measure("knowledge-planner",()=>{signal?.throwIfAborted();reserve();return requestModel({...args,config:selected,signal,onUsage:v=>trace.usage("knowledge-planner",v)});}),activity})):null;
   const activeTask=rawHistory.filter(m=>m.role==="assistant").at(-1)?.inference?.researchTask;
   if(!local&&publicAgent&&mode!=="off"&&selected.provider==="nvidia"){
-    const agent=await agentResearch({mode,history,signal,ownerFacts:store.listMemories(),canRequest:(slots=1)=>!signal?.aborted&&canRequest(slots),activity,diagnostics:agentDiagnostics,
+    const profile=currentProfile(promptFile,store);
+    // Only typed behavior preferences are included in the public tool prompt.
+    // Freeform persona, custom guidance, memories and raw assistant history remain private.
+    const publicVoice=assistantVoiceGuidance({...profile,systemPrompt:"You are the user\x27s expressive desktop companion. Be natural, warm and accurate.",communication:{...profile.communication,endearments:"honey, sweetheart, darling",customGuidance:""}},roleplayActive(question,history));
+    const agent=await agentResearch({mode,history,signal,publicVoice,ownerFacts:store.listMemories(),canRequest:(slots=1)=>!signal?.aborted&&canRequest(slots),activity,diagnostics:agentDiagnostics,
       answerSystem:systemPrompt(promptFile,store,{text:"",ids:[],auditLines:[]},{question,history:[],mode,researchActive:true,plannedPublicSearch:true,publicWebRequested:true}),
       generate:args=>trace.measure("agent",()=>{signal?.throwIfAborted();reserve();return requestModel({...args,config:selected,signal,onModel:v=>trace.model(v),onUsage:v=>trace.usage("agent",v)});}),
       compose:args=>trace.measure("agent-answer",()=>{signal?.throwIfAborted();reserve();return requestModel({...args,config:selected,signal,onModel:v=>trace.model(v),onUsage:v=>trace.usage("agent-answer",v)});}),
       search:(query,recent)=>trace.measure("search",()=>search(query,recent)),read:(url,options)=>trace.measure("read",()=>read(url,options))});
     if(agent){trace.firstText();onDelta(agent.answer);return {...agent,memory:{text:"",ids:[],auditLines:[]}};}
-    // The agent chose no public tool. Continue through the ordinary persona
-    // and memory chat path, not another public planner.
+    // Private-context handoff or unavailable agent: ordinary persona/memory
+    // chat, not another public planner.
     mode="off";
   }
   const researched=local??await researchTurn({mode,history,activeTask,canRequest:()=>!signal?.aborted&&canRequest(2),generate:args=>trace.measure("planner",()=>{
