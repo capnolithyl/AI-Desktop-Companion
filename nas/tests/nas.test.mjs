@@ -1334,3 +1334,33 @@ test("credential redaction blocks known key formats before inference and learnin
   assert.equal(store.learning.enqueue(store.append(c.id,"user",credential),store.append(c.id,"assistant","Okay."),c.id),false);
  }finally{store.db.close();}
 });
+
+
+test("native research diagnostics distinguish rejected queries from unavailable search service",async()=>{
+ const {executeNasTurn}=await import("../turn.mjs"),store=openStore(":memory:");
+ try{
+  const chat=store.newConversation(),question="Look up Winterdome's album.";
+  store.append(chat.id,"user",question);
+  const events=[],queries=[];let calls=0;
+  const call=(name,args,id)=>({content:"",toolCalls:[{id,type:"function",function:{name,arguments:JSON.stringify(args)}}]});
+  const result=await executeNasTurn({store,conversationId:chat.id,question,selected:{provider:"nvidia",model:"test",historyChars:32000},mode:"simple",publicAgent:true,reserve:()=>{},canRequest:()=>true,activity:e=>events.push(e),
+   search:async q=>{queries.push(q);return [{url:"https://example.org/winterdome",title:"Winterdome",content:"An album released in 2006.",kind:"preview"}];},requestModel:async args=>{
+    calls++;
+    if(calls===1)return call("request_public_research",{},"research");
+    if(calls===2)return call("search_web",{query:"my private album"},"blocked");
+    if(calls===3){
+     assert.match(args.history.at(-1).content,/personal pronouns or private context/);
+     return call("search_web",{query:"Winterdome Weltendaemmerung"},"search");
+    }
+    if(calls===4)return {content:"DONE",toolCalls:[]};
+    assert.match(args.history.at(-1).content,/evidence-available/);
+    assert.match(args.history.at(-1).content,/An album released in 2006/);
+    return {content:"I found the album!",toolCalls:[]};
+   }});
+  assert.deepEqual(queries,["Winterdome Weltendaemmerung"]);
+  assert.equal(result.answer,"I found the album!");
+  assert.ok(events.some(e=>e.title==="Public tool not completed"&&e.detail.includes("personal pronouns")));
+  assert.ok(events.some(e=>e.title==="Public research finished"&&e.detail==="evidence-available"));
+  assert.doesNotMatch(JSON.stringify(events),/my private album/);
+ }finally{store.db.close();}
+});
