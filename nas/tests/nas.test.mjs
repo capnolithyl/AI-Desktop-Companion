@@ -1,3 +1,4 @@
+import "./auth-sessions.test.mjs";
 import "../../src/memory-retrieval.test.mjs";
 import "../../src/memory-budget.test.mjs";
 import "../../src/session-memory.test.mjs";
@@ -69,6 +70,21 @@ test("NAS HTTP requires a key, streams replies and persists them",async()=>{
     assert.equal(connect,"connect-src 'self' data:");
     assert.match(csp,/script-src 'self';/);
     assert.equal((await fetch(base+"/api/status")).status,401);
+    const loginBody=JSON.stringify({key,remember:true});
+    const webHeaders={"X-Mikan-Client":"workspace","Content-Type":"application/json"};
+    const login=(body,headers=webHeaders)=>fetch(base+"/api/auth/login",{method:"POST",headers,body});
+    assert.equal((await login(loginBody,{"Content-Type":"application/json"})).status,403);
+    assert.equal((await login(JSON.stringify({key:"wrong",remember:true}))).status,401);
+    const signedIn=await login(loginBody);
+    assert.equal(signedIn.status,200);
+    assert.deepEqual(await signedIn.json(),{ok:true});
+    const cookie=signedIn.headers.get("set-cookie");
+    assert.match(cookie,/HttpOnly; SameSite=Strict; Max-Age=2592000/);
+    const remembered={...webHeaders,Cookie:cookie.split(";")[0]};
+    assert.equal((await fetch(base+"/api/status",{headers:remembered})).status,200);
+    assert.equal((await fetch(base+"/api/status",{headers:{Cookie:remembered.Cookie}})).status,401);
+    assert.equal((await fetch(base+"/api/auth/logout",{method:"POST",headers:remembered})).status,200);
+    assert.equal((await fetch(base+"/api/status",{headers:remembered})).status,401);
     const headers={Authorization:"Bearer "+key,"Content-Type":"application/json"};
     assert.equal((await fetch(base+"/api/profile")).status,401);
     assert.equal((await fetch(base+"/api/library")).status,401);
