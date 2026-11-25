@@ -40,7 +40,7 @@ export function NasBrainLab({client,models,busy}:{client:NasClient;models:NasMod
     {report&&<section className={"brain-eval-run-monitor nas-brain-monitor "+(running?"running":report.state==="finished"?"complete":report.state==="failed"?"failed":"stopped")} aria-live="polite">
       <div className="brain-eval-run-heading"><strong>{stateName[report.state]??report.state}{statusError?" (last known)":""}</strong><span>{report.done}/{report.total} turns</span></div>
       <progress max={report.total||1} value={report.done}/><div className="brain-eval-run-details"><span>{report.model}</span><span>{report.currentLabel}</span></div>
-      {report.state==="quota"&&!running&&<p className="brain-eval-muted-note">The provider quota ended this run. No further tests are running. Partial results are saved; start a new run once the provider budget is available.</p>}
+      {report.state==="quota"&&!running&&!statusError&&<p className="brain-eval-muted-note">The provider quota ended this run. No further tests are running. Partial results are saved; start a new run once the provider budget is available.</p>}
       <div className="brain-eval-actions">{running&&<button className="secondary-action" disabled={working} onClick={()=>void stop()}><Square size={14}/> Stop run</button>}<button className="secondary-action" onClick={()=>{setView(null);setTab("results");}}>View results</button></div>
     </section>}
     {tab==="run"&&<div className="brain-workspace-view">
