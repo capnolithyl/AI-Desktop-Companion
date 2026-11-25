@@ -56,6 +56,10 @@ public class HomeActivity extends Activity {
     private GridView results;
     private DrawerAdapter drawerAdapter;
     private int drawerOpenCount;
+    private DrawerIndexView drawerIndex;
+    private TextView drawerLetter,drawerSortButton,drawerCategoryButton;
+    private String drawerCategory="";
+    private int[] drawerSections=new int[27];
     private TextView clock, date, greeting, systemStats;
     private DeviceStats.Snapshot statsSnapshot;
     private boolean statsBusy;
@@ -131,6 +135,7 @@ public class HomeActivity extends Activity {
         boolean media=LauncherNotifications.allowed(this),calendar=checkSelfPermission(android.Manifest.permission.READ_CALENDAR)==android.content.pm.PackageManager.PERMISSION_GRANTED;
         if(catalogRenderPending){catalogRenderPending=false;refreshScreen();}
         else if(settings&&(media!=lastMediaPermission||calendar!=lastCalendarPermission))showSettings();
+        else if(drawer&&search!=null&&drawerSort()>=2)renderResults(search.getText().toString());
         lastMediaPermission=media;lastCalendarPermission=calendar;
         if(media&&(prefs.getBoolean("badges",false)||MikanRemarks.notificationHintsEnabled(prefs)))handler.postDelayed(()->{if(foreground&&!closed)LauncherNotifications.refreshIfConnected();},120);
         updateClock();observeEntry();
@@ -227,7 +232,7 @@ public class HomeActivity extends Activity {
     }
     private Drawable homeWallpaper(){String name=prefs.getString("wallpaper","reading-nook.webp");Drawable d="custom".equals(name)?wallpaperArt.get():asset(name);return d!=null?d:asset("reading-nook.webp");}
     private void createPage(){
-        closeQuickSearch();mixedScroll=null;results=null;drawerAdapter=null;systemStats=null;handler.removeCallbacks(statsRefresh);
+        closeQuickSearch();mixedScroll=null;results=null;drawerAdapter=null;drawerIndex=null;drawerLetter=null;drawerSortButton=null;drawerCategoryButton=null;systemStats=null;handler.removeCallbacks(statsRefresh);
         badgeViews.clear();music=null;mikanCard=null;clock=null;date=null;greeting=null;ampm=null;dashboard.detach();
         root=new FrameLayout(this);root.setBackgroundColor(0xff191417);
         ImageView bg=new ImageView(this);bg.setScaleType(ImageView.ScaleType.CENTER_CROP);bg.setImageDrawable(homeWallpaper());
@@ -488,7 +493,10 @@ public class HomeActivity extends Activity {
         if(!appIndex.containsKey(key))return;
         LinkedHashSet<String> recent=new LinkedHashSet<>();recent.add(key);
         for(String old:prefs.getString("quickRecentApps","").split("\\n")){if(recent.size()>=12)break;if(appIndex.containsKey(old))recent.add(old);}
-        prefs.edit().putString("quickRecentApps",String.join("\n",recent)).apply();
+        LinkedHashMap<String,Integer> counts=DrawerData.counts(prefs.getString("drawerLaunchCountsV1",""));
+        counts.keySet().retainAll(appIndex.keySet());
+        if(counts.size()<1000||counts.containsKey(key))counts.put(key,Math.min(1000000,counts.getOrDefault(key,0)+1));
+        prefs.edit().putString("quickRecentApps",String.join("\n",recent)).putString("drawerLaunchCountsV1",DrawerData.encode(counts)).apply();
     }
     private void rememberPackageLaunch(String pkg){
         for(App app:apps)if(app.component.getPackageName().equals(pkg)){rememberLaunch(app.key());return;}
@@ -572,7 +580,7 @@ public class HomeActivity extends Activity {
             FrameLayout frame=new FrameLayout(HomeActivity.this);frame.addView(icon,new FrameLayout.LayoutParams(-1,-1));
             dot=text("•",18,PEACH,true);dot.setGravity(Gravity.CENTER);dot.setBackground(shape(0xff50332b,20,false));dot.setVisibility(View.GONE);
             frame.addView(dot,new FrameLayout.LayoutParams(dp(16),dp(16),Gravity.TOP|Gravity.RIGHT));
-            int size=prefs.getInt("iconSize",50),maxSize=(getResources().getConfiguration().screenWidthDp-48)/Math.max(prefs.getInt("columns",4),prefs.getInt("dockCount",5));
+            int size=prefs.getInt("iconSize",50),maxSize=(getResources().getConfiguration().screenWidthDp-68)/drawerColumns();
             size=Math.max(32,Math.min(size,maxSize));addView(frame,new LinearLayout.LayoutParams(dp(size),dp(size)));
             name=text("",11,CREAM,false);name.setGravity(Gravity.TOP|Gravity.CENTER_HORIZONTAL);name.setIncludeFontPadding(false);name.setMaxLines(2);name.setMinLines(2);name.setEllipsize(android.text.TextUtils.TruncateAt.END);
             LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,-2);lp.topMargin=dp(3);addView(name,lp);
@@ -593,7 +601,19 @@ public class HomeActivity extends Activity {
         boolean badges;
         void submit(String raw){
             String next=raw.trim().toLowerCase(Locale.ROOT);query=next;items.clear();
-            for(App app:apps)if(next.isEmpty()||app.label.toLowerCase(Locale.ROOT).contains(next)||app.component.getPackageName().toLowerCase(Locale.ROOT).contains(next))items.add(app);
+            String normalized=QuickAppRank.normalize(raw);Set<String> hidden=hiddenDrawerApps();Map<String,String> categories=drawerCategories();
+            for(App app:apps)if(!hidden.contains(app.key())&&(drawerCategory.isEmpty()||drawerCategory.equals(categories.get(app.key())))&&(normalized.isEmpty()||QuickAppRank.scoreNormalized(normalized,app.searchLabel,app.searchPackage)>=0))items.add(app);
+            Comparator<App> alphabet=Comparator.comparingInt((App app)->DrawerData.bucket(app.searchLabel)).thenComparing(app->app.searchLabel).thenComparing(App::key);
+            int sort=drawerSort();
+            if(sort==1)items.sort(alphabet.reversed());
+            else if(sort==2){
+                HashMap<String,Integer> order=new HashMap<>();int index=0;for(String key:prefs.getString("quickRecentApps","").split("\n"))order.put(key,index++);
+                items.sort(Comparator.comparingInt((App app)->order.getOrDefault(app.key(),Integer.MAX_VALUE)).thenComparing(alphabet));
+            }else if(sort==3){
+                Map<String,Integer> counts=DrawerData.counts(prefs.getString("drawerLaunchCountsV1",""));
+                items.sort(Comparator.comparingInt((App app)->counts.getOrDefault(app.key(),0)).reversed().thenComparing(alphabet));
+            }else items.sort(alphabet);
+            Arrays.fill(drawerSections,-1);for(int i=0;i<items.size();i++){int bucket=DrawerData.bucket(items.get(i).searchLabel);if(drawerSections[bucket]<0)drawerSections[bucket]=i;}
             notifyDataSetChanged();
         }
         @Override public int getCount(){return items.size();}
@@ -606,24 +626,119 @@ public class HomeActivity extends Activity {
             perf.record("drawer cell bind",started);return cell;
         }
     }
+    private int drawerColumns(){return Math.max(3,Math.min(5,prefs.getInt("drawerColumns",prefs.getInt("columns",4))));}
+    private int drawerSort(){return Math.max(0,Math.min(3,prefs.getInt("drawerSort",0)));}
+    private String drawerSortName(){return new String[]{"A–Z","Z–A","Recent","Frequent"}[drawerSort()];}
+    private LinkedHashSet<String> hiddenDrawerApps(){try{return DrawerData.keys(prefs.getString("drawerHiddenV1",""));}catch(RuntimeException e){return new LinkedHashSet<>();}}
+    private LinkedHashMap<String,String> drawerCategories(){try{return DrawerData.categories(prefs.getString("drawerCategoriesV1",""));}catch(RuntimeException e){return new LinkedHashMap<>();}}
+    private void reloadDrawer(){
+        if(!drawer||results==null||search==null)return;
+        if(drawerSortButton!=null)drawerSortButton.setText(drawerSortName());
+        if(drawerCategoryButton!=null)drawerCategoryButton.setText(drawerCategory.isEmpty()?"All apps":drawerCategory);
+        renderResults(search.getText().toString());results.setSelection(0);
+    }
+    private void updateDrawerIndex(){
+        if(drawerIndex==null||results==null||drawerAdapter==null)return;
+        boolean visible=drawerSort()<2&&prefs.getBoolean("drawerIndex",true)&&drawerAdapter.query.isEmpty()&&drawerAdapter.getCount()>0;
+        drawerIndex.sections(drawerSections);
+        drawerIndex.setVisibility(visible?View.VISIBLE:View.GONE);hideDrawerLetter();
+        FrameLayout.LayoutParams lp=(FrameLayout.LayoutParams)results.getLayoutParams();int margin=visible?dp(28):0;
+        if(lp.rightMargin!=margin){lp.rightMargin=margin;results.setLayoutParams(lp);}
+    }
+    private int jumpDrawerLetter(int requested){
+        if(!drawer||results==null)return -1;int actual=DrawerData.nearest(requested,drawerSections);
+        if(actual>=0){results.setSelection(drawerSections[actual]);if(drawerLetter!=null){drawerLetter.setText(DrawerData.letter(actual));drawerLetter.setVisibility(View.VISIBLE);}}
+        return actual;
+    }
+    private void hideDrawerLetter(){if(drawerLetter!=null)drawerLetter.setVisibility(View.GONE);}
+    private void chooseDrawerLetter(){
+        ArrayList<Integer> letters=new ArrayList<>();ArrayList<String> labels=new ArrayList<>();
+        for(int i=0;i<27;i++)if(drawerSections[i]>=0){letters.add(i);labels.add(DrawerData.letter(i));}
+        if(!labels.isEmpty())new AlertDialog.Builder(this).setTitle("Jump to letter").setItems(labels.toArray(new String[0]),(d,i)->{jumpDrawerLetter(letters.get(i));hideDrawerLetter();}).setNegativeButton("Cancel",null).show();
+    }
+    private void chooseDrawerSort(){
+        new AlertDialog.Builder(this).setTitle("Sort apps").setSingleChoiceItems(new String[]{"Alphabetical A–Z","Alphabetical Z–A","Recently launched in Mikan","Frequently launched in Mikan"},drawerSort(),(d,i)->{prefs.edit().putInt("drawerSort",i).apply();d.dismiss();reloadDrawer();}).setNegativeButton("Cancel",null).show();
+    }
+    private void chooseDrawerCategory(){
+        TreeSet<String> names=new TreeSet<>();names.addAll(drawerCategories().values());
+        ArrayList<String> choices=new ArrayList<>();choices.add("All apps");choices.addAll(names);
+        new AlertDialog.Builder(this).setTitle("Filter by category").setItems(choices.toArray(new String[0]),(d,i)->{drawerCategory=i==0?"":choices.get(i);reloadDrawer();}).setNegativeButton("Cancel",null).show();
+    }
+    private void drawerOptions(){
+        new AlertDialog.Builder(this).setTitle("App drawer").setItems(new String[]{"Grid density","Alphabet index: "+(prefs.getBoolean("drawerIndex",true)?"On":"Off"),"Manage hidden apps","Manage categories","Clear local launch history"},(d,i)->{
+            if(i==0)new AlertDialog.Builder(this).setTitle("Drawer columns").setSingleChoiceItems(new String[]{"3","4","5"},drawerColumns()-3,(dd,c)->{prefs.edit().putInt("drawerColumns",c+3).apply();dd.dismiss();if(results!=null){results.setNumColumns(drawerColumns());results.setAdapter(drawerAdapter);reloadDrawer();}}).setNegativeButton("Cancel",null).show();
+            else if(i==1){prefs.edit().putBoolean("drawerIndex",!prefs.getBoolean("drawerIndex",true)).apply();reloadDrawer();}
+            else if(i==2)manageDrawerHidden();
+            else if(i==3)manageDrawerCategories();
+            else new AlertDialog.Builder(this).setTitle("Clear launch history?").setMessage("Reset Mikan's recent and frequent app suggestions. No system usage history is accessed.").setNegativeButton("Cancel",null).setPositiveButton("Clear",(dd,j)->{prefs.edit().remove("quickRecentApps").remove("drawerLaunchCountsV1").apply();reloadDrawer();}).show();
+        }).setNegativeButton("Cancel",null).show();
+    }
+    private void drawerAppOptions(App app){
+        new AlertDialog.Builder(this).setTitle(app.label).setItems(new String[]{"App options","Assign category","Hide from drawer"},(d,i)->{
+            if(i==0)appOptions(app);
+            else if(i==1)assignDrawerCategory(app);
+            else new AlertDialog.Builder(this).setTitle("Hide "+app.label+"?").setMessage("Hidden from the app drawer and drawer search. Home shortcuts and quick search stay available.").setNegativeButton("Cancel",null).setPositiveButton("Hide",(dd,j)->{
+                LinkedHashSet<String> hidden=hiddenDrawerApps();if(hidden.size()>=1000&&!hidden.contains(app.key()))return;hidden.add(app.key());prefs.edit().putString("drawerHiddenV1",String.join("\n",hidden)).apply();reloadDrawer();
+            }).show();
+        }).setNegativeButton("Cancel",null).show();
+    }
+    private void manageDrawerHidden(){
+        ArrayList<App> list=new ArrayList<>(apps);LinkedHashSet<String> hidden=hiddenDrawerApps();
+        String[] labels=new String[list.size()];boolean[] checked=new boolean[list.size()];
+        for(int i=0;i<list.size();i++){labels[i]=list.get(i).label;checked[i]=hidden.contains(list.get(i).key());}
+        new AlertDialog.Builder(this).setTitle("Hidden apps").setMultiChoiceItems(labels,checked,(d,i,on)->checked[i]=on).setNegativeButton("Cancel",null).setNeutralButton("Unhide all",(d,i)->{prefs.edit().remove("drawerHiddenV1").apply();reloadDrawer();}).setPositiveButton("Save",(d,j)->{
+            for(int i=0;i<list.size();i++){String key=list.get(i).key();if(checked[i])hidden.add(key);else hidden.remove(key);}
+            if(hidden.size()>1000){Toast.makeText(this,"Too many hidden apps.",Toast.LENGTH_SHORT).show();return;}
+            prefs.edit().putString("drawerHiddenV1",String.join("\n",hidden)).apply();reloadDrawer();
+        }).show();
+    }
+    private void manageDrawerCategories(){
+        ArrayList<App> list=new ArrayList<>(apps);Map<String,String> categories=drawerCategories();String[] labels=new String[list.size()];
+        for(int i=0;i<list.size();i++){App app=list.get(i);String category=categories.get(app.key());labels[i]=app.label+(category==null?"":" · "+category);}
+        new AlertDialog.Builder(this).setTitle("Assign app categories").setItems(labels,(d,i)->assignDrawerCategory(list.get(i))).setNegativeButton("Close",null).show();
+    }
+    private void assignDrawerCategory(App app){
+        LinkedHashMap<String,String> categories=drawerCategories();TreeSet<String> names=new TreeSet<>(categories.values());
+        ArrayList<String> options=new ArrayList<>();options.add("No category");options.add("New category…");options.addAll(names);
+        new AlertDialog.Builder(this).setTitle(app.label+" · category").setItems(options.toArray(new String[0]),(d,i)->{
+            if(i==1){EditText input=new EditText(this);input.setSingleLine(true);input.setFilters(new android.text.InputFilter[]{new android.text.InputFilter.LengthFilter(40)});input.setHint("e.g. Games");
+                new AlertDialog.Builder(this).setTitle("New category").setView(input).setNegativeButton("Cancel",null).setPositiveButton("Save",(dd,j)->{
+                    String name=input.getText().toString().trim();if(!DrawerData.validCategory(name)){Toast.makeText(this,"Enter a valid category name.",Toast.LENGTH_SHORT).show();return;}
+                    setDrawerCategory(app,name);
+                }).show();
+            }else setDrawerCategory(app,i==0?"":options.get(i));
+        }).setNegativeButton("Cancel",null).show();
+    }
+    private void setDrawerCategory(App app,String name){
+        Map<String,String> categories=drawerCategories();if(name.isEmpty())categories.remove(app.key());
+        else{if(categories.size()>=1000&&!categories.containsKey(app.key()))return;categories.put(app.key(),name);}
+        prefs.edit().putString("drawerCategoriesV1",DrawerData.encode(categories)).apply();
+        if(!drawerCategory.isEmpty()&&!categories.containsValue(drawerCategory))drawerCategory="";
+        reloadDrawer();
+    }
     private void showDrawer(){
         long started=android.os.SystemClock.elapsedRealtime();boolean first=drawerOpenCount++==0;
-        drawer=true;settings=false;createPage();
+        drawer=true;settings=false;drawerCategory="";createPage();
         LinearLayout bar=horizontal();bar.addView(action("‹ Home",()->{hideKeyboard();showHome();}));TextView title=text("  All apps",22,CREAM,true);bar.addView(title,new LinearLayout.LayoutParams(0,-2,1));page.addView(bar);gap(page,12);
         search=new EditText(this);search.setSingleLine(true);search.setTextColor(CREAM);search.setHintTextColor(MUTED);search.setTextSize(16);search.setHint("Search installed apps");search.setPadding(dp(18),dp(10),dp(18),dp(10));search.setBackground(shape(PANEL,20,true));page.addView(search,new LinearLayout.LayoutParams(-1,dp(52)));
-        gap(page,8);page.addView(text("Long-press for app options",12,MUTED,false));gap(page,10);
+        gap(page,8);
+        LinearLayout tools=horizontal();drawerSortButton=action(drawerSortName(),this::chooseDrawerSort);tools.addView(drawerSortButton,new LinearLayout.LayoutParams(0,-2,1));
+        drawerCategoryButton=action("All apps",this::chooseDrawerCategory);drawerCategoryButton.setSingleLine(true);drawerCategoryButton.setEllipsize(android.text.TextUtils.TruncateAt.END);tools.addView(drawerCategoryButton,new LinearLayout.LayoutParams(0,-2,1));
+        tools.addView(action("⋯",this::drawerOptions),new LinearLayout.LayoutParams(dp(48),-2));page.addView(tools);gap(page,8);
         // Explicitly constrain grid height to the remaining viewport. No ScrollView
         // wrapper: GridView measures/attaches only the cells it needs.
         FrameLayout viewport=new FrameLayout(this);page.addView(viewport,new LinearLayout.LayoutParams(-1,0,1));
-        results=new GridView(this);results.setNumColumns(prefs.getInt("columns",4));results.setStretchMode(GridView.STRETCH_COLUMN_WIDTH);results.setGravity(Gravity.CENTER);
+        results=new GridView(this);results.setNumColumns(drawerColumns());results.setStretchMode(GridView.STRETCH_COLUMN_WIDTH);results.setGravity(Gravity.CENTER);
         results.setVerticalSpacing(0);results.setHorizontalSpacing(0);results.setClipToPadding(false);results.setVerticalScrollBarEnabled(true);
         results.setSelector(new android.graphics.drawable.ColorDrawable(0x22ffbf88));results.setDrawSelectorOnTop(true);
         viewport.addView(results,new FrameLayout.LayoutParams(-1,-1));
+        drawerIndex=new DrawerIndexView(this,this::jumpDrawerLetter,this::hideDrawerLetter,this::chooseDrawerLetter);FrameLayout.LayoutParams ip=new FrameLayout.LayoutParams(dp(28),-1,Gravity.RIGHT);viewport.addView(drawerIndex,ip);
+        drawerLetter=text("",44,CREAM,true);drawerLetter.setGravity(Gravity.CENTER);drawerLetter.setBackground(panelShape(22));drawerLetter.setVisibility(View.GONE);viewport.addView(drawerLetter,new FrameLayout.LayoutParams(dp(96),dp(96),Gravity.CENTER));
         TextView empty=text("No matching apps.",16,MUTED,false);empty.setVisibility(View.GONE);viewport.addView(empty,new FrameLayout.LayoutParams(-1,-2,Gravity.TOP));results.setEmptyView(empty);
         drawerAdapter=new DrawerAdapter();results.setAdapter(drawerAdapter);
         final GridView grid=results;final DrawerAdapter adapter=drawerAdapter;final EditText field=search;
         grid.setOnItemClickListener((parent,view,position,id)->{if(drawer&&drawerAdapter==adapter&&position<adapter.getCount())launch(adapter.getItem(position));});
-        grid.setOnItemLongClickListener((parent,view,position,id)->{if(drawer&&drawerAdapter==adapter&&position<adapter.getCount()){appOptions(adapter.getItem(position));return true;}return false;});
+        grid.setOnItemLongClickListener((parent,view,position,id)->{if(drawer&&drawerAdapter==adapter&&position<adapter.getCount()){drawerAppOptions(adapter.getItem(position));return true;}return false;});
         field.addTextChangedListener(new TextWatcher(){public void beforeTextChanged(CharSequence s,int start,int count,int after){}public void onTextChanged(CharSequence s,int start,int before,int count){if(drawer&&search==field)renderResults(s.toString());}public void afterTextChanged(Editable s){}});
         page.setFocusableInTouchMode(true);page.requestFocus();renderResults("");
         perf.record("drawer setup",started);
@@ -647,6 +762,7 @@ public class HomeActivity extends Activity {
         drawerAdapter.badges=prefs.getBoolean("badges",false)&&LauncherNotifications.allowed(this);
         drawerAdapter.submit(query);
         if(changed)results.setSelection(0);
+        updateDrawerIndex();
         perf.record("drawer filter/submit",started);
         queueExtras();
     }

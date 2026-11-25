@@ -45,6 +45,11 @@ jobs:
           mkdir -p /tmp/mikan-grid-tests
           javac -d /tmp/mikan-grid-tests launcher/app/src/main/java/dev/capnolithyl/mikan/launcher/MixedLayout.java launcher/tests/MixedLayoutTest.java
           java -cp /tmp/mikan-grid-tests dev.capnolithyl.mikan.launcher.MixedLayoutTest
+      - name: Test drawer preferences and alphabetical index
+        run: |
+          mkdir -p /tmp/mikan-drawer-tests
+          javac -d /tmp/mikan-drawer-tests launcher/app/src/main/java/dev/capnolithyl/mikan/launcher/DrawerData.java launcher/tests/DrawerDataTest.java
+          java -cp /tmp/mikan-drawer-tests dev.capnolithyl.mikan.launcher.DrawerDataTest
       - name: Compile launcher
         working-directory: launcher
         run: gradle :app:assembleDebug --stacktrace

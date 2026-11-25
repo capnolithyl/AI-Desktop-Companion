@@ -1,6 +1,6 @@
 # Mikan Launcher — living feature reference
 
-**Source baseline:** v0.12.2 (versionCode 22), opt-in mixed grid editor, 2026-11-25. See Git history for implementation commit.
+**Source baseline:** v0.12.3 (versionCode 23), drawer overhaul, 2026-11-25. See Git history for implementation commit.
 **Development:** [PR #117](https://github.com/capnolithyl/AI-Desktop-Companion/pull/117), branch `feature/mikan-launcher-v01`. Check current branch and Gradle version before changing this document.
 **Purpose:** a free, personal, offline-first Android launcher inspired by the Mikan OS home-screen mockup. Separate from Pocket Mikan, desktop Mikan and the NAS. This document tracks the launcher only.
 
@@ -19,7 +19,8 @@ Build success, release publication, installation and individual feature verifica
 | Independent Android home app | 0.1 | HOME/DEFAULT role and normal launch entry; Settings > Default home app to select or switch home. | Initial install and home UI observed; stock fallback and cold boot still pending. |
 | Header system stats | 0.11.6 | Subtle two-line RAM and internal data storage used/total beside Mikan OS; tap for details and available values. Enabled by default, toggle in Home screen settings. Uses Android MemoryInfo/StatFs, local asynchronous snapshots at most every 30 seconds while Home visible; no new permission or persistent service. RAM is an estimate, storage is usable data filesystem. Display preference included in backup. | Implemented; device and layout validation pending. |
 | Quick app search | 0.12.0 | Tap Home search bar for bottom overlay and keyboard, without initializing drawer or rebuilding Home. Local ranked results (exact, prefix, word prefix, substring, multiple terms, package fallback); up to five results, Go/Enter launches first match, tap launches chosen result. Empty query suggests recent then pinned apps. Close/outside/Back dismiss; IME Back behavior can vary. Bounded local recent list (12 launcher-observed successful launches), excluded from layout backup; no system usage permission, AI or network. | Implemented; automated rank cases and device validation pending. |
-| App drawer | 0.1 / 0.11.4 | Search installed launchable apps by label or package; swipe up near bottom opens full drawer; its own search field opens keyboard. Native adapter-backed GridView creates/recycles visible cells, filters existing catalog without recreating the grid; 4/5 columns, existing icons, badge updates, and click/long-press actions. | Implemented; device latency, search, scroll and launch regression pending. |
+| Drawer customization | 0.12.3 | Right-edge #/A–Z scrubber (nearest populated section, large active letter, haptics); alphabetical ascending/descending, local recent/frequent sorting, user-assigned categories, hide/unhide, independent 3–5 columns. Index hidden while searching or nonalphabetical. Hidden applies to drawer only; Home and quick search retained. Sort/category/hide/density settings backed up; launch history local and excluded, clearable. | Implemented; CI/device pending. |
+| App drawer | 0.1 / 0.11.4 | Search installed launchable apps by label or package; swipe up near bottom opens full drawer; its own search field opens keyboard. Native adapter-backed GridView creates/recycles visible cells, filters existing catalog without recreating the grid; 3–5 independently configurable columns, existing icons, badge updates, and click/long-press actions. | Implemented; device latency, search, scroll and launch regression pending. |
 | Favorites | 0.1 | Long-press drawer app to pin; drawer/Manage favorites menu to unpin and move; saved locally. | Favorites visible across screenshots; persistence on updates observed, complete CRUD pending. |
 | Dock | 0.1–0.2 | First 3–5 available pinned entries, configurable, persists across pages. Default 5; floating dock (default on in v0.8) or framed dock. | Floating dock observed in v0.8; toggle pending. |
 | App rearrangement | 0.2 | Hold and drag pinned app onto another visible pinned tile; menu-based ordering and moving between pages. | Implemented; gesture and cross-page tests pending. |
@@ -137,6 +138,8 @@ Weather card also exposes refresh, city, units and clear location. No full-scree
 
 | 0.12.2 | Live mixed grid, widget movement/resizing, dock slot editing, model tests | Implemented; CI/device pending. |
 
+| 0.12.3 | Alphabet index, sorting, categories, hidden apps, drawer density and local launch counts | Implemented; CI/device pending. |
+
 ## 7. Outstanding verification checklist
 
 - [ ] Cold boot/reboot with airplane mode and NAS down; open drawer, favorites and folders.
@@ -182,6 +185,8 @@ Weather card also exposes refresh, city, units and clear location. No full-scree
 
 - [ ] v0.12.2 verify legacy layout unchanged by default, mixed toggle on/off, all widget rendering/taps, editing moves and resize collision rejection, adaptive rows, page manager, dock slot swap, backup/restore, font/width changes, offline and latency. Mixed-layout pure Java tests in CI.
 
+- [ ] v0.12.3 verify alphabet scrub/index missing sections/descending, haptics and accessibility, search hides index, recent/frequent sort after launch/resume, category creation/filter/removal, hidden app management, independent density, backup/restore, unchanged quick search and launch/long-press, large catalog performance. Pure Java drawer tests in CI.
+
 ## 8. Roadmap (not implemented)
 
 Planned milestones; version targets flexible. See [Trello roadmap](https://trello.com/c/VEk6xVz6). No arbitrary deadlines.
@@ -195,8 +200,8 @@ Owner reported roughly half-second opening delay on v0.11.3. Replaced eager Scro
 ### v0.12 — Quick app search and home screen editor (partially implemented)
 Quick app search implemented in v0.12.0: independent bottom overlay, ranked local matches, keyboard Go, recent/pinned suggestions, original drawer swipe. v0.12.1 adds a dedicated app-slot editor, drag/tap placement, folder creation, page management and widget page assignment. v0.12.2 adds opt-in live mixed grid, rectangular positions/resizing, collision checks and dock slot picker. Cross-page movement still uses page manager; direct in-grid folder creation and fully independent dock remain future refinements. Version target flexible; device verification pending.
 
-### Next — App drawer overhaul (proposed; version target flexible)
-App sorting (A–Z/Z–A and candidate local launch-history/install-date/manual orders), confirmed right-edge A–Z drag-to-scroll index with active-letter overlay, optional haptics and # bucket in alphabetical mode, hide index when searching or nonalphabetical. Candidate categories/folders, hidden apps and independent density. Preserve offline search, app actions and responsive recycled-grid foundation. Usage sorting based on launcher-recorded launches unless broader access explicitly approved. Final scope subject to owner examples.
+### v0.12.3 — App drawer overhaul (implemented; verification pending)
+Alphabetical A–Z/Z–A, recent/frequent launcher-observed sorting, right-edge drag-to-scroll index, haptics, active-letter overlay, # bucket, custom category filter, hidden apps and independent density. No usage access; no global activity history. Device verification remains pending.
 
 ### v0.13 — Theme engine
 Accent colors, multiple schemes, adjustable wallpaper darkness/widget transparency, complete theme import/export including art, seasonal and optional local time/cached-weather themes.
