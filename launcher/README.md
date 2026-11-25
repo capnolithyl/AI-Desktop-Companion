@@ -1,4 +1,4 @@
-# Mikan Launcher v0.7
+# Mikan Launcher v0.8
 
 **Living reference:** [Feature inventory and verification status](FEATURES.md). Read [launcher maintenance rules](AGENTS.md) before making changes. Update the feature inventory in the same change as every launcher feature, fix or release; distinguish implementation from tested behavior.
 
@@ -14,7 +14,7 @@ Clock, Mikan and music can be assigned to a page or hidden in Settings > Pages &
 Wallpaper, icons, grid/dock sizes, persistent favorites, custom portrait and HTTPS Mikan Web link, signed GitHub release updater. No NAS requirement for core home; configured visible weather may refresh on foreground entry. Other network actions are user initiated. Existing portrait, web address and favorites remain intact on upgrade. Reset portrait returns to default.
 
 ## Verification
-Test update from v0.6; app launches, page changes, folder CRUD and restart persistence, widget page/visibility, music controls in Spotify or another player, notification dots after grant and revoke, airplane-mode cold boot with NAS offline, stock launcher fallback. Device validation is required.
+Test update from v0.7; app launches, page changes, folder CRUD and restart persistence, widget page/visibility, music controls in Spotify or another player, notification dots after grant and revoke, airplane-mode cold boot with NAS offline, stock launcher fallback. Device validation is required.
 
 ## v0.5 polish
 Compact home layout, visible scroll affordance, auto-height two-line labels, normalized adaptive monochrome icons, softer amber panel gradients/shadows, page navigation hidden for one page. Music has painted amber controls and a time/progress scrubber when media sessions report duration; seeking is enabled only with ACTION_SEEK_TO. Horizontal page gestures are suppressed when a touch starts on the scrubber. Verify short/tall displays, large font scaling, paused/playing state, unknown duration, unsupported seeking and switching tracks. Small screens can scroll rather than shrink text or hide apps.
@@ -24,3 +24,6 @@ Larger full-bleed portrait with gradient blending, illustrated Mikan card with c
 
 ## v0.7 dashboard
 Weather next to clock, music next to agenda when both share a page and screen/font size permits. Stacked mode selectable; each widget can be hidden or moved independently. Weather uses Open-Meteo (free non-commercial, model-based) and GeoNames geocoding; select city explicitly, no GPS, forecasts fetched only while foregrounded and visible (or explicit refresh); 30-minute cache and stale/offline label. Fahrenheit default, Celsius available. Calendar uses Android CalendarContract.Instances (read-only runtime permission, next seven days, up to two upcoming/ongoing visible instances, no data sent or stored). Calendar titles can be hidden; tap calendar card for calendar app or permission. Verify city selection/units/cache/offline, permission denial/revocation, recurring/all-day events, page pairing and large-font fallback. No Google account credentials required. Existing favorites, art, updater and settings preserved.
+
+## v0.8 design system
+Shared warm panel/tile gradients, two-tone themed glyphs and custom common-app artwork, floating or framed dock, page dots, compact settings glyph, lighter clock typography, matching lower widget heights, circular amber play/pause, agenda decoration and a search bar with local app search, explicit browser web search and opt-in Android speech recognition (review query before search). No new app permissions. Existing custom portrait remains; no bundled cutout, shuffle/repeat or lockscreen implementation. See FEATURES.md for device evidence and remaining tests.

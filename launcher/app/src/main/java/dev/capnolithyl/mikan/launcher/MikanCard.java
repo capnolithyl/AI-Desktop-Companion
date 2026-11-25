@@ -27,7 +27,7 @@ final class MikanCard {
     MikanCard(Context context,Drawable artwork,boolean transparent,String initialStatus,Runnable open){
         this.context=context;
         root=new FrameLayout(context);root.setMinimumHeight(dp(172));root.setClipToOutline(true);
-        GradientDrawable background=gradient(0xff593a30,0xff322326,25,0xff986448);
+        GradientDrawable background=MikanTheme.panel(context,25);
         root.setBackground(background);root.setElevation(dp(2));
         LinearLayout row=new LinearLayout(context);row.setOrientation(LinearLayout.HORIZONTAL);row.setGravity(Gravity.CENTER_VERTICAL);row.setBaselineAligned(false);
         root.addView(row,new FrameLayout.LayoutParams(-1,-2));
@@ -37,8 +37,8 @@ final class MikanCard {
         art.addView(picture,new FrameLayout.LayoutParams(-1,-1));
         if(!transparent){
             View fade=new View(context);
-            fade.setBackground(new GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,new int[]{0x00000000,0x00000000,0x803d2928,0xff50342e}));
-            art.addView(fade,new FrameLayout.LayoutParams(dp(55),-1,Gravity.RIGHT));
+            fade.setBackground(new GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,new int[]{0x00000000,0x003d2928,0x903d2928,0xff44302b}));
+            art.addView(fade,new FrameLayout.LayoutParams(dp(65),-1,Gravity.RIGHT));
         }
         ImageView spark=new ImageView(context);spark.setImageDrawable(new MikanMark(MikanMark.SPARK,PEACH));
         FrameLayout.LayoutParams sparkParams=new FrameLayout.LayoutParams(dp(24),dp(24),Gravity.TOP|Gravity.RIGHT);sparkParams.topMargin=dp(12);sparkParams.rightMargin=dp(3);art.addView(spark,sparkParams);
@@ -83,7 +83,7 @@ final class MikanCard {
             canvas.save();canvas.translate(getBounds().left,getBounds().top);canvas.scale(density,density);
             float radius=Math.min(15,Math.min((w-9)/2,h/2)-1),tail=Math.min(h-8,Math.max(19,h*.68f));
             Path p=new Path();p.moveTo(9+radius,1);p.lineTo(w-radius-1,1);p.quadTo(w-1,1,w-1,1+radius);p.lineTo(w-1,h-radius-1);p.quadTo(w-1,h-1,w-radius-1,h-1);p.lineTo(9+radius,h-1);p.quadTo(9,h-1,9,h-radius-1);p.lineTo(9,tail+4);p.quadTo(4,tail+6,1,tail+2);p.quadTo(7,tail-2,9,tail-10);p.lineTo(9,1+radius);p.quadTo(9,1,9+radius,1);p.close();
-            paint.setStyle(Paint.Style.FILL);paint.setColor(0xff79503d);canvas.drawPath(p,paint);paint.setStyle(Paint.Style.STROKE);paint.setStrokeWidth(1);paint.setColor(0xffb68158);canvas.drawPath(p,paint);
+            paint.setStyle(Paint.Style.FILL);paint.setColor(0xff6b4838);canvas.drawPath(p,paint);paint.setStyle(Paint.Style.STROKE);paint.setStrokeWidth(1);paint.setColor(0xffb68158);canvas.drawPath(p,paint);
             canvas.restore();
         }
         @Override public void setAlpha(int alpha){paint.setAlpha(alpha);invalidateSelf();}

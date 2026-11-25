@@ -69,15 +69,14 @@ final class DashboardCards {
     private int dp(float n){return Math.round(n*activity.getResources().getDisplayMetrics().density);}
     private TextView label(String value,int size,int color,boolean bold){
         TextView v=new TextView(activity);v.setText(value);v.setTextSize(size);v.setTextColor(color);v.setIncludeFontPadding(false);
-        if(bold)v.setTypeface(Typeface.DEFAULT,Typeface.BOLD);return v;
+        v.setTypeface(Typeface.create(bold?"sans-serif-medium":"sans-serif",Typeface.NORMAL));return v;
     }
     private LinearLayout vertical(){LinearLayout l=new LinearLayout(activity);l.setOrientation(LinearLayout.VERTICAL);return l;}
     private LinearLayout horizontal(){LinearLayout l=new LinearLayout(activity);l.setGravity(Gravity.CENTER_VERTICAL);return l;}
     private void gap(LinearLayout l,int n){l.addView(new View(activity),new LinearLayout.LayoutParams(1,dp(n)));}
     private LinearLayout panel(){
         LinearLayout l=vertical();l.setPadding(dp(11),dp(10),dp(11),dp(10));
-        GradientDrawable bg=new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,new int[]{0xf34d342b,0xed302326});
-        bg.setCornerRadius(dp(23));bg.setStroke(dp(1),0xff906044);l.setBackground(bg);l.setElevation(dp(2));return l;
+        l.setBackground(MikanTheme.panel(activity,23));l.setElevation(dp(2));return l;
     }
     private void toast(String s){if(!closed&&!activity.isFinishing())Toast.makeText(activity,s,Toast.LENGTH_SHORT).show();}
     private boolean canDialog(){return !closed&&resumed&&!activity.isFinishing()&&!activity.isDestroyed();}
@@ -270,9 +269,9 @@ final class DashboardCards {
     }
     private void renderAgenda(List<Event> events,String message){
         if(agendaRoot==null)return;agendaRoot.removeAllViews();
-        TextView heading=label("Upcoming",15,PEACH,true);agendaRoot.addView(heading);
+        LinearLayout head=horizontal();android.widget.ImageView glyph=new android.widget.ImageView(activity);glyph.setImageDrawable(new MikanMark(MikanMark.CALENDAR,PEACH));head.addView(glyph,new LinearLayout.LayoutParams(dp(19),dp(19)));TextView heading=label("Upcoming",14,CREAM,true);heading.setPadding(dp(6),0,0,0);head.addView(heading);agendaRoot.addView(head);
         gap(agendaRoot,8);View rule=new View(activity);rule.setBackgroundColor(0x447f5740);agendaRoot.addView(rule,new LinearLayout.LayoutParams(-1,dp(1)));gap(agendaRoot,7);
-        if(message!=null||events==null||events.isEmpty()){TextView empty=label(message!=null?message:"No events in the next 7 days ♡",12,MUTED,false);agendaRoot.addView(empty);return;}
+        if(message!=null||events==null||events.isEmpty()){TextView empty=label(message!=null?message:"No events in the next 7 days ♡",12,MUTED,false);agendaRoot.addView(empty);android.widget.ImageView cat=new android.widget.ImageView(activity);cat.setImageDrawable(new MikanMark(MikanMark.CAT,PEACH));cat.setAlpha(.55f);LinearLayout.LayoutParams cp=new LinearLayout.LayoutParams(dp(36),dp(36));cp.gravity=Gravity.RIGHT;agendaRoot.addView(cat,cp);return;}
         for(Event e:events){
             TextView day=label(eventDate(e),10,PEACH,true);agendaRoot.addView(day);gap(agendaRoot,2);
             TextView title=label("•  "+(prefs.getBoolean("agendaTitles",true)?e.title:"Calendar event"),12,CREAM,true);title.setMaxLines(2);title.setEllipsize(TextUtils.TruncateAt.END);agendaRoot.addView(title);

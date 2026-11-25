@@ -99,12 +99,12 @@ public class HomeActivity extends Activity {
         GradientDrawable d=new GradientDrawable();d.setColor(color);d.setCornerRadius(dp(radius));if(border)d.setStroke(dp(1),BORDER);return d;
     }
     private GradientDrawable panelShape(int radius){
-        GradientDrawable d=new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,new int[]{0xf13d2a28,0xed2a2022});d.setCornerRadius(dp(radius));d.setStroke(dp(1),0xff906044);return d;
+        return MikanTheme.panel(this,radius);
     }
     private LinearLayout vertical(){LinearLayout v=new LinearLayout(this);v.setOrientation(LinearLayout.VERTICAL);return v;}
     private LinearLayout horizontal(){LinearLayout v=new LinearLayout(this);v.setOrientation(LinearLayout.HORIZONTAL);v.setGravity(Gravity.CENTER_VERTICAL);return v;}
     private TextView text(String value,int size,int color,boolean bold){
-        TextView v=new TextView(this);v.setText(value);v.setTextSize(size);v.setTextColor(color);if(bold)v.setTypeface(Typeface.DEFAULT,Typeface.BOLD);return v;
+        TextView v=new TextView(this);v.setText(value);v.setTextSize(size);v.setTextColor(color);v.setTypeface(Typeface.create(bold?"sans-serif-medium":"sans-serif",Typeface.NORMAL));return v;
     }
     private void gap(LinearLayout parent,int size){View v=new View(this);parent.addView(v,new LinearLayout.LayoutParams(1,dp(size)));}
     private Drawable asset(String name){try(java.io.InputStream in=getAssets().open(name)){return Drawable.createFromStream(in,name);}catch(Exception e){return null;}}
@@ -170,7 +170,7 @@ public class HomeActivity extends Activity {
         TextView brand=text("Mikan OS",15,CREAM,true);
         ImageView mark=new ImageView(this);mark.setImageDrawable(new MikanMark(MikanMark.CAT,PEACH));LinearLayout.LayoutParams markParams=new LinearLayout.LayoutParams(dp(23),dp(23));markParams.rightMargin=dp(7);header.addView(mark,markParams);
         header.addView(brand,new LinearLayout.LayoutParams(0,-2,1));
-        header.addView(action("⚙",this::showSettings));page.addView(header);
+        header.addView(markButton(MikanMark.GEAR,"Launcher settings",this::showSettings),new LinearLayout.LayoutParams(dp(44),dp(44)));page.addView(header);
         ScrollView scroll=new ScrollView(this);scroll.setFillViewport(false);scroll.setVerticalScrollBarEnabled(true);scroll.setScrollbarFadingEnabled(true);
         page.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
         LinearLayout body=vertical();scroll.addView(body,new ScrollView.LayoutParams(-1,-2));
@@ -179,7 +179,7 @@ public class HomeActivity extends Activity {
         compactClock=showClock&&showWeather&&canPair();
         LinearLayout clockBlock=vertical();
         if(showClock){
-        LinearLayout timeRow=horizontal();clock=text("",compactClock?36:44,CREAM,false);clock.setIncludeFontPadding(false);timeRow.addView(clock);
+        LinearLayout timeRow=horizontal();clock=text("",compactClock?40:48,CREAM,false);clock.setTypeface(Typeface.create("sans-serif-light",Typeface.NORMAL));clock.setIncludeFontPadding(false);timeRow.addView(clock);
         ImageView paw=new ImageView(this);paw.setImageDrawable(new MikanMark(MikanMark.PAW,PEACH));LinearLayout.LayoutParams pawParams=new LinearLayout.LayoutParams(dp(23),dp(23));pawParams.leftMargin=dp(8);timeRow.addView(paw,pawParams);clockBlock.addView(timeRow);
         if(compactClock){ampm=text("",11,PEACH,false);ampm.setIncludeFontPadding(false);clockBlock.addView(ampm);}
         gap(clockBlock,3);date=text("",15,MUTED,false);date.setIncludeFontPadding(false);clockBlock.addView(date);}
@@ -202,17 +202,39 @@ public class HomeActivity extends Activity {
         boolean pair=showMusic&&showAgenda&&canPair();
         if(showMusic)music=new MusicPanel(this,pair);
         if(showMusic||showAgenda){addWidgetRow(body,showMusic?music.view():null,showAgenda?dashboard.agendaView():null,pair);gap(body,10);}
-        LinearLayout dock=horizontal();dock.setPadding(dp(4),dp(5),dp(4),dp(5));dock.setBackground(panelShape(24));dock.setElevation(dp(2));
+        LinearLayout dock=horizontal();dock.setPadding(0,dp(3),0,dp(3));if(!prefs.getBoolean("floatingDock",true)){dock.setBackground(panelShape(24));dock.setElevation(dp(2));}
         for(int i=0;i<dockCount;i++){if(i<pinned.size())dock.addView(tile(pinned.get(i),false),new LinearLayout.LayoutParams(0,-2,1));else{View blank=new View(this);dock.addView(blank,new LinearLayout.LayoutParams(0,dp(56),1));}}
         LinearLayout nav=horizontal();nav.setGravity(Gravity.CENTER);int count=pageCount();
         if(count>1){
         if(homePage>0)nav.addView(pageArrow("‹",()->changePage(-1)));
-        TextView index=text((homePage+1)+" / "+count,13,PEACH,true);index.setGravity(Gravity.CENTER);nav.addView(index,new LinearLayout.LayoutParams(dp(70),dp(36)));
+        LinearLayout dots=horizontal();dots.setGravity(Gravity.CENTER);for(int i=0;i<count;i++){final int target=i;View dot=new View(this);dot.setBackground(shape(i==homePage?PEACH:0xff967a69,10,false));LinearLayout.LayoutParams d=new LinearLayout.LayoutParams(dp(i==homePage?9:6),dp(i==homePage?9:6));d.setMargins(dp(4),0,dp(4),0);dots.addView(dot,d);dot.setContentDescription("Page "+(i+1));dot.setOnClickListener(v->{homePage=target;showHome();});}nav.addView(dots,new LinearLayout.LayoutParams(-2,dp(36)));
         if(homePage+1<count)nav.addView(pageArrow("›",()->changePage(1)));
         page.addView(nav);gap(page,4);}
         page.addView(dock);gap(page,7);
-        TextView drawerButton=action("⌕   Search apps  ·  Swipe up",this::showDrawer);page.addView(drawerButton,new LinearLayout.LayoutParams(-1,dp(48)));
+        page.addView(searchBar(),new LinearLayout.LayoutParams(-1,dp(50)));
         updateClock();refreshExtras();
+    }
+    private ImageView markButton(int kind,String description,Runnable run){
+        ImageView v=new ImageView(this);v.setImageDrawable(new MikanMark(kind,PEACH));v.setScaleType(ImageView.ScaleType.FIT_CENTER);v.setPadding(dp(11),dp(11),dp(11),dp(11));v.setContentDescription(description);v.setFocusable(true);v.setBackground(MikanTheme.ripple(this,18));v.setOnClickListener(w->run.run());return v;
+    }
+    private View searchBar(){
+        LinearLayout bar=horizontal();bar.setBackground(MikanTheme.panel(this,26));bar.setPadding(dp(4),0,dp(4),0);
+        bar.addView(markButton(MikanMark.SEARCH,"Search installed apps",this::openAppSearch),new LinearLayout.LayoutParams(dp(42),-1));
+        TextView hint=text("Search on Mikan OS",13,MUTED,false);hint.setGravity(Gravity.CENTER_VERTICAL);hint.setSingleLine(true);hint.setEllipsize(android.text.TextUtils.TruncateAt.END);hint.setOnClickListener(v->openAppSearch());bar.addView(hint,new LinearLayout.LayoutParams(0,-1,1));
+        bar.addView(markButton(MikanMark.GLOBE,"Search web",()->webSearchDialog("")),new LinearLayout.LayoutParams(dp(42),-1));
+        bar.addView(markButton(MikanMark.MIC,"Voice web search",this::voiceSearch),new LinearLayout.LayoutParams(dp(42),-1));
+        return bar;
+    }
+    private void openAppSearch(){showDrawer();search.requestFocus();search.post(()->{if(drawer&&search!=null&&search.hasFocus())((InputMethodManager)getSystemService(INPUT_METHOD_SERVICE)).showSoftInput(search,InputMethodManager.SHOW_IMPLICIT);});}
+    private void webSearchDialog(String initial){
+        EditText input=new EditText(this);input.setSingleLine(true);input.setHint("Search the web");input.setText(initial);
+        new AlertDialog.Builder(this).setTitle("Web search").setMessage("Opens Google in your browser. Your query leaves the phone only when you choose Search.").setView(input).setNegativeButton("Cancel",null).setPositiveButton("Search",(d,w)->{String q=input.getText().toString().trim();if(q.isEmpty())return;try{startActivity(new Intent(Intent.ACTION_VIEW,android.net.Uri.parse("https://www.google.com/search?q="+android.net.Uri.encode(q))));}catch(Exception e){Toast.makeText(this,"No browser available.",Toast.LENGTH_SHORT).show();}}).show();
+    }
+    private void voiceSearch(){
+        new AlertDialog.Builder(this).setTitle("Voice search").setMessage("Use your Android speech recognition provider. It may process audio online. Review the recognized query before opening the web search.").setNegativeButton("Cancel",null).setPositiveButton("Speak",(d,w)->{
+            Intent i=new Intent(android.speech.RecognizerIntent.ACTION_RECOGNIZE_SPEECH);i.putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE_MODEL,android.speech.RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);i.putExtra(android.speech.RecognizerIntent.EXTRA_MAX_RESULTS,1);
+            try{startActivityForResult(i,75);}catch(Exception e){Toast.makeText(this,"Speech recognition unavailable.",Toast.LENGTH_SHORT).show();}
+        }).show();
     }
     private TextView pageArrow(String label,Runnable r){TextView v=action(label,r);v.setMinHeight(dp(36));v.setPadding(dp(16),dp(4),dp(16),dp(4));return v;}
     private void updateClock(){
@@ -224,7 +246,7 @@ public class HomeActivity extends Activity {
     }
     private View tile(App app,boolean label){
         LinearLayout cell=vertical();cell.setGravity(Gravity.CENTER);cell.setPadding(dp(2),dp(3),dp(2),dp(3));
-        ImageView icon=new ImageView(this);icon.setImageDrawable(themedIcon(app));icon.setScaleType(ImageView.ScaleType.FIT_CENTER);int inset=dp(prefs.getBoolean("themed",true)?5:7);icon.setPadding(inset,inset,inset,inset);icon.setBackground(shape(0xff50332b,17,true));
+        ImageView icon=new ImageView(this);icon.setImageDrawable(themedIcon(app));icon.setScaleType(ImageView.ScaleType.FIT_CENTER);int inset=dp(prefs.getBoolean("themed",true)?5:7);icon.setPadding(inset,inset,inset,inset);icon.setBackground(MikanTheme.tile(this));icon.setClipToOutline(true);
         FrameLayout iconFrame=new FrameLayout(this);iconFrame.addView(icon,new FrameLayout.LayoutParams(-1,-1));
         TextView dot=text("•",18,PEACH,true);dot.setGravity(Gravity.CENTER);dot.setBackground(shape(0xff50332b,20,false));dot.setVisibility(View.GONE);FrameLayout.LayoutParams bp=new FrameLayout.LayoutParams(dp(16),dp(16),Gravity.TOP|Gravity.RIGHT);iconFrame.addView(dot,bp);badgeViews.put(dot,app.key());
         cell.addView(iconFrame,new LinearLayout.LayoutParams(dp(50),dp(50)));
@@ -266,6 +288,7 @@ public class HomeActivity extends Activity {
         setting(body,"Grid: "+prefs.getInt("columns",4)+" columns",()->chooseNumber("columns","Grid columns",new int[]{4,5}));
         setting(body,"Dock: "+prefs.getInt("dockCount",5)+" apps",()->chooseNumber("dockCount","Dock size",new int[]{3,4,5}));
         setting(body,"Favorites heading: "+(prefs.getBoolean("showFavoritesLabel",false)?"Shown":"Hidden"),()->{prefs.edit().putBoolean("showFavoritesLabel",!prefs.getBoolean("showFavoritesLabel",false)).apply();showSettings();});
+        setting(body,"Floating dock: "+(prefs.getBoolean("floatingDock",true)?"On":"Off"),()->{prefs.edit().putBoolean("floatingDock",!prefs.getBoolean("floatingDock",true)).apply();showSettings();});
         setting(body,"Manage favorites",this::manageFavorites);
         setting(body,"Create app folder",this::createFolder);
         setting(body,"Manage folders",this::manageFolders);
@@ -315,7 +338,9 @@ public class HomeActivity extends Activity {
     private Drawable themedIcon(App app){
         if(app.folderKey!=null)return folders.icon(this,app.folderKey,key->{App item=find(key);return item==null?null:themedIcon(item);});
         if(!prefs.getBoolean("themed",true))return app.icon;
-        if(app.component.getPackageName().equals("dev.capnolithyl.mikan.pocket"))return getDrawable(dev.capnolithyl.mikan.launcher.R.drawable.mikan_icon);
+        if(app.component.getPackageName().equals("dev.capnolithyl.mikan.pocket"))return new MikanMark(MikanMark.PAW,PEACH);
+        String pkg=app.component.getPackageName();
+        if(LauncherIcons.hasCustom(pkg)){Drawable.ConstantState cached=monoCache.get(app.key());if(cached!=null)return cached.newDrawable(getResources());Drawable custom=LauncherIcons.create(this,pkg,app.label,app.icon);if(custom.getConstantState()!=null)monoCache.put(app.key(),custom.getConstantState());return custom;}
         if(Build.VERSION.SDK_INT>=33&&app.icon instanceof AdaptiveIconDrawable){
             Drawable mono=((AdaptiveIconDrawable)app.icon).getMonochrome();
             if(mono!=null){Drawable.ConstantState cached=monoCache.get(app.key());if(cached!=null)return cached.newDrawable(getResources());Drawable d=LauncherIcons.normalizedMonochrome(this,mono,PEACH);if(d!=null){if(d.getConstantState()!=null)monoCache.put(app.key(),d.getConstantState());return d;}}
@@ -325,7 +350,7 @@ public class HomeActivity extends Activity {
     private boolean canPair(){return prefs.getBoolean("pairWidgets",true)&&getResources().getConfiguration().screenWidthDp>=350&&getResources().getConfiguration().fontScale<=1.2f;}
     private void addWidgetRow(LinearLayout body,View left,View right,boolean pair){
         if(left==null&&right==null)return;
-        if(pair&&left!=null&&right!=null){LinearLayout row=horizontal();row.setGravity(Gravity.CENTER_VERTICAL);row.setBaselineAligned(false);row.addView(left,new LinearLayout.LayoutParams(0,-2,1));LinearLayout.LayoutParams rp=new LinearLayout.LayoutParams(0,-2,1);rp.leftMargin=dp(8);row.addView(right,rp);body.addView(row,new LinearLayout.LayoutParams(-1,-2));}
+        if(pair&&left!=null&&right!=null){LinearLayout row=horizontal();row.setGravity(Gravity.CENTER_VERTICAL);row.setBaselineAligned(false);boolean equal=music!=null&&left==music.view();int height=equal?-1:-2;row.addView(left,new LinearLayout.LayoutParams(0,height,1));LinearLayout.LayoutParams rp=new LinearLayout.LayoutParams(0,height,1);rp.leftMargin=dp(8);row.addView(right,rp);body.addView(row,new LinearLayout.LayoutParams(-1,-2));}
         else{if(left!=null)body.addView(left,new LinearLayout.LayoutParams(-1,-2));if(left!=null&&right!=null)gap(body,8);if(right!=null)body.addView(right,new LinearLayout.LayoutParams(-1,-2));}
     }
     @Override public void onRequestPermissionsResult(int request,String[] permissions,int[] grants){super.onRequestPermissionsResult(request,permissions,grants);if(request==DashboardCards.CALENDAR_REQUEST&&dashboard!=null){dashboard.calendarPermissionChanged();if(!settings&&!drawer)showHome();}}
@@ -336,6 +361,7 @@ public class HomeActivity extends Activity {
     }
     @Override protected void onActivityResult(int request,int result,Intent data){
         super.onActivityResult(request,result,data);
+        if(request==75){if(result==RESULT_OK&&data!=null){ArrayList<String> words=data.getStringArrayListExtra(android.speech.RecognizerIntent.EXTRA_RESULTS);if(words!=null&&!words.isEmpty())webSearchDialog(words.get(0));}return;}
         if((request!=73&&request!=74)||result!=RESULT_OK||data==null||data.getData()==null)return;
         final android.net.Uri uri=data.getData();
         new Thread(()->{

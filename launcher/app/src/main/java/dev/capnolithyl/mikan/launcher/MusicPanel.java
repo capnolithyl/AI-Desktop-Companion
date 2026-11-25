@@ -48,8 +48,7 @@ final class MusicPanel {
     MusicPanel(Context context,boolean compact){
         this.context=context;
         root=new LinearLayout(context);root.setOrientation(LinearLayout.VERTICAL);root.setPadding(dp(compact?9:12),dp(9),dp(compact?9:12),dp(7));
-        GradientDrawable bg=new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,new int[]{0xf13d2a28,0xed2a2022});
-        bg.setCornerRadius(dp(23));bg.setStroke(dp(1),0xff906044);root.setBackground(bg);root.setElevation(dp(2));
+        root.setBackground(MikanTheme.panel(context,23));root.setElevation(dp(2));
         LinearLayout row=new LinearLayout(context);row.setGravity(Gravity.CENTER_VERTICAL);root.addView(row);
         artwork=new ImageView(context);artwork.setScaleType(ImageView.ScaleType.CENTER_CROP);
         GradientDrawable artBg=new GradientDrawable();artBg.setColor(0xff50332b);artBg.setCornerRadius(dp(8));artwork.setBackground(artBg);artwork.setClipToOutline(true);
@@ -83,7 +82,7 @@ final class MusicPanel {
     }
     View view(){return root;}
     private int dp(float n){return Math.round(n*context.getResources().getDisplayMetrics().density);}
-    private TextView label(String s,int size,int color){TextView t=new TextView(context);t.setText(s);t.setTextSize(size);t.setTextColor(color);t.setIncludeFontPadding(false);return t;}
+    private TextView label(String s,int size,int color){TextView t=new TextView(context);t.setText(s);t.setTextSize(size);t.setTextColor(color);t.setIncludeFontPadding(false);t.setTypeface(Typeface.create("sans-serif",Typeface.NORMAL));return t;}
     private MediaButton control(int kind,String desc,Runnable r){MediaButton button=new MediaButton(context,kind);button.setContentDescription(desc);button.setOnClickListener(v->r.run());buttons.addView(button,new LinearLayout.LayoutParams(0,dp(44),1));return button;}
     boolean isSeekTouch(float rawX,float rawY){
         if(timeline.getVisibility()!=View.VISIBLE||!seek.isShown()||!seek.isEnabled())return false;
@@ -165,8 +164,8 @@ final class MusicPanel {
         }
         void setPlaying(boolean value){if(playing!=value){playing=value;invalidate();}setContentDescription(value?"Pause":"Play");}
         @Override protected void onDraw(Canvas c){
-            super.onDraw(c);float side=dp(22);c.save();c.translate((getWidth()-side)/2f,(getHeight()-side)/2f);c.scale(side/24f,side/24f);paint.setColor(PEACH);paint.setStyle(Paint.Style.FILL);
-            if(kind==1){if(playing){c.drawRoundRect(5,3,10,21,1.3f,1.3f,paint);c.drawRoundRect(14,3,19,21,1.3f,1.3f,paint);}else triangle(c,6,3,21,12,6,21);}
+            super.onDraw(c);float side=dp(kind==1?36:21);c.save();c.translate((getWidth()-side)/2f,(getHeight()-side)/2f);c.scale(side/24f,side/24f);paint.setColor(PEACH);paint.setStyle(Paint.Style.FILL);
+            if(kind==1){paint.setColor(0xffffb978);c.drawCircle(12,12,11.8f,paint);paint.setColor(0xff37231e);c.scale(.62f,.62f,12,12);if(playing){c.drawRoundRect(5,3,10,21,1.3f,1.3f,paint);c.drawRoundRect(14,3,19,21,1.3f,1.3f,paint);}else triangle(c,6,3,21,12,6,21);}
             else if(kind==0){c.drawRoundRect(3,3,6,21,1,1,paint);triangle(c,20,3,7,12,20,21);}
             else{triangle(c,4,3,17,12,4,21);c.drawRoundRect(18,3,21,21,1,1,paint);}
             c.restore();
