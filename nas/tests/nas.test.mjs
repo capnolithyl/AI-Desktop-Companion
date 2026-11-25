@@ -1212,8 +1212,8 @@ test("native simple chat sees recent assistant replies and private persona in on
    assert.equal(args.history.at(-2).content,"Master of Puppets by Metal Metallica.");
    assert.match(args.system,/Private persona marker/);
    assert.match(args.system,/Private memory marker/);
-   assert.deepEqual(args.agentTools.map(t=>t.function.name),["recall_memory","request_public_research"]);
-   assert.deepEqual(args.agentTools[1].function.parameters.properties,{});
+   assert.deepEqual(args.agentTools.map(t=>t.function.name),["recall_memory","search_web","read_webpage"]);
+   assert.deepEqual(args.agentTools[1].function.parameters.required,["query"]);
    return {content:"Okay, you caught my typo.",toolCalls:[]};
   }});
   assert.equal(calls,1);assert.equal(result.answer,"Okay, you caught my typo.");
@@ -1221,33 +1221,27 @@ test("native simple chat sees recent assistant replies and private persona in on
  }finally{store.db.close();}
 });
 
-test("private conversation handoff does not pass persona, memory, assistant history or tool arguments to public research",async()=>{
+test("direct native research keeps persona and dialogue through search and read without delegation",async()=>{
  const {executeNasTurn}=await import("../turn.mjs"),store=openStore(":memory:");
  try{
-  store.saveProfile({...DEFAULT_COMPANION_PROFILE,systemPrompt:"PRIVATE_PERSONA_SENTINEL"});
-  store.library.context=()=>({text:"PRIVATE_MEMORY_SENTINEL",ids:[],auditLines:[]});
-  const chat=store.newConversation();
-  store.append(chat.id,"user","Tell me about the Lantern album.");
-  store.append(chat.id,"assistant","PRIVATE_ASSISTANT_SENTINEL");
+  store.saveProfile({...DEFAULT_COMPANION_PROFILE,systemPrompt:"Private persona marker"});
+  store.library.context=()=>({text:"Private memory marker",ids:[],auditLines:[]});
+  const chat=store.newConversation();store.append(chat.id,"user","Tell me about the Lantern album.");
+  store.append(chat.id,"assistant","Private assistant marker");
   const question="Could you tell me more?";store.append(chat.id,"user",question);
-  let calls=0;const searches=[];
-  const result=await executeNasTurn({store,conversationId:chat.id,question,selected:{provider:"cerebras",model:"gpt-oss-120b",historyChars:32000,reasoningEffort:"medium"},mode:"simple",publicAgent:true,reserve:()=>{},canRequest:()=>true,search:async q=>{searches.push(q);return [{url:"https://example.org/lantern",title:"Lantern album",content:"Lantern has four tracks.",kind:"preview"}];},requestModel:async args=>{
-   calls++;
-   if(calls===1){
-    assert.match(JSON.stringify(args.history),/PRIVATE_ASSISTANT_SENTINEL/);
-    return {content:"PRIVATE_DRAFT_SENTINEL",toolCalls:[{id:"handoff",type:"function",function:{name:"request_public_research",arguments:'{"query":"PRIVATE_ARGUMENT_SENTINEL"}'}}]};
-   }
-   if(calls<4){
-    assert.doesNotMatch(JSON.stringify({system:args.system,history:args.history}),/PRIVATE_(?:PERSONA|MEMORY|ASSISTANT|DRAFT|ARGUMENT)_SENTINEL/);
-    if(calls===2)return {content:"",toolCalls:[{id:"search",type:"function",function:{name:"search_web",arguments:'{"query":"Lantern album tracks"}'}}]};
-    return {content:"DONE",toolCalls:[]};
-   }
-   assert.match(args.system,/PRIVATE_PERSONA_SENTINEL/);assert.match(args.system,/PRIVATE_MEMORY_SENTINEL/);
-   assert.match(JSON.stringify(args.history),/PRIVATE_ASSISTANT_SENTINEL/);
-   assert.match(args.history.at(-1).content,/Lantern has four tracks/);
-   return {content:"Lantern has four tracks.",toolCalls:[]};
-  }});
-  assert.equal(calls,4);assert.deepEqual(searches,["Lantern album tracks"]);
+  let calls=0;const searches=[],reads=[];
+  const call=(name,args,id)=>({content:"",toolCalls:[{id,type:"function",function:{name,arguments:JSON.stringify(args)}}]});
+  const result=await executeNasTurn({store,conversationId:chat.id,question,selected:{provider:"cerebras",model:"gpt-oss-120b",historyChars:32000},mode:"simple",publicAgent:true,reserve:()=>{},canRequest:()=>true,
+   search:async q=>{searches.push(q);return [{url:"https://example.org/lantern?v=public",title:"Lantern album",content:"Lantern has four tracks.",kind:"preview"},{url:"https://example.org/private?token=private-token",title:"Private link",content:"Never read",kind:"preview"}];},
+   read:async url=>{reads.push(url);return {url,title:"Lantern album",content:"Lantern has four tracks. The opener is Blue Light.",kind:"page"};},
+   requestModel:async args=>{
+    calls++;assert.match(args.system,/Private persona marker/);assert.match(args.system,/Private memory marker/);assert.match(JSON.stringify(args.history),/Private assistant marker/);
+    assert.ok(!args.agentTools.some(t=>t.function.name==="request_public_research"));
+    if(calls===1)return call("search_web",{query:"Lantern album tracks"},"search");
+    if(calls===2){assert.match(args.history.at(-1).content,/Lantern has four tracks/);assert.doesNotMatch(args.history.at(-1).content,/private-token/);return call("read_webpage",{source:1},"read");}
+    assert.match(args.history.at(-1).content,/Blue Light/);return {content:"Lantern has four tracks.",toolCalls:[]};
+   }});
+  assert.equal(calls,3);assert.deepEqual(searches,["Lantern album tracks"]);assert.deepEqual(reads,["https://example.org/lantern?v=public"]);
   assert.equal(result.answer,"Lantern has four tracks.");assert.equal(result.researched.sources.length,1);
  }finally{store.db.close();}
 });
@@ -1295,7 +1289,7 @@ test("model-led companion uses original dialogue and calls recall and private kn
   const result=await executeNasTurn({store,conversationId:chat.id,question,selected:{provider:"nvidia",model:"test",historyChars:32000},mode:"off",publicAgent:true,knowledge,reserve:()=>{},canRequest:()=>true,requestModel:async args=>{
    calls.push(args);
    assert.doesNotMatch(args.system,/FALSE_SUMMARY_SENTINEL/);
-   assert.ok(!args.agentTools.some(t=>t.function.name==="request_public_research"));
+   assert.ok(!args.agentTools.some(t=>["search_web","read_webpage"].includes(t.function.name)));
    const call=(name,args,id)=>({content:"",toolCalls:[{id,type:"function",function:{name,arguments:JSON.stringify(args)}}]});
    if(calls.length===1)return call("recall_memory",{query:"lantern story"},"r");
    if(calls.length===2){assert.match(args.history.at(-1).content,/The lantern was blue/);return call("find_knowledge",{query:"Lantern notes"},"f");}
@@ -1336,31 +1330,41 @@ test("credential redaction blocks known key formats before inference and learnin
 });
 
 
-test("native research diagnostics distinguish rejected queries from unavailable search service",async()=>{
+test("direct research rejects private identity but permits unrelated public names in profile facts",async()=>{
  const {executeNasTurn}=await import("../turn.mjs"),store=openStore(":memory:");
  try{
-  const chat=store.newConversation(),question="Look up Winterdome's album.";
+  store.db.prepare("INSERT INTO user_memories(fact,category) VALUES(?,?)").run("The user's first name is Avery.","profile");
+  store.db.prepare("INSERT INTO user_memories(fact,category) VALUES(?,?)").run("Avery attended a Metallica concert in Detroit in 2024.","profile");
+  const chat=store.newConversation(),question="Look up Metallica's album.";
   store.append(chat.id,"user",question);
   const events=[],queries=[];let calls=0;
   const call=(name,args,id)=>({content:"",toolCalls:[{id,type:"function",function:{name,arguments:JSON.stringify(args)}}]});
   const result=await executeNasTurn({store,conversationId:chat.id,question,selected:{provider:"nvidia",model:"test",historyChars:32000},mode:"simple",publicAgent:true,reserve:()=>{},canRequest:()=>true,activity:e=>events.push(e),
-   search:async q=>{queries.push(q);return [{url:"https://example.org/winterdome",title:"Winterdome",content:"An album released in 2006.",kind:"preview"}];},requestModel:async args=>{
+   search:async q=>{queries.push(q);return [{url:"https://example.org/metallica",title:"Metallica",content:"Album information.",kind:"preview"}];},requestModel:async args=>{
     calls++;
-    if(calls===1)return call("request_public_research",{},"research");
-    if(calls===2)return call("search_web",{query:"my private album"},"blocked");
-    if(calls===3){
-     assert.match(args.history.at(-1).content,/personal pronouns or private context/);
-     return call("search_web",{query:"Winterdome Weltendaemmerung"},"search");
-    }
-    if(calls===4)return {content:"DONE",toolCalls:[]};
-    assert.match(args.history.at(-1).content,/evidence-available/);
-    assert.match(args.history.at(-1).content,/An album released in 2006/);
+    if(calls===1)return call("search_web",{query:"Avery personal concert"},"blocked");
+    if(calls===2){assert.match(args.history.at(-1).content,/personal pronouns or private context/);return call("search_web",{query:"Avery concert Detroit"},"identity");}
+    if(calls===3){assert.match(args.history.at(-1).content,/Rejected private identity/);return call("search_web",{query:"Metallica concert Detroit 2024"},"search");}
+    assert.match(args.history.at(-1).content,/Album information/);
     return {content:"I found the album!",toolCalls:[]};
    }});
-  assert.deepEqual(queries,["Winterdome Weltendaemmerung"]);
+  assert.deepEqual(queries,["Metallica concert Detroit 2024"]);
   assert.equal(result.answer,"I found the album!");
-  assert.ok(events.some(e=>e.title==="Public tool not completed"&&e.detail.includes("personal pronouns")));
-  assert.ok(events.some(e=>e.title==="Public research finished"&&e.detail==="evidence-available"));
-  assert.doesNotMatch(JSON.stringify(events),/my private album/);
+  assert.ok(events.some(e=>e.title==="Companion tool not completed"&&e.detail.includes("Rejected private identity")));
+  assert.doesNotMatch(JSON.stringify(events),/Avery concert Detroit/);
+ }finally{store.db.close();}
+});
+
+test("native web opt-out excludes web tools and rejects attempts to call them",async()=>{
+ const {executeNasTurn}=await import("../turn.mjs"),store=openStore(":memory:");
+ try{
+  const chat=store.newConversation(),question="Tell me about the album, don't search the web.";store.append(chat.id,"user",question);
+  let calls=0;
+  const result=await executeNasTurn({store,conversationId:chat.id,question,selected:{provider:"nvidia",model:"test",historyChars:32000},mode:"simple",publicAgent:true,reserve:()=>{},canRequest:()=>true,search:async()=>{throw Error("Must not search");},requestModel:async args=>{
+   assert.ok(!args.agentTools.some(t=>["search_web","read_webpage"].includes(t.function.name)));
+   if(++calls===1)return {content:"",toolCalls:[{id:"blocked",type:"function",function:{name:"search_web",arguments:'{"query":"Public album"}'}}]};
+   assert.match(args.history.at(-1).content,/disabled for this turn/);return {content:"I won't search.",toolCalls:[]};
+  }});
+  assert.equal(result.answer,"I won't search.");
  }finally{store.db.close();}
 });
