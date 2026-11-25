@@ -57,11 +57,16 @@ function workspaceFile(path) {
 function sse(res,kind,value) {
   if (!res.destroyed) res.write("event: "+kind+"\ndata: "+JSON.stringify(value)+"\n\n");
 }
-export function makeServer({store,config,key,promptFile="",maintenanceFile="/data/.mikan-update-maintenance",updates=updateControl(),models=providerSettings({initial:config,db:store.db}),generate=generateReply,research=researchSettings(store.db,{defaultEngine:"legacy"}),search=searchWeb,read=readWeb,knowledge=createKnowledge({db:store.db,read})}) {
+export function makeServer({store,config,key,promptFile="",maintenanceFile="/data/.mikan-update-maintenance",updates=updateControl(),models=providerSettings({initial:config,db:store.db}),generate=generateReply,research=researchSettings(store.db,{defaultEngine:"legacy"}),search=searchWeb,read=readWeb,knowledge=createKnowledge({db:store.db,read}),memoryIdleMs=90000,memoryPollMs=15000}) {
   if (typeof key!=="string" || key.length<32) throw new Error("MIKAN_REMOTE_KEY must be at least 32 characters");
-  let busy=false,lastReplyAt=0,activeWrites=0;
+  let busy=false,lastInteractionAt=Date.now(),activeWrites=0,memoryTask=null,memoryAbort=null;
   const maintenance=()=>existsSync(maintenanceFile);
-  const unavailable=()=>busy||store.learning.isRunning()||brain.isRunning()||knowledge.isRunning();
+  const foregroundUnavailable=()=>busy||brain.isRunning()||knowledge.isRunning();
+  const unavailable=()=>foregroundUnavailable()||store.learning.isRunning()||!!memoryTask;
+  const interruptMemory=async()=>{
+    const task=memoryTask;
+    if(task){memoryAbort?.abort();await task;}
+  };
   const requestModel=async(args,source="chat")=>{
     const startedAt=Date.now();let usage=null,failed=true;
     try{
@@ -102,7 +107,7 @@ export function makeServer({store,config,key,promptFile="",maintenanceFile="/dat
         return json(res,202,updates.queue(body?.action));
       }
       if (req.method==="GET" && path==="/api/status")
-        return json(res,200,{...models.view(),busy:unavailable(),build:BUILD});
+        return json(res,200,{...models.view(),busy:foregroundUnavailable(),memoryBusy:store.learning.isRunning(),build:BUILD});
       if(req.method==="GET"&&path==="/api/knowledge")return json(res,200,knowledge.status());
       if(req.method==="GET"&&path==="/api/knowledge/document"){
         const q=new URL(req.url,"http://localhost").searchParams;return json(res,200,knowledge.inspect(q.get("kind"),q.get("id")));
@@ -151,7 +156,8 @@ export function makeServer({store,config,key,promptFile="",maintenanceFile="/dat
       if (req.method==="GET" && path==="/api/conversations")
         return json(res,200,{conversations:store.conversations()});
       if (req.method==="POST" && path==="/api/conversations") {
-        if (unavailable()) return json(res,409,{error:"Mikan is responding"});
+        if (foregroundUnavailable()) return json(res,409,{error:"Mikan is responding"});
+        lastInteractionAt=Date.now();
         return json(res,201,store.newConversation());
       }
       const match=path.match(/^\/api\/conversations\/([\w-]+)\/messages$/);
@@ -198,19 +204,24 @@ export function makeServer({store,config,key,promptFile="",maintenanceFile="/dat
       const del=path.match(/^\/api\/memories\/(\d+)$/);
       if (req.method==="DELETE" && del) return json(res,200,{removed:store.removeMemory(Number(del[1]))});
       if (req.method==="POST" && path==="/api/chat") {
-        if (unavailable()) return json(res,409,{error:store.learning.isRunning()?"Mikan is processing memories. Retry in a moment.":"Mikan is already responding"});
+        if (foregroundUnavailable()) return json(res,409,{error:"Mikan is already responding"});
         const body=await readJson(req);
         const question=typeof body.text==="string"?body.text.trim():"";
         const conversationId=body.conversationId;
         if (!question || question.length>4000 || !/^[\w-]{1,100}$/.test(conversationId||""))
           return json(res,400,{error:"Invalid conversation or message (limit: 4000 characters)"});
         if (!store.exists(conversationId)) return json(res,404,{error:"Conversation not found"});
-        if (unavailable()) return json(res,409,{error:"Mikan is already responding"});
+        if (foregroundUnavailable()) return json(res,409,{error:"Mikan is already responding"});
         const selected=models.active();
         if(!models.available(selected.provider))return json(res,429,{error:"NAS cloud request budget reached. Try again later or select another provider."});
-        busy=true;
+        busy=true;lastInteractionAt=Date.now();
         let user;const mode=research.get(),trace=turnTrace(mode);
         try {
+        // Claim the foreground slot before yielding. Abort and drain the
+        // background worker before starting another provider request.
+        await trace.measure("memory-yield",interruptMemory);
+        if(!models.available(selected.provider))return json(res,429,{error:"NAS cloud request budget reached. Try again later or select another provider."});
+        if(res.destroyed)return;
         const prior=store.messages(conversationId,1)?.at(-1);
         user=store.append(conversationId,"user",question);
         res.writeHead(200,{"Content-Type":"text/event-stream; charset=utf-8",
@@ -223,7 +234,6 @@ export function makeServer({store,config,key,promptFile="",maintenanceFile="/dat
           store.library.markRecalled(memory.ids);
           try{store.learning.recordRecall(conversationId,saved.id,memory.auditLines);}catch{console.error('Could not record NAS memory recall activity');}
           try{if(researched.local||store.messages(conversationId,80).some(m=>m.inference?.sources?.some(s=>s.kind==="notion"||s.kind==="cached-web")))store.learning.recordKnowledgeSkip(conversationId,saved.id);else store.learning.enqueue(user,saved,conversationId,prior?.role==="assistant"?prior.content:"");}catch{console.error("Could not queue NAS memory extraction");}
-          lastReplyAt=Date.now();
           sse(res,"done",{message:saved});
         } catch(error) {
           // Do not leak upstream response bodies or credentials to the browser.
@@ -233,7 +243,7 @@ export function makeServer({store,config,key,promptFile="",maintenanceFile="/dat
           if (!res.headersSent) json(res,500,{error:"Could not prepare the conversation"});
           else sse(res,"error",{error:(upstreamStatus===429||error?.status===429)?"Provider quota reached (HTTP 429). No automatic retry.":"Cloud reply failed ("+selected.provider+(upstreamStatus?" HTTP "+upstreamStatus:"")+"). Check the selected model and provider quota."});
         } finally {
-          busy=false;
+          lastInteractionAt=Date.now();busy=false;
           res.end();
         }
         return;
@@ -247,12 +257,21 @@ export function makeServer({store,config,key,promptFile="",maintenanceFile="/dat
   });
   server.requestTimeout=30000;
   const timer=setInterval(()=>{
-    if(maintenance()||unavailable()||Date.now()-lastReplyAt<15000)return;
+    if(maintenance()||unavailable()||activeWrites>0||Date.now()-lastInteractionAt<memoryIdleMs)return;
     let selected;try{selected=models.active();}catch{return;}
-    if(!models.available(selected.provider))return;
-    void store.learning.processNext(args=>{models.reserve(selected.provider);return requestModel(args,"memory");},selected).catch(()=>console.error("NAS memory worker failed"));
-  },15000);
-  timer.unref();server.once("close",()=>clearInterval(timer));
+    // One background request plus two spare request slots for chat.
+    // This is admission headroom, not a guarantee of remaining token quota.
+    if(!models.available(selected.provider,3))return;
+    const controller=new AbortController();memoryAbort=controller;
+    memoryTask=store.learning.processNext(args=>{
+      controller.signal.throwIfAborted();
+      models.reserve(selected.provider);
+      return requestModel({...args,signal:controller.signal},"memory");
+    },selected,{signal:controller.signal}).catch(()=>console.error("NAS memory worker failed")).finally(()=>{
+      memoryTask=null;memoryAbort=null;
+    });
+  },memoryPollMs);
+  timer.unref();server.once("close",()=>{clearInterval(timer);memoryAbort?.abort();});
   return server;
 }
 

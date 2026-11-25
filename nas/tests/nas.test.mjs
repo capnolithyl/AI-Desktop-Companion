@@ -1135,3 +1135,49 @@ test("Cerebras supports native tool call and tool result continuation",async()=>
  }});
  assert.equal(second.content,"Found it.");
 });
+
+test("foreground chat preempts an in-flight memory job without losing it or running two requests at once",async()=>{
+  const store=openStore(":memory:"),key="12345678901234567890123456789012";
+  const chat=store.newConversation(),user=store.append(chat.id,"user","I love pears."),assistant=store.append(chat.id,"assistant","Pears are excellent.");
+  store.learning.setSettings({user:true,character:false});store.learning.enqueue(user,assistant,chat.id);
+  let memoryStarted,started=new Promise(resolve=>{memoryStarted=resolve;}),inferenceActive=0,chatCalls=0,interrupted=false;
+  const server=makeServer({store,key,config:{provider:"groq",model:"openai/gpt-oss-120b",key:"synthetic-groq-secret"},memoryIdleMs:100,memoryPollMs:5,
+    generate:async args=>{
+      inferenceActive++;assert.equal(inferenceActive,1);
+      try{
+        if(args.system.startsWith("You are Mikan's memory decision engine")){
+          memoryStarted();
+          await new Promise((resolve,reject)=>{if(args.signal.aborted)reject(args.signal.reason);else args.signal.addEventListener("abort",()=>reject(args.signal.reason),{once:true});});
+          return '{"facts":[],"interests":[],"canon":[]}';
+        }
+        chatCalls++;assert.equal(interrupted,true);args.onDelta("I'm here.");return "I'm here.";
+      }finally{inferenceActive--;if(args.signal?.aborted)interrupted=true;}
+    }});
+  await new Promise(resolve=>server.listen(0,"127.0.0.1",resolve));
+  const base="http://127.0.0.1:"+server.address().port,headers={Authorization:"Bearer "+key,"Content-Type":"application/json"};
+  let timer;
+  try{
+    await Promise.race([started,new Promise((_,reject)=>{timer=setTimeout(()=>reject(Error("Memory worker did not start")),3000);})]);clearTimeout(timer);
+    const status=await (await fetch(base+"/api/status",{headers})).json();
+    assert.equal(status.busy,false);assert.equal(status.memoryBusy,true);
+    const response=await fetch(base+"/api/chat",{method:"POST",headers,body:JSON.stringify({conversationId:chat.id,text:"Hi again"})});
+    assert.equal(response.status,200);assert.match(await response.text(),/I'm here/);
+    assert.equal(chatCalls,1);assert.equal(interrupted,true);
+    const original=store.db.prepare("SELECT status FROM nas_learning_jobs WHERE assistant_id=?").get(assistant.id);
+    assert.equal(original.status,"queued");assert.equal(store.learning.getStatus().failed,0);
+    assert.equal(store.messages(chat.id).at(-1).content,"I'm here.");
+  }finally{clearTimeout(timer);await new Promise(resolve=>server.close(resolve));store.db.close();}
+});
+test("interrupted memory result is not persisted even if the model returns after abort",async()=>{
+  const store=openStore(":memory:");
+  try{
+    const chat=store.newConversation(),controller=new AbortController();
+    const user=store.append(chat.id,"user","I love pears."),assistant=store.append(chat.id,"assistant","Pears are excellent.");
+    store.learning.setSettings({user:true,character:false});store.learning.enqueue(user,assistant,chat.id);
+    const result=JSON.stringify({facts:[{action:"save",scope:"long_term",fact:"The user loves pears",category:"preferences",tags:[],evidence:"I love pears",relatedId:null}],interests:[],canon:[]});
+    await store.learning.processNext(async()=>{controller.abort();return result;},{provider:"groq",model:"test"},{signal:controller.signal});
+    assert.equal(store.learning.getStatus().queued,1);assert.equal(store.learning.getStatus().failed,0);assert.equal(store.listMemories().length,0);
+    await store.learning.processNext(async()=>result,{provider:"groq",model:"test"});
+    assert.equal(store.learning.getStatus().queued,0);assert.equal(store.listMemories().length,1);
+  }finally{store.db.close();}
+});
