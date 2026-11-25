@@ -84,9 +84,7 @@ final class NativeWidgets {
             for(AppWidgetProviderInfo i:manager.getInstalledProviders())if((i.widgetCategory&AppWidgetProviderInfo.WIDGET_CATEGORY_HOME_SCREEN)!=0)providers.add(i);
             providers.sort(Comparator.comparing((AppWidgetProviderInfo i)->label(i),String.CASE_INSENSITIVE_ORDER));
             if(providers.isEmpty()){toast("No compatible Android widgets found.");return;}
-            String[] labels=new String[providers.size()];
-            for(int i=0;i<labels.length;i++){AppWidgetProviderInfo provider=providers.get(i);labels[i]=label(provider)+"\n"+provider.provider.getPackageName();}
-            new AlertDialog.Builder(activity).setTitle("Choose Android widget").setItems(labels,(d,i)->bind(providers.get(i),page)).setNegativeButton("Cancel",null).show();
+            new WidgetPickerDialog(activity,providers,provider->bind(provider,page)).open();
         }catch(RuntimeException ex){toast("Android widget picker unavailable.");}
     }
     private void bind(AppWidgetProviderInfo provider,int page){
