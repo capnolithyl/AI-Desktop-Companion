@@ -56,7 +56,8 @@ export async function agentResearch({mode,history,generate,compose=generate,canR
   const snapshot=()=>sources.map((s,i)=>({number:i+1,...clip(s)}));
   const record=(title,detail,lines=[])=>activity({title,detail,lines});
   if(priorCount)record("Previous public evidence available",priorCount+" dated sources from the preceding turn",[]);
-  const add=s=>{const url=webURL(s?.url);if(url&&!sources.some(x=>x.url===url.href)&&sources.length<maxSources)sources.push(clip({...s,url:url.href,retrievedAt:s.fetchedAt??clock,priorTurn:false}));};
+  const retrievalTime=s=>s.fromCache&&Number.isFinite(s.fetchedAt)?Math.min(s.fetchedAt,clock):clock;
+  const add=s=>{const url=webURL(s?.url);if(url&&!sources.some(x=>x.url===url.href)&&sources.length<maxSources)sources.push(clip({...s,url:url.href,retrievedAt:retrievalTime(s),priorTurn:false}));};
   for(let round=0;round<maxCalls;round++){
     signal?.throwIfAborted();
     if(!canRequest(2)){stopReason="quota-reserve";break;}
@@ -99,18 +100,19 @@ export async function agentResearch({mode,history,generate,compose=generate,canR
             attempted=true;searched++;seenQueries.add(norm(decision.query));
             const found=await search(decision.query,args.recent===true);
             const limit=Number.isInteger(args.max_results)?Math.max(1,Math.min(4,args.max_results)):3;
-            const selected=[];
+            const selected=[],freshPreviews=new Map();
             for(const item of found){
               const url=webURL(item?.url);if(!url)continue;
               const old=sources.findIndex(s=>s.url===url.href);
               if(old>=0){
                 if(sources[old].kind!=="page")sources[old]=clip({...item,url:url.href,retrievedAt:clock,priorTurn:false});
+                if(sources[old].kind==="page")freshPreviews.set(old,String(item.content??"").slice(0,1100));
                 if(!selected.includes(old))selected.push(old);
               }else if(sources.length<maxSources){add(item);selected.push(sources.length-1);}
               if(selected.length>=limit)break;
             }
-            if(selected.length)freshLookup=true;
-            record("Web search",found.length+" results; "+selected.length+" selected",[decision.query]);result={sources:selected.map(i=>({...snapshot()[i],content:sources[i].content.slice(0,2400)})),remainingSearches:maxSearches-searched,remainingReads:maxReads-readCount,remainingSourceSlots:maxSources-sources.length};
+            if(selected.some(i=>String(freshPreviews.get(i)??sources[i].content??"").trim()))freshLookup=true;
+            record("Web search",found.length+" results; "+selected.length+" selected",[decision.query]);result={sources:selected.map(i=>({...snapshot()[i],content:sources[i].content.slice(0,2400),...(freshPreviews.has(i)?{freshSearchPreview:freshPreviews.get(i)}:{})})),remainingSearches:maxSearches-searched,remainingReads:maxReads-readCount,remainingSourceSlots:maxSources-sources.length};
           }
         }else if(call.function.name==="read_webpage"&&readCount<maxReads){
           const proposed=Number.isInteger(args.source)?args.source-1:-1;
@@ -129,7 +131,7 @@ export async function agentResearch({mode,history,generate,compose=generate,canR
               result={error:"Page content unavailable; retained original preview",sources:snapshot()};
               record("Webpage read failed","Retained original preview",[url]);
             }else{
-              if(index>=0)sources[index]=clip({...page,url,publishedDate:page.publishedDate??sources[index].publishedDate,retrievedAt:page.fetchedAt??clock,priorTurn:false});
+              if(index>=0)sources[index]=clip({...page,url,publishedDate:page.publishedDate??sources[index].publishedDate,retrievedAt:retrievalTime(page),priorTurn:false});
               else add(page);
               if(!page.fromCache)freshLookup=true;
               record(page.fromCache?"Cached webpage read":"Webpage read",page.title,[url]);result={source:snapshot()[index>=0?index:sources.findIndex(s=>s.url===webURL(page.url)?.href)]};
@@ -189,7 +191,7 @@ export async function agentResearch({mode,history,generate,compose=generate,canR
     +(strict?"\nBefore replying, check every material claim and explicit constraint against the supplied evidence. Remove unsupported candidates, qualify uncertainty, and explain missing information.":"\nUse your judgment to synthesize the evidence concisely; don't refuse useful supported findings just because some evidence is missing.");
   let draft=directAnswer;
   const {previousPublicSources:unusedPrior,...answerRequest}=request;
-  const answerInput=JSON.stringify({...answerRequest,sources:snapshot(),researchStatus:sources.length?"Sources retrieved; some tools may have failed":requestedTools?"No public lookup produced evidence. Clearly state this; distinguish any internal-knowledge suggestions from verified facts.":"No public research requested or performed."});
+  const answerInput=JSON.stringify({...answerRequest,sources:snapshot(),researchStatus:sources.length?(freshLookup?"Public lookup returned evidence; some tools may have failed.":"Only previous or cached evidence available; do not claim fresh verification.") :requestedTools?"No public lookup produced evidence. Clearly state this; distinguish any internal-knowledge suggestions from verified facts.":"No public research requested or performed."});
   const finish=async(recovery=false)=>compose({system:synthesisSystem+(recovery?"\nThe preceding generation ran out of tokens. Give a complete, compact answer now. Do not restart research or over-explain.":""),history:[{role:"user",content:answerInput}],temperature:0.4,maxTokens:recovery?(strict?4096:2048):answerTokens,agentEffort:recovery?"none":"medium",rejectTruncated:true,onDelta:()=>{}});
   if(!draft){
     // At most one low-cost retry after truncation; never replay the tools.

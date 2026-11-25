@@ -923,3 +923,12 @@ test("native unrelated casual reply does not keep prior public sources attached"
  const result=await agentResearch({mode:"simple",history:[{role:"user",content:"Find Lantern facts."},{role:"assistant",content:"Old reply."},{role:"user",content:"Tell me a joke."}],previousEvidence:[{url:"https://example.org/a",kind:"page",content:"Lantern facts",retrievedAt:now.getTime()-1000}],now,canRequest:()=>true,generate:async()=>({content:"A joke.",toolCalls:[]})});
  assert.equal(result.answer,"A joke.");assert.deepEqual(result.researched.sources,[]);assert.equal(result.researched.agentEvidence,undefined);
 });
+
+test("native agent persists newly read pages even when fetch completes after turn start",async()=>{
+ const {agentResearch}=await import("../agent-research.mjs");let round=0;const now=new Date("2026-11-24T20:00:00Z");
+ const result=await agentResearch({mode:"simple",history:[{role:"user",content:"Find Lantern facts."}],now,canRequest:()=>true,
+ search:async()=>[{url:"https://example.org/a",title:"Lantern",kind:"preview",content:"Lantern preview."}],
+ read:async()=>({url:"https://example.org/a",title:"Lantern",kind:"page",content:"Lantern has four episodes. ".repeat(8),fetchedAt:now.getTime()+3000,fromCache:false}),
+ generate:async()=>{round++;return round===1?{content:"",toolCalls:[{id:"s",type:"function",function:{name:"search_web",arguments:'{"query":"Lantern facts"}'}}]}:round===2?{content:"",toolCalls:[{id:"r",type:"function",function:{name:"read_webpage",arguments:'{"source":1}'}}]}:{content:"Lantern has four episodes [1].",toolCalls:[]};}});
+ assert.equal(result.researched.agentEvidence.length,1);assert.equal(result.researched.agentEvidence[0].kind,"page");assert.equal(result.researched.agentEvidence[0].retrievedAt,now.getTime());
+});
