@@ -884,3 +884,42 @@ test("same-batch search cannot authorize a guessed source handle",async()=>{
  read:async()=>{throw Error("guessed handle must never be read");},
  generate:async args=>{if(++round===1)return {content:"",toolCalls:[call("s","search_web",{query:"Lantern facts"}),call("r","read_webpage",{source:1})]};assert.match(args.history.at(-1).content,/explicitly supplied/);return {content:"Found Lantern [1].",toolCalls:[]};}});
 });
+
+test("native citations normalize provider line notation but never authorize nonexistent sources",async()=>{
+ const {agentResearch,normalizeAgentCitations}=await import("../agent-research.mjs");let round=0;const events=[];
+ assert.equal(normalizeAgentCitations("A【6†L1-L4】 B【10】 C[2]"),"A[6] B[10] C[2]");
+ const result=await agentResearch({mode:"simple",history:[{role:"user",content:"Find Lantern facts."}],canRequest:()=>true,activity:e=>events.push(e),
+ search:async()=>[{url:"https://example.org/a",title:"Lantern",kind:"preview",content:"Lantern has four episodes."}],
+ generate:async()=>++round===1?{content:"",toolCalls:[{id:"s",type:"function",function:{name:"search_web",arguments:'{"query":"Lantern facts"}'}}]}:{content:"Lantern has four episodes 【1†L1-L4】. Another claim 【99】.",toolCalls:[]}});
+ assert.match(result.answer,/four episodes \[1\]/);assert.match(result.answer,/unverified reference/);assert.doesNotMatch(result.answer,/【|†L|\[99\]/);assert.ok(events.some(e=>e.title==="Citation format normalized"));assert.equal(result.researched.agentEvidence.length,1);
+});
+test("native search lets model reserve source slots and returns only selected results",async()=>{
+ const {agentResearch}=await import("../agent-research.mjs");let round=0,searches=0;
+ const result=await agentResearch({mode:"simple",history:[{role:"user",content:"Find three Lantern facts."}],canRequest:()=>true,
+ search:async()=>{searches++;return Array.from({length:8},(_,i)=>({url:"https://example.org/"+searches+"/"+i,title:"Lantern "+i,kind:"preview",content:"Candidate evidence"}));},
+ generate:async args=>{round++;if(round>1){const out=JSON.parse(args.history.at(-1).content);assert.equal(out.sources.length,2);assert.equal(out.sources[0].number,(round-2)*2+1);}
+ if(round<=4)return {content:"",toolCalls:[{id:"s"+round,type:"function",function:{name:"search_web",arguments:JSON.stringify({query:"Lantern candidate "+round,max_results:2})}}]};
+ throw Error("unexpected round");},compose:async args=>{assert.equal(JSON.parse(args.history[0].content).sources.length,8);return "Candidate facts [1][3][5].";}});
+ assert.equal(searches,4);assert.equal(result.researched.sources.length,8);
+});
+test("native follow-up uses bounded prior evidence and preserves retrieval date without searching again",async()=>{
+ const {agentResearch}=await import("../agent-research.mjs");const now=new Date("2026-11-24T20:00:00Z"),retrievedAt=now.getTime()-1000;
+ const history=[{role:"user",content:"Find Lantern episodes."},{role:"assistant",content:"Untrusted old assistant prose."},{role:"user",content:"Only after 2010."}];
+ const previousEvidence=[{url:"https://example.org/a",title:"Lantern",kind:"page",content:"Lantern premiered in 2014 and has four episodes.",retrievedAt}];
+ const result=await agentResearch({mode:"simple",history,previousEvidence,now,canRequest:()=>true,
+ search:async()=>{throw Error("unexpected search")},generate:async args=>{const input=JSON.parse(args.history[0].content);assert.equal(input.previousPublicSources[0].number,1);assert.equal(input.previousPublicSources[0].priorTurn,true);assert.doesNotMatch(args.history[0].content,/Untrusted old assistant prose/);return {content:"Lantern qualifies [1].",toolCalls:[]};}});
+ assert.equal(result.answer,"Lantern qualifies [1].");assert.equal(result.researched.agentEvidence[0].retrievedAt,retrievedAt);
+});
+test("native follow-up does not treat reused evidence as fresh or carry private/stale sources",async()=>{
+ const {agentResearch}=await import("../agent-research.mjs");const now=new Date("2026-11-24T20:00:00Z"),retrievedAt=now.getTime()-1000;
+ const history=[{role:"user",content:"Find Lantern status."},{role:"assistant",content:"Old reply."},{role:"user",content:"Verify its current status."}];
+ const previousEvidence=[{url:"https://example.org/a",title:"Lantern",kind:"page",content:"Old status",retrievedAt},{url:"https://example.org/stale",kind:"preview",content:"Stale",retrievedAt:retrievedAt-90000000},{url:"https://example.org/private",kind:"notion",content:"Private doc",retrievedAt}];
+ const result=await agentResearch({mode:"simple",history,previousEvidence,now,canRequest:()=>true,
+ generate:async args=>{assert.equal(JSON.parse(args.history[0].content).previousPublicSources.length,1);return {content:"Still airing [1].",toolCalls:[]};}});
+ assert.match(result.answer,/could not complete a public lookup/);assert.doesNotMatch(result.answer,/Still airing/);
+});
+test("native unrelated casual reply does not keep prior public sources attached",async()=>{
+ const {agentResearch}=await import("../agent-research.mjs");const now=new Date("2026-11-24T20:00:00Z");
+ const result=await agentResearch({mode:"simple",history:[{role:"user",content:"Find Lantern facts."},{role:"assistant",content:"Old reply."},{role:"user",content:"Tell me a joke."}],previousEvidence:[{url:"https://example.org/a",kind:"page",content:"Lantern facts",retrievedAt:now.getTime()-1000}],now,canRequest:()=>true,generate:async()=>({content:"A joke.",toolCalls:[]})});
+ assert.equal(result.answer,"A joke.");assert.deepEqual(result.researched.sources,[]);assert.equal(result.researched.agentEvidence,undefined);
+});
