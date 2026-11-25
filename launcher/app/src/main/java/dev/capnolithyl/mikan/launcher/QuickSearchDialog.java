@@ -63,7 +63,7 @@ final class QuickSearchDialog<T> extends Dialog {
         field=new EditText(activity){
             @Override public boolean onKeyPreIme(int keyCode,KeyEvent event){
                 if(keyCode==KeyEvent.KEYCODE_BACK){
-                    if(event.getAction()==KeyEvent.ACTION_UP&&!event.isCanceled())close();
+                    if(event.getAction()==KeyEvent.ACTION_UP&&!event.isCanceled())QuickSearchDialog.this.close();
                     return true;
                 }
                 return super.onKeyPreIme(keyCode,event);
@@ -142,7 +142,7 @@ final class QuickSearchDialog<T> extends Dialog {
     void close(){
         if(closing)return;closing=true;
         InputMethodManager ime=activity.getSystemService(InputMethodManager.class);
-        if(ime!=null)ime.hideSoftInputFromWindow(field.getWindowToken(),0);
+        if(ime!=null&&field.getWindowToken()!=null)ime.hideSoftInputFromWindow(field.getWindowToken(),0);
         dismiss();
     }
     private int dp(float n){return Math.round(n*activity.getResources().getDisplayMetrics().density);}

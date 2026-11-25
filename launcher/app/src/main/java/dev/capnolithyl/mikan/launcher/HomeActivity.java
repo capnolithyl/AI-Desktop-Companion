@@ -88,9 +88,9 @@ public class HomeActivity extends Activity {
     private final Runnable progressTick=new Runnable(){public void run(){if(music!=null)music.updatePosition();handler.postDelayed(this,1000);}};
     private final Runnable tick=new Runnable(){ public void run(){ updateClock(); refreshSystemStats(); handler.postDelayed(this,15000); } };
     private static final class App {
-        final ComponentName component; final String label; final ResolveInfo info; final String folderKey;
-        App(ComponentName component,String label,ResolveInfo info){this.component=component;this.label=label;this.info=info;this.folderKey=null;}
-        App(String key,String label){this.component=null;this.label=label;this.info=null;this.folderKey=key;}
+        final ComponentName component; final String label,searchLabel,searchPackage; final ResolveInfo info; final String folderKey;
+        App(ComponentName component,String label,ResolveInfo info){this.component=component;this.label=label;this.info=info;this.folderKey=null;this.searchLabel=QuickAppRank.normalize(label);this.searchPackage=QuickAppRank.normalize(component.getPackageName());}
+        App(String key,String label){this.component=null;this.label=label;this.info=null;this.folderKey=key;this.searchLabel=QuickAppRank.normalize(label);this.searchPackage="";}
         String key(){return folderKey==null?component.flattenToString():folderKey;}
     }
 
@@ -446,7 +446,7 @@ public class HomeActivity extends Activity {
         ArrayList<App> matches=new ArrayList<>();
         Map<App,Integer> scores=new HashMap<>();
         for(App app:apps){
-            int score=QuickAppRank.score(normalized,app.label,app.component.getPackageName());
+            int score=QuickAppRank.scoreNormalized(normalized,app.searchLabel,app.searchPackage);
             if(score>=0){matches.add(app);scores.put(app,score);}
         }
         matches.sort(Comparator.comparingInt((App app)->scores.get(app)).thenComparing(app->app.label,String.CASE_INSENSITIVE_ORDER).thenComparing(App::key));
@@ -456,7 +456,7 @@ public class HomeActivity extends Activity {
         if(!appIndex.containsKey(key))return;
         LinkedHashSet<String> recent=new LinkedHashSet<>();recent.add(key);
         for(String old:prefs.getString("quickRecentApps","").split("\\n")){if(recent.size()>=12)break;if(appIndex.containsKey(old))recent.add(old);}
-        prefs.edit().putString("quickRecentApps",String.join("\\n",recent)).apply();
+        prefs.edit().putString("quickRecentApps",String.join("\n",recent)).apply();
     }
     private void rememberPackageLaunch(String pkg){
         for(App app:apps)if(app.component.getPackageName().equals(pkg)){rememberLaunch(app.key());return;}
