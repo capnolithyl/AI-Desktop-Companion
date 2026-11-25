@@ -253,7 +253,7 @@ final class DashboardCards {
         renderAgenda(null,calendarAllowed()?"Loading events…":"Tap to enable calendar");
         if(resumed)refreshCalendar(true);return agendaRoot;
     }
-    private void openCalendar(){
+    void openCalendar(){
         try{Uri uri=ContentUris.withAppendedId(CalendarContract.CONTENT_URI.buildUpon().appendPath("time").build(),System.currentTimeMillis());activity.startActivity(new Intent(Intent.ACTION_VIEW,uri));}
         catch(Exception e){toast("No calendar app available.");}
     }

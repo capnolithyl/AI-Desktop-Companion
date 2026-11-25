@@ -10,38 +10,61 @@ import org.json.JSONObject;
 /** Local, deterministic remarks; never consumes notification content or calls an AI. */
 final class MikanRemarks {
     private static final long ROTATE_MS=45000,WEATHER_TTL=30*60*1000L;
+    enum Action { NONE, APP, WEATHER, CALENDAR }
+    static final class Remark {
+        final String text,packageName,label;
+        final Action action;
+        Remark(String text,Action action,String packageName,String label){this.text=text;this.action=action;this.packageName=packageName;this.label=label;}
+        String key(){return action==Action.NONE?text:action.name()+":"+packageName;}
+        boolean actionable(){return action!=Action.NONE;}
+    }
     private List<String> previous=new ArrayList<>();
     private long changedAt;
     private int index;
     static boolean notificationHintsEnabled(SharedPreferences p){
         return p.getBoolean("mikanRemarks",true)&&p.getBoolean("mikanNotifyHints",true)&&p.getInt("mikanPage",1)>0;
     }
-    private static boolean any(Set<String> packages,String... names){
-        for(String name:names)if(packages.contains(name))return true;return false;
+    private static void addApp(List<Remark> options,Set<String> packages,String pkg,String label,String text){
+        if(packages.contains(pkg))options.add(new Remark(text,Action.APP,pkg,label));
     }
-    String choose(SharedPreferences prefs,Set<String> packages,String agenda,int hour){
+    private static Remark idle(String text){return new Remark(text,Action.NONE,"","");}
+    void advance(){if(!previous.isEmpty()){index=(index+1)%previous.size();changedAt=SystemClock.elapsedRealtime();}}
+    Remark choose(SharedPreferences prefs,Set<String> packages,String agenda,int hour){
         if(!prefs.getBoolean("mikanRemarks",true)){previous.clear();index=0;return null;}
-        List<String> options=new ArrayList<>();
+        List<Remark> options=new ArrayList<>();
         if(notificationHintsEnabled(prefs)){
-            if(any(packages,"com.whatsapp","com.whatsapp.w4b"))options.add("Psst! WhatsApp has notifications for you ♡");
-            if(any(packages,"com.google.android.apps.messaging","com.android.messaging","com.samsung.android.messaging"))options.add("Your Messages app has something waiting!");
-            if(any(packages,"com.google.android.gm","com.microsoft.office.outlook","com.samsung.android.email.provider","com.fsck.k9","net.thunderbird.android"))options.add("You've got mail notifications. Inbox adventure?");
-            if(any(packages,"org.thoughtcrime.securesms","org.telegram.messenger","com.facebook.orca","com.discord"))options.add("One of your chat apps has notifications ♡");
+            addApp(options,packages,"com.whatsapp","WhatsApp","Psst! WhatsApp has notifications for you ♡");
+            addApp(options,packages,"com.whatsapp.w4b","WhatsApp Business","WhatsApp Business has notifications for you ♡");
+            addApp(options,packages,"com.google.android.apps.messaging","Messages","Your Messages app has something waiting!");
+            addApp(options,packages,"com.android.messaging","Messages","Your Messages app has something waiting!");
+            addApp(options,packages,"com.samsung.android.messaging","Messages","Your Messages app has something waiting!");
+            addApp(options,packages,"com.google.android.gm","Gmail","Gmail has mail notifications. Inbox adventure?");
+            addApp(options,packages,"com.microsoft.office.outlook","Outlook","Outlook has notifications for you ♡");
+            addApp(options,packages,"com.samsung.android.email.provider","Email","You've got email notifications!");
+            addApp(options,packages,"com.fsck.k9","K-9 Mail","K-9 Mail has notifications for you!");
+            addApp(options,packages,"net.thunderbird.android","Thunderbird","Thunderbird has mail notifications!");
+            addApp(options,packages,"org.thoughtcrime.securesms","Signal","Signal has notifications for you ♡");
+            addApp(options,packages,"org.telegram.messenger","Telegram","Telegram has notifications for you ♡");
+            addApp(options,packages,"com.facebook.orca","Messenger","Messenger has notifications for you ♡");
+            addApp(options,packages,"com.discord","Discord","Discord has notifications for you ♡");
         }
-        if(prefs.getBoolean("mikanCalendarHints",true)&&agenda!=null)options.add(agenda);
+        if(prefs.getBoolean("mikanCalendarHints",true)&&agenda!=null)options.add(new Remark(agenda,Action.CALENDAR,"","Calendar"));
         if(prefs.getBoolean("mikanWeatherHints",true)){
-            String weather=weatherHint(prefs);if(weather!=null)options.add(weather);
+            String weather=weatherHint(prefs);if(weather!=null)options.add(new Remark(weather,Action.WEATHER,"","Weather"));
         }
-        options.add(hour<5?"Even cats need their beauty sleep!":hour<12?"Coffee first, world domination later.":hour<18?"Don't forget a little stretch and water ♡":"A cozy evening sounds purrfect.");
-        options.add("Your little pocket companion is on duty ♡");
-        options.add("One task at a time. You've got this!");
-        options.add("I vote for a tiny coffee break.");
+        options.add(idle(hour<5?"Even cats need their beauty sleep!":hour<12?"Coffee first, world domination later.":hour<18?"Don't forget a little stretch and water ♡":"A cozy evening sounds purrfect."));
+        options.add(idle("Your little pocket companion is on duty ♡"));
+        options.add(idle("One task at a time. You've got this!"));
+        options.add(idle("I vote for a tiny coffee break."));
+        // Compare stable action identities, not a changing countdown or temperature.
+        // Otherwise calendar countdowns can continually reset the rotation.
+        List<String> keys=new ArrayList<>();for(Remark option:options)keys.add(option.key());
         long now=SystemClock.elapsedRealtime();
-        if(!options.equals(previous)){previous=new ArrayList<>(options);index=0;changedAt=now;}
+        if(!keys.equals(previous)){previous=keys;index=0;changedAt=now;}
         else if(now-changedAt>=ROTATE_MS){index=(index+1)%options.size();changedAt=now;}
         return options.get(index);
     }
-    private static String weatherHint(SharedPreferences prefs){
+    static String weatherHint(SharedPreferences prefs){
         long age=System.currentTimeMillis()-prefs.getLong("weatherAt",0);
         if(age<0||age>=WEATHER_TTL||prefs.getString("weatherCoords","").isEmpty())return null;
         try{

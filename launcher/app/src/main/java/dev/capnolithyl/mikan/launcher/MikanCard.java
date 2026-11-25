@@ -23,11 +23,13 @@ final class MikanCard {
     private static final int PEACH=0xffffbf88,CREAM=0xffffe9d5,MUTED=0xffe1bda9;
     private final Context context;
     private final FrameLayout root;
-    private final TextView greeting,subtitle;
-    private final String shortcutLabel;
+    private final TextView greeting,subtitle,actionHint;
+    private final LinearLayout bubble;
+    private MikanRemarks.Remark currentRemark;
+    private boolean bubbleTouch;
     private String fallback="";
-    MikanCard(Context context,Drawable artwork,boolean transparent,String shortcutLabel,Runnable open){
-        this.context=context;this.shortcutLabel=shortcutLabel;
+    MikanCard(Context context,Drawable artwork,boolean transparent,String shortcutLabel,Runnable open,java.util.function.Consumer<MikanRemarks.Remark> onRemark){
+        this.context=context;
         root=new FrameLayout(context);root.setMinimumHeight(dp(172));root.setClipToOutline(true);
         GradientDrawable background=MikanTheme.panel(context,25);
         root.setBackground(background);root.setElevation(dp(2));
@@ -50,23 +52,48 @@ final class MikanCard {
         TextView name=label("Mikan ♡",20,PEACH,true);name.setTypeface(Typeface.create("casual",Typeface.ITALIC));heading.addView(name,new LinearLayout.LayoutParams(0,-2,1));
         ImageView paw=new ImageView(context);paw.setImageDrawable(new MikanMark(MikanMark.PAW,PEACH));heading.addView(paw,new LinearLayout.LayoutParams(dp(18),dp(18)));
         space(copy,6);
-        LinearLayout bubble=new LinearLayout(context);bubble.setOrientation(LinearLayout.VERTICAL);
+        bubble=new LinearLayout(context);bubble.setOrientation(LinearLayout.VERTICAL);
         bubble.setBackground(new Bubble(context));bubble.setPadding(dp(16),dp(9),dp(9),dp(9));copy.addView(bubble,new LinearLayout.LayoutParams(-1,-2));
         greeting=label("",16,CREAM,true);bubble.addView(greeting);
         space(bubble,3);subtitle=label("",13,MUTED,false);subtitle.setMinLines(3);bubble.addView(subtitle);
+        actionHint=label("",10,PEACH,true);actionHint.setGravity(Gravity.END);actionHint.setSingleLine(true);actionHint.setEllipsize(android.text.TextUtils.TruncateAt.END);actionHint.setVisibility(View.INVISIBLE);bubble.addView(actionHint,new LinearLayout.LayoutParams(-1,-2));
+        art.setFocusable(true);art.setContentDescription(shortcutLabel);art.setOnClickListener(v->open.run());
+        art.setForeground(ripple(12));
+        // Separate targets. Freeze the visible remark during a touch so its action
+        // cannot change between finger down and finger up.
+        bubble.setForeground(ripple(15));
+        bubble.setOnTouchListener((v,event)->{
+            int action=event.getActionMasked();
+            if(action==android.view.MotionEvent.ACTION_DOWN)bubbleTouch=true;
+            if(action==android.view.MotionEvent.ACTION_UP||action==android.view.MotionEvent.ACTION_CANCEL)bubbleTouch=false;
+            return false;
+        });
+        bubble.setOnClickListener(v->{if(currentRemark!=null)onRemark.accept(currentRemark);});
         updateGreeting(java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY));
-        GradientDrawable mask=new GradientDrawable();mask.setColor(Color.WHITE);mask.setCornerRadius(dp(25));
-        root.setForeground(new RippleDrawable(ColorStateList.valueOf(0x22ffbf88),null,mask));
-        root.setFocusable(true);root.setOnClickListener(v->open.run());root.setContentDescription(shortcutLabel+". "+greeting.getText()+". "+subtitle.getText());
+        setRemark(null);
     }
     View view(){return root;}
-    void setRemark(String value){String note=value==null?fallback:value;if(!note.contentEquals(subtitle.getText()))subtitle.setText(note);root.setContentDescription(shortcutLabel+". "+greeting.getText()+". "+note);}
+    private RippleDrawable ripple(int radius){
+        GradientDrawable mask=new GradientDrawable();mask.setColor(Color.WHITE);mask.setCornerRadius(dp(radius));
+        return new RippleDrawable(ColorStateList.valueOf(0x22ffbf88),null,mask);
+    }
+    void setRemark(MikanRemarks.Remark value){
+        if(bubbleTouch)return;
+        currentRemark=value;String note=value==null?fallback:value.text;
+        if(!note.contentEquals(subtitle.getText()))subtitle.setText(note);
+        boolean actionable=value!=null&&value.actionable();
+        String hint=actionable?value.label+" ↗":"";
+        if(!hint.contentEquals(actionHint.getText()))actionHint.setText(hint);
+        int visibility=actionable?View.VISIBLE:View.INVISIBLE;if(actionHint.getVisibility()!=visibility)actionHint.setVisibility(visibility);
+        bubble.setClickable(value!=null);bubble.setFocusable(value!=null);
+        String description=greeting.getText()+". "+note+(actionable?". Open "+value.label:value!=null?". Tap for another remark.":"");
+        if(!description.contentEquals(bubble.getContentDescription()==null?"":bubble.getContentDescription()))bubble.setContentDescription(description);
+    }
     void updateGreeting(int hour){
         String hello=hour<5?"Still awake? ♡":hour<12?"Good morning ♡":hour<18?"Good afternoon ♡":"Good evening ♡";
         String note=hour<5?"A little rest sounds nice.":hour<12?"Ready for a fresh start?":hour<18?"Take a little coffee break.":"Time to get cozy.";
         if(!hello.contentEquals(greeting.getText()))greeting.setText(hello);
-        boolean showingFallback=subtitle.getText().length()==0||fallback.contentEquals(subtitle.getText());fallback=note;
-        if(showingFallback)setRemark(null);
+        fallback=note;setRemark(currentRemark);
     }
     private int dp(float n){return Math.round(n*context.getResources().getDisplayMetrics().density);}
     private void space(LinearLayout parent,int n){parent.addView(new View(context),new LinearLayout.LayoutParams(1,dp(n)));}

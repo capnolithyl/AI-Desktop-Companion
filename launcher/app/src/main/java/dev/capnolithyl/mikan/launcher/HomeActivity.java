@@ -320,7 +320,7 @@ public class HomeActivity extends Activity {
         if(widgetHere("mikanPage",1)){
             Drawable art=characterArt.get();
             boolean pocket=pocketAvailable();
-            mikanCard=new MikanCard(this,art!=null?art:portraits.get(),art!=null,pocket?"Open Pocket Mikan":"Open Mikan Web",this::openMikan);
+            mikanCard=new MikanCard(this,art!=null?art:portraits.get(),art!=null,pocket?"Open Pocket Mikan":"Open Mikan Web",this::openMikan,this::openRemark);
             characterBlock.addView(mikanCard.view());gap(characterBlock,12);
         }
         if(prefs.getBoolean("showFavoritesLabel",false)){appBlock.addView(text("YOUR FAVORITES",12,MUTED,true));gap(appBlock,4);}
@@ -644,7 +644,7 @@ public class HomeActivity extends Activity {
                 settingsUi.toggle(body,"Weather remarks","Use the existing fresh weather snapshot",prefs.getBoolean("mikanWeatherHints",true),on->{prefs.edit().putBoolean("mikanWeatherHints",on).apply();showSettings();});
                 settingsUi.toggle(body,"Calendar reminders","Mention an upcoming event without revealing its title",prefs.getBoolean("mikanCalendarHints",true),on->{prefs.edit().putBoolean("mikanCalendarHints",on).apply();showSettings();});
                 settingsUi.row(body,"Notification access",LauncherNotifications.allowed(this)?"Allowed":"Not granted",this::notificationAccess);
-                settingsUi.note(body,"Remarks rotate while Home is visible. No AI, additional network calls, message contents or sender names.");
+                settingsUi.note(body,"Remarks rotate while Home is visible. Tap the artwork for Pocket Mikan, the bubble for its indicated app, or an idle bubble for another remark. No AI, additional network calls, message contents or sender names.");
                 settingsUi.heading(body,"COMPANION CONNECTION");
                 settingsUi.row(body,"Open Pocket Mikan",pocketAvailable()?"App installed":"App unavailable",this::openMikan);
                 settingsUi.note(body,"The home card prefers Pocket Mikan. The saved web address is only a fallback; Pocket Mikan manages its own connection.");
@@ -894,13 +894,46 @@ public class HomeActivity extends Activity {
             try{startActivity(new Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS));}catch(Exception e){Toast.makeText(this,"Open Android notification access settings.",Toast.LENGTH_LONG).show();}
         }).show();
     }
+    private void refreshMikanRemark(boolean notificationAccess){
+        if(mikanCard==null||!foreground||closed)return;
+        Set<String> packages=notificationAccess?LauncherNotifications.snapshot():Collections.emptySet();
+        String agenda=prefs.getBoolean("mikanCalendarHints",true)?dashboard.upcomingHint():null;
+        mikanCard.setRemark(remarks.choose(prefs,packages,agenda,Calendar.getInstance().get(Calendar.HOUR_OF_DAY)));
+    }
+    private void openRemark(MikanRemarks.Remark remark){
+        if(!foreground||closed||drawer||settings||mikanCard==null||!prefs.getBoolean("mikanRemarks",true))return;
+        boolean access=MikanRemarks.notificationHintsEnabled(prefs)&&LauncherNotifications.allowed(this);
+        switch(remark.action){
+            case NONE:
+                remarks.advance();refreshMikanRemark(access);return;
+            case APP:
+                // Recheck notification presence and permission, never launch a different
+                // package just because the same category has another active notification.
+                if(!access||!LauncherNotifications.has(remark.packageName)){
+                    Toast.makeText(this,"That notification is no longer available.",Toast.LENGTH_SHORT).show();
+                    refreshMikanRemark(access);return;
+                }
+                try{
+                    Intent intent=getPackageManager().getLaunchIntentForPackage(remark.packageName);
+                    if(intent!=null){intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED);startActivity(intent);return;}
+                }catch(RuntimeException ignored){}
+                Toast.makeText(this,remark.label+" is unavailable.",Toast.LENGTH_SHORT).show();invalidateCatalog();return;
+            case WEATHER:
+                if(prefs.getBoolean("mikanWeatherHints",true)&&MikanRemarks.weatherHint(prefs)!=null){openWidgetApp("weather");return;}
+                break;
+            case CALENDAR:
+                if(prefs.getBoolean("mikanCalendarHints",true)&&dashboard.upcomingHint()!=null){dashboard.openCalendar();return;}
+                break;
+        }
+        Toast.makeText(this,"That update is no longer current.",Toast.LENGTH_SHORT).show();refreshMikanRemark(access);
+    }
     private void refreshExtras(){
         if(!foreground||closed)return;
         long started=android.os.SystemClock.elapsedRealtime();
         boolean hints=mikanCard!=null&&MikanRemarks.notificationHintsEnabled(prefs);
         boolean access=(prefs.getBoolean("badges",false)||hints)&&LauncherNotifications.allowed(this);
         boolean enabled=prefs.getBoolean("badges",false)&&access;
-        if(mikanCard!=null){String note=remarks.choose(prefs,access&&hints?LauncherNotifications.snapshot():Collections.emptySet(),dashboard.upcomingHint(),Calendar.getInstance().get(Calendar.HOUR_OF_DAY));mikanCard.setRemark(note);}
+        if(mikanCard!=null)refreshMikanRemark(access&&hints);
         for(Map.Entry<TextView,String> e:badgeViews.entrySet()){
             boolean show=false;
             if(enabled){App a=find(e.getValue());if(a!=null){if(a.folderKey!=null){for(String k:folders.members(a.folderKey)){App child=find(k);if(child!=null&&child.component!=null&&LauncherNotifications.has(child.component.getPackageName())){show=true;break;}}}else show=LauncherNotifications.has(a.component.getPackageName());}}
