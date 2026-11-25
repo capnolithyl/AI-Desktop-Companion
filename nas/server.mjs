@@ -13,6 +13,7 @@ import {executeNasTurn,turnTrace,currentProfile} from "./turn.mjs";
 import {createBrainLab} from "./brain-lab.mjs";
 import {researchSettings,searchWeb,readWeb} from "./research.mjs";
 import {createKnowledge} from "./knowledge.mjs";
+import {containsCredential,redactCredentials} from "./companion-agent.mjs";
 
 const ROOT=dirname(fileURLToPath(import.meta.url));
 const BUILD=runningBuildInfo();
@@ -70,7 +71,7 @@ export function makeServer({store,config,key,promptFile="",maintenanceFile="/dat
   const requestModel=async(args,source="chat")=>{
     const startedAt=Date.now();let usage=null,failed=true;
     try{
-      const result=await generate({...args,onUsage:value=>{usage=value;args.onUsage?.(value);},onResponse:response=>models.observe(args.config.provider,response)});
+      const result=await generate({...args,system:redactCredentials(args.system),history:args.history.map(m=>({...m,content:typeof m.content==="string"?redactCredentials(m.content):m.content,...(m.tool_calls?{tool_calls:m.tool_calls.map(c=>({...c,function:{...c.function,arguments:redactCredentials(c.function.arguments)}}))}:{})})),onUsage:value=>{usage=value;args.onUsage?.(value);},onResponse:response=>models.observe(args.config.provider,response)});
       failed=false;return result;
     }catch(error){if(error?.upstreamStatus===429){models.cooldown(args.config.provider);error.quota=models.quota(args.config.provider);}throw error;}
     finally{
@@ -210,6 +211,7 @@ export function makeServer({store,config,key,promptFile="",maintenanceFile="/dat
         const conversationId=body.conversationId;
         if (!question || question.length>4000 || !/^[\w-]{1,100}$/.test(conversationId||""))
           return json(res,400,{error:"Invalid conversation or message (limit: 4000 characters)"});
+        if(containsCredential(question))return json(res,400,{error:"That looks like an API credential. Enter it in Models & providers, not chat. It was not saved or sent to a model."});
         if (!store.exists(conversationId)) return json(res,404,{error:"Conversation not found"});
         if (foregroundUnavailable()) return json(res,409,{error:"Mikan is already responding"});
         const selected=models.active();
