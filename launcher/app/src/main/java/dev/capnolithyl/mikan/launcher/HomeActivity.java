@@ -42,6 +42,8 @@ public class HomeActivity extends Activity {
     private EditText search;
     private boolean drawer=false;
     private boolean settings=false;
+    private SettingsHub.Section settingsSection=SettingsHub.Section.HUB;
+    private SettingsHub settingsUi;
     private LauncherUpdater updater;
     private PortraitStore portraits,characterArt;
     private MikanCard mikanCard;
@@ -76,7 +78,8 @@ public class HomeActivity extends Activity {
         portraits=new PortraitStore(this);
         characterArt=new PortraitStore(this,"mikan-character-art.webp",new String[]{"portraits/character.webp"});
         folders=new HomeFolders(prefs);
-        dashboard=new DashboardCards(this,prefs,this::showSettings);
+        dashboard=new DashboardCards(this,prefs,()->{if(settings)showSettings();});
+        settingsUi=new SettingsHub(this);
         loadApps();
         restoreFavorites();
         showHome();
@@ -93,7 +96,7 @@ public class HomeActivity extends Activity {
     @Override protected void onPause(){dashboard.pause();handler.removeCallbacks(tick);handler.removeCallbacks(refreshExtras);handler.removeCallbacks(progressTick);super.onPause();}
     @Override protected void onDestroy(){if(dashboard!=null)dashboard.close();super.onDestroy();}
     @Override protected void onNewIntent(Intent intent){super.onNewIntent(intent);setIntent(intent);hideKeyboard();homePage=0;showHome();}
-    @Override public void onBackPressed(){if(drawer||settings){hideKeyboard();showHome();}else if(homePage!=0){homePage=0;showHome();}}
+    @Override public void onBackPressed(){if(settings){backFromSettings();}else if(drawer){hideKeyboard();showHome();}else if(homePage!=0){homePage=0;showHome();}}
     private int dp(float n){return Math.round(n*getResources().getDisplayMetrics().density);}
     private GradientDrawable shape(int color,int radius,boolean border){
         GradientDrawable d=new GradientDrawable();d.setColor(color);d.setCornerRadius(dp(radius));if(border)d.setStroke(dp(1),BORDER);return d;
@@ -170,7 +173,7 @@ public class HomeActivity extends Activity {
         TextView brand=text("Mikan OS",15,CREAM,true);
         ImageView mark=new ImageView(this);mark.setImageDrawable(new MikanMark(MikanMark.CAT,PEACH));LinearLayout.LayoutParams markParams=new LinearLayout.LayoutParams(dp(23),dp(23));markParams.rightMargin=dp(7);header.addView(mark,markParams);
         header.addView(brand,new LinearLayout.LayoutParams(0,-2,1));
-        header.addView(markButton(MikanMark.GEAR,"Launcher settings",this::showSettings),new LinearLayout.LayoutParams(dp(44),dp(44)));page.addView(header);
+        header.addView(markButton(MikanMark.GEAR,"Launcher settings",this::openSettings),new LinearLayout.LayoutParams(dp(44),dp(44)));page.addView(header);
         ScrollView scroll=new ScrollView(this);scroll.setFillViewport(false);scroll.setVerticalScrollBarEnabled(true);scroll.setScrollbarFadingEnabled(true);
         page.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
         LinearLayout body=vertical();scroll.addView(body,new ScrollView.LayoutParams(-1,-2));
@@ -278,45 +281,87 @@ public class HomeActivity extends Activity {
     }
     private void hideKeyboard(){if(search!=null){((InputMethodManager)getSystemService(INPUT_METHOD_SERVICE)).hideSoftInputFromWindow(search.getWindowToken(),0);search.clearFocus();}}
 
-    private void showSettings(){
-        drawer=false;settings=true;search=null;results=null;createPage();
-        LinearLayout top=horizontal();top.addView(action("‹ Home",this::showHome));top.addView(text("  Settings",24,CREAM,true));page.addView(top);gap(page,16);
-        ScrollView scroll=new ScrollView(this);LinearLayout body=vertical();scroll.addView(body);page.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
-        body.addView(text("APPEARANCE",12,PEACH,true));gap(body,10);
-        setting(body,"Wallpaper: "+(prefs.getString("wallpaper","reading-nook.webp").equals("reading-nook.webp")?"Reading nook":"Study nook"),()->new AlertDialog.Builder(this).setTitle("Wallpaper").setItems(new String[]{"Reading nook","Study nook"},(d,i)->{prefs.edit().putString("wallpaper",i==0?"reading-nook.webp":"study-nook.webp").apply();showSettings();}).show());
-        setting(body,"Icons: "+(prefs.getBoolean("themed",true)?"Amber":"Original"),()->{prefs.edit().putBoolean("themed",!prefs.getBoolean("themed",true)).apply();showSettings();});
-        setting(body,"Grid: "+prefs.getInt("columns",4)+" columns",()->chooseNumber("columns","Grid columns",new int[]{4,5}));
-        setting(body,"Dock: "+prefs.getInt("dockCount",5)+" apps",()->chooseNumber("dockCount","Dock size",new int[]{3,4,5}));
-        setting(body,"Favorites heading: "+(prefs.getBoolean("showFavoritesLabel",false)?"Shown":"Hidden"),()->{prefs.edit().putBoolean("showFavoritesLabel",!prefs.getBoolean("showFavoritesLabel",false)).apply();showSettings();});
-        setting(body,"Floating dock: "+(prefs.getBoolean("floatingDock",true)?"On":"Off"),()->{prefs.edit().putBoolean("floatingDock",!prefs.getBoolean("floatingDock",true)).apply();showSettings();});
-        setting(body,"Manage favorites",this::manageFavorites);
-        setting(body,"Create app folder",this::createFolder);
-        setting(body,"Manage folders",this::manageFolders);
-        gap(body,18);body.addView(text("PAGES & WIDGETS",12,PEACH,true));gap(body,10);
-        setting(body,"Minimum home pages: "+prefs.getInt("minPages",1),()->chooseNumber("minPages","Minimum home pages",new int[]{1,2,3,4,5}));
-        widgetSetting(body,"Clock","clockPage",1);widgetSetting(body,"Mikan","mikanPage",1);widgetSetting(body,"Music","musicPage",1);
-        widgetSetting(body,"Weather","weatherPage",1);widgetSetting(body,"Upcoming events","agendaPage",1);
-        setting(body,"Widget layout: "+(prefs.getBoolean("pairWidgets",true)?"Side by side":"Stacked"),()->{prefs.edit().putBoolean("pairWidgets",!prefs.getBoolean("pairWidgets",true)).apply();showSettings();});
-        gap(body,10);setting(body,"Weather city: "+dashboard.city(),dashboard::chooseCity);
-        setting(body,"Weather units: "+(prefs.getBoolean("weatherF",true)?"°F":"°C"),()->{dashboard.toggleUnits();showSettings();});
-        setting(body,"Refresh weather",dashboard::manualWeatherRefresh);
-        setting(body,"Calendar access",dashboard::requestCalendar);
-        setting(body,"Calendar titles: "+(prefs.getBoolean("agendaTitles",true)?"Shown":"Hidden"),()->{prefs.edit().putBoolean("agendaTitles",!prefs.getBoolean("agendaTitles",true)).apply();showSettings();});
-        setting(body,"Notification dots: "+(prefs.getBoolean("badges",false)?"On":"Off"),()->{boolean on=!prefs.getBoolean("badges",false);prefs.edit().putBoolean("badges",on).apply();LauncherNotifications.refreshIfConnected();if(on&&!LauncherNotifications.allowed(this))notificationAccess();showSettings();});
-        setting(body,"Notification / music access",this::notificationAccess);
-        gap(body,18);body.addView(text("MIKAN",12,PEACH,true));gap(body,10);
-        setting(body,"Choose portrait",this::pickPortrait);
-        setting(body,"Choose character artwork (transparent PNG)",()->pickImage(74));
-        setting(body,"Remove character artwork",()->new AlertDialog.Builder(this).setTitle("Return to portrait?").setNegativeButton("Cancel",null).setPositiveButton("Remove",(d,w)->{characterArt.reset();showSettings();}).show());
-        setting(body,"Reset portrait",()->new AlertDialog.Builder(this).setTitle("Reset portrait?").setNegativeButton("Cancel",null).setPositiveButton("Reset",(d,w)->{portraits.reset();showSettings();}).show());
-        setting(body,"Mikan Web address",()->editMikanUrl(false));
-        setting(body,"Check Mikan Web connection",this::checkMikanWeb);
-        gap(body,18);body.addView(text("SYSTEM",12,PEACH,true));gap(body,10);
-        setting(body,"Default home app",this::chooseHome);
-        setting(body,"Check for launcher updates",()->updater.check());
-        body.addView(text("Updates are optional. Home works offline.",13,MUTED,false));
+    private void openSettings(){settingsSection=SettingsHub.Section.HUB;showSettings();}
+    private void backFromSettings(){
+        hideKeyboard();
+        if(settingsSection!=SettingsHub.Section.HUB){settingsSection=SettingsHub.Section.HUB;showSettings();}else showHome();
     }
-    private void setting(LinearLayout body,String label,Runnable callback){TextView b=action(label,callback);b.setGravity(Gravity.CENTER_VERTICAL);body.addView(b,new LinearLayout.LayoutParams(-1,dp(52)));gap(body,8);}
+    private void showSettings(){
+        if(!settings)settingsSection=SettingsHub.Section.HUB;
+        drawer=false;settings=true;search=null;results=null;createPage();
+        LinearLayout body=settingsUi.render(page,settingsSection,this::backFromSettings,section->{settingsSection=section;showSettings();});
+        switch(settingsSection){
+            case HUB: break;
+            case APPEARANCE:
+                settingsUi.wallpapers(body,prefs.getString("wallpaper","reading-nook.webp"),asset("reading-nook.webp"),asset("study-nook.webp"),name->{prefs.edit().putString("wallpaper",name).apply();showSettings();});
+                settingsUi.heading(body,"APP ICONS");
+                settingsUi.choice(body,"Icon style",new String[]{"Amber","Original"},prefs.getBoolean("themed",true)?0:1,i->{prefs.edit().putBoolean("themed",i==0).apply();showSettings();});
+                break;
+            case HOME:
+                settingsUi.heading(body,"LAYOUT");
+                settingsUi.choice(body,"App grid",new String[]{"4 columns","5 columns"},prefs.getInt("columns",4)-4,i->{prefs.edit().putInt("columns",i+4).apply();showSettings();});
+                settingsUi.choice(body,"Dock size",new String[]{"3 apps","4 apps","5 apps"},prefs.getInt("dockCount",5)-3,i->{prefs.edit().putInt("dockCount",i+3).apply();showSettings();});
+                settingsUi.toggle(body,"Floating dock","Individual icons without a shared background",prefs.getBoolean("floatingDock",true),on->{prefs.edit().putBoolean("floatingDock",on).apply();showSettings();});
+                settingsUi.toggle(body,"Favorites heading","Show the label above your pinned apps",prefs.getBoolean("showFavoritesLabel",false),on->{prefs.edit().putBoolean("showFavoritesLabel",on).apply();showSettings();});
+                setting(body,"Minimum home pages: "+prefs.getInt("minPages",1),()->chooseNumber("minPages","Minimum home pages",new int[]{1,2,3,4,5}));
+                settingsUi.heading(body,"SHORTCUTS & FOLDERS");
+                setting(body,"Manage favorites",this::manageFavorites);
+                setting(body,"Create app folder",this::createFolder);
+                setting(body,"Manage folders",this::manageFolders);
+                break;
+            case WIDGETS:
+                settingsUi.heading(body,"WIDGET PLACEMENT");
+                settingsUi.note(body,"Choose a home page for each widget, or hide it completely.");
+                widgetSetting(body,"Clock","clockPage",1);widgetSetting(body,"Mikan","mikanPage",1);widgetSetting(body,"Music","musicPage",1);
+                widgetSetting(body,"Weather","weatherPage",1);widgetSetting(body,"Upcoming events","agendaPage",1);
+                settingsUi.heading(body,"ARRANGEMENT");
+                settingsUi.choice(body,"Widget layout",new String[]{"Side by side","Stacked"},prefs.getBoolean("pairWidgets",true)?0:1,i->{prefs.edit().putBoolean("pairWidgets",i==0).apply();showSettings();});
+                settingsUi.note(body,"Cards stack automatically when screen width or text size requires it.");
+                break;
+            case WEATHER:
+                settingsUi.heading(body,"FORECAST");
+                setting(body,"Weather city: "+dashboard.city(),dashboard::chooseCity);
+                settingsUi.choice(body,"Temperature units",new String[]{"°F","°C"},prefs.getBoolean("weatherF",true)?0:1,i->{if((i==0)!=prefs.getBoolean("weatherF",true))dashboard.toggleUnits();showSettings();});
+                setting(body,"Refresh weather",dashboard::manualWeatherRefresh);
+                settingsUi.note(body,"Open-Meteo forecast. No GPS permission; city lookup uses the internet.");
+                settingsUi.heading(body,"CALENDAR");
+                settingsUi.row(body,"Calendar access",checkSelfPermission(android.Manifest.permission.READ_CALENDAR)==android.content.pm.PackageManager.PERMISSION_GRANTED?"Allowed":"Not granted",dashboard::requestCalendar);
+                settingsUi.toggle(body,"Show calendar titles","Hide event names for more privacy",prefs.getBoolean("agendaTitles",true),on->{prefs.edit().putBoolean("agendaTitles",on).apply();showSettings();});
+                break;
+            case MIKAN:
+                settingsUi.heading(body,"CHARACTER ART");
+                Drawable cutout=characterArt.get();settingsUi.artPreview(body,cutout!=null?cutout:portraits.get(),cutout!=null?"Character artwork active":"Portrait active");
+                setting(body,"Choose portrait",this::pickPortrait);
+                setting(body,"Choose character artwork",()->pickImage(74));
+                setting(body,"Remove character artwork",()->new AlertDialog.Builder(this).setTitle("Return to portrait?").setNegativeButton("Cancel",null).setPositiveButton("Remove",(d,w)->{characterArt.reset();showSettings();}).show());
+                setting(body,"Reset portrait",()->new AlertDialog.Builder(this).setTitle("Reset portrait?").setNegativeButton("Cancel",null).setPositiveButton("Reset",(d,w)->{portraits.reset();showSettings();}).show());
+                settingsUi.note(body,"Use a transparent PNG for character artwork. Images are stored on this phone.");
+                settingsUi.heading(body,"COMPANION CONNECTION");
+                settingsUi.row(body,"Mikan Web address",prefs.getString("mikanWebUrl","").isEmpty()?"Not configured":"Configured",()->editMikanUrl(false));
+                setting(body,"Check Mikan Web connection",this::checkMikanWeb);
+                if(!webStatus.isEmpty())settingsUi.note(body,"Last check: "+webStatus);
+                break;
+            case ACCESS:
+                settingsUi.heading(body,"NOTIFICATIONS & MEDIA");
+                settingsUi.toggle(body,"Notification dots","Show active app and folder notifications",prefs.getBoolean("badges",false),on->{prefs.edit().putBoolean("badges",on).apply();LauncherNotifications.refreshIfConnected();if(on&&!LauncherNotifications.allowed(this))notificationAccess();showSettings();});
+                settingsUi.row(body,"Notification / music access",LauncherNotifications.allowed(this)?"Allowed":"Not granted",this::notificationAccess);
+                settingsUi.note(body,"Notification access is optional. Music controls and dots use local Android data.");
+                settingsUi.heading(body,"ANDROID PERMISSIONS");
+                settingsUi.row(body,"Calendar access",checkSelfPermission(android.Manifest.permission.READ_CALENDAR)==android.content.pm.PackageManager.PERMISSION_GRANTED?"Allowed":"Not granted",dashboard::requestCalendar);
+                setting(body,"Android app settings",()->{try{startActivity(new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,android.net.Uri.parse("package:"+getPackageName())));}catch(Exception ex){Toast.makeText(this,"Open Android app settings manually.",Toast.LENGTH_SHORT).show();}});
+                break;
+            case SYSTEM:
+                settingsUi.heading(body,"LAUNCHER");
+                setting(body,"Default home app",this::chooseHome);
+                setting(body,"Check for launcher updates",()->updater.check());
+                settingsUi.note(body,"Updates are optional. Your home screen works offline.");
+                break;
+        }
+    }
+    private void setting(LinearLayout body,String label,Runnable callback){
+        int split=label.indexOf(": ");
+        settingsUi.row(body,split<0?label:label.substring(0,split),split<0?"":label.substring(split+2),callback);
+    }
     private void chooseNumber(String key,String title,int[] values){String[] labels=new String[values.length];for(int i=0;i<values.length;i++)labels[i]=Integer.toString(values[i]);new AlertDialog.Builder(this).setTitle(title).setItems(labels,(d,i)->{prefs.edit().putInt(key,values[i]).apply();showSettings();}).show();}
     private void manageFavorites(){
         ArrayList<App> items=new ArrayList<>();for(String key:favorites){App a=find(key);if(a!=null)items.add(a);}
@@ -395,6 +440,7 @@ public class HomeActivity extends Activity {
             runOnUiThread(()->{
                 checkingWeb=false;if(isFinishing()||isDestroyed()||!url.equals(prefs.getString("mikanWebUrl","")))return;
                 checkedWebUrl=url;webStatus=status;Toast.makeText(this,status+" · last check only",Toast.LENGTH_LONG).show();
+                if(settings&&settingsSection==SettingsHub.Section.MIKAN)showSettings();
                 if(!settings&&!drawer&&mikanCard!=null)mikanCard.setStatus(status);
             });
         },"mikan-web-check").start();
@@ -416,7 +462,7 @@ public class HomeActivity extends Activity {
             try{
                 java.net.URI uri=new java.net.URI(value);
                 if(!"https".equalsIgnoreCase(uri.getScheme())||uri.getHost()==null||uri.getUserInfo()!=null)throw new IllegalArgumentException();
-                prefs.edit().putString("mikanWebUrl",value).apply();checkedWebUrl="";webStatus="";dialog.dismiss();if(openAfter)openMikan();
+                prefs.edit().putString("mikanWebUrl",value).apply();checkedWebUrl="";webStatus="";dialog.dismiss();if(openAfter)openMikan();else if(settings)showSettings();
             }catch(Exception e){field.setError("Enter a valid HTTPS web address.");}
         }));dialog.show();
     }

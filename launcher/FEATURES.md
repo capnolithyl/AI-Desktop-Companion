@@ -1,6 +1,6 @@
 # Mikan Launcher — living feature reference
 
-**Source baseline:** v0.8 (versionCode 8), design-system release, 2026-11-24. See Git history for implementation commit.
+**Source baseline:** v0.9 (versionCode 9), settings overhaul, 2026-11-24. See Git history for implementation commit.
 **Development:** [PR #117](https://github.com/capnolithyl/AI-Desktop-Companion/pull/117), branch `feature/mikan-launcher-v01`. Check current branch and Gradle version before changing this document.
 **Purpose:** a free, personal, offline-first Android launcher inspired by the Mikan OS home-screen mockup. Separate from Pocket Mikan, desktop Mikan and the NAS. This document tracks the launcher only.
 
@@ -19,7 +19,7 @@ Build success, release publication, installation and individual feature verifica
 | Independent Android home app | 0.1 | HOME/DEFAULT role and normal launch entry; Settings > Default home app to select or switch home. | Initial install and home UI observed; stock fallback and cold boot still pending. |
 | App drawer | 0.1 | Search installed launchable apps by label or package; tap search field or swipe up near bottom; field opens keyboard. | Implemented; full search and launch regression pending. |
 | Favorites | 0.1 | Long-press drawer app to pin; drawer/Manage favorites menu to unpin and move; saved locally. | Favorites visible across screenshots; persistence on updates observed, complete CRUD pending. |
-| Dock | 0.1–0.2 | First 3–5 available pinned entries, configurable, persists across pages. Default 5; floating dock (default on in v0.8) or framed dock. | Device observed through v0.7; v0.8 toggle pending. |
+| Dock | 0.1–0.2 | First 3–5 available pinned entries, configurable, persists across pages. Default 5; floating dock (default on in v0.8) or framed dock. | Floating dock observed in v0.8; toggle pending. |
 | App rearrangement | 0.2 | Hold and drag pinned app onto another visible pinned tile; menu-based ordering and moving between pages. | Implemented; gesture and cross-page tests pending. |
 | App grid | 0.2 | 4 or 5 columns, two rows of favorites per page; automatically packed, no arbitrary empty slots. Labels wrap to two lines. | Four-column layout observed; five-column layout pending. |
 | Multiple pages | 0.4 | Auto pagination; minimum 1–5 pages setting; horizontal swipes or arrows. Home intent returns to first page. Single-page indicator hidden since 0.5; dot indicators in v0.8. | Single-page UI observed; multiple-page navigation pending. |
@@ -32,7 +32,7 @@ Build success, release publication, installation and individual feature verifica
 | --- | --- | --- | --- |
 | Mikan OS theme | 0.1–0.6 | Espresso/amber/peach palette; gradients, subtle borders/shadows, rounded panels, cat/paw/spark drawings, handwriting-style character heading. | v0.6 screenshot observed. |
 | Wallpaper | 0.1–0.2 | Bundled Reading nook and Study nook; choose in Appearance settings. | Both backgrounds seen in owner screenshots across releases. |
-| Icon styles | 0.2–0.8 | Amber or Original. Amber uses peach-to-amber gradient glyphs, custom common-app glyphs, normalized adaptive monochrome and warm luminance fallback. Pocket Mikan uses drawn paw. | v0.7 amber icons observed; new v0.8 glyphs, original toggle and full coverage pending. |
+| Icon styles | 0.2–0.8 | Amber or Original. Amber uses peach-to-amber gradient glyphs, custom common-app glyphs, normalized adaptive monochrome and warm luminance fallback. Pocket Mikan uses drawn paw. | v0.8 gradient/custom icons observed; original toggle and full coverage pending. |
 | Favorites heading | 0.6 | Optional, hidden by default. | Hidden in v0.6 screenshot. |
 | Local portrait | 0.3 | Settings > Choose portrait; downscale to at most 768 px on longest edge, store privately. Reset returns to bundled coffee portrait if available, otherwise legacy small chat avatar. | Owner confirmed coffee portrait import; survives updates. |
 | Character artwork | 0.6 | Separate import/remove control for transparent art, local alpha-preserving storage. Existing portrait remains fallback; full-bleed image with blend when no cutout. | Full-bleed portrait observed; transparent import not yet confirmed. Coffee/cutout artwork is not bundled by default at this baseline. |
@@ -48,7 +48,7 @@ All five built-in widgets (clock, Mikan, music, weather, upcoming events) can be
 
 | Feature | Introduced | Current implementation / use | Evidence |
 | --- | --- | --- | --- |
-| Clock/date | 0.1–0.7 | Local time and locale, respects Android 12/24-hour preference; short date, paw decoration; compact AM/PM line when paired. | Full-width and compact clock observed in 0.6/0.7; v0.8 typography pending. |
+| Clock/date | 0.1–0.7 | Local time and locale, respects Android 12/24-hour preference; short date, paw decoration; compact AM/PM line when paired. | Full-width and compact clock observed in 0.6/0.7; v0.8 typography observed. |
 | Music metadata/art | 0.4 | Android active MediaSession, prefer playing session, title/artist and album art where available. Notification listener access required. | Owner screenshot shows track, artist and artwork. |
 | Music controls | 0.4–0.5 | Previous, play/pause, next; supported actions only. Custom amber-painted icons, no emoji; circular amber play/pause in v0.8. | Controls rendered; actions not explicitly confirmed. |
 | Progress/seek | 0.5 | Position/time/duration; seek only with ACTION_SEEK_TO; hide timeline for unknown duration. Foreground position tick and track/session guards. Scrubbing avoids page gesture. | Timeline rendered; actual seek and track changes pending. |
@@ -61,14 +61,19 @@ All five built-in widgets (clock, Mikan, music, weather, upcoming events) can be
 
 ## 4. Settings quick reference
 
+v0.9 replaces the long list with a themed category hub, icons, descriptions and dedicated pages. Android Back or the header back button returns to the hub from a submenu, then Home. Switches and segmented choices expose saved values. Wallpaper thumbnails and active art preview use local assets. Permission rows display actual current grant state. Installed version displayed on hub. Existing preference keys and actions preserved.
+
 | Section | Controls |
 | --- | --- |
-| Appearance | Wallpaper, Icons, Grid (4/5 columns), Dock (3–5 apps), Favorites heading, Floating dock, Manage favorites, Create app folder, Manage folders |
-| Pages & widgets | Minimum home pages (1–5), Clock, Mikan, Music, Weather, Upcoming events, Widget layout (Side by side/Stacked), Weather city, Weather units, Refresh weather, Calendar access, Calendar titles, Notification dots, Notification / music access |
-| Mikan | Choose portrait, Choose character artwork (transparent PNG), Remove character artwork, Reset portrait, Mikan Web address, Check Mikan Web connection |
-| System | Default home app, Check for launcher updates |
+| Appearance | Reading nook / Study nook wallpaper previews, Amber / Original icon style |
+| Home screen | Grid (4/5 columns), Dock (3–5 apps), Floating dock, Favorites heading, Minimum home pages (1–5), Manage favorites, Create app folder, Manage folders |
+| Widgets | Clock, Mikan, Music, Weather, Upcoming events placement/visibility, Widget layout (Side by side/Stacked) |
+| Weather & calendar | Weather city, Temperature units, Refresh weather, Calendar access, Show calendar titles |
+| Mikan | Active artwork preview, Choose portrait, Choose character artwork, Remove character artwork, Reset portrait, Mikan Web address, Check Mikan Web connection |
+| Permissions & privacy | Notification dots, Notification / music access, Calendar access, Android app settings |
+| System & updates | Default home app, Check for launcher updates |
 
-Weather card also exposes refresh, city, units and clear location. Settings labels above match the current source. Do not assume there is a separate full-screen widget editor.
+Weather card also exposes refresh, city, units and clear location. No full-screen widget editor or free-position grid. Existing selection dialogs remain for advanced actions.
 
 ## 5. Offline, privacy and updates
 
@@ -91,7 +96,8 @@ Weather card also exposes refresh, city, units and clear location. Settings labe
 | 0.6 | Mikan speech bubble/illustration, transparent-art import, clock accents, web check | Owner screenshot observed; cutout and web check pending. |
 | 0.7 | Responsive widget pairs, weather, calendar, compact music | Source implemented; build job in run [45513874730](https://github.com/capnolithyl/AI-Desktop-Companion/actions/runs/45513874730) succeeded, publish job skipped in that run. Owner screenshot subsequently confirms installed v0.7, paired layout, weather data and empty agenda. Other functional tests remain pending. |
 
-| 0.8 | Two-tone glyphs, shared panel/tile styling, floating dock, page dots, equal paired heights, circular play, calendar decoration, search and voice affordances | Implemented; CI and device validation pending. |
+| 0.8 | Two-tone glyphs, shared panel/tile styling, floating dock, page dots, equal paired heights, circular play, calendar decoration, search and voice affordances | Owner v0.8 screenshot confirms floating dock, two-tone glyphs, paired card heights, circular play and search bar rendering; behavior of new actions pending. |
+| 0.9 | Categorized settings hub, dedicated submenus, native switches, segmented choices, wallpaper and portrait previews, permission status and installed version | Implemented; CI and device validation pending. |
 
 ## 7. Outstanding verification checklist
 
@@ -107,11 +113,13 @@ Weather card also exposes refresh, city, units and clear location. Settings labe
 - [ ] Weather city selection, units, clear/reset, cache age, offline and retry behavior.
 - [ ] Calendar grant/deny/revoke, empty calendar, recurring/all-day events, hidden titles.
 - [x] v0.7 installation and paired dashboard observed on phone; weather data and empty agenda rendered.
-- [ ] v0.8: confirm design changes, icon readability, equal paired heights, dock toggle, search/voice confirmation and fallback.
+- [x] v0.8 design, equal paired heights, floating dock, gradient icons, circular play and search bar observed.
+- [ ] v0.8 dock toggle and search/voice confirmation and fallback.
+- [ ] v0.9 navigate all seven settings categories, Android back and Home navigation; verify every existing action, switches/choices, preview rendering, permission status and no settings loss after update.
 
 ## 8. Roadmap (not implemented)
 
-**v0.8 implemented:** shared warm design styling, two-tone glyphs, floating dock, page dots, circular play, search bar and voice/browser actions. Device visual and behavioral validation pending. **Remaining mockup gaps:** transparent character cutout artwork (not bundled), richer ambient effects, full icon pack, shuffle/repeat (needs reliable media-provider support), camera/Lens shortcut, lockscreen customization.
+**v0.8 implemented:** shared warm design styling, two-tone glyphs, floating dock, page dots, circular play, search bar and voice/browser actions. Visual design observed on device; behavioral validation pending. **v0.9 implemented:** categorized settings, visual choices and permission status; pending device validation. **Remaining mockup gaps:** transparent character cutout artwork (not bundled), richer ambient effects, full icon pack, shuffle/repeat (needs reliable media-provider support), camera/Lens shortcut, lockscreen customization.
 
 **Later / separate milestones:** free-position app/widget grid and drag-to-create folders; third-party Android widget hosting; richer folder UI; custom wallpapers/icon packs; bundled transparent/alternate Mikan art and optional outfit variants; optional actual NAS/model status; improved Pocket Mikan integration; lockscreen wallpaper and Android-supported lockscreen customization (do not replace or bypass secure Android lockscreen). No promised dates. Check Trello and current source before selecting next features.
 

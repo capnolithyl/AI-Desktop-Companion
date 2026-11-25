@@ -9,7 +9,7 @@ import android.graphics.Rect;
 import android.graphics.drawable.Drawable;
 
 final class MikanMark extends Drawable {
-    static final int CAT=0,PAW=1,SPARK=2,SEARCH=3,GLOBE=4,MIC=5,CALENDAR=6,GEAR=7;
+    static final int CAT=0,PAW=1,SPARK=2,SEARCH=3,GLOBE=4,MIC=5,CALENDAR=6,GEAR=7,PALETTE=8,GRID=9,WIDGET=10,WEATHER=11,SHIELD=12,DOWNLOAD=13;
     private final int kind;
     private final Paint paint=new Paint(Paint.ANTI_ALIAS_FLAG);
     MikanMark(int kind,int color){this.kind=kind;paint.setColor(color);paint.setStrokeJoin(Paint.Join.ROUND);paint.setStrokeCap(Paint.Cap.ROUND);}
@@ -25,6 +25,13 @@ final class MikanMark extends Drawable {
             paint.setStyle(Paint.Style.FILL);
             canvas.drawOval(3,10,10,19,paint);canvas.drawOval(10,3,16,13,paint);canvas.drawOval(17,3,23,13,paint);canvas.drawOval(24,10,31,19,paint);
             path.moveTo(16,16);path.cubicTo(10,16,5,23,8,27);path.cubicTo(11,31,14,26,16,26);path.cubicTo(19,26,22,31,25,27);path.cubicTo(28,23,22,16,16,16);path.close();canvas.drawPath(path,paint);
+         }else if(kind>=PALETTE&&kind<=DOWNLOAD){
+            paint.setStyle(Paint.Style.STROKE);paint.setStrokeWidth(2.2f);
+            if(kind==PALETTE){path.moveTo(16,4);path.cubicTo(1,4,0,24,13,27);path.cubicTo(19,31,22,24,19,21);path.cubicTo(17,17,30,22,28,12);path.cubicTo(26,5,21,4,16,4);path.close();canvas.drawPath(path,paint);paint.setStyle(Paint.Style.FILL);canvas.drawCircle(10,11,2,paint);canvas.drawCircle(17,8,2,paint);canvas.drawCircle(23,13,2,paint);canvas.drawCircle(7,18,2,paint);}
+            else if(kind==GRID||kind==WIDGET){for(int j=0;j<2;j++)for(int i=0;i<2;i++){float x=4+i*14,y=4+j*14;canvas.drawRoundRect(x,y,x+10,y+10,2,2,paint);}if(kind==WIDGET){canvas.drawLine(4,16,28,16,paint);}}
+            else if(kind==WEATHER){canvas.drawCircle(11,10,5,paint);path.moveTo(8,24);path.cubicTo(2,24,2,17,9,17);path.cubicTo(10,10,20,10,22,17);path.cubicTo(30,16,32,26,24,26);path.lineTo(8,26);path.close();canvas.drawPath(path,paint);}
+            else if(kind==SHIELD){path.moveTo(16,3);path.lineTo(27,8);path.lineTo(26,18);path.quadTo(23,25,16,29);path.quadTo(9,25,6,18);path.lineTo(5,8);path.close();canvas.drawPath(path,paint);canvas.drawLine(11,16,15,20,paint);canvas.drawLine(15,20,22,12,paint);}
+            else {canvas.drawLine(16,4,16,21,paint);canvas.drawLine(10,15,16,21,paint);canvas.drawLine(16,21,22,15,paint);canvas.drawLine(5,22,5,28,paint);canvas.drawLine(5,28,27,28,paint);canvas.drawLine(27,28,27,22,paint);}
         }else if(kind==SEARCH||kind==GLOBE||kind==MIC||kind==CALENDAR||kind==GEAR){
             paint.setStyle(Paint.Style.STROKE);paint.setStrokeWidth(2.3f);
             if(kind==SEARCH){canvas.drawCircle(13,13,8,paint);canvas.drawLine(19,19,27,27,paint);}
