@@ -8,13 +8,13 @@ final class MixedLayout {
     static final class Rect {
         final int x,y,w,h;
         Rect(int x,int y,int w,int h){this.x=x;this.y=y;this.w=w;this.h=h;}
-        boolean fits(int columns){return x>=0&&y>=0&&w>0&&h>0&&x+w<=columns&&y+h<=ROW_LIMIT;}
+        boolean fits(int columns){return x>=0&&y>=0&&w>0&&h>0&&(long)x+w<=columns&&(long)y+h<=ROW_LIMIT;}
         boolean overlaps(Rect r){return x<r.x+r.w&&x+w>r.x&&y<r.y+r.h&&y+h>r.y;}
     }
     static final class Spec {
         final String key;final int minW,minH,w,h;
         Spec(String key,int minW,int minH,int w,int h){this.key=key;this.minW=minW;this.minH=minH;this.w=w;this.h=h;}
-        boolean accepts(Rect r,int columns){return r.fits(columns)&&r.w>=minW&&r.h>=minH&&(key.startsWith("widget:")||(r.w==1&&r.h==1));}
+        boolean accepts(Rect r,int columns){return r.fits(columns)&&r.w>=minW&&r.h>=minH&&r.h<=12&&(key.startsWith("widget:")||(r.w==1&&r.h==1));}
     }
     private final LinkedHashMap<String,Rect> saved=new LinkedHashMap<>();
     static MixedLayout parse(String raw){
@@ -25,7 +25,7 @@ final class MixedLayout {
             String[] parts=line.split("\t",-1);
             if(parts.length!=5||parts[0].isEmpty()||parts[0].length()>512||parts[0].contains("\r")||model.saved.containsKey(parts[0])||model.saved.size()>=1005)throw new IllegalArgumentException("Invalid grid record");
             Rect rect=new Rect(Integer.parseInt(parts[1]),Integer.parseInt(parts[2]),Integer.parseInt(parts[3]),Integer.parseInt(parts[4]));
-            if(!rect.fits(5))throw new IllegalArgumentException("Invalid grid bounds");
+            if(!rect.fits(5)||rect.h>12)throw new IllegalArgumentException("Invalid grid bounds");
             model.saved.put(parts[0],rect);
         }return model;
     }

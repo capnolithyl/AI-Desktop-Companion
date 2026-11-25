@@ -374,7 +374,7 @@ public class HomeActivity extends Activity {
         if(homePage>0)nav.addView(pageArrow("‹",()->changePage(-1)));
         LinearLayout dots=horizontal();dots.setGravity(Gravity.CENTER);
         if(count>8){TextView counter=text((homePage+1)+" / "+count,13,MUTED,true);counter.setGravity(Gravity.CENTER);dots.addView(counter);}
-        else for(int i=0;i<count;i++){final int target=i;View dot=new View(this);dot.setBackground(shape(i==homePage?PEACH:0xff967a69,10,false));LinearLayout.LayoutParams d=new LinearLayout.LayoutParams(dp(i==homePage?9:6),dp(i==homePage?9:6));d.setMargins(dp(4),0,dp(4),0);dots.addView(dot,d);dot.setContentDescription("Page "+(i+1));dot.setOnClickListener(v->{homePage=target;showHome();});}
+        else for(int i=0;i<count;i++){final int target=i;View dot=new View(this);dot.setBackground(shape(i==homePage?PEACH:0xff967a69,10,false));LinearLayout.LayoutParams d=new LinearLayout.LayoutParams(dp(i==homePage?9:6),dp(i==homePage?9:6));d.setMargins(dp(4),0,dp(4),0);dots.addView(dot,d);dot.setContentDescription("Page "+(i+1));dot.setOnClickListener(v->{homePage=target;mixedScrollY=0;showHome();});}
         nav.addView(dots,new LinearLayout.LayoutParams(-2,dp(36)));
         if(homePage+1<count)nav.addView(pageArrow("›",()->changePage(1)));
         page.addView(nav);gap(page,4);}
@@ -991,12 +991,12 @@ public class HomeActivity extends Activity {
         App app=find(key);return app==null?"Unavailable shortcut":app.label;
     }
     private MixedLayout.Spec mixedWidgetSpec(String key,int columns){
-        boolean large=!canPair();int min=large?columns:2,h=2,w=min;
+        boolean large=getResources().getConfiguration().screenWidthDp<350||getResources().getConfiguration().fontScale>1.2f;int min=large?columns:2,h=2,w=min;
         if(key.equals("mikanPage")){min=columns>=5&&!large?3:columns;w=columns;h=3;}
-        else if(key.equals("clockPage")){h=1;w=large?columns:(prefs.getBoolean("pairTop",true)?2:columns);}
-        else if(key.equals("weatherPage"))w=large?columns:(prefs.getBoolean("pairTop",true)?columns-2:columns);
-        else if(key.equals("musicPage"))w=large?columns:(prefs.getBoolean("pairBottom",true)?2:columns);
-        else if(key.equals("agendaPage"))w=large?columns:(prefs.getBoolean("pairBottom",true)?columns-2:columns);
+        else if(key.equals("clockPage")){h=1;w=large?columns:(canPair()&&prefs.getBoolean("pairTop",true)?2:columns);}
+        else if(key.equals("weatherPage"))w=large?columns:(canPair()&&prefs.getBoolean("pairTop",true)?columns-2:columns);
+        else if(key.equals("musicPage"))w=large?columns:(canPair()&&prefs.getBoolean("pairBottom",true)?2:columns);
+        else if(key.equals("agendaPage"))w=large?columns:(canPair()&&prefs.getBoolean("pairBottom",true)?columns-2:columns);
         return new MixedLayout.Spec(widgetGridKey(key),min,key.equals("mikanPage")?2:1,w,h);
     }
     private void renderMixedHome(LinearLayout body){
@@ -1091,7 +1091,7 @@ public class HomeActivity extends Activity {
     private void persistSlots(){if(homeSlots!=null)prefs.edit().putString("homeSlotsV1",homeSlots.encode()).apply();}
     private void openHomeEditor(){
         closeQuickSearch();hideKeyboard();drawer=false;settings=false;
-        if(prefs.getBoolean("mixedHome",false)){editingMixed=true;editingHome=false;mixedScrollY=0;showHome();return;}
+        if(prefs.getBoolean("mixedHome",false)){if(editingMixed)return;editingMixed=true;editingHome=false;mixedScrollY=mixedScroll==null?0:mixedScroll.getScrollY();showHome();return;}
         openPageManager();
     }
     private void openPageManager(){
