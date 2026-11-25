@@ -1,13 +1,12 @@
 import {readFileSync,existsSync} from "node:fs";
 import {performance} from "node:perf_hooks";
 import {assistantTurnInstructionParts,joinAssistantInstructionParts} from "../src/assistant-instructions.ts";
-import {assistantVoiceGuidance} from "../src/assistant-voice.ts";
 import {roleplayActive} from "../src/narration-filter.ts";
 import {reviewResearchCompletion,groundedResearchFallback} from "../src/evidence-verification.ts";
 import {boundedHistory} from "./provider-settings.mjs";
 import {nativeResearchAvailable,structuredResearchPrompt,structuredResearchTool,reviewNativeResearch} from "./native-research.mjs";
 import {researchTurn,researchInstructions} from "./research.mjs";
-import {agentResearch} from "./agent-research.mjs";
+import {companionTurn} from "./companion-agent.mjs";
 import {planKnowledge} from "./knowledge-plan.mjs";
 import {auditNotionReview,groundedManuscriptHistory,deniesLoadedNotionAccess,unavailableNotionModelResponse,unverifiedNotionReviewResponse} from "../src/notion-reading.ts";
 export function currentProfile(promptFile,store) {
@@ -45,72 +44,21 @@ export function turnTrace(mode){
 // Shared executor: caller owns authentication, admission, persistence and quota.
 export async function executeNasTurn({store,conversationId,question,selected,mode,promptFile="",requestModel,reserve,canRequest,search,read,trace=turnTrace(mode),onDelta=()=>{},activity=()=>{},signal,knowledge,publicAgent=process.env.MIKAN_PUBLIC_AGENT==="1",agentDiagnostics=false}){
   signal?.throwIfAborted();
+  const modelLed=publicAgent&&["nvidia","groq","cerebras"].includes(selected.provider);
   const {history,rawHistory,memory}=await trace.measure("context",()=>{
     const rawHistory=store.messages(conversationId,80);
     const history=boundedHistory(rawHistory,selected.historyChars);
-    const memory=store.library.context(question,conversationId);
+    const memory=store.library.context(question,conversationId,modelLed?{includeSessions:false}:undefined);
     return {history,rawHistory,memory};
   });
+  if(modelLed)return companionTurn({store,conversationId,question,history,rawHistory,memory,profile:currentProfile(promptFile,store),selected,mode,requestModel,reserve,canRequest,search,read,knowledge,trace,onDelta,activity,signal});
+  // Explicit compatibility engine for providers without native tool support.
   const recentSources=rawHistory.filter(m=>m.role==="assistant").reverse().flatMap(m=>(m.inference?.sources??[]).filter(s=>s.kind==="notion"||s.kind==="cached-web"));
   const previous=recentSources.filter((s,i)=>recentSources.findIndex(other=>other.id===s.id)===i).slice(0,12);
   const local=knowledge?await trace.measure("knowledge",()=>planKnowledge({knowledge,history,previous,question,provider:selected.provider,canRequest:()=>!signal?.aborted&&canRequest(2),generate:args=>trace.measure("knowledge-planner",()=>{signal?.throwIfAborted();reserve();return requestModel({...args,config:selected,signal,onUsage:v=>trace.usage("knowledge-planner",v)});}),activity})):null;
   // Interactive effort applies to answers and native tool decisions, not auxiliary inference.
   const effort=selected.reasoningEffort==="auto"?undefined:selected.reasoningEffort;
   const activeTask=rawHistory.filter(m=>m.role==="assistant").at(-1)?.inference?.researchTask;
-  // Narrow, cheap conversational fast path for self-expressions of emotion.
-  // Questions, explicit requests and longer messages still use the agent.
-  const reaction=/^(?:(?:dude|man|wow|damn|lol|haha)[,!\s]+)*(?:i(?:['’]m| am) (?:so |really |super |pretty |very )?(?:excited|hyped|happy|sad|frustrated|annoyed|tired|relieved|disappointed|impatient)|(?:that(?:['’]s| is) (?:so |really |pretty )?(?:awesome|great|amazing|hilarious|funny|sad|annoying|frustrating|disappointing)))[.!\s]*$/i.test(question.trim());
-  if(!local&&reaction&&mode!=="off"){
-    activity({title:"Conversational reaction",detail:"No public lookup needed; retain full conversation and persona",lines:[]});
-    mode="off";
-  }
-  // Chat privately with the normal persona, memories and bounded role-preserving
-  // history before handing off to the isolated public research loop. The only
-  // tool in this first pass is a zero-argument request for public research;
-  // its arguments and private draft are NEVER forwarded to public tools.
-  const nativeEligible=!local&&publicAgent&&["nvidia","groq","cerebras"].includes(selected.provider);
-  const explicitLookup=/\b(?:latest|current|right now|as of today|search again|verify|look up|any news|any updates)\b/i.test(question);
-  const noBrowse=/\b(?:do not|don't|never|no need to)\s+(?:browse|search|look up|use the web|go online)\b/i.test(question);
-  if(nativeEligible&&mode==="simple"&&!explicitLookup&&!noBrowse){
-    const privateSystem=systemPrompt(promptFile,store,memory,{question,history,mode:"off"})+
-      "\n\nThis is a private conversation with your full persona and recent dialogue. Pay attention to your own earlier replies, callbacks, corrections, playful teasing and sarcasm; don't treat every statement as a literal preference. Keep your own established interests distinct from the owner's. Answer naturally and directly. Never claim to be working on something in the background. Only if public research would materially improve this turn, call request_public_research with an empty object; the host will independently run a privacy-filtered public research phase. Do not include any query, private information or draft in the handoff. No web lookup has occurred in this pass.";
-    let decision;
-    try{
-      decision=await trace.measure("agent",()=>{signal?.throwIfAborted();reserve();return requestModel({config:selected,system:privateSystem,history,signal,agentTools:[{type:"function",function:{name:"request_public_research",description:"Ask the host to independently consider public web research. No arguments or private context may be passed.",parameters:{type:"object",properties:{},additionalProperties:false}}}],agentToolChoice:"auto",agentThinking:true,agentEffort:effort,maxTokens:4096,temperature:0.4,onModel:v=>trace.model(v),onUsage:v=>trace.usage("agent",v)});});
-    }catch(error){
-      signal?.throwIfAborted();
-      if(error?.upstreamStatus===429||error?.status===429||!canRequest())throw error;
-      activity({title:"Private chat decision unavailable",detail:"Use ordinary tool-free answer",lines:[]});
-    }
-    const calls=Array.isArray(decision?.toolCalls)?decision.toolCalls:[];
-    const handoff=calls.length===1&&calls[0]?.function?.name==="request_public_research";
-    if(handoff){
-      activity({title:"Public research requested",detail:"Private conversation remains outside public tool loop",lines:[]});
-      if(!canRequest(2)){
-        const answer="I don't have enough provider request budget to complete a public lookup right now.";
-        trace.firstText();onDelta(answer);return {answer,memory,researched:{sources:[],note:"",evidence:"[]"}};
-      }
-    }else if(!calls.length&&typeof decision?.content==="string"&&decision.content.trim()&&!/^\s*(?:\{\s*"(?:tool|arguments|function|tool_calls|name)"|<(?:tool_call|function_call)>)/i.test(decision.content)){
-      const answer=decision.content.trim();
-      activity({title:"Private conversational answer",detail:"Full bounded conversation and relevant memories; no public tools",lines:[]});
-      trace.firstText();onDelta(answer);return {answer,memory,researched:{sources:[],note:"",evidence:"[]"}};
-    }else mode="off";
-  }
-  if(!local&&publicAgent&&mode!=="off"&&["nvidia","groq","cerebras"].includes(selected.provider)){
-    const profile=currentProfile(promptFile,store);
-    // Only typed behavior preferences are included in the public tool prompt.
-    // Freeform persona, custom guidance, memories and raw assistant history remain private.
-    const publicVoice=assistantVoiceGuidance({...profile,systemPrompt:"You are the user\x27s expressive desktop companion. Be natural, warm and accurate.",communication:{...profile.communication,endearments:"honey, sweetheart, darling",customGuidance:"",dialogueExamples:""}},roleplayActive(question,history));
-    const agent=await agentResearch({mode,history,signal,publicVoice,compact:["groq","cerebras"].includes(selected.provider),reasoningEffort:effort,previousEvidence:rawHistory.at(-2)?.role==="assistant"?rawHistory.at(-2)?.inference?.agentEvidence:undefined,ownerFacts:store.listMemories(),canRequest:(slots=1)=>!signal?.aborted&&canRequest(slots),activity,diagnostics:agentDiagnostics,
-      answerSystem:systemPrompt(promptFile,store,{text:"",ids:[],auditLines:[]},{question,history:[],mode,researchActive:true,plannedPublicSearch:true,publicWebRequested:true}),
-      generate:args=>trace.measure("agent",()=>{signal?.throwIfAborted();reserve();return requestModel({...args,config:selected,signal,onModel:v=>trace.model(v),onUsage:v=>trace.usage("agent",v)});}),
-      compose:args=>trace.measure("agent-answer",()=>{signal?.throwIfAborted();reserve();return requestModel({...args,config:selected,signal,onModel:v=>trace.model(v),onUsage:v=>trace.usage("agent-answer",v)});}),
-      search:(query,recent)=>trace.measure("search",()=>search(query,recent)),read:(url,options)=>trace.measure("read",()=>read(url,options))});
-    if(agent){trace.firstText();onDelta(agent.answer);return {...agent,memory:{text:"",ids:[],auditLines:[]}};}
-    // Private-context handoff or unavailable agent: ordinary persona/memory
-    // chat, not another public planner.
-    mode="off";
-  }
   const researched=local??await researchTurn({mode,history,activeTask,canRequest:()=>!signal?.aborted&&canRequest(2),generate:args=>trace.measure("planner",()=>{
     signal?.throwIfAborted();reserve();return requestModel({...args,config:selected,signal,onUsage:v=>trace.usage("planner",v)});
   }),search:(query,recent)=>trace.measure("search",()=>{signal?.throwIfAborted();return search(query,recent);}),
