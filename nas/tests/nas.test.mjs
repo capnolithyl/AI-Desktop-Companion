@@ -1245,3 +1245,34 @@ test("private conversation handoff does not pass persona, memory, assistant hist
   assert.equal(result.answer,"Lantern has four tracks [1].");assert.equal(result.researched.sources.length,1);
  }finally{store.db.close();}
 });
+
+test("durable memory dates use the original local message date even when extraction is delayed",async()=>{
+ const store=openStore(":memory:");
+ try{
+  const chat=store.newConversation(),l=store.learning;
+  l.setSettings({user:true,character:false});
+  const u=store.append(chat.id,"user","I saw Metallica in Detroit two years ago.");
+  const a=store.append(chat.id,"assistant","Nice!");
+  // UTC November 26 is still November 25 in Detroit.
+  const sent=Date.parse("2026-11-26T02:00:00Z");
+  store.db.prepare("UPDATE messages SET created_at=? WHERE id=?").run(sent,u.id);
+  store.db.prepare("UPDATE messages SET created_at=? WHERE id=?").run(sent/1000,a.id);
+  l.enqueue(u,a,chat.id);
+  await l.processNext(async req=>{
+   const input=JSON.parse(req.history[0].content);
+   assert.equal(input.currentUserDate,"2026-11-25");
+   assert.equal(input.currentAssistantDate,"2026-11-25");
+   assert.equal(input.timeZone,"America/Detroit");
+   assert.match(req.system,/original message/);
+   return JSON.stringify({facts:[{action:"save",scope:"long_term",category:"interests",fact:"The user attended a Metallica concert in Detroit two years ago.",evidence:"I saw Metallica in Detroit two years ago.",tags:[]}],interests:[],canon:[]});
+  },{});
+  assert.equal(store.library.execute("snapshot",{}).facts[0].fact,"The user attended a Metallica concert in Detroit around 2024.");
+  assert.equal(l.getStatus().lastOutcome.entries[0].evidence,u.content);
+  const u2=store.append(chat.id,"user","I saw another band last year.");
+  const a2=store.append(chat.id,"assistant","Cool.");
+  l.enqueue(u2,a2,chat.id);
+  await l.processNext(async()=>JSON.stringify({facts:[{action:"save",scope:"long_term",category:"interests",fact:"The user saw another band last year.",evidence:u2.content,tags:[]}],interests:[],canon:[]}),{});
+  assert.equal(l.getStatus().lastOutcome.saved,0);
+  assert.equal(store.library.execute("snapshot",{}).facts.length,1);
+ }finally{store.db.close();}
+});
