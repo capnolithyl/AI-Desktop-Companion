@@ -91,7 +91,7 @@ export function providerSettings({initial,env={},file="",db,now=Date.now}){
   }
   function quotaError(p){
     const snapshot=quota(p);
-    return Object.assign(invalid("NAS provider budget unavailable: "+(snapshot.reason??"unknown"),429),{code:snapshot.reason??"local-quota",quota:snapshot});
+    return Object.assign(invalid("NAS cloud request budget reached: "+(snapshot.reason??"unknown")+". Try again later or select another provider.",429),{code:snapshot.reason??"local-quota",quota:snapshot});
   }
   function reserve(p){
     if(!available(p))throw quotaError(p);
