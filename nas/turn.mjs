@@ -54,13 +54,15 @@ export async function executeNasTurn({store,conversationId,question,selected,mod
   const recentSources=rawHistory.filter(m=>m.role==="assistant").reverse().flatMap(m=>(m.inference?.sources??[]).filter(s=>s.kind==="notion"||s.kind==="cached-web"));
   const previous=recentSources.filter((s,i)=>recentSources.findIndex(other=>other.id===s.id)===i).slice(0,12);
   const local=knowledge?await trace.measure("knowledge",()=>planKnowledge({knowledge,history,previous,question,provider:selected.provider,canRequest:()=>!signal?.aborted&&canRequest(2),generate:args=>trace.measure("knowledge-planner",()=>{signal?.throwIfAborted();reserve();return requestModel({...args,config:selected,signal,onUsage:v=>trace.usage("knowledge-planner",v)});}),activity})):null;
+  // Interactive effort applies to answers and native tool decisions, not auxiliary inference.
+  const effort=selected.reasoningEffort==="auto"?undefined:selected.reasoningEffort;
   const activeTask=rawHistory.filter(m=>m.role==="assistant").at(-1)?.inference?.researchTask;
   if(!local&&publicAgent&&mode!=="off"&&["nvidia","groq"].includes(selected.provider)){
     const profile=currentProfile(promptFile,store);
     // Only typed behavior preferences are included in the public tool prompt.
     // Freeform persona, custom guidance, memories and raw assistant history remain private.
     const publicVoice=assistantVoiceGuidance({...profile,systemPrompt:"You are the user\x27s expressive desktop companion. Be natural, warm and accurate.",communication:{...profile.communication,endearments:"honey, sweetheart, darling",customGuidance:""}},roleplayActive(question,history));
-    const agent=await agentResearch({mode,history,signal,publicVoice,compact:selected.provider==="groq",previousEvidence:rawHistory.at(-2)?.role==="assistant"?rawHistory.at(-2)?.inference?.agentEvidence:undefined,ownerFacts:store.listMemories(),canRequest:(slots=1)=>!signal?.aborted&&canRequest(slots),activity,diagnostics:agentDiagnostics,
+    const agent=await agentResearch({mode,history,signal,publicVoice,compact:selected.provider==="groq",reasoningEffort:effort,previousEvidence:rawHistory.at(-2)?.role==="assistant"?rawHistory.at(-2)?.inference?.agentEvidence:undefined,ownerFacts:store.listMemories(),canRequest:(slots=1)=>!signal?.aborted&&canRequest(slots),activity,diagnostics:agentDiagnostics,
       answerSystem:systemPrompt(promptFile,store,{text:"",ids:[],auditLines:[]},{question,history:[],mode,researchActive:true,plannedPublicSearch:true,publicWebRequested:true}),
       generate:args=>trace.measure("agent",()=>{signal?.throwIfAborted();reserve();return requestModel({...args,config:selected,signal,onModel:v=>trace.model(v),onUsage:v=>trace.usage("agent",v)});}),
       compose:args=>trace.measure("agent-answer",()=>{signal?.throwIfAborted();reserve();return requestModel({...args,config:selected,signal,onModel:v=>trace.model(v),onUsage:v=>trace.usage("agent-answer",v)});}),
@@ -143,7 +145,7 @@ export async function executeNasTurn({store,conversationId,question,selected,mod
     if(answer===undefined)answer="I retrieved public sources, but couldn't validate their evidence for this request ("+(failure??"provider budget")+"). I won't guess; the source links are available below.";
     trace.firstText();onDelta(answer);return {answer,memory:answerMemory,researched};
   }
-  answer=await trace.measure("answer",()=>{reserve();return requestModel({config:selected,system:system+reviewRules,history:answerHistory,signal,maxTokens:grounded?6144:4096,onModel:value=>trace.model(value),onUsage:v=>trace.usage("answer",v),
+  answer=await trace.measure("answer",()=>{reserve();return requestModel({config:selected,system:system+reviewRules,history:answerHistory,signal,agentEffort:effort,maxTokens:grounded?6144:4096,onModel:value=>trace.model(value),onUsage:v=>trace.usage("answer",v),
     onDelta:part=>{if(!grounded&&!strictEvidence){if(part)trace.firstText();onDelta(part);}}});});
   if(grounded){
     const check=async text=>trace.measure("manuscript-audit",()=>({...auditNotionReview(text,researched.manuscriptEvidence),denial:deniesLoadedNotionAccess(text)}));
@@ -154,7 +156,7 @@ export async function executeNasTurn({store,conversationId,question,selected,mod
       // One additional attempt; never send the rejected draft as evidence or
       // retry rate-limit failures. Re-read the same original manuscript.
       try{
-        answer=await trace.measure("manuscript-repair",()=>{reserve();return requestModel({config:selected,system:system+reviewRules+"\nRewrite from the original source alone. An earlier draft failed grounding. Avoid all direct quotes and unsupported concrete details; give useful literary feedback without inventing events.",history:answerHistory,signal,temperature:0.2,maxTokens:6144,onUsage:v=>trace.usage("manuscript-repair",v),onModel:value=>trace.model(value),onDelta:()=>{}});});
+        answer=await trace.measure("manuscript-repair",()=>{reserve();return requestModel({config:selected,system:system+reviewRules+"\nRewrite from the original source alone. An earlier draft failed grounding. Avoid all direct quotes and unsupported concrete details; give useful literary feedback without inventing events.",history:answerHistory,signal,agentEffort:effort,temperature:0.2,maxTokens:6144,onUsage:v=>trace.usage("manuscript-repair",v),onModel:value=>trace.model(value),onDelta:()=>{}});});
         audit=await check(answer);logAudit();
       }catch(e){signal?.throwIfAborted();activity({title:"Manuscript repair unavailable",detail:"No further retry; original rejected draft withheld",lines:[]});}
     }

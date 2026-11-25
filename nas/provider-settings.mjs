@@ -9,13 +9,14 @@ const GROQ_MODELS=["openai/gpt-oss-120b","openai/gpt-oss-20b"];
 const modelValid=(provider,model)=>typeof model==="string"&&model.length<=120&&/^[\w./:-]{2,120}$/.test(model)&&
   (provider!=="openrouter"||model==="openrouter/free"||model.endsWith(":free"))&&
   (provider!=="gemini"||model.startsWith("gemini-"))&&(provider!=="groq"||GROQ_MODELS.includes(model));
+const effortOptions=(provider,model)=>provider==="groq"?["low","medium","high"]:provider==="nvidia"&&model==="nvidia/nemotron-3-ultra-550b-a55b"?["auto","none","medium","high"]:[];
 const keyValid=key=>typeof key==="string"&&key.length>=12&&key.length<=512&&!/\s/.test(key);
 export function providerSettings({initial,env={},file="",db,now=Date.now}){
   const initialProvider=initial?.provider??env.MIKAN_PROVIDER??"nvidia";
   if(!PROVIDERS.includes(initialProvider))throw Error("Unsupported MIKAN_PROVIDER");
   const defaults={...DEFAULT_MODELS,[initialProvider]:initial?.model??env.MIKAN_MODEL??DEFAULT_MODELS[initialProvider]};
   const inherited=Object.fromEntries(PROVIDERS.map(p=>[p,initial?.provider===p?initial.key:env[KEY_NAMES[p]]||""]));
-  let saved={provider:initialProvider,models:defaults,keys:{},historyChars:32000};
+  let saved={provider:initialProvider,models:defaults,keys:{},efforts:{groq:"medium",nvidia:"auto"},historyChars:32000};
   if(file){
     try{
       const disk=JSON.parse(readFileSync(file,"utf8"));
@@ -23,6 +24,7 @@ export function providerSettings({initial,env={},file="",db,now=Date.now}){
       for(const p of PROVIDERS){
         if(modelValid(p,disk.models?.[p]))saved.models[p]=disk.models[p];
         if(keyValid(disk.keys?.[p]))saved.keys[p]=disk.keys[p];
+        if(effortOptions(p,DEFAULT_MODELS[p]).includes(disk.efforts?.[p]))saved.efforts[p]=disk.efforts[p];
       }
       saved.provider=disk.provider;
       if([16000,32000,64000].includes(disk.historyChars))saved.historyChars=disk.historyChars;
@@ -32,7 +34,7 @@ export function providerSettings({initial,env={},file="",db,now=Date.now}){
   const configured=(p,s=saved)=>keyValid(credential(p,s));
   const models=p=>p==="nvidia"?[...new Set([...NVIDIA_MODELS,defaults.nvidia,saved.models.nvidia])]:p==="groq"?GROQ_MODELS:[saved.models[p]];
   function view(){
-    return {provider:saved.provider,model:saved.models[saved.provider],historyChars:saved.historyChars,
+    return {provider:saved.provider,model:saved.models[saved.provider],historyChars:saved.historyChars,reasoningEffort:effortOptions(saved.provider,saved.models[saved.provider]).includes(saved.efforts[saved.provider])?saved.efforts[saved.provider]:null,reasoningOptions:effortOptions(saved.provider,saved.models[saved.provider]),
       providers:PROVIDERS.map(provider=>({provider,model:saved.models[provider],models:models(provider),configured:configured(provider),credentialSource:saved.keys[provider]?"nas":configured(provider)?"environment":"missing",imageInput:"unsupported",nativeTools:"unverified"}))};
   }
   function active(){return configFor(saved.provider,saved.models[saved.provider]);}
@@ -40,15 +42,19 @@ export function providerSettings({initial,env={},file="",db,now=Date.now}){
     if(!PROVIDERS.includes(p)||!models(p).includes(model))throw invalid("Select an approved configured model");
     if(!configured(p))throw invalid("Configure the selected provider API key in Models & providers.",503);
     if(!modelValid(p,model))throw invalid("Select an approved cloud model.",400);
-    return {provider:p,model,key:credential(p),historyChars:saved.historyChars};
+    return {provider:p,model,key:credential(p),historyChars:saved.historyChars,...(effortOptions(p,model).includes(saved.efforts[p])?{reasoningEffort:saved.efforts[p]}:{})};
   }
   function save(patch){
     const p=patch?.provider;
     if(!PROVIDERS.includes(p))throw invalid("Unknown cloud provider");
-    const next={...saved,models:{...saved.models},keys:{...saved.keys}};
+    const next={...saved,models:{...saved.models},keys:{...saved.keys},efforts:{...saved.efforts}};
     if(patch.model!==undefined){
       if(!modelValid(p,patch.model))throw invalid("Invalid model; OpenRouter must use a free route");
       next.models[p]=patch.model;
+    }
+    if(patch.reasoningEffort!==undefined){
+      if(!effortOptions(p,next.models[p]).includes(patch.reasoningEffort))throw invalid("Unsupported reasoning effort for this model");
+      next.efforts[p]=patch.reasoningEffort;
     }
     if(patch.apiKey!==undefined){
       if(!keyValid(patch.apiKey))throw invalid("API key must be 12–512 non-whitespace characters");

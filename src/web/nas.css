@@ -106,3 +106,10 @@ html:has(.nas-app),body:has(.nas-app),body:has(.nas-gate){background:#211412!imp
 .nas-app .nas-channel-confirm-actions button:focus-visible{outline:2px solid #ffc18a;outline-offset:3px;}
 @media(max-width:780px){.nas-app .nas-channel-grid{grid-template-columns:minmax(0,1fr);}}
 @media(prefers-reduced-motion:reduce){.nas-app .nas-updates .nas-channel-card{transition:none;}}
+
+.nas-app .nas-composer-stack{min-width:0;width:100%;display:grid;gap:7px;}
+.nas-app .nas-thinking-row{display:flex;justify-content:flex-end;align-items:center;padding-inline:4px;}
+.nas-app .nas-thinking-select{display:inline-flex;align-items:center;gap:7px;border:1px solid #a86c494d;border-radius:999px;padding:4px 9px;background:#402c26;color:#e8c7b0;font-size:12px;}
+.nas-app .nas-thinking-select select{font:inherit;color:#ffd29d;background:transparent;border:0;padding:2px 4px;cursor:pointer;outline-offset:3px;}
+.nas-app .nas-thinking-select select option{background:#392820;color:#ffe0b9;}
+.nas-app .nas-thinking-select select:disabled{opacity:.65;cursor:default;}

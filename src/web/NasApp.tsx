@@ -20,7 +20,7 @@ import {NasKnowledge} from "./NasKnowledge";
 import {NasBrainLab} from "./NasBrainLab";
 import {NasTiming} from "./NasTiming";
 import {NasModels} from "./NasModels";
-import type {NasModels as ModelSettings,CloudProvider} from "./nas-client";
+import type {NasModels as ModelSettings,CloudProvider,ReasoningEffort} from "./nas-client";
 import {memoryNotice} from "./memory-notifications";
 import {nasActivity} from "./nas-activity";
 const portrait=new URL("../../assets/iki/mikan-chat-avatar.webp",import.meta.url).href;
@@ -188,6 +188,10 @@ export function NasApp(){
     const [provider,model]=JSON.parse(value) as [CloudProvider,string];
     setSwitching(true);try{applyModels(await client.saveModels({provider,model,select:true}));}catch(error){report(error);}finally{setSwitching(false);}
   };
+  const switchEffort=async(effort:ReasoningEffort)=>{
+    if(!status||busy||switching)return;
+    setSwitching(true);try{applyModels(await client.saveModels({provider:status.provider,reasoningEffort:effort}));}catch(error){report(error);}finally{setSwitching(false);}
+  };
   const refreshLibrary=async()=>{const [snapshot,list,learn]=await Promise.all([client.library(),client.chats(),client.learning()]);setLibrary(snapshot);setChats(list);setLearning(learn);};
   const setLearningFlags=async(next:LearningSettings)=>{try{await client.saveLearning(next);await refreshLibrary();}catch(error){report(error);}};
   const mutate=async<T,>(action:string,args:object):Promise<T>=>{const result=await client.memoryAction<T>(action,args);await refreshLibrary();return result;};
@@ -300,11 +304,11 @@ export function NasApp(){
       transcript={<>{!messages.length&&<div className="workspace-greeting"><PawPrint size={42}/><strong>Ready for a little conversation?</strong><span>Beholder is awake.</span></div>}
         {messages.map(message=><Bubble key={message.id} message={message} latest={message.id===latest} busy={busy}/>)}
         {notice&&<div className="workspace-system-feedback" role="status"><Sparkles size={18}/><span>{notice}</span></div>}</>}
-      composer={<form className="input-row" onSubmit={event=>void send(event)}>
+      composer={<div className="nas-composer-stack">{!!status?.reasoningOptions?.length&&<div className="nas-thinking-row"><label className="nas-thinking-select"><Brain size={14}/><span>Thinking effort</span><select aria-label="Thinking effort" value={status.reasoningEffort??""} disabled={busy||switching||!!status.busy} onChange={e=>void switchEffort(e.target.value as ReasoningEffort)}>{status.reasoningOptions.map(effort=><option key={effort} value={effort}>{({auto:"Auto",none:"Off",low:"Low",medium:"Medium",high:"High"})[effort]}</option>)}</select></label></div>}<form className="input-row" onSubmit={event=>void send(event)}>
         <textarea aria-label="Message Mikan" rows={2} placeholder="Message Mikan…" maxLength={4000} value={input} onChange={event=>setInput(event.target.value)}
           onKeyDown={event=>{if(event.key==="Enter"&&!event.shiftKey&&!event.nativeEvent.isComposing){event.preventDefault();void send();}}}/>
         <button className="send-button chat-paw-send" type="submit" aria-label="Send message" disabled={busy||switching||!input.trim()}>{busy?<LoaderCircle className="spin" size={20}/>:<WorkspaceSendPaw/>}</button>
-      </form>}/>:<section className="drawer control-center-window" role="dialog" aria-label="Mikan Control Center">
+      </form></div>}/>:<section className="drawer control-center-window" role="dialog" aria-label="Mikan Control Center">
       <header className="drawer-header control-center-header"><button type="button" className="back-button" onClick={()=>openPage("chat")} title="Back to chat"><ArrowLeft size={20}/></button>
         <span className="control-header-glyph"><Settings2 size={22}/></span><div className="drawer-title"><strong>{tabs.find(t=>t.id===page)?.label||"Conversation log"}</strong><span>Mikan's control center · Beholder</span></div>
         <span className="control-local-indicator"><span/> NAS</span></header>

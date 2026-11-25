@@ -989,3 +989,27 @@ test("Groq stream uses native usage metadata and keeps reasoning separate from d
  }});
  assert.equal(result,"Hi!");assert.deepEqual(deltas,["Hi!"]);assert.equal(usage[0].inputTokens,500);
 });
+
+test("thinking effort defaults to medium for Groq, persists and rejects unsupported values",()=>{
+ const root=mkdtempSync(join(tmpdir(),"mikan-effort-")),store=openStore(join(root,"db.sqlite3"));
+ try{
+  const file=join(root,"providers.json"),env={GROQ_API_KEY:"synthetic-groq-secret",NVIDIA_API_KEY:"synthetic-nvidia-secret"};
+  const models=providerSettings({env,file,db:store.db});
+  const view=models.save({provider:"groq",select:true});
+  assert.equal(view.reasoningEffort,"medium");assert.deepEqual(view.reasoningOptions,["low","medium","high"]);
+  models.save({provider:"groq",reasoningEffort:"high"});
+  assert.throws(()=>models.save({provider:"groq",reasoningEffort:"none"}),/Unsupported reasoning/);
+  const reopened=providerSettings({env,file,db:store.db});assert.equal(reopened.active().reasoningEffort,"high");
+  assert.equal(reopened.save({provider:"nvidia",select:true}).reasoningEffort,"auto");
+  assert.equal(reopened.save({provider:"groq",select:true}).reasoningEffort,"high");
+ }finally{store.db.close();rmSync(root,{recursive:true,force:true});}
+});
+test("ordinary Groq chat uses selected thinking effort without an extra inference call",async()=>{
+ const {executeNasTurn}=await import("../turn.mjs"),store=openStore(":memory:");
+ try{
+  const chat=store.newConversation(),question="That's a funny story.";store.append(chat.id,"user",question);
+  let calls=0;
+  await executeNasTurn({store,conversationId:chat.id,question,selected:{provider:"groq",model:"openai/gpt-oss-120b",historyChars:16000,reasoningEffort:"medium"},mode:"off",reserve:()=>calls++,canRequest:()=>true,requestModel:async args=>{assert.equal(args.agentEffort,"medium");args.onDelta("Haha!");return "Haha!";}});
+  assert.equal(calls,1);
+ }finally{store.db.close();}
+});
