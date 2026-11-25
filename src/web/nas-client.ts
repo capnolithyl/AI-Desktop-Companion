@@ -10,10 +10,10 @@ export type LearningStatus={
   history:{id:number;kind:string;previous:string;replacement:string;changedAt:number}[];
 };
 export type LibrarySnapshot={facts:UserFact[];characterFacts:CharacterFact[];interests:InterestItem[];sessionSummaries:SessionSummary[]};
-export type CloudProvider="nvidia"|"openrouter"|"gemini";
+export type CloudProvider="nvidia"|"openrouter"|"gemini"|"groq";
 export type ResearchMode="off"|"simple"|"strict";
 export type NasSource={url:string;title:string;kind:"preview"|"page"|"notion"|"cached-web";publishedDate:string|null;id?:string;syncedAt?:number;fetchedAt?:number;fromCache?:boolean;coverage?:string};
-export type NasTiming={mode:ResearchMode;totalMs:number;firstTextMs:number|null;modelCalls:number;stages:{stage:string;startMs:number;elapsedMs:number;success:boolean;errorCode?:string}[];inference?:{stage:string;finishReason:string|null;outputTokens:number|null;reasoningTokens:number|null;maxTokens:number;sawDone?:boolean}[]};
+export type NasTiming={mode:ResearchMode;totalMs:number;firstTextMs:number|null;modelCalls:number;stages:{stage:string;startMs:number;elapsedMs:number;success:boolean;errorCode?:string}[];inference?:{stage:string;finishReason:string|null;inputTokens?:number|null;outputTokens:number|null;reasoningTokens:number|null;maxTokens:number;sawDone?:boolean}[]};
 export type NasInference={researchTask?:unknown;provider:CloudProvider;requestedModel:string;actualModel:string|null;outcome:"completed"|"failed";upstreamStatus?:number|null;errorCode?:string;sources?:NasSource[];timing?:NasTiming};
 export type NasMessage={id:string;role:"user"|"assistant";content:string;createdAt:number;inference?:NasInference};
 export type ProviderEntry={provider:CloudProvider;model:string;models:string[];configured:boolean;credentialSource:"nas"|"environment"|"missing";imageInput:"unsupported";nativeTools:"unverified"};

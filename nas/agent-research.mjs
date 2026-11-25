@@ -28,7 +28,7 @@ const currentLookup=q=>/\b(?:latest|current|right now|as of today|search again|v
 const marker=s=>/^(?:RESEARCH_DONE|NO_PUBLIC_RESEARCH|NEED_PRIVATE_CONTEXT)\s*\.?$/i.test(s.trim());
 const usableProse=s=>typeof s==="string"&&s.trim()&&!rawToolText(s)&&!marker(s);
 const clip=s=>({...s,content:String(s.content??"").slice(0,6000)});
-export async function agentResearch({mode,history,generate,compose=generate,canRequest,search,read,activity=()=>{},signal,now=new Date(),ownerFacts=[],answerSystem="",publicVoice="",diagnostics=false,previousEvidence=[]}){
+export async function agentResearch({mode,history,generate,compose=generate,canRequest,search,read,activity=()=>{},signal,now=new Date(),ownerFacts=[],answerSystem="",publicVoice="",diagnostics=false,previousEvidence=[],compact=false}){
   const strict=mode==="strict",sources=[],seenQueries=new Set(),seenReads=new Set();
   const question=history.at(-1)?.content??"";
   const priorUsers=history.slice(0,-1).filter(m=>m.role==="user");
@@ -43,6 +43,7 @@ export async function agentResearch({mode,history,generate,compose=generate,canR
   // Only the immediately previous, screened user turn can lend evidence.
   // No previous assistant prose, private documents, or arbitrary cache lookup.
   if(lastPrior&&screened.at(-1)===lastPrior)for(const source of carrySources(previousEvidence,clock))if(!sources.some(s=>s.url===source.url))sources.push(source);
+  if(compact)for(const source of sources)source.content=source.content.slice(0,1000);
   const priorCount=sources.length;
   const liveDate=new Intl.DateTimeFormat("en-CA",{timeZone:"America/Detroit",year:"numeric",month:"2-digit",day:"2-digit"}).format(now);
   const request={currentTime:now.toISOString(),localDate:liveDate,recentUserTurns:screened,currentUser:question,...(priorCount?{previousPublicSources:sources.map((s,i)=>({number:i+1,...s}))}:{})};
@@ -112,7 +113,7 @@ export async function agentResearch({mode,history,generate,compose=generate,canR
               if(selected.length>=limit)break;
             }
             if(selected.some(i=>String(freshPreviews.get(i)??sources[i].content??"").trim()))freshLookup=true;
-            record("Web search",found.length+" results; "+selected.length+" selected",[decision.query]);result={sources:selected.map(i=>({...snapshot()[i],content:sources[i].content.slice(0,2400),...(freshPreviews.has(i)?{freshSearchPreview:freshPreviews.get(i)}:{})})),remainingSearches:maxSearches-searched,remainingReads:maxReads-readCount,remainingSourceSlots:maxSources-sources.length};
+            record("Web search",found.length+" results; "+selected.length+" selected",[decision.query]);result={sources:selected.map(i=>({...snapshot()[i],content:sources[i].content.slice(0,compact?800:2400),...(freshPreviews.has(i)?{freshSearchPreview:freshPreviews.get(i)}:{})})),remainingSearches:maxSearches-searched,remainingReads:maxReads-readCount,remainingSourceSlots:maxSources-sources.length};
           }
         }else if(call.function.name==="read_webpage"&&readCount<maxReads){
           const proposed=Number.isInteger(args.source)?args.source-1:-1;
@@ -134,7 +135,7 @@ export async function agentResearch({mode,history,generate,compose=generate,canR
               if(index>=0)sources[index]=clip({...page,url,publishedDate:page.publishedDate??sources[index].publishedDate,retrievedAt:retrievalTime(page),priorTurn:false});
               else add(page);
               if(!page.fromCache)freshLookup=true;
-              record(page.fromCache?"Cached webpage read":"Webpage read",page.title,[url]);result={source:snapshot()[index>=0?index:sources.findIndex(s=>s.url===webURL(page.url)?.href)]};
+              record(page.fromCache?"Cached webpage read":"Webpage read",page.title,[url]);const entry=snapshot()[index>=0?index:sources.findIndex(s=>s.url===webURL(page.url)?.href)];result={source:compact&&entry?{...entry,content:entry.content.slice(0,2400)}:entry};
             }
           }
         }

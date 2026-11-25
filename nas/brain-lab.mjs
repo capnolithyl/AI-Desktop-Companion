@@ -1,6 +1,6 @@
 import {randomUUID} from "node:crypto";
 import {EVAL_FACTS,EVAL_SCENARIOS} from "../src/brain-eval-fixtures.ts";
-import {CLOUD_EVAL_BUDGETS,paceCloudBrainTurn} from "../src/brain-eval-cloud.ts";
+import {NAS_CLOUD_EVAL_BUDGETS,paceCloudBrainTurn} from "../src/brain-eval-cloud.ts";
 import {openStore} from "./storage.mjs";
 import {executeNasTurn,turnTrace} from "./turn.mjs";
 const invalid=(message,status=400)=>Object.assign(Error(message),{status});
@@ -27,13 +27,13 @@ export function createBrainLab({db,models,requestModel,search,read,build,pace=pa
   function start(body){
     if(controller)throw invalid("Brain Lab is already running",409);
     const {provider,model,scenarioIds,mode,repetitions,publicAgent=false}=body??{};
-    if(typeof publicAgent!=="boolean"||publicAgent&&provider!=="nvidia")throw invalid("Native agent requires NVIDIA");
+    if(typeof publicAgent!=="boolean"||publicAgent&&!["nvidia","groq"].includes(provider))throw invalid("Native agent requires NVIDIA or Groq");
     if(!["simple","strict","off"].includes(mode)||![1,2,3,5].includes(repetitions)||!Array.isArray(scenarioIds)||!scenarioIds.length||new Set(scenarioIds).size!==scenarioIds.length)throw invalid("Select scenarios, mode and repetitions");
     const selected=models.configFor(provider,model);
     const scenarios=scenarioIds.map(id=>EVAL_SCENARIOS.find(s=>s.id===id));
     if(scenarios.some(s=>!s||unsupported(s)))throw invalid("Select supported NAS scenarios only");
     const total=scenarios.reduce((n,s)=>n+s.steps.length,0)*repetitions;
-    const budget=CLOUD_EVAL_BUDGETS[provider];
+    const budget=NAS_CLOUD_EVAL_BUDGETS[provider];
     if(total>budget.maxTurns)throw invalid("Choose at most "+budget.maxTurns+" turns for "+provider);
     if(mode==="off"&&scenarios.some(s=>s.steps.some(t=>t.expect.web===true||t.expect.route==="research")))throw invalid("Enable Simple or Strict for web scenarios");
     if(!models.available(provider))throw models.quotaError(provider);

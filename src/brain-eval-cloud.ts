@@ -38,6 +38,9 @@ export const CLOUD_EVAL_BUDGETS: Record<CloudEvalProvider,CloudBudget> = {
     estimatedCallsPerTurn:5,description:"Conservative 1 turn/minute; Gemini RPM, TPM and daily free limits depend on your model/project."}
 };
 
+// NAS-only additions; desktop provider types and native commands stay unchanged.
+export const NAS_CLOUD_EVAL_BUDGETS:Record<CloudEvalProvider|"groq",CloudBudget|{provider:"groq";maxTurns:number;minimumIntervalMs:number;estimatedCallsPerTurn:number;description:string}>={...CLOUD_EVAL_BUDGETS,groq:{provider:"groq",maxTurns:12,minimumIntervalMs:60000,estimatedCallsPerTurn:6,description:"Free tier: start at most one benchmark turn per minute. Multiple calls and large contexts can still exhaust Groq token limits."}};
+
 export function brainCloudChoices(settings:BrainModelSettings):BrainEvalModelChoice[]{
   const choices:BrainEvalModelChoice[]=NVIDIA_MODELS.map(model=>({
     id:"nvidia:"+model,provider:"nvidia" as const,model,
@@ -104,10 +107,10 @@ export function validateCloudTurnBudget(
   }
 }
 
-const nextProviderTurn=new Map<CloudEvalProvider,number>();
+const nextProviderTurn=new Map<CloudEvalProvider|"groq",number>();
 /** All Brain Lab runs share this in-process gate. No timer runs in the background. */
 export async function paceCloudBrainTurn(
-  provider:CloudEvalProvider,signal:AbortSignal,
+  provider:CloudEvalProvider|"groq",signal:AbortSignal,
   onWait:(milliseconds:number)=>void=()=>{},
   now:()=>number=Date.now,
   sleep:(ms:number,signal:AbortSignal)=>Promise<void>=abortableCloudSleep
@@ -117,7 +120,7 @@ export async function paceCloudBrainTurn(
   const delay=Math.max(0,earliest-now());
   if(delay>0){onWait(delay);await sleep(delay,signal);}
   if(signal.aborted)throw new Error("Brain Lab cloud request stopped");
-  nextProviderTurn.set(provider,now()+CLOUD_EVAL_BUDGETS[provider].minimumIntervalMs);
+  nextProviderTurn.set(provider,now()+NAS_CLOUD_EVAL_BUDGETS[provider].minimumIntervalMs);
 }
 export function abortableCloudSleep(ms:number,signal:AbortSignal):Promise<void>{
   if(signal.aborted)return Promise.reject(new Error("Brain Lab stopped during cloud pacing"));

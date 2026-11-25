@@ -954,3 +954,38 @@ test("provider exposes safe quota headers and HTTP status without raw response b
  await assert.rejects(()=>generateReply({config:{provider:"nvidia",model:"test",key:"synthetic-test-key"},system:"test",history:[],onResponse:r=>seen.push(r),fetchImpl:async()=>new Response("private upstream details",{status:429,headers})}),e=>e.upstreamStatus===429&&!e.message.includes("private"));
  assert.deepEqual(seen,[{status:429,headers:{"retry-after":"15","x-ratelimit-remaining-requests":"0"}}]);
 });
+
+test("Groq is selectable without exposing its key or permitting arbitrary model IDs",()=>{
+ const store=openStore(":memory:");
+ try{
+  const models=providerSettings({env:{NVIDIA_API_KEY:"synthetic-nvidia-secret"},db:store.db});
+  const view=models.save({provider:"groq",model:"openai/gpt-oss-120b",apiKey:"synthetic-groq-secret",select:true});
+  assert.equal(models.active().provider,"groq");
+  assert.equal(models.active().key,"synthetic-groq-secret");
+  assert.ok(!JSON.stringify(view).includes("synthetic-groq-secret"));
+  assert.deepEqual(view.providers.find(p=>p.provider==="groq").models,["openai/gpt-oss-120b","openai/gpt-oss-20b"]);
+  assert.equal(models.quota("groq").minuteLimit,30);
+  assert.equal(models.quota("groq").dayLimit,1000);
+  assert.throws(()=>models.save({provider:"groq",model:"unknown-model"}),/Invalid model/);
+ }finally{store.db.close();}
+});
+test("Groq native tool request uses supported GPT-OSS parameters and reports token usage",async()=>{
+ const config={provider:"groq",model:"openai/gpt-oss-120b",key:"synthetic-groq-secret"},usage=[];
+ const call={id:"c1",type:"function",function:{name:"search_web",arguments:'{"query":"short horror anime"}'}};
+ const result=await generateReply({config,system:"test",history:[{role:"user",content:"test"}],agentTools:[{type:"function",function:{name:"search_web",parameters:{type:"object"}}}],agentEffort:"medium",maxTokens:4096,onUsage:v=>usage.push(v),fetchImpl:async(url,opts)=>{
+  assert.equal(url,"https://api.groq.com/openai/v1/chat/completions");
+  const body=JSON.parse(opts.body);assert.equal(body.max_completion_tokens,2048);assert.equal(body.max_tokens,undefined);
+  assert.equal(body.reasoning_effort,"medium");assert.equal(body.include_reasoning,false);
+  assert.equal(body.chat_template_kwargs,undefined);assert.equal(body.tool_choice,"auto");
+  return Response.json({choices:[{finish_reason:"tool_calls",message:{content:null,tool_calls:[call]}}],usage:{prompt_tokens:500,completion_tokens:100}});
+ }});
+ assert.deepEqual(result.toolCalls,[call]);assert.equal(usage[0].inputTokens,500);
+});
+test("Groq stream uses native usage metadata and keeps reasoning separate from displayed text",async()=>{
+ const usage=[],deltas=[];
+ const result=await generateReply({config:{provider:"groq",model:"openai/gpt-oss-20b",key:"synthetic-groq-secret"},system:"test",history:[{role:"user",content:"hi"}],onUsage:v=>usage.push(v),onDelta:v=>deltas.push(v),fetchImpl:async(_url,opts)=>{
+ const body=JSON.parse(opts.body);assert.equal(body.stream,true);assert.equal(body.reasoning_effort,"low");assert.equal(body.stream_options,undefined);
+ return new Response('data: {"choices":[{"delta":{"reasoning":"hidden"}}]}\n\ndata: {"choices":[{"delta":{"content":"Hi!"},"finish_reason":"stop"}],"x_groq":{"usage":{"prompt_tokens":500,"completion_tokens":25}}}\n\ndata: [DONE]\n\n');
+ }});
+ assert.equal(result,"Hi!");assert.deepEqual(deltas,["Hi!"]);assert.equal(usage[0].inputTokens,500);
+});
