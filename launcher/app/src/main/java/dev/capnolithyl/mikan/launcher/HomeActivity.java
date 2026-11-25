@@ -327,7 +327,7 @@ public class HomeActivity extends Activity {
             renderSystemStats();queueSystemStats();
         }
         if(editingMixed)header.addView(action("Done",this::finishMixedEdit));else header.addView(markButton(MikanMark.GEAR,"Launcher settings",this::openSettings),new LinearLayout.LayoutParams(dp(44),dp(44)));page.addView(header);
-        if(editingMixed){page.addView(text("Hold a tile to move · hold ↘ to resize · tap for options",12,MUTED,false));gap(page,6);}
+        if(editingMixed){page.addView(text("Hold to move · hold ↘ to resize · tap − to remove apps",12,MUTED,false));gap(page,6);}
         ScrollView scroll=new ScrollView(this);scroll.setFillViewport(false);scroll.setVerticalScrollBarEnabled(true);scroll.setScrollbarFadingEnabled(true);
         page.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
         LinearLayout body=vertical();scroll.addView(body,new ScrollView.LayoutParams(-1,-2));
@@ -555,12 +555,43 @@ public class HomeActivity extends Activity {
         TextView dot=text("•",18,PEACH,true);dot.setGravity(Gravity.CENTER);dot.setBackground(shape(0xff50332b,20,false));dot.setVisibility(View.GONE);FrameLayout.LayoutParams bp=new FrameLayout.LayoutParams(dp(16),dp(16),Gravity.TOP|Gravity.RIGHT);iconFrame.addView(dot,bp);badgeViews.put(dot,app.key());
         int size=prefs.getInt("iconSize",50);int maxSize=(getResources().getConfiguration().screenWidthDp-48)/Math.max(prefs.getInt("columns",4),prefs.getInt("dockCount",5));size=Math.max(32,Math.min(size,maxSize));cell.addView(iconFrame,new LinearLayout.LayoutParams(dp(size),dp(size)));
         if(label){TextView name=text(app.label,11,CREAM,false);name.setGravity(Gravity.TOP|Gravity.CENTER_HORIZONTAL);name.setIncludeFontPadding(false);name.setMaxLines(2);name.setMinLines(2);name.setEllipsize(android.text.TextUtils.TruncateAt.END);LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(-1,-2);p.topMargin=dp(3);cell.addView(name,p); }
-        cell.setContentDescription(app.label);cell.setOnClickListener(v->launch(app));cell.setOnLongClickListener(v->{if(!drawer&&favorites.contains(app.key())&&prefs.contains("homeSlotsV1")){openHomeEditor();}else if(!drawer&&favorites.contains(app.key())){ClipData data=ClipData.newPlainText("mikan-favorite",app.key());v.startDragAndDrop(data,new View.DragShadowBuilder(v),app.key(),0);}else appOptions(app);return true;});
+        cell.setContentDescription(app.label);cell.setOnClickListener(v->launch(app));cell.setOnLongClickListener(v->{if(!drawer&&!settings&&favorites.contains(app.key()))showHomeShortcutMenu(v,app,label);else appOptions(app);return true;});
         if(!drawer&&!prefs.contains("homeSlotsV1"))cell.setOnDragListener((v,event)->{if(event.getAction()==android.view.DragEvent.ACTION_DRAG_STARTED)return event.getLocalState() instanceof String;
             if(event.getAction()==android.view.DragEvent.ACTION_DRAG_ENTERED)v.setAlpha(.55f);
             if(event.getAction()==android.view.DragEvent.ACTION_DRAG_EXITED||event.getAction()==android.view.DragEvent.ACTION_DRAG_ENDED)v.setAlpha(1f);
             if(event.getAction()==android.view.DragEvent.ACTION_DROP){String from=(String)event.getLocalState();int target=favorites.indexOf(app.key()),old=favorites.indexOf(from);if(target>=0&&old>=0&&target!=old){App source=find(from);if(app.folderKey!=null&&source!=null&&source.folderKey==null){handler.post(()->dropOnFolder(source,app.folderKey));}else{favorites.remove(old);favorites.add(target,from);saveFavorites();handler.post(this::showHome);}}return true;}return true;});
         return cell;
+    }
+    private void showHomeShortcutMenu(View anchor,App app,boolean home){
+        PopupMenu menu=new PopupMenu(this,anchor);
+        menu.getMenu().add(0,1,0,home?"Remove from Home":"Remove from dock");
+        menu.getMenu().add(0,2,1,"Move / edit layout");
+        menu.getMenu().add(0,3,2,app.folderKey==null?"App options":"Folder options");
+        menu.setOnMenuItemClickListener(item->{
+            switch(item.getItemId()){
+                case 1:removeHomeShortcut(app.key());return true;
+                case 2:openHomeEditor();return true;
+                case 3:appOptions(app);return true;
+                default:return false;
+            }
+        });menu.show();
+    }
+    private void removeHomeShortcut(String key){
+        if(key==null||!favorites.contains(key))return;
+        App app=find(key);String name=app!=null?app.label:"Shortcut";
+        if(editingHome){ensureHomeSlots();persistSlots();}
+        if(editingMixed&&mixedScroll!=null)mixedScrollY=mixedScroll.getScrollY();
+        selectedSlot=-1;favorites.remove(key);saveFavorites();
+        if(prefs.contains("mixedGridV1")){
+            MixedLayout layout=mixedLayout();layout.forget(key);prefs.edit().putString("mixedGridV1",layout.encode()).apply();
+        }
+        Toast.makeText(this,name+" removed from Home",Toast.LENGTH_SHORT).show();
+        refreshScreen();
+    }
+    private TextView removeShortcutButton(String label,Runnable remove){
+        TextView button=text("−",22,CREAM,true);button.setGravity(Gravity.CENTER);
+        button.setBackground(shape(0xff704339,20,true));button.setContentDescription("Remove "+label+" from Home");
+        button.setFocusable(true);button.setOnClickListener(v->remove.run());return button;
     }
     private void addGrid(LinearLayout parent,List<App> items,int columns){
         for(int i=0;i<items.size();i+=columns){LinearLayout row=horizontal();row.setGravity(Gravity.TOP);
@@ -1155,6 +1186,7 @@ public class HomeActivity extends Activity {
             public void changed(Map<String,MixedLayout.Rect> next){if(editingMixed&&homePage==pageAt)saveMixedChange(saved,next);}
             public void rejected(){Toast.makeText(HomeActivity.this,"That position overlaps another tile or is too small.",Toast.LENGTH_SHORT).show();}
             public void editItem(String key){if(editingMixed&&homePage==pageAt)editMixedItem(key,columns,saved,current,specs);}
+            public void removeItem(String key){if(editingMixed&&homePage==pageAt&&!key.startsWith("widget:"))removeHomeShortcut(key);}
         });
         grid.setOnLongClickListener(v->{if(!editingMixed)openHomeEditor();return true;});
         for(MixedLayout.Spec spec:specs){
@@ -1187,8 +1219,8 @@ public class HomeActivity extends Activity {
     private void editMixedItem(String key,int columns,MixedLayout model,LinkedHashMap<String,MixedLayout.Rect> current,List<MixedLayout.Spec> specs){
         MixedLayout.Rect old=current.get(key);if(old==null)return;
         if(!key.startsWith("widget:")){
-            new AlertDialog.Builder(this).setTitle(mixedLabel(key)).setItems(new String[]{"Manage apps and folders","Unpin shortcut"},(d,i)->{
-                if(i==0)openPageManager();else{favorites.remove(key);saveFavorites();mixedScrollY=0;showHome();}
+            new AlertDialog.Builder(this).setTitle(mixedLabel(key)).setItems(new String[]{"Remove from Home","Manage apps and folders"},(d,i)->{
+                if(i==0)removeHomeShortcut(key);else openPageManager();
             }).setNegativeButton("Cancel",null).show();return;
         }
         MixedLayout.Spec spec=null;for(MixedLayout.Spec item:specs)if(item.key.equals(key))spec=item;
@@ -1204,9 +1236,14 @@ public class HomeActivity extends Activity {
         if(!editingMixed)return;
         if(slot>favorites.size()){Toast.makeText(this,"Fill the earlier dock slot first.",Toast.LENGTH_SHORT).show();return;}
         ArrayList<App> choices=new ArrayList<>(apps);for(String id:folders.keys()){App folder=find(id);if(folder!=null)choices.add(folder);}
-        if(choices.isEmpty())return;String[] labels=new String[choices.size()];for(int i=0;i<labels.length;i++)labels[i]=choices.get(i).label;
+        final String existing=slot<favorites.size()?favorites.get(slot):null;
+        if(choices.isEmpty()&&existing==null)return;
+        int offset=existing==null?0:1;String[] labels=new String[choices.size()+offset];
+        if(existing!=null)labels[0]="Remove from dock";
+        for(int i=0;i<choices.size();i++)labels[i+offset]=choices.get(i).label;
         new AlertDialog.Builder(this).setTitle("Dock slot "+(slot+1)).setItems(labels,(d,i)->{
-            String key=choices.get(i).key();if(find(key)==null||!editingMixed)return;int from=favorites.indexOf(key);
+            if(existing!=null&&i==0){if(editingMixed&&slot<favorites.size()&&existing.equals(favorites.get(slot)))removeHomeShortcut(existing);return;}
+            String key=choices.get(i-offset).key();if(find(key)==null||!editingMixed)return;int from=favorites.indexOf(key);
             if(from==slot)return;
             if(slot<favorites.size()&&from>=0)Collections.swap(favorites,from,slot);
             else if(slot<favorites.size()){String previous=favorites.set(slot,key);favorites.add(previous);}
@@ -1255,7 +1292,7 @@ public class HomeActivity extends Activity {
     private void showHomeEditor(){
         ensureHomeSlots();homePage=Math.max(0,Math.min(homePage,editorPageCount()-1));createPage();
         LinearLayout bar=horizontal();bar.addView(action("Done",this::finishHomeEdit));TextView title=text("  Edit Home",21,CREAM,true);bar.addView(title,new LinearLayout.LayoutParams(0,-2,1));page.addView(bar);
-        gap(page,8);page.addView(text("Hold and drag a shortcut, or tap it then tap a destination. Changes save immediately.",13,MUTED,false));gap(page,10);
+        gap(page,8);page.addView(text("Drag or tap to move shortcuts. Tap − to remove. Changes save immediately.",13,MUTED,false));gap(page,10);
         page.addView(action(prefs.getBoolean("mixedHome",false)?"Back to live grid":"Try live mixed grid",()->{if(!prefs.getBoolean("mixedHome",false)){new AlertDialog.Builder(this).setTitle("Enable mixed grid?").setMessage("Apps and widgets share a scrollable grid. Your existing section layout remains available in Home settings.").setNegativeButton("Cancel",null).setPositiveButton("Enable",(d,i)->{enableMixedLayout();editingHome=false;editingMixed=true;mixedScrollY=0;showHome();}).show();}else{editingHome=false;editingMixed=true;mixedScrollY=0;showHome();}}));gap(page,6);
         LinearLayout nav=horizontal();nav.addView(action("‹",()->editorPage(-1)));TextView position=text("Page "+(homePage+1)+" / "+editorPageCount(),15,CREAM,true);position.setGravity(Gravity.CENTER);nav.addView(position,new LinearLayout.LayoutParams(0,-2,1));nav.addView(action("›",()->editorPage(1)));page.addView(nav);gap(page,8);
         if(selectedSlot>=0){String selected=homeSlots.at(selectedSlot);App app=selected==null?null:find(selected);page.addView(text(app==null?"Select a shortcut":"Moving "+app.label+" · tap a cell",13,PEACH,true));gap(page,6);}
@@ -1280,7 +1317,14 @@ public class HomeActivity extends Activity {
                     if(event.getAction()==android.view.DragEvent.ACTION_DROP){int from=(Integer)event.getLocalState();handler.post(()->moveHomeSlot(from,slot));return true;}
                     return true;
                 });
-                LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,-2,1);lp.setMargins(dp(2),dp(3),dp(2),dp(3));line.addView(cell,lp);
+                // Keep the removal button separate from the drag surface.
+                FrameLayout wrapper=new FrameLayout(this);wrapper.addView(cell,new FrameLayout.LayoutParams(-1,-2));
+                if(key!=null){
+                    TextView remove=removeShortcutButton(app==null?"unavailable shortcut":app.label,()->{if(editingHome&&key.equals(homeSlots.at(slot)))removeHomeShortcut(key);});
+                    FrameLayout.LayoutParams rp=new FrameLayout.LayoutParams(dp(36),dp(36),Gravity.TOP|Gravity.RIGHT);
+                    wrapper.addView(remove,rp);
+                }
+                LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,-2,1);lp.setMargins(dp(2),dp(3),dp(2),dp(3));line.addView(wrapper,lp);
             }body.addView(line);
         }
         gap(body,12);body.addView(text("WIDGETS ON THIS PAGE",12,MUTED,true));

@@ -1,6 +1,6 @@
 # Mikan Launcher — living feature reference
 
-**Source baseline:** v0.12.4 (versionCode 24), alphabet sections and animated index, 2026-11-25. See Git history for implementation commit.
+**Source baseline:** v0.12.5 (versionCode 25), direct home shortcut removal, 2026-11-25. See Git history for implementation commit.
 **Development:** [PR #117](https://github.com/capnolithyl/AI-Desktop-Companion/pull/117), branch `feature/mikan-launcher-v01`. Check current branch and Gradle version before changing this document.
 **Purpose:** a free, personal, offline-first Android launcher inspired by the Mikan OS home-screen mockup. Separate from Pocket Mikan, desktop Mikan and the NAS. This document tracks the launcher only.
 
@@ -22,9 +22,10 @@ Build success, release publication, installation and individual feature verifica
 | Drawer customization | 0.12.3 | Right-edge #/A–Z scrubber (nearest populated section, animated enlarged active/neighbor letters since v0.12.4, haptics); alphabetical ascending/descending, local recent/frequent sorting, user-assigned categories, hide/unhide, independent 3–5 columns. Index hidden while searching or nonalphabetical. Hidden applies to drawer only; Home and quick search retained. Sort/category/hide/density settings backed up; launch history local and excluded, clearable. | Implemented; CI/device pending. |
 | Alphabet sections and wave | 0.12.4 | Default alphabetical modes group apps beneath full-width populated #/A–Z headings; partial rows do not mix letters. Virtualized ListView recycles headers and rows of app cells; index jumps to headers. Continuous finger-position wave expands active/neighbor letters leftward, then settles on release; respects disabled system animations. No centered popup; wave replaces it. Search and history sorts use flat rows. | Implemented; CI/device pending. |
 | App drawer | 0.1 / 0.11.4 / 0.12.4 | Search installed launchable apps by label or package; swipe up near bottom opens full drawer; its own search field opens keyboard. Native adapter-backed ListView creates/recycles visible header and app rows, filters existing catalog without rebuilding the drawer; 3–5 independently configurable columns, existing icons, badge updates, and click/long-press actions. | Implemented; device latency, search, scroll and launch regression pending. |
+| Direct shortcut removal | 0.12.5 | Long-press pinned Home/dock icon for anchored Remove from Home/dock and Move/edit layout menu. Visible minus controls on app/folder tiles in both editors; live dock picker has Remove action. Unpins only, leaves app installed, folders/membership and icons intact; preserves sparse positions, clears removed mixed placement. Legacy packed mode and dock prefix still shift remaining apps. | Implemented; CI/device pending. |
 | Favorites | 0.1 | Long-press drawer app to pin; drawer/Manage favorites menu to unpin and move; saved locally. | Favorites visible across screenshots; persistence on updates observed, complete CRUD pending. |
 | Dock | 0.1–0.2 | First 3–5 available pinned entries, configurable, persists across pages. Default 5; floating dock (default on in v0.8) or framed dock. | Floating dock observed in v0.8; toggle pending. |
-| App rearrangement | 0.2 | Hold and drag pinned app onto another visible pinned tile; menu-based ordering and moving between pages. | Implemented; gesture and cross-page tests pending. |
+| App rearrangement | 0.2 | Long-press pinned tile for Move/edit layout (v0.12.5); drag within editor, menu-based ordering and moving between pages. | Implemented; gesture and cross-page tests pending. |
 | Live mixed grid | 0.12.2 | Opt-in in Home settings or page manager. Existing app/widget page assignments feed a common rectangular grid; long-press Home enters live edit, drag tile or resize handle, tap widget for available sizes, collision rejection and adaptive row heights. Page manager remains for cross-page moves/folders; dock tap during edit swaps/replaces apps. Existing sections remain selectable. Mixed grid settings/positions backed up. Widget minimum widths vary with screen/font, no unrestricted pixel positioning. | Implemented; CI/device validation pending. |
 | Home editor | 0.12.1 | Long-press empty Home space/brand or Settings > Home screen > Edit home screen. Separate editor with drag or tap-select/tap-destination, sparse app slots, occupied app swap/create folder, page add/remove-empty/reorder, widget page moves. Changes save immediately; legacy layout remains until first edit; dock stays ordered favorites prefix (unavailable pinned entries keep their slots after explicit layout activation). Explicit legacy reorder can reset app positions. Backup includes validated slots. Up to 20 pages can be created in editor; adding directly to an empty Home slot requires the legacy dock prefix to be full. Grid-size changes reinterpret linear slot positions. Live mixed grid supports within-page widget placement/resizing in v0.12.2. | Implemented; CI/device validation pending. |
 | App grid | 0.2 | 4 or 5 columns, 1–4 configurable rows of favorites per page; automatically packed until edited; sparse positions supported in v0.12.1. Labels wrap to two lines. | Four-column layout observed; five-column layout pending. |
@@ -143,6 +144,8 @@ Weather card also exposes refresh, city, units and clear location. No full-scree
 
 | 0.12.4 | Grouped letter headers, recycled drawer rows, finger-following magnification wave and release animation | Implemented; CI/device pending. |
 
+| 0.12.5 | Direct long-press removal, editor minus controls and dock removal | Implemented; CI/device pending. |
+
 ## 7. Outstanding verification checklist
 
 - [ ] Cold boot/reboot with airplane mode and NAS down; open drawer, favorites and folders.
@@ -191,6 +194,8 @@ Weather card also exposes refresh, city, units and clear location. No full-scree
 - [ ] v0.12.3 verify alphabet scrub/index missing sections/descending, haptics and accessibility, search hides index, recent/frequent sort after launch/resume, category creation/filter/removal, hidden app management, independent density, backup/restore, unchanged quick search and launch/long-press, large catalog performance. Pure Java drawer tests in CI.
 
 - [ ] v0.12.4 verify wave follows fractional finger position, neighbors extend progressively, smooth release, disabled animation setting, missing letters, both alphabetical sorts, heading alignment, partial rows, # section, search and nonalphabetical flat rows, category filter, hide/unhide, density, recycled icons/badges, long-press/tap, scrolling and latency. Pure Java row/wave tests in CI.
+
+- [ ] v0.12.5 verify normal Home and dock long-press menu, both editor minus controls, unavailable shortcuts, mixed dock picker removal, sparse position persistence, folder preservation, re-pin, ordinary tap/drag, backup and restart. Mixed model tests include forgetting removed placement.
 
 ## 8. Roadmap (not implemented)
 

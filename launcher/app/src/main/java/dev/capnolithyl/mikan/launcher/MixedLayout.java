@@ -61,5 +61,6 @@ final class MixedLayout {
             result.put(spec.key,found);
         }return result;
     }
+    void forget(String key){saved.remove(key);}
     void remember(Map<String,Rect> current,Set<String> keep){saved.keySet().retainAll(keep);saved.putAll(current);}
 }

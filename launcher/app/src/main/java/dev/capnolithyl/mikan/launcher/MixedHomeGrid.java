@@ -15,7 +15,7 @@ import java.util.*;
 
 /** Scrollable grid with content-aware row heights. Editing handles do not intercept normal widget actions. */
 final class MixedHomeGrid extends ViewGroup {
-    interface Callbacks {void changed(Map<String,MixedLayout.Rect> layout);void rejected();void editItem(String key);}
+    interface Callbacks {void changed(Map<String,MixedLayout.Rect> layout);void rejected();void editItem(String key);void removeItem(String key);
     private final Map<String,MixedLayout.Rect> positions;
     private final Map<String,MixedLayout.Spec> specs=new HashMap<>();
     private final Map<View,String> keys=new LinkedHashMap<>();
@@ -42,6 +42,12 @@ final class MixedHomeGrid extends ViewGroup {
             if(key.startsWith("widget:")){
                 TextView handle=new TextView(getContext());handle.setText("↘");handle.setTextColor(0xffffe9d5);handle.setTextSize(17);handle.setGravity(Gravity.CENTER);handle.setContentDescription("Resize "+key);handle.setBackground(MikanTheme.tile(getContext()));handle.setOnClickListener(v->callbacks.editItem(key));handle.setOnLongClickListener(v->start(frame,key,true));
                 FrameLayout.LayoutParams hp=new FrameLayout.LayoutParams(dp(36),dp(36),Gravity.BOTTOM|Gravity.RIGHT);frame.addView(handle,hp);
+            }else{
+                TextView remove=new TextView(getContext());remove.setText("−");remove.setTextSize(22);remove.setTextColor(0xffffe9d5);remove.setGravity(Gravity.CENTER);
+                GradientDrawable background=new GradientDrawable();background.setColor(0xff704339);background.setCornerRadius(dp(18));background.setStroke(dp(1),0xffb68158);remove.setBackground(background);
+                CharSequence label=content.getContentDescription();remove.setContentDescription("Remove "+(label==null?"shortcut":label)+" from Home");remove.setFocusable(true);
+                remove.setOnClickListener(v->callbacks.removeItem(key));
+                frame.addView(remove,new FrameLayout.LayoutParams(dp(36),dp(36),Gravity.TOP|Gravity.RIGHT));
             }
         }
         keys.put(frame,key);addView(frame,new ViewGroup.LayoutParams(-1,-2));
