@@ -44,6 +44,21 @@ test("NAS storage preserves and reuses desktop-compatible SQLite records",()=>{
   } finally {rmSync(root,{recursive:true,force:true});}
 });
 
+test("NAS history preserves insertion order for messages with identical timestamps",()=>{
+  const store=openStore(":memory:");
+  try{
+    const chat=store.newConversation();
+    const first=store.append(chat.id,"user","First");
+    const second=store.append(chat.id,"assistant","Second");
+    const third=store.append(chat.id,"user","Third");
+    store.db.prepare("UPDATE messages SET created_at=? WHERE conversation_id=?").run(1700000000000,chat.id);
+    assert.deepEqual(store.messages(chat.id).map(m=>m.id),[first.id,second.id,third.id]);
+    assert.deepEqual(store.messages(chat.id,2).map(m=>m.id),[second.id,third.id]);
+    assert.equal(store.messages(chat.id,1)[0].id,third.id);
+    assert.ok(!("insertion_order" in store.messages(chat.id)[0]));
+  }finally{store.db.close();}
+});
+
 test("NAS HTTP requires a key, streams replies and persists them",async()=>{
   const root=mkdtempSync(join(tmpdir(),"mikan-api-"));
   const store=openStore(join(root,"db.sqlite3"));

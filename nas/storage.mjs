@@ -63,8 +63,8 @@ export function openStore(path) {
   function messages(id, limit = 80) {
     if (!exists(id)) return null;
     return db.prepare(`SELECT id,role,content,created_at AS createdAt,metadata_json FROM
-       (SELECT id,role,content,created_at,metadata_json FROM messages WHERE conversation_id=?
-        ORDER BY created_at DESC,rowid DESC LIMIT ?) ORDER BY created_at ASC`)
+       (SELECT id,role,content,created_at,metadata_json,rowid AS insertion_order FROM messages WHERE conversation_id=?
+        ORDER BY created_at DESC,rowid DESC LIMIT ?) ORDER BY created_at ASC,insertion_order ASC`)
       .all(id, limit).map(({metadata_json,...message})=>{
         try{const inference=JSON.parse(metadata_json)?.nasInference;return inference?{...message,inference}:message;}catch{return message;}
       });
