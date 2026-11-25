@@ -12,6 +12,8 @@ import android.graphics.Typeface;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
 import android.graphics.drawable.RippleDrawable;
+import android.graphics.drawable.TransitionDrawable;
+import android.animation.ValueAnimator;
 import android.view.Gravity;
 import android.view.View;
 import android.widget.FrameLayout;
@@ -25,11 +27,17 @@ final class MikanCard {
     private final FrameLayout root;
     private final TextView greeting,subtitle,actionHint;
     private final LinearLayout bubble;
+    private final ImageView picture;
+    private final Drawable fallbackArtwork;
+    private final java.util.function.Function<MikanExpression,Drawable> expressionArt;
+    private MikanExpression shownExpression;
+    private Drawable shownArtwork;
+    private int artRevision;
     private MikanRemarks.Remark currentRemark;
     private boolean bubbleTouch;
     private String fallback="";
-    MikanCard(Context context,Drawable artwork,boolean transparent,String shortcutLabel,Runnable open,java.util.function.Consumer<MikanRemarks.Remark> onRemark){
-        this.context=context;
+    MikanCard(Context context,Drawable artwork,boolean transparent,String shortcutLabel,Runnable open,java.util.function.Consumer<MikanRemarks.Remark> onRemark,java.util.function.Function<MikanExpression,Drawable> expressionArt){
+        this.context=context;this.fallbackArtwork=artwork;this.expressionArt=expressionArt;
         root=new FrameLayout(context);root.setMinimumHeight(dp(172));root.setClipToOutline(true);
         GradientDrawable background=MikanTheme.panel(context,25);
         root.setBackground(background);root.setElevation(dp(2));
@@ -37,7 +45,7 @@ final class MikanCard {
         root.addView(row,new FrameLayout.LayoutParams(-1,-2));
         FrameLayout art=new FrameLayout(context);
         row.addView(art,new LinearLayout.LayoutParams(0,-1,0.94f));
-        ImageView picture=new ImageView(context);picture.setImageDrawable(artwork);picture.setScaleType(transparent?ImageView.ScaleType.FIT_END:ImageView.ScaleType.CENTER_CROP);
+        picture=new ImageView(context);picture.setImageDrawable(artwork);picture.setScaleType(transparent?ImageView.ScaleType.FIT_END:ImageView.ScaleType.CENTER_CROP);
         art.addView(picture,new FrameLayout.LayoutParams(-1,-1));
         if(!transparent){
             View fade=new View(context);
@@ -79,7 +87,7 @@ final class MikanCard {
     }
     void setRemark(MikanRemarks.Remark value){
         if(bubbleTouch)return;
-        currentRemark=value;String note=value==null?fallback:value.text;
+        currentRemark=value;updateExpression(value==null?MikanExpression.DEFAULT:value.expression);String note=value==null?fallback:value.text;
         if(!note.contentEquals(subtitle.getText()))subtitle.setText(note);
         boolean actionable=value!=null&&value.actionable();
         String hint=actionable?value.label+" ↗":"";
@@ -88,6 +96,20 @@ final class MikanCard {
         bubble.setClickable(value!=null);bubble.setFocusable(value!=null);
         String description=greeting.getText()+". "+note+(actionable?". Open "+value.label:value!=null?". Tap for another remark.":"");
         if(!description.contentEquals(bubble.getContentDescription()==null?"":bubble.getContentDescription()))bubble.setContentDescription(description);
+    }
+    private void updateExpression(MikanExpression expression){
+        if(expressionArt==null||shownExpression==expression)return;
+        shownExpression=expression;
+        Drawable next=expressionArt.apply(expression);if(next==null)next=fallbackArtwork;
+        Drawable previous=shownArtwork;shownArtwork=next;
+        int revision=++artRevision;
+        if(previous==null||next==null||previous==next||!picture.isAttachedToWindow()||!ValueAnimator.areAnimatorsEnabled()){
+            picture.setImageDrawable(next);return;
+        }
+        TransitionDrawable transition=new TransitionDrawable(new Drawable[]{previous,next});
+        transition.setCrossFadeEnabled(true);picture.setImageDrawable(transition);transition.startTransition(220);
+        final Drawable target=next;
+        picture.postDelayed(()->{if(artRevision==revision)picture.setImageDrawable(target);},240);
     }
     void updateGreeting(int hour){
         String hello=hour<5?"Still awake? ♡":hour<12?"Good morning ♡":hour<18?"Good afternoon ♡":"Good evening ♡";

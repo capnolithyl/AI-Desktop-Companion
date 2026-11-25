@@ -14,7 +14,8 @@ final class MikanRemarks {
     static final class Remark {
         final String text,packageName,label;
         final Action action;
-        Remark(String text,Action action,String packageName,String label){this.text=text;this.action=action;this.packageName=packageName;this.label=label;}
+        final MikanExpression expression;
+        Remark(String text,Action action,String packageName,String label,MikanExpression expression){this.text=text;this.action=action;this.packageName=packageName;this.label=label;this.expression=expression;}
         String key(){return action==Action.NONE?text:action.name()+":"+packageName;}
         boolean actionable(){return action!=Action.NONE;}
     }
@@ -25,9 +26,9 @@ final class MikanRemarks {
         return p.getBoolean("mikanRemarks",true)&&p.getBoolean("mikanNotifyHints",true)&&p.getInt("mikanPage",1)>0;
     }
     private static void addApp(List<Remark> options,Set<String> packages,String pkg,String label,String text){
-        if(packages.contains(pkg))options.add(new Remark(text,Action.APP,pkg,label));
+        if(packages.contains(pkg))options.add(new Remark(text,Action.APP,pkg,label,MikanExpression.SURPRISED));
     }
-    private static Remark idle(String text){return new Remark(text,Action.NONE,"","");}
+    private static Remark idle(String text,MikanExpression expression){return new Remark(text,Action.NONE,"","",expression);}
     void advance(){if(!previous.isEmpty()){index=(index+1)%previous.size();changedAt=SystemClock.elapsedRealtime();}}
     Remark choose(SharedPreferences prefs,Set<String> packages,String agenda,int hour){
         if(!prefs.getBoolean("mikanRemarks",true)){previous.clear();index=0;return null;}
@@ -48,14 +49,14 @@ final class MikanRemarks {
             addApp(options,packages,"com.facebook.orca","Messenger","Messenger has notifications for you ♡");
             addApp(options,packages,"com.discord","Discord","Discord has notifications for you ♡");
         }
-        if(prefs.getBoolean("mikanCalendarHints",true)&&agenda!=null)options.add(new Remark(agenda,Action.CALENDAR,"","Calendar"));
+        if(prefs.getBoolean("mikanCalendarHints",true)&&agenda!=null)options.add(new Remark(agenda,Action.CALENDAR,"","Calendar",MikanExpression.CONCERNED));
         if(prefs.getBoolean("mikanWeatherHints",true)){
-            String weather=weatherHint(prefs);if(weather!=null)options.add(new Remark(weather,Action.WEATHER,"","Weather"));
+            Remark weather=weatherRemark(prefs);if(weather!=null)options.add(weather);
         }
-        options.add(idle(hour<5?"Even cats need their beauty sleep!":hour<12?"Coffee first, world domination later.":hour<18?"Don't forget a little stretch and water ♡":"A cozy evening sounds purrfect."));
-        options.add(idle("Your little pocket companion is on duty ♡"));
-        options.add(idle("One task at a time. You've got this!"));
-        options.add(idle("I vote for a tiny coffee break."));
+        options.add(idle(hour<7||hour>=22?"Even cats need their beauty sleep!":hour<12?"Coffee first, world domination later.":hour<18?"Don't forget a little stretch and water ♡":"A cozy evening sounds purrfect.",MikanExpression.idle(hour)));
+        options.add(idle("Your little pocket companion is on duty ♡",MikanExpression.DEFAULT));
+        options.add(idle("Tiny victories deserve a celebration! ♡",MikanExpression.EXCITED));
+        options.add(idle("I vote for a tiny coffee break.",MikanExpression.SMUG));
         // Compare stable action identities, not a changing countdown or temperature.
         // Otherwise calendar countdowns can continually reset the rotation.
         List<String> keys=new ArrayList<>();for(Remark option:options)keys.add(option.key());
@@ -64,7 +65,8 @@ final class MikanRemarks {
         else if(now-changedAt>=ROTATE_MS){index=(index+1)%options.size();changedAt=now;}
         return options.get(index);
     }
-    static String weatherHint(SharedPreferences prefs){
+    static String weatherHint(SharedPreferences prefs){Remark remark=weatherRemark(prefs);return remark==null?null:remark.text;}
+    private static Remark weatherRemark(SharedPreferences prefs){
         long age=System.currentTimeMillis()-prefs.getLong("weatherAt",0);
         if(age<0||age>=WEATHER_TTL||prefs.getString("weatherCoords","").isEmpty())return null;
         try{
@@ -73,13 +75,15 @@ final class MikanRemarks {
             if(!Double.isFinite(c))return null;
             boolean f=prefs.getBoolean("weatherF",true);
             String temp=Math.round(f?c*9/5+32:c)+"°"+(f?"F":"C");
-            if(code>=95&&code<=99)return "Thunderstorms in the latest weather update. Cozy indoors?";
-            if((code>=71&&code<=77)||code==85||code==86)return "Snow and "+temp+" outside. Stay warm ♡";
-            if((code>=51&&code<=67)||(code>=80&&code<=82))return "Looks rainy out there. Umbrella time!";
-            if(c<=5)return "Brrr, "+temp+" outside. Bundle up!";
-            if(c>=28)return "It's "+temp+" outside. Remember your water!";
-            if(code<=1&&code>=0)return (data.optBoolean("day",true)?"Clear skies and ":"A clear night at ")+temp+". Nice!";
-            if(code==2||code==3||code==45||code==48)return "It's "+temp+" out. A good day for something cozy.";
+            String text=null;
+            if(code>=95&&code<=99)text="Thunderstorms in the latest weather update. Cozy indoors?";
+            else if((code>=71&&code<=77)||code==85||code==86)text="Snow and "+temp+" outside. Stay warm ♡";
+            else if((code>=51&&code<=67)||(code>=80&&code<=82))text="Looks rainy out there. Umbrella time!";
+            else if(c<=5)text="Brrr, "+temp+" outside. Bundle up!";
+            else if(c>=28)text="It's "+temp+" outside. Remember your water!";
+            else if(code<=1&&code>=0)text=(data.optBoolean("day",true)?"Clear skies and ":"A clear night at ")+temp+". Nice!";
+            else if(code==2||code==3||code==45||code==48)text="It's "+temp+" out. A good day for something cozy.";
+            if(text!=null)return new Remark(text,Action.WEATHER,"","Weather",MikanExpression.weather(code,c));
         }catch(Exception ignored){}
         return null;
     }

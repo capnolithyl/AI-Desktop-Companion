@@ -73,6 +73,7 @@ public class HomeActivity extends Activity {
     private SettingsHub settingsUi;
     private LauncherUpdater updater;
     private PortraitStore portraits,characterArt,wallpaperArt,lockArt;
+    private ExpressionArt expressionArt;
     private String pendingIconKey;
     private boolean fileBusy;
     private MikanCard mikanCard;
@@ -113,7 +114,7 @@ public class HomeActivity extends Activity {
         getWindow().getDecorView().setSystemUiVisibility(0);
         prefs=getSharedPreferences("launcher",MODE_PRIVATE);
         updater=new LauncherUpdater(this);
-        portraits=new PortraitStore(this);
+        portraits=new PortraitStore(this);expressionArt=new ExpressionArt(this);
         characterArt=new PortraitStore(this,"mikan-character-art.webp",new String[]{"portraits/character.webp"});
         wallpaperArt=new PortraitStore(this,"custom-wallpaper.webp",new String[]{},2048);
         lockArt=new PortraitStore(this,"lock-wallpaper.webp",new String[]{},2048);
@@ -166,7 +167,7 @@ public class HomeActivity extends Activity {
         super.onTrimMemory(level);
         // UI_HIDDEN is a normal app switch, not a low-memory signal.
         if(level==android.content.ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW||level==android.content.ComponentCallbacks2.TRIM_MEMORY_RUNNING_CRITICAL||level>=android.content.ComponentCallbacks2.TRIM_MEMORY_MODERATE){
-            monoCache.evictAll();originalIcons.evictAll();assetCache.evictAll();PortraitStore.clearCache();
+            monoCache.evictAll();originalIcons.evictAll();assetCache.evictAll();PortraitStore.clearCache();if(expressionArt!=null)expressionArt.clear();
         }
     }
     private void beginEntry(String kind){entryGeneration++;entryKind=kind;entryStart=android.os.SystemClock.elapsedRealtime();}
@@ -346,9 +347,7 @@ public class HomeActivity extends Activity {
         gap(clockBlock,3);date=text("",15,MUTED,false);date.setIncludeFontPadding(false);clockBlock.addView(date);widgetLink(clockBlock,"Open clock app",()->openWidgetApp("clock"));}
         if(showClock||showWeather){addWidgetRow(topWidgets,showClock?clockBlock:null,showWeather?dashboard.weatherView():null,compactClock);gap(topWidgets,12);}
         if(widgetHere("mikanPage",1)){
-            Drawable art=characterArt.get();
-            boolean pocket=pocketAvailable();
-            mikanCard=new MikanCard(this,art!=null?art:portraits.get(),art!=null,pocket?"Open Pocket Mikan":"Open Mikan Web",this::openMikan,this::openRemark);
+            mikanCard=createMikanCard();
             characterBlock.addView(mikanCard.view());gap(characterBlock,12);
         }
         if(prefs.getBoolean("showFavoritesLabel",false)){appBlock.addView(text("YOUR FAVORITES",12,MUTED,true));gap(appBlock,4);}
@@ -895,12 +894,15 @@ public class HomeActivity extends Activity {
                 break;
             case MIKAN:
                 settingsUi.heading(body,"CHARACTER ART");
-                Drawable cutout=characterArt.get();settingsUi.artPreview(body,cutout!=null?cutout:portraits.get(),cutout!=null?"Character artwork active":"Portrait active");
+                boolean dynamicExpressions=prefs.getBoolean("mikanExpressions",true);
+                Drawable cutout=characterArt.get();Drawable preview=dynamicExpressions?expressionArt.get(MikanExpression.DEFAULT):null;
+                settingsUi.artPreview(body,preview!=null?preview:cutout!=null?cutout:portraits.get(),preview!=null?"Dynamic expressions active":cutout!=null?"Character artwork saved":"Portrait saved");
+                settingsUi.toggle(body,"Dynamic expressions","Match Mikan's portrait to her remarks; turn off to use your saved artwork",dynamicExpressions,on->{prefs.edit().putBoolean("mikanExpressions",on).apply();showSettings();});
                 setting(body,"Choose portrait",this::pickPortrait);
                 setting(body,"Choose character artwork",()->pickImage(74));
                 setting(body,"Remove character artwork",()->new AlertDialog.Builder(this).setTitle("Return to portrait?").setNegativeButton("Cancel",null).setPositiveButton("Remove",(d,w)->{characterArt.reset();showSettings();}).show());
                 setting(body,"Reset portrait",()->new AlertDialog.Builder(this).setTitle("Reset portrait?").setNegativeButton("Cancel",null).setPositiveButton("Reset",(d,w)->{portraits.reset();showSettings();}).show());
-                settingsUi.note(body,"Use a transparent PNG for character artwork. Images are stored on this phone.");
+                settingsUi.note(body,"Use a transparent PNG for character artwork. Imported images are preserved; turn off dynamic expressions to display them.");
                 settingsUi.heading(body,"LITTLE REMARKS");
                 settingsUi.toggle(body,"Dynamic messages","Contextual remarks and playful greetings",prefs.getBoolean("mikanRemarks",true),on->{prefs.edit().putBoolean("mikanRemarks",on).apply();LauncherNotifications.refreshIfConnected();showSettings();});
                 settingsUi.toggle(body,"Notification hints","Mention active messaging and email notifications, never their contents",prefs.getBoolean("mikanNotifyHints",true),on->{prefs.edit().putBoolean("mikanNotifyHints",on).apply();LauncherNotifications.refreshIfConnected();if(on&&!LauncherNotifications.allowed(this))notificationAccess();showSettings();});
@@ -1207,7 +1209,7 @@ public class HomeActivity extends Activity {
                 date=text("",15,MUTED,false);clockBlock.addView(date);widgetLink(clockBlock,"Open clock app",()->openWidgetApp("clock"));return clockBlock;
             case "weatherPage":return dashboard.weatherView();
             case "mikanPage":
-                Drawable art=characterArt.get();mikanCard=new MikanCard(this,art!=null?art:portraits.get(),art!=null,pocketAvailable()?"Open Pocket Mikan":"Open Mikan Web",this::openMikan,this::openRemark);return mikanCard.view();
+                mikanCard=createMikanCard();return mikanCard.view();
             case "musicPage":music=new MusicPanel(this,compact);widgetLink(music.view(),"Open music app",()->openWidgetApp("music"));return music.view();
             case "agendaPage":return dashboard.agendaView();
             default:return null;
@@ -1426,6 +1428,11 @@ public class HomeActivity extends Activity {
         new AlertDialog.Builder(this).setTitle("Notification access").setMessage("Android grants broad notification access. Mikan Launcher uses app identifiers for dots and optional notification hints, and active media sessions for playback controls. Message bodies and sender names are not read for hints. No notification data is sent to Mikan Web or persisted. You can revoke access at any time.").setNegativeButton("Cancel",null).setPositiveButton("Open Android settings",(d,w)->{
             try{startActivity(new Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS));}catch(Exception e){Toast.makeText(this,"Open Android notification access settings.",Toast.LENGTH_LONG).show();}
         }).show();
+    }
+    private MikanCard createMikanCard(){
+        boolean dynamic=prefs.getBoolean("mikanExpressions",true);
+        Drawable cutout=dynamic?null:characterArt.get();
+        return new MikanCard(this,cutout!=null?cutout:portraits.get(),cutout!=null,pocketAvailable()?"Open Pocket Mikan":"Open Mikan Web",this::openMikan,this::openRemark,dynamic?expressionArt::get:null);
     }
     private void refreshMikanRemark(boolean notificationAccess){
         if(mikanCard==null||!foreground||closed)return;

@@ -55,6 +55,19 @@ jobs:
           mkdir -p /tmp/mikan-section-tests
           javac -d /tmp/mikan-section-tests launcher/app/src/main/java/dev/capnolithyl/mikan/launcher/DrawerRows.java launcher/app/src/main/java/dev/capnolithyl/mikan/launcher/IndexWave.java launcher/tests/DrawerRowsTest.java
           java -cp /tmp/mikan-section-tests dev.capnolithyl.mikan.launcher.DrawerRowsTest
+      - name: Test expression rules and bundled assets
+        run: |
+          mkdir -p /tmp/mikan-expression-tests
+          javac -d /tmp/mikan-expression-tests launcher/app/src/main/java/dev/capnolithyl/mikan/launcher/MikanExpression.java launcher/tests/MikanExpressionTest.java
+          java -cp /tmp/mikan-expression-tests dev.capnolithyl.mikan.launcher.MikanExpressionTest
+          python3 - <<'PY'
+          from pathlib import Path
+          root = Path("launcher/app/src/main/assets/portraits/expressions")
+          for name in ("default", "pouty", "sleepy", "surprised", "excited", "concerned", "smug", "freezing"):
+              data = (root / (name + ".webp")).read_bytes()
+              assert len(data) > 20 and data[:4] == b"RIFF" and data[8:12] == b"WEBP", name
+              print(name, len(data), "bytes")
+          PY
       - name: Compile launcher
         working-directory: launcher
         run: gradle :app:assembleDebug --stacktrace

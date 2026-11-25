@@ -94,3 +94,6 @@ In live edit mode touch and drag any app or widget body; no separate move handle
 
 ## Planned v0.14 expression assets
 Theme engine deferred at owner request. Upload `default.webp`, `pouty.webp`, `sleepy.webp`, `surprised.webp`, `excited.webp`, `concerned.webp`, `smug.webp`, and `freezing.webp` into `app/src/main/assets/portraits/expressions/`. Standard Android assets are packaged alongside the generated assets; leave existing portrait fallback untouched. No runtime changes yet.
+
+## v0.14.0 dynamic expressions
+The eight bundled portraits are selected by explicit expression tags on existing local remarks. Notifications use Surprised, upcoming events/thunderstorms Concerned, rain Pouty, snow/cold Freezing, late/early idle Sleepy, playful idle Smug and celebratory idle Excited; normal idle/default uses Default. No delivery inference. Crossfade 220ms on expression change only; respects disabled system animations, bounded lazy 8 MiB cache, fallback to default then saved portrait. Enabled by default; Settings > Mikan > Dynamic expressions off restores existing custom portrait/cutout without deleting it. No new permissions, AI or network. Toggle included in settings backup. CI rules/asset header checks and physical device validation pending.
