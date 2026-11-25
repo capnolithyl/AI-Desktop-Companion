@@ -1061,7 +1061,7 @@ test("excited follow-up uses full conversation in one private answer without rep
   store.append(chat.id,"assistant","They plan to record next year.",{researchTask:{kind:"lookup",subject:"new album"}});
   const question="dude i'm so excited";store.append(chat.id,"user",question);
   let calls=0;
-  const result=await executeNasTurn({store,conversationId:chat.id,question,selected:{provider:"groq",model:"openai/gpt-oss-120b",historyChars:16000,reasoningEffort:"medium"},mode:"simple",publicAgent:true,reserve:()=>calls++,canRequest:()=>true,search:async()=>{throw Error("unexpected search");},requestModel:async args=>{assert.equal(args.agentTools,undefined);assert.equal(args.history.at(-2).content,"They plan to record next year.");assert.match(args.system,/DIALOGUE STYLE/);return "That is going to be a long wait!";}});
+  const result=await executeNasTurn({store,conversationId:chat.id,question,selected:{provider:"groq",model:"openai/gpt-oss-120b",historyChars:16000,reasoningEffort:"medium"},mode:"simple",publicAgent:true,reserve:()=>calls++,canRequest:()=>true,search:async()=>{throw Error("unexpected search");},requestModel:async args=>{assert.ok(args.agentTools.some(t=>t.function.name==="recall_memory"));assert.equal(args.history.at(-2).content,"They plan to record next year.");assert.match(args.system,/Speak directly as your character/);return {content:"That is going to be a long wait!",toolCalls:[]};}});
   assert.equal(calls,1);assert.deepEqual(result.researched.sources,[]);
  }finally{store.db.close();}
 });
@@ -1212,12 +1212,12 @@ test("native simple chat sees recent assistant replies and private persona in on
    assert.equal(args.history.at(-2).content,"Master of Puppets by Metal Metallica.");
    assert.match(args.system,/Private persona marker/);
    assert.match(args.system,/Private memory marker/);
-   assert.deepEqual(args.agentTools.map(t=>t.function.name),["request_public_research"]);
-   assert.deepEqual(args.agentTools[0].function.parameters.properties,{});
+   assert.deepEqual(args.agentTools.map(t=>t.function.name),["recall_memory","request_public_research"]);
+   assert.deepEqual(args.agentTools[1].function.parameters.properties,{});
    return {content:"Okay, you caught my typo.",toolCalls:[]};
   }});
   assert.equal(calls,1);assert.equal(result.answer,"Okay, you caught my typo.");
-  assert.equal(result.memory,memory);assert.deepEqual(result.researched.sources,[]);
+  assert.deepEqual(result.memory,memory);assert.deepEqual(result.researched.sources,[]);
  }finally{store.db.close();}
 });
 
@@ -1237,12 +1237,18 @@ test("private conversation handoff does not pass persona, memory, assistant hist
     assert.match(JSON.stringify(args.history),/PRIVATE_ASSISTANT_SENTINEL/);
     return {content:"PRIVATE_DRAFT_SENTINEL",toolCalls:[{id:"handoff",type:"function",function:{name:"request_public_research",arguments:'{"query":"PRIVATE_ARGUMENT_SENTINEL"}'}}]};
    }
-   assert.doesNotMatch(JSON.stringify({system:args.system,history:args.history}),/PRIVATE_(?:PERSONA|MEMORY|ASSISTANT|DRAFT|ARGUMENT)_SENTINEL/);
-   if(calls===2)return {content:"",toolCalls:[{id:"search",type:"function",function:{name:"search_web",arguments:'{"query":"Lantern album tracks"}'}}]};
-   return {content:"Lantern has four tracks [1].",toolCalls:[]};
+   if(calls<4){
+    assert.doesNotMatch(JSON.stringify({system:args.system,history:args.history}),/PRIVATE_(?:PERSONA|MEMORY|ASSISTANT|DRAFT|ARGUMENT)_SENTINEL/);
+    if(calls===2)return {content:"",toolCalls:[{id:"search",type:"function",function:{name:"search_web",arguments:'{"query":"Lantern album tracks"}'}}]};
+    return {content:"DONE",toolCalls:[]};
+   }
+   assert.match(args.system,/PRIVATE_PERSONA_SENTINEL/);assert.match(args.system,/PRIVATE_MEMORY_SENTINEL/);
+   assert.match(JSON.stringify(args.history),/PRIVATE_ASSISTANT_SENTINEL/);
+   assert.match(args.history.at(-1).content,/Lantern has four tracks/);
+   return {content:"Lantern has four tracks.",toolCalls:[]};
   }});
-  assert.equal(calls,3);assert.deepEqual(searches,["Lantern album tracks"]);
-  assert.equal(result.answer,"Lantern has four tracks [1].");assert.equal(result.researched.sources.length,1);
+  assert.equal(calls,4);assert.deepEqual(searches,["Lantern album tracks"]);
+  assert.equal(result.answer,"Lantern has four tracks.");assert.equal(result.researched.sources.length,1);
  }finally{store.db.close();}
 });
 
@@ -1274,5 +1280,57 @@ test("durable memory dates use the original local message date even when extract
   await l.processNext(async()=>JSON.stringify({facts:[{action:"save",scope:"long_term",category:"interests",fact:"The user saw another band last year.",evidence:u2.content,tags:[]}],interests:[],canon:[]}),{});
   assert.equal(l.getStatus().lastOutcome.saved,0);
   assert.equal(store.library.execute("snapshot",{}).facts.length,1);
+ }finally{store.db.close();}
+});
+
+test("model-led companion uses original dialogue and calls recall and private knowledge even with public web disabled",async()=>{
+ const {executeNasTurn}=await import("../turn.mjs"),store=openStore(":memory:");
+ try{
+  const old=store.newConversation();store.append(old.id,"user","Remember the secret-free lantern story.");store.append(old.id,"assistant","The lantern was blue.");
+  const chat=store.newConversation(),question="Tell me about that again.";
+  store.append(chat.id,"user",question);
+  store.db.prepare("INSERT INTO session_summaries VALUES(?,?,?,unixepoch())").run(chat.id,'- FALSE_SUMMARY_SENTINEL [user said: "Tell me about that again."]',1);
+  const calls=[],lookup=[];
+  const knowledge={candidates:q=>{lookup.push(q);return [{id:"doc1",title:"Lantern notes",kind:"notion"}];},load:async(p,scope)=>{assert.equal(p.id,"doc1");assert.equal(scope,"full");return {id:p.id,kind:"notion",title:p.title,url:"https://notion.so/example",content:"Original document text.",coverage:"complete cached page"};}};
+  const result=await executeNasTurn({store,conversationId:chat.id,question,selected:{provider:"nvidia",model:"test",historyChars:32000},mode:"off",publicAgent:true,knowledge,reserve:()=>{},canRequest:()=>true,requestModel:async args=>{
+   calls.push(args);
+   assert.doesNotMatch(args.system,/FALSE_SUMMARY_SENTINEL/);
+   assert.ok(!args.agentTools.some(t=>t.function.name==="request_public_research"));
+   const call=(name,args,id)=>({content:"",toolCalls:[{id,type:"function",function:{name,arguments:JSON.stringify(args)}}]});
+   if(calls.length===1)return call("recall_memory",{query:"lantern story"},"r");
+   if(calls.length===2){assert.match(args.history.at(-1).content,/The lantern was blue/);return call("find_knowledge",{query:"Lantern notes"},"f");}
+   if(calls.length===3)return call("read_knowledge",{id:"doc1",scope:"full"},"d");
+   assert.match(args.history.at(-1).content,/Original document text/);
+   return {content:"The lantern was blue, and I found the original notes.",toolCalls:[]};
+  }});
+  assert.equal(calls.length,4);assert.deepEqual(lookup,["Lantern notes"]);
+  assert.equal(result.answer,"The lantern was blue, and I found the original notes.");
+  assert.equal(result.researched.local,true);assert.equal(result.researched.sources[0].id,"doc1");
+ }finally{store.db.close();}
+});
+
+test("model-led companion respects a one-call remaining quota without discarding persona or history",async()=>{
+ const {executeNasTurn}=await import("../turn.mjs"),store=openStore(":memory:");
+ try{
+  const c=store.newConversation();store.append(c.id,"user","Hello.");store.append(c.id,"assistant","Hi!");
+  const question="You funny little cat.";store.append(c.id,"user",question);
+  let remaining=1;
+  const result=await executeNasTurn({store,conversationId:c.id,question,selected:{provider:"cerebras",model:"gpt-oss-120b",historyChars:16000},mode:"simple",publicAgent:true,reserve:()=>remaining--,canRequest:(n=1)=>remaining>=n,requestModel:async args=>{
+   assert.equal(args.agentToolChoice,"none");
+   assert.equal(args.history.at(-2).content,"Hi!");
+   return {content:"Guilty.",toolCalls:[]};
+  }});
+  assert.equal(remaining,0);assert.equal(result.answer,"Guilty.");
+ }finally{store.db.close();}
+});
+
+test("credential redaction blocks known key formats before inference and learning",async()=>{
+ const {containsCredential,redactCredentials}=await import("../companion-agent.mjs");
+ const credential="csk-"+"x".repeat(32);
+ assert.equal(containsCredential(credential),true);assert.equal(redactCredentials("hello "+credential),"hello [credential removed]");
+ const store=openStore(":memory:");
+ try{
+  const c=store.newConversation();store.learning.setSettings({user:true,character:true});
+  assert.equal(store.learning.enqueue(store.append(c.id,"user",credential),store.append(c.id,"assistant","Okay."),c.id),false);
  }finally{store.db.close();}
 });
