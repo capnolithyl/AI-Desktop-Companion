@@ -1,6 +1,6 @@
 # Mikan Launcher — living feature reference
 
-**Source baseline:** v0.11 (versionCode 11), lockscreen crop fix, 2026-11-24. See Git history for implementation commit.
+**Source baseline:** v0.11.1 (versionCode 12), performance pass, 2026-11-24. See Git history for implementation commit.
 **Development:** [PR #117](https://github.com/capnolithyl/AI-Desktop-Companion/pull/117), branch `feature/mikan-launcher-v01`. Check current branch and Gradle version before changing this document.
 **Purpose:** a free, personal, offline-first Android launcher inspired by the Mikan OS home-screen mockup. Separate from Pocket Mikan, desktop Mikan and the NAS. This document tracks the launcher only.
 
@@ -111,6 +111,8 @@ Weather card also exposes refresh, city, units and clear location. No full-scree
 | 0.10 | Custom wallpaper, app icon overrides, layout options, folder grid and drop actions, local JSON backup/restore, Android lockscreen wallpaper | Owner screenshot confirms lockscreen wallpaper applied, but right-side subject cropped; other testing pending. |
 | 0.11 | Screen-ratio wallpaper crop, interactive position/zoom preview, explicit crop hint | Implemented; CI and physical lockscreen framing verification pending. |
 
+| 0.11.1 | Reuse Home on warm resume, event-driven catalog refresh, bounded image/icon caches, delayed widget refresh, local timing diagnostics | Implemented; CI and physical performance comparison pending. |
+
 ## 7. Outstanding verification checklist
 
 - [ ] Cold boot/reboot with airplane mode and NAS down; open drawer, favorites and folders.
@@ -133,17 +135,14 @@ Weather card also exposes refresh, city, units and clear location. No full-scree
 
 - [ ] v0.11 apply the existing lockscreen image with center/right framing, verify on real lockscreen, reset sliders, cancel without changing wallpaper, confirm home wallpaper unchanged and secure unlock intact. Android may still apply system zoom.
 
+- [ ] v0.11.1 warm Home return from several apps; cold process start; install/update/remove apps; permission changes, artwork replacement, drawer and page navigation, low-memory recovery; copy diagnostics and compare perceived latency. No measured improvement yet.
+
 ## 8. Roadmap (not implemented)
 
 Planned milestones; version targets flexible. See [Trello roadmap](https://trello.com/c/VEk6xVz6). No arbitrary deadlines.
 
-### v0.11.1 — Performance pass (next, before editor)
-- Owner reports occasional extra delay pressing Android Home. Source inspection of v0.11: onResume reloads all launchable app labels/icons, clears monochrome cache, and calls showHome (or rebuilds settings/drawer); onNewIntent also calls showHome; onCreate and onResume can duplicate initialization. createPage recreates view hierarchy and loads wallpaper; portrait imports are decoded on read. These are candidate bottlenecks, not measured root causes.
-- Instrument cold start, warm Home return, first rendered frame and widget refresh separately; compare before/after on the Pixel. Track median and slow-tail latency, jank, memory and idle battery; no invented benchmark results.
-- Reuse existing home views on unchanged state; invalidate app catalog/icons on install/update/remove and relevant settings changes instead of rebuilding on every resume; bounded caches for decoded wallpaper, art and icons with proper invalidation.
-- Defer app discovery/icon decoding and media/provider work off critical UI path where safe; render local UI first, update widgets incrementally after first frame. Avoid duplicate resume/Home intent work and repeated refreshes, stop timers while paused.
-- Regression: app install/remove/update, Home from apps and settings/drawer, page behavior, permissions changes, artwork/settings updates, music/calendar/weather freshness, offline cold boot, low-memory recovery. Preserve visual design, settings and updater; no NAS/network dependency, no always-on service just to make Home faster.
-- Planned only; no optimization or benchmark has been completed yet.
+### v0.11.1 — Performance pass (implemented, validation pending)
+Warm Home retains existing view; package events trigger debounced background catalog scans; cold start still queries labels synchronously, icons lazy-loaded with bounded caches. Bundled backgrounds and imported bitmaps cached with invalidation and memory-pressure eviction. Media/notification refresh deferred after entry; existing timers stop when paused. Settings > System & updates > Performance diagnostics reports local in-memory rolling count, median, p95 and max for Activity callback-to-pre-draw (not touch-to-display), home build, catalog and media/badge refresh. Copy/reset available. Cold start optimization, true frame/jank/battery profiling and before/after measurements remain pending.
 
 ### v0.12 — Home screen editor
 Long-press edit mode, collision-safe free grid placement, drag-to-create folders, page management, widget resizing and preservation of old layout.

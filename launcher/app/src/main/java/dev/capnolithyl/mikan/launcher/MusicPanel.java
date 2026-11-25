@@ -78,7 +78,7 @@ final class MusicPanel {
         });
         buttons=new LinearLayout(context);buttons.setGravity(Gravity.CENTER);root.addView(buttons);
         prev=control(0,"Previous track",()->command(0));play=control(1,"Play or pause",()->command(1));next=control(2,"Next track",()->command(2));
-        refresh();
+        empty("Loading music…");
     }
     View view(){return root;}
     private int dp(float n){return Math.round(n*context.getResources().getDisplayMetrics().density);}

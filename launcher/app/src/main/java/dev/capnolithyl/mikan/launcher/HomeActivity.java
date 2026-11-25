@@ -33,7 +33,21 @@ public class HomeActivity extends Activity {
     private static final int CREAM=0xffffe9d5, PEACH=0xffffbf88, MUTED=0xffe1bda9, PANEL=0xe6312325, BORDER=0xff805439;
     private final Handler handler=new Handler(Looper.getMainLooper());
     private final ArrayList<App> apps=new ArrayList<>();
-    private final Map<String,Drawable.ConstantState> monoCache=new HashMap<>();
+    private final android.util.LruCache<String,Drawable.ConstantState> monoCache=new android.util.LruCache<>(96);
+    private final android.util.LruCache<String,Drawable.ConstantState> originalIcons=new android.util.LruCache<>(96);
+    private final android.util.LruCache<String,Drawable.ConstantState> assetCache=new android.util.LruCache<>(4);
+    private final Map<String,App> appIndex=new HashMap<>();
+    private final java.util.concurrent.ExecutorService catalogWorker=java.util.concurrent.Executors.newSingleThreadExecutor();
+    private final LauncherPerf perf=new LauncherPerf();
+    private boolean foreground,closed,catalogDirty,catalogBusy,catalogRenderPending,receiverRegistered;
+    private boolean lastMediaPermission,lastCalendarPermission;
+    private long entryStart;
+    private String entryKind;
+    private final Runnable catalogRefresh=()->refreshCatalog();
+    private final Runnable delayedExtras=()->{if(foreground&&!closed)refreshExtras();};
+    private final android.content.BroadcastReceiver packagesChanged=new android.content.BroadcastReceiver(){
+        @Override public void onReceive(android.content.Context context,Intent intent){invalidateCatalog();}
+    };
     private final ArrayList<String> favorites=new ArrayList<>();
     private SharedPreferences prefs;
     private FrameLayout root;
@@ -64,14 +78,15 @@ public class HomeActivity extends Activity {
     private final Runnable progressTick=new Runnable(){public void run(){if(music!=null)music.updatePosition();handler.postDelayed(this,1000);}};
     private final Runnable tick=new Runnable(){ public void run(){ updateClock(); handler.postDelayed(this,15000); } };
     private static final class App {
-        final ComponentName component; final String label; final Drawable icon; final String folderKey;
-        App(ComponentName component,String label,Drawable icon){this.component=component;this.label=label;this.icon=icon;this.folderKey=null;}
-        App(String key,String label,Drawable icon){this.component=null;this.label=label;this.icon=icon;this.folderKey=key;}
+        final ComponentName component; final String label; final ResolveInfo info; final String folderKey;
+        App(ComponentName component,String label,ResolveInfo info){this.component=component;this.label=label;this.info=info;this.folderKey=null;}
+        App(String key,String label){this.component=null;this.label=label;this.info=null;this.folderKey=key;}
         String key(){return folderKey==null?component.flattenToString():folderKey;}
     }
 
     @Override public void onCreate(Bundle state){
         super.onCreate(state);
+        beginEntry("cold/activity create");
         getWindow().setStatusBarColor(Color.TRANSPARENT);
         getWindow().setNavigationBarColor(Color.TRANSPARENT);
         getWindow().getDecorView().setSystemUiVisibility(0);
@@ -85,23 +100,92 @@ public class HomeActivity extends Activity {
         folders=new HomeFolders(prefs);
         dashboard=new DashboardCards(this,prefs,()->{if(settings)showSettings();});
         settingsUi=new SettingsHub(this);
-        loadApps();
+        registerPackageChanges();
+        long scan=android.os.SystemClock.elapsedRealtime();applyCatalog(scanApps());perf.record("initial app catalog",scan);
         restoreFavorites();
         if(settings)showSettings();else showHome();
     }
     @Override protected void onSaveInstanceState(Bundle out){super.onSaveInstanceState(out);out.putString("pendingIconKey",pendingIconKey);if(settings)out.putString("settingsSection",settingsSection.name());}
     @Override protected void onResume(){
-        super.onResume(); loadApps();
-        if(LauncherNotifications.allowed(this))LauncherNotifications.refreshIfConnected();
-        if(settings) showSettings(); else if(drawer && search!=null) renderResults(search.getText().toString()); else showHome();
-        handler.removeCallbacks(tick); handler.post(tick);
-        handler.removeCallbacks(refreshExtras);handler.post(refreshExtras);
-        handler.removeCallbacks(progressTick);handler.post(progressTick);
-        dashboard.resume();
+        super.onResume();foreground=true;
+        if(entryKind==null)beginEntry("warm resume");
+        boolean media=LauncherNotifications.allowed(this),calendar=checkSelfPermission(android.Manifest.permission.READ_CALENDAR)==android.content.pm.PackageManager.PERMISSION_GRANTED;
+        if(catalogRenderPending){catalogRenderPending=false;refreshScreen();}
+        else if(settings&&(media!=lastMediaPermission||calendar!=lastCalendarPermission))showSettings();
+        lastMediaPermission=media;lastCalendarPermission=calendar;
+        if(media&&prefs.getBoolean("badges",false))handler.postDelayed(()->{if(foreground&&!closed)LauncherNotifications.refreshIfConnected();},120);
+        updateClock();observeEntry();
+        handler.removeCallbacks(tick);handler.postDelayed(tick,15000);
+        handler.removeCallbacks(refreshExtras);handler.postDelayed(refreshExtras,2500);
+        handler.removeCallbacks(progressTick);handler.postDelayed(progressTick,1000);
+        queueExtras();dashboard.resume();
+        if(catalogDirty)scheduleCatalog();
     }
-    @Override protected void onPause(){dashboard.pause();handler.removeCallbacks(tick);handler.removeCallbacks(refreshExtras);handler.removeCallbacks(progressTick);super.onPause();}
-    @Override protected void onDestroy(){if(dashboard!=null)dashboard.close();super.onDestroy();}
-    @Override protected void onNewIntent(Intent intent){super.onNewIntent(intent);setIntent(intent);hideKeyboard();homePage=0;showHome();}
+    @Override protected void onPause(){
+        foreground=false;dashboard.pause();handler.removeCallbacks(tick);handler.removeCallbacks(refreshExtras);handler.removeCallbacks(progressTick);handler.removeCallbacks(delayedExtras);handler.removeCallbacks(catalogRefresh);
+        entryKind=null;super.onPause();
+    }
+    @Override protected void onDestroy(){
+        closed=true;foreground=false;handler.removeCallbacksAndMessages(null);catalogWorker.shutdownNow();
+        if(receiverRegistered)unregisterReceiver(packagesChanged);
+        if(dashboard!=null)dashboard.close();super.onDestroy();
+    }
+    @Override protected void onNewIntent(Intent intent){
+        super.onNewIntent(intent);setIntent(intent);
+        beginEntry("Home intent");
+        if(drawer||settings||homePage!=0){hideKeyboard();homePage=0;showHome();}
+        else updateClock();
+        if(foreground){observeEntry();queueExtras();}
+    }
+    @Override public void onTrimMemory(int level){
+        super.onTrimMemory(level);
+        if(level>=android.content.ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW){
+            monoCache.evictAll();originalIcons.evictAll();assetCache.evictAll();PortraitStore.clearCache();
+        }
+    }
+    private void beginEntry(String kind){entryKind=kind;entryStart=android.os.SystemClock.elapsedRealtime();}
+    private void observeEntry(){
+        if(root==null||entryKind==null)return;
+        final View target=root;final long started=entryStart;final String kind=entryKind;
+        entryKind=null;
+        final android.view.ViewTreeObserver observer=target.getViewTreeObserver();
+        if(!observer.isAlive())return;
+        observer.addOnPreDrawListener(new android.view.ViewTreeObserver.OnPreDrawListener(){
+            @Override public boolean onPreDraw(){
+                android.view.ViewTreeObserver current=target.getViewTreeObserver();if(current.isAlive())current.removeOnPreDrawListener(this);
+                if(foreground&&!closed&&root==target)perf.record(kind+" to pre-draw",started);
+                return true;
+            }
+        });
+        target.invalidate();
+    }
+    private void queueExtras(){
+        if(!foreground||closed)return;
+        handler.removeCallbacks(delayedExtras);handler.postDelayed(delayedExtras,100);
+    }
+    private void registerPackageChanges(){
+        android.content.IntentFilter filter=new android.content.IntentFilter();
+        filter.addAction(Intent.ACTION_PACKAGE_ADDED);filter.addAction(Intent.ACTION_PACKAGE_REMOVED);filter.addAction(Intent.ACTION_PACKAGE_CHANGED);filter.addAction(Intent.ACTION_PACKAGE_REPLACED);filter.addDataScheme("package");
+        if(Build.VERSION.SDK_INT>=33)registerReceiver(packagesChanged,filter,android.content.Context.RECEIVER_NOT_EXPORTED);else registerReceiver(packagesChanged,filter);
+        receiverRegistered=true;
+    }
+    private void invalidateCatalog(){catalogDirty=true;if(foreground)scheduleCatalog();}
+    private void scheduleCatalog(){handler.removeCallbacks(catalogRefresh);handler.postDelayed(catalogRefresh,300);}
+    private void refreshCatalog(){
+        if(closed||!foreground||!catalogDirty||catalogBusy)return;
+        catalogDirty=false;catalogBusy=true;long started=android.os.SystemClock.elapsedRealtime();
+        catalogWorker.execute(()->{
+            ArrayList<App> next=null;try{next=scanApps();}catch(RuntimeException ignored){}
+            final ArrayList<App> result=next;
+            handler.post(()->{
+                catalogBusy=false;if(closed)return;
+                perf.record("package catalog refresh",started);
+                if(result!=null){applyCatalog(result);if(foreground)refreshScreen();else catalogRenderPending=true;}
+                else {catalogDirty=true;return;}
+                if(catalogDirty&&foreground)scheduleCatalog();
+            });
+        });
+    }
     @Override public void onBackPressed(){if(settings){backFromSettings();}else if(drawer){hideKeyboard();showHome();}else if(homePage!=0){homePage=0;showHome();}}
     private int dp(float n){return Math.round(n*getResources().getDisplayMetrics().density);}
     private GradientDrawable shape(int color,int radius,boolean border){
@@ -116,7 +200,10 @@ public class HomeActivity extends Activity {
         TextView v=new TextView(this);v.setText(value);v.setTextSize(size);v.setTextColor(color);v.setTypeface(Typeface.create(bold?"sans-serif-medium":"sans-serif",Typeface.NORMAL));return v;
     }
     private void gap(LinearLayout parent,int size){View v=new View(this);parent.addView(v,new LinearLayout.LayoutParams(1,dp(size)));}
-    private Drawable asset(String name){try(java.io.InputStream in=getAssets().open(name)){return Drawable.createFromStream(in,name);}catch(Exception e){return null;}}
+    private Drawable asset(String name){
+        Drawable.ConstantState cached=assetCache.get(name);if(cached!=null)return cached.newDrawable(getResources());
+        try(java.io.InputStream in=getAssets().open(name)){Drawable result=Drawable.createFromStream(in,name);if(result!=null&&result.getConstantState()!=null)assetCache.put(name,result.getConstantState());return result;}catch(Exception e){return null;}
+    }
     private Drawable homeWallpaper(){String name=prefs.getString("wallpaper","reading-nook.webp");Drawable d="custom".equals(name)?wallpaperArt.get():asset(name);return d!=null?d:asset("reading-nook.webp");}
     private void createPage(){
         badgeViews.clear();music=null;mikanCard=null;clock=null;date=null;greeting=null;ampm=null;dashboard.detach();
@@ -137,18 +224,30 @@ public class HomeActivity extends Activity {
         });
         setContentView(root);root.requestApplyInsets();
     }
-    private void loadApps(){
-        apps.clear();monoCache.clear();
+    private ArrayList<App> scanApps(){
+        ArrayList<App> found=new ArrayList<>();
         Intent intent=new Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER);
-        for(ResolveInfo r:getPackageManager().queryIntentActivities(intent,0)){
-            if(r.activityInfo==null||r.activityInfo.packageName.equals(getPackageName()))continue;
-            ComponentName c=new ComponentName(r.activityInfo.packageName,r.activityInfo.name);
-            String name=r.loadLabel(getPackageManager()).toString();
-            apps.add(new App(c,name,r.loadIcon(getPackageManager())));
+        android.content.pm.PackageManager pm=getPackageManager();
+        for(ResolveInfo info:pm.queryIntentActivities(intent,0)){
+            if(info.activityInfo==null||info.activityInfo.packageName.equals(getPackageName()))continue;
+            ComponentName component=new ComponentName(info.activityInfo.packageName,info.activityInfo.name);
+            CharSequence label=info.loadLabel(pm);
+            found.add(new App(component,label==null?component.getPackageName():label.toString(),info));
         }
-        apps.sort(Comparator.comparing((App a)->a.label,String.CASE_INSENSITIVE_ORDER).thenComparing(App::key));
+        found.sort(Comparator.comparing((App a)->a.label,String.CASE_INSENSITIVE_ORDER).thenComparing(App::key));return found;
     }
-    private App find(String key){for(App a:apps)if(a.key().equals(key))return a;if(folders!=null&&folders.exists(key))return new App(key,folders.name(key),getDrawable(android.R.drawable.ic_menu_agenda));return null;}
+    private void applyCatalog(ArrayList<App> next){
+        apps.clear();apps.addAll(next);appIndex.clear();
+        for(App app:apps)appIndex.put(app.key(),app);
+        monoCache.evictAll();originalIcons.evictAll();
+    }
+    private Drawable originalIcon(App app){
+        Drawable.ConstantState cached=originalIcons.get(app.key());if(cached!=null)return cached.newDrawable(getResources());
+        Drawable icon=null;try{if(app.info!=null)icon=app.info.loadIcon(getPackageManager());}catch(RuntimeException ignored){}
+        if(icon==null)icon=getPackageManager().getDefaultActivityIcon();
+        if(icon.getConstantState()!=null)originalIcons.put(app.key(),icon.getConstantState());return icon;
+    }
+    private App find(String key){App app=appIndex.get(key);if(app!=null)return app;if(folders!=null&&folders.exists(key))return new App(key,folders.name(key));return null;}
     private void restoreFavorites(){
         favorites.clear();
         if(prefs.contains("favorites")){
@@ -169,12 +268,13 @@ public class HomeActivity extends Activity {
     private void launch(App app){
         if(app.folderKey!=null){openFolder(app.folderKey);return;}
         try{hideKeyboard();Intent intent=new Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER).setComponent(app.component).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED);startActivity(intent);}
-        catch(Exception e){Toast.makeText(this,"Unable to open "+app.label,Toast.LENGTH_SHORT).show();loadApps();if(drawer)renderResults(search.getText().toString());else showHome();}
+        catch(Exception e){Toast.makeText(this,"Unable to open "+app.label,Toast.LENGTH_SHORT).show();invalidateCatalog();}
     }
     private TextView action(String label,Runnable run){
         TextView b=text(label,14,PEACH,true);b.setGravity(Gravity.CENTER);b.setPadding(dp(12),dp(10),dp(12),dp(10));b.setBackground(shape(PANEL,20,true));b.setMinHeight(dp(48));b.setOnClickListener(v->run.run());return b;
     }
     private void showHome(){
+        long buildStarted=android.os.SystemClock.elapsedRealtime();
         drawer=false;settings=false;search=null;results=null;homePage=Math.max(0,Math.min(homePage,pageCount()-1));createPage();
         LinearLayout header=horizontal();
         TextView brand=text("Mikan OS",15,CREAM,true);
@@ -226,7 +326,7 @@ public class HomeActivity extends Activity {
         page.addView(nav);gap(page,4);}
         page.addView(dock);gap(page,7);
         page.addView(searchBar(),new LinearLayout.LayoutParams(-1,dp(50)));
-        updateClock();refreshExtras();
+        updateClock();perf.record("home view build",buildStarted);queueExtras();
     }
     private ImageView markButton(int kind,String description,Runnable run){
         ImageView v=new ImageView(this);v.setImageDrawable(new MikanMark(kind,PEACH));v.setScaleType(ImageView.ScaleType.FIT_CENTER);v.setPadding(dp(11),dp(11),dp(11),dp(11));v.setContentDescription(description);v.setFocusable(true);v.setBackground(MikanTheme.ripple(this,18));v.setOnClickListener(w->run.run());return v;
@@ -288,7 +388,7 @@ public class HomeActivity extends Activity {
     private void renderResults(String query){
         if(results==null)return;badgeViews.clear();results.removeAllViews();ArrayList<App> matches=new ArrayList<>();String q=query.trim().toLowerCase(Locale.ROOT);
         for(App a:apps)if(a.label.toLowerCase(Locale.ROOT).contains(q)||a.component.getPackageName().toLowerCase(Locale.ROOT).contains(q))matches.add(a);
-        if(matches.isEmpty())results.addView(text("No matching apps.",16,MUTED,false));else addGrid(results,matches,prefs.getInt("columns",4));refreshExtras();
+        if(matches.isEmpty())results.addView(text("No matching apps.",16,MUTED,false));else addGrid(results,matches,prefs.getInt("columns",4));queueExtras();
     }
     private void hideKeyboard(){if(search!=null){((InputMethodManager)getSystemService(INPUT_METHOD_SERVICE)).hideSoftInputFromWindow(search.getWindowToken(),0);search.clearFocus();}}
 
@@ -380,6 +480,7 @@ public class HomeActivity extends Activity {
                 settingsUi.heading(body,"LAUNCHER");
                 setting(body,"Default home app",this::chooseHome);
                 setting(body,"Check for launcher updates",()->updater.check());
+                setting(body,"Performance diagnostics",this::showPerformance);
                 settingsUi.note(body,"Updates are optional. Your home screen works offline.");
                 settingsUi.heading(body,"BACKUP & RESTORE");
                 setting(body,"Export layout and settings",()->backupPicker(true));
@@ -415,15 +516,16 @@ public class HomeActivity extends Activity {
         if(app.folderKey!=null)return folders.icon(this,app.folderKey,key->{App item=find(key);return item==null?null:themedIcon(item);});
         String style=prefs.getString("iconStyle:"+app.key(),"default");
         if("custom".equals(style)){Drawable custom=iconStore(app.key()).get();if(custom!=null)return custom;}
-        if("original".equals(style)||(!"amber".equals(style)&&!prefs.getBoolean("themed",true)))return app.icon;
+        if("original".equals(style)||(!"amber".equals(style)&&!prefs.getBoolean("themed",true)))return originalIcon(app);
         if(app.component.getPackageName().equals("dev.capnolithyl.mikan.pocket"))return new MikanMark(MikanMark.PAW,PEACH);
-        String pkg=app.component.getPackageName();
-        if(LauncherIcons.hasCustom(pkg)){Drawable.ConstantState cached=monoCache.get(app.key());if(cached!=null)return cached.newDrawable(getResources());Drawable custom=LauncherIcons.create(this,pkg,app.label,app.icon);if(custom.getConstantState()!=null)monoCache.put(app.key(),custom.getConstantState());return custom;}
-        if(Build.VERSION.SDK_INT>=33&&app.icon instanceof AdaptiveIconDrawable){
-            Drawable mono=((AdaptiveIconDrawable)app.icon).getMonochrome();
-            if(mono!=null){Drawable.ConstantState cached=monoCache.get(app.key());if(cached!=null)return cached.newDrawable(getResources());Drawable d=LauncherIcons.normalizedMonochrome(this,mono,PEACH);if(d!=null){if(d.getConstantState()!=null)monoCache.put(app.key(),d.getConstantState());return d;}}
+        Drawable.ConstantState cached=monoCache.get(app.key());if(cached!=null)return cached.newDrawable(getResources());
+        String pkg=app.component.getPackageName();Drawable original=originalIcon(app),result=null;
+        if(!LauncherIcons.hasCustom(pkg)&&Build.VERSION.SDK_INT>=33&&original instanceof AdaptiveIconDrawable){
+            Drawable mono=((AdaptiveIconDrawable)original).getMonochrome();
+            if(mono!=null)result=LauncherIcons.normalizedMonochrome(this,mono,PEACH);
         }
-        return LauncherIcons.create(this,app.component.getPackageName(),app.label,app.icon);
+        if(result==null)result=LauncherIcons.create(this,pkg,app.label,original);
+        if(result.getConstantState()!=null)monoCache.put(app.key(),result.getConstantState());return result;
     }
     private boolean canPair(){return prefs.getBoolean("pairWidgets",true)&&getResources().getConfiguration().screenWidthDp>=350&&getResources().getConfiguration().fontScale<=1.2f;}
     private void addWidgetRow(LinearLayout body,View left,View right,boolean pair){
@@ -431,7 +533,7 @@ public class HomeActivity extends Activity {
         if(pair&&left!=null&&right!=null){LinearLayout row=horizontal();row.setGravity(Gravity.CENTER_VERTICAL);row.setBaselineAligned(false);boolean equal=music!=null&&left==music.view();int height=equal?-1:-2;row.addView(left,new LinearLayout.LayoutParams(0,height,1));LinearLayout.LayoutParams rp=new LinearLayout.LayoutParams(0,height,1);rp.leftMargin=dp(8);row.addView(right,rp);body.addView(row,new LinearLayout.LayoutParams(-1,-2));}
         else{if(left!=null)body.addView(left,new LinearLayout.LayoutParams(-1,-2));if(left!=null&&right!=null)gap(body,8);if(right!=null)body.addView(right,new LinearLayout.LayoutParams(-1,-2));}
     }
-    @Override public void onRequestPermissionsResult(int request,String[] permissions,int[] grants){super.onRequestPermissionsResult(request,permissions,grants);if(request==DashboardCards.CALENDAR_REQUEST&&dashboard!=null){dashboard.calendarPermissionChanged();if(!settings&&!drawer)showHome();}}
+    @Override public void onRequestPermissionsResult(int request,String[] permissions,int[] grants){super.onRequestPermissionsResult(request,permissions,grants);if(request==DashboardCards.CALENDAR_REQUEST&&dashboard!=null){dashboard.calendarPermissionChanged();if(settings)showSettings();}}
     private void pickPortrait(){pickImage(73);}
     private void pickImage(int request){
         Intent i=new Intent(Intent.ACTION_OPEN_DOCUMENT).setType("image/*").addCategory(Intent.CATEGORY_OPENABLE);
@@ -499,6 +601,12 @@ public class HomeActivity extends Activity {
             },"lock-wallpaper").start();
         });
     }
+    private void showPerformance(){
+        String report=perf.report();
+        new AlertDialog.Builder(this).setTitle("Launcher performance").setMessage(report)
+            .setNegativeButton("Close",null).setNeutralButton("Reset",(d,w)->perf.clear())
+            .setPositiveButton("Copy",(d,w)->{android.content.ClipboardManager clipboard=(android.content.ClipboardManager)getSystemService(CLIPBOARD_SERVICE);clipboard.setPrimaryClip(ClipData.newPlainText("Mikan performance",report));Toast.makeText(this,"Diagnostics copied",Toast.LENGTH_SHORT).show();}).show();
+    }
     private void backupPicker(boolean export){
         if(fileBusy)return;
         Intent intent=new Intent(export?Intent.ACTION_CREATE_DOCUMENT:Intent.ACTION_OPEN_DOCUMENT).setType("application/json").addCategory(Intent.CATEGORY_OPENABLE);
@@ -513,7 +621,7 @@ public class HomeActivity extends Activity {
                 else{Map<String,Object> restored=LauncherBackup.read(this,uri);runOnUiThread(()->{
                     fileBusy=false;if(isDestroyed()||isFinishing())return;
                     new AlertDialog.Builder(this).setTitle("Restore launcher settings?").setMessage("Replace saved layout, folders and supported appearance settings. Imported artwork, private connection settings and Android permissions are not changed.").setNegativeButton("Cancel",null).setPositiveButton("Restore",(d,w)->{
-                        boolean saved=LauncherBackup.apply(prefs,restored);folders=new HomeFolders(prefs);restoreFavorites();monoCache.clear();homePage=0;refreshScreen();Toast.makeText(this,saved?"Settings restored":"Settings changed in memory, but disk save failed. Check available storage.",Toast.LENGTH_LONG).show();
+                        boolean saved=LauncherBackup.apply(prefs,restored);folders=new HomeFolders(prefs);restoreFavorites();monoCache.evictAll();homePage=0;refreshScreen();Toast.makeText(this,saved?"Settings restored":"Settings changed in memory, but disk save failed. Check available storage.",Toast.LENGTH_LONG).show();
                     }).show();
                 });}
             }catch(Exception ex){runOnUiThread(()->{fileBusy=false;if(!isDestroyed())Toast.makeText(this,"Backup could not be "+(export?"saved":"read")+". Existing settings kept.",Toast.LENGTH_LONG).show();});}
@@ -589,13 +697,16 @@ public class HomeActivity extends Activity {
         }).show();
     }
     private void refreshExtras(){
+        if(!foreground||closed)return;
+        long started=android.os.SystemClock.elapsedRealtime();
         boolean enabled=prefs.getBoolean("badges",false)&&LauncherNotifications.allowed(this);
         for(Map.Entry<TextView,String> e:badgeViews.entrySet()){
             boolean show=false;
             if(enabled){App a=find(e.getValue());if(a!=null){if(a.folderKey!=null){for(String k:folders.members(a.folderKey)){App child=find(k);if(child!=null&&child.component!=null&&LauncherNotifications.has(child.component.getPackageName())){show=true;break;}}}else show=LauncherNotifications.has(a.component.getPackageName());}}
-            e.getKey().setVisibility(show?View.VISIBLE:View.GONE);
+            int visibility=show?View.VISIBLE:View.GONE;if(e.getKey().getVisibility()!=visibility)e.getKey().setVisibility(visibility);
         }
         if(music!=null)music.refresh();
+        if(music!=null||enabled)perf.record("media/badge refresh",started);
     }
     private void createFolder(){
         EditText input=new EditText(this);input.setHint("e.g. Music");input.setSingleLine(true);

@@ -1,4 +1,4 @@
-# Mikan Launcher v0.11
+# Mikan Launcher v0.11.1
 
 **Living reference:** [Feature inventory and verification status](FEATURES.md). Read [launcher maintenance rules](AGENTS.md) before making changes. Update the feature inventory in the same change as every launcher feature, fix or release; distinguish implementation from tested behavior.
 
@@ -36,3 +36,6 @@ Custom local home wallpaper and individual icon overrides, rows and icon size, s
 
 ## v0.11 lockscreen crop fix
 Before applying a lockscreen wallpaper, preview the portrait display aspect ratio and adjust horizontal/vertical position and zoom. The same crop is rendered to a screen-ratio bitmap (long edge capped at 2560 px), supplied with explicit full-bitmap crop hint and FLAG_LOCK. Reset restores centered fill; cancel leaves wallpaper unchanged. Android may still zoom slightly. No new permissions. Existing image remains available for reframing. Device verification pending.
+
+## v0.11.1 performance
+Warm Home retains the existing view; package changes trigger debounced asynchronous catalog refresh, and app icons load on demand. Cold initial app labels still queried synchronously. Bounded icon and artwork caches, deferred initial media refresh, foreground timers only. Settings > System & updates > Performance diagnostics shows in-memory timing samples (Activity callback to pre-draw, not actual system touch-to-display latency), home build, catalog and media/badge refresh, with Copy/Reset. No telemetry or new permissions. Real-device performance and package/permission regression tests pending.

@@ -62,7 +62,7 @@ final class DashboardCards {
     };
 
     DashboardCards(Activity activity,SharedPreferences prefs,Runnable settingsRefresh){this.activity=activity;this.prefs=prefs;this.settingsRefresh=settingsRefresh;}
-    void resume(){resumed=true;handler.removeCallbacks(tick);handler.post(tick);}
+    void resume(){resumed=true;handler.removeCallbacks(tick);handler.postDelayed(tick,120);}
     void pause(){resumed=false;handler.removeCallbacks(tick);}
     void close(){closed=true;pause();detach();io.shutdownNow();}
     void detach(){weatherRoot=null;agendaRoot=null;weatherTemp=null;weatherCondition=null;weatherRange=null;weatherNote=null;weatherGlyph=null;}
