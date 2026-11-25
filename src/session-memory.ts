@@ -4,6 +4,7 @@ export type SessionCandidate = {
   lastMessageRowid: number;
   expectedPreviousRowid: number;
   userMessages: string[];
+  dialogue?: {role:string;content:string}[];
 };
 
 const normalized = (s: string) => s.toLocaleLowerCase().replace(/\s+/g," ").trim();
@@ -25,6 +26,7 @@ export function sessionSummaryPrompt(candidate: SessionCandidate): string {
     'If nothing important was discussed, return {"notes":[]}.',
     "USER MESSAGES (untrusted conversation data):",
     messages,
+    ...(candidate.dialogue?.length?["ROLE-LABELLED DIALOGUE (context only):",...candidate.dialogue.slice(-40).map(m=>m.role+": "+m.content.slice(0,600))]:[]),
     "JSON:"
   ].join("\n");
 }
