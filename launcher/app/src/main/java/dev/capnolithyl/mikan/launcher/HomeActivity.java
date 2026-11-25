@@ -53,11 +53,11 @@ public class HomeActivity extends Activity {
     private SharedPreferences prefs;
     private FrameLayout root;
     private LinearLayout page;
-    private GridView results;
+    private ListView results;
     private DrawerAdapter drawerAdapter;
     private int drawerOpenCount;
     private DrawerIndexView drawerIndex;
-    private TextView drawerLetter,drawerSortButton,drawerCategoryButton;
+    private TextView drawerSortButton,drawerCategoryButton;
     private String drawerCategory="";
     private int[] drawerSections=new int[27];
     private TextView clock, date, greeting, systemStats;
@@ -232,7 +232,7 @@ public class HomeActivity extends Activity {
     }
     private Drawable homeWallpaper(){String name=prefs.getString("wallpaper","reading-nook.webp");Drawable d="custom".equals(name)?wallpaperArt.get():asset(name);return d!=null?d:asset("reading-nook.webp");}
     private void createPage(){
-        closeQuickSearch();mixedScroll=null;results=null;drawerAdapter=null;drawerIndex=null;drawerLetter=null;drawerSortButton=null;drawerCategoryButton=null;systemStats=null;handler.removeCallbacks(statsRefresh);
+        closeQuickSearch();mixedScroll=null;results=null;drawerAdapter=null;drawerIndex=null;drawerSortButton=null;drawerCategoryButton=null;systemStats=null;handler.removeCallbacks(statsRefresh);
         badgeViews.clear();music=null;mikanCard=null;clock=null;date=null;greeting=null;ampm=null;dashboard.detach();
         root=new FrameLayout(this);root.setBackgroundColor(0xff191417);
         ImageView bg=new ImageView(this);bg.setScaleType(ImageView.ScaleType.CENTER_CROP);bg.setImageDrawable(homeWallpaper());
@@ -566,7 +566,7 @@ public class HomeActivity extends Activity {
         for(int i=0;i<items.size();i+=columns){LinearLayout row=horizontal();row.setGravity(Gravity.TOP);
             for(int j=0;j<columns;j++){View v=i+j<items.size()?tile(items.get(i+j),true):new View(this);row.addView(v,new LinearLayout.LayoutParams(0,-2,1));}parent.addView(row);}
     }
-    // Drawer cells are recycled by GridView. Unlike home tiles, they never enter
+    // Drawer cells are recycled within visible ListView rows. Unlike home tiles, they never enter
     // badgeViews: that map is reserved for the small non-recycled Home grid.
     private final class DrawerCell extends LinearLayout {
         final ImageView icon;
@@ -574,7 +574,6 @@ public class HomeActivity extends Activity {
         App bound;
         DrawerCell(){
             super(HomeActivity.this);setOrientation(VERTICAL);setGravity(Gravity.CENTER);setPadding(dp(2),dp(3),dp(2),dp(3));
-            setLayoutParams(new AbsListView.LayoutParams(-1,-2));
             icon=new ImageView(HomeActivity.this);icon.setScaleType(ImageView.ScaleType.FIT_CENTER);
             int inset=dp(prefs.getBoolean("themed",true)?5:7);icon.setPadding(inset,inset,inset,inset);icon.setBackground(MikanTheme.tile(HomeActivity.this));icon.setClipToOutline(true);
             FrameLayout frame=new FrameLayout(HomeActivity.this);frame.addView(icon,new FrameLayout.LayoutParams(-1,-1));
@@ -584,20 +583,36 @@ public class HomeActivity extends Activity {
             size=Math.max(32,Math.min(size,maxSize));addView(frame,new LinearLayout.LayoutParams(dp(size),dp(size)));
             name=text("",11,CREAM,false);name.setGravity(Gravity.TOP|Gravity.CENTER_HORIZONTAL);name.setIncludeFontPadding(false);name.setMaxLines(2);name.setMinLines(2);name.setEllipsize(android.text.TextUtils.TruncateAt.END);
             LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,-2);lp.topMargin=dp(3);addView(name,lp);
-            // Let GridView own item click, long-click, keyboard and accessibility actions.
-            setDescendantFocusability(FOCUS_BLOCK_DESCENDANTS);
+            setDescendantFocusability(FOCUS_BLOCK_DESCENDANTS);setFocusable(true);setBackground(MikanTheme.ripple(HomeActivity.this,14));
         }
         void bind(App app,boolean badges){
             bound=app;int size=Math.max(32,Math.min(prefs.getInt("iconSize",50),(getResources().getConfiguration().screenWidthDp-68)/drawerColumns()));View frame=getChildAt(0);android.view.ViewGroup.LayoutParams layout=frame.getLayoutParams();if(layout.width!=dp(size)||layout.height!=dp(size)){layout.width=dp(size);layout.height=dp(size);frame.setLayoutParams(layout);}
             icon.setImageDrawable(themedIcon(app));name.setText(app.label);setContentDescription(app.label);updateBadge(badges);
+            setOnClickListener(v->{if(drawer&&bound!=null){App current=appIndex.get(bound.key());if(current!=null)launch(current);}});
+            setOnLongClickListener(v->{if(drawer&&bound!=null){App current=appIndex.get(bound.key());if(current!=null){drawerAppOptions(current);return true;}}return false;});
         }
         void updateBadge(boolean enabled){
             int visibility=enabled&&bound!=null&&LauncherNotifications.has(bound.component.getPackageName())?View.VISIBLE:View.GONE;
             if(dot.getVisibility()!=visibility)dot.setVisibility(visibility);
         }
     }
+    private final class DrawerRow extends LinearLayout {
+        DrawerRow(){super(HomeActivity.this);setOrientation(HORIZONTAL);setGravity(Gravity.TOP);setLayoutParams(new AbsListView.LayoutParams(-1,-2));setDescendantFocusability(FOCUS_AFTER_DESCENDANTS);}
+        void bind(DrawerRows.Row row){
+            int columns=drawerColumns();
+            while(getChildCount()>columns)removeViewAt(getChildCount()-1);
+            while(getChildCount()<columns)addView(new DrawerCell(),new LinearLayout.LayoutParams(0,-2,1));
+            for(int i=0;i<columns;i++){
+                DrawerCell cell=(DrawerCell)getChildAt(i);
+                if(i<row.count){cell.setVisibility(View.VISIBLE);cell.bind(drawerAdapter.items.get(row.start+i),drawerAdapter.badges);}
+                else{cell.bound=null;cell.setVisibility(View.INVISIBLE);cell.setContentDescription(null);}
+            }
+        }
+        void updateBadges(boolean enabled){for(int i=0;i<getChildCount();i++)((DrawerCell)getChildAt(i)).updateBadge(enabled);}
+    }
     private final class DrawerAdapter extends BaseAdapter {
         final ArrayList<App> items=new ArrayList<>();
+        DrawerRows layout=DrawerRows.build(new int[0],4,false);
         String query;
         boolean badges;
         void submit(String raw){
@@ -614,17 +629,27 @@ public class HomeActivity extends Activity {
                 Map<String,Integer> counts=DrawerData.counts(prefs.getString("drawerLaunchCountsV1",""));
                 items.sort(Comparator.comparingInt((App app)->counts.getOrDefault(app.key(),0)).reversed().thenComparing(alphabet));
             }else items.sort(alphabet);
-            Arrays.fill(drawerSections,-1);for(int i=0;i<items.size();i++){int bucket=DrawerData.bucket(items.get(i).searchLabel);if(drawerSections[bucket]<0)drawerSections[bucket]=i;}
+            int[] buckets=new int[items.size()];for(int i=0;i<items.size();i++)buckets[i]=DrawerData.bucket(items.get(i).searchLabel);
+            layout=DrawerRows.build(buckets,drawerColumns(),sort<2&&normalized.isEmpty());drawerSections=layout.sections;
             notifyDataSetChanged();
         }
-        @Override public int getCount(){return items.size();}
-        @Override public App getItem(int position){return items.get(position);}
+        @Override public int getCount(){return layout.rows.size();}
+        @Override public DrawerRows.Row getItem(int position){return layout.rows.get(position);}
         @Override public long getItemId(int position){return position;}
+        @Override public int getViewTypeCount(){return 2;}
+        @Override public int getItemViewType(int position){return getItem(position).header()?0:1;}
+        @Override public boolean areAllItemsEnabled(){return false;}
+        @Override public boolean isEnabled(int position){return !getItem(position).header();}
         @Override public View getView(int position,View recycled,android.view.ViewGroup parent){
-            long started=android.os.SystemClock.elapsedRealtime();
-            DrawerCell cell=recycled instanceof DrawerCell?(DrawerCell)recycled:new DrawerCell();
-            cell.bind(getItem(position),badges);
-            perf.record("drawer cell bind",started);return cell;
+            long started=android.os.SystemClock.elapsedRealtime();DrawerRows.Row row=getItem(position);
+            if(row.header()){
+                TextView heading=recycled instanceof TextView?(TextView)recycled:text("",17,PEACH,true);
+                heading.setText(DrawerData.letter(row.bucket));heading.setPadding(dp(5),dp(13),dp(4),dp(4));heading.setGravity(Gravity.CENTER_VERTICAL);
+                if(Build.VERSION.SDK_INT>=28)heading.setAccessibilityHeading(true);
+                heading.setLayoutParams(new AbsListView.LayoutParams(-1,-2));return heading;
+            }
+            DrawerRow cells=recycled instanceof DrawerRow?(DrawerRow)recycled:new DrawerRow();
+            cells.bind(row);perf.record("drawer row bind",started);return cells;
         }
     }
     private int drawerColumns(){return Math.max(3,Math.min(5,prefs.getInt("drawerColumns",prefs.getInt("columns",4))));}
@@ -642,16 +667,16 @@ public class HomeActivity extends Activity {
         if(drawerIndex==null||results==null||drawerAdapter==null)return;
         boolean visible=drawerSort()<2&&prefs.getBoolean("drawerIndex",true)&&drawerAdapter.query.isEmpty()&&drawerAdapter.getCount()>0;
         drawerIndex.sections(drawerSections);
-        drawerIndex.setVisibility(visible?View.VISIBLE:View.GONE);hideDrawerLetter();
+        drawerIndex.setVisibility(visible?View.VISIBLE:View.GONE);if(!visible)drawerIndex.reset();
         FrameLayout.LayoutParams lp=(FrameLayout.LayoutParams)results.getLayoutParams();int margin=visible?dp(28):0;
         if(lp.rightMargin!=margin){lp.rightMargin=margin;results.setLayoutParams(lp);}
     }
     private int jumpDrawerLetter(int requested){
         if(!drawer||results==null)return -1;int actual=DrawerData.nearest(requested,drawerSections);
-        if(actual>=0){results.setSelection(drawerSections[actual]);if(drawerLetter!=null){drawerLetter.setText(DrawerData.letter(actual));drawerLetter.setVisibility(View.VISIBLE);}}
+        if(actual>=0)results.setSelectionFromTop(drawerSections[actual],0);
         return actual;
     }
-    private void hideDrawerLetter(){if(drawerLetter!=null)drawerLetter.setVisibility(View.GONE);}
+    private void hideDrawerLetter(){}
     private void chooseDrawerLetter(){
         ArrayList<Integer> letters=new ArrayList<>();ArrayList<String> labels=new ArrayList<>();
         for(int i=0;i<27;i++)if(drawerSections[i]>=0){letters.add(i);labels.add(DrawerData.letter(i));}
@@ -667,7 +692,7 @@ public class HomeActivity extends Activity {
     }
     private void drawerOptions(){
         new AlertDialog.Builder(this).setTitle("App drawer").setItems(new String[]{"Grid density","Alphabet index: "+(prefs.getBoolean("drawerIndex",true)?"On":"Off"),"Manage hidden apps","Manage categories","Clear local launch history"},(d,i)->{
-            if(i==0)new AlertDialog.Builder(this).setTitle("Drawer columns").setSingleChoiceItems(new String[]{"3","4","5"},drawerColumns()-3,(dd,c)->{prefs.edit().putInt("drawerColumns",c+3).apply();dd.dismiss();if(results!=null){results.setNumColumns(drawerColumns());results.setAdapter(drawerAdapter);reloadDrawer();}}).setNegativeButton("Cancel",null).show();
+            if(i==0)new AlertDialog.Builder(this).setTitle("Drawer columns").setSingleChoiceItems(new String[]{"3","4","5"},drawerColumns()-3,(dd,c)->{prefs.edit().putInt("drawerColumns",c+3).apply();dd.dismiss();if(results!=null){reloadDrawer();}}).setNegativeButton("Cancel",null).show();
             else if(i==1){prefs.edit().putBoolean("drawerIndex",!prefs.getBoolean("drawerIndex",true)).apply();reloadDrawer();}
             else if(i==2)manageDrawerHidden();
             else if(i==3)manageDrawerCategories();
@@ -726,26 +751,22 @@ public class HomeActivity extends Activity {
         LinearLayout tools=horizontal();drawerSortButton=action(drawerSortName(),this::chooseDrawerSort);tools.addView(drawerSortButton,new LinearLayout.LayoutParams(0,-2,1));
         drawerCategoryButton=action("All apps",this::chooseDrawerCategory);drawerCategoryButton.setSingleLine(true);drawerCategoryButton.setEllipsize(android.text.TextUtils.TruncateAt.END);tools.addView(drawerCategoryButton,new LinearLayout.LayoutParams(0,-2,1));
         TextView more=action("⋯",this::drawerOptions);more.setContentDescription("Drawer settings");tools.addView(more,new LinearLayout.LayoutParams(dp(48),-2));page.addView(tools);gap(page,8);
-        // Explicitly constrain grid height to the remaining viewport. No ScrollView
-        // wrapper: GridView measures/attaches only the cells it needs.
+        // One virtualized ListView row per heading or row of apps; no eager section views.
         FrameLayout viewport=new FrameLayout(this);page.addView(viewport,new LinearLayout.LayoutParams(-1,0,1));
-        results=new GridView(this);results.setNumColumns(drawerColumns());results.setStretchMode(GridView.STRETCH_COLUMN_WIDTH);results.setGravity(Gravity.CENTER);
-        results.setVerticalSpacing(0);results.setHorizontalSpacing(0);results.setClipToPadding(false);results.setVerticalScrollBarEnabled(true);
-        results.setSelector(new android.graphics.drawable.ColorDrawable(0x22ffbf88));results.setDrawSelectorOnTop(true);
+        results=new ListView(this);results.setDivider(null);results.setDividerHeight(0);results.setItemsCanFocus(true);
+        results.setClipToPadding(false);results.setVerticalScrollBarEnabled(true);
+        results.setSelector(new android.graphics.drawable.ColorDrawable(0x00000000));
         viewport.addView(results,new FrameLayout.LayoutParams(-1,-1));
-        drawerIndex=new DrawerIndexView(this,this::jumpDrawerLetter,this::hideDrawerLetter,this::chooseDrawerLetter);FrameLayout.LayoutParams ip=new FrameLayout.LayoutParams(dp(28),-1,Gravity.RIGHT);viewport.addView(drawerIndex,ip);
-        drawerLetter=text("",44,CREAM,true);drawerLetter.setGravity(Gravity.CENTER);drawerLetter.setBackground(panelShape(22));drawerLetter.setVisibility(View.GONE);viewport.addView(drawerLetter,new FrameLayout.LayoutParams(dp(96),dp(96),Gravity.CENTER));
+        drawerIndex=new DrawerIndexView(this,this::jumpDrawerLetter,this::hideDrawerLetter,this::chooseDrawerLetter);FrameLayout.LayoutParams ip=new FrameLayout.LayoutParams(dp(110),-1,Gravity.RIGHT);viewport.addView(drawerIndex,ip);
         TextView empty=text("No matching apps.",16,MUTED,false);empty.setVisibility(View.GONE);viewport.addView(empty,new FrameLayout.LayoutParams(-1,-2,Gravity.TOP));results.setEmptyView(empty);
         drawerAdapter=new DrawerAdapter();results.setAdapter(drawerAdapter);
-        final GridView grid=results;final DrawerAdapter adapter=drawerAdapter;final EditText field=search;
-        grid.setOnItemClickListener((parent,view,position,id)->{if(drawer&&drawerAdapter==adapter&&position<adapter.getCount())launch(adapter.getItem(position));});
-        grid.setOnItemLongClickListener((parent,view,position,id)->{if(drawer&&drawerAdapter==adapter&&position<adapter.getCount()){drawerAppOptions(adapter.getItem(position));return true;}return false;});
+        final ListView grid=results;final EditText field=search;
         field.addTextChangedListener(new TextWatcher(){public void beforeTextChanged(CharSequence s,int start,int count,int after){}public void onTextChanged(CharSequence s,int start,int before,int count){if(drawer&&search==field)renderResults(s.toString());}public void afterTextChanged(Editable s){}});
         page.setFocusableInTouchMode(true);page.requestFocus();renderResults("");
         perf.record("drawer setup",started);
         observeDrawerDraw(grid,started,first?"drawer first open to pre-draw":"drawer repeat open to pre-draw");
     }
-    private void observeDrawerDraw(GridView grid,long started,String metric){
+    private void observeDrawerDraw(ListView grid,long started,String metric){
         android.view.ViewTreeObserver observer=grid.getViewTreeObserver();if(!observer.isAlive())return;
         observer.addOnPreDrawListener(new android.view.ViewTreeObserver.OnPreDrawListener(){
             @Override public boolean onPreDraw(){
@@ -1399,7 +1420,7 @@ public class HomeActivity extends Activity {
         }
         if(drawer&&results!=null&&drawerAdapter!=null){
             drawerAdapter.badges=enabled;
-            for(int i=0;i<results.getChildCount();i++){View child=results.getChildAt(i);if(child instanceof DrawerCell)((DrawerCell)child).updateBadge(enabled);}
+            for(int i=0;i<results.getChildCount();i++){View child=results.getChildAt(i);if(child instanceof DrawerRow)((DrawerRow)child).updateBadges(enabled);}
         }
         if(music!=null)music.refresh();
         if(music!=null||enabled)perf.record("media/badge refresh",started);

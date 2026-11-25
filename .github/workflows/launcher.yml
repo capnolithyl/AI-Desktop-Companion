@@ -50,6 +50,11 @@ jobs:
           mkdir -p /tmp/mikan-drawer-tests
           javac -d /tmp/mikan-drawer-tests launcher/app/src/main/java/dev/capnolithyl/mikan/launcher/DrawerData.java launcher/tests/DrawerDataTest.java
           java -cp /tmp/mikan-drawer-tests dev.capnolithyl.mikan.launcher.DrawerDataTest
+      - name: Test drawer section rows and index wave
+        run: |
+          mkdir -p /tmp/mikan-section-tests
+          javac -d /tmp/mikan-section-tests launcher/app/src/main/java/dev/capnolithyl/mikan/launcher/DrawerRows.java launcher/app/src/main/java/dev/capnolithyl/mikan/launcher/IndexWave.java launcher/tests/DrawerRowsTest.java
+          java -cp /tmp/mikan-section-tests dev.capnolithyl.mikan.launcher.DrawerRowsTest
       - name: Compile launcher
         working-directory: launcher
         run: gradle :app:assembleDebug --stacktrace

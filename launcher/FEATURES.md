@@ -1,6 +1,6 @@
 # Mikan Launcher — living feature reference
 
-**Source baseline:** v0.12.3 (versionCode 23), drawer overhaul, 2026-11-25. See Git history for implementation commit.
+**Source baseline:** v0.12.4 (versionCode 24), alphabet sections and animated index, 2026-11-25. See Git history for implementation commit.
 **Development:** [PR #117](https://github.com/capnolithyl/AI-Desktop-Companion/pull/117), branch `feature/mikan-launcher-v01`. Check current branch and Gradle version before changing this document.
 **Purpose:** a free, personal, offline-first Android launcher inspired by the Mikan OS home-screen mockup. Separate from Pocket Mikan, desktop Mikan and the NAS. This document tracks the launcher only.
 
@@ -19,8 +19,9 @@ Build success, release publication, installation and individual feature verifica
 | Independent Android home app | 0.1 | HOME/DEFAULT role and normal launch entry; Settings > Default home app to select or switch home. | Initial install and home UI observed; stock fallback and cold boot still pending. |
 | Header system stats | 0.11.6 | Subtle two-line RAM and internal data storage used/total beside Mikan OS; tap for details and available values. Enabled by default, toggle in Home screen settings. Uses Android MemoryInfo/StatFs, local asynchronous snapshots at most every 30 seconds while Home visible; no new permission or persistent service. RAM is an estimate, storage is usable data filesystem. Display preference included in backup. | Implemented; device and layout validation pending. |
 | Quick app search | 0.12.0 | Tap Home search bar for bottom overlay and keyboard, without initializing drawer or rebuilding Home. Local ranked results (exact, prefix, word prefix, substring, multiple terms, package fallback); up to five results, Go/Enter launches first match, tap launches chosen result. Empty query suggests recent then pinned apps. Close/outside/Back dismiss; IME Back behavior can vary. Bounded local recent list (12 launcher-observed successful launches), excluded from layout backup; no system usage permission, AI or network. | Implemented; automated rank cases and device validation pending. |
-| Drawer customization | 0.12.3 | Right-edge #/A–Z scrubber (nearest populated section, large active letter, haptics); alphabetical ascending/descending, local recent/frequent sorting, user-assigned categories, hide/unhide, independent 3–5 columns. Index hidden while searching or nonalphabetical. Hidden applies to drawer only; Home and quick search retained. Sort/category/hide/density settings backed up; launch history local and excluded, clearable. | Implemented; CI/device pending. |
-| App drawer | 0.1 / 0.11.4 | Search installed launchable apps by label or package; swipe up near bottom opens full drawer; its own search field opens keyboard. Native adapter-backed GridView creates/recycles visible cells, filters existing catalog without recreating the grid; 3–5 independently configurable columns, existing icons, badge updates, and click/long-press actions. | Implemented; device latency, search, scroll and launch regression pending. |
+| Drawer customization | 0.12.3 | Right-edge #/A–Z scrubber (nearest populated section, animated enlarged active/neighbor letters since v0.12.4, haptics); alphabetical ascending/descending, local recent/frequent sorting, user-assigned categories, hide/unhide, independent 3–5 columns. Index hidden while searching or nonalphabetical. Hidden applies to drawer only; Home and quick search retained. Sort/category/hide/density settings backed up; launch history local and excluded, clearable. | Implemented; CI/device pending. |
+| Alphabet sections and wave | 0.12.4 | Default alphabetical modes group apps beneath full-width populated #/A–Z headings; partial rows do not mix letters. Virtualized ListView recycles headers and rows of app cells; index jumps to headers. Continuous finger-position wave expands active/neighbor letters leftward, then settles on release; respects disabled system animations. No centered popup; wave replaces it. Search and history sorts use flat rows. | Implemented; CI/device pending. |
+| App drawer | 0.1 / 0.11.4 / 0.12.4 | Search installed launchable apps by label or package; swipe up near bottom opens full drawer; its own search field opens keyboard. Native adapter-backed ListView creates/recycles visible header and app rows, filters existing catalog without rebuilding the drawer; 3–5 independently configurable columns, existing icons, badge updates, and click/long-press actions. | Implemented; device latency, search, scroll and launch regression pending. |
 | Favorites | 0.1 | Long-press drawer app to pin; drawer/Manage favorites menu to unpin and move; saved locally. | Favorites visible across screenshots; persistence on updates observed, complete CRUD pending. |
 | Dock | 0.1–0.2 | First 3–5 available pinned entries, configurable, persists across pages. Default 5; floating dock (default on in v0.8) or framed dock. | Floating dock observed in v0.8; toggle pending. |
 | App rearrangement | 0.2 | Hold and drag pinned app onto another visible pinned tile; menu-based ordering and moving between pages. | Implemented; gesture and cross-page tests pending. |
@@ -138,7 +139,9 @@ Weather card also exposes refresh, city, units and clear location. No full-scree
 
 | 0.12.2 | Live mixed grid, widget movement/resizing, dock slot editing, model tests | Implemented; CI/device pending. |
 
-| 0.12.3 | Alphabet index, sorting, categories, hidden apps, drawer density and local launch counts | Implemented; CI/device pending. |
+| 0.12.3 | Alphabet index, sorting, categories, hidden apps, drawer density and local launch counts | Launcher CI [45614733031](https://github.com/capnolithyl/AI-Desktop-Companion/actions/runs/45614733031) succeeded; owner confirms index functional. Further tests pending. |
+
+| 0.12.4 | Grouped letter headers, recycled drawer rows, finger-following magnification wave and release animation | Implemented; CI/device pending. |
 
 ## 7. Outstanding verification checklist
 
@@ -186,6 +189,8 @@ Weather card also exposes refresh, city, units and clear location. No full-scree
 - [ ] v0.12.2 verify legacy layout unchanged by default, mixed toggle on/off, all widget rendering/taps, editing moves and resize collision rejection, adaptive rows, page manager, dock slot swap, backup/restore, font/width changes, offline and latency. Mixed-layout pure Java tests in CI.
 
 - [ ] v0.12.3 verify alphabet scrub/index missing sections/descending, haptics and accessibility, search hides index, recent/frequent sort after launch/resume, category creation/filter/removal, hidden app management, independent density, backup/restore, unchanged quick search and launch/long-press, large catalog performance. Pure Java drawer tests in CI.
+
+- [ ] v0.12.4 verify wave follows fractional finger position, neighbors extend progressively, smooth release, disabled animation setting, missing letters, both alphabetical sorts, heading alignment, partial rows, # section, search and nonalphabetical flat rows, category filter, hide/unhide, density, recycled icons/badges, long-press/tap, scrolling and latency. Pure Java row/wave tests in CI.
 
 ## 8. Roadmap (not implemented)
 
