@@ -48,7 +48,7 @@ export async function executeNasTurn({store,conversationId,question,selected,mod
   const {history,rawHistory,memory}=await trace.measure("context",()=>{
     const rawHistory=store.messages(conversationId,80);
     const history=boundedHistory(rawHistory,selected.historyChars);
-    const memory=store.library.context(question,conversationId,modelLed?{includeSessions:false}:undefined);
+    const memory=store.library.context(question,conversationId,modelLed?{modelLed:true,includeSessions:false}:undefined);
     return {history,rawHistory,memory};
   });
   if(modelLed)return companionTurn({store,conversationId,question,history,rawHistory,memory,profile:currentProfile(promptFile,store),selected,mode,requestModel,reserve,canRequest,search,read,knowledge,trace,onDelta,activity,signal});
