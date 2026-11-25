@@ -1,6 +1,6 @@
 import {parseMemoryImport,parseTags,MEMORY_CATEGORIES} from "../src/memory-import.ts";
 import {parseCanon,parseInterests,canonKey} from "../src/interest-import.ts";
-import {meaningfulTerms,memoryTerms} from "../src/memory-ranking.ts";
+import {meaningfulTerms,memoryTerms,rankMemories} from "../src/memory-ranking.ts";
 import {selectDeterministicMemoryIds} from "../src/memory-retrieval.ts";
 import {shouldIncludeCharacterCanon,characterContinuityContext} from "../src/character-canon-routing.ts";
 import {buildInterestContext} from "../src/interest-context.ts";
@@ -98,7 +98,8 @@ export function createMemoryLibrary(db){
     if(!args||typeof args!=="object"||Array.isArray(args))invalid("Invalid memory arguments");
     try{return commands[action](args);}catch(e){if(/UNIQUE constraint failed/.test(e.message))throw Object.assign(new Error("A matching record already exists; nothing was overwritten"),{status:409});throw e;}
   }
-  function context(question,conversationId,{includeSessions=true,explicitRecall=false}={}){
+  function context(question,conversationId,{includeSessions=true,explicitRecall=false,modelLed=false}={}){
+    if(modelLed)return modelContext(question,explicitRecall);
     const budget=memoryBudget(16384);
     // Whole-word relevance, without an extra inference request. Preserve
     // broad-domain matching for explicit recall and recommendation requests.
@@ -139,6 +140,27 @@ export function createMemoryLibrary(db){
     const text=sections.join("\n\n");
     // Actual context supplied to inference, not an assumption about what the model used.
     return {text,ids:selected.map(x=>x.item.id),recall,auditLines:sections.flatMap(section=>section.split("\n").filter(line=>line.trim()).slice(0,12)).slice(0,32).map(line=>line.slice(0,500))};
+  }
+  // Native companion path: retrieval ranks data, not conversational intent.
+  // No "is this a personal question?" or character-canon regex gates.
+  function modelContext(query,explicitRecall){
+    const budget=memoryBudget(16384),terms=meaningfulTerms(query);
+    const overlap=value=>{const words=new Set(memoryTerms(value));return terms.reduce((n,t)=>n+Number(words.has(t)),0);};
+    const candidates=facts().filter(f=>f.importance>=90||overlap([f.fact,f.category,...(f.tags??[])].join(" "))>0);
+    const pinned=rankMemories(candidates.filter(f=>f.importance>=90),query).slice(0,2);
+    const matched=rankMemories(candidates.filter(f=>!pinned.some(p=>p.id===f.id)&&overlap([f.fact,f.category,...(f.tags??[])].join(" "))>0),query);
+    const rows=[];let length=0;
+    for(const f of [...pinned,...matched]){
+      const stamp=new Date(f.createdAt<1e12?f.createdAt*1000:f.createdAt);
+      const date=Number.isFinite(stamp.getTime())?stamp.toISOString().slice(0,10):"unknown date";
+      const line="- ["+date+"] "+f.fact;
+      if(rows.length>=budget.maxFacts||length+line.length>budget.factChars)continue;
+      rows.push({id:f.id,line});length+=line.length;
+    }
+    const tastes=interests().map(i=>({i,score:overlap([i.name,i.kind,i.status,i.notes,...i.tags].join(" "))})).filter(x=>x.score>0).sort((a,b)=>b.score-a.score).slice(0,12).map(({i})=>"- "+i.kind+": "+i.name+" ("+i.status+(i.rating!==null?", rating "+i.rating:"")+")");
+    const character=canon().map(i=>({i,score:overlap(i.label+" "+i.value)})).sort((a,b)=>b.score-a.score).slice(0,10).map(({i})=>"- "+i.label+": "+i.value);
+    const sections=[rows.length?"Owner facts (date saved):\n"+rows.map(r=>r.line).join("\n"):"",tastes.length?"Owner interests:\n"+tastes.join("\n").slice(0,2000):"",character.length?"Character canon:\n"+character.join("\n").slice(0,2000):""].filter(Boolean);
+    return {text:sections.join("\n\n"),ids:rows.map(r=>r.id),auditLines:sections.flatMap(s=>s.split("\n")).slice(0,32)};
   }
   function markRecalled(ids){const write=db.prepare("INSERT INTO user_memory_usage(memory_id,reference_count,last_accessed) SELECT id,1,unixepoch() FROM user_memories WHERE id=? ON CONFLICT(memory_id) DO UPDATE SET reference_count=MIN(10000,user_memory_usage.reference_count+1),last_accessed=unixepoch()");for(const id of new Set(ids.slice(0,20)))write.run(id);}
   // Search the original user-authored FTS index, then include the surrounding
