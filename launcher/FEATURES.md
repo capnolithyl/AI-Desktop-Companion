@@ -135,9 +135,32 @@ Weather card also exposes refresh, city, units and clear location. No full-scree
 
 ## 8. Roadmap (not implemented)
 
-**v0.8 implemented:** shared warm design styling, two-tone glyphs, floating dock, page dots, circular play, search bar and voice/browser actions. Visual design observed on device; behavioral validation pending. **v0.9 implemented:** categorized settings, visual choices and permission status; owner reports improved settings, detailed behavior checks pending. **Remaining mockup gaps:** transparent character cutout artwork (not bundled), richer ambient effects, full icon pack, shuffle/repeat (needs reliable media-provider support), camera/Lens shortcut, lockscreen customization.
+Planned milestones; version targets flexible. See [Trello roadmap](https://trello.com/c/VEk6xVz6). No arbitrary deadlines.
 
-**Later / separate milestones:** free-position app/widget grid and drag-to-create folders; third-party Android widget hosting; richer folder UI; full icon packs and free-position layout; bundled transparent/alternate Mikan art and optional outfit variants; optional actual NAS/model status; improved Pocket Mikan integration; further Android-supported lockscreen customization (do not replace or bypass secure Android lockscreen). No promised dates. Check Trello and current source before selecting next features.
+### v0.11.1 — Performance pass (next, before editor)
+- Owner reports occasional extra delay pressing Android Home. Source inspection of v0.11: onResume reloads all launchable app labels/icons, clears monochrome cache, and calls showHome (or rebuilds settings/drawer); onNewIntent also calls showHome; onCreate and onResume can duplicate initialization. createPage recreates view hierarchy and loads wallpaper; portrait imports are decoded on read. These are candidate bottlenecks, not measured root causes.
+- Instrument cold start, warm Home return, first rendered frame and widget refresh separately; compare before/after on the Pixel. Track median and slow-tail latency, jank, memory and idle battery; no invented benchmark results.
+- Reuse existing home views on unchanged state; invalidate app catalog/icons on install/update/remove and relevant settings changes instead of rebuilding on every resume; bounded caches for decoded wallpaper, art and icons with proper invalidation.
+- Defer app discovery/icon decoding and media/provider work off critical UI path where safe; render local UI first, update widgets incrementally after first frame. Avoid duplicate resume/Home intent work and repeated refreshes, stop timers while paused.
+- Regression: app install/remove/update, Home from apps and settings/drawer, page behavior, permissions changes, artwork/settings updates, music/calendar/weather freshness, offline cold boot, low-memory recovery. Preserve visual design, settings and updater; no NAS/network dependency, no always-on service just to make Home faster.
+- Planned only; no optimization or benchmark has been completed yet.
+
+### v0.12 — Home screen editor
+Long-press edit mode, collision-safe free grid placement, drag-to-create folders, page management, widget resizing and preservation of old layout.
+
+### v0.13 — Theme engine
+Accent colors, multiple schemes, adjustable wallpaper darkness/widget transparency, complete theme import/export including art, seasonal and optional local time/cached-weather themes.
+
+### v0.14 — Bring Mikan to life
+Time-based expressions/artwork, local greetings using optional weather/calendar, configurable occasional messages, optional bounded NAS responses/status and offline personality.
+
+### v0.15 — Expanded widgets
+Native Android widget hosting (subject to compatibility), battery/device information, tasks/reminders, quick contacts, optional daily briefing and local fallback.
+
+### v1.0 — Daily-driver release
+Performance/battery/startup regression, full backup/restore, crash recovery, offline boot and NAS-outage tests, stock launcher fallback, resolve outstanding bugs and merge with owner approval.
+
+Other gaps: transparent/alternate bundled artwork, richer ambient effects, full icon packs, shuffle/repeat where supported, camera/Lens shortcut, Android Wallpaper & style shortcut and further supported lockscreen customization without bypassing secure keyguard. No root/custom ROM.
 
 ## 9. Maintenance contract
 
