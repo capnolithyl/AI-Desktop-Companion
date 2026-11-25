@@ -62,6 +62,7 @@ public class HomeActivity extends Activity {
     private long lastStats=-30000;
     private final Runnable statsRefresh=()->refreshSystemStats();
     private EditText search;
+    private QuickSearchDialog<App> quickSearch;
     private boolean drawer=false;
     private boolean settings=false;
     private SettingsHub.Section settingsSection=SettingsHub.Section.HUB;
@@ -133,17 +134,17 @@ public class HomeActivity extends Activity {
         if(catalogDirty)scheduleCatalog();
     }
     @Override protected void onPause(){
-        foreground=false;dashboard.pause();handler.removeCallbacks(statsRefresh);handler.removeCallbacks(tick);handler.removeCallbacks(refreshExtras);handler.removeCallbacks(progressTick);handler.removeCallbacks(delayedExtras);handler.removeCallbacks(catalogRefresh);
+        foreground=false;closeQuickSearch();dashboard.pause();handler.removeCallbacks(statsRefresh);handler.removeCallbacks(tick);handler.removeCallbacks(refreshExtras);handler.removeCallbacks(progressTick);handler.removeCallbacks(delayedExtras);handler.removeCallbacks(catalogRefresh);
         entryKind=null;entryGeneration++;super.onPause();
     }
     @Override protected void onDestroy(){
-        closed=true;foreground=false;handler.removeCallbacksAndMessages(null);catalogWorker.shutdownNow();
+        closed=true;foreground=false;closeQuickSearch();handler.removeCallbacksAndMessages(null);catalogWorker.shutdownNow();
         if(receiverRegistered)unregisterReceiver(packagesChanged);
         if(dashboard!=null)dashboard.close();super.onDestroy();
     }
     @Override protected void onNewIntent(Intent intent){
         super.onNewIntent(intent);setIntent(intent);
-        beginEntry("Home intent");
+        closeQuickSearch();beginEntry("Home intent");
         if(drawer||settings||homePage!=0){hideKeyboard();homePage=0;showHome();}
         else updateClock();
         if(foreground){observeEntry();queueExtras();queueSystemStats();}
@@ -198,7 +199,7 @@ public class HomeActivity extends Activity {
             });
         });
     }
-    @Override public void onBackPressed(){if(settings){backFromSettings();}else if(drawer){hideKeyboard();showHome();}else if(homePage!=0){homePage=0;showHome();}}
+    @Override public void onBackPressed(){if(quickSearch!=null){closeQuickSearch();return;}if(settings){backFromSettings();}else if(drawer){hideKeyboard();showHome();}else if(homePage!=0){homePage=0;showHome();}}
     private int dp(float n){return Math.round(n*getResources().getDisplayMetrics().density);}
     private GradientDrawable shape(int color,int radius,boolean border){
         GradientDrawable d=new GradientDrawable();d.setColor(color);d.setCornerRadius(dp(radius));if(border)d.setStroke(dp(1),BORDER);return d;
@@ -218,7 +219,7 @@ public class HomeActivity extends Activity {
     }
     private Drawable homeWallpaper(){String name=prefs.getString("wallpaper","reading-nook.webp");Drawable d="custom".equals(name)?wallpaperArt.get():asset(name);return d!=null?d:asset("reading-nook.webp");}
     private void createPage(){
-        results=null;drawerAdapter=null;systemStats=null;handler.removeCallbacks(statsRefresh);
+        closeQuickSearch();results=null;drawerAdapter=null;systemStats=null;handler.removeCallbacks(statsRefresh);
         badgeViews.clear();music=null;mikanCard=null;clock=null;date=null;greeting=null;ampm=null;dashboard.detach();
         root=new FrameLayout(this);root.setBackgroundColor(0xff191417);
         ImageView bg=new ImageView(this);bg.setScaleType(ImageView.ScaleType.CENTER_CROP);bg.setImageDrawable(homeWallpaper());
@@ -280,7 +281,7 @@ public class HomeActivity extends Activity {
     }
     private void launch(App app){
         if(app.folderKey!=null){openFolder(app.folderKey);return;}
-        try{hideKeyboard();Intent intent=new Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER).setComponent(app.component).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED);startActivity(intent);}
+        try{hideKeyboard();Intent intent=new Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER).setComponent(app.component).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED);startActivity(intent);rememberLaunch(app.key());}
         catch(Exception e){Toast.makeText(this,"Unable to open "+app.label,Toast.LENGTH_SHORT).show();invalidateCatalog();}
     }
     private TextView action(String label,Runnable run){
@@ -397,12 +398,69 @@ public class HomeActivity extends Activity {
     private View searchBar(){
         LinearLayout bar=horizontal();bar.setBackground(MikanTheme.panel(this,26));bar.setPadding(dp(4),0,dp(4),0);
         bar.addView(markButton(MikanMark.SEARCH,"Search installed apps",this::openAppSearch),new LinearLayout.LayoutParams(dp(42),-1));
-        TextView hint=text("Search on Mikan OS",13,MUTED,false);hint.setGravity(Gravity.CENTER_VERTICAL);hint.setSingleLine(true);hint.setEllipsize(android.text.TextUtils.TruncateAt.END);hint.setOnClickListener(v->openAppSearch());bar.addView(hint,new LinearLayout.LayoutParams(0,-1,1));
+        TextView hint=text("Find an app...",13,MUTED,false);hint.setGravity(Gravity.CENTER_VERTICAL);hint.setSingleLine(true);hint.setEllipsize(android.text.TextUtils.TruncateAt.END);hint.setOnClickListener(v->openAppSearch());bar.addView(hint,new LinearLayout.LayoutParams(0,-1,1));
         bar.addView(markButton(MikanMark.GLOBE,"Search web",()->webSearchDialog("")),new LinearLayout.LayoutParams(dp(42),-1));
         bar.addView(markButton(MikanMark.MIC,"Voice web search",this::voiceSearch),new LinearLayout.LayoutParams(dp(42),-1));
         return bar;
     }
-    private void openAppSearch(){showDrawer();search.requestFocus();search.post(()->{if(drawer&&search!=null&&search.hasFocus())((InputMethodManager)getSystemService(INPUT_METHOD_SERVICE)).showSoftInput(search,InputMethodManager.SHOW_IMPLICIT);});}
+    private void openAppSearch(){
+        if(!foreground||closed||drawer||settings||quickSearch!=null)return;
+        final long started=android.os.SystemClock.elapsedRealtime();
+        final QuickSearchDialog<App> overlay=new QuickSearchDialog<>(this,new QuickSearchDialog.Source<App>(){
+            @Override public List<App> matches(String query){return quickMatches(query);}
+            @Override public String label(App app){return app.label;}
+            @Override public Drawable icon(App app){return themedIcon(app);}
+            @Override public void launch(App app){
+                App current=appIndex.get(app.key());
+                if(current==null){Toast.makeText(HomeActivity.this,"App is no longer available.",Toast.LENGTH_SHORT).show();return;}
+                closeQuickSearch();HomeActivity.this.launch(current);
+            }
+            @Override public void timing(String name,long start){perf.record(name,start);}
+        });
+        quickSearch=overlay;
+        overlay.setOnDismissListener(dialog->{
+            if(quickSearch==overlay)quickSearch=null;
+            // A package refresh may have arrived while the dialog was open.
+            // Refresh Home after dismissal without touching its page or query.
+            if(catalogRenderPending&&foreground&&!closed)handler.post(()->{
+                if(catalogRenderPending&&foreground&&!closed&&quickSearch==null){catalogRenderPending=false;refreshScreen();}
+            });
+        });
+        overlay.open(started);
+    }
+    private void closeQuickSearch(){
+        QuickSearchDialog<App> overlay=quickSearch;
+        quickSearch=null;
+        if(overlay!=null)overlay.close();
+    }
+    private List<App> quickMatches(String query){
+        String normalized=QuickAppRank.normalize(query);
+        if(normalized.isEmpty()){
+            LinkedHashSet<App> choices=new LinkedHashSet<>();
+            for(String key:prefs.getString("quickRecentApps","").split("\\n")){
+                App app=appIndex.get(key);if(app!=null)choices.add(app);
+            }
+            for(String key:favorites){App app=appIndex.get(key);if(app!=null)choices.add(app);}
+            ArrayList<App> list=new ArrayList<>(choices);return list.subList(0,Math.min(QuickSearchDialog.LIMIT,list.size()));
+        }
+        ArrayList<App> matches=new ArrayList<>();
+        Map<App,Integer> scores=new HashMap<>();
+        for(App app:apps){
+            int score=QuickAppRank.score(normalized,app.label,app.component.getPackageName());
+            if(score>=0){matches.add(app);scores.put(app,score);}
+        }
+        matches.sort(Comparator.comparingInt((App app)->scores.get(app)).thenComparing(app->app.label,String.CASE_INSENSITIVE_ORDER).thenComparing(App::key));
+        return matches.subList(0,Math.min(QuickSearchDialog.LIMIT,matches.size()));
+    }
+    private void rememberLaunch(String key){
+        if(!appIndex.containsKey(key))return;
+        LinkedHashSet<String> recent=new LinkedHashSet<>();recent.add(key);
+        for(String old:prefs.getString("quickRecentApps","").split("\\n")){if(recent.size()>=12)break;if(appIndex.containsKey(old))recent.add(old);}
+        prefs.edit().putString("quickRecentApps",String.join("\\n",recent)).apply();
+    }
+    private void rememberPackageLaunch(String pkg){
+        for(App app:apps)if(app.component.getPackageName().equals(pkg)){rememberLaunch(app.key());return;}
+    }
     private void webSearchDialog(String initial){
         EditText input=new EditText(this);input.setSingleLine(true);input.setHint("Search the web");input.setText(initial);
         new AlertDialog.Builder(this).setTitle("Web search").setMessage("Opens Google in your browser. Your query leaves the phone only when you choose Search.").setView(input).setNegativeButton("Cancel",null).setPositiveButton("Search",(d,w)->{String q=input.getText().toString().trim();if(q.isEmpty())return;try{startActivity(new Intent(Intent.ACTION_VIEW,android.net.Uri.parse("https://www.google.com/search?q="+android.net.Uri.encode(q))));}catch(Exception e){Toast.makeText(this,"No browser available.",Toast.LENGTH_SHORT).show();}}).show();
@@ -847,7 +905,7 @@ public class HomeActivity extends Activity {
     private void openMikan(){
         try{
             Intent intent=getPackageManager().getLaunchIntentForPackage(POCKET_PACKAGE);
-            if(intent!=null){intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED);startActivity(intent);return;}
+            if(intent!=null){intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED);startActivity(intent);rememberPackageLaunch(POCKET_PACKAGE);return;}
         }catch(RuntimeException ignored){}
         Toast.makeText(this,"Pocket Mikan unavailable. Opening web fallback.",Toast.LENGTH_SHORT).show();
         openMikanWeb();
@@ -915,7 +973,7 @@ public class HomeActivity extends Activity {
                 }
                 try{
                     Intent intent=getPackageManager().getLaunchIntentForPackage(remark.packageName);
-                    if(intent!=null){intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED);startActivity(intent);return;}
+                    if(intent!=null){intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED);startActivity(intent);rememberPackageLaunch(remark.packageName);return;}
                 }catch(RuntimeException ignored){}
                 Toast.makeText(this,remark.label+" is unavailable.",Toast.LENGTH_SHORT).show();invalidateCatalog();return;
             case WEATHER:
@@ -965,7 +1023,7 @@ public class HomeActivity extends Activity {
             saveFavorites();refreshScreen();
         }).show();
     }
-    private void refreshScreen(){if(settings)showSettings();else if(drawer&&search!=null)renderResults(search.getText().toString());else showHome();}
+    private void refreshScreen(){if(quickSearch!=null){catalogRenderPending=true;quickSearch.refresh();return;}if(settings)showSettings();else if(drawer&&search!=null)renderResults(search.getText().toString());else showHome();}
     private void manageFolders(){
         List<String> ids=folders.keys();if(ids.isEmpty()){createFolder();return;}
         String[] names=new String[ids.size()];for(int i=0;i<names.length;i++)names[i]=folders.name(ids.get(i));
@@ -1009,6 +1067,7 @@ public class HomeActivity extends Activity {
         }catch(Exception e){new AlertDialog.Builder(this).setMessage("Open Android Settings → Apps → Default apps → Home app.").setPositiveButton("OK",null).show();}
     }
     @Override public boolean dispatchTouchEvent(MotionEvent event){
+        if(quickSearch!=null)return super.dispatchTouchEvent(event);
         if(event.getActionMasked()==MotionEvent.ACTION_DOWN){touchX=event.getX();touchY=event.getY();seekGesture=music!=null&&music.isSeekTouch(event.getRawX(),event.getRawY());}
         if(!seekGesture&&!drawer&&!settings&&event.getActionMasked()==MotionEvent.ACTION_UP&&Math.abs(event.getX()-touchX)>dp(90)&&Math.abs(event.getY()-touchY)<dp(55)){MotionEvent cancel=MotionEvent.obtain(event);cancel.setAction(MotionEvent.ACTION_CANCEL);super.dispatchTouchEvent(cancel);cancel.recycle();changePage(event.getX()<touchX?1:-1);return true;}
         if(!seekGesture&&!drawer&&!settings&&event.getActionMasked()==MotionEvent.ACTION_UP&&root!=null&&touchY>root.getHeight()-dp(180)&&touchY-event.getY()>dp(70)&&Math.abs(event.getX()-touchX)<dp(90)){

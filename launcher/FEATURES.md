@@ -1,6 +1,6 @@
 # Mikan Launcher — living feature reference
 
-**Source baseline:** v0.11.8 (versionCode 19), actionable Mikan remarks, 2026-11-24. See Git history for implementation commit.
+**Source baseline:** v0.12.0 (versionCode 20), independent quick app search, 2026-11-25. See Git history for implementation commit.
 **Development:** [PR #117](https://github.com/capnolithyl/AI-Desktop-Companion/pull/117), branch `feature/mikan-launcher-v01`. Check current branch and Gradle version before changing this document.
 **Purpose:** a free, personal, offline-first Android launcher inspired by the Mikan OS home-screen mockup. Separate from Pocket Mikan, desktop Mikan and the NAS. This document tracks the launcher only.
 
@@ -18,7 +18,8 @@ Build success, release publication, installation and individual feature verifica
 | --- | --- | --- | --- |
 | Independent Android home app | 0.1 | HOME/DEFAULT role and normal launch entry; Settings > Default home app to select or switch home. | Initial install and home UI observed; stock fallback and cold boot still pending. |
 | Header system stats | 0.11.6 | Subtle two-line RAM and internal data storage used/total beside Mikan OS; tap for details and available values. Enabled by default, toggle in Home screen settings. Uses Android MemoryInfo/StatFs, local asynchronous snapshots at most every 30 seconds while Home visible; no new permission or persistent service. RAM is an estimate, storage is usable data filesystem. Display preference included in backup. | Implemented; device and layout validation pending. |
-| App drawer | 0.1 / 0.11.4 | Search installed launchable apps by label or package; tap search field or swipe up near bottom; field opens keyboard. Native adapter-backed GridView creates/recycles visible cells, filters existing catalog without recreating the grid; 4/5 columns, existing icons, badge updates, and click/long-press actions. | Implemented; device latency, search, scroll and launch regression pending. |
+| Quick app search | 0.12.0 | Tap Home search bar for bottom overlay and keyboard, without initializing drawer or rebuilding Home. Local ranked results (exact, prefix, word prefix, substring, multiple terms, package fallback); up to five results, Go/Enter launches first match, tap launches chosen result. Empty query suggests recent then pinned apps. Close/outside/Back dismiss; IME Back behavior can vary. Bounded local recent list (12 launcher-observed successful launches), excluded from layout backup; no system usage permission, AI or network. | Implemented; automated rank cases and device validation pending. |
+| App drawer | 0.1 / 0.11.4 | Search installed launchable apps by label or package; swipe up near bottom opens full drawer; its own search field opens keyboard. Native adapter-backed GridView creates/recycles visible cells, filters existing catalog without recreating the grid; 4/5 columns, existing icons, badge updates, and click/long-press actions. | Implemented; device latency, search, scroll and launch regression pending. |
 | Favorites | 0.1 | Long-press drawer app to pin; drawer/Manage favorites menu to unpin and move; saved locally. | Favorites visible across screenshots; persistence on updates observed, complete CRUD pending. |
 | Dock | 0.1–0.2 | First 3–5 available pinned entries, configurable, persists across pages. Default 5; floating dock (default on in v0.8) or framed dock. | Floating dock observed in v0.8; toggle pending. |
 | App rearrangement | 0.2 | Hold and drag pinned app onto another visible pinned tile; menu-based ordering and moving between pages. | Implemented; gesture and cross-page tests pending. |
@@ -128,6 +129,8 @@ Weather card also exposes refresh, city, units and clear location. No full-scree
 
 | 0.11.8 | Separate portrait and bubble touch targets, typed contextual app actions, idle cycling and stale-context checks | Implemented; CI/device verification pending. |
 
+| 0.12.0 | Independent Home quick search, ranked matches, keyboard launch, local recent/pinned suggestions and diagnostics | Implemented; CI/device verification pending. |
+
 ## 7. Outstanding verification checklist
 
 - [ ] Cold boot/reboot with airplane mode and NAS down; open drawer, favorites and folders.
@@ -167,6 +170,8 @@ Weather card also exposes refresh, city, units and clear location. No full-scree
 
 - [ ] v0.11.8 verify artwork opens Pocket Mikan/web fallback; each supported notification launches exact app (including simultaneous mail/chat apps), weather uses configured shortcut, calendar opens installed calendar; idle tap cycles, disabled remarks leave bubble inactive, arrow/label reflect shown target, no cross-launch during rotation or swipe, stale/revoked/missing app handling, accessibility and compact layout. No delivery actions yet.
 
+- [ ] v0.12.0 tap search with Home page retained; keyboard autofocus, IME Go/hardware Enter, exact/prefix/word/substring/package matching, empty/recent/pinned, rapid input/no matches, close/outside/Back/Home, swipe-up full drawer, catalog changes during search, rotation/large text/landscape, launch/reopen, offline and timing regression. Ranking cases run in launcher CI. Local recent list capped at 12 and not exported.
+
 ## 8. Roadmap (not implemented)
 
 Planned milestones; version targets flexible. See [Trello roadmap](https://trello.com/c/VEk6xVz6). No arbitrary deadlines.
@@ -177,8 +182,8 @@ Warm Home retains existing view; package events trigger debounced background cat
 ### v0.11.4 — App drawer performance (implemented; validation pending)
 Owner reported roughly half-second opening delay on v0.11.3. Replaced eager ScrollView/all-app tile construction with a viewport-constrained Android GridView and BaseAdapter that recycles cells, rebinds icon/label/badge safely, handles clicks and long presses using current adapter items, filters existing catalog and preserves existing Home grid, appearance and settings. Visible badges refreshed separately from non-recycled Home views; imported icons refresh drawer too. Diagnostics include first/repeat drawer open to pre-draw, setup, filter/submit, and cell binding (not actual display latency or jank). Target warm open <100ms is aspirational, not measured. CI/device verification, memory/scroll-jank profiling pending. A–Z index and sorting still planned for v0.12.1.
 
-### v0.12 — Home screen editor
-Long-press edit mode, collision-safe free grid placement, drag-to-create folders, page management, widget resizing and preservation of old layout.
+### v0.12 — Quick app search (implemented) and home screen editor (remaining)
+Quick app search implemented in v0.12.0: independent bottom overlay, ranked local matches, keyboard Go, recent/pinned suggestions, original drawer swipe. Remaining editor phase: long-press edit mode, collision-safe free grid placement, drag-to-create folders, page management, widget resizing and preservation of old layout. Version target flexible; device verification pending.
 
 ### v0.12.1 — App drawer overhaul (proposed)
 App sorting (A–Z/Z–A and candidate local launch-history/install-date/manual orders), confirmed right-edge A–Z drag-to-scroll index with active-letter overlay, optional haptics and # bucket in alphabetical mode, hide index when searching or nonalphabetical. Candidate categories/folders, hidden apps and independent density. Preserve offline search, app actions and responsive recycled-grid foundation. Usage sorting based on launcher-recorded launches unless broader access explicitly approved. Final scope subject to owner examples.

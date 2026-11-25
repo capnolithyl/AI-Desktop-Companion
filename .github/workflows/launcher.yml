@@ -30,6 +30,11 @@ jobs:
         env:
           MIKAN_ANDROID_SIGNING_BUNDLE: ${{ secrets.MIKAN_ANDROID_SIGNING_BUNDLE }}
         run: python3 .github/scripts/setup-android-signing.py
+      - name: Test quick search ranking
+        run: |
+          mkdir -p /tmp/mikan-quick-search-tests
+          javac -d /tmp/mikan-quick-search-tests launcher/app/src/main/java/dev/capnolithyl/mikan/launcher/QuickAppRank.java launcher/tests/QuickAppRankTest.java
+          java -cp /tmp/mikan-quick-search-tests dev.capnolithyl.mikan.launcher.QuickAppRankTest
       - name: Compile launcher
         working-directory: launcher
         run: gradle :app:assembleDebug --stacktrace
