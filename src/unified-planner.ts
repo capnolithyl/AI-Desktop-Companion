@@ -54,7 +54,19 @@ export type UnifiedPlan = {
 };
 
 const privateWords = /\b(?:i|me|my|mine|our|ours|myself|owner|user|his|her|their|mikan|private|personal|notion)\b/i;
-const emailOrPhone = /[\w.+-]+@[\w.-]+\.[a-z]{2,}|(?:\+?\d[\d().\s-]{7,}\d)/i;
+const emailPattern = /[\w.+-]+@[\w.-]+\.[a-z]{2,}/i;
+// A sequence of four-digit years is not by itself contact information.
+// Keep the conservative phone check for other numeric runs and explicit
+// contact queries. This heuristic is not a comprehensive PII detector.
+function containsContactInfo(query:string):boolean {
+  if(emailPattern.test(query))return true;
+  const contactContext=/\b(?:phone|telephone|tel|mobile|contact|call|fax|whatsapp)\b/i.test(query);
+  for(const match of query.matchAll(/\+?\d[\d().\s-]{7,}\d/g)){
+    const years=/^(?:18|19|20)\d{2}(?:[ -]+(?:18|19|20)\d{2})+$/.test(match[0]);
+    if(!years||contactContext)return true;
+  }
+  return false;
+}
 const privateUrl = /https?:\/\//i;
 const defaultWeb: WebToolDecision = {search:false,reason:"No external lookup selected",method:"not-needed"};
 
@@ -217,7 +229,7 @@ export function parseWebToolDecision(
       return {...defaultWeb,method:"fallback",reason:"Invalid public search query length"};
     if(privateWords.test(query))
       return {...defaultWeb,method:"fallback",reason:"Unsafe query: personal pronouns or private context"};
-    if(emailOrPhone.test(query) || privateUrl.test(query))
+    if(containsContactInfo(query) || privateUrl.test(query))
       return {...defaultWeb,method:"fallback",reason:"Unsafe query: contact information or URL"};
     if(/\b[A-Z][a-z]{2,}\s+(?:birthday|birthdate)\b/.test(query))
       return {...defaultWeb,method:"fallback",reason:"Unsafe query: named personal dates"};

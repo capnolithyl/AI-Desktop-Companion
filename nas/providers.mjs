@@ -20,8 +20,13 @@ function remoteError(status) {
 const safeReason=value=>typeof value==="string"&&/^[a-zA-Z0-9_-]{1,40}$/.test(value)?value:null;
 const tokenCount=value=>Number.isSafeInteger(value)&&value>=0&&value<=10000000?value:null;
 export function inferenceError(code){return Object.assign(Error(code),{code});}
-export async function generateReply({config, system, history, onDelta=()=>{}, onModel=()=>{}, onUsage=()=>{}, fetchImpl=fetch, temperature=0.7, maxTokens=4096,signal,structuredTool,agentTools,agentToolChoice="auto",agentThinking=false}) {
+export async function generateReply({config, system, history, onDelta=()=>{}, onModel=()=>{}, onUsage=()=>{}, fetchImpl=fetch, temperature=0.7, maxTokens=4096,signal,structuredTool,agentTools,agentToolChoice="auto",agentThinking=false,agentEffort,rejectTruncated=false}) {
   const {provider,model,key} = config;
+  const ultra=provider==="nvidia"&&model==="nvidia/nemotron-3-ultra-550b-a55b";
+  // Ultra documents enable_thinking and medium_effort in chat_template_kwargs.
+  // Only the experimental engine opts into this; legacy callers stay unchanged.
+  const effort=ultra&&["none","medium","high"].includes(agentEffort)?agentEffort:null;
+  const effortTemplate=effort?{enable_thinking:effort!=="none",...(effort==="medium"?{medium_effort:true}:{}),...(effort==="none"?{force_nonempty_content:true}:{})}:null;
   if(agentTools&&provider!=="nvidia")throw inferenceError("agent-provider-not-supported");
   if (provider === "gemini") {
     const contents = history.map(m=>({
@@ -59,7 +64,7 @@ export async function generateReply({config, system, history, onDelta=()=>{}, on
     body:JSON.stringify({model,stream:!structuredTool&&!agentTools,max_tokens:maxTokens,temperature,
       ...(agentTools?{tools:agentTools,tool_choice:agentToolChoice}:structuredTool?{tools:[structuredTool],tool_choice:"required"}:{stream_options:{include_usage:true}}),
       // Same model-specific evidence setting used by the desktop NVIDIA adapter.
-      ...((structuredTool||agentTools)&&provider==="nvidia"&&model==="nvidia/nemotron-3-ultra-550b-a55b"?{chat_template_kwargs:agentTools&&agentThinking?{enable_thinking:true}:{enable_thinking:false,force_nonempty_content:true}}:{}),
+      ...(effortTemplate&&!structuredTool?{chat_template_kwargs:effortTemplate}:(structuredTool||agentTools)&&ultra?{chat_template_kwargs:agentTools&&agentThinking?{enable_thinking:true}:{enable_thinking:false,force_nonempty_content:true}}:{}),
       messages:[{role:"system",content:system},...history.map(m=>agentTools&&m.role==="tool"?{role:"tool",tool_call_id:m.tool_call_id,content:m.content}:agentTools&&m.role==="assistant"&&m.tool_calls?{role:"assistant",content:m.content??null,tool_calls:m.tool_calls}:{role:m.role,content:m.content})]}),
     signal:signal?AbortSignal.any([signal,AbortSignal.timeout(120000)]):AbortSignal.timeout(120000)
   });
@@ -67,9 +72,9 @@ export async function generateReply({config, system, history, onDelta=()=>{}, on
   if(structuredTool||agentTools){
     const data=await response.json(),choice=data.choices?.[0],message=choice?.message;
     const finish=safeReason(choice?.finish_reason);
-    onUsage({finishReason:finish,outputTokens:tokenCount(data.usage?.completion_tokens),reasoningTokens:tokenCount(data.usage?.completion_tokens_details?.reasoning_tokens),maxTokens});
+    onUsage({finishReason:finish,outputTokens:tokenCount(data.usage?.completion_tokens),reasoningTokens:tokenCount(data.usage?.completion_tokens_details?.reasoning_tokens),maxTokens,...(effort?{reasoningEffort:effort}:{})});
     if(typeof data.model==="string"&&data.model.length<=160&&/^[\w./:-]+$/.test(data.model)&&!data.model.includes(key))onModel(data.model);
-    if(finish==="length")throw inferenceError("output-limit");
+    if(finish==="length")throw Object.assign(inferenceError("output-limit"),agentTools&&typeof message?.content==="string"&&!message?.tool_calls?.length?{partial:message.content.trim().slice(0,60000)}:{});
     if(agentTools){
       const calls=Array.isArray(message?.tool_calls)?message.tool_calls:[];
       if(calls.length>6||calls.some(c=>typeof c.id!=="string"||c.id.length>200||c.type!=="function"||typeof c.function?.name!=="string"||typeof c.function?.arguments!=="string"||c.function.arguments.length>32000)||new Set(calls.map(c=>c.id)).size!==calls.length)throw inferenceError("invalid-agent-tool-call");
@@ -119,7 +124,8 @@ export async function generateReply({config, system, history, onDelta=()=>{}, on
     }
   }
   if (buffer.trim()) readLine(buffer.trim());
-  onUsage({finishReason,outputTokens,reasoningTokens,maxTokens,sawDone});
+  onUsage({finishReason,outputTokens,reasoningTokens,maxTokens,sawDone,...(effort?{reasoningEffort:effort}:{})});
+  if(rejectTruncated&&finishReason==="length")throw Object.assign(inferenceError("output-limit"),{partial:result.trim()});
   if (!result.trim()) throw inferenceError(finishReason==="length"?"output-limit":"empty-output");
   if(!sawDone&&!finishReason)throw inferenceError("incomplete-stream");
   return result.trim();
