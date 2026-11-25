@@ -327,7 +327,7 @@ public class HomeActivity extends Activity {
             renderSystemStats();queueSystemStats();
         }
         if(editingMixed)header.addView(action("Done",this::finishMixedEdit));else header.addView(markButton(MikanMark.GEAR,"Launcher settings",this::openSettings),new LinearLayout.LayoutParams(dp(44),dp(44)));page.addView(header);
-        if(editingMixed){page.addView(text("Tap a tile or ✥ then its destination · drag to move · ↘ to resize",12,MUTED,false));gap(page,6);}
+        if(editingMixed){page.addView(text("Drag any app or widget · ↘ to resize · − to remove apps",12,MUTED,false));gap(page,6);}
         ScrollView scroll=new ScrollView(this);scroll.setFillViewport(false);scroll.setVerticalScrollBarEnabled(true);scroll.setScrollbarFadingEnabled(true);
         page.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
         LinearLayout body=vertical();scroll.addView(body,new ScrollView.LayoutParams(-1,-2));

@@ -11,8 +11,8 @@ android {
         applicationId = "dev.capnolithyl.mikan.launcher"
         minSdk = 26
         targetSdk = 35
-        versionCode = 27
-        versionName = "0.12.7"
+        versionCode = 28
+        versionName = "0.12.8"
     }
     signingConfigs {
         if (signing.isNotEmpty()) create("personal") {

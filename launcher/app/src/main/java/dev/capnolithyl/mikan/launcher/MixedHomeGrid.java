@@ -4,11 +4,13 @@ import android.content.ClipData;
 import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.Paint;
+import android.graphics.Point;
 import android.graphics.drawable.GradientDrawable;
 import android.view.DragEvent;
 import android.view.Gravity;
 import android.view.MotionEvent;
 import android.view.ViewConfiguration;
+import android.view.HapticFeedbackConstants;
 import android.widget.Toast;
 import android.view.View;
 import android.view.ViewGroup;
@@ -27,7 +29,10 @@ final class MixedHomeGrid extends ViewGroup {
     private String selected;private float downX,downY;
     private boolean placing;
     private final Paint paint=new Paint(Paint.ANTI_ALIAS_FLAG);
-    private static final class Drag {final String key;final boolean resize;Drag(String key,boolean resize){this.key=key;this.resize=resize;}}
+    private static final class Drag {
+        final String key;final boolean resize;final float gripX,gripY;
+        Drag(String key,boolean resize,float gripX,float gripY){this.key=key;this.resize=resize;this.gripX=gripX;this.gripY=gripY;}
+    }
     MixedHomeGrid(Context c,int columns,boolean editing,Map<String,MixedLayout.Rect> positions,List<MixedLayout.Spec> specs,Callbacks callbacks){
         super(c);this.columns=columns;this.editing=editing;this.positions=new LinkedHashMap<>(positions);this.callbacks=callbacks;
         for(MixedLayout.Spec spec:specs)this.specs.put(spec.key,spec);
@@ -40,20 +45,24 @@ final class MixedHomeGrid extends ViewGroup {
         if(!positions.containsKey(key))return;
         FrameLayout frame=new FrameLayout(getContext());
         content.setOnDragListener(null);
-        frame.addView(content,new FrameLayout.LayoutParams(-1,-2,Gravity.TOP));
+        // Isolate elevated widget cards in their own layer. Their shadows must not
+        // put them above the editor's touch surface (or its resize/remove controls).
+        FrameLayout contentLayer=new FrameLayout(getContext());
+        contentLayer.addView(content,new FrameLayout.LayoutParams(-1,-2,Gravity.TOP));
+        frame.addView(contentLayer,new FrameLayout.LayoutParams(-1,-2,Gravity.TOP));
         if(editing){
+            contentLayer.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS);
             View move=new View(getContext());move.setBackground(outline(0xbaffbf88));move.setContentDescription("Move "+key);move.setFocusable(true);
-            move.setOnClickListener(v->select(key));move.setOnLongClickListener(v->start(frame,key,false));frame.addView(move,new FrameLayout.LayoutParams(-1,-1));
+            move.setElevation(dp(2));
+            move.setOnClickListener(v->select(key));
+            installMoveGesture(move,frame,key);
+            frame.addView(move,new FrameLayout.LayoutParams(-1,-1));
             if(key.startsWith("widget:")){
-                TextView moveHandle=new TextView(getContext());moveHandle.setText("✥");moveHandle.setTextSize(19);moveHandle.setTextColor(0xffffe9d5);moveHandle.setGravity(Gravity.CENTER);
-                moveHandle.setBackground(MikanTheme.tile(getContext()));moveHandle.setContentDescription("Move widget");moveHandle.setFocusable(true);
-                moveHandle.setOnClickListener(v->select(key));moveHandle.setOnLongClickListener(v->start(frame,key,false));
-                frame.addView(moveHandle,new FrameLayout.LayoutParams(dp(36),dp(36),Gravity.TOP|Gravity.LEFT));
-                TextView handle=new TextView(getContext());handle.setText("↘");handle.setTextColor(0xffffe9d5);handle.setTextSize(17);handle.setGravity(Gravity.CENTER);handle.setContentDescription("Resize "+key);handle.setBackground(MikanTheme.tile(getContext()));handle.setOnClickListener(v->callbacks.editItem(key));handle.setOnLongClickListener(v->start(frame,key,true));
+                TextView handle=new TextView(getContext());handle.setText("↘");handle.setTextColor(0xffffe9d5);handle.setTextSize(17);handle.setGravity(Gravity.CENTER);handle.setContentDescription("Resize "+key);handle.setBackground(controlBackground());handle.setElevation(dp(4));handle.setFocusable(true);handle.setOnClickListener(v->callbacks.editItem(key));handle.setOnLongClickListener(v->start(frame,key,true,frame.getWidth()/2f,frame.getHeight()/2f));
                 FrameLayout.LayoutParams hp=new FrameLayout.LayoutParams(dp(36),dp(36),Gravity.BOTTOM|Gravity.RIGHT);frame.addView(handle,hp);
             }else{
                 TextView remove=new TextView(getContext());remove.setText("−");remove.setTextSize(22);remove.setTextColor(0xffffe9d5);remove.setGravity(Gravity.CENTER);
-                GradientDrawable background=new GradientDrawable();background.setColor(0xff704339);background.setCornerRadius(dp(18));background.setStroke(dp(1),0xffb68158);remove.setBackground(background);
+                GradientDrawable background=new GradientDrawable();background.setColor(0xff704339);background.setCornerRadius(dp(18));background.setStroke(dp(1),0xffb68158);remove.setBackground(background);remove.setElevation(dp(4));
                 CharSequence label=content.getContentDescription();remove.setContentDescription("Remove "+(label==null?"shortcut":label)+" from Home");remove.setFocusable(true);
                 remove.setOnClickListener(v->callbacks.removeItem(key));
                 frame.addView(remove,new FrameLayout.LayoutParams(dp(36),dp(36),Gravity.TOP|Gravity.RIGHT));
@@ -61,13 +70,52 @@ final class MixedHomeGrid extends ViewGroup {
         }
         keys.put(frame,key);addView(frame,new ViewGroup.LayoutParams(-1,-2));
     }
+    private GradientDrawable controlBackground(){
+        GradientDrawable background=new GradientDrawable();background.setColor(0xff704339);background.setCornerRadius(dp(18));background.setStroke(dp(1),0xffb68158);return background;
+    }
+    private void installMoveGesture(View surface,View frame,String key){
+        surface.setOnTouchListener(new View.OnTouchListener(){
+            float x,y;boolean started;
+            final int slop=ViewConfiguration.get(getContext()).getScaledTouchSlop();
+            @Override public boolean onTouch(View v,MotionEvent event){
+                switch(event.getActionMasked()){
+                    case MotionEvent.ACTION_DOWN:
+                        x=event.getX();y=event.getY();started=false;
+                        if(v.getParent()!=null)v.getParent().requestDisallowInterceptTouchEvent(true);
+                        return true;
+                    case MotionEvent.ACTION_MOVE:
+                        if(!started&&Math.hypot(event.getX()-x,event.getY()-y)>slop){
+                            started=start(frame,key,false,x,y);
+                            if(started)v.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
+                        }
+                        return true;
+                    case MotionEvent.ACTION_UP:
+                        if(v.getParent()!=null)v.getParent().requestDisallowInterceptTouchEvent(false);
+                        if(!started&&Math.hypot(event.getX()-x,event.getY()-y)<=slop)v.performClick();
+                        return true;
+                    case MotionEvent.ACTION_CANCEL:
+                        if(v.getParent()!=null)v.getParent().requestDisallowInterceptTouchEvent(false);return true;
+                    default:return true;
+                }
+            }
+        });
+    }
     private void select(String key){
-        selected=key;invalidate();Toast.makeText(getContext(),"Tap where you want to move this tile, or drag it.",Toast.LENGTH_SHORT).show();
+        selected=key.equals(selected)?null:key;invalidate();
+        if(selected!=null)Toast.makeText(getContext(),"Drag this tile, or tap an empty destination.",Toast.LENGTH_SHORT).show();
     }
     void compact(){if(editing){selected=null;callbacks.changed(MixedLayout.compact(positions,columns));}}
-    private boolean start(View frame,String key,boolean resize){
+    private boolean start(View frame,String key,boolean resize,float gripX,float gripY){
         selected=null;invalidate();
-        return frame.startDragAndDrop(ClipData.newPlainText("mikan-grid",key),new View.DragShadowBuilder(frame),new Drag(key,resize),0);
+        final int px=Math.max(0,Math.min(frame.getWidth()-1,Math.round(gripX)));
+        final int py=Math.max(0,Math.min(frame.getHeight()-1,Math.round(gripY)));
+        View.DragShadowBuilder shadow=new View.DragShadowBuilder(frame){
+            @Override public void onProvideShadowMetrics(Point size,Point touch){
+                super.onProvideShadowMetrics(size,touch);
+                touch.set(px,py);
+            }
+        };
+        return frame.startDragAndDrop(ClipData.newPlainText("mikan-grid",key),shadow,new Drag(key,resize,px,py),0);
     }
     @Override protected void onMeasure(int widthSpec,int heightSpec){
         int width=MeasureSpec.getSize(widthSpec);int[] heights=new int[rows];Arrays.fill(heights,dp(44));
@@ -113,17 +161,22 @@ final class MixedHomeGrid extends ViewGroup {
         MixedLayout.Rect old=positions.get(drag.key);if(old==null||edges==null)return null;
         int col=Math.max(0,Math.min(columns-1,(int)(x*columns/Math.max(1,getWidth())))),row=rowAt(y);
         if(drag.resize)return new MixedLayout.Rect(old.x,old.y,col-old.x+1,row-old.y+1);
-        // Default Android drag shadow is centered on the finger. Convert its center
-        // back to the tile origin; full-width cards can now be dropped from any x.
+        // Preserve the actual grip point instead of making the widget jump to
+        // its center. Account for the frame's three-dp grid inset.
         float cellWidth=getWidth()/(float)columns;
-        int left=Math.max(0,Math.min(columns-old.w,Math.round(x/cellWidth-old.w/2f)));
-        float top=y-(edges[old.y+old.h]-edges[old.y])/2f;
+        int left=Math.max(0,Math.min(columns-old.w,Math.round((x-drag.gripX-dp(3))/cellWidth)));
+        float top=y-drag.gripY-dp(3);
         int upper=rowAt(top);
         if(upper+1<rows&&Math.abs(edges[upper+1]-top)<Math.abs(edges[upper]-top))upper++;
         return new MixedLayout.Rect(left,Math.max(0,Math.min(rows-old.h,upper)),old.w,old.h);
     }
     @Override public boolean onInterceptTouchEvent(MotionEvent event){
-        if(editing&&selected!=null&&event.getActionMasked()==MotionEvent.ACTION_DOWN){placing=true;return true;}
+        if(editing&&selected!=null&&event.getActionMasked()==MotionEvent.ACTION_DOWN){
+            // Only a tap on empty grid space is a placement gesture. Touching any
+            // tile still permits direct dragging, resize or removal.
+            for(View child:keys.keySet())if(event.getX()>=child.getLeft()&&event.getX()<child.getRight()&&event.getY()>=child.getTop()&&event.getY()<child.getBottom())return false;
+            placing=true;return true;
+        }
         return super.onInterceptTouchEvent(event);
     }
     @Override public boolean onTouchEvent(MotionEvent event){

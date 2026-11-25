@@ -1,6 +1,6 @@
 # Mikan Launcher — living feature reference
 
-**Source baseline:** v0.12.7 (versionCode 27), compact movable widgets, 2026-11-25. See Git history for implementation commit.
+**Source baseline:** v0.12.8 (versionCode 28), direct widget drag, 2026-11-25. See Git history for implementation commit.
 **Development:** [PR #117](https://github.com/capnolithyl/AI-Desktop-Companion/pull/117), branch `feature/mikan-launcher-v01`. Check current branch and Gradle version before changing this document.
 **Purpose:** a free, personal, offline-first Android launcher inspired by the Mikan OS home-screen mockup. Separate from Pocket Mikan, desktop Mikan and the NAS. This document tracks the launcher only.
 
@@ -27,7 +27,8 @@ Build success, release publication, installation and individual feature verifica
 | Favorites | 0.1 | Long-press drawer app to pin; drawer/Manage favorites menu to unpin and move; saved locally. | Favorites visible across screenshots; persistence on updates observed, complete CRUD pending. |
 | Dock | 0.1–0.2 | First 3–5 available pinned entries, configurable, persists across pages. Default 5; floating dock (default on in v0.8) or framed dock. | Floating dock observed in v0.8; toggle pending. |
 | App rearrangement | 0.2 | Long-press pinned tile for Move/edit layout (v0.12.5); drag within editor, menu-based ordering and moving between pages. | Implemented; gesture and cross-page tests pending. |
-| Widget movement and compact rows | 0.12.7 | Mixed editor exposes widget move handles, tap tile then destination and center-anchored drag (including full-width widgets). Rows use smaller content-aware minimum heights; explicit Close vertical gaps compacts upward without changing widths/spans or horizontal positions. Legacy editor entry offers mixed layout or page manager. Collision checks retained; widget resize handles still available. | Implemented; CI/device pending. |
+| Direct tile drag | 0.12.8 | In live edit mode, drag any app or widget body immediately after touch slop; no move handle or long-press required. Separate content layer keeps elevated widgets below editor gestures; opaque resize/remove buttons above gesture surface. Shadow preserves grip point. Tap-to-empty placement remains optional; touching a tile does not get intercepted by selected state. Normal widget actions remain unchanged outside edit mode. | Implemented; CI/device pending. |
+| Widget movement and compact rows | 0.12.7 | Mixed editor originally exposed widget move handles and center-anchored drag; v0.12.8 replaces move handles with direct body drag and grip-point anchoring. Tap-to-empty placement remains available. Rows use smaller content-aware minimum heights; explicit Close vertical gaps compacts upward without changing widths/spans or horizontal positions. Legacy editor entry offers mixed layout or page manager. Collision checks retained; widget resize handles still available. | Implemented; CI/device pending. |
 | Live mixed grid | 0.12.2 | Opt-in in Home settings or page manager. Existing app/widget page assignments feed a common rectangular grid; long-press Home enters live edit, drag tile or resize handle, tap widget for available sizes, collision rejection and adaptive row heights. Page manager remains for cross-page moves/folders; dock tap during edit swaps/replaces apps. Existing sections remain selectable. Mixed grid settings/positions backed up. Widget minimum widths vary with screen/font, no unrestricted pixel positioning. | Implemented; CI/device validation pending. |
 | Home editor | 0.12.1 | Long-press empty Home space/brand or Settings > Home screen > Edit home screen. Separate editor with drag or tap-select/tap-destination, sparse app slots, occupied app swap/create folder, page add/remove-empty/reorder, widget page moves. Changes save immediately; legacy layout remains until first edit; dock stays ordered favorites prefix (unavailable pinned entries keep their slots after explicit layout activation). Explicit legacy reorder can reset app positions. Backup includes validated slots. Up to 20 pages can be created in editor; adding directly to an empty Home slot requires the legacy dock prefix to be full. Grid-size changes reinterpret linear slot positions. Live mixed grid supports within-page widget placement/resizing in v0.12.2. | Implemented; CI/device validation pending. |
 | App grid | 0.2 | 4 or 5 columns, 1–4 configurable rows of favorites per page; automatically packed until edited; sparse positions supported in v0.12.1. Labels wrap to two lines. | Four-column layout observed; five-column layout pending. |
@@ -150,7 +151,9 @@ Weather card also exposes refresh, city, units and clear location. No full-scree
 
 | 0.12.6 | Shared searchable Home/dock shortcut picker | Implemented; CI/device pending. |
 
-| 0.12.7 | Compact mixed grid rows, explicit gap closure, widget movement handles, centered drag and tap-to-place | Implemented; CI/device pending. |
+| 0.12.7 | Compact mixed grid rows, explicit gap closure, widget movement handles, centered drag and tap-to-place | Launcher build/tests passed in CI 45626402632; release tag confirmed. Owner screenshot confirmed editor displayed but movement controls difficult to see. |
+
+| 0.12.8 | Direct app/widget body drag, correct overlay z-order, opaque resize controls, grip-point shadow | Implemented; CI/device pending. |
 
 ## 7. Outstanding verification checklist
 
@@ -206,6 +209,8 @@ Weather card also exposes refresh, city, units and clear location. No full-scree
 - [ ] v0.12.6 verify Home empty-slot picker and dock picker, themed recycled icons, alphabetical browsing, ranked name/package search, no matches, Go/tap selection without launching, cancel/Back, pinned filtering and dock remove, stale app/slot, keyboard/landscape and latency. Existing QuickAppRank cases cover ranking.
 
 - [ ] v0.12.7 verify long-press entry, explicit mixed mode choice, compact default rows, close vertical gaps, full-width widget drag from center, tap placement and collision rejection, resize, scroll, saved layout and Home widget actions. Compaction model tests in CI.
+
+- [ ] v0.12.8 verify direct drag from clock/weather/Mikan/music/agenda and app body (including elevated cards), grip offset and collision rejection, resize/remove controls, tap-to-empty, scroll from empty space, normal widget actions after Done, persistence/restart. Physical gesture tests pending.
 
 ## 8. Roadmap (not implemented)
 
