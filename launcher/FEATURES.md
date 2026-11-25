@@ -1,6 +1,6 @@
 # Mikan Launcher — living feature reference
 
-**Source baseline:** v0.12.1 (versionCode 21), home app-slot editor, 2026-11-25. See Git history for implementation commit.
+**Source baseline:** v0.12.2 (versionCode 22), opt-in mixed grid editor, 2026-11-25. See Git history for implementation commit.
 **Development:** [PR #117](https://github.com/capnolithyl/AI-Desktop-Companion/pull/117), branch `feature/mikan-launcher-v01`. Check current branch and Gradle version before changing this document.
 **Purpose:** a free, personal, offline-first Android launcher inspired by the Mikan OS home-screen mockup. Separate from Pocket Mikan, desktop Mikan and the NAS. This document tracks the launcher only.
 
@@ -23,7 +23,8 @@ Build success, release publication, installation and individual feature verifica
 | Favorites | 0.1 | Long-press drawer app to pin; drawer/Manage favorites menu to unpin and move; saved locally. | Favorites visible across screenshots; persistence on updates observed, complete CRUD pending. |
 | Dock | 0.1–0.2 | First 3–5 available pinned entries, configurable, persists across pages. Default 5; floating dock (default on in v0.8) or framed dock. | Floating dock observed in v0.8; toggle pending. |
 | App rearrangement | 0.2 | Hold and drag pinned app onto another visible pinned tile; menu-based ordering and moving between pages. | Implemented; gesture and cross-page tests pending. |
-| Home editor | 0.12.1 | Long-press empty Home space/brand or Settings > Home screen > Edit home screen. Separate editor with drag or tap-select/tap-destination, sparse app slots, occupied app swap/create folder, page add/remove-empty/reorder, widget page moves. Changes save immediately; legacy layout remains until first edit; dock stays ordered favorites prefix (unavailable pinned entries keep their slots after explicit layout activation). Explicit legacy reorder can reset app positions. Backup includes validated slots. Up to 20 pages can be created in editor; adding directly to an empty Home slot requires the legacy dock prefix to be full. Grid-size changes reinterpret linear slot positions. Widget free placement/resizing remains planned. | Implemented; CI/device validation pending. |
+| Live mixed grid | 0.12.2 | Opt-in in Home settings or page manager. Existing app/widget page assignments feed a common rectangular grid; long-press Home enters live edit, drag tile or resize handle, tap widget for available sizes, collision rejection and adaptive row heights. Page manager remains for cross-page moves/folders; dock tap during edit swaps/replaces apps. Existing sections remain selectable. Mixed grid settings/positions backed up. Widget minimum widths vary with screen/font, no unrestricted pixel positioning. | Implemented; CI/device validation pending. |
+| Home editor | 0.12.1 | Long-press empty Home space/brand or Settings > Home screen > Edit home screen. Separate editor with drag or tap-select/tap-destination, sparse app slots, occupied app swap/create folder, page add/remove-empty/reorder, widget page moves. Changes save immediately; legacy layout remains until first edit; dock stays ordered favorites prefix (unavailable pinned entries keep their slots after explicit layout activation). Explicit legacy reorder can reset app positions. Backup includes validated slots. Up to 20 pages can be created in editor; adding directly to an empty Home slot requires the legacy dock prefix to be full. Grid-size changes reinterpret linear slot positions. Live mixed grid supports within-page widget placement/resizing in v0.12.2. | Implemented; CI/device validation pending. |
 | App grid | 0.2 | 4 or 5 columns, 1–4 configurable rows of favorites per page; automatically packed until edited; sparse positions supported in v0.12.1. Labels wrap to two lines. | Four-column layout observed; five-column layout pending. |
 | Multiple pages | 0.4 | Auto pagination; minimum 1–5 pages setting; horizontal swipes or arrows. Home intent returns to first page. Single-page indicator hidden since 0.5; dot indicators in v0.8. | Single-page UI observed; multiple-page navigation pending. |
 | Folders | 0.4 | Settings > Create app folder / Manage folders; select apps, edit membership, rename, move, delete, or open a folder icon grid with long-press actions. Mini icon previews, folder notification dots. | Implemented; device tests pending. |
@@ -134,6 +135,8 @@ Weather card also exposes refresh, city, units and clear location. No full-scree
 
 | 0.12.1 | Sparse app slots, edit mode, swap/folder, pages and widget page assignment | Initial CI run [45611729553](https://github.com/capnolithyl/AI-Desktop-Companion/actions/runs/45611729553): both ranking and slot tests passed; Java compilation failed due to duplicate local variable `key` in backup validation. Renamed loop variable; rebuild and device validation pending. |
 
+| 0.12.2 | Live mixed grid, widget movement/resizing, dock slot editing, model tests | Implemented; CI/device pending. |
+
 ## 7. Outstanding verification checklist
 
 - [ ] Cold boot/reboot with airplane mode and NAS down; open drawer, favorites and folders.
@@ -177,6 +180,8 @@ Weather card also exposes refresh, city, units and clear location. No full-scree
 
 - [ ] v0.12.1 verify unchanged layout on upgrade, long-press/settings entry, drag/tap selection, empty/occupied slots, cross-page moves, folder creation, add app, page add/remove/reorder with widgets, reset, backup/restore, catalog changes, dock/legacy menus, narrow screens and performance. Pure Java slot model tests in CI. Free widget positioning and resizing remain planned.
 
+- [ ] v0.12.2 verify legacy layout unchanged by default, mixed toggle on/off, all widget rendering/taps, editing moves and resize collision rejection, adaptive rows, page manager, dock slot swap, backup/restore, font/width changes, offline and latency. Mixed-layout pure Java tests in CI.
+
 ## 8. Roadmap (not implemented)
 
 Planned milestones; version targets flexible. See [Trello roadmap](https://trello.com/c/VEk6xVz6). No arbitrary deadlines.
@@ -188,7 +193,7 @@ Warm Home retains existing view; package events trigger debounced background cat
 Owner reported roughly half-second opening delay on v0.11.3. Replaced eager ScrollView/all-app tile construction with a viewport-constrained Android GridView and BaseAdapter that recycles cells, rebinds icon/label/badge safely, handles clicks and long presses using current adapter items, filters existing catalog and preserves existing Home grid, appearance and settings. Visible badges refreshed separately from non-recycled Home views; imported icons refresh drawer too. Diagnostics include first/repeat drawer open to pre-draw, setup, filter/submit, and cell binding (not actual display latency or jank). Target warm open <100ms is aspirational, not measured. CI/device verification, memory/scroll-jank profiling pending. A–Z index and sorting still planned for the subsequent drawer milestone.
 
 ### v0.12 — Quick app search and home screen editor (partially implemented)
-Quick app search implemented in v0.12.0: independent bottom overlay, ranked local matches, keyboard Go, recent/pinned suggestions, original drawer swipe. v0.12.1 adds a dedicated app-slot editor, drag/tap placement, folder creation, page management and widget page assignment. Remaining: free widget positioning/resizing, more direct on-home editing. Version target flexible; device verification pending.
+Quick app search implemented in v0.12.0: independent bottom overlay, ranked local matches, keyboard Go, recent/pinned suggestions, original drawer swipe. v0.12.1 adds a dedicated app-slot editor, drag/tap placement, folder creation, page management and widget page assignment. v0.12.2 adds opt-in live mixed grid, rectangular positions/resizing, collision checks and dock slot picker. Cross-page movement still uses page manager; direct in-grid folder creation and fully independent dock remain future refinements. Version target flexible; device verification pending.
 
 ### Next — App drawer overhaul (proposed; version target flexible)
 App sorting (A–Z/Z–A and candidate local launch-history/install-date/manual orders), confirmed right-edge A–Z drag-to-scroll index with active-letter overlay, optional haptics and # bucket in alphabetical mode, hide index when searching or nonalphabetical. Candidate categories/folders, hidden apps and independent density. Preserve offline search, app actions and responsive recycled-grid foundation. Usage sorting based on launcher-recorded launches unless broader access explicitly approved. Final scope subject to owner examples.

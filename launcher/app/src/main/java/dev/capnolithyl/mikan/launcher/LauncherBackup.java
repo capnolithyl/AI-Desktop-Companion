@@ -12,12 +12,12 @@ import org.json.*;
 /** Deliberately limited to portable launcher configuration, not private endpoints or artwork. */
 final class LauncherBackup {
     private static final int LIMIT=1024*1024;
-    private static final Set<String> BOOL=new HashSet<>(Arrays.asList("themed","showFavoritesLabel","floatingDock","pairWidgets","pairTop","pairBottom","weatherF","agendaTitles","badges","showSystemStats","mikanRemarks","mikanNotifyHints","mikanWeatherHints","mikanCalendarHints"));
+    private static final Set<String> BOOL=new HashSet<>(Arrays.asList("themed","showFavoritesLabel","floatingDock","pairWidgets","pairTop","pairBottom","weatherF","agendaTitles","badges","showSystemStats","mikanRemarks","mikanNotifyHints","mikanWeatherHints","mikanCalendarHints","mixedHome"));
     private static final Set<String> PAGES=new HashSet<>(Arrays.asList("clockPage","mikanPage","musicPage","weatherPage","agendaPage"));
     private static final String ICON="iconStyle:";
     private static boolean component(String key){return key.length()<=512&&ComponentName.unflattenFromString(key)!=null&&!key.contains("\n")&&!key.contains("\r");}
     private static boolean folder(String key){return key.matches("folder:[0-9a-fA-F-]{36}");}
-    private static boolean known(String k){return BOOL.contains(k)||PAGES.contains(k)||Arrays.asList("columns","dockCount","minPages","homeRows","iconSize","sectionOrder","wallpaper","favorites","foldersV1","homeSlotsV1").contains(k);}
+    private static boolean known(String k){return BOOL.contains(k)||PAGES.contains(k)||Arrays.asList("columns","dockCount","minPages","homeRows","iconSize","sectionOrder","wallpaper","favorites","foldersV1","homeSlotsV1","mixedGridV1").contains(k);}
     private static int integer(Object value,int min,int max)throws IOException{
         if(!(value instanceof Number))throw new IOException("Expected integer");
         double n=((Number)value).doubleValue();if(n!=Math.rint(n)||n<min||n>max)throw new IOException("Out of range");
@@ -34,6 +34,10 @@ final class LauncherBackup {
             case "sectionOrder":return integer(v,0,2);
             case "iconSize":int size=integer(v,42,58);if(size!=42&&size!=50&&size!=58)throw new IOException("Invalid icon size");return size;
             case "wallpaper":if(!"reading-nook.webp".equals(v)&&!"study-nook.webp".equals(v))throw new IOException("Invalid wallpaper");return v;
+            case "mixedGridV1":{
+                if(!(v instanceof String))throw new IOException("Invalid mixed grid");MixedLayout layout=MixedLayout.parse((String)v);
+                for(String item:layout.keys())if(!component(item)&&!folder(item)&&!Arrays.asList("widget:clockPage","widget:mikanPage","widget:musicPage","widget:weatherPage","widget:agendaPage").contains(item))throw new IOException("Invalid grid item");return layout.encode();
+            }
             case "homeSlotsV1":{
                 if(!(v instanceof String))throw new IOException("Invalid home slots");HomeSlots slots=HomeSlots.parse((String)v);for(String shortcut:slots.keys())if(!component(shortcut)&&!folder(shortcut))throw new IOException("Invalid shortcut");return slots.encode();
             }

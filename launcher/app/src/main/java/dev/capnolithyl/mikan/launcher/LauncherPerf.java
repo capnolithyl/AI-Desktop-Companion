@@ -9,7 +9,7 @@ final class LauncherPerf {
     }
     void clear(){samples.clear();}
     String report(){
-        StringBuilder out=new StringBuilder("v0.12.1 · This process only\nMilliseconds, last 60 samples per category. Pre-draw is an app-side proxy, not actual display or Home-button latency.\n");
+        StringBuilder out=new StringBuilder("v0.12.2 · This process only\nMilliseconds, last 60 samples per category. Pre-draw is an app-side proxy, not actual display or Home-button latency.\n");
         for(Map.Entry<String,ArrayDeque<Long>> e:samples.entrySet()){
             ArrayList<Long> sorted=new ArrayList<>(e.getValue());Collections.sort(sorted);int n=sorted.size();
             if(n==0)continue;
