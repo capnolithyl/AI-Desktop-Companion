@@ -82,6 +82,9 @@ public class HomeActivity extends Activity {
     private TextView ampm;
     private boolean compactClock;
     private String checkedWebUrl="",webStatus="";
+    private long webCheckedAt=-1,webStartedAt=-1,batteryReadAt=-1;
+    private String webStartedUrl="";
+    private MikanPersonality.Line batteryRemark;
     private boolean checkingWeb;
     private HomeFolders folders;
     private int homePage=0;
@@ -131,7 +134,7 @@ public class HomeActivity extends Activity {
     }
     @Override protected void onSaveInstanceState(Bundle out){super.onSaveInstanceState(out);out.putString("pendingIconKey",pendingIconKey);if(settings)out.putString("settingsSection",settingsSection.name());}
     @Override protected void onResume(){
-        super.onResume();foreground=true;
+        super.onResume();foreground=true;batteryReadAt=-1;
         if(entryKind==null)beginEntry("warm resume");
         boolean media=LauncherNotifications.allowed(this),calendar=checkSelfPermission(android.Manifest.permission.READ_CALENDAR)==android.content.pm.PackageManager.PERMISSION_GRANTED;
         if(catalogRenderPending){catalogRenderPending=false;refreshScreen();}
@@ -908,8 +911,12 @@ public class HomeActivity extends Activity {
                 settingsUi.toggle(body,"Notification hints","Mention active messaging and email notifications, never their contents",prefs.getBoolean("mikanNotifyHints",true),on->{prefs.edit().putBoolean("mikanNotifyHints",on).apply();LauncherNotifications.refreshIfConnected();if(on&&!LauncherNotifications.allowed(this))notificationAccess();showSettings();});
                 settingsUi.toggle(body,"Weather remarks","Use the existing fresh weather snapshot",prefs.getBoolean("mikanWeatherHints",true),on->{prefs.edit().putBoolean("mikanWeatherHints",on).apply();showSettings();});
                 settingsUi.toggle(body,"Calendar reminders","Mention an upcoming event without revealing its title",prefs.getBoolean("mikanCalendarHints",true),on->{prefs.edit().putBoolean("mikanCalendarHints",on).apply();showSettings();});
+                settingsUi.toggle(body,"Battery reactions","React to low battery, charging and full charge",prefs.getBoolean("mikanBatteryHints",true),on->{prefs.edit().putBoolean("mikanBatteryHints",on).apply();batteryReadAt=-1;showSettings();});
+                settingsUi.toggle(body,"Holiday greetings","Local date-based greetings for selected holidays",prefs.getBoolean("mikanHolidayHints",true),on->{prefs.edit().putBoolean("mikanHolidayHints",on).apply();showSettings();});
+                settingsUi.toggle(body,"Delivery app hints","Mention notifications from supported tracking apps; requires notification hints",prefs.getBoolean("mikanDeliveryHints",true),on->{prefs.edit().putBoolean("mikanDeliveryHints",on).apply();showSettings();});
+                settingsUi.toggle(body,"Web reachability remarks","Optional HTTPS check every 5 minutes while Mikan is visible; not an AI/NAS health check",prefs.getBoolean("mikanWebHints",false),on->{prefs.edit().putBoolean("mikanWebHints",on).apply();webStartedAt=-1;showSettings();});
                 settingsUi.row(body,"Notification access",LauncherNotifications.allowed(this)?"Allowed":"Not granted",this::notificationAccess);
-                settingsUi.note(body,"Remarks rotate while Home is visible. Tap the artwork for Pocket Mikan, the bubble for its indicated app, or an idle bubble for another remark. No AI, additional network calls, message contents or sender names.");
+                settingsUi.note(body,"Remarks rotate while Home is visible. Tap the artwork for Pocket Mikan, the bubble for its indicated app, or an idle bubble for another remark. No AI or notification contents. Network requests only if optional web reachability checks are enabled.");
                 settingsUi.heading(body,"COMPANION CONNECTION");
                 settingsUi.row(body,"Open Pocket Mikan",pocketAvailable()?"App installed":"App unavailable",this::openMikan);
                 settingsUi.note(body,"The home card prefers Pocket Mikan. The saved web address is only a fallback; Pocket Mikan manages its own connection.");
@@ -1078,11 +1085,16 @@ public class HomeActivity extends Activity {
             }catch(Exception ex){runOnUiThread(()->{fileBusy=false;if(!isDestroyed())Toast.makeText(this,"Backup could not be "+(export?"saved":"read")+". Existing settings kept.",Toast.LENGTH_LONG).show();});}
         },"launcher-backup").start();
     }
-    private void checkMikanWeb(){
+    private void checkMikanWeb(){checkMikanWeb(true);}
+    private void checkMikanWeb(boolean manual){
         String url=prefs.getString("mikanWebUrl","");
-        if(url.isEmpty()){editMikanUrl(false);return;}
+        if(url.isEmpty()){if(manual)editMikanUrl(false);return;}
         if(checkingWeb)return;
-        checkingWeb=true;Toast.makeText(this,"Checking Mikan Web…",Toast.LENGTH_SHORT).show();
+        if(!manual&&(!foreground||closed||mikanCard==null||!prefs.getBoolean("mikanWebHints",false)||!prefs.getBoolean("mikanRemarks",true)))return;
+        long now=android.os.SystemClock.elapsedRealtime();
+        if(!manual&&url.equals(webStartedUrl)&&webStartedAt>=0&&now-webStartedAt<5*60*1000L)return;
+        webStartedAt=now;webStartedUrl=url;checkingWeb=true;
+        if(manual)Toast.makeText(this,"Checking Mikan Web…",Toast.LENGTH_SHORT).show();
         new Thread(()->{
             String result="Web unreachable";
             java.net.HttpURLConnection connection=null;
@@ -1099,9 +1111,9 @@ public class HomeActivity extends Activity {
             final String status=result;
             runOnUiThread(()->{
                 checkingWeb=false;if(isFinishing()||isDestroyed()||!url.equals(prefs.getString("mikanWebUrl","")))return;
-                checkedWebUrl=url;webStatus=status;Toast.makeText(this,status+" · last check only",Toast.LENGTH_LONG).show();
-                if(settings&&settingsSection==SettingsHub.Section.MIKAN)showSettings();
-                // Web check status stays in settings; the character bubble is for remarks.
+                checkedWebUrl=url;webStatus=status;webCheckedAt=android.os.SystemClock.elapsedRealtime();
+                if(manual){Toast.makeText(this,status+" · last check only",Toast.LENGTH_LONG).show();if(settings&&settingsSection==SettingsHub.Section.MIKAN)showSettings();}
+                // Foreground refresh consumes this snapshot only when opt-in is enabled.
             });
         },"mikan-web-check").start();
     }
@@ -1134,7 +1146,7 @@ public class HomeActivity extends Activity {
             try{
                 java.net.URI uri=new java.net.URI(value);
                 if(!"https".equalsIgnoreCase(uri.getScheme())||uri.getHost()==null||uri.getUserInfo()!=null)throw new IllegalArgumentException();
-                prefs.edit().putString("mikanWebUrl",value).apply();checkedWebUrl="";webStatus="";dialog.dismiss();if(openAfter)openMikanWeb();else if(settings)showSettings();
+                prefs.edit().putString("mikanWebUrl",value).apply();checkedWebUrl="";webStatus="";webCheckedAt=-1;webStartedAt=-1;dialog.dismiss();if(openAfter)openMikanWeb();else if(settings)showSettings();
             }catch(Exception e){field.setError("Enter a valid HTTPS web address.");}
         }));dialog.show();
     }
@@ -1438,7 +1450,22 @@ public class HomeActivity extends Activity {
         if(mikanCard==null||!foreground||closed)return;
         Set<String> packages=notificationAccess?LauncherNotifications.snapshot():Collections.emptySet();
         String agenda=prefs.getBoolean("mikanCalendarHints",true)?dashboard.upcomingHint():null;
-        mikanCard.setRemark(remarks.choose(prefs,packages,agenda,Calendar.getInstance().get(Calendar.HOUR_OF_DAY)));
+        long now=android.os.SystemClock.elapsedRealtime();
+        if(prefs.getBoolean("mikanBatteryHints",true)&&(batteryReadAt<0||now-batteryReadAt>=15000)){
+            batteryReadAt=now;batteryRemark=null;
+            try{
+                Intent battery=registerReceiver(null,new android.content.IntentFilter(Intent.ACTION_BATTERY_CHANGED));
+                if(battery!=null){
+                    int level=battery.getIntExtra(android.os.BatteryManager.EXTRA_LEVEL,-1),scale=battery.getIntExtra(android.os.BatteryManager.EXTRA_SCALE,-1);
+                    int status=battery.getIntExtra(android.os.BatteryManager.EXTRA_STATUS,android.os.BatteryManager.BATTERY_STATUS_UNKNOWN);
+                    boolean plugged=battery.getIntExtra(android.os.BatteryManager.EXTRA_PLUGGED,0)!=0;
+                    if(level>=0&&scale>0&&level<=scale)batteryRemark=MikanPersonality.battery(Math.round(level*100f/scale),status==android.os.BatteryManager.BATTERY_STATUS_CHARGING,status==android.os.BatteryManager.BATTERY_STATUS_FULL&&plugged,plugged);
+                }
+            }catch(RuntimeException ignored){}
+        }
+        checkMikanWeb(false);
+        String recentWeb=prefs.getBoolean("mikanWebHints",false)&&!webStatus.isEmpty()&&checkedWebUrl.equals(prefs.getString("mikanWebUrl",""))&&webCheckedAt>=0&&now-webCheckedAt<10*60*1000L?webStatus:null;
+        mikanCard.setRemark(remarks.choose(prefs,packages,agenda,Calendar.getInstance().get(Calendar.HOUR_OF_DAY),java.time.LocalDate.now(),batteryRemark,recentWeb));
     }
     private void openRemark(MikanRemarks.Remark remark){
         if(!foreground||closed||drawer||settings||mikanCard==null||!prefs.getBoolean("mikanRemarks",true))return;

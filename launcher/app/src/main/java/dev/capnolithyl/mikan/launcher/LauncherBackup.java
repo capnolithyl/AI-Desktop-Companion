@@ -12,7 +12,7 @@ import org.json.*;
 /** Deliberately limited to portable launcher configuration, not private endpoints or artwork. */
 final class LauncherBackup {
     private static final int LIMIT=1024*1024;
-    private static final Set<String> BOOL=new HashSet<>(Arrays.asList("themed","showFavoritesLabel","floatingDock","pairWidgets","pairTop","pairBottom","weatherF","agendaTitles","badges","showSystemStats","mikanRemarks","mikanNotifyHints","mikanWeatherHints","mikanCalendarHints","mikanExpressions","mixedHome","drawerIndex"));
+    private static final Set<String> BOOL=new HashSet<>(Arrays.asList("themed","showFavoritesLabel","floatingDock","pairWidgets","pairTop","pairBottom","weatherF","agendaTitles","badges","showSystemStats","mikanRemarks","mikanNotifyHints","mikanWeatherHints","mikanCalendarHints","mikanExpressions","mikanBatteryHints","mikanHolidayHints","mikanDeliveryHints","mikanWebHints","mixedHome","drawerIndex"));
     private static final Set<String> PAGES=new HashSet<>(Arrays.asList("clockPage","mikanPage","musicPage","weatherPage","agendaPage"));
     private static final String ICON="iconStyle:";
     private static boolean component(String key){return key.length()<=512&&ComponentName.unflattenFromString(key)!=null&&!key.contains("\n")&&!key.contains("\r");}

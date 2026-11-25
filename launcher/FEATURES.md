@@ -1,6 +1,6 @@
 # Mikan Launcher — living feature reference
 
-**Source baseline:** v0.14.0 (versionCode 29), dynamic expressions, 2026-11-25. See Git history for implementation commit.
+**Source baseline:** v0.14.1 (versionCode 30), richer local personality, 2026-11-25. See Git history for implementation commit.
 **Development:** [PR #117](https://github.com/capnolithyl/AI-Desktop-Companion/pull/117), branch `feature/mikan-launcher-v01`. Check current branch and Gradle version before changing this document.
 **Purpose:** a free, personal, offline-first Android launcher inspired by the Mikan OS home-screen mockup. Separate from Pocket Mikan, desktop Mikan and the NAS. This document tracks the launcher only.
 
@@ -46,6 +46,7 @@ Build success, release publication, installation and individual feature verifica
 | Favorites heading | 0.6 | Optional, hidden by default. | Hidden in v0.6 screenshot. |
 | Local portrait | 0.3 | Settings > Choose portrait; downscale to at most 768 px on longest edge, store privately. Reset returns to bundled coffee portrait if available, otherwise legacy small chat avatar. | Owner confirmed coffee portrait import; survives updates. |
 | Character artwork | 0.6 | Separate import/remove control for transparent art, local alpha-preserving storage. Existing portrait remains fallback; full-bleed image with blend when no cutout. | Full-bleed portrait observed; transparent import not yet confirmed. Coffee/cutout artwork is not bundled by default at this baseline. |
+| Richer personality | 0.14.1 | Fifteen time-aware idle options per time window; stable rotation preserves current remark when unrelated context disappears, interrupts for new contextual keys. Battery reactions from Android sticky snapshot sampled at most every 15s while visible (low <=25%, concern <=15%, critical <=5%, charging/full), holiday greetings on selected local dates incl. US Thanksgiving. Delivery app presence hints for UPS, FedEx, AfterShip, Route, Shop; never claim actual delivery. Optional web reachability HEAD check on configured HTTPS address, off by default, foreground only, at most every 5 min, 5s connect/read timeout, no auth/redirect; snapshot expires after 10 min. Not authenticated NAS/inference health. Separate source toggles and backup. | Implemented; CI/device pending. |
 | Dynamic expressions | 0.14.0 | Eight bundled WebP portraits tagged directly on local remarks: idle/default/sleepy/smug/excited, notification/surprised, calendar or thunderstorm/concerned, rain/pouty, snow/cold/freezing. Default enabled; switch off in Mikan settings to restore saved portrait/cutout. Crossfade 220ms only on expression change, respects disabled animations, 8 MiB bounded lazy bitmap cache, missing asset falls back to default then saved portrait. No new permissions, AI, network or delivery detection. Settings backup includes toggle, not art. | Implemented; CI/device pending. |
 | Mikan card | 0.1–0.6 / 0.11.8 | Time-based greeting plus rotating contextual/local remarks in expanded speech bubble; artwork opens Pocket Mikan or web fallback. Bubble has separate contextual action or idle tap-to-cycle; visible target hint only when actionable. | Implemented; device validation pending. |
 | Dynamic remarks | 0.11.7 | Local templates rotate roughly every 45 seconds while Home visible, refresh on context changes; notification presence for supported messaging/mail apps, fresh cached weather, imminent timed events from existing agenda snapshot, and playful idle messages. Individual toggles in Mikan settings, enabled by default but existing Android permissions required; no contents, sender names, exact unread counts, event titles, extra network or AI. Settings backed up; notification identifiers only in memory. | Implemented; CI/device tests pending. |
@@ -158,6 +159,8 @@ Weather card also exposes refresh, city, units and clear location. No full-scree
 
 | 0.14.0 | Dynamic expression tags, bundled portraits, cached crossfade and custom-art toggle | Implemented; CI/device pending. |
 
+| 0.14.1 | Local personality variety, battery, holiday, delivery app hints and opt-in web reachability | Implemented; CI/device pending. |
+
 ## 7. Outstanding verification checklist
 
 - [ ] Cold boot/reboot with airplane mode and NAS down; open drawer, favorites and folders.
@@ -217,6 +220,8 @@ Weather card also exposes refresh, city, units and clear location. No full-scree
 
 - [ ] v0.14.0 verify all eight assets render, changes match current remark, crossfade and reduced motion, unchanged remark, source toggles and stale data, idle cycling/time, both Home modes, portrait/bubble taps, custom art restored on disable, restart/backup, memory pressure and offline. Expression rules and WebP headers checked in CI.
 
+- [ ] v0.14.1 verify battery transitions/unknown/plugged-not-charging, holiday local date, idle rotation and new context priority, delivery app notification action and revoked access, source toggles, opt-in HTTPS web reachability throttling/timeout/offline/URL change, no requests with toggle off, restart and backup. Pure Java personality tests added.
+
 ## 8. Roadmap (not implemented)
 
 Planned milestones; version targets flexible. See [Trello roadmap](https://trello.com/c/VEk6xVz6). No arbitrary deadlines.
@@ -237,7 +242,7 @@ Alphabetical A–Z/Z–A, recent/frequent launcher-observed sorting, right-edge 
 Accent colors, multiple schemes, adjustable wallpaper darkness/widget transparency, complete theme import/export including art, seasonal and optional local time/cached-weather themes.
 
 ### v0.14 — Bring Mikan to life (first phase implemented)
-Eight uploaded WebP portraits wired in v0.14.0, local remark tags, crossfade and opt-out. Future: richer remark variety, reliable delivery signals, optional bounded NAS status. Theme engine remains deferred.
+Eight uploaded portraits wired in v0.14.0 (launcher CI 45683723437 passed; owner reported positive device experience). v0.14.1 adds richer idle rotation, battery, holidays, tracking-app notification hints and optional web reachability. Actual delivery confirmation and authenticated NAS/inference health remain future work. Theme engine remains deferred.
 Time-based expressions/artwork synchronized to remark context (owner approved), extend local remarks (contextual rotation in v0.11.7 and typed actions in v0.11.8), optional bounded NAS responses/status and offline personality. Delivery hints require reliable notification signal; cached expression art and default fallback.
 
 ### v0.15 — Expanded widgets

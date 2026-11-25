@@ -68,6 +68,11 @@ jobs:
               assert len(data) > 20 and data[:4] == b"RIFF" and data[8:12] == b"WEBP", name
               print(name, len(data), "bytes")
           PY
+      - name: Test local personality rules and rotation
+        run: |
+          mkdir -p /tmp/mikan-personality-tests
+          javac -d /tmp/mikan-personality-tests launcher/app/src/main/java/dev/capnolithyl/mikan/launcher/MikanExpression.java launcher/app/src/main/java/dev/capnolithyl/mikan/launcher/MikanPersonality.java launcher/tests/MikanPersonalityTest.java
+          java -cp /tmp/mikan-personality-tests dev.capnolithyl.mikan.launcher.MikanPersonalityTest
       - name: Compile launcher
         working-directory: launcher
         run: gradle :app:assembleDebug --stacktrace

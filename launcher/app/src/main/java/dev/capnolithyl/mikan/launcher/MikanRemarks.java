@@ -5,6 +5,7 @@ import android.os.SystemClock;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
+import java.time.LocalDate;
 import org.json.JSONObject;
 
 /** Local, deterministic remarks; never consumes notification content or calls an AI. */
@@ -15,24 +16,30 @@ final class MikanRemarks {
         final String text,packageName,label;
         final Action action;
         final MikanExpression expression;
-        Remark(String text,Action action,String packageName,String label,MikanExpression expression){this.text=text;this.action=action;this.packageName=packageName;this.label=label;this.expression=expression;}
-        String key(){return action==Action.NONE?text:action.name()+":"+packageName;}
+        final String identity;
+        Remark(String text,Action action,String packageName,String label,MikanExpression expression){
+            this(text,action,packageName,label,expression,action.name()+":"+packageName);
+        }
+        Remark(String text,Action action,String packageName,String label,MikanExpression expression,String identity){this.text=text;this.action=action;this.packageName=packageName;this.label=label;this.expression=expression;this.identity=identity;}
+        String key(){return identity;}
         boolean actionable(){return action!=Action.NONE;}
     }
-    private List<String> previous=new ArrayList<>();
-    private long changedAt;
-    private int index;
+    private final MikanPersonality.Rotation rotation=new MikanPersonality.Rotation();
     static boolean notificationHintsEnabled(SharedPreferences p){
         return p.getBoolean("mikanRemarks",true)&&p.getBoolean("mikanNotifyHints",true)&&p.getInt("mikanPage",1)>0;
     }
     private static void addApp(List<Remark> options,Set<String> packages,String pkg,String label,String text){
         if(packages.contains(pkg))options.add(new Remark(text,Action.APP,pkg,label,MikanExpression.SURPRISED));
     }
-    private static Remark idle(String text,MikanExpression expression){return new Remark(text,Action.NONE,"","",expression);}
-    void advance(){if(!previous.isEmpty()){index=(index+1)%previous.size();changedAt=SystemClock.elapsedRealtime();}}
-    Remark choose(SharedPreferences prefs,Set<String> packages,String agenda,int hour){
-        if(!prefs.getBoolean("mikanRemarks",true)){previous.clear();index=0;return null;}
+    private static Remark local(MikanPersonality.Line line){return new Remark(line.text,Action.NONE,"","",line.expression,line.key);}
+    private static void addDelivery(List<Remark> options,Set<String> packages,String pkg,String label){
+        if(packages.contains(pkg))options.add(new Remark(label+" has a notification. Want to take a look?",Action.APP,pkg,label,MikanExpression.EXCITED));
+    }
+    void advance(){rotation.advance();}
+    Remark choose(SharedPreferences prefs,Set<String> packages,String agenda,int hour,LocalDate date,MikanPersonality.Line battery,String webStatus){
+        if(!prefs.getBoolean("mikanRemarks",true)){rotation.reset();return null;}
         List<Remark> options=new ArrayList<>();
+        if(prefs.getBoolean("mikanBatteryHints",true)&&battery!=null)options.add(local(battery));
         if(notificationHintsEnabled(prefs)){
             addApp(options,packages,"com.whatsapp","WhatsApp","Psst! WhatsApp has notifications for you ♡");
             addApp(options,packages,"com.whatsapp.w4b","WhatsApp Business","WhatsApp Business has notifications for you ♡");
@@ -48,23 +55,31 @@ final class MikanRemarks {
             addApp(options,packages,"org.telegram.messenger","Telegram","Telegram has notifications for you ♡");
             addApp(options,packages,"com.facebook.orca","Messenger","Messenger has notifications for you ♡");
             addApp(options,packages,"com.discord","Discord","Discord has notifications for you ♡");
+            if(prefs.getBoolean("mikanDeliveryHints",true)){
+                addDelivery(options,packages,"com.ups.mobile.android","UPS");
+                addDelivery(options,packages,"com.fedex.ida.android","FedEx");
+                addDelivery(options,packages,"com.aftership.AfterShip","AfterShip");
+                addDelivery(options,packages,"com.route.app","Route");
+                addDelivery(options,packages,"com.shopify.arrive","Shop");
+            }
+        }
+        if(prefs.getBoolean("mikanHolidayHints",true)){
+            MikanPersonality.Line holiday=MikanPersonality.holiday(date);if(holiday!=null)options.add(local(holiday));
         }
         if(prefs.getBoolean("mikanCalendarHints",true)&&agenda!=null)options.add(new Remark(agenda,Action.CALENDAR,"","Calendar",MikanExpression.CONCERNED));
         if(prefs.getBoolean("mikanWeatherHints",true)){
             Remark weather=weatherRemark(prefs);if(weather!=null)options.add(weather);
         }
-        options.add(idle(hour<7||hour>=22?"Even cats need their beauty sleep!":hour<12?"Coffee first, world domination later.":hour<18?"Don't forget a little stretch and water ♡":"A cozy evening sounds purrfect.",MikanExpression.idle(hour)));
-        options.add(idle("Your little pocket companion is on duty ♡",MikanExpression.DEFAULT));
-        options.add(idle("Tiny victories deserve a celebration! ♡",MikanExpression.EXCITED));
-        options.add(idle("I vote for a tiny coffee break.",MikanExpression.SMUG));
-        // Compare stable action identities, not a changing countdown or temperature.
-        // Otherwise calendar countdowns can continually reset the rotation.
+        if(prefs.getBoolean("mikanWebHints",false)&&webStatus!=null){
+            boolean responded=webStatus.equals("Web responded");
+            String note=responded?"Mikan Web responded to its latest check ♡":webStatus.equals("Web requires access")?"Mikan Web requires access at its latest check.":"Mikan Web check: "+webStatus+".";
+            options.add(new Remark(note,Action.NONE,"","",responded?MikanExpression.DEFAULT:MikanExpression.CONCERNED,"web:"+webStatus));
+        }
+        for(MikanPersonality.Line line:MikanPersonality.idle(hour))options.add(local(line));
         List<String> keys=new ArrayList<>();for(Remark option:options)keys.add(option.key());
-        long now=SystemClock.elapsedRealtime();
-        if(!keys.equals(previous)){previous=keys;index=0;changedAt=now;}
-        else if(now-changedAt>=ROTATE_MS){index=(index+1)%options.size();changedAt=now;}
-        return options.get(index);
+        return options.get(rotation.select(keys,SystemClock.elapsedRealtime(),ROTATE_MS));
     }
+
     static String weatherHint(SharedPreferences prefs){Remark remark=weatherRemark(prefs);return remark==null?null:remark.text;}
     private static Remark weatherRemark(SharedPreferences prefs){
         long age=System.currentTimeMillis()-prefs.getLong("weatherAt",0);
