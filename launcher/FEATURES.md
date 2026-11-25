@@ -274,6 +274,9 @@ Time-based expressions/artwork synchronized to remark context (owner approved), 
 ### v0.15 — Expanded widgets
 v0.15.0 device information widget implemented, CI passed and owner confirmed working. v0.15.1 first native Android AppWidget hosting implemented (full-width managed section; CI passed, picker observed, binding/rendering compatibility pending). v0.15.2 themed grouped picker passed CI and owner approved its appearance. v0.15.3 native mixed-grid placement/resizing/removal implemented; CI and physical provider compatibility pending. Remaining: tasks/reminders, quick contacts, optional daily briefing and local fallback.
 
+### v0.16 — Mikan Dream Mode (planned)
+User-approved milestone after expanded widgets. Implement an optional Android `DreamService` charging screensaver, selectable in system screensaver settings. Large amber clock/date respecting system time format, sleeping Mikan artwork, battery percentage/charging indicator, portrait and landscape, dim nighttime mode and periodic content repositioning to reduce OLED burn-in risk. Optional next alarm, cached weather and holiday artwork, with local fallback. No LLM, NAS, root or continuous background service; stop updates when dreaming ends. Keep the secure keyguard and manufacturer always-on display unchanged. Verify that the owner's current charging clock is the Android screensaver and that the device supports selecting third-party dreams; charging triggers remain controlled by Android. Test charging/unplug, exit, orientation, offline, brightness, battery use and secure unlock. Not implemented yet.
+
 ### v1.0 — Daily-driver release
 Performance/battery/startup regression, full backup/restore, crash recovery, offline boot and NAS-outage tests, stock launcher fallback, resolve outstanding bugs and merge with owner approval.
 
