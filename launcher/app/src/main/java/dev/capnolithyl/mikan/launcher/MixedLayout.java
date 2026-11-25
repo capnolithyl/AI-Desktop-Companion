@@ -61,6 +61,21 @@ final class MixedLayout {
             result.put(spec.key,found);
         }return result;
     }
+    /** Explicitly close vertical gaps, retaining horizontal positions and spans. */
+    static LinkedHashMap<String,Rect> compact(Map<String,Rect> current,int columns){
+        List<Map.Entry<String,Rect>> ordered=new ArrayList<>(current.entrySet());
+        ordered.sort(Comparator.comparingInt((Map.Entry<String,Rect> item)->item.getValue().y).thenComparingInt(item->item.getValue().x).thenComparing(Map.Entry::getKey));
+        LinkedHashMap<String,Rect> result=new LinkedHashMap<>();
+        for(Map.Entry<String,Rect> item:ordered){
+            Rect old=item.getValue(),next=old;
+            for(int y=0;y<=old.y;y++){
+                Rect candidate=new Rect(old.x,y,old.w,old.h);
+                if(vacant(result,item.getKey(),candidate,columns)){next=candidate;break;}
+            }
+            result.put(item.getKey(),next);
+        }
+        return result;
+    }
     void forget(String key){saved.remove(key);}
     void remember(Map<String,Rect> current,Set<String> keep){saved.keySet().retainAll(keep);saved.putAll(current);}
 }

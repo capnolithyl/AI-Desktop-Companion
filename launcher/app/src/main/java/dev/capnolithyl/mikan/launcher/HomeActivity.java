@@ -327,7 +327,7 @@ public class HomeActivity extends Activity {
             renderSystemStats();queueSystemStats();
         }
         if(editingMixed)header.addView(action("Done",this::finishMixedEdit));else header.addView(markButton(MikanMark.GEAR,"Launcher settings",this::openSettings),new LinearLayout.LayoutParams(dp(44),dp(44)));page.addView(header);
-        if(editingMixed){page.addView(text("Hold to move · hold ↘ to resize · tap − to remove apps",12,MUTED,false));gap(page,6);}
+        if(editingMixed){page.addView(text("Tap a tile or ✥ then its destination · drag to move · ↘ to resize",12,MUTED,false));gap(page,6);}
         ScrollView scroll=new ScrollView(this);scroll.setFillViewport(false);scroll.setVerticalScrollBarEnabled(true);scroll.setScrollbarFadingEnabled(true);
         page.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
         LinearLayout body=vertical();scroll.addView(body,new ScrollView.LayoutParams(-1,-2));
@@ -1195,6 +1195,7 @@ public class HomeActivity extends Activity {
             else{App app=find(spec.key);content=app==null?text("Unavailable",11,MUTED,false):tile(app,true);}
             if(content!=null)grid.item(spec.key,content);
         }
+        if(editingMixed){body.addView(action("Close vertical gaps",grid::compact));gap(body,6);}
         body.addView(grid,new LinearLayout.LayoutParams(-1,-2));
     }
     private View buildMixedWidget(String key,boolean compact){
@@ -1273,7 +1274,10 @@ public class HomeActivity extends Activity {
     private void openHomeEditor(){
         closeQuickSearch();hideKeyboard();drawer=false;settings=false;
         if(prefs.getBoolean("mixedHome",false)){if(editingMixed)return;editingMixed=true;editingHome=false;mixedScrollY=mixedScroll==null?0:mixedScroll.getScrollY();showHome();return;}
-        openPageManager();
+        new AlertDialog.Builder(this).setTitle("Edit home screen").setItems(new String[]{"Move apps & widgets","Manage pages & apps"},(d,i)->{
+            if(i==0){enableMixedLayout();editingHome=false;editingMixed=true;mixedScrollY=0;showHome();}
+            else openPageManager();
+        }).setMessage(null).setNegativeButton("Cancel",null).show();
     }
     private void openPageManager(){
         editingMixed=false;drawer=false;settings=false;
@@ -1300,7 +1304,7 @@ public class HomeActivity extends Activity {
         ensureHomeSlots();homePage=Math.max(0,Math.min(homePage,editorPageCount()-1));createPage();
         LinearLayout bar=horizontal();bar.addView(action("Done",this::finishHomeEdit));TextView title=text("  Edit Home",21,CREAM,true);bar.addView(title,new LinearLayout.LayoutParams(0,-2,1));page.addView(bar);
         gap(page,8);page.addView(text("Drag or tap to move shortcuts. Tap − to remove. Changes save immediately.",13,MUTED,false));gap(page,10);
-        page.addView(action(prefs.getBoolean("mixedHome",false)?"Back to live grid":"Try live mixed grid",()->{if(!prefs.getBoolean("mixedHome",false)){new AlertDialog.Builder(this).setTitle("Enable mixed grid?").setMessage("Apps and widgets share a scrollable grid. Your existing section layout remains available in Home settings.").setNegativeButton("Cancel",null).setPositiveButton("Enable",(d,i)->{enableMixedLayout();editingHome=false;editingMixed=true;mixedScrollY=0;showHome();}).show();}else{editingHome=false;editingMixed=true;mixedScrollY=0;showHome();}}));gap(page,6);
+        page.addView(action(prefs.getBoolean("mixedHome",false)?"Back to live grid":"Move apps & widgets",()->{if(!prefs.getBoolean("mixedHome",false)){new AlertDialog.Builder(this).setTitle("Enable mixed grid?").setMessage("Apps and widgets share a scrollable grid. Your existing section layout remains available in Home settings.").setNegativeButton("Cancel",null).setPositiveButton("Enable",(d,i)->{enableMixedLayout();editingHome=false;editingMixed=true;mixedScrollY=0;showHome();}).show();}else{editingHome=false;editingMixed=true;mixedScrollY=0;showHome();}}));gap(page,6);
         LinearLayout nav=horizontal();nav.addView(action("‹",()->editorPage(-1)));TextView position=text("Page "+(homePage+1)+" / "+editorPageCount(),15,CREAM,true);position.setGravity(Gravity.CENTER);nav.addView(position,new LinearLayout.LayoutParams(0,-2,1));nav.addView(action("›",()->editorPage(1)));page.addView(nav);gap(page,8);
         if(selectedSlot>=0){String selected=homeSlots.at(selectedSlot);App app=selected==null?null:find(selected);page.addView(text(app==null?"Select a shortcut":"Moving "+app.label+" · tap a cell",13,PEACH,true));gap(page,6);}
         ScrollView scroll=new ScrollView(this);LinearLayout body=vertical();scroll.addView(body);page.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));

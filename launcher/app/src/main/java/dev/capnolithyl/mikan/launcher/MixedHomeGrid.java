@@ -7,6 +7,9 @@ import android.graphics.Paint;
 import android.graphics.drawable.GradientDrawable;
 import android.view.DragEvent;
 import android.view.Gravity;
+import android.view.MotionEvent;
+import android.view.ViewConfiguration;
+import android.widget.Toast;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
@@ -21,6 +24,8 @@ final class MixedHomeGrid extends ViewGroup {
     private final Map<View,String> keys=new LinkedHashMap<>();
     private final int columns;private final boolean editing;private final Callbacks callbacks;
     private int[] edges;private int rows;private MixedLayout.Rect preview;private boolean valid;
+    private String selected;private float downX,downY;
+    private boolean placing;
     private final Paint paint=new Paint(Paint.ANTI_ALIAS_FLAG);
     private static final class Drag {final String key;final boolean resize;Drag(String key,boolean resize){this.key=key;this.resize=resize;}}
     MixedHomeGrid(Context c,int columns,boolean editing,Map<String,MixedLayout.Rect> positions,List<MixedLayout.Spec> specs,Callbacks callbacks){
@@ -38,8 +43,12 @@ final class MixedHomeGrid extends ViewGroup {
         frame.addView(content,new FrameLayout.LayoutParams(-1,-2,Gravity.TOP));
         if(editing){
             View move=new View(getContext());move.setBackground(outline(0xbaffbf88));move.setContentDescription("Move "+key);move.setFocusable(true);
-            move.setOnClickListener(v->callbacks.editItem(key));move.setOnLongClickListener(v->start(frame,key,false));frame.addView(move,new FrameLayout.LayoutParams(-1,-1));
+            move.setOnClickListener(v->select(key));move.setOnLongClickListener(v->start(frame,key,false));frame.addView(move,new FrameLayout.LayoutParams(-1,-1));
             if(key.startsWith("widget:")){
+                TextView moveHandle=new TextView(getContext());moveHandle.setText("✥");moveHandle.setTextSize(19);moveHandle.setTextColor(0xffffe9d5);moveHandle.setGravity(Gravity.CENTER);
+                moveHandle.setBackground(MikanTheme.tile(getContext()));moveHandle.setContentDescription("Move widget");moveHandle.setFocusable(true);
+                moveHandle.setOnClickListener(v->select(key));moveHandle.setOnLongClickListener(v->start(frame,key,false));
+                frame.addView(moveHandle,new FrameLayout.LayoutParams(dp(36),dp(36),Gravity.TOP|Gravity.LEFT));
                 TextView handle=new TextView(getContext());handle.setText("↘");handle.setTextColor(0xffffe9d5);handle.setTextSize(17);handle.setGravity(Gravity.CENTER);handle.setContentDescription("Resize "+key);handle.setBackground(MikanTheme.tile(getContext()));handle.setOnClickListener(v->callbacks.editItem(key));handle.setOnLongClickListener(v->start(frame,key,true));
                 FrameLayout.LayoutParams hp=new FrameLayout.LayoutParams(dp(36),dp(36),Gravity.BOTTOM|Gravity.RIGHT);frame.addView(handle,hp);
             }else{
@@ -52,17 +61,22 @@ final class MixedHomeGrid extends ViewGroup {
         }
         keys.put(frame,key);addView(frame,new ViewGroup.LayoutParams(-1,-2));
     }
+    private void select(String key){
+        selected=key;invalidate();Toast.makeText(getContext(),"Tap where you want to move this tile, or drag it.",Toast.LENGTH_SHORT).show();
+    }
+    void compact(){if(editing){selected=null;callbacks.changed(MixedLayout.compact(positions,columns));}}
     private boolean start(View frame,String key,boolean resize){
+        selected=null;invalidate();
         return frame.startDragAndDrop(ClipData.newPlainText("mikan-grid",key),new View.DragShadowBuilder(frame),new Drag(key,resize),0);
     }
     @Override protected void onMeasure(int widthSpec,int heightSpec){
-        int width=MeasureSpec.getSize(widthSpec);int[] heights=new int[rows];Arrays.fill(heights,dp(80));
+        int width=MeasureSpec.getSize(widthSpec);int[] heights=new int[rows];Arrays.fill(heights,dp(44));
         for(Map.Entry<View,String> entry:keys.entrySet()){
             MixedLayout.Rect r=positions.get(entry.getValue());View v=entry.getKey();
             int childWidth=Math.max(1,(r.x+r.w)*width/columns-r.x*width/columns-dp(6));
             v.measure(MeasureSpec.makeMeasureSpec(childWidth,MeasureSpec.EXACTLY),MeasureSpec.makeMeasureSpec(0,MeasureSpec.UNSPECIFIED));
             int need=v.getMeasuredHeight()+dp(6),current=0;for(int y=r.y;y<r.y+r.h;y++)current+=heights[y];
-            if(need>current)heights[r.y+r.h-1]+=need-current;
+            if(need>current){int extra=need-current;for(int y=0;y<r.h;y++)heights[r.y+y]+=extra/r.h+(y<extra%r.h?1:0);}
         }
         edges=new int[rows+1];for(int y=0;y<rows;y++)edges[y+1]=edges[y]+heights[y];
         for(Map.Entry<View,String> entry:keys.entrySet()){
@@ -84,20 +98,62 @@ final class MixedHomeGrid extends ViewGroup {
         for(int y:edges)c.drawLine(0,y,getWidth(),y,paint);
     }
     @Override protected void dispatchDraw(Canvas c){
-        super.dispatchDraw(c);if(preview==null||edges==null||!preview.fits(columns)||preview.y+preview.h>rows)return;
+        super.dispatchDraw(c);
+        MixedLayout.Rect chosen=selected==null?null:positions.get(selected);
+        if(chosen!=null&&edges!=null){
+            paint.setColor(0xffffbf88);paint.setStyle(Paint.Style.STROKE);paint.setStrokeWidth(dp(2));
+            c.drawRect(chosen.x*getWidth()/columns+dp(2),edges[chosen.y]+dp(2),(chosen.x+chosen.w)*getWidth()/columns-dp(2),edges[chosen.y+chosen.h]-dp(2),paint);
+            paint.setStyle(Paint.Style.FILL);
+        }
+        if(preview==null||edges==null||!preview.fits(columns)||preview.y+preview.h>rows)return;
         paint.setColor(valid?0x6659c287:0x77d16e5b);c.drawRect(preview.x*getWidth()/columns,edges[preview.y],(preview.x+preview.w)*getWidth()/columns,edges[preview.y+preview.h],paint);
     }
+    private int rowAt(float y){int row=0;while(row+1<rows&&y>=edges[row+1])row++;return row;}
     private MixedLayout.Rect candidate(Drag drag,float x,float y){
         MixedLayout.Rect old=positions.get(drag.key);if(old==null||edges==null)return null;
-        int col=Math.max(0,Math.min(columns-1,(int)(x*columns/Math.max(1,getWidth())))),row=0;
-        while(row+1<rows&&y>=edges[row+1])row++;
-        return drag.resize?new MixedLayout.Rect(old.x,old.y,col-old.x+1,row-old.y+1):new MixedLayout.Rect(col,row,old.w,old.h);
+        int col=Math.max(0,Math.min(columns-1,(int)(x*columns/Math.max(1,getWidth())))),row=rowAt(y);
+        if(drag.resize)return new MixedLayout.Rect(old.x,old.y,col-old.x+1,row-old.y+1);
+        // Default Android drag shadow is centered on the finger. Convert its center
+        // back to the tile origin; full-width cards can now be dropped from any x.
+        float cellWidth=getWidth()/(float)columns;
+        int left=Math.max(0,Math.min(columns-old.w,Math.round(x/cellWidth-old.w/2f)));
+        float top=y-(edges[old.y+old.h]-edges[old.y])/2f;
+        int upper=rowAt(top);
+        if(upper+1<rows&&Math.abs(edges[upper+1]-top)<Math.abs(edges[upper]-top))upper++;
+        return new MixedLayout.Rect(left,Math.max(0,Math.min(rows-old.h,upper)),old.w,old.h);
+    }
+    @Override public boolean onInterceptTouchEvent(MotionEvent event){
+        if(editing&&selected!=null&&event.getActionMasked()==MotionEvent.ACTION_DOWN){placing=true;return true;}
+        return super.onInterceptTouchEvent(event);
+    }
+    @Override public boolean onTouchEvent(MotionEvent event){
+        if(!editing||selected==null||!placing)return super.onTouchEvent(event);
+        switch(event.getActionMasked()){
+            case MotionEvent.ACTION_DOWN:downX=event.getX();downY=event.getY();return true;
+            case MotionEvent.ACTION_MOVE:return true;
+            case MotionEvent.ACTION_CANCEL:placing=false;return true;
+            case MotionEvent.ACTION_UP:
+                placing=false;
+                int slop=ViewConfiguration.get(getContext()).getScaledTouchSlop();
+                if(Math.abs(event.getX()-downX)>slop||Math.abs(event.getY()-downY)>slop||edges==null)return true;
+                MixedLayout.Rect old=positions.get(selected);
+                if(old==null){selected=null;invalidate();return true;}
+                int x=Math.max(0,Math.min(columns-old.w,(int)(event.getX()*columns/Math.max(1,getWidth()))));
+                int y=Math.min(rows-old.h,rowAt(event.getY()));
+                MixedLayout.Rect dest=new MixedLayout.Rect(x,y,old.w,old.h);
+                if(old.x==x&&old.y==y){selected=null;invalidate();return true;}
+                if(MixedLayout.vacant(positions,selected,dest,columns)){
+                    positions.put(selected,dest);selected=null;callbacks.changed(new LinkedHashMap<>(positions));
+                }else callbacks.rejected();
+                invalidate();return true;
+            default:return true;
+        }
     }
     @Override public boolean onDragEvent(DragEvent event){
         if(!editing||!(event.getLocalState() instanceof Drag))return false;
         Drag drag=(Drag)event.getLocalState();
         switch(event.getAction()){
-            case DragEvent.ACTION_DRAG_STARTED:return true;
+            case DragEvent.ACTION_DRAG_STARTED:selected=null;placing=false;invalidate();return true;
             case DragEvent.ACTION_DRAG_LOCATION:
             case DragEvent.ACTION_DROP:
                 preview=candidate(drag,event.getX(),event.getY());

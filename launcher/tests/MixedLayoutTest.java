@@ -12,6 +12,15 @@ public final class MixedLayoutTest {
         for(String k:narrow.keySet())check(MixedLayout.vacant(narrow,k,narrow.get(k),5));
         boolean bad=false;try{MixedLayout.parse("a\t0\t79\t1\t2");}catch(IllegalArgumentException e){bad=true;}check(bad);
         m.forget("a");check(!MixedLayout.parse(m.encode()).keys().contains("a"));
+        Map<String,MixedLayout.Rect> gaps=new LinkedHashMap<>();
+        gaps.put("widget:clockPage",new MixedLayout.Rect(0,2,2,1));
+        gaps.put("widget:weatherPage",new MixedLayout.Rect(2,3,2,2));
+        gaps.put("widget:mikanPage",new MixedLayout.Rect(0,9,4,3));
+        gaps.put("a",new MixedLayout.Rect(0,14,1,1));
+        Map<String,MixedLayout.Rect> compact=MixedLayout.compact(gaps,4);
+        check(compact.get("widget:clockPage").y==0&&compact.get("widget:weatherPage").y==0);
+        check(compact.get("widget:mikanPage").y==2&&compact.get("a").y==1);
+        for(String key:compact.keySet()){MixedLayout.Rect rect=compact.get(key),old=gaps.get(key);check(rect.x==old.x&&rect.w==old.w&&rect.h==old.h&&rect.y<=old.y&&MixedLayout.vacant(compact,key,rect,4));}
         System.out.println("MixedLayout tests passed");
     }
 }
