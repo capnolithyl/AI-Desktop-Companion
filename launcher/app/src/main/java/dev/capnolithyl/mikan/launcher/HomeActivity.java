@@ -510,7 +510,7 @@ public class HomeActivity extends Activity {
                 else{Map<String,Object> restored=LauncherBackup.read(this,uri);runOnUiThread(()->{
                     fileBusy=false;if(isDestroyed()||isFinishing())return;
                     new AlertDialog.Builder(this).setTitle("Restore launcher settings?").setMessage("Replace saved layout, folders and supported appearance settings. Imported artwork, private connection settings and Android permissions are not changed.").setNegativeButton("Cancel",null).setPositiveButton("Restore",(d,w)->{
-                        LauncherBackup.apply(prefs,restored);folders=new HomeFolders(prefs);restoreFavorites();monoCache.clear();homePage=0;refreshScreen();Toast.makeText(this,"Settings restored",Toast.LENGTH_SHORT).show();
+                        boolean saved=LauncherBackup.apply(prefs,restored);folders=new HomeFolders(prefs);restoreFavorites();monoCache.clear();homePage=0;refreshScreen();Toast.makeText(this,saved?"Settings restored":"Settings changed in memory, but disk save failed. Check available storage.",Toast.LENGTH_LONG).show();
                     }).show();
                 });}
             }catch(Exception ex){runOnUiThread(()->{fileBusy=false;if(!isDestroyed())Toast.makeText(this,"Backup could not be "+(export?"saved":"read")+". Existing settings kept.",Toast.LENGTH_LONG).show();});}

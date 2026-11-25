@@ -81,7 +81,7 @@ Weather card also exposes refresh, city, units and clear location. No full-scree
 - Per-app icon override by installed component: global, amber, original or local image (up to 256 px, alpha preserved). App drawer long-press or Home settings > Customize app icons. Custom image overrides global theme; missing image falls back to global style.
 - Layout: configurable 1–4 home rows, icon size constrained by screen/grid, independent top/bottom pairing and three section order presets. Existing defaults retained. No free-position drag grid or arbitrary widget resizing yet.
 - Folder icon grid with member long-press remove/pin/customize; drop app onto existing folder to add/move/reorder. No drag-to-create.
-- Local JSON settings backup via Android document picker, validated schema and explicit restore confirmation. Includes layout, folders, theme, widget visibility and supported preferences; excludes imported image binaries, per-app custom image selections, private web/weather location, weather cache and Android permissions. Custom wallpaper choice is omitted from export; restore leaves current wallpaper unchanged if no bundled selection. No automatic upload. Backup may contain installed app identifiers and folder names.
+- Local JSON settings backup via Android document picker, validated schema and explicit restore confirmation. Includes layout, folders, theme, widget visibility and supported preferences; excludes imported image binaries, per-app custom image selections, private web/weather location, weather cache and Android permissions. Existing custom icon selections are preserved on restore. Custom wallpaper choice is omitted from export; restore leaves current wallpaper unchanged if no bundled selection. No automatic upload. Backup may contain installed app identifiers and folder names.
 - Lockscreen category imports a local image, previews it and explicitly applies it with WallpaperManager FLAG_LOCK, using normal SET_WALLPAPER permission. Can use current home wallpaper. Android retains secure keyguard, system clock, notifications and unlock. No replacement lockscreen or lockscreen widgets. Device support/actual crop pending.
 
 ## 5. Offline, privacy and updates
@@ -126,7 +126,7 @@ Weather card also exposes refresh, city, units and clear location. No full-scree
 - [x] v0.7 installation and paired dashboard observed on phone; weather data and empty agenda rendered.
 - [x] v0.8 design, equal paired heights, floating dock, gradient icons, circular play and search bar observed.
 - [ ] v0.8 dock toggle and search/voice confirmation and fallback.
-- [ ] v0.9 navigate all seven settings categories, Android back and Home navigation; verify every existing action, switches/choices, preview rendering, permission status and no settings loss after update.
+- [ ] v0.9 navigate all eight settings categories (seven in v0.9), Android back and Home navigation; verify every existing action, switches/choices, preview rendering, permission status and no settings loss after update.
 
 - [ ] v0.10 import wallpapers/icons, verify fallback and persisted overrides; change rows/size/section order and pairing; test folder grid/drop and backup round trip, malformed backup rejection, lock-only wallpaper and secure unlock unchanged.
 

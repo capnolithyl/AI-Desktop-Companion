@@ -89,6 +89,7 @@ final class LauncherBackup {
             if(known(k)&&!k.equals("wallpaper")||k.startsWith(ICON)&&!"custom".equals(entry.getValue()))editor.remove(k);
         }
         for(Map.Entry<String,Object> e:restored.entrySet()){
+            if(e.getKey().startsWith(ICON)&&"custom".equals(prefs.getString(e.getKey(),"default")))continue;
             Object v=e.getValue();if(v instanceof Boolean)editor.putBoolean(e.getKey(),(Boolean)v);else if(v instanceof Integer)editor.putInt(e.getKey(),(Integer)v);else editor.putString(e.getKey(),(String)v);
         }
         return editor.commit();
