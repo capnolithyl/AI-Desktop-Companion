@@ -62,6 +62,8 @@ public class HomeActivity extends Activity {
     private int[] drawerSections=new int[27];
     private TextView clock, date, greeting, systemStats;
     private DeviceStats.Snapshot statsSnapshot;
+    private TextView deviceBattery,deviceMemory;
+    private ProgressBar deviceCharge;
     private boolean statsBusy;
     private long lastStats=-30000;
     private final Runnable statsRefresh=()->refreshSystemStats();
@@ -92,10 +94,10 @@ public class HomeActivity extends Activity {
     private boolean editingHome,editingMixed;
     private int mixedScrollY;
     private ScrollView mixedScroll;
-    private static final String[] WIDGET_NAMES={"Clock","Mikan","Music","Weather","Upcoming events"};
+    private static final String[] WIDGET_NAMES={"Clock","Mikan","Music","Weather","Upcoming events","Device information"};
     private HomeSlots homeSlots;
     private int selectedSlot=-1;
-    private static final String[] WIDGET_PAGES={"clockPage","mikanPage","musicPage","weatherPage","agendaPage"};
+    private static final String[] WIDGET_PAGES={"clockPage","mikanPage","musicPage","weatherPage","agendaPage","devicePage"};
     private MusicPanel music;
     private final Map<TextView,String> badgeViews=new HashMap<>();
     private final Runnable refreshExtras=new Runnable(){public void run(){refreshExtras();handler.postDelayed(this,2500);}};
@@ -237,7 +239,7 @@ public class HomeActivity extends Activity {
     }
     private Drawable homeWallpaper(){String name=prefs.getString("wallpaper","reading-nook.webp");Drawable d="custom".equals(name)?wallpaperArt.get():asset(name);return d!=null?d:asset("reading-nook.webp");}
     private void createPage(){
-        closeQuickSearch();mixedScroll=null;results=null;drawerAdapter=null;drawerIndex=null;drawerSortButton=null;drawerCategoryButton=null;systemStats=null;handler.removeCallbacks(statsRefresh);
+        closeQuickSearch();mixedScroll=null;results=null;drawerAdapter=null;drawerIndex=null;drawerSortButton=null;drawerCategoryButton=null;systemStats=null;deviceBattery=null;deviceMemory=null;deviceCharge=null;handler.removeCallbacks(statsRefresh);
         badgeViews.clear();music=null;mikanCard=null;clock=null;date=null;greeting=null;ampm=null;dashboard.detach();
         root=new FrameLayout(this);root.setBackgroundColor(0xff191417);
         ImageView bg=new ImageView(this);bg.setScaleType(ImageView.ScaleType.CENTER_CROP);bg.setImageDrawable(homeWallpaper());
@@ -365,6 +367,7 @@ public class HomeActivity extends Activity {
         boolean pair=showMusic&&showAgenda&&canPair()&&prefs.getBoolean("pairBottom",true);
         if(showMusic){music=new MusicPanel(this,pair);widgetLink(music.view(),"Open music app",()->openWidgetApp("music"));}
         if(showMusic||showAgenda){addWidgetRow(bottomWidgets,showMusic?music.view():null,showAgenda?dashboard.agendaView():null,pair);gap(bottomWidgets,10);}
+        if(widgetHere("devicePage",0)){bottomWidgets.addView(deviceWidget());gap(bottomWidgets,10);}
         int order=prefs.getInt("sectionOrder",0);
         LinearLayout[] sections=order==1?new LinearLayout[]{topWidgets,characterBlock,bottomWidgets,appBlock}:order==2?new LinearLayout[]{appBlock,topWidgets,characterBlock,bottomWidgets}:new LinearLayout[]{topWidgets,characterBlock,appBlock,bottomWidgets};
         for(LinearLayout section:sections)if(section.getChildCount()>0)body.addView(section);
@@ -516,11 +519,11 @@ public class HomeActivity extends Activity {
     }
     private TextView pageArrow(String label,Runnable r){TextView v=action(label,r);v.setMinHeight(dp(36));v.setPadding(dp(16),dp(4),dp(16),dp(4));return v;}
     private void queueSystemStats(){
-        if(!foreground||closed||systemStats==null)return;
+        if(!foreground||closed||(systemStats==null&&deviceBattery==null))return;
         handler.removeCallbacks(statsRefresh);handler.postDelayed(statsRefresh,180);
     }
     private void refreshSystemStats(){
-        if(!foreground||closed||systemStats==null||statsBusy)return;
+        if(!foreground||closed||(systemStats==null&&deviceBattery==null)||statsBusy)return;
         long now=android.os.SystemClock.elapsedRealtime();
         if(now-lastStats<30000)return;
         statsBusy=true;lastStats=now;
@@ -533,10 +536,31 @@ public class HomeActivity extends Activity {
         });
     }
     private void renderSystemStats(){
-        if(systemStats==null)return;
-        String value=statsSnapshot==null?"RAM · —\nStorage · —":statsSnapshot.compact();
-        if(!value.contentEquals(systemStats.getText()))systemStats.setText(value);
-        systemStats.setContentDescription((statsSnapshot==null?"Device statistics loading":statsSnapshot.details())+". Tap for details.");
+        if(systemStats!=null){
+            String value=statsSnapshot==null?"RAM · —\nStorage · —":statsSnapshot.compact();
+            if(!value.contentEquals(systemStats.getText()))systemStats.setText(value);
+            systemStats.setContentDescription((statsSnapshot==null?"Device statistics loading":statsSnapshot.details())+". Tap for details.");
+        }
+        if(deviceBattery!=null){
+            deviceBattery.setText(statsSnapshot==null?"Battery · —":statsSnapshot.batteryLabel());
+            deviceMemory.setText(statsSnapshot==null?"RAM · —\nStorage · —":statsSnapshot.compact());
+            boolean known=statsSnapshot!=null&&statsSnapshot.batteryPercent>=0;
+            deviceCharge.setVisibility(known?View.VISIBLE:View.GONE);
+            if(known)deviceCharge.setProgress(statsSnapshot.batteryPercent);
+        }
+    }
+    private View deviceWidget(){
+        LinearLayout card=vertical();card.setPadding(dp(14),dp(12),dp(14),dp(12));card.setBackground(panelShape(20));
+        card.setFocusable(true);card.setOnClickListener(v->showSystemStatsDetails());
+        card.addView(text("Device information",14,CREAM,true));gap(card,7);
+        deviceBattery=text("Battery · —",18,PEACH,true);card.addView(deviceBattery);
+        deviceCharge=new ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal);
+        deviceCharge.setMax(100);deviceCharge.setProgressTintList(android.content.res.ColorStateList.valueOf(PEACH));
+        deviceCharge.setProgressBackgroundTintList(android.content.res.ColorStateList.valueOf(0xff68473b));
+        deviceCharge.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+        card.addView(deviceCharge,new LinearLayout.LayoutParams(-1,dp(8)));gap(card,8);
+        deviceMemory=text("RAM · —\nStorage · —",12,MUTED,false);card.addView(deviceMemory);
+        renderSystemStats();queueSystemStats();return card;
     }
     private void showSystemStatsDetails(){
         queueSystemStats();
@@ -874,6 +898,7 @@ public class HomeActivity extends Activity {
                 settingsUi.note(body,"Choose a home page for each widget, or hide it completely.");
                 widgetSetting(body,"Clock","clockPage",1);widgetSetting(body,"Mikan","mikanPage",1);widgetSetting(body,"Music","musicPage",1);
                 widgetSetting(body,"Weather","weatherPage",1);widgetSetting(body,"Upcoming events","agendaPage",1);
+                widgetSetting(body,"Device information","devicePage",0);
                 settingsUi.heading(body,"TAP SHORTCUTS");
                 for(String kind:new String[]{"music","weather","clock"})settingsUi.row(body,widgetName(kind)+" opens",widgetTargetLabel(kind),()->chooseWidgetApp(kind,false));
                 settingsUi.note(body,"Music controls still control playback. Long-press weather for forecast settings.");
@@ -1143,12 +1168,13 @@ public class HomeActivity extends Activity {
     }
 
     private boolean widgetHere(String key,int def){return prefs.getInt(key,def)==homePage+1;}
+    private int widgetPage(String key){return prefs.getInt(key,"devicePage".equals(key)?0:1);}
     private int pageCount(){
         int count=0;for(String key:favorites)if(find(key)!=null)count++;
         int cap=prefs.getInt("columns",4)*prefs.getInt("homeRows",2),dock=prefs.getInt("dockCount",5);
         int pages=Math.max(prefs.getInt("minPages",1),(Math.max(0,count-dock)+cap-1)/cap);
         if(prefs.contains("homeSlotsV1")){ensureHomeSlots();pages=Math.max(pages,homeSlots.last()/cap+1);}
-        for(String key:WIDGET_PAGES)pages=Math.max(pages,prefs.getInt(key,1));
+        for(String key:WIDGET_PAGES)pages=Math.max(pages,widgetPage(key));
         return Math.max(1,pages);
     }
     private void enableMixedLayout(){
@@ -1170,6 +1196,7 @@ public class HomeActivity extends Activity {
         else if(key.equals("weatherPage"))w=large?columns:(canPair()&&prefs.getBoolean("pairTop",true)?columns-2:columns);
         else if(key.equals("musicPage"))w=large?columns:(canPair()&&prefs.getBoolean("pairBottom",true)?2:columns);
         else if(key.equals("agendaPage"))w=large?columns:(canPair()&&prefs.getBoolean("pairBottom",true)?columns-2:columns);
+        else if(key.equals("devicePage"))w=columns;
         return new MixedLayout.Spec(widgetGridKey(key),min,key.equals("mikanPage")?2:1,w,h);
     }
     private void renderMixedHome(LinearLayout body){
@@ -1181,6 +1208,7 @@ public class HomeActivity extends Activity {
         for(int i=0;i<cap;i++){String key=homeSlots.at(homePage*cap+i);if(key!=null)shortcuts.add(new MixedLayout.Spec(key,1,1,1,1));}
         if(widgetHere("musicPage",1))bottom.add(mixedWidgetSpec("musicPage",columns));
         if(widgetHere("agendaPage",1))bottom.add(mixedWidgetSpec("agendaPage",columns));
+        if(widgetHere("devicePage",0))bottom.add(mixedWidgetSpec("devicePage",columns));
         int order=prefs.getInt("sectionOrder",0);
         if(order==2)specs.addAll(shortcuts);specs.addAll(top);specs.addAll(middle);if(order==0)specs.addAll(shortcuts);specs.addAll(bottom);if(order==1)specs.addAll(shortcuts);
         MixedLayout model=mixedLayout();LinkedHashMap<String,MixedLayout.Rect> layout=model.resolve(specs,columns);
@@ -1215,6 +1243,7 @@ public class HomeActivity extends Activity {
                 mikanCard=createMikanCard();return mikanCard.view();
             case "musicPage":music=new MusicPanel(this,compact);widgetLink(music.view(),"Open music app",()->openWidgetApp("music"));return music.view();
             case "agendaPage":return dashboard.agendaView();
+            case "devicePage":return deviceWidget();
             default:return null;
         }
     }
@@ -1344,15 +1373,15 @@ public class HomeActivity extends Activity {
             }body.addView(line);
         }
         gap(body,12);body.addView(text("WIDGETS ON THIS PAGE",12,MUTED,true));
-        String[] names={"Clock","Mikan","Music","Weather","Upcoming events"};
-        for(int k=0;k<WIDGET_PAGES.length;k++)if(prefs.getInt(WIDGET_PAGES[k],1)==homePage+1){final String widget=WIDGET_PAGES[k];final String name=names[k];body.addView(action(name+" · Move",()->moveEditorWidget(widget,name)));}
+        String[] names=WIDGET_NAMES;
+        for(int k=0;k<WIDGET_PAGES.length;k++)if(widgetPage(WIDGET_PAGES[k])==homePage+1){final String widget=WIDGET_PAGES[k];final String name=names[k];body.addView(action(name+" · Move",()->moveEditorWidget(widget,name)));}
         body.addView(text("Use the live mixed grid to position and resize widgets on the page. This manager handles cross-page assignments and folder creation.",12,MUTED,false));gap(body,10);
         LinearLayout controls=horizontal();controls.addView(action("+ Page",this::addEditorPage),new LinearLayout.LayoutParams(0,-2,1));controls.addView(action("Remove",this::removeEditorPage),new LinearLayout.LayoutParams(0,-2,1));page.addView(controls);
         LinearLayout reorder=horizontal();reorder.addView(action("Move page ‹",()->swapEditorPage(-1)),new LinearLayout.LayoutParams(0,-2,1));reorder.addView(action("Move page ›",()->swapEditorPage(1)),new LinearLayout.LayoutParams(0,-2,1));page.addView(reorder);
     }
     private int editorPageCount(){
         int cap=slotCapacity(),count=Math.max(prefs.getInt("minPages",1),homeSlots.last()<0?1:homeSlots.last()/cap+1);
-        for(String key:WIDGET_PAGES)count=Math.max(count,prefs.getInt(key,1));return Math.max(1,count);
+        for(String key:WIDGET_PAGES)count=Math.max(count,widgetPage(key));return Math.max(1,count);
     }
     private void editorPage(int direction){homePage=Math.max(0,Math.min(editorPageCount()-1,homePage+direction));showHomeEditor();}
     private void selectHomeSlot(int slot){
@@ -1404,15 +1433,15 @@ public class HomeActivity extends Activity {
     private void removeEditorPage(){
         int count=editorPageCount();if(count<=1){Toast.makeText(this,"Keep at least one home page.",Toast.LENGTH_SHORT).show();return;}
         if(!homeSlots.emptyPage(homePage,slotCapacity())){Toast.makeText(this,"Move the apps off this page first.",Toast.LENGTH_SHORT).show();return;}
-        for(String key:WIDGET_PAGES)if(prefs.getInt(key,1)==homePage+1){Toast.makeText(this,"Move the widgets off this page first.",Toast.LENGTH_SHORT).show();return;}
+        for(String key:WIDGET_PAGES)if(widgetPage(key)==homePage+1){Toast.makeText(this,"Move the widgets off this page first.",Toast.LENGTH_SHORT).show();return;}
         homeSlots.removeEmptyPage(homePage,slotCapacity());SharedPreferences.Editor changes=prefs.edit().putInt("minPages",count-1);
-        for(String key:WIDGET_PAGES){int value=prefs.getInt(key,1);if(value>homePage+1)changes.putInt(key,value-1);}
+        for(String key:WIDGET_PAGES){int value=widgetPage(key);if(value>homePage+1)changes.putInt(key,value-1);}
         changes.putString("homeSlotsV1",homeSlots.encode()).apply();selectedSlot=-1;homePage=Math.min(homePage,count-2);showHomeEditor();
     }
     private void swapEditorPage(int direction){
         int other=homePage+direction;if(other<0||other>=editorPageCount())return;
         homeSlots.swapPages(homePage,other,slotCapacity());SharedPreferences.Editor changes=prefs.edit().putInt("minPages",editorPageCount());
-        for(String key:WIDGET_PAGES){int value=prefs.getInt(key,1);if(value==homePage+1)changes.putInt(key,other+1);else if(value==other+1)changes.putInt(key,homePage+1);}
+        for(String key:WIDGET_PAGES){int value=widgetPage(key);if(value==homePage+1)changes.putInt(key,other+1);else if(value==other+1)changes.putInt(key,homePage+1);}
         changes.putString("homeSlotsV1",homeSlots.encode()).apply();selectedSlot=-1;homePage=other;showHomeEditor();
     }
     private void moveEditorWidget(String key,String name){
