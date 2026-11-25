@@ -1,6 +1,6 @@
 # Mikan Launcher — living feature reference
 
-**Source baseline:** v0.9 (versionCode 9), settings overhaul, 2026-11-24. See Git history for implementation commit.
+**Source baseline:** v0.10 (versionCode 10), customization and local backup, 2026-11-24. See Git history for implementation commit.
 **Development:** [PR #117](https://github.com/capnolithyl/AI-Desktop-Companion/pull/117), branch `feature/mikan-launcher-v01`. Check current branch and Gradle version before changing this document.
 **Purpose:** a free, personal, offline-first Android launcher inspired by the Mikan OS home-screen mockup. Separate from Pocket Mikan, desktop Mikan and the NAS. This document tracks the launcher only.
 
@@ -21,18 +21,18 @@ Build success, release publication, installation and individual feature verifica
 | Favorites | 0.1 | Long-press drawer app to pin; drawer/Manage favorites menu to unpin and move; saved locally. | Favorites visible across screenshots; persistence on updates observed, complete CRUD pending. |
 | Dock | 0.1–0.2 | First 3–5 available pinned entries, configurable, persists across pages. Default 5; floating dock (default on in v0.8) or framed dock. | Floating dock observed in v0.8; toggle pending. |
 | App rearrangement | 0.2 | Hold and drag pinned app onto another visible pinned tile; menu-based ordering and moving between pages. | Implemented; gesture and cross-page tests pending. |
-| App grid | 0.2 | 4 or 5 columns, two rows of favorites per page; automatically packed, no arbitrary empty slots. Labels wrap to two lines. | Four-column layout observed; five-column layout pending. |
+| App grid | 0.2 | 4 or 5 columns, 1–4 configurable rows of favorites per page; automatically packed, no arbitrary empty slots. Labels wrap to two lines. | Four-column layout observed; five-column layout pending. |
 | Multiple pages | 0.4 | Auto pagination; minimum 1–5 pages setting; horizontal swipes or arrows. Home intent returns to first page. Single-page indicator hidden since 0.5; dot indicators in v0.8. | Single-page UI observed; multiple-page navigation pending. |
-| Folders | 0.4 | Settings > Create app folder / Manage folders; select apps, edit membership, rename, move, delete, or open a folder dialog. Mini icon previews, folder notification dots. | Implemented; device tests pending. |
-| Folder membership semantics | 0.4 | A folder is an additional shortcut; creating or adding to a folder does not remove existing app shortcuts. No nested folders or drag-to-create. | Implemented. |
+| Folders | 0.4 | Settings > Create app folder / Manage folders; select apps, edit membership, rename, move, delete, or open a folder icon grid with long-press actions. Mini icon previews, folder notification dots. | Implemented; device tests pending. |
+| Folder membership semantics | 0.4 | A folder is an additional shortcut; creating or adding to a folder does not remove existing app shortcuts. No nested folders or drag-to-create; dropping an app onto an existing folder offers add/move/reorder. | Implemented. |
 
 ## 2. Appearance and Mikan character
 
 | Feature | Introduced | Current implementation / use | Evidence |
 | --- | --- | --- | --- |
 | Mikan OS theme | 0.1–0.6 | Espresso/amber/peach palette; gradients, subtle borders/shadows, rounded panels, cat/paw/spark drawings, handwriting-style character heading. | v0.6 screenshot observed. |
-| Wallpaper | 0.1–0.2 | Bundled Reading nook and Study nook; choose in Appearance settings. | Both backgrounds seen in owner screenshots across releases. |
-| Icon styles | 0.2–0.8 | Amber or Original. Amber uses peach-to-amber gradient glyphs, custom common-app glyphs, normalized adaptive monochrome and warm luminance fallback. Pocket Mikan uses drawn paw. | v0.8 gradient/custom icons observed; original toggle and full coverage pending. |
+| Wallpaper | 0.1–0.2 | Bundled Reading nook and Study nook plus imported local wallpaper (up to 2048 px); choose in Appearance settings. | Both backgrounds seen in owner screenshots across releases. |
+| Icon styles | 0.2–0.8 | Amber or Original. Amber uses peach-to-amber gradient glyphs, custom common-app glyphs, normalized adaptive monochrome and warm luminance fallback. Pocket Mikan uses drawn paw. Per-app global/amber/original/custom image override available. | v0.8 gradient/custom icons observed; original toggle and full coverage pending. |
 | Favorites heading | 0.6 | Optional, hidden by default. | Hidden in v0.6 screenshot. |
 | Local portrait | 0.3 | Settings > Choose portrait; downscale to at most 768 px on longest edge, store privately. Reset returns to bundled coffee portrait if available, otherwise legacy small chat avatar. | Owner confirmed coffee portrait import; survives updates. |
 | Character artwork | 0.6 | Separate import/remove control for transparent art, local alpha-preserving storage. Existing portrait remains fallback; full-bleed image with blend when no cutout. | Full-bleed portrait observed; transparent import not yet confirmed. Coffee/cutout artwork is not bundled by default at this baseline. |
@@ -44,7 +44,7 @@ Build success, release publication, installation and individual feature verifica
 
 ## 3. Dashboard widgets
 
-All five built-in widgets (clock, Mikan, music, weather, upcoming events) can be assigned to a numbered page or hidden. Defaults: page 1, side-by-side layout enabled. Pair clock/weather above Mikan and music/agenda below apps when on same page and screen width >=350 dp and font scale <=1.2; otherwise stack. Layout is scrollable; dock remains fixed. Independent page placement is not free-form widget positioning. Lower paired cards use equal-height layout in v0.8.
+All five built-in widgets (clock, Mikan, music, weather, upcoming events) can be assigned to a numbered page or hidden. Defaults: page 1, side-by-side layout enabled. Pair clock/weather above Mikan and music/agenda below apps when on same page and screen width >=350 dp and font scale <=1.2; otherwise stack. Layout is scrollable; dock remains fixed. Independent page placement is not free-form widget positioning. Optional independent pairing and three section order presets. Lower paired cards use equal-height layout in v0.8.
 
 | Feature | Introduced | Current implementation / use | Evidence |
 | --- | --- | --- | --- |
@@ -65,15 +65,24 @@ v0.9 replaces the long list with a themed category hub, icons, descriptions and 
 
 | Section | Controls |
 | --- | --- |
-| Appearance | Reading nook / Study nook wallpaper previews, Amber / Original icon style |
-| Home screen | Grid (4/5 columns), Dock (3–5 apps), Floating dock, Favorites heading, Minimum home pages (1–5), Manage favorites, Create app folder, Manage folders |
-| Widgets | Clock, Mikan, Music, Weather, Upcoming events placement/visibility, Widget layout (Side by side/Stacked) |
+| Appearance | Reading nook / Study nook wallpaper previews, custom wallpaper import/use, Amber / Original icon style |
+| Lockscreen | Import and preview image, apply lock-only wallpaper or current home wallpaper, Android wallpaper settings |
+| Home screen | Grid (4/5 columns), rows (1–4), icon size, Dock (3–5 apps), Floating dock, Favorites heading, Minimum home pages (1–5), Manage favorites, Customize app icons, Create app folder, Manage folders |
+| Widgets | Clock, Mikan, Music, Weather, Upcoming events placement/visibility, Widget layout (Side by side/Stacked), independent pair toggles, section order |
 | Weather & calendar | Weather city, Temperature units, Refresh weather, Calendar access, Show calendar titles |
 | Mikan | Active artwork preview, Choose portrait, Choose character artwork, Remove character artwork, Reset portrait, Mikan Web address, Check Mikan Web connection |
 | Permissions & privacy | Notification dots, Notification / music access, Calendar access, Android app settings |
-| System & updates | Default home app, Check for launcher updates |
+| System & updates | Default home app, Check for launcher updates, Export/Restore layout and settings |
 
 Weather card also exposes refresh, city, units and clear location. No full-screen widget editor or free-position grid. Existing selection dialogs remain for advanced actions.
+
+## v0.10 customization additions
+
+- Per-app icon override by installed component: global, amber, original or local image (up to 256 px, alpha preserved). App drawer long-press or Home settings > Customize app icons. Custom image overrides global theme; missing image falls back to global style.
+- Layout: configurable 1–4 home rows, icon size constrained by screen/grid, independent top/bottom pairing and three section order presets. Existing defaults retained. No free-position drag grid or arbitrary widget resizing yet.
+- Folder icon grid with member long-press remove/pin/customize; drop app onto existing folder to add/move/reorder. No drag-to-create.
+- Local JSON settings backup via Android document picker, validated schema and explicit restore confirmation. Includes layout, folders, theme, widget visibility and supported preferences; excludes imported image binaries, per-app custom image selections, private web/weather location, weather cache and Android permissions. Custom wallpaper choice is omitted from export; restore leaves current wallpaper unchanged if no bundled selection. No automatic upload. Backup may contain installed app identifiers and folder names.
+- Lockscreen category imports a local image, previews it and explicitly applies it with WallpaperManager FLAG_LOCK, using normal SET_WALLPAPER permission. Can use current home wallpaper. Android retains secure keyguard, system clock, notifications and unlock. No replacement lockscreen or lockscreen widgets. Device support/actual crop pending.
 
 ## 5. Offline, privacy and updates
 
@@ -99,6 +108,8 @@ Weather card also exposes refresh, city, units and clear location. No full-scree
 | 0.8 | Two-tone glyphs, shared panel/tile styling, floating dock, page dots, equal paired heights, circular play, calendar decoration, search and voice affordances | Owner v0.8 screenshot confirms floating dock, two-tone glyphs, paired card heights, circular play and search bar rendering; behavior of new actions pending. |
 | 0.9 | Categorized settings hub, dedicated submenus, native switches, segmented choices, wallpaper and portrait previews, permission status and installed version | Owner reports improved settings after v0.9 update; detailed control/navigation verification pending. |
 
+| 0.10 | Custom wallpaper, app icon overrides, layout options, folder grid and drop actions, local JSON backup/restore, Android lockscreen wallpaper | Implemented; CI and device testing pending. |
+
 ## 7. Outstanding verification checklist
 
 - [ ] Cold boot/reboot with airplane mode and NAS down; open drawer, favorites and folders.
@@ -117,11 +128,13 @@ Weather card also exposes refresh, city, units and clear location. No full-scree
 - [ ] v0.8 dock toggle and search/voice confirmation and fallback.
 - [ ] v0.9 navigate all seven settings categories, Android back and Home navigation; verify every existing action, switches/choices, preview rendering, permission status and no settings loss after update.
 
+- [ ] v0.10 import wallpapers/icons, verify fallback and persisted overrides; change rows/size/section order and pairing; test folder grid/drop and backup round trip, malformed backup rejection, lock-only wallpaper and secure unlock unchanged.
+
 ## 8. Roadmap (not implemented)
 
 **v0.8 implemented:** shared warm design styling, two-tone glyphs, floating dock, page dots, circular play, search bar and voice/browser actions. Visual design observed on device; behavioral validation pending. **v0.9 implemented:** categorized settings, visual choices and permission status; owner reports improved settings, detailed behavior checks pending. **Remaining mockup gaps:** transparent character cutout artwork (not bundled), richer ambient effects, full icon pack, shuffle/repeat (needs reliable media-provider support), camera/Lens shortcut, lockscreen customization.
 
-**Later / separate milestones:** free-position app/widget grid and drag-to-create folders; third-party Android widget hosting; richer folder UI; custom wallpapers/icon packs; bundled transparent/alternate Mikan art and optional outfit variants; optional actual NAS/model status; improved Pocket Mikan integration; lockscreen wallpaper and Android-supported lockscreen customization (do not replace or bypass secure Android lockscreen). No promised dates. Check Trello and current source before selecting next features.
+**Later / separate milestones:** free-position app/widget grid and drag-to-create folders; third-party Android widget hosting; richer folder UI; full icon packs and free-position layout; bundled transparent/alternate Mikan art and optional outfit variants; optional actual NAS/model status; improved Pocket Mikan integration; further Android-supported lockscreen customization (do not replace or bypass secure Android lockscreen). No promised dates. Check Trello and current source before selecting next features.
 
 ## 9. Maintenance contract
 

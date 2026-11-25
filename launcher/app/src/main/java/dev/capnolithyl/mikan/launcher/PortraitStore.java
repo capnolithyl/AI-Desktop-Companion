@@ -13,11 +13,15 @@ final class PortraitStore {
     private final Context context;
     private final AtomicFile file;
     private final String[] assets;
+    private final int maxEdge;
     PortraitStore(Context context){
         this(context,"mikan-launcher-portrait.webp",new String[]{"portraits/coffee.webp","mikan-chat-avatar.webp"});
     }
     PortraitStore(Context context,String filename,String[] assets){
-        this.context=context.getApplicationContext();this.assets=assets.clone();
+        this(context,filename,assets,768);
+    }
+    PortraitStore(Context context,String filename,String[] assets,int maxEdge){
+        this.context=context.getApplicationContext();this.assets=assets.clone();this.maxEdge=maxEdge;
         file=new AtomicFile(new File(context.getFilesDir(),filename));
     }
     synchronized Drawable get(){
@@ -39,14 +43,14 @@ final class PortraitStore {
             BitmapFactory.Options opts=new BitmapFactory.Options();opts.inJustDecodeBounds=true;
             try(InputStream in=context.getContentResolver().openInputStream(uri)){BitmapFactory.decodeStream(in,null,opts);}
             if(opts.outWidth<=0||opts.outHeight<=0)return false;
-            int sample=1;while(Math.max(opts.outWidth,opts.outHeight)/sample>1536)sample*=2;
+            int sample=1;while(Math.max(opts.outWidth,opts.outHeight)/sample>maxEdge*2)sample*=2;
             opts.inJustDecodeBounds=false;opts.inSampleSize=sample;
             try(InputStream in=context.getContentResolver().openInputStream(uri)){bitmap=BitmapFactory.decodeStream(in,null,opts);}
             if(bitmap==null)return false;
             int max=Math.max(bitmap.getWidth(),bitmap.getHeight());
-            if(max>768){float scale=768f/max;Bitmap resized=Bitmap.createScaledBitmap(bitmap,Math.max(1,Math.round(bitmap.getWidth()*scale)),Math.max(1,Math.round(bitmap.getHeight()*scale)),true);if(resized!=bitmap){bitmap.recycle();bitmap=resized;}}
+            if(max>maxEdge){float scale=(float)maxEdge/max;Bitmap resized=Bitmap.createScaledBitmap(bitmap,Math.max(1,Math.round(bitmap.getWidth()*scale)),Math.max(1,Math.round(bitmap.getHeight()*scale)),true);if(resized!=bitmap){bitmap.recycle();bitmap=resized;}}
             out=file.startWrite();
-            if(!bitmap.compress(assets.length==1?Bitmap.CompressFormat.PNG:Bitmap.CompressFormat.WEBP,92,out))throw new IOException("Encode failed");
+            if(!bitmap.compress((assets.length==1||maxEdge==256)?Bitmap.CompressFormat.PNG:Bitmap.CompressFormat.WEBP,92,out))throw new IOException("Encode failed");
             file.finishWrite(out);out=null;return true;
         }catch(Exception e){if(out!=null)file.failWrite(out);return false;}
         finally{if(bitmap!=null)bitmap.recycle();}

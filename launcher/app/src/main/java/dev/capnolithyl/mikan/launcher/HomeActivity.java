@@ -45,7 +45,9 @@ public class HomeActivity extends Activity {
     private SettingsHub.Section settingsSection=SettingsHub.Section.HUB;
     private SettingsHub settingsUi;
     private LauncherUpdater updater;
-    private PortraitStore portraits,characterArt;
+    private PortraitStore portraits,characterArt,wallpaperArt,lockArt;
+    private String pendingIconKey;
+    private boolean fileBusy;
     private MikanCard mikanCard;
     private DashboardCards dashboard;
     private TextView ampm;
@@ -77,13 +79,17 @@ public class HomeActivity extends Activity {
         updater=new LauncherUpdater(this);
         portraits=new PortraitStore(this);
         characterArt=new PortraitStore(this,"mikan-character-art.webp",new String[]{"portraits/character.webp"});
+        wallpaperArt=new PortraitStore(this,"custom-wallpaper.webp",new String[]{},2048);
+        lockArt=new PortraitStore(this,"lock-wallpaper.webp",new String[]{},2048);
+        if(state!=null){pendingIconKey=state.getString("pendingIconKey");String saved=state.getString("settingsSection");if(saved!=null)try{settingsSection=SettingsHub.Section.valueOf(saved);settings=true;}catch(IllegalArgumentException ignored){}}
         folders=new HomeFolders(prefs);
         dashboard=new DashboardCards(this,prefs,()->{if(settings)showSettings();});
         settingsUi=new SettingsHub(this);
         loadApps();
         restoreFavorites();
-        showHome();
+        if(settings)showSettings();else showHome();
     }
+    @Override protected void onSaveInstanceState(Bundle out){super.onSaveInstanceState(out);out.putString("pendingIconKey",pendingIconKey);if(settings)out.putString("settingsSection",settingsSection.name());}
     @Override protected void onResume(){
         super.onResume(); loadApps();
         if(LauncherNotifications.allowed(this))LauncherNotifications.refreshIfConnected();
@@ -111,10 +117,11 @@ public class HomeActivity extends Activity {
     }
     private void gap(LinearLayout parent,int size){View v=new View(this);parent.addView(v,new LinearLayout.LayoutParams(1,dp(size)));}
     private Drawable asset(String name){try(java.io.InputStream in=getAssets().open(name)){return Drawable.createFromStream(in,name);}catch(Exception e){return null;}}
+    private Drawable homeWallpaper(){String name=prefs.getString("wallpaper","reading-nook.webp");Drawable d="custom".equals(name)?wallpaperArt.get():asset(name);return d!=null?d:asset("reading-nook.webp");}
     private void createPage(){
         badgeViews.clear();music=null;mikanCard=null;clock=null;date=null;greeting=null;ampm=null;dashboard.detach();
         root=new FrameLayout(this);root.setBackgroundColor(0xff191417);
-        ImageView bg=new ImageView(this);bg.setScaleType(ImageView.ScaleType.CENTER_CROP);bg.setImageDrawable(asset(prefs.getString("wallpaper","reading-nook.webp")));
+        ImageView bg=new ImageView(this);bg.setScaleType(ImageView.ScaleType.CENTER_CROP);bg.setImageDrawable(homeWallpaper());
         root.addView(bg,new FrameLayout.LayoutParams(-1,-1));
         View shade=new View(this);shade.setBackground(new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,new int[]{0xb0191417,0x80221a1a,0xe0191417}));
         root.addView(shade,new FrameLayout.LayoutParams(-1,-1));
@@ -178,33 +185,37 @@ public class HomeActivity extends Activity {
         page.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
         LinearLayout body=vertical();scroll.addView(body,new ScrollView.LayoutParams(-1,-2));
         gap(body,6);
+        LinearLayout topWidgets=vertical(),characterBlock=vertical(),appBlock=vertical(),bottomWidgets=vertical();
         boolean showClock=widgetHere("clockPage",1),showWeather=widgetHere("weatherPage",1);
-        compactClock=showClock&&showWeather&&canPair();
+        compactClock=showClock&&showWeather&&canPair()&&prefs.getBoolean("pairTop",true);
         LinearLayout clockBlock=vertical();
         if(showClock){
         LinearLayout timeRow=horizontal();clock=text("",compactClock?40:48,CREAM,false);clock.setTypeface(Typeface.create("sans-serif-light",Typeface.NORMAL));clock.setIncludeFontPadding(false);timeRow.addView(clock);
         ImageView paw=new ImageView(this);paw.setImageDrawable(new MikanMark(MikanMark.PAW,PEACH));LinearLayout.LayoutParams pawParams=new LinearLayout.LayoutParams(dp(23),dp(23));pawParams.leftMargin=dp(8);timeRow.addView(paw,pawParams);clockBlock.addView(timeRow);
         if(compactClock){ampm=text("",11,PEACH,false);ampm.setIncludeFontPadding(false);clockBlock.addView(ampm);}
         gap(clockBlock,3);date=text("",15,MUTED,false);date.setIncludeFontPadding(false);clockBlock.addView(date);}
-        if(showClock||showWeather){addWidgetRow(body,showClock?clockBlock:null,showWeather?dashboard.weatherView():null,compactClock);gap(body,12);}
+        if(showClock||showWeather){addWidgetRow(topWidgets,showClock?clockBlock:null,showWeather?dashboard.weatherView():null,compactClock);gap(topWidgets,12);}
         if(widgetHere("mikanPage",1)){
             Drawable art=characterArt.get();
             String url=prefs.getString("mikanWebUrl","");
             String status=url.isEmpty()?"Set up Mikan Web":url.equals(checkedWebUrl)&&!webStatus.isEmpty()?webStatus:"Web shortcut";
             mikanCard=new MikanCard(this,art!=null?art:portraits.get(),art!=null,status,this::openMikan);
-            body.addView(mikanCard.view());gap(body,12);
+            characterBlock.addView(mikanCard.view());gap(characterBlock,12);
         }
-        if(prefs.getBoolean("showFavoritesLabel",false)){body.addView(text("YOUR FAVORITES",12,MUTED,true));gap(body,4);}
+        if(prefs.getBoolean("showFavoritesLabel",false)){appBlock.addView(text("YOUR FAVORITES",12,MUTED,true));gap(appBlock,4);}
         ArrayList<App> pinned=new ArrayList<>();for(String key:favorites){App a=find(key);if(a!=null)pinned.add(a);}
         int dockCount=prefs.getInt("dockCount",5);
-        int columns=prefs.getInt("columns",4), perPage=columns*2;
+        int columns=prefs.getInt("columns",4), perPage=columns*prefs.getInt("homeRows",2);
         int start=Math.min(pinned.size(),dockCount+homePage*perPage),end=Math.min(pinned.size(),start+perPage);
-        if(start==end)body.addView(text("Pin apps from the drawer or create a folder in settings.",14,MUTED,false));else addGrid(body,pinned.subList(start,end),columns);
-        gap(body,10);
+        if(start==end)appBlock.addView(text("Pin apps from the drawer or create a folder in settings.",14,MUTED,false));else addGrid(appBlock,pinned.subList(start,end),columns);
+        gap(appBlock,10);
         boolean showMusic=widgetHere("musicPage",1),showAgenda=widgetHere("agendaPage",1);
-        boolean pair=showMusic&&showAgenda&&canPair();
+        boolean pair=showMusic&&showAgenda&&canPair()&&prefs.getBoolean("pairBottom",true);
         if(showMusic)music=new MusicPanel(this,pair);
-        if(showMusic||showAgenda){addWidgetRow(body,showMusic?music.view():null,showAgenda?dashboard.agendaView():null,pair);gap(body,10);}
+        if(showMusic||showAgenda){addWidgetRow(bottomWidgets,showMusic?music.view():null,showAgenda?dashboard.agendaView():null,pair);gap(bottomWidgets,10);}
+        int order=prefs.getInt("sectionOrder",0);
+        LinearLayout[] sections=order==1?new LinearLayout[]{topWidgets,characterBlock,bottomWidgets,appBlock}:order==2?new LinearLayout[]{appBlock,topWidgets,characterBlock,bottomWidgets}:new LinearLayout[]{topWidgets,characterBlock,appBlock,bottomWidgets};
+        for(LinearLayout section:sections)if(section.getChildCount()>0)body.addView(section);
         LinearLayout dock=horizontal();dock.setPadding(0,dp(3),0,dp(3));if(!prefs.getBoolean("floatingDock",true)){dock.setBackground(panelShape(24));dock.setElevation(dp(2));}
         for(int i=0;i<dockCount;i++){if(i<pinned.size())dock.addView(tile(pinned.get(i),false),new LinearLayout.LayoutParams(0,-2,1));else{View blank=new View(this);dock.addView(blank,new LinearLayout.LayoutParams(0,dp(56),1));}}
         LinearLayout nav=horizontal();nav.setGravity(Gravity.CENTER);int count=pageCount();
@@ -252,13 +263,13 @@ public class HomeActivity extends Activity {
         ImageView icon=new ImageView(this);icon.setImageDrawable(themedIcon(app));icon.setScaleType(ImageView.ScaleType.FIT_CENTER);int inset=dp(prefs.getBoolean("themed",true)?5:7);icon.setPadding(inset,inset,inset,inset);icon.setBackground(MikanTheme.tile(this));icon.setClipToOutline(true);
         FrameLayout iconFrame=new FrameLayout(this);iconFrame.addView(icon,new FrameLayout.LayoutParams(-1,-1));
         TextView dot=text("•",18,PEACH,true);dot.setGravity(Gravity.CENTER);dot.setBackground(shape(0xff50332b,20,false));dot.setVisibility(View.GONE);FrameLayout.LayoutParams bp=new FrameLayout.LayoutParams(dp(16),dp(16),Gravity.TOP|Gravity.RIGHT);iconFrame.addView(dot,bp);badgeViews.put(dot,app.key());
-        cell.addView(iconFrame,new LinearLayout.LayoutParams(dp(50),dp(50)));
+        int size=prefs.getInt("iconSize",50);int maxSize=(getResources().getConfiguration().screenWidthDp-48)/Math.max(prefs.getInt("columns",4),prefs.getInt("dockCount",5));size=Math.max(32,Math.min(size,maxSize));cell.addView(iconFrame,new LinearLayout.LayoutParams(dp(size),dp(size)));
         if(label){TextView name=text(app.label,11,CREAM,false);name.setGravity(Gravity.TOP|Gravity.CENTER_HORIZONTAL);name.setIncludeFontPadding(false);name.setMaxLines(2);name.setMinLines(2);name.setEllipsize(android.text.TextUtils.TruncateAt.END);LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(-1,-2);p.topMargin=dp(3);cell.addView(name,p); }
         cell.setContentDescription(app.label);cell.setOnClickListener(v->launch(app));cell.setOnLongClickListener(v->{if(!drawer&&favorites.contains(app.key())){ClipData data=ClipData.newPlainText("mikan-favorite",app.key());v.startDragAndDrop(data,new View.DragShadowBuilder(v),app.key(),0);}else appOptions(app);return true;});
         if(!drawer)cell.setOnDragListener((v,event)->{if(event.getAction()==android.view.DragEvent.ACTION_DRAG_STARTED)return event.getLocalState() instanceof String;
             if(event.getAction()==android.view.DragEvent.ACTION_DRAG_ENTERED)v.setAlpha(.55f);
             if(event.getAction()==android.view.DragEvent.ACTION_DRAG_EXITED||event.getAction()==android.view.DragEvent.ACTION_DRAG_ENDED)v.setAlpha(1f);
-            if(event.getAction()==android.view.DragEvent.ACTION_DROP){String from=(String)event.getLocalState();int target=favorites.indexOf(app.key()),old=favorites.indexOf(from);if(target>=0&&old>=0&&target!=old){favorites.remove(old);favorites.add(target,from);saveFavorites();handler.post(this::showHome);}return true;}return true;});
+            if(event.getAction()==android.view.DragEvent.ACTION_DROP){String from=(String)event.getLocalState();int target=favorites.indexOf(app.key()),old=favorites.indexOf(from);if(target>=0&&old>=0&&target!=old){App source=find(from);if(app.folderKey!=null&&source!=null&&source.folderKey==null){handler.post(()->dropOnFolder(source,app.folderKey));}else{favorites.remove(old);favorites.add(target,from);saveFavorites();handler.post(this::showHome);}}return true;}return true;});
         return cell;
     }
     private void addGrid(LinearLayout parent,List<App> items,int columns){
@@ -294,18 +305,30 @@ public class HomeActivity extends Activity {
             case HUB: break;
             case APPEARANCE:
                 settingsUi.wallpapers(body,prefs.getString("wallpaper","reading-nook.webp"),asset("reading-nook.webp"),asset("study-nook.webp"),name->{prefs.edit().putString("wallpaper",name).apply();showSettings();});
+                settingsUi.row(body,"Import custom wallpaper","From an image on your phone",()->pickImage(76));
+                if(wallpaperArt.get()!=null){settingsUi.artPreview(body,wallpaperArt.get(),"Custom wallpaper");settingsUi.row(body,"Use custom wallpaper",prefs.getString("wallpaper","").equals("custom")?"Selected":"Tap to apply",()->{prefs.edit().putString("wallpaper","custom").apply();showSettings();});}
                 settingsUi.heading(body,"APP ICONS");
                 settingsUi.choice(body,"Icon style",new String[]{"Amber","Original"},prefs.getBoolean("themed",true)?0:1,i->{prefs.edit().putBoolean("themed",i==0).apply();showSettings();});
+                break;
+            case LOCK:
+                settingsUi.note(body,"Customize the real Android lockscreen wallpaper. Android retains the clock, notifications and secure unlock.");
+                settingsUi.row(body,"Choose lockscreen image","Preview locally before applying",()->pickImage(77));
+                if(lockArt.get()!=null){settingsUi.artPreview(body,lockArt.get(),"Lockscreen image");setting(body,"Apply chosen lockscreen image",()->applyLockWallpaper(lockArt.get()));}
+                setting(body,"Use current home wallpaper",()->applyLockWallpaper(homeWallpaper()));
+                setting(body,"Open Android wallpaper settings",()->{try{startActivity(new Intent(Intent.ACTION_SET_WALLPAPER));}catch(Exception ex){Toast.makeText(this,"Use Android Settings > Wallpaper & style.",Toast.LENGTH_LONG).show();}});
                 break;
             case HOME:
                 settingsUi.heading(body,"LAYOUT");
                 settingsUi.choice(body,"App grid",new String[]{"4 columns","5 columns"},prefs.getInt("columns",4)-4,i->{prefs.edit().putInt("columns",i+4).apply();showSettings();});
+                settingsUi.choice(body,"Rows per home page",new String[]{"1","2","3","4"},prefs.getInt("homeRows",2)-1,i->{prefs.edit().putInt("homeRows",i+1).apply();showSettings();});
+                settingsUi.choice(body,"Icon size",new String[]{"Small","Default","Large"},prefs.getInt("iconSize",50)==42?0:prefs.getInt("iconSize",50)==58?2:1,i->{prefs.edit().putInt("iconSize",new int[]{42,50,58}[i]).apply();showSettings();});
                 settingsUi.choice(body,"Dock size",new String[]{"3 apps","4 apps","5 apps"},prefs.getInt("dockCount",5)-3,i->{prefs.edit().putInt("dockCount",i+3).apply();showSettings();});
                 settingsUi.toggle(body,"Floating dock","Individual icons without a shared background",prefs.getBoolean("floatingDock",true),on->{prefs.edit().putBoolean("floatingDock",on).apply();showSettings();});
                 settingsUi.toggle(body,"Favorites heading","Show the label above your pinned apps",prefs.getBoolean("showFavoritesLabel",false),on->{prefs.edit().putBoolean("showFavoritesLabel",on).apply();showSettings();});
                 setting(body,"Minimum home pages: "+prefs.getInt("minPages",1),()->chooseNumber("minPages","Minimum home pages",new int[]{1,2,3,4,5}));
                 settingsUi.heading(body,"SHORTCUTS & FOLDERS");
                 setting(body,"Manage favorites",this::manageFavorites);
+                setting(body,"Customize app icons",this::chooseIconApp);
                 setting(body,"Create app folder",this::createFolder);
                 setting(body,"Manage folders",this::manageFolders);
                 break;
@@ -316,6 +339,9 @@ public class HomeActivity extends Activity {
                 widgetSetting(body,"Weather","weatherPage",1);widgetSetting(body,"Upcoming events","agendaPage",1);
                 settingsUi.heading(body,"ARRANGEMENT");
                 settingsUi.choice(body,"Widget layout",new String[]{"Side by side","Stacked"},prefs.getBoolean("pairWidgets",true)?0:1,i->{prefs.edit().putBoolean("pairWidgets",i==0).apply();showSettings();});
+                settingsUi.toggle(body,"Pair clock and weather","When both are on the same page",prefs.getBoolean("pairTop",true),on->{prefs.edit().putBoolean("pairTop",on).apply();showSettings();});
+                settingsUi.toggle(body,"Pair music and calendar","When both are on the same page",prefs.getBoolean("pairBottom",true),on->{prefs.edit().putBoolean("pairBottom",on).apply();showSettings();});
+                setting(body,"Section order: "+new String[]{"Default","Widgets first","Apps first"}[Math.max(0,Math.min(2,prefs.getInt("sectionOrder",0)))],()->new AlertDialog.Builder(this).setTitle("Home section order").setItems(new String[]{"Default","Widgets first","Apps first"},(d,i)->{prefs.edit().putInt("sectionOrder",i).apply();showSettings();}).show());
                 settingsUi.note(body,"Cards stack automatically when screen width or text size requires it.");
                 break;
             case WEATHER:
@@ -355,6 +381,10 @@ public class HomeActivity extends Activity {
                 setting(body,"Default home app",this::chooseHome);
                 setting(body,"Check for launcher updates",()->updater.check());
                 settingsUi.note(body,"Updates are optional. Your home screen works offline.");
+                settingsUi.heading(body,"BACKUP & RESTORE");
+                setting(body,"Export layout and settings",()->backupPicker(true));
+                setting(body,"Restore layout and settings",()->backupPicker(false));
+                settingsUi.note(body,"Local JSON backup includes layout, folders and appearance choices, not imported artwork, web address, weather location or Android permissions.");
                 break;
         }
     }
@@ -372,17 +402,20 @@ public class HomeActivity extends Activity {
     private void appOptions(App app){
         if(app.folderKey!=null){folderOptions(app.folderKey);return;}
         boolean pinned=favorites.contains(app.key());
-        if(!pinned){new AlertDialog.Builder(this).setTitle(app.label).setItems(new String[]{"Pin to favorites","Add to folder"},(d,i)->{if(i==0)toggle(app);else addToFolder(app);}).show();return;}
-        new AlertDialog.Builder(this).setTitle(app.label).setItems(new String[]{"Unpin","Move to front of dock","Move earlier","Move later","Move to end of home","Move to next page","Move to previous page","Add to folder"},(d,i)->{
+        if(!pinned){new AlertDialog.Builder(this).setTitle(app.label).setItems(new String[]{"Pin to favorites","Add to folder","Customize icon"},(d,i)->{if(i==0)toggle(app);else if(i==1)addToFolder(app);else iconOptions(app);}).show();return;}
+        new AlertDialog.Builder(this).setTitle(app.label).setItems(new String[]{"Unpin","Move to front of dock","Move earlier","Move later","Move to end of home","Move to next page","Move to previous page","Add to folder","Customize icon"},(d,i)->{
+            if(i==8){iconOptions(app);return;}
             if(i==7){addToFolder(app);return;}
             if(i==0){favorites.remove(app.key());saveFavorites();}
-            else{int old=favorites.indexOf(app.key());int target=i==1?0:i==2?Math.max(0,old-1):i==3?Math.min(favorites.size()-1,old+1):i==5?Math.min(favorites.size()-1,old+prefs.getInt("columns",4)*2):i==6?Math.max(prefs.getInt("dockCount",5),old-prefs.getInt("columns",4)*2):favorites.size()-1;target=Math.max(0,Math.min(favorites.size()-1,target));favorites.remove(old);favorites.add(target,app.key());saveFavorites();}
+            else{int old=favorites.indexOf(app.key());int target=i==1?0:i==2?Math.max(0,old-1):i==3?Math.min(favorites.size()-1,old+1):i==5?Math.min(favorites.size()-1,old+prefs.getInt("columns",4)*prefs.getInt("homeRows",2)):i==6?Math.max(prefs.getInt("dockCount",5),old-prefs.getInt("columns",4)*prefs.getInt("homeRows",2)):favorites.size()-1;target=Math.max(0,Math.min(favorites.size()-1,target));favorites.remove(old);favorites.add(target,app.key());saveFavorites();}
             if(settings)showSettings();else if(drawer)renderResults(search.getText().toString());else showHome();
         }).show();
     }
     private Drawable themedIcon(App app){
         if(app.folderKey!=null)return folders.icon(this,app.folderKey,key->{App item=find(key);return item==null?null:themedIcon(item);});
-        if(!prefs.getBoolean("themed",true))return app.icon;
+        String style=prefs.getString("iconStyle:"+app.key(),"default");
+        if("custom".equals(style)){Drawable custom=iconStore(app.key()).get();if(custom!=null)return custom;}
+        if("original".equals(style)||(!"amber".equals(style)&&!prefs.getBoolean("themed",true)))return app.icon;
         if(app.component.getPackageName().equals("dev.capnolithyl.mikan.pocket"))return new MikanMark(MikanMark.PAW,PEACH);
         String pkg=app.component.getPackageName();
         if(LauncherIcons.hasCustom(pkg)){Drawable.ConstantState cached=monoCache.get(app.key());if(cached!=null)return cached.newDrawable(getResources());Drawable custom=LauncherIcons.create(this,pkg,app.label,app.icon);if(custom.getConstantState()!=null)monoCache.put(app.key(),custom.getConstantState());return custom;}
@@ -407,16 +440,81 @@ public class HomeActivity extends Activity {
     @Override protected void onActivityResult(int request,int result,Intent data){
         super.onActivityResult(request,result,data);
         if(request==75){if(result==RESULT_OK&&data!=null){ArrayList<String> words=data.getStringArrayListExtra(android.speech.RecognizerIntent.EXTRA_RESULTS);if(words!=null&&!words.isEmpty())webSearchDialog(words.get(0));}return;}
-        if((request!=73&&request!=74)||result!=RESULT_OK||data==null||data.getData()==null)return;
+        if(request==78||request==79){if(result==RESULT_OK&&data!=null&&data.getData()!=null)handleBackup(request==78,data.getData());return;}
+        if((request!=73&&request!=74&&request!=76&&request!=77&&request!=80)||result!=RESULT_OK||data==null||data.getData()==null)return;
+        if(fileBusy)return;
+        final String iconKey=pendingIconKey;pendingIconKey=null;
+        if(request==80&&iconKey==null)return;
+        fileBusy=true;
         final android.net.Uri uri=data.getData();
         new Thread(()->{
-            boolean ok=(request==74?characterArt:portraits).importImage(uri);
+            PortraitStore target=request==74?characterArt:request==76?wallpaperArt:request==77?lockArt:request==80?iconStore(iconKey):portraits;
+            boolean ok=target.importImage(uri);
             runOnUiThread(()->{
-                if(isFinishing()||isDestroyed())return;
-                Toast.makeText(this,ok?"Mikan artwork saved locally ♡":"Could not read this image.",Toast.LENGTH_SHORT).show();
+                fileBusy=false;if(isFinishing()||isDestroyed())return;
+                if(ok&&request==76)prefs.edit().putString("wallpaper","custom").apply();
+                if(ok&&request==80)prefs.edit().putString("iconStyle:"+iconKey,"custom").apply();
+                Toast.makeText(this,ok?"Image saved locally ♡":"Could not read this image.",Toast.LENGTH_SHORT).show();
                 if(settings)showSettings();else if(!drawer)showHome();
             });
         },"mikan-portrait-import").start();
+    }
+    private PortraitStore iconStore(String key){
+        String filename=java.util.UUID.nameUUIDFromBytes(key.getBytes(java.nio.charset.StandardCharsets.UTF_8)).toString();
+        return new PortraitStore(this,"icon-"+filename+".png",new String[]{},256);
+    }
+    private void chooseIconApp(){
+        if(apps.isEmpty())return;
+        String[] names=new String[apps.size()];for(int i=0;i<names.length;i++)names[i]=apps.get(i).label;
+        new AlertDialog.Builder(this).setTitle("Customize app icon").setItems(names,(d,i)->{if(i<apps.size())iconOptions(apps.get(i));}).show();
+    }
+    private void iconOptions(App app){
+        new AlertDialog.Builder(this).setTitle(app.label+" icon").setItems(new String[]{"Follow global style","Amber","Original","Import custom image","Remove custom image"},(d,i)->{
+            if(i==3){pendingIconKey=app.key();pickImage(80);return;}
+            if(i==4)iconStore(app.key()).reset();
+            prefs.edit().putString("iconStyle:"+app.key(),i==1?"amber":i==2?"original":"default").apply();refreshScreen();
+        }).show();
+    }
+    private void dropOnFolder(App source,String id){
+        new AlertDialog.Builder(this).setTitle(folders.name(id)).setItems(new String[]{"Add shortcut to folder","Move shortcut into folder","Reorder favorites"},(d,i)->{
+            if(i==2){int old=favorites.indexOf(source.key()),target=favorites.indexOf(id);if(old>=0&&target>=0){favorites.remove(old);favorites.add(target,source.key());}}
+            else{ArrayList<String> members=new ArrayList<>(folders.members(id));if(!members.contains(source.key()))members.add(source.key());folders.save(id,folders.name(id),members);if(i==1)favorites.remove(source.key());}
+            saveFavorites();refreshScreen();
+        }).show();
+    }
+    private void applyLockWallpaper(Drawable art){
+        if(art==null||fileBusy)return;
+        new AlertDialog.Builder(this).setTitle("Set Android lockscreen wallpaper?").setMessage("Replaces only your lockscreen wallpaper. Android's secure lockscreen remains unchanged.").setNegativeButton("Cancel",null).setPositiveButton("Apply",(d,w)->{
+            if(fileBusy)return;fileBusy=true;
+            new Thread(()->{boolean success=false;android.graphics.Bitmap bitmap=null;
+                try{android.app.WallpaperManager manager=android.app.WallpaperManager.getInstance(this);if(!manager.isWallpaperSupported()||!manager.isSetWallpaperAllowed())throw new IllegalStateException();
+                    int width=Math.max(1,art.getIntrinsicWidth()),height=Math.max(1,art.getIntrinsicHeight());float scale=Math.min(1f,2048f/Math.max(width,height));width=Math.max(1,Math.round(width*scale));height=Math.max(1,Math.round(height*scale));
+                    bitmap=android.graphics.Bitmap.createBitmap(width,height,android.graphics.Bitmap.Config.ARGB_8888);art.setBounds(0,0,width,height);art.draw(new android.graphics.Canvas(bitmap));
+                    success=manager.setBitmap(bitmap,null,false,android.app.WallpaperManager.FLAG_LOCK)!=0;
+                }catch(Exception ignored){}finally{if(bitmap!=null)bitmap.recycle();}
+                final boolean ok=success;runOnUiThread(()->{fileBusy=false;if(!isDestroyed()&&!isFinishing())Toast.makeText(this,ok?"Lockscreen wallpaper applied":"Android could not set the wallpaper",Toast.LENGTH_LONG).show();});
+            },"lock-wallpaper").start();
+        }).show();
+    }
+    private void backupPicker(boolean export){
+        if(fileBusy)return;
+        Intent intent=new Intent(export?Intent.ACTION_CREATE_DOCUMENT:Intent.ACTION_OPEN_DOCUMENT).setType("application/json").addCategory(Intent.CATEGORY_OPENABLE);
+        if(export)intent.putExtra(Intent.EXTRA_TITLE,"mikan-launcher-settings.json");
+        try{startActivityForResult(intent,export?78:79);}catch(Exception ex){Toast.makeText(this,"No file picker available.",Toast.LENGTH_SHORT).show();}
+    }
+    private void handleBackup(boolean export,android.net.Uri uri){
+        if(fileBusy)return;fileBusy=true;
+        new Thread(()->{
+            try{
+                if(export){LauncherBackup.write(this,prefs,uri);runOnUiThread(()->{fileBusy=false;if(!isDestroyed())Toast.makeText(this,"Settings exported",Toast.LENGTH_SHORT).show();});}
+                else{Map<String,Object> restored=LauncherBackup.read(this,uri);runOnUiThread(()->{
+                    fileBusy=false;if(isDestroyed()||isFinishing())return;
+                    new AlertDialog.Builder(this).setTitle("Restore launcher settings?").setMessage("Replace saved layout, folders and supported appearance settings. Imported artwork, private connection settings and Android permissions are not changed.").setNegativeButton("Cancel",null).setPositiveButton("Restore",(d,w)->{
+                        LauncherBackup.apply(prefs,restored);folders=new HomeFolders(prefs);restoreFavorites();monoCache.clear();homePage=0;refreshScreen();Toast.makeText(this,"Settings restored",Toast.LENGTH_SHORT).show();
+                    }).show();
+                });}
+            }catch(Exception ex){runOnUiThread(()->{fileBusy=false;if(!isDestroyed())Toast.makeText(this,"Backup could not be "+(export?"saved":"read")+". Existing settings kept.",Toast.LENGTH_LONG).show();});}
+        },"launcher-backup").start();
     }
     private void checkMikanWeb(){
         String url=prefs.getString("mikanWebUrl","");
@@ -470,7 +568,7 @@ public class HomeActivity extends Activity {
     private boolean widgetHere(String key,int def){return prefs.getInt(key,def)==homePage+1;}
     private int pageCount(){
         int count=0;for(String key:favorites)if(find(key)!=null)count++;
-        int cap=prefs.getInt("columns",4)*2,dock=prefs.getInt("dockCount",5);
+        int cap=prefs.getInt("columns",4)*prefs.getInt("homeRows",2),dock=prefs.getInt("dockCount",5);
         int pages=Math.max(prefs.getInt("minPages",1),(Math.max(0,count-dock)+cap-1)/cap);
         for(String key:new String[]{"clockPage","mikanPage","musicPage","weatherPage","agendaPage"})pages=Math.max(pages,prefs.getInt(key,1));
         return Math.max(1,pages);
@@ -531,8 +629,21 @@ public class HomeActivity extends Activity {
     }
     private void openFolder(String id){
         ArrayList<App> members=new ArrayList<>();for(String k:folders.members(id)){App a=find(k);if(a!=null&&a.component!=null)members.add(a);}
-        String[] names=new String[members.size()];for(int i=0;i<names.length;i++)names[i]=members.get(i).label;
-        new AlertDialog.Builder(this).setTitle(folders.name(id)).setItems(names,(d,i)->launch(members.get(i))).setNeutralButton("Edit",(d,w)->folderOptions(id)).setNegativeButton("Close",null).show();
+        ScrollView scroll=new ScrollView(this);LinearLayout grid=vertical();grid.setPadding(dp(12),dp(8),dp(12),dp(8));scroll.addView(grid);
+        AlertDialog dialog=new AlertDialog.Builder(this).setTitle(folders.name(id)).setView(scroll).setNeutralButton("Edit",(d,w)->folderOptions(id)).setNegativeButton("Close",null).create();
+        if(members.isEmpty())grid.addView(text("No available apps. Edit folder to add more.",14,CREAM,false));
+        for(int n=0;n<members.size();n+=3){LinearLayout row=horizontal();row.setGravity(Gravity.TOP);for(int j=0;j<3;j++){
+            if(n+j>=members.size()){row.addView(new View(this),new LinearLayout.LayoutParams(0,1,1));continue;}
+            App app=members.get(n+j);LinearLayout tile=vertical();tile.setGravity(Gravity.CENTER);tile.setPadding(dp(4),dp(6),dp(4),dp(6));
+            ImageView image=new ImageView(this);image.setImageDrawable(themedIcon(app));image.setScaleType(ImageView.ScaleType.FIT_CENTER);image.setPadding(dp(5),dp(5),dp(5),dp(5));image.setBackground(MikanTheme.tile(this));tile.addView(image,new LinearLayout.LayoutParams(dp(48),dp(48)));
+            TextView label=text(app.label,12,CREAM,false);label.setGravity(Gravity.CENTER);label.setMaxLines(2);tile.addView(label);tile.setContentDescription(app.label);
+            tile.setOnClickListener(v->{dialog.dismiss();launch(app);});tile.setOnLongClickListener(v->{new AlertDialog.Builder(this).setTitle(app.label).setItems(new String[]{"Remove from folder","Pin separately","Customize icon"},(d,i)->{
+                if(i==0){ArrayList<String> keys=new ArrayList<>(folders.members(id));keys.remove(app.key());folders.save(id,folders.name(id),keys);dialog.dismiss();refreshScreen();openFolder(id);}
+                else if(i==1){if(!favorites.contains(app.key())){favorites.add(app.key());saveFavorites();}dialog.dismiss();refreshScreen();}
+                else{dialog.dismiss();iconOptions(app);}
+            }).show();return true;});row.addView(tile,new LinearLayout.LayoutParams(0,-2,1));
+        }grid.addView(row);}
+        dialog.show();
     }
     private void addToFolder(App app){
         List<String> ids=folders.keys();if(ids.isEmpty()){createFolder();return;}

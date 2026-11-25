@@ -21,6 +21,7 @@ final class SettingsHub {
     enum Section {
         HUB("Settings","Make Mikan OS your own",MikanMark.GEAR),
         APPEARANCE("Appearance","Wallpapers and app icons",MikanMark.PALETTE),
+        LOCK("Lockscreen","Separate Android lockscreen wallpaper",MikanMark.SHIELD),
         HOME("Home screen","Grid, dock, pages and folders",MikanMark.GRID),
         WIDGETS("Widgets","Placement and dashboard layout",MikanMark.WIDGET),
         WEATHER("Weather & calendar","Forecasts and upcoming events",MikanMark.WEATHER),
