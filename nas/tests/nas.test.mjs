@@ -734,7 +734,7 @@ test("native agent adapter preserves real tool calls and tool result messages",a
  const call={id:"call_1",type:"function",function:{name:"search_web",arguments:'{"query":"Brian Fair Shadows Fall birth year"}'}};
  const agentTools=[{type:"function",function:{name:"search_web",parameters:{type:"object"}}}];
  const result=await generateReply({config,system:"test",agentTools,history:[{role:"user",content:"test"},{role:"assistant",content:null,tool_calls:[call]},{role:"tool",tool_call_id:"call_1",content:"test result"}],fetchImpl:async(_url,opts)=>{
-   const body=JSON.parse(opts.body);assert.equal(body.stream,false);assert.equal(body.tool_choice,"auto");assert.equal(body.messages.at(-1).tool_call_id,"call_1");assert.deepEqual(body.messages.at(-2).tool_calls,[call]);
+   const body=JSON.parse(opts.body);assert.equal(body.stream,false);assert.equal(body.tool_choice,"auto");assert.equal(body.chat_template_kwargs.enable_thinking,false);assert.equal(body.messages.at(-1).tool_call_id,"call_1");assert.deepEqual(body.messages.at(-2).tool_calls,[call]);
    return Response.json({choices:[{finish_reason:"tool_calls",message:{content:null,tool_calls:[call]}}]});
  }});
  assert.deepEqual(result.toolCalls,[call]);
@@ -751,8 +751,8 @@ test("agent executes actual calls, preserves natural queries and prevents unappr
      assert.equal(args.history.at(-1).role,"tool");
      if(round===2)return {content:"",toolCalls:[call("b","read_webpage",{url:"http://127.0.0.1/private"})]};
      assert.match(args.history.at(-1).content,/explicitly supplied/);
-     return {content:"RESEARCH_DONE",toolCalls:[]};
-   },compose:async args=>{assert.equal(args.agentTools,undefined);assert.match(args.history[0].content,/Example Model 4 officially released/);return "Example Model 4 officially released [1].";}});
+     return {content:"Example Model 4 officially released [1].",toolCalls:[]};
+   },compose:async()=>{throw Error("A completed answer must not be regenerated");}});
  assert.deepEqual(queries,["Example model official release"]);assert.equal(reads,0);assert.match(result.answer,/Example Model 4/);assert.equal(round,3);
 });
 
@@ -784,4 +784,41 @@ test("web extraction removes quoted template attributes and navigation without l
  const result=await readWeb("https://example.org",async()=>({type:"text/html",body:"<html><head><title>Test</title></head><nav>menu links</nav><div data-mw='{\"template\":\"[[Hidden]] > broken markup <ref>\"}'><p>Lantern premiered in 2014 &amp; has 4 episodes.</p><p>Author&#x27;s name</p></div><footer>footer spam</footer></html>"}));
  assert.match(result.content,/Lantern premiered in 2014 & has 4 episodes/);
  assert.match(result.content,/Author's name/);assert.doesNotMatch(result.content,/template|Hidden|menu links|footer spam/);
+});
+
+test("native agent can finish an ordinary chat in one model call with no public tools executed",async()=>{
+ const {agentResearch}=await import("../agent-research.mjs");let calls=0;
+ const result=await agentResearch({mode:"simple",history:[{role:"user",content:"I'm bored. Entertain me."}],canRequest:()=>true,publicVoice:"Warm and playful",
+ generate:async args=>{calls++;assert.equal(args.agentThinking,true);assert.match(args.system,/just answer/);assert.match(args.system,/Warm and playful/);return {content:"Let's invent a ridiculous story.",toolCalls:[]};},
+ compose:async()=>{throw Error("unexpected synthesis")},search:async()=>{throw Error("unexpected search")}});
+ assert.equal(calls,1);assert.equal(result.answer,"Let's invent a ridiculous story.");assert.deepEqual(result.researched.sources,[]);
+});
+test("native agent hands private-context requests to tool-free chat",async()=>{
+ const {agentResearch}=await import("../agent-research.mjs");
+ const result=await agentResearch({mode:"simple",history:[{role:"user",content:"Remind me what we discussed."}],canRequest:()=>true,
+ generate:async()=>({content:"NEED_PRIVATE_CONTEXT",toolCalls:[]}),compose:async()=>{throw Error("unexpected compose")}});
+ assert.equal(result,null);
+});
+test("native search guard accepts numeric comparisons but still rejects private identities and markup",async()=>{
+ const {validateAgentQuery}=await import("../agent-research.mjs");
+ assert.equal(validateAgentQuery("horror anime <6 episodes after 2010").query,"horror anime fewer than 6 episodes after 2010");
+ assert.equal(validateAgentQuery("horror anime >=2011 <6 episodes").query,"horror anime at least 2011 fewer than 6 episodes");
+ assert.equal(validateAgentQuery("my wife's birthday").search,false);
+ assert.equal(validateAgentQuery("anime <script>alert(1)</script>").search,false);
+ assert.equal(validateAgentQuery("Rowan birthday",[{category:"family",fact:"The fictional spouse is Rowan."}]).search,false);
+});
+test("blocked searches do not silently become verified answers or consume the whole tool budget",async()=>{
+ const {agentResearch}=await import("../agent-research.mjs");let calls=0;const events=[];
+ const result=await agentResearch({mode:"simple",history:[{role:"user",content:"Recommend short horror anime."}],canRequest:()=>true,diagnostics:true,activity:e=>events.push(e),
+ generate:async()=>({content:"",toolCalls:[{id:"c"+(++calls),type:"function",function:{name:"search_web",arguments:'{"query":"my private address"}'}}]}),
+ search:async()=>{throw Error("unexpected search")},compose:async args=>{assert.match(args.history[0].content,/No public lookup produced evidence/);return "I couldn't verify the titles online."; }});
+ assert.equal(calls,2);assert.ok(events.some(e=>e.title==="Public query rejected"&&e.detail.includes("private context")));assert.match(result.answer,/No public sources were retrieved/);
+});
+test("native adapter explicitly enables thinking only for the experimental tool request",async()=>{
+ const config={provider:"nvidia",model:"nvidia/nemotron-3-ultra-550b-a55b",key:"synthetic-test-key"};
+ const result=await generateReply({config,system:"test",history:[{role:"user",content:"test"}],agentTools:[{type:"function",function:{name:"search_web",parameters:{type:"object"}}}],agentThinking:true,fetchImpl:async(_url,opts)=>{
+ const body=JSON.parse(opts.body);assert.equal(body.chat_template_kwargs.enable_thinking,true);assert.equal(body.chat_template_kwargs.force_nonempty_content,undefined);
+ return Response.json({choices:[{finish_reason:"stop",message:{content:"Natural answer",reasoning_content:"not returned"}}]});
+ }});
+ assert.deepEqual(result,{content:"Natural answer",toolCalls:[]});
 });
