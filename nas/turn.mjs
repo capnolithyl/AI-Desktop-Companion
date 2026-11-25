@@ -64,6 +64,38 @@ export async function executeNasTurn({store,conversationId,question,selected,mod
     activity({title:"Conversational reaction",detail:"No public lookup needed; retain full conversation and persona",lines:[]});
     mode="off";
   }
+  // Chat privately with the normal persona, memories and bounded role-preserving
+  // history before handing off to the isolated public research loop. The only
+  // tool in this first pass is a zero-argument request for public research;
+  // its arguments and private draft are NEVER forwarded to public tools.
+  const nativeEligible=!local&&publicAgent&&["nvidia","groq","cerebras"].includes(selected.provider);
+  const explicitLookup=/\b(?:latest|current|right now|as of today|search again|verify|look up|any news|any updates)\b/i.test(question);
+  const noBrowse=/\b(?:do not|don't|never|no need to)\s+(?:browse|search|look up|use the web|go online)\b/i.test(question);
+  if(nativeEligible&&mode==="simple"&&!explicitLookup&&!noBrowse){
+    const privateSystem=systemPrompt(promptFile,store,memory,{question,history,mode:"off"})+
+      "\n\nThis is a private conversation with your full persona and recent dialogue. Pay attention to your own earlier replies, callbacks, corrections, playful teasing and sarcasm; don't treat every statement as a literal preference. Keep your own established interests distinct from the owner's. Answer naturally and directly. Never claim to be working on something in the background. Only if public research would materially improve this turn, call request_public_research with an empty object; the host will independently run a privacy-filtered public research phase. Do not include any query, private information or draft in the handoff. No web lookup has occurred in this pass.";
+    let decision;
+    try{
+      decision=await trace.measure("agent",()=>{signal?.throwIfAborted();reserve();return requestModel({config:selected,system:privateSystem,history,signal,agentTools:[{type:"function",function:{name:"request_public_research",description:"Ask the host to independently consider public web research. No arguments or private context may be passed.",parameters:{type:"object",properties:{},additionalProperties:false}}}],agentToolChoice:"auto",agentThinking:true,agentEffort:effort,maxTokens:4096,temperature:0.4,onModel:v=>trace.model(v),onUsage:v=>trace.usage("agent",v)});});
+    }catch(error){
+      signal?.throwIfAborted();
+      if(error?.upstreamStatus===429||error?.status===429||!canRequest())throw error;
+      activity({title:"Private chat decision unavailable",detail:"Use ordinary tool-free answer",lines:[]});
+    }
+    const calls=Array.isArray(decision?.toolCalls)?decision.toolCalls:[];
+    const handoff=calls.length===1&&calls[0]?.function?.name==="request_public_research";
+    if(handoff){
+      activity({title:"Public research requested",detail:"Private conversation remains outside public tool loop",lines:[]});
+      if(!canRequest(2)){
+        const answer="I don't have enough provider request budget to complete a public lookup right now.";
+        trace.firstText();onDelta(answer);return {answer,memory,researched:{sources:[],note:"",evidence:"[]"}};
+      }
+    }else if(!calls.length&&typeof decision?.content==="string"&&decision.content.trim()&&!/^\s*(?:\{\s*"(?:tool|arguments|function|tool_calls|name)"|<(?:tool_call|function_call)>)/i.test(decision.content)){
+      const answer=decision.content.trim();
+      activity({title:"Private conversational answer",detail:"Full bounded conversation and relevant memories; no public tools",lines:[]});
+      trace.firstText();onDelta(answer);return {answer,memory,researched:{sources:[],note:"",evidence:"[]"}};
+    }else mode="off";
+  }
   if(!local&&publicAgent&&mode!=="off"&&["nvidia","groq","cerebras"].includes(selected.provider)){
     const profile=currentProfile(promptFile,store);
     // Only typed behavior preferences are included in the public tool prompt.
