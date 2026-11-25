@@ -1,4 +1,4 @@
-# Mikan Launcher v0.10
+# Mikan Launcher v0.11
 
 **Living reference:** [Feature inventory and verification status](FEATURES.md). Read [launcher maintenance rules](AGENTS.md) before making changes. Update the feature inventory in the same change as every launcher feature, fix or release; distinguish implementation from tested behavior.
 
@@ -33,3 +33,6 @@ Seven dedicated categories: Appearance, Home screen, Widgets, Weather & calendar
 
 ## v0.10 customization and reliability
 Custom local home wallpaper and individual icon overrides, rows and icon size, section order presets, independent widget pairs, folder icon grid and drop-onto-folder actions. System settings export/restore validated local JSON (layout/preferences/folders only, not image binaries, private server/location or permission grants). Lockscreen section imports/previews and explicitly sets Android lock-only wallpaper; does not replace secure keyguard. See FEATURES.md for test checklist; physical offline reboot still required.
+
+## v0.11 lockscreen crop fix
+Before applying a lockscreen wallpaper, preview the portrait display aspect ratio and adjust horizontal/vertical position and zoom. The same crop is rendered to a screen-ratio bitmap (long edge capped at 2560 px), supplied with explicit full-bitmap crop hint and FLAG_LOCK. Reset restores centered fill; cancel leaves wallpaper unchanged. Android may still zoom slightly. No new permissions. Existing image remains available for reframing. Device verification pending.

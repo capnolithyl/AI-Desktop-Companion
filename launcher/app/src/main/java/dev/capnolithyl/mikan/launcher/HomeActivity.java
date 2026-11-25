@@ -313,7 +313,7 @@ public class HomeActivity extends Activity {
             case LOCK:
                 settingsUi.note(body,"Customize the real Android lockscreen wallpaper. Android retains the clock, notifications and secure unlock.");
                 settingsUi.row(body,"Choose lockscreen image","Preview locally before applying",()->pickImage(77));
-                if(lockArt.get()!=null){settingsUi.artPreview(body,lockArt.get(),"Lockscreen image");setting(body,"Apply chosen lockscreen image",()->applyLockWallpaper(lockArt.get()));}
+                if(lockArt.get()!=null){settingsUi.artPreview(body,lockArt.get(),"Lockscreen image");setting(body,"Adjust and apply lockscreen image",()->applyLockWallpaper(lockArt.get()));}
                 setting(body,"Use current home wallpaper",()->applyLockWallpaper(homeWallpaper()));
                 setting(body,"Open Android wallpaper settings",()->{try{startActivity(new Intent(Intent.ACTION_SET_WALLPAPER));}catch(Exception ex){Toast.makeText(this,"Use Android Settings > Wallpaper & style.",Toast.LENGTH_LONG).show();}});
                 break;
@@ -484,17 +484,20 @@ public class HomeActivity extends Activity {
     }
     private void applyLockWallpaper(Drawable art){
         if(art==null||fileBusy)return;
-        new AlertDialog.Builder(this).setTitle("Set Android lockscreen wallpaper?").setMessage("Replaces only your lockscreen wallpaper. Android's secure lockscreen remains unchanged.").setNegativeButton("Cancel",null).setPositiveButton("Apply",(d,w)->{
-            if(fileBusy)return;fileBusy=true;
-            new Thread(()->{boolean success=false;android.graphics.Bitmap bitmap=null;
-                try{android.app.WallpaperManager manager=android.app.WallpaperManager.getInstance(this);if(!manager.isWallpaperSupported()||!manager.isSetWallpaperAllowed())throw new IllegalStateException();
-                    int width=Math.max(1,art.getIntrinsicWidth()),height=Math.max(1,art.getIntrinsicHeight());float scale=Math.min(1f,2048f/Math.max(width,height));width=Math.max(1,Math.round(width*scale));height=Math.max(1,Math.round(height*scale));
-                    bitmap=android.graphics.Bitmap.createBitmap(width,height,android.graphics.Bitmap.Config.ARGB_8888);art.setBounds(0,0,width,height);art.draw(new android.graphics.Canvas(bitmap));
-                    success=manager.setBitmap(bitmap,null,false,android.app.WallpaperManager.FLAG_LOCK)!=0;
-                }catch(Exception ignored){}finally{if(bitmap!=null)bitmap.recycle();}
-                final boolean ok=success;runOnUiThread(()->{fileBusy=false;if(!isDestroyed()&&!isFinishing())Toast.makeText(this,ok?"Lockscreen wallpaper applied":"Android could not set the wallpaper",Toast.LENGTH_LONG).show();});
+        LockWallpaperCrop.show(this,art,(bitmap)->{
+            if(fileBusy){bitmap.recycle();return;}
+            fileBusy=true;
+            new Thread(()->{
+                boolean success=false;
+                try{
+                    android.app.WallpaperManager manager=android.app.WallpaperManager.getInstance(this);
+                    if(!manager.isWallpaperSupported()||!manager.isSetWallpaperAllowed())throw new IllegalStateException();
+                    success=manager.setBitmap(bitmap,new android.graphics.Rect(0,0,bitmap.getWidth(),bitmap.getHeight()),false,android.app.WallpaperManager.FLAG_LOCK)!=0;
+                }catch(Exception ignored){}finally{bitmap.recycle();}
+                final boolean ok=success;
+                runOnUiThread(()->{fileBusy=false;if(!isDestroyed()&&!isFinishing())Toast.makeText(this,ok?"Lockscreen wallpaper applied":"Android could not set the wallpaper",Toast.LENGTH_LONG).show();});
             },"lock-wallpaper").start();
-        }).show();
+        });
     }
     private void backupPicker(boolean export){
         if(fileBusy)return;

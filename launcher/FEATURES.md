@@ -1,6 +1,6 @@
 # Mikan Launcher — living feature reference
 
-**Source baseline:** v0.10 (versionCode 10), customization and local backup, 2026-11-24. See Git history for implementation commit.
+**Source baseline:** v0.11 (versionCode 11), lockscreen crop fix, 2026-11-24. See Git history for implementation commit.
 **Development:** [PR #117](https://github.com/capnolithyl/AI-Desktop-Companion/pull/117), branch `feature/mikan-launcher-v01`. Check current branch and Gradle version before changing this document.
 **Purpose:** a free, personal, offline-first Android launcher inspired by the Mikan OS home-screen mockup. Separate from Pocket Mikan, desktop Mikan and the NAS. This document tracks the launcher only.
 
@@ -66,7 +66,7 @@ v0.9 replaces the long list with a themed category hub, icons, descriptions and 
 | Section | Controls |
 | --- | --- |
 | Appearance | Reading nook / Study nook wallpaper previews, custom wallpaper import/use, Amber / Original icon style |
-| Lockscreen | Import and preview image, apply lock-only wallpaper or current home wallpaper, Android wallpaper settings |
+| Lockscreen | Import image, preview screen-ratio crop with horizontal/vertical position and zoom, apply lock-only wallpaper or current home wallpaper, Android wallpaper settings |
 | Home screen | Grid (4/5 columns), rows (1–4), icon size, Dock (3–5 apps), Floating dock, Favorites heading, Minimum home pages (1–5), Manage favorites, Customize app icons, Create app folder, Manage folders |
 | Widgets | Clock, Mikan, Music, Weather, Upcoming events placement/visibility, Widget layout (Side by side/Stacked), independent pair toggles, section order |
 | Weather & calendar | Weather city, Temperature units, Refresh weather, Calendar access, Show calendar titles |
@@ -108,7 +108,8 @@ Weather card also exposes refresh, city, units and clear location. No full-scree
 | 0.8 | Two-tone glyphs, shared panel/tile styling, floating dock, page dots, equal paired heights, circular play, calendar decoration, search and voice affordances | Owner v0.8 screenshot confirms floating dock, two-tone glyphs, paired card heights, circular play and search bar rendering; behavior of new actions pending. |
 | 0.9 | Categorized settings hub, dedicated submenus, native switches, segmented choices, wallpaper and portrait previews, permission status and installed version | Owner reports improved settings after v0.9 update; detailed control/navigation verification pending. |
 
-| 0.10 | Custom wallpaper, app icon overrides, layout options, folder grid and drop actions, local JSON backup/restore, Android lockscreen wallpaper | Implemented; CI and device testing pending. |
+| 0.10 | Custom wallpaper, app icon overrides, layout options, folder grid and drop actions, local JSON backup/restore, Android lockscreen wallpaper | Owner screenshot confirms lockscreen wallpaper applied, but right-side subject cropped; other testing pending. |
+| 0.11 | Screen-ratio wallpaper crop, interactive position/zoom preview, explicit crop hint | Implemented; CI and physical lockscreen framing verification pending. |
 
 ## 7. Outstanding verification checklist
 
@@ -129,6 +130,8 @@ Weather card also exposes refresh, city, units and clear location. No full-scree
 - [ ] v0.9 navigate all eight settings categories (seven in v0.9), Android back and Home navigation; verify every existing action, switches/choices, preview rendering, permission status and no settings loss after update.
 
 - [ ] v0.10 import wallpapers/icons, verify fallback and persisted overrides; change rows/size/section order and pairing; test folder grid/drop and backup round trip, malformed backup rejection, lock-only wallpaper and secure unlock unchanged.
+
+- [ ] v0.11 apply the existing lockscreen image with center/right framing, verify on real lockscreen, reset sliders, cancel without changing wallpaper, confirm home wallpaper unchanged and secure unlock intact. Android may still apply system zoom.
 
 ## 8. Roadmap (not implemented)
 
