@@ -106,3 +106,5 @@ html:has(.nas-app),body:has(.nas-app),body:has(.nas-gate){background:#211412!imp
 .nas-app .nas-channel-confirm-actions button:focus-visible{outline:2px solid #ffc18a;outline-offset:3px;}
 @media(max-width:780px){.nas-app .nas-channel-grid{grid-template-columns:minmax(0,1fr);}}
 @media(prefers-reduced-motion:reduce){.nas-app .nas-updates .nas-channel-card{transition:none;}}
+
+.nas-login .nas-remember-device{display:flex;gap:9px;align-items:center;font-size:13px;color:#f0cdb8;}.nas-login .nas-remember-device input{width:auto;accent-color:#ffa65e;}
