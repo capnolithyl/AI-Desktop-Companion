@@ -1,6 +1,6 @@
 # Mikan Launcher — living feature reference
 
-**Source baseline:** v0.11.1 (versionCode 12), performance pass, 2026-11-24. See Git history for implementation commit.
+**Source baseline:** v0.11.2 (versionCode 13), widget shortcuts, 2026-11-24. See Git history for implementation commit.
 **Development:** [PR #117](https://github.com/capnolithyl/AI-Desktop-Companion/pull/117), branch `feature/mikan-launcher-v01`. Check current branch and Gradle version before changing this document.
 **Purpose:** a free, personal, offline-first Android launcher inspired by the Mikan OS home-screen mockup. Separate from Pocket Mikan, desktop Mikan and the NAS. This document tracks the launcher only.
 
@@ -52,6 +52,7 @@ All five built-in widgets (clock, Mikan, music, weather, upcoming events) can be
 | Music metadata/art | 0.4 | Android active MediaSession, prefer playing session, title/artist and album art where available. Notification listener access required. | Owner screenshot shows track, artist and artwork. |
 | Music controls | 0.4–0.5 | Previous, play/pause, next; supported actions only. Custom amber-painted icons, no emoji; circular amber play/pause in v0.8. | Controls rendered; actions not explicitly confirmed. |
 | Progress/seek | 0.5 | Position/time/duration; seek only with ACTION_SEEK_TO; hide timeline for unknown duration. Foreground position tick and track/session guards. Scrubbing avoids page gesture. | Timeline rendered; actual seek and track changes pending. |
+| Widget app shortcuts | 0.11.2 | Tap music card outside playback controls to open Spotify, configured weather card to open Pixel Weather or another installed weather app, clock/date to open Clock. Settings > Widgets > Tap shortcuts allows selecting a different installed app or automatic default. If unavailable, choose an installed app; no network or store fallback. Weather long-press retains forecast options and unconfigured tap opens city setup. Shortcut choices local, not included in current JSON backup. | Implemented; physical tap/control validation pending. |
 | Compact music panel | 0.7 | Smaller art/text, elapsed and total time below scrubber when paired. | v0.7 screenshot observed. |
 | Weather | 0.7 | Choose a city through Open-Meteo geocoding. Current temperature/condition, high/low, custom weather glyph, city and attribution. Fahrenheit default, Celsius toggle. | Owner v0.7 screenshot shows current conditions, temperature and range; refresh/units/cache still pending. |
 | Weather cache | 0.7 | Selected city/coordinates and snapshot saved locally; 30-min freshness window, 5-min retry throttling, stale/cached label. Refresh while visible and foregrounded, or explicit action. Can clear city/cache. | Implemented; offline and retry tests pending. |
@@ -111,7 +112,8 @@ Weather card also exposes refresh, city, units and clear location. No full-scree
 | 0.10 | Custom wallpaper, app icon overrides, layout options, folder grid and drop actions, local JSON backup/restore, Android lockscreen wallpaper | Owner screenshot confirms lockscreen wallpaper applied, but right-side subject cropped; other testing pending. |
 | 0.11 | Screen-ratio wallpaper crop, interactive position/zoom preview, explicit crop hint | Implemented; CI and physical lockscreen framing verification pending. |
 
-| 0.11.1 | Reuse Home on warm resume, event-driven catalog refresh, bounded image/icon caches, delayed widget refresh, local timing diagnostics | Implemented; CI and physical performance comparison pending. |
+| 0.11.1 | Reuse Home on warm resume, event-driven catalog refresh, bounded image/icon caches, delayed widget refresh, local timing diagnostics | Owner reports perceived improvement; measured comparison and regression checks pending. |
+| 0.11.2 | Music, weather and clock tap shortcuts; configurable installed app targets | Implemented; CI and device tests pending. |
 
 ## 7. Outstanding verification checklist
 
@@ -137,12 +139,14 @@ Weather card also exposes refresh, city, units and clear location. No full-scree
 
 - [ ] v0.11.1 warm Home return from several apps; cold process start; install/update/remove apps; permission changes, artwork replacement, drawer and page navigation, low-memory recovery; copy diagnostics and compare perceived latency. No measured improvement yet.
 
+- [ ] v0.11.2 test Spotify shortcut, music play/pause/skip/seek without opening app, configured weather tap and long-press menu, unconfigured weather city setup, clock tap, alternate app choice/reset and missing/uninstalled targets. Verify paired/stacked layouts and no regression in Home latency.
+
 ## 8. Roadmap (not implemented)
 
 Planned milestones; version targets flexible. See [Trello roadmap](https://trello.com/c/VEk6xVz6). No arbitrary deadlines.
 
 ### v0.11.1 — Performance pass (implemented, validation pending)
-Warm Home retains existing view; package events trigger debounced background catalog scans; cold start still queries labels synchronously, icons lazy-loaded with bounded caches. Bundled backgrounds and imported bitmaps cached with invalidation and memory-pressure eviction (normal app switches do not clear caches). Media/notification refresh deferred after entry; existing timers stop when paused. Settings > System & updates > Performance diagnostics reports local in-memory rolling count, median, p95 and max for Activity callback-to-pre-draw (not touch-to-display), home build, catalog and media/badge refresh. Copy/reset available. Cold start optimization, true frame/jank/battery profiling and before/after measurements remain pending.
+Warm Home retains existing view; package events trigger debounced background catalog scans; cold start still queries labels synchronously, icons lazy-loaded with bounded caches. Bundled backgrounds and imported bitmaps cached with invalidation and memory-pressure eviction (normal app switches do not clear caches). Media/notification refresh deferred after entry; existing timers stop when paused. Settings > System & updates > Performance diagnostics reports local in-memory rolling count, median, p95 and max for Activity callback-to-pre-draw (not touch-to-display), home build, catalog and media/badge refresh. Copy/reset available. Owner reports perceived improvement. Cold start optimization, true frame/jank/battery profiling and before/after measurements remain pending.
 
 ### v0.12 — Home screen editor
 Long-press edit mode, collision-safe free grid placement, drag-to-create folders, page management, widget resizing and preservation of old layout.

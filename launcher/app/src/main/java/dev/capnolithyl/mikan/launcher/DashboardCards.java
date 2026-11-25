@@ -47,7 +47,7 @@ final class DashboardCards {
     private static final long WEATHER_TTL=30*60*1000L, RETRY_DELAY=5*60*1000L;
     private final Activity activity;
     private final SharedPreferences prefs;
-    private final Runnable settingsRefresh;
+    private final Runnable settingsRefresh,openWeather;
     private final ExecutorService io=Executors.newFixedThreadPool(2);
     private final Handler handler=new Handler(Looper.getMainLooper());
     private boolean resumed,closed,weatherBusy,calendarBusy,cityBusy,weatherFailed;
@@ -61,7 +61,7 @@ final class DashboardCards {
         @Override public void run(){if(!resumed||closed)return;refreshWeather(false);refreshCalendar(false);handler.postDelayed(this,60000);}
     };
 
-    DashboardCards(Activity activity,SharedPreferences prefs,Runnable settingsRefresh){this.activity=activity;this.prefs=prefs;this.settingsRefresh=settingsRefresh;}
+    DashboardCards(Activity activity,SharedPreferences prefs,Runnable settingsRefresh,Runnable openWeather){this.activity=activity;this.prefs=prefs;this.settingsRefresh=settingsRefresh;this.openWeather=openWeather;}
     void resume(){resumed=true;handler.removeCallbacks(tick);handler.postDelayed(tick,120);}
     void pause(){resumed=false;handler.removeCallbacks(tick);}
     void close(){closed=true;pause();detach();io.shutdownNow();}
@@ -93,7 +93,8 @@ final class DashboardCards {
         gap(copy,3);weatherCondition=label("",11,MUTED,false);weatherCondition.setMaxLines(2);copy.addView(weatherCondition);
         gap(weatherRoot,5);weatherRange=label("",11,CREAM,false);weatherRoot.addView(weatherRange);
         gap(weatherRoot,4);weatherNote=label("",10,MUTED,false);weatherNote.setMaxLines(2);weatherNote.setEllipsize(TextUtils.TruncateAt.END);weatherRoot.addView(weatherNote);
-        weatherRoot.setOnClickListener(v->{if(coordinates().isEmpty())chooseCity();else weatherOptions();});
+        weatherRoot.setOnClickListener(v->{if(coordinates().isEmpty())chooseCity();else openWeather.run();});
+        weatherRoot.setOnLongClickListener(v->{if(coordinates().isEmpty())chooseCity();else weatherOptions();return true;});
         weatherRoot.setFocusable(true);
         renderWeather();if(resumed)refreshWeather(false);return weatherRoot;
     }

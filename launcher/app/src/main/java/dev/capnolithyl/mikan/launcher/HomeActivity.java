@@ -98,7 +98,7 @@ public class HomeActivity extends Activity {
         lockArt=new PortraitStore(this,"lock-wallpaper.webp",new String[]{},2048);
         if(state!=null){pendingIconKey=state.getString("pendingIconKey");String saved=state.getString("settingsSection");if(saved!=null)try{settingsSection=SettingsHub.Section.valueOf(saved);settings=true;}catch(IllegalArgumentException ignored){}}
         folders=new HomeFolders(prefs);
-        dashboard=new DashboardCards(this,prefs,()->{if(settings)showSettings();});
+        dashboard=new DashboardCards(this,prefs,()->{if(settings)showSettings();},()->openWidgetApp("weather"));
         settingsUi=new SettingsHub(this);
         registerPackageChanges();
         long scan=android.os.SystemClock.elapsedRealtime();applyCatalog(scanApps());perf.record("initial app catalog",scan);
@@ -296,7 +296,7 @@ public class HomeActivity extends Activity {
         LinearLayout timeRow=horizontal();clock=text("",compactClock?40:48,CREAM,false);clock.setTypeface(Typeface.create("sans-serif-light",Typeface.NORMAL));clock.setIncludeFontPadding(false);timeRow.addView(clock);
         ImageView paw=new ImageView(this);paw.setImageDrawable(new MikanMark(MikanMark.PAW,PEACH));LinearLayout.LayoutParams pawParams=new LinearLayout.LayoutParams(dp(23),dp(23));pawParams.leftMargin=dp(8);timeRow.addView(paw,pawParams);clockBlock.addView(timeRow);
         if(compactClock){ampm=text("",11,PEACH,false);ampm.setIncludeFontPadding(false);clockBlock.addView(ampm);}
-        gap(clockBlock,3);date=text("",15,MUTED,false);date.setIncludeFontPadding(false);clockBlock.addView(date);}
+        gap(clockBlock,3);date=text("",15,MUTED,false);date.setIncludeFontPadding(false);clockBlock.addView(date);widgetLink(clockBlock,"Open clock app",()->openWidgetApp("clock"));}
         if(showClock||showWeather){addWidgetRow(topWidgets,showClock?clockBlock:null,showWeather?dashboard.weatherView():null,compactClock);gap(topWidgets,12);}
         if(widgetHere("mikanPage",1)){
             Drawable art=characterArt.get();
@@ -314,7 +314,7 @@ public class HomeActivity extends Activity {
         gap(appBlock,10);
         boolean showMusic=widgetHere("musicPage",1),showAgenda=widgetHere("agendaPage",1);
         boolean pair=showMusic&&showAgenda&&canPair()&&prefs.getBoolean("pairBottom",true);
-        if(showMusic)music=new MusicPanel(this,pair);
+        if(showMusic){music=new MusicPanel(this,pair);widgetLink(music.view(),"Open music app",()->openWidgetApp("music"));}
         if(showMusic||showAgenda){addWidgetRow(bottomWidgets,showMusic?music.view():null,showAgenda?dashboard.agendaView():null,pair);gap(bottomWidgets,10);}
         int order=prefs.getInt("sectionOrder",0);
         LinearLayout[] sections=order==1?new LinearLayout[]{topWidgets,characterBlock,bottomWidgets,appBlock}:order==2?new LinearLayout[]{appBlock,topWidgets,characterBlock,bottomWidgets}:new LinearLayout[]{topWidgets,characterBlock,appBlock,bottomWidgets};
@@ -330,6 +330,48 @@ public class HomeActivity extends Activity {
         page.addView(dock);gap(page,7);
         page.addView(searchBar(),new LinearLayout.LayoutParams(-1,dp(50)));
         updateClock();perf.record("home view build",buildStarted);queueExtras();
+    }
+    private void widgetLink(View view,String label,Runnable action){
+        view.setOnClickListener(v->action.run());view.setFocusable(true);
+        view.setAccessibilityDelegate(new View.AccessibilityDelegate(){
+            @Override public void onInitializeAccessibilityNodeInfo(View host,android.view.accessibility.AccessibilityNodeInfo info){
+                super.onInitializeAccessibilityNodeInfo(host,info);
+                info.addAction(new android.view.accessibility.AccessibilityNodeInfo.AccessibilityAction(android.view.accessibility.AccessibilityNodeInfo.ACTION_CLICK,label));
+            }
+        });
+    }
+    private String widgetName(String kind){return "music".equals(kind)?"Music":"weather".equals(kind)?"Weather":"Clock";}
+    private String[] widgetPackages(String kind){
+        if("music".equals(kind))return new String[]{"com.spotify.music"};
+        if("weather".equals(kind))return new String[]{"com.google.android.apps.weather","com.sec.android.daemonapp","com.samsung.android.weather"};
+        return new String[]{"com.google.android.deskclock","com.android.deskclock","com.sec.android.app.clockpackage"};
+    }
+    private App widgetTarget(String kind){
+        String key=prefs.getString("widgetApp:"+kind,"");
+        if(!key.isEmpty()){App selected=appIndex.get(key);if(selected!=null)return selected;return null;}
+        for(String pkg:widgetPackages(kind))for(App app:apps)if(app.component.getPackageName().equals(pkg))return app;
+        if(!"music".equals(kind))for(App app:apps)if(app.label.equalsIgnoreCase(widgetName(kind)))return app;
+        return null;
+    }
+    private String widgetTargetLabel(String kind){
+        App target=widgetTarget(kind);return target!=null?target.label:("music".equals(kind)?"Spotify (choose if unavailable)":"Choose installed app");
+    }
+    private void openWidgetApp(String kind){
+        App app=widgetTarget(kind);
+        if(app!=null){launch(app);return;}
+        chooseWidgetApp(kind,true);
+    }
+    private void chooseWidgetApp(String kind,boolean openAfter){
+        ArrayList<App> choices=new ArrayList<>(apps);
+        if(choices.isEmpty()){Toast.makeText(this,"No launchable apps available.",Toast.LENGTH_SHORT).show();return;}
+        String[] labels=new String[choices.size()+1];
+        labels[0]="Automatic ("+("music".equals(kind)?"Spotify":widgetName(kind))+")";
+        for(int i=0;i<choices.size();i++)labels[i+1]=choices.get(i).label+" · "+choices.get(i).component.getPackageName();
+        new AlertDialog.Builder(this).setTitle(widgetName(kind)+" shortcut").setItems(labels,(dialog,index)->{
+            if(index==0){prefs.edit().remove("widgetApp:"+kind).apply();if(openAfter){App target=widgetTarget(kind);if(target!=null)launch(target);else Toast.makeText(this,"Default app unavailable. Choose an installed app.",Toast.LENGTH_SHORT).show();}}
+            else {App target=choices.get(index-1);prefs.edit().putString("widgetApp:"+kind,target.key()).apply();if(openAfter)launch(target);}
+            if(settings)showSettings();
+        }).setNegativeButton("Cancel",null).show();
     }
     private ImageView markButton(int kind,String description,Runnable run){
         ImageView v=new ImageView(this);v.setImageDrawable(new MikanMark(kind,PEACH));v.setScaleType(ImageView.ScaleType.FIT_CENTER);v.setPadding(dp(11),dp(11),dp(11),dp(11));v.setContentDescription(description);v.setFocusable(true);v.setBackground(MikanTheme.ripple(this,18));v.setOnClickListener(w->run.run());return v;
@@ -440,6 +482,9 @@ public class HomeActivity extends Activity {
                 settingsUi.note(body,"Choose a home page for each widget, or hide it completely.");
                 widgetSetting(body,"Clock","clockPage",1);widgetSetting(body,"Mikan","mikanPage",1);widgetSetting(body,"Music","musicPage",1);
                 widgetSetting(body,"Weather","weatherPage",1);widgetSetting(body,"Upcoming events","agendaPage",1);
+                settingsUi.heading(body,"TAP SHORTCUTS");
+                for(String kind:new String[]{"music","weather","clock"})settingsUi.row(body,widgetName(kind)+" opens",widgetTargetLabel(kind),()->chooseWidgetApp(kind,false));
+                settingsUi.note(body,"Music controls still control playback. Long-press weather for forecast settings.");
                 settingsUi.heading(body,"ARRANGEMENT");
                 settingsUi.choice(body,"Widget layout",new String[]{"Side by side","Stacked"},prefs.getBoolean("pairWidgets",true)?0:1,i->{prefs.edit().putBoolean("pairWidgets",i==0).apply();showSettings();});
                 settingsUi.toggle(body,"Pair clock and weather","When both are on the same page",prefs.getBoolean("pairTop",true),on->{prefs.edit().putBoolean("pairTop",on).apply();showSettings();});

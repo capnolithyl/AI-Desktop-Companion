@@ -39,3 +39,6 @@ Before applying a lockscreen wallpaper, preview the portrait display aspect rati
 
 ## v0.11.1 performance
 Warm Home retains the existing view; package changes trigger debounced asynchronous catalog refresh, and app icons load on demand. Cold initial app labels still queried synchronously. Bounded icon and artwork caches, deferred initial media refresh, foreground timers only. Settings > System & updates > Performance diagnostics shows in-memory timing samples (Activity callback to pre-draw, not actual system touch-to-display latency), home build, catalog and media/badge refresh, with Copy/Reset. No telemetry or new permissions. Real-device performance and package/permission regression tests pending.
+
+## v0.11.2 widget shortcuts
+Tap the music card outside its interactive controls to open Spotify by default, a configured weather card to open installed Weather, and the clock/date to open Clock. Settings > Widgets > Tap shortcuts selects another installed app or automatic default. Missing targets offer a local app picker. Weather long-press retains forecast options and unconfigured tap retains city setup. No network or new permissions; selected targets local, not included in current backup. Owner reports perceived improvement in v0.11.1; objective benchmarks and v0.11.2 device validation pending.
