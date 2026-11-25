@@ -5,7 +5,7 @@ import {join} from "node:path";
 import {fileURLToPath} from "node:url";
 
 // Model revision, tokenizer and pooling are part of the cache identity.
-export const EMBEDDING_REVISION="all-MiniLM-L6-v2:855bcf54d21334332f75db10bdd48970ff0ef547:int8:mean:192";
+export const EMBEDDING_REVISION="bge-small-en-v1.5:c5ac6c397e27c80e0229ec647987f2e553fc0ba9:int8:cls:query-prefix:192";
 const root=()=>process.env.MIKAN_EMBEDDINGS_DIR||"/opt/mikan-embeddings";
 const interpreter=()=>join(root(),"venv/bin/python");
 export const embeddingsAvailable=()=>process.env.MIKAN_EMBEDDINGS_DISABLED!=="1"&&existsSync(interpreter())&&existsSync(join(root(),"model.onnx"))&&existsSync(join(root(),"tokenizer.json"));
@@ -17,7 +17,7 @@ export function rankSemantic(query,rows){
   if(!valid(query))return [];
   const scored=rows.filter(r=>valid(r.vector)).map(r=>({id:r.id,score:cosine(query,r.vector)})).filter(r=>Number.isFinite(r.score)).sort((a,b)=>b.score-a.score||a.id-b.id);
   // Nearest does not mean relevant. Conservative, tunable similarity floor.
-  const floor=Math.max(0.32,(scored[0]?.score??0)-0.14);
+  const floor=Math.max(0.45,(scored[0]?.score??0)-0.14);
   return scored.filter(r=>r.score>=floor).slice(0,6).map(r=>r.id);
 }
 

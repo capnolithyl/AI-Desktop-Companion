@@ -12,6 +12,9 @@ if not isinstance(texts, list) or not 1 <= len(texts) <= 129:
     raise ValueError("invalid embedding batch")
 if any(not isinstance(t, str) or len(t) > 2000 for t in texts):
     raise ValueError("invalid embedding text")
+# BGE uses an asymmetric query instruction and first-token pooling.
+# The first item is always the retrieval query; remaining items are facts.
+texts[0] = "Represent this sentence for searching relevant passages: " + texts[0]
 tokenizer = Tokenizer.from_file(os.path.join(root, "tokenizer.json"))
 tokenizer.enable_truncation(max_length=192)
 tokenizer.enable_padding(pad_id=0, pad_token="[PAD]")
@@ -31,7 +34,9 @@ for start in range(0, len(texts), 8):
         "token_type_ids": np.array([e.type_ids for e in enc], dtype=np.int64),
     }
     hidden = session.run(None, {k: v for k, v in inputs.items() if k in names})[0]
-    pooled = (hidden * mask[:, :, None]).sum(axis=1) / np.maximum(mask.sum(axis=1)[:, None], 1)
+    if hidden.ndim != 3 or hidden.shape[-1] != 384:
+        raise ValueError("unexpected embedding model output shape")
+    pooled = hidden[:, 0, :].astype(np.float32, copy=True)
     pooled /= np.maximum(np.linalg.norm(pooled, axis=1, keepdims=True), 1e-12)
     vectors.extend(pooled.astype(np.float32).tolist())
 json.dump(vectors, sys.stdout, separators=(",", ":"), allow_nan=False)
