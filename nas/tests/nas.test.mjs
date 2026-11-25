@@ -1196,3 +1196,52 @@ test("interrupted memory result is not persisted even if the model returns after
     assert.equal(store.learning.getStatus().queued,0);assert.equal(store.listMemories().length,1);
   }finally{store.db.close();}
 });
+
+test("native simple chat sees recent assistant replies and private persona in one call",async()=>{
+ const {executeNasTurn}=await import("../turn.mjs"),store=openStore(":memory:");
+ try{
+  store.saveProfile({...DEFAULT_COMPANION_PROFILE,systemPrompt:"Private persona marker"});
+  const chat=store.newConversation();
+  store.append(chat.id,"user","Give me a playlist.");
+  store.append(chat.id,"assistant","Master of Puppets by Metal Metallica.");
+  const question="Long live Metal Metallica, pioneers of metallic metal.";store.append(chat.id,"user",question);
+  const memory={text:"Private memory marker",ids:[],auditLines:[]};
+  store.library.context=()=>memory;
+  let calls=0;
+  const result=await executeNasTurn({store,conversationId:chat.id,question,selected:{provider:"cerebras",model:"gpt-oss-120b",historyChars:32000,reasoningEffort:"medium"},mode:"simple",publicAgent:true,reserve:()=>calls++,canRequest:()=>true,search:async()=>{throw Error("unexpected public search");},requestModel:async args=>{
+   assert.equal(args.history.at(-2).content,"Master of Puppets by Metal Metallica.");
+   assert.match(args.system,/Private persona marker/);
+   assert.match(args.system,/Private memory marker/);
+   assert.deepEqual(args.agentTools.map(t=>t.function.name),["request_public_research"]);
+   assert.deepEqual(args.agentTools[0].function.parameters.properties,{});
+   return {content:"Okay, you caught my typo.",toolCalls:[]};
+  }});
+  assert.equal(calls,1);assert.equal(result.answer,"Okay, you caught my typo.");
+  assert.equal(result.memory,memory);assert.deepEqual(result.researched.sources,[]);
+ }finally{store.db.close();}
+});
+
+test("private conversation handoff does not pass persona, memory, assistant history or tool arguments to public research",async()=>{
+ const {executeNasTurn}=await import("../turn.mjs"),store=openStore(":memory:");
+ try{
+  store.saveProfile({...DEFAULT_COMPANION_PROFILE,systemPrompt:"PRIVATE_PERSONA_SENTINEL"});
+  store.library.context=()=>({text:"PRIVATE_MEMORY_SENTINEL",ids:[],auditLines:[]});
+  const chat=store.newConversation();
+  store.append(chat.id,"user","Tell me about the Lantern album.");
+  store.append(chat.id,"assistant","PRIVATE_ASSISTANT_SENTINEL");
+  const question="Could you tell me more?";store.append(chat.id,"user",question);
+  let calls=0;const searches=[];
+  const result=await executeNasTurn({store,conversationId:chat.id,question,selected:{provider:"cerebras",model:"gpt-oss-120b",historyChars:32000,reasoningEffort:"medium"},mode:"simple",publicAgent:true,reserve:()=>{},canRequest:()=>true,search:async q=>{searches.push(q);return [{url:"https://example.org/lantern",title:"Lantern album",content:"Lantern has four tracks.",kind:"preview"}];},requestModel:async args=>{
+   calls++;
+   if(calls===1){
+    assert.match(JSON.stringify(args.history),/PRIVATE_ASSISTANT_SENTINEL/);
+    return {content:"PRIVATE_DRAFT_SENTINEL",toolCalls:[{id:"handoff",type:"function",function:{name:"request_public_research",arguments:'{"query":"PRIVATE_ARGUMENT_SENTINEL"}'}}]};
+   }
+   assert.doesNotMatch(JSON.stringify({system:args.system,history:args.history}),/PRIVATE_(?:PERSONA|MEMORY|ASSISTANT|DRAFT|ARGUMENT)_SENTINEL/);
+   if(calls===2)return {content:"",toolCalls:[{id:"search",type:"function",function:{name:"search_web",arguments:'{"query":"Lantern album tracks"}'}}]};
+   return {content:"Lantern has four tracks [1].",toolCalls:[]};
+  }});
+  assert.equal(calls,3);assert.deepEqual(searches,["Lantern album tracks"]);
+  assert.equal(result.answer,"Lantern has four tracks [1].");assert.equal(result.researched.sources.length,1);
+ }finally{store.db.close();}
+});
