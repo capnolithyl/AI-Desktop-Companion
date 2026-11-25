@@ -6,6 +6,7 @@ import {shouldIncludeCharacterCanon,characterContinuityContext} from "../src/cha
 import {buildInterestContext} from "../src/interest-context.ts";
 import {shouldSearchArchive,archiveMemoryContext} from "../src/archive-memory.ts";
 import {memoryBudget,sessionMemoryContext} from "../src/memory-budget.ts";
+import {createSemanticRecall} from "./semantic-recall.mjs";
 
 function invalid(message){throw Object.assign(new Error(message),{status:400});}
 function missing(message="Record not found"){throw Object.assign(new Error(message),{status:404});}
@@ -63,6 +64,8 @@ export function createMemoryLibrary(db){
     if(!hadFactIndex)db.exec("INSERT INTO user_memory_search(rowid,fact,category,tags) SELECT id,fact,category,tags_json FROM user_memories");
   });
   const facts=()=>db.prepare(factSQL+" ORDER BY m.updated_at DESC,m.id DESC").all().map(decodeTags);
+  const semanticLookup=createSemanticRecall(db);
+  const semanticRecall=(query,options)=>semanticLookup(query,facts(),options);
   const canon=()=>db.prepare(canonSQL+" ORDER BY updated_at DESC,id DESC").all();
   const interests=()=>db.prepare(interestSQL+" ORDER BY updated_at DESC,id DESC").all().map(decodeTags);
   const summaries=()=>db.prepare("SELECT conversation_id AS conversationId,summary,last_message_rowid AS lastMessageRowid,updated_at AS updatedAt FROM session_summaries ORDER BY updated_at DESC").all();
@@ -98,8 +101,8 @@ export function createMemoryLibrary(db){
     if(!args||typeof args!=="object"||Array.isArray(args))invalid("Invalid memory arguments");
     try{return commands[action](args);}catch(e){if(/UNIQUE constraint failed/.test(e.message))throw Object.assign(new Error("A matching record already exists; nothing was overwritten"),{status:409});throw e;}
   }
-  function context(question,conversationId,{includeSessions=true,explicitRecall=false,modelLed=false}={}){
-    if(modelLed)return modelContext(question,explicitRecall);
+  function context(question,conversationId,{includeSessions=true,explicitRecall=false,modelLed=false,semanticIds=[]}={}){
+    if(modelLed)return modelContext(question,explicitRecall,semanticIds);
     const budget=memoryBudget(16384);
     // Whole-word relevance, without an extra inference request. Preserve
     // broad-domain matching for explicit recall and recommendation requests.
@@ -143,17 +146,21 @@ export function createMemoryLibrary(db){
   }
   // Native companion path: retrieval ranks data, not conversational intent.
   // No "is this a personal question?" or character-canon regex gates.
-  function modelContext(query,explicitRecall){
+  function modelContext(query,explicitRecall,semanticIds=[]){
     const budget=memoryBudget(16384),terms=meaningfulTerms(query);
     const overlap=value=>{const words=new Set(memoryTerms(value));return terms.reduce((n,t)=>n+Number(words.has(t)),0);};
-    const candidates=facts().filter(f=>f.importance>=90||overlap([f.fact,f.category,...(f.tags??[])].join(" "))>0);
+    const semantic=new Set(semanticIds);
+    const relevant=f=>semantic.has(f.id)||overlap([f.fact,f.category,...(f.tags??[])].join(" "))>0;
+    const candidates=facts().filter(f=>f.importance>=90||relevant(f));
     const pinned=rankMemories(candidates.filter(f=>f.importance>=90),query).slice(0,2);
-    const matched=rankMemories(candidates.filter(f=>!pinned.some(p=>p.id===f.id)&&overlap([f.fact,f.category,...(f.tags??[])].join(" "))>0),query);
+    const matched=rankMemories(candidates.filter(f=>!pinned.some(p=>p.id===f.id)&&relevant(f)),query,semanticIds);
     const rows=[];let length=0;
+    const hasProvenance=!!db.prepare("SELECT 1 FROM sqlite_master WHERE type=\x27table\x27 AND name=\x27automatic_memory_sources\x27").get();
     for(const f of [...pinned,...matched]){
       const stamp=new Date(f.createdAt<1e12?f.createdAt*1000:f.createdAt);
       const date=Number.isFinite(stamp.getTime())?stamp.toISOString().slice(0,10):"unknown date";
-      const line="- ["+date+"] "+f.fact;
+      const provenance=hasProvenance?db.prepare("SELECT evidence FROM automatic_memory_sources WHERE memory_kind=\x27user\x27 AND memory_id=? AND source_message_id IN (SELECT id FROM messages WHERE role=\x27user\x27)").get(f.id):null;
+      const line="- ["+date+"] "+f.fact+(provenance?.evidence?" [Owner source quote: "+JSON.stringify(provenance.evidence.slice(0,180))+"]":"");
       if(rows.length>=budget.maxFacts||length+line.length>budget.factChars)continue;
       rows.push({id:f.id,line});length+=line.length;
     }
@@ -179,5 +186,5 @@ export function createMemoryLibrary(db){
     }
     return windows;
   }
-  return {execute,context,markRecalled,recallDialogue};
+  return {execute,context,markRecalled,recallDialogue,semanticRecall};
 }

@@ -45,6 +45,9 @@ jobs:
           node --check nas/server.mjs
           node --check nas/storage.mjs
           node --check nas/learning.mjs
+          node --check nas/semantic-recall.mjs
+          python3 -m py_compile nas/embed-memory.py
+          rm -rf nas/__pycache__
           node --check nas/providers.mjs
           node --check nas/provider-settings.mjs
           node --check nas/research.mjs
@@ -63,7 +66,7 @@ jobs:
         run: docker build --platform linux/amd64 --label org.opencontainers.image.source=https://github.com/capnolithyl/AI-Desktop-Companion --label org.opencontainers.image.revision="$GITHUB_SHA" -f .nas-deploy/nas/Dockerfile -t mikan-nas:ci .nas-deploy
       - name: Smoke test packaged workspace
         run: |
-          docker run --rm -d --name mikan-nas-ci -p 127.0.0.1:3847:3847 -e MIKAN_REMOTE_KEY=01234567890123456789012345678901 -e NVIDIA_API_KEY=synthetic-test-key -e MIKAN_PROVIDER=nvidia mikan-nas:ci
+          docker run --rm -d --memory=512m --name mikan-nas-ci -p 127.0.0.1:3847:3847 -e MIKAN_REMOTE_KEY=01234567890123456789012345678901 -e NVIDIA_API_KEY=synthetic-test-key -e MIKAN_PROVIDER=nvidia mikan-nas:ci
           trap 'docker logs mikan-nas-ci; docker stop mikan-nas-ci' EXIT
           for i in $(seq 1 30); do
             if curl -fsS http://127.0.0.1:3847/api/health; then break; fi
@@ -71,6 +74,22 @@ jobs:
           done
           curl -fsS http://127.0.0.1:3847/api/health
           printf '%s' '{"question":"test","sources":[],"passages":[]}' | docker exec -i mikan-nas-ci /app/nas/mikan-research-native | grep -F '"kind":"passages"'
+          docker exec -i mikan-nas-ci node --input-type=module <<'JS'
+          import assert from "node:assert/strict";
+          import {embedLocal,embeddingsAvailable} from "/app/nas/semantic-recall.mjs";
+          import {seedEvalStore} from "/app/nas/brain-lab.mjs";
+          assert.equal(embeddingsAvailable(),true);
+          const vectors=await embedLocal(["Where do I live now?","The user lives in Brookmere.","The user likes playing guitar."]);
+          assert.equal(vectors.length,3);assert.equal(vectors[0].length,384);
+          const similarity=(a,b)=>a.reduce((n,v,i)=>n+v*b[i],0);
+          assert.ok(similarity(vectors[0],vectors[1])>similarity(vectors[0],vectors[2]),"retrieval embedding must distinguish relevant from unrelated passages");
+          const s=seedEvalStore();
+          for(const [q,id] of [["Where do I live now?",116],["And where did I grow up?",116],["Who sings for Cobalt Harbor?",103],["Which graphical interface framework powers Lantern Desk?",108],["What kind of food is my favorite?",106]]){
+            const r=await s.library.semanticRecall(q);console.log("Semantic recall",q,r);
+            assert.equal(r.status,"ready");assert.ok(r.ids.includes(id),JSON.stringify(r));
+          }
+          s.db.close();
+          JS
           docker exec -i mikan-nas-ci node --input-type=module <<'JS'
           import assert from "node:assert/strict";
           import {nativeResearchAvailable,reviewNativeResearch} from "/app/nas/native-research.mjs";

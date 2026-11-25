@@ -45,10 +45,12 @@ export function turnTrace(mode){
 export async function executeNasTurn({store,conversationId,question,selected,mode,promptFile="",requestModel,reserve,canRequest,search,read,trace=turnTrace(mode),onDelta=()=>{},activity=()=>{},signal,knowledge,publicAgent=process.env.MIKAN_PUBLIC_AGENT==="1",agentDiagnostics=false}){
   signal?.throwIfAborted();
   const modelLed=publicAgent&&["nvidia","groq","cerebras"].includes(selected.provider);
-  const {history,rawHistory,memory}=await trace.measure("context",()=>{
+  const {history,rawHistory,memory}=await trace.measure("context",async()=>{
     const rawHistory=store.messages(conversationId,80);
     const history=boundedHistory(rawHistory,selected.historyChars);
-    const memory=store.library.context(question,conversationId,modelLed?{modelLed:true,includeSessions:false}:undefined);
+    const semantic=modelLed?await store.library.semanticRecall?.(question,{signal}):null;
+    if(semantic&&!["unavailable","empty"].includes(semantic.status))activity({title:"Semantic memory retrieval",detail:semantic.status+" · "+semantic.indexed+"/"+semantic.total+" facts indexed",lines:semantic.ids.map(id=>"Memory #"+id)});
+    const memory=store.library.context(question,conversationId,modelLed?{modelLed:true,includeSessions:false,semanticIds:semantic?.ids??[]}:undefined);
     return {history,rawHistory,memory};
   });
   if(modelLed)return companionTurn({store,conversationId,question,history,rawHistory,memory,profile:currentProfile(promptFile,store),selected,mode,requestModel,reserve,canRequest,search,read,knowledge,trace,onDelta,activity,signal});
