@@ -24,7 +24,7 @@ final class MikanCard {
     private final Context context;
     private final FrameLayout root;
     private final TextView greeting,subtitle,status;
-    MikanCard(Context context,Drawable artwork,boolean transparent,String initialStatus,Runnable open){
+    MikanCard(Context context,Drawable artwork,boolean transparent,String initialStatus,String shortcutLabel,Runnable open){
         this.context=context;
         root=new FrameLayout(context);root.setMinimumHeight(dp(172));root.setClipToOutline(true);
         GradientDrawable background=MikanTheme.panel(context,25);
@@ -55,11 +55,11 @@ final class MikanCard {
         space(copy,7);
         status=label(initialStatus,11,PEACH,false);status.setGravity(Gravity.CENTER_VERTICAL);status.setPadding(dp(8),dp(5),dp(8),dp(5));status.setBackground(gradient(0x55402825,0x55402825,11,0x887d543e));copy.addView(status,new LinearLayout.LayoutParams(-1,-2));
         space(copy,4);
-        TextView shortcut=label("Open Mikan Web ↗",11,CREAM,false);shortcut.setPadding(dp(4),0,0,0);copy.addView(shortcut);
+        TextView shortcut=label(shortcutLabel+" ↗",11,CREAM,false);shortcut.setPadding(dp(4),0,0,0);copy.addView(shortcut);
         updateGreeting(java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY));
         GradientDrawable mask=new GradientDrawable();mask.setColor(Color.WHITE);mask.setCornerRadius(dp(25));
         root.setForeground(new RippleDrawable(ColorStateList.valueOf(0x22ffbf88),null,mask));
-        root.setFocusable(true);root.setOnClickListener(v->open.run());root.setContentDescription("Open Mikan Web");
+        root.setFocusable(true);root.setOnClickListener(v->open.run());root.setContentDescription(shortcutLabel);
     }
     View view(){return root;}
     void setStatus(String value){status.setText(value);}

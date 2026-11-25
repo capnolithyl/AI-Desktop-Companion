@@ -42,3 +42,6 @@ Warm Home retains the existing view; package changes trigger debounced asynchron
 
 ## v0.11.2 widget shortcuts
 Tap the music card outside its interactive controls to open Spotify by default, a configured weather card to open installed Weather, and the clock/date to open Clock. Settings > Widgets > Tap shortcuts selects another installed app or automatic default. Missing targets offer a local app picker. Weather long-press retains forecast options and unconfigured tap retains city setup. No network or new permissions; selected targets local, not included in current backup. Owner reports perceived improvement in v0.11.1; objective benchmarks and v0.11.2 device validation pending.
+
+## v0.11.3 Pocket Mikan shortcut
+The Mikan character card now opens installed Pocket Mikan (`dev.capnolithyl.mikan.pocket`) through its standard Android launch intent. The card label reflects app availability. If unavailable, the existing saved web URL is a fallback; Settings > Mikan also retains an explicit browser action. Pocket Mikan manages its own NAS address, login and WebView session. No new permissions, connection checks on tap, or changes to Pocket itself. Device validation pending.

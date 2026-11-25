@@ -30,6 +30,7 @@ import java.text.DateFormat;
 import java.util.*;
 
 public class HomeActivity extends Activity {
+    private static final String POCKET_PACKAGE="dev.capnolithyl.mikan.pocket";
     private static final int CREAM=0xffffe9d5, PEACH=0xffffbf88, MUTED=0xffe1bda9, PANEL=0xe6312325, BORDER=0xff805439;
     private final Handler handler=new Handler(Looper.getMainLooper());
     private final ArrayList<App> apps=new ArrayList<>();
@@ -301,8 +302,9 @@ public class HomeActivity extends Activity {
         if(widgetHere("mikanPage",1)){
             Drawable art=characterArt.get();
             String url=prefs.getString("mikanWebUrl","");
-            String status=url.isEmpty()?"Set up Mikan Web":url.equals(checkedWebUrl)&&!webStatus.isEmpty()?webStatus:"Web shortcut";
-            mikanCard=new MikanCard(this,art!=null?art:portraits.get(),art!=null,status,this::openMikan);
+            boolean pocket=pocketAvailable();
+            String status=pocket?"Pocket Mikan app":url.isEmpty()?"Set up Mikan Web":url.equals(checkedWebUrl)&&!webStatus.isEmpty()?webStatus:"Web fallback";
+            mikanCard=new MikanCard(this,art!=null?art:portraits.get(),art!=null,status,pocket?"Open Pocket Mikan":"Open Mikan Web",this::openMikan);
             characterBlock.addView(mikanCard.view());gap(characterBlock,12);
         }
         if(prefs.getBoolean("showFavoritesLabel",false)){appBlock.addView(text("YOUR FAVORITES",12,MUTED,true));gap(appBlock,4);}
@@ -511,6 +513,9 @@ public class HomeActivity extends Activity {
                 setting(body,"Reset portrait",()->new AlertDialog.Builder(this).setTitle("Reset portrait?").setNegativeButton("Cancel",null).setPositiveButton("Reset",(d,w)->{portraits.reset();showSettings();}).show());
                 settingsUi.note(body,"Use a transparent PNG for character artwork. Images are stored on this phone.");
                 settingsUi.heading(body,"COMPANION CONNECTION");
+                settingsUi.row(body,"Open Pocket Mikan",pocketAvailable()?"App installed":"App unavailable",this::openMikan);
+                settingsUi.note(body,"The home card prefers Pocket Mikan. The saved web address is only a fallback; Pocket Mikan manages its own connection.");
+                setting(body,"Open Mikan Web in browser",this::openMikanWeb);
                 settingsUi.row(body,"Mikan Web address",prefs.getString("mikanWebUrl","").isEmpty()?"Not configured":"Configured",()->editMikanUrl(false));
                 setting(body,"Check Mikan Web connection",this::checkMikanWeb);
                 if(!webStatus.isEmpty())settingsUi.note(body,"Last check: "+webStatus);
@@ -698,11 +703,23 @@ public class HomeActivity extends Activity {
                 checkingWeb=false;if(isFinishing()||isDestroyed()||!url.equals(prefs.getString("mikanWebUrl","")))return;
                 checkedWebUrl=url;webStatus=status;Toast.makeText(this,status+" · last check only",Toast.LENGTH_LONG).show();
                 if(settings&&settingsSection==SettingsHub.Section.MIKAN)showSettings();
-                if(!settings&&!drawer&&mikanCard!=null)mikanCard.setStatus(status);
+                if(!settings&&!drawer&&mikanCard!=null&&!pocketAvailable())mikanCard.setStatus(status);
             });
         },"mikan-web-check").start();
     }
+    private boolean pocketAvailable(){
+        for(App app:apps)if(POCKET_PACKAGE.equals(app.component.getPackageName()))return true;
+        return false;
+    }
     private void openMikan(){
+        try{
+            Intent intent=getPackageManager().getLaunchIntentForPackage(POCKET_PACKAGE);
+            if(intent!=null){intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED);startActivity(intent);return;}
+        }catch(RuntimeException ignored){}
+        Toast.makeText(this,"Pocket Mikan unavailable. Opening web fallback.",Toast.LENGTH_SHORT).show();
+        openMikanWeb();
+    }
+    private void openMikanWeb(){
         String url=prefs.getString("mikanWebUrl","");
         if(url.isEmpty()){editMikanUrl(true);return;}
         try{startActivity(new Intent(Intent.ACTION_VIEW,android.net.Uri.parse(url)).addCategory(Intent.CATEGORY_BROWSABLE));}
@@ -719,7 +736,7 @@ public class HomeActivity extends Activity {
             try{
                 java.net.URI uri=new java.net.URI(value);
                 if(!"https".equalsIgnoreCase(uri.getScheme())||uri.getHost()==null||uri.getUserInfo()!=null)throw new IllegalArgumentException();
-                prefs.edit().putString("mikanWebUrl",value).apply();checkedWebUrl="";webStatus="";dialog.dismiss();if(openAfter)openMikan();else if(settings)showSettings();
+                prefs.edit().putString("mikanWebUrl",value).apply();checkedWebUrl="";webStatus="";dialog.dismiss();if(openAfter)openMikanWeb();else if(settings)showSettings();
             }catch(Exception e){field.setError("Enter a valid HTTPS web address.");}
         }));dialog.show();
     }
