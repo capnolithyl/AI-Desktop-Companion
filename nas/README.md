@@ -8,6 +8,10 @@ Remaining parity work: desktop and Android native clients using the central NAS 
 
 The initial prototype setup below is historical. Existing installations should use the managed updater, not reinstall.
 
+## Remember this device (HTTPS workspace)
+
+The shared browser and Pocket Mikan login can remember a device for 30 days using a Secure, HttpOnly, SameSite=Strict cookie. The access key is submitted once, not stored in JavaScript storage. Unchecking the option creates a browser-session cookie with a 12-hour server-side limit. Sessions are stored as keyed token digests in SQLite and survive NAS restarts; Lock revokes the current token, and changing MIKAN_REMOTE_KEY invalidates existing sessions. The legacy bearer API still works. Use the existing Tailscale HTTPS URL: plain HTTP does not support the secure cookie. No APK or NAS secret changes needed; after deploying, sign in once on each device. Do not expose the API publicly.
+
 ## 1. Gather the files on Windows
 
 Use **main**. For a fresh development checkout:
