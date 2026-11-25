@@ -15,14 +15,13 @@ import java.util.function.IntUnaryOperator;
 final class DrawerIndexView extends View {
     private final Paint paint=new Paint(Paint.ANTI_ALIAS_FLAG);
     private final IntUnaryOperator jump;
-    private final Runnable finish;
     private int[] sections=new int[27];
     private int requested=-1,active=-1;
     private float center=0,strength=0;
     private boolean tracking;
     private ValueAnimator animation;
-    DrawerIndexView(Context c,IntUnaryOperator jump,Runnable finish,Runnable picker){
-        super(c);this.jump=jump;this.finish=finish;Arrays.fill(sections,-1);
+    DrawerIndexView(Context c,IntUnaryOperator jump,Runnable picker){
+        super(c);this.jump=jump;Arrays.fill(sections,-1);
         setFocusable(true);setContentDescription("Alphabetical index. Drag to jump, or activate to choose a letter.");
         setOnClickListener(v->picker.run());
     }
@@ -84,7 +83,7 @@ final class DrawerIndexView extends View {
             case MotionEvent.ACTION_UP:
             case MotionEvent.ACTION_CANCEL:
                 if(!tracking)return false;
-                tracking=false;requested=-1;active=-1;finish.run();
+                tracking=false;requested=-1;active=-1;
                 if(getParent()!=null)getParent().requestDisallowInterceptTouchEvent(false);
                 animateStrength(0f,190);return true;
             default:return tracking;

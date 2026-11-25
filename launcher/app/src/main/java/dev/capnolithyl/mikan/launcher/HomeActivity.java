@@ -598,13 +598,13 @@ public class HomeActivity extends Activity {
     }
     private final class DrawerRow extends LinearLayout {
         DrawerRow(){super(HomeActivity.this);setOrientation(HORIZONTAL);setGravity(Gravity.TOP);setLayoutParams(new AbsListView.LayoutParams(-1,-2));setDescendantFocusability(FOCUS_AFTER_DESCENDANTS);}
-        void bind(DrawerRows.Row row){
+        void bind(DrawerRows.Row row,List<App> items,boolean badges){
             int columns=drawerColumns();
             while(getChildCount()>columns)removeViewAt(getChildCount()-1);
             while(getChildCount()<columns)addView(new DrawerCell(),new LinearLayout.LayoutParams(0,-2,1));
             for(int i=0;i<columns;i++){
                 DrawerCell cell=(DrawerCell)getChildAt(i);
-                if(i<row.count){cell.setVisibility(View.VISIBLE);cell.bind(drawerAdapter.items.get(row.start+i),drawerAdapter.badges);}
+                if(i<row.count){cell.setVisibility(View.VISIBLE);cell.bind(items.get(row.start+i),badges);}
                 else{cell.bound=null;cell.setVisibility(View.INVISIBLE);cell.setContentDescription(null);}
             }
         }
@@ -649,7 +649,7 @@ public class HomeActivity extends Activity {
                 heading.setLayoutParams(new AbsListView.LayoutParams(-1,-2));return heading;
             }
             DrawerRow cells=recycled instanceof DrawerRow?(DrawerRow)recycled:new DrawerRow();
-            cells.bind(row);perf.record("drawer row bind",started);return cells;
+            cells.bind(row,items,badges);perf.record("drawer row bind",started);return cells;
         }
     }
     private int drawerColumns(){return Math.max(3,Math.min(5,prefs.getInt("drawerColumns",prefs.getInt("columns",4))));}
@@ -676,11 +676,10 @@ public class HomeActivity extends Activity {
         if(actual>=0)results.setSelectionFromTop(drawerSections[actual],0);
         return actual;
     }
-    private void hideDrawerLetter(){}
     private void chooseDrawerLetter(){
         ArrayList<Integer> letters=new ArrayList<>();ArrayList<String> labels=new ArrayList<>();
         for(int i=0;i<27;i++)if(drawerSections[i]>=0){letters.add(i);labels.add(DrawerData.letter(i));}
-        if(!labels.isEmpty())new AlertDialog.Builder(this).setTitle("Jump to letter").setItems(labels.toArray(new String[0]),(d,i)->{jumpDrawerLetter(letters.get(i));hideDrawerLetter();}).setNegativeButton("Cancel",null).show();
+        if(!labels.isEmpty())new AlertDialog.Builder(this).setTitle("Jump to letter").setItems(labels.toArray(new String[0]),(d,i)->{jumpDrawerLetter(letters.get(i));}).setNegativeButton("Cancel",null).show();
     }
     private void chooseDrawerSort(){
         new AlertDialog.Builder(this).setTitle("Sort apps").setSingleChoiceItems(new String[]{"Alphabetical A–Z","Alphabetical Z–A","Recently launched in Mikan","Frequently launched in Mikan"},drawerSort(),(d,i)->{prefs.edit().putInt("drawerSort",i).apply();d.dismiss();reloadDrawer();}).setNegativeButton("Cancel",null).show();
@@ -757,7 +756,7 @@ public class HomeActivity extends Activity {
         results.setClipToPadding(false);results.setVerticalScrollBarEnabled(true);
         results.setSelector(new android.graphics.drawable.ColorDrawable(0x00000000));
         viewport.addView(results,new FrameLayout.LayoutParams(-1,-1));
-        drawerIndex=new DrawerIndexView(this,this::jumpDrawerLetter,this::hideDrawerLetter,this::chooseDrawerLetter);FrameLayout.LayoutParams ip=new FrameLayout.LayoutParams(dp(110),-1,Gravity.RIGHT);viewport.addView(drawerIndex,ip);
+        drawerIndex=new DrawerIndexView(this,this::jumpDrawerLetter,this::chooseDrawerLetter);FrameLayout.LayoutParams ip=new FrameLayout.LayoutParams(dp(110),-1,Gravity.RIGHT);viewport.addView(drawerIndex,ip);
         TextView empty=text("No matching apps.",16,MUTED,false);empty.setVisibility(View.GONE);viewport.addView(empty,new FrameLayout.LayoutParams(-1,-2,Gravity.TOP));results.setEmptyView(empty);
         drawerAdapter=new DrawerAdapter();results.setAdapter(drawerAdapter);
         final ListView grid=results;final EditText field=search;
