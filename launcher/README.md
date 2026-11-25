@@ -118,3 +118,7 @@ Settings > Widgets > Add Android widget: choose an existing page and installed h
 ## v0.15.2 visual widget picker
 
 Themed searchable picker groups widgets under installed app names and icons. Tap an app to expand its widgets; search by app or widget to see matching entries directly. Provider-reported default grid dimensions or dp sizes and numbered duplicate variants help distinguish choices. Static provider preview images load on demand in recycled rows, with a bounded thumbnail cache and explicit icon fallback. No live preview layouts or dynamic preview support yet; no widget IDs are allocated until selection. Binding, configuration, page/height and existing placements are unchanged. Owner screenshot confirmed v0.15.1 picker opened, but the flat package-name list was rejected; new picker CI/device verification pending.
+
+## v0.15.3 native widgets in the mixed grid
+
+Enable Home screen > Mixed app & widget grid, then long-press empty Home space or Mikan OS. Native widgets can now be dragged with apps and built-in widgets, resized using the existing handle or size menu, and removed with the minus button and confirmation. Provider minimum sizes and resize axes constrain spans; oversized or unplaceable widgets remain below the grid. Native grid coordinates are device-local and survive restart, but are not exported with portable settings. Section mode still uses full-width widgets with the separate height setting. The previous picker passed launcher CI and owner approved appearance; v0.15.3 CI and actual widget rendering/gesture tests pending.

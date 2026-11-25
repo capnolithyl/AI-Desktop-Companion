@@ -1,6 +1,6 @@
 # Mikan Launcher — living feature reference
 
-**Source baseline:** v0.15.2 (versionCode 35), themed visual Android widget picker, 2026-11-25. See Git history for implementation commit.
+**Source baseline:** v0.15.3 (versionCode 36), native widgets in mixed home grid, 2026-11-25. See Git history for implementation commit.
 **Development:** [PR #117](https://github.com/capnolithyl/AI-Desktop-Companion/pull/117), branch `feature/mikan-launcher-v01`. Check current branch and Gradle version before changing this document.
 **Purpose:** a free, personal, offline-first Android launcher inspired by the Mikan OS home-screen mockup. Separate from Pocket Mikan, desktop Mikan and the NAS. This document tracks the launcher only.
 
@@ -65,8 +65,9 @@ All six built-in widgets (clock, Mikan, music, weather, upcoming events, device 
 
 | Feature | Introduced | Current implementation / use | Evidence |
 | --- | --- | --- | --- |
-| Android widget picker | 0.15.2 | Replaces flat package-name list with themed expandable app groups, app icons, app/widget search, provider-reported default cell or dp dimensions and numbered variants for duplicate labels/sizes. Recycled rows load static provider preview images on demand; missing images use app icon and explicit no-preview label. Bounded 4 MiB thumbnail cache; no live preview layouts, dynamic previews, widget IDs, binding or network while browsing. Selection retains existing binding and configuration flow. | Implemented; CI/device pending. |
-| Android app widgets | 0.15.1 | Settings > Widgets > Add Android widget chooses an existing page and current-profile home-screen provider. Android consent/configuration flow; canceled bindings are deleted. Up to 12 live full-width widgets appended below either home layout, provider-native appearance/actions, configurable height, page move and removal via settings/page manager. Host listens while Activity visible; no launcher network requests or new manifest permissions. Device-specific bindings and heights excluded from portable JSON backup; retained on same-device layout restore. No mixed-grid drag, arbitrary width, work-profile or pinned-widget support yet. Provider-specific compatibility and network behavior vary. | Implemented; CI/device pending. |
+| Native widget grid | 0.15.3 | Mixed home layout includes native widgets alongside shortcuts and built-in cards. Direct body drag, resize handle/size menu, minus removal with confirmation; provider minimum dimensions and supported resize axes converted to conservative grid spans. Hosted content fills exact grid bounds and reports size changes to Android. Existing resolved tiles preserved on addition; oversized or unplaceable widgets remain below grid. Device-local placements stored separately from portable backup; reset mixed layout resets both, section mode retains full-width height setting. No new permissions. | Implemented; CI/device pending. |
+| Android widget picker | 0.15.2 | Replaces flat package-name list with themed expandable app groups, app icons, app/widget search, provider-reported default cell or dp dimensions and numbered variants for duplicate labels/sizes. Recycled rows load static provider preview images on demand; missing images use app icon and explicit no-preview label. Bounded 4 MiB thumbnail cache; no live preview layouts, dynamic previews, widget IDs, binding or network while browsing. Selection retains existing binding and configuration flow. | Owner approved picker appearance; CI passed, binding and detailed regression pending. |
+| Android app widgets | 0.15.1 | Settings > Widgets > Add Android widget chooses an existing page and current-profile home-screen provider. Android consent/configuration flow; canceled bindings are deleted. Up to 12 live widgets, full-width in section layout or mixed-grid placement since v0.15.3, provider-native appearance/actions, configurable height, page move and removal via settings/page manager. Host listens while Activity visible; no launcher network requests or new manifest permissions. Device-specific bindings and heights excluded from portable JSON backup; retained on same-device layout restore. Mixed-grid drag/resize added in v0.15.3; no work-profile or pinned-widget support yet. Provider-specific compatibility and network behavior vary. | Implemented; CI/device pending. |
 | Device information | 0.15.0 | Optional themed battery percentage/status and charge bar, RAM and internal storage usage; tap for details. Settings > Widgets > Device information selects page or Hidden (default). Both section and mixed layouts; movable/resizable in mixed grid and page manager; page/placement backed up. Shares asynchronous foreground-only 30s stats sampling with header, even if header is hidden. Android battery sticky snapshot, no network or new permission. Missing data shown as unavailable; no battery-life prediction. | Owner confirmed working; detailed regression pending. |
 | Clock/date | 0.1–0.7 | Local time and locale, respects Android 12/24-hour preference; short date, paw decoration; compact AM/PM line when paired. | Full-width and compact clock observed in 0.6/0.7; v0.8 typography observed. |
 | Music metadata/art | 0.4 | Android active MediaSession, prefer playing session, title/artist and album art where available. Notification listener access required. | Owner screenshot shows track, artist and artwork. |
@@ -171,7 +172,8 @@ Weather card also exposes refresh, city, units and clear location. No full-scree
 | 0.14.3 | Holiday calendar expansion and eight date-linked portraits | Implemented; CI/device pending. |
 | 0.15.0 | Optional local battery/device information widget | Launcher CI 45694485813 passed; owner confirmed widget works on phone. Detailed regression pending. |
 | 0.15.1 | Native Android AppWidget host, picker, consent/configuration, page and height management | Launcher CI 45697092452 passed; owner screenshot confirms picker opens and enumerates providers, not that binding/rendering works. Flat list usability rejected. |
-| 0.15.2 | Searchable themed app-grouped widget picker, previews and variant dimensions | Implemented; CI/device pending. |
+| 0.15.2 | Searchable themed app-grouped widget picker, previews and variant dimensions | Launcher CI 45698730597 passed; owner approved appearance. |
+| 0.15.3 | Native widget mixed-grid drag, resizing and removal | Implemented; CI/device pending. |
 
 ## 7. Outstanding verification checklist
 
@@ -244,6 +246,8 @@ Weather card also exposes refresh, city, units and clear location. No full-scree
 
 - [ ] v0.15.2 verify grouped browsing, expansion/collapse, search by app and widget, duplicate labels, static preview and fallback, keyboard, scrolling/recycling, cancellation, selecting exact variant and binding flow. CI/device pending.
 
+- [ ] v0.15.3 verify native widgets added before/after upgrade, both modes, drag and resize axes/minimum dimensions, actual provider rendering/actions and size callbacks, direct removal, collision/oversize fallback, restart, page changes, grid reset and portable backup without widget IDs. Pure Java mixed-layout tests expanded; CI/device pending.
+
 ## 8. Roadmap (not implemented)
 
 Planned milestones; version targets flexible. See [Trello roadmap](https://trello.com/c/VEk6xVz6). No arbitrary deadlines.
@@ -268,7 +272,7 @@ Eight uploaded portraits wired in v0.14.0 (launcher CI 45683723437 passed; owner
 Time-based expressions/artwork synchronized to remark context (owner approved), extend local remarks (contextual rotation in v0.11.7 and typed actions in v0.11.8), optional bounded NAS responses/status and offline personality. Delivery hints require reliable notification signal; cached expression art and default fallback.
 
 ### v0.15 — Expanded widgets
-v0.15.0 device information widget implemented, CI passed and owner confirmed working. v0.15.1 first native Android AppWidget hosting implemented (full-width managed section; CI passed, picker observed, binding/rendering compatibility pending). v0.15.2 replaces the rejected flat picker with themed grouped search and static previews. Remaining: native widget mixed-grid positioning/width, tasks/reminders, quick contacts, optional daily briefing and local fallback.
+v0.15.0 device information widget implemented, CI passed and owner confirmed working. v0.15.1 first native Android AppWidget hosting implemented (full-width managed section; CI passed, picker observed, binding/rendering compatibility pending). v0.15.2 themed grouped picker passed CI and owner approved its appearance. v0.15.3 native mixed-grid placement/resizing/removal implemented; CI and physical provider compatibility pending. Remaining: tasks/reminders, quick contacts, optional daily briefing and local fallback.
 
 ### v1.0 — Daily-driver release
 Performance/battery/startup regression, full backup/restore, crash recovery, offline boot and NAS-outage tests, stock launcher fallback, resolve outstanding bugs and merge with owner approval.

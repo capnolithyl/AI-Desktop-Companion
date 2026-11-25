@@ -377,11 +377,7 @@ public class HomeActivity extends Activity {
         LinearLayout[] sections=order==1?new LinearLayout[]{topWidgets,characterBlock,bottomWidgets,appBlock}:order==2?new LinearLayout[]{appBlock,topWidgets,characterBlock,bottomWidgets}:new LinearLayout[]{topWidgets,characterBlock,appBlock,bottomWidgets};
         for(LinearLayout section:sections)if(section.getChildCount()>0)body.addView(section);
         }
-        for(NativeWidgets.Entry entry:nativeWidgets.onPage(homePage+1)){
-            if(editingMixed)body.addView(action(nativeWidgets.label(entry)+" · Manage Android widget",()->nativeWidgetOptions(entry)));
-            else body.addView(nativeWidgets.view(entry),new LinearLayout.LayoutParams(-1,dp(entry.height)));
-            gap(body,10);
-        }
+        if(!mixed)for(NativeWidgets.Entry entry:nativeWidgets.onPage(homePage+1))appendNativeWidget(body,entry,false);
         int dockCount=prefs.getInt("dockCount",5);ArrayList<App> pinned=new ArrayList<>();for(String key:favorites){App app=find(key);if(app!=null)pinned.add(app);}
         LinearLayout dock=horizontal();dock.setOnLongClickListener(v->{openHomeEditor();return true;});dock.setPadding(0,dp(3),0,dp(3));if(!prefs.getBoolean("floatingDock",true)){dock.setBackground(panelShape(24));dock.setElevation(dp(2));}
         for(int i=0;i<dockCount;i++){
@@ -887,7 +883,7 @@ public class HomeActivity extends Activity {
                 settingsUi.heading(body,"LAYOUT");
                 setting(body,"Edit home screen",this::openHomeEditor);
                 settingsUi.toggle(body,"Mixed app & widget grid","Optional live grid; turn off to return to sections",prefs.getBoolean("mixedHome",false),on->{if(on)enableMixedLayout();else prefs.edit().putBoolean("mixedHome",false).apply();showSettings();});
-                if(prefs.getBoolean("mixedHome",false))setting(body,"Reset mixed grid positions",()->new AlertDialog.Builder(this).setTitle("Reset mixed grid?").setMessage("Repack widgets and apps. Existing favorites and page assignments remain.").setNegativeButton("Cancel",null).setPositiveButton("Reset",(d,i)->{prefs.edit().remove("mixedGridV1").apply();showSettings();}).show());
+                if(prefs.getBoolean("mixedHome",false))setting(body,"Reset mixed grid positions",()->new AlertDialog.Builder(this).setTitle("Reset mixed grid?").setMessage("Repack widgets and apps. Existing favorites and page assignments remain.").setNegativeButton("Cancel",null).setPositiveButton("Reset",(d,i)->{prefs.edit().remove("mixedGridV1").remove("nativeMixedGridV1").apply();showSettings();}).show());
                 settingsUi.toggle(body,"Header system stats","Small RAM and storage indicators",prefs.getBoolean("showSystemStats",true),on->{prefs.edit().putBoolean("showSystemStats",on).apply();showSettings();});
                 settingsUi.choice(body,"App grid",new String[]{"4 columns","5 columns"},prefs.getInt("columns",4)-4,i->{prefs.edit().putInt("columns",i+4).apply();showSettings();});
                 settingsUi.choice(body,"Rows per home page",new String[]{"1","2","3","4"},prefs.getInt("homeRows",2)-1,i->{prefs.edit().putInt("homeRows",i+1).apply();showSettings();});
@@ -912,7 +908,7 @@ public class HomeActivity extends Activity {
                 settingsUi.heading(body,"ANDROID WIDGETS");
                 settingsUi.row(body,"Add Android widget","Choose an installed app's widget",()->chooseNativeWidgetPage());
                 for(NativeWidgets.Entry entry:nativeWidgets.entries())settingsUi.row(body,nativeWidgets.label(entry),"Page "+entry.page+" · "+entry.height+" dp",()->nativeWidgetOptions(entry));
-                settingsUi.note(body,"Android widgets appear below the home grid. Manage page, height and removal here.");
+                settingsUi.note(body,"In mixed layout, move and resize Android widgets in Home edit mode. In section layout, widgets appear below the home grid. Manage page and removal here.");
                 settingsUi.heading(body,"TAP SHORTCUTS");
                 for(String kind:new String[]{"music","weather","clock"})settingsUi.row(body,widgetName(kind)+" opens",widgetTargetLabel(kind),()->chooseWidgetApp(kind,false));
                 settingsUi.note(body,"Music controls still control playback. Long-press weather for forecast settings.");
@@ -1201,6 +1197,7 @@ public class HomeActivity extends Activity {
     }
     private String widgetGridKey(String key){return "widget:"+key;}
     private String mixedLabel(String key){
+        NativeWidgets.Entry entry=nativeWidgets.find(key);if(entry!=null)return nativeWidgets.label(entry);
         for(int i=0;i<WIDGET_PAGES.length;i++)if(widgetGridKey(WIDGET_PAGES[i]).equals(key))return WIDGET_NAMES[i];
         App app=find(key);return app==null?"Unavailable shortcut":app.label;
     }
@@ -1228,23 +1225,50 @@ public class HomeActivity extends Activity {
         if(order==2)specs.addAll(shortcuts);specs.addAll(top);specs.addAll(middle);if(order==0)specs.addAll(shortcuts);specs.addAll(bottom);if(order==1)specs.addAll(shortcuts);
         MixedLayout model=mixedLayout();LinkedHashMap<String,MixedLayout.Rect> layout=model.resolve(specs,columns);
         if(layout==null){model=new MixedLayout();layout=model.resolve(specs,columns);}
-        if(layout==null){body.addView(text("Grid could not fit this page. Manage pages or disable mixed grid in settings.",14,CREAM,false));return;}
+        if(layout==null){body.addView(text("Grid could not fit this page. Manage pages or disable mixed grid in settings.",14,CREAM,false));for(NativeWidgets.Entry entry:nativeWidgets.onPage(homePage+1))appendNativeWidget(body,entry,true);return;}
+        // Preserve existing resolved app/built-in positions before placing native
+        // widgets; keep device-specific placements separate from portable backup.
+        MixedLayout local;
+        try{local=MixedLayout.parse(prefs.getString("nativeMixedGridV1",""));}catch(RuntimeException ex){local=new MixedLayout();}
+        model=MixedLayout.combine(model,local);
+        Set<String> keep=model.keys();keep.addAll(layout.keySet());model.remember(layout,keep);
+        List<NativeWidgets.Entry> fallback=new ArrayList<>();
+        int widthDp=Math.max(1,getResources().getConfiguration().screenWidthDp-32);
+        for(NativeWidgets.Entry entry:nativeWidgets.onPage(homePage+1)){
+            MixedLayout.Spec spec=nativeWidgets.spec(entry,columns,widthDp);
+            specs.add(spec);LinkedHashMap<String,MixedLayout.Rect> trial=model.resolve(specs,columns);
+            if(trial==null){specs.remove(specs.size()-1);fallback.add(entry);continue;}
+            layout=trial;keep.addAll(layout.keySet());model.remember(layout,keep);
+        }
         final MixedLayout saved=model;final LinkedHashMap<String,MixedLayout.Rect> current=layout;final int pageAt=homePage;
         MixedHomeGrid grid=new MixedHomeGrid(this,columns,editingMixed,current,specs,new MixedHomeGrid.Callbacks(){
             public void changed(Map<String,MixedLayout.Rect> next){if(editingMixed&&homePage==pageAt)saveMixedChange(saved,next);}
             public void rejected(){Toast.makeText(HomeActivity.this,"That position overlaps another tile or is too small.",Toast.LENGTH_SHORT).show();}
             public void editItem(String key){if(editingMixed&&homePage==pageAt)editMixedItem(key,columns,saved,current,specs);}
-            public void removeItem(String key){if(editingMixed&&homePage==pageAt&&!key.startsWith("widget:"))removeHomeShortcut(key);}
+            public void removeItem(String key){if(!editingMixed||homePage!=pageAt)return;NativeWidgets.Entry entry=nativeWidgets.find(key);if(entry!=null)confirmNativeRemoval(entry);else if(!key.startsWith("widget:"))removeHomeShortcut(key);}
         });
         grid.setOnLongClickListener(v->{if(!editingMixed)openHomeEditor();return true;});
         for(MixedLayout.Spec spec:specs){
             MixedLayout.Rect position=current.get(spec.key);View content;
-            if(spec.key.startsWith("widget:"))content=buildMixedWidget(spec.key.substring(7),position.w<columns);
+            NativeWidgets.Entry entry=nativeWidgets.find(spec.key);
+            if(entry!=null){
+                content=nativeWidgets.view(entry);if(editingMixed)content.setContentDescription(nativeWidgets.label(entry));
+            }else if(spec.key.startsWith("widget:"))content=buildMixedWidget(spec.key.substring(7),position.w<columns);
             else{App app=find(spec.key);content=app==null?text("Unavailable",11,MUTED,false):tile(app,true);}
             if(content!=null)grid.item(spec.key,content);
         }
         if(editingMixed){body.addView(action("Close vertical gaps",grid::compact));gap(body,6);}
         body.addView(grid,new LinearLayout.LayoutParams(-1,-2));
+        for(NativeWidgets.Entry entry:fallback)appendNativeWidget(body,entry,true);
+    }
+    private void appendNativeWidget(LinearLayout body,NativeWidgets.Entry entry,boolean fallback){
+        if(fallback)body.addView(text(nativeWidgets.label(entry)+" · Outside grid (size or space limit)",12,MUTED,false));
+        if(editingMixed)body.addView(action(nativeWidgets.label(entry)+" · Manage Android widget",()->nativeWidgetOptions(entry)));
+        else body.addView(nativeWidgets.view(entry),new LinearLayout.LayoutParams(-1,dp(entry.height)));
+        gap(body,10);
+    }
+    private void confirmNativeRemoval(NativeWidgets.Entry entry){
+        new AlertDialog.Builder(this).setTitle("Remove Android widget?").setMessage("Removes this widget from Mikan Home, not the app.").setNegativeButton("Cancel",null).setPositiveButton("Remove",(dd,j)->{if(editingMixed&&mixedScroll!=null)mixedScrollY=mixedScroll.getScrollY();nativeWidgets.remove(entry.id);refreshScreen();}).show();
     }
     private View buildMixedWidget(String key,boolean compact){
         switch(key){
@@ -1264,7 +1288,8 @@ public class HomeActivity extends Activity {
     }
     private void saveMixedChange(MixedLayout model,Map<String,MixedLayout.Rect> next){
         Set<String> keep=new HashSet<>(favorites);for(String key:WIDGET_PAGES)keep.add(widgetGridKey(key));
-        model.remember(next,keep);prefs.edit().putString("mixedGridV1",model.encode()).apply();mixedScrollY=mixedScroll==null?0:mixedScroll.getScrollY();showHome();
+        for(NativeWidgets.Entry entry:nativeWidgets.entries())keep.add(NativeWidgets.key(entry));
+        model.remember(next,keep);prefs.edit().putString("mixedGridV1",model.encodePartition(false)).putString("nativeMixedGridV1",model.encodePartition(true)).apply();mixedScrollY=mixedScroll==null?0:mixedScroll.getScrollY();showHome();
     }
     private void editMixedItem(String key,int columns,MixedLayout model,LinkedHashMap<String,MixedLayout.Rect> current,List<MixedLayout.Spec> specs){
         MixedLayout.Rect old=current.get(key);if(old==null)return;
@@ -1276,7 +1301,7 @@ public class HomeActivity extends Activity {
         MixedLayout.Spec spec=null;for(MixedLayout.Spec item:specs)if(item.key.equals(key))spec=item;
         if(spec==null)return;
         List<MixedLayout.Rect> sizes=new ArrayList<>();List<String> labels=new ArrayList<>();
-        for(int width=spec.minW;width<=columns;width++)for(int height=spec.minH;height<=Math.max(4,old.h);height++){
+        for(int width=spec.minW;width<=Math.min(columns,spec.maxW);width++)for(int height=spec.minH;height<=Math.min(spec.maxH,MixedLayout.nativeKey(key)?12:Math.max(4,old.h));height++){
             MixedLayout.Rect rect=new MixedLayout.Rect(old.x,old.y,width,height);
             if(spec.accepts(rect,columns)&&MixedLayout.vacant(current,key,rect,columns)){sizes.add(rect);labels.add(width+" × "+height+(width==old.w&&height==old.h?" (current)":""));}
         }
@@ -1476,7 +1501,7 @@ public class HomeActivity extends Activity {
                 int[] sizes={96,128,160,200,240,320,400,480,600};String[] labels=new String[sizes.length];
                 for(int j=0;j<sizes.length;j++)labels[j]=sizes[j]+" dp"+(sizes[j]==entry.height?" (current)":"");
                 new AlertDialog.Builder(this).setTitle("Widget height").setItems(labels,(dd,j)->{nativeWidgets.resize(entry.id,sizes[j]);refreshScreen();}).setNegativeButton("Cancel",null).show();
-            }else new AlertDialog.Builder(this).setTitle("Remove Android widget?").setMessage("Removes this widget from Mikan Home, not the app.").setNegativeButton("Cancel",null).setPositiveButton("Remove",(dd,j)->{nativeWidgets.remove(entry.id);refreshScreen();}).show();
+            }else confirmNativeRemoval(entry);
         }).setNegativeButton("Cancel",null).show();
     }
     private void moveEditorWidget(String key,String name){

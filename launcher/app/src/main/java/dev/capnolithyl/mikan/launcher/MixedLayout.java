@@ -12,9 +12,10 @@ final class MixedLayout {
         boolean overlaps(Rect r){return x<r.x+r.w&&x+w>r.x&&y<r.y+r.h&&y+h>r.y;}
     }
     static final class Spec {
-        final String key;final int minW,minH,w,h;
-        Spec(String key,int minW,int minH,int w,int h){this.key=key;this.minW=minW;this.minH=minH;this.w=w;this.h=h;}
-        boolean accepts(Rect r,int columns){return r.fits(columns)&&r.w>=minW&&r.h>=minH&&r.h<=12&&(key.startsWith("widget:")||(r.w==1&&r.h==1));}
+        final String key;final int minW,minH,w,h,maxW,maxH;
+        Spec(String key,int minW,int minH,int w,int h){this(key,minW,minH,w,h,5,12);}
+        Spec(String key,int minW,int minH,int w,int h,int maxW,int maxH){this.key=key;this.minW=minW;this.minH=minH;this.w=w;this.h=h;this.maxW=maxW;this.maxH=maxH;}
+        boolean accepts(Rect r,int columns){return r.fits(columns)&&r.w>=minW&&r.h>=minH&&r.w<=maxW&&r.h<=maxH&&r.h<=12&&(key.startsWith("widget:")||(r.w==1&&r.h==1));}
     }
     private final LinkedHashMap<String,Rect> saved=new LinkedHashMap<>();
     static MixedLayout parse(String raw){
@@ -23,7 +24,7 @@ final class MixedLayout {
         for(String line:raw.split("\n")){
             if(line.isEmpty())continue;
             String[] parts=line.split("\t",-1);
-            if(parts.length!=5||parts[0].isEmpty()||parts[0].length()>512||parts[0].contains("\r")||model.saved.containsKey(parts[0])||model.saved.size()>=1006)throw new IllegalArgumentException("Invalid grid record");
+            if(parts.length!=5||parts[0].isEmpty()||parts[0].length()>512||parts[0].contains("\r")||model.saved.containsKey(parts[0])||model.saved.size()>=1018)throw new IllegalArgumentException("Invalid grid record");
             Rect rect=new Rect(Integer.parseInt(parts[1]),Integer.parseInt(parts[2]),Integer.parseInt(parts[3]),Integer.parseInt(parts[4]));
             if(!rect.fits(5)||rect.h>12)throw new IllegalArgumentException("Invalid grid bounds");
             model.saved.put(parts[0],rect);
@@ -45,8 +46,9 @@ final class MixedLayout {
         LinkedHashMap<String,Rect> result=new LinkedHashMap<>();
         for(Spec spec:specs){Rect old=saved.get(spec.key);if(old!=null&&spec.accepts(old,columns)&&vacant(result,spec.key,old,columns))result.put(spec.key,old);}
         for(Spec spec:specs)if(!result.containsKey(spec.key)){
-            int width=Math.min(columns,Math.max(spec.minW,spec.w)),height=Math.max(spec.minH,spec.h);
-            Rect old=saved.get(spec.key);if(old!=null&&spec.key.startsWith("widget:")){width=Math.min(columns,Math.max(spec.minW,old.w));height=Math.max(spec.minH,old.h);}
+            if(spec.minW>columns||spec.minW>spec.maxW||spec.minH>spec.maxH||spec.minH>12)return null;
+            int width=Math.min(Math.min(columns,spec.maxW),Math.max(spec.minW,spec.w)),height=Math.min(spec.maxH,Math.max(spec.minH,spec.h));
+            Rect old=saved.get(spec.key);if(old!=null&&spec.key.startsWith("widget:")){width=Math.min(Math.min(columns,spec.maxW),Math.max(spec.minW,old.w));height=Math.min(spec.maxH,Math.max(spec.minH,old.h));}
             Rect found=null;
             outer:for(int y=0;y+height<=ROW_LIMIT;y++)for(int x=0;x+width<=columns;x++){
                 Rect proposed=new Rect(x,y,width,height);if(vacant(result,spec.key,proposed,columns)){found=proposed;break outer;}
@@ -75,6 +77,19 @@ final class MixedLayout {
             result.put(item.getKey(),next);
         }
         return result;
+    }
+    static final String NATIVE_PREFIX="widget:native:";
+    static boolean nativeKey(String key){return key.startsWith(NATIVE_PREFIX);}
+    static MixedLayout combine(MixedLayout portable,MixedLayout local){
+        MixedLayout result=new MixedLayout();
+        for(Map.Entry<String,Rect> e:portable.saved.entrySet())if(!nativeKey(e.getKey()))result.saved.put(e.getKey(),e.getValue());
+        for(Map.Entry<String,Rect> e:local.saved.entrySet())if(nativeKey(e.getKey()))result.saved.put(e.getKey(),e.getValue());
+        return result;
+    }
+    String encodePartition(boolean local){
+        MixedLayout result=new MixedLayout();
+        for(Map.Entry<String,Rect> e:saved.entrySet())if(nativeKey(e.getKey())==local)result.saved.put(e.getKey(),e.getValue());
+        return result.encode();
     }
     void forget(String key){saved.remove(key);}
     void remember(Map<String,Rect> current,Set<String> keep){saved.keySet().retainAll(keep);saved.putAll(current);}

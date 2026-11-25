@@ -58,10 +58,35 @@ final class NativeWidgets {
     private String encoded(){StringBuilder value=new StringBuilder();for(Entry e:items.values()){if(value.length()>0)value.append('\n');value.append(e.id).append(',').append(e.page).append(',').append(e.height);}return value.toString();}
     private void save(){prefs.edit().putString(STORE,encoded()).apply();}
     void move(int id,int page){Entry e=items.get(id);if(e!=null&&page>=1&&page<=20){e.page=page;save();}}
-    void resize(int id,int height){Entry e=items.get(id);if(e!=null){e.height=Math.max(96,Math.min(600,height));save();}}
+    void resize(int id,int height){Entry e=items.get(id);if(e!=null){e.height=Math.max(96,Math.min(600,height));save();forgetPosition(id);}}
     void removePage(int page){for(Entry e:items.values())if(e.page>page)e.page--;save();}
     void swapPages(int a,int b){if(a>20||b>20)return;for(Entry e:items.values()){if(e.page==a)e.page=b;else if(e.page==b)e.page=a;}save();}
-    void remove(int id){if(items.remove(id)!=null){save();delete(id);}if(items.isEmpty()&&pending<0)stopListening();}
+    static String key(Entry entry){return MixedLayout.NATIVE_PREFIX+entry.id;}
+    Entry find(String key){if(!MixedLayout.nativeKey(key))return null;try{return items.get(Integer.parseInt(key.substring(MixedLayout.NATIVE_PREFIX.length())));}catch(NumberFormatException ex){return null;}}
+    private void forgetPosition(int id){
+        try{MixedLayout local=MixedLayout.parse(prefs.getString("nativeMixedGridV1",""));local.forget(MixedLayout.NATIVE_PREFIX+id);prefs.edit().putString("nativeMixedGridV1",local.encodePartition(true)).apply();}catch(RuntimeException ignored){}
+    }
+    void remove(int id){if(items.remove(id)!=null){save();forgetPosition(id);delete(id);}if(items.isEmpty()&&pending<0)stopListening();}
+    MixedLayout.Spec spec(Entry entry,int columns,int widthDp){
+        AppWidgetProviderInfo provider=info(entry.id);
+        float density=activity.getResources().getDisplayMetrics().density;
+        int defaultWidth=provider==null?1:Math.max(1,(int)Math.ceil(provider.minWidth/density));
+        int defaultHeight=provider==null?128:Math.max(1,(int)Math.ceil(provider.minHeight/density));
+        boolean horizontal=provider!=null&&(provider.resizeMode&AppWidgetProviderInfo.RESIZE_HORIZONTAL)!=0;
+        boolean vertical=provider!=null&&(provider.resizeMode&AppWidgetProviderInfo.RESIZE_VERTICAL)!=0;
+        int minWidth=horizontal&&provider.minResizeWidth>0?(int)Math.ceil(provider.minResizeWidth/density):defaultWidth;
+        int minHeight=vertical&&provider.minResizeHeight>0?(int)Math.ceil(provider.minResizeHeight/density):defaultHeight;
+        // Grid rectangles include six dp of spacing. Round up conservatively so
+        // the host rectangle meets the provider's declared minimum.
+        int minW=Math.max(1,(int)Math.ceil((minWidth+6)*columns/(double)Math.max(1,widthDp)));
+        int minH=Math.max(1,(int)Math.ceil((minHeight+6)/44.0));
+        int defaultW=Math.max(minW,(int)Math.ceil((defaultWidth+6)*columns/(double)Math.max(1,widthDp)));
+        int defaultH=Math.max(minH,(int)Math.ceil((Math.max(entry.height,defaultHeight)+6)/44.0));
+        if(!horizontal)minW=defaultW;
+        if(!vertical)minH=Math.max(minH,(int)Math.ceil((defaultHeight+6)/44.0));
+        int maxW=horizontal?columns:minW,maxH=vertical?12:minH;
+        return new MixedLayout.Spec(key(entry),minW,minH,Math.min(columns,defaultW),Math.min(maxH,defaultH),maxW,maxH);
+    }
     private void delete(int id){try{host.deleteAppWidgetId(id);}catch(RuntimeException ignored){}}
     private void clearPending(){pending=-1;prefs.edit().remove(PENDING).remove(PAGE).apply();}
     private void cancel(){if(pending>0&&!items.containsKey(pending))delete(pending);clearPending();if(items.isEmpty())stopListening();}

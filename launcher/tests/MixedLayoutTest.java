@@ -21,6 +21,26 @@ public final class MixedLayoutTest {
         check(compact.get("widget:clockPage").y==0&&compact.get("widget:weatherPage").y==0);
         check(compact.get("widget:mikanPage").y==2&&compact.get("a").y==1);
         for(String key:compact.keySet()){MixedLayout.Rect rect=compact.get(key),old=gaps.get(key);check(rect.x==old.x&&rect.w==old.w&&rect.h==old.h&&rect.y<=old.y&&MixedLayout.vacant(compact,key,rect,4));}
+        String nativeKey=MixedLayout.NATIVE_PREFIX+"42";
+        MixedLayout.Spec nativeSpec=new MixedLayout.Spec(nativeKey,2,3,3,4,4,8);
+        check(!nativeSpec.accepts(new MixedLayout.Rect(0,0,1,4),4));
+        check(!nativeSpec.accepts(new MixedLayout.Rect(0,0,3,9),4));
+        check(nativeSpec.accepts(new MixedLayout.Rect(0,0,4,8),4));
+        MixedLayout.Spec fixed=new MixedLayout.Spec(nativeKey,2,3,2,3,2,3);
+        check(!fixed.accepts(new MixedLayout.Rect(0,0,3,3),4));
+        check(!fixed.accepts(new MixedLayout.Rect(0,0,2,4),4));
+        check(new MixedLayout().resolve(Arrays.asList(new MixedLayout.Spec(nativeKey,5,3,5,3,5,3)),4)==null);
+        MixedLayout portable=new MixedLayout();Map<String,MixedLayout.Rect> base=portable.resolve(specs,4);
+        portable.remember(base,base.keySet());
+        List<MixedLayout.Spec> combinedSpecs=new ArrayList<>(specs);combinedSpecs.add(nativeSpec);
+        Map<String,MixedLayout.Rect> withNative=portable.resolve(combinedSpecs,4);
+        check(withNative!=null&&withNative.size()==5);
+        for(String key:base.keySet()){MixedLayout.Rect a=base.get(key),b=withNative.get(key);check(a.x==b.x&&a.y==b.y&&a.w==b.w&&a.h==b.h);}
+        portable.remember(withNative,withNative.keySet());
+        MixedLayout local=MixedLayout.parse(portable.encodePartition(true)),other=MixedLayout.parse(portable.encodePartition(false));
+        check(local.keys().size()==1&&local.keys().contains(nativeKey)&&!other.keys().contains(nativeKey));
+        MixedLayout joined=MixedLayout.combine(other,local);check(joined.resolve(combinedSpecs,4).get(nativeKey).h==withNative.get(nativeKey).h);
+        joined.forget(nativeKey);check(MixedLayout.parse(joined.encodePartition(true)).keys().isEmpty());
         System.out.println("MixedLayout tests passed");
     }
 }

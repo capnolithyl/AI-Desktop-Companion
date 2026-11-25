@@ -48,8 +48,10 @@ final class MixedHomeGrid extends ViewGroup {
         // Isolate elevated widget cards in their own layer. Their shadows must not
         // put them above the editor's touch surface (or its resize/remove controls).
         FrameLayout contentLayer=new FrameLayout(getContext());
-        contentLayer.addView(content,new FrameLayout.LayoutParams(-1,-2,Gravity.TOP));
-        frame.addView(contentLayer,new FrameLayout.LayoutParams(-1,-2,Gravity.TOP));
+        boolean nativeWidget=MixedLayout.nativeKey(key);
+        int contentHeight=nativeWidget?-1:-2;
+        contentLayer.addView(content,new FrameLayout.LayoutParams(-1,contentHeight,Gravity.TOP));
+        frame.addView(contentLayer,new FrameLayout.LayoutParams(-1,contentHeight,Gravity.TOP));
         if(editing){
             contentLayer.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS);
             View move=new View(getContext());move.setBackground(outline(0xbaffbf88));move.setContentDescription("Move "+key);move.setFocusable(true);
@@ -60,7 +62,8 @@ final class MixedHomeGrid extends ViewGroup {
             if(key.startsWith("widget:")){
                 TextView handle=new TextView(getContext());handle.setText("↘");handle.setTextColor(0xffffe9d5);handle.setTextSize(17);handle.setGravity(Gravity.CENTER);handle.setContentDescription("Resize "+key);handle.setBackground(controlBackground());handle.setElevation(dp(4));handle.setFocusable(true);handle.setOnClickListener(v->callbacks.editItem(key));handle.setOnLongClickListener(v->start(frame,key,true,frame.getWidth()/2f,frame.getHeight()/2f));
                 FrameLayout.LayoutParams hp=new FrameLayout.LayoutParams(dp(36),dp(36),Gravity.BOTTOM|Gravity.RIGHT);frame.addView(handle,hp);
-            }else{
+            }
+            if(!key.startsWith("widget:")||nativeWidget){
                 TextView remove=new TextView(getContext());remove.setText("−");remove.setTextSize(22);remove.setTextColor(0xffffe9d5);remove.setGravity(Gravity.CENTER);
                 GradientDrawable background=new GradientDrawable();background.setColor(0xff704339);background.setCornerRadius(dp(18));background.setStroke(dp(1),0xffb68158);remove.setBackground(background);remove.setElevation(dp(4));
                 CharSequence label=content.getContentDescription();remove.setContentDescription("Remove "+(label==null?"shortcut":label)+" from Home");remove.setFocusable(true);
@@ -122,6 +125,9 @@ final class MixedHomeGrid extends ViewGroup {
         for(Map.Entry<View,String> entry:keys.entrySet()){
             MixedLayout.Rect r=positions.get(entry.getValue());View v=entry.getKey();
             int childWidth=Math.max(1,(r.x+r.w)*width/columns-r.x*width/columns-dp(6));
+            // Hosted RemoteViews fill the final exact grid rectangle; their intrinsic
+            // measurement must not force a row larger than the user's chosen span.
+            if(MixedLayout.nativeKey(entry.getValue()))continue;
             v.measure(MeasureSpec.makeMeasureSpec(childWidth,MeasureSpec.EXACTLY),MeasureSpec.makeMeasureSpec(0,MeasureSpec.UNSPECIFIED));
             int need=v.getMeasuredHeight()+dp(6),current=0;for(int y=r.y;y<r.y+r.h;y++)current+=heights[y];
             if(need>current){int extra=need-current;for(int y=0;y<r.h;y++)heights[r.y+y]+=extra/r.h+(y<extra%r.h?1:0);}
