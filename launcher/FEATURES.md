@@ -57,7 +57,7 @@ All five built-in widgets (clock, Mikan, music, weather, upcoming events) can be
 | Compact music panel | 0.7 | Smaller art/text, elapsed and total time below scrubber when paired. | v0.7 screenshot observed. |
 | Weather | 0.7 | Choose a city through Open-Meteo geocoding. Current temperature/condition, high/low, custom weather glyph, city and attribution. Fahrenheit default, Celsius toggle. | Owner v0.7 screenshot shows current conditions, temperature and range; refresh/units/cache still pending. |
 | Weather cache | 0.7 | Selected city/coordinates and snapshot saved locally; 30-min freshness window, 5-min retry throttling, stale/cached label. Refresh while visible and foregrounded, or explicit action. Can clear city/cache. | Implemented; offline and retry tests pending. |
-| Upcoming calendar | 0.7 / 0.11.5 | Android visible Instances query, read-only permission; up to two upcoming/ongoing events in next seven days, dates/times and all-day support. Explicitly canceled events excluded; unset status accepted. Refresh on resume, manual refresh/diagnostics on long-press; tap opens calendar app or permission prompt. Distinguish absent local/visible calendars from empty agenda. | Owner screenshot reported false empty agenda despite events in Calendar; fix implemented, actual cause/device validation pending. |
+| Upcoming calendar | 0.7 / 0.11.5 | Android visible Instances query, read-only permission; up to two upcoming/ongoing events in next seven days, dates/times and all-day support. Explicitly canceled events excluded; unset status accepted. Refresh on resume, manual refresh/diagnostics on long-press; tap opens calendar app or permission prompt. Distinguish absent local/visible calendars from empty agenda. | Owner confirmed upcoming events displayed after enabling Google Calendar data sharing and synchronizing. Basic populated agenda verified; remaining regressions pending. |
 | Calendar privacy | 0.7 | Optional title hiding; no calendar data persisted or transmitted by launcher. | Implemented; grant/revoke and privacy behavior pending. |
 | Notification dots | 0.4 | Off by default; opt-in Android notification access; active non-ongoing, non-group-summary notification package identifiers in memory. Folder dots aggregate members. Not unread counts. | Implemented; dot behavior and revocation pending. |
 
@@ -117,7 +117,7 @@ Weather card also exposes refresh, city, units and clear location. No full-scree
 | 0.11.2 | Music, weather and clock tap shortcuts; configurable installed app targets | Implemented; CI and device tests pending. |
 | 0.11.3 | Prefer Pocket Mikan app on character card, retain explicit browser and missing-app fallback | Owner reports looking good; detailed device regression pending. |
 | 0.11.4 | Virtualized native drawer grid, recycled cells and local drawer timing diagnostics | Implemented; CI and device performance/regression pending. |
-| 0.11.5 | Null-safe calendar filtering, resume/manual refresh, counts-only provider diagnostics | Implemented; CI and owner calendar regression pending. |
+| 0.11.5 | Null-safe calendar filtering, resume/manual refresh, counts-only provider diagnostics | Owner confirmed basic populated agenda after Google Calendar data sharing and sync; other regressions pending. |
 
 ## 7. Outstanding verification checklist
 
@@ -149,7 +149,8 @@ Weather card also exposes refresh, city, units and clear location. No full-scree
 
 - [ ] v0.11.4 test first/repeated drawer opening (swipe and search tap), compare timings, scroll large catalog, rapid search and clearing/no results, app launch and long-press pin/folder/icon actions, icon import while drawer open, install/remove/update, notification dots on reused cells and permission revoke, 4/5 columns and large font, keyboard resize, Home/Back and offline operation. Confirm no stale icons/labels/badges and no Home latency regression.
 
-- [ ] v0.11.5 verify upcoming timed/all-day/recurring events from multiple visible calendars; unset and canceled statuses, local date/time boundaries, permission grant/revoke, empty and hidden/unsynced calendars, resume/long-press refresh, diagnostics from settings and widget; no event titles/accounts in diagnostic copy. Owner screenshot reported false empty state, exact device root cause unconfirmed.
+- [ ] v0.11.5 verify upcoming timed/all-day/recurring events from multiple visible calendars; unset and canceled statuses, local date/time boundaries, permission grant/revoke, empty and hidden/unsynced calendars, resume/long-press refresh, diagnostics from settings and widget; no event titles/accounts in diagnostic copy. Remaining regression cases pending.
+- [x] v0.11.5 basic agenda populated after enabling Google Calendar > Settings > General > Share Google Calendar data with other apps and refreshing/synchronizing. Diagnostic report initially showed zero local calendars, then calendars but no occurrences, before successful sync.
 
 ## 8. Roadmap (not implemented)
 
