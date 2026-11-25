@@ -143,7 +143,7 @@ export async function companionTurn({store,conversationId,question,history,rawHi
       try{
         if(++toolCount<=10&&a&&!containsCredential(call.function.arguments)){
           if(call.function.name==="recall_memory"&&typeof a.query==="string"&&a.query.trim()&&a.query.length<=400){
-            const found=store.library.context(a.query,conversationId,{includeSessions:false,explicitRecall:true});
+            const found=store.library.context(a.query,conversationId,{modelLed:true,includeSessions:false,explicitRecall:true});
             for(const id of found.ids)ids.add(id);auditLines.push(...found.auditLines);
             out={memory:found.text||"No matching memory",dialogue:store.library.recallDialogue?.(a.query)??[]};activity({title:"Memory retrieved",detail:"Model requested additional context",lines:[]});
           }else if(call.function.name==="find_knowledge"&&knowledge&&typeof a.query==="string"&&a.query.trim()&&a.query.length<=400){
