@@ -91,3 +91,6 @@ Long-press Home or Mikan OS to enter editing; if still using sections, choose Mo
 
 ## v0.12.8 direct tile dragging
 In live edit mode touch and drag any app or widget body; no separate move handle and no long-press needed. The gesture begins after Android touch slop, with the shadow anchored at the actual grip point. An isolated content layer keeps elevated widget cards below the editing surface, and opaque resize/remove controls remain on top. Tap a tile then empty space is still an alternative; touching another tile always permits dragging. Scroll from empty grid space. Outside edit mode widget actions are unchanged. Existing placements and collision rules unchanged. CI/device testing pending.
+
+## Planned v0.14 expression assets
+Theme engine deferred at owner request. Upload `default.webp`, `pouty.webp`, `sleepy.webp`, `surprised.webp`, `excited.webp`, `concerned.webp`, `smug.webp`, and `freezing.webp` into `app/src/main/assets/portraits/expressions/`. Standard Android assets are packaged alongside the generated assets; leave existing portrait fallback untouched. No runtime changes yet.

@@ -228,10 +228,11 @@ Quick app search implemented in v0.12.0: independent bottom overlay, ranked loca
 ### v0.12.3 — App drawer overhaul (implemented; verification pending)
 Alphabetical A–Z/Z–A, recent/frequent launcher-observed sorting, right-edge drag-to-scroll index, haptics, active-letter overlay, # bucket, custom category filter, hidden apps and independent density. No usage access; no global activity history. Device verification remains pending.
 
-### v0.13 — Theme engine
+### v0.13 — Theme engine (deferred to backlog)
 Accent colors, multiple schemes, adjustable wallpaper darkness/widget transparency, complete theme import/export including art, seasonal and optional local time/cached-weather themes.
 
-### v0.14 — Bring Mikan to life
+### v0.14 — Bring Mikan to life (next priority)
+Artwork staging: upload eight 4:3 WebP expression portraits to `launcher/app/src/main/assets/portraits/expressions/`; see directory README. No expression runtime implemented yet.
 Time-based expressions/artwork synchronized to remark context (owner approved), extend local remarks (contextual rotation in v0.11.7 and typed actions in v0.11.8), optional bounded NAS responses/status and offline personality. Delivery hints require reliable notification signal; cached expression art and default fallback.
 
 ### v0.15 — Expanded widgets
