@@ -932,3 +932,25 @@ test("native agent persists newly read pages even when fetch completes after tur
  generate:async()=>{round++;return round===1?{content:"",toolCalls:[{id:"s",type:"function",function:{name:"search_web",arguments:'{"query":"Lantern facts"}'}}]}:round===2?{content:"",toolCalls:[{id:"r",type:"function",function:{name:"read_webpage",arguments:'{"source":1}'}}]}:{content:"Lantern has four episodes [1].",toolCalls:[]};}});
  assert.equal(result.researched.agentEvidence.length,1);assert.equal(result.researched.agentEvidence[0].kind,"page");assert.equal(result.researched.agentEvidence[0].retrievedAt,now.getTime());
 });
+
+test("quota diagnostics distinguish rolling local limits, cooldown and upstream response",()=>{
+ const store=openStore(":memory:");let time=1795572120000;
+ try{
+ const models=providerSettings({initial:{provider:"nvidia",model:"test",key:"synthetic-test-key"},db:store.db,now:()=>time});
+ for(let i=0;i<30;i++)models.reserve("nvidia");
+ assert.equal(models.quota("nvidia").requestsLastMinute,30);assert.equal(models.quota("nvidia").reason,"local-minute");
+ assert.throws(()=>models.reserve("nvidia"),e=>e.code==="local-minute"&&e.quota.remainingMinute===0);
+ time+=60001;assert.equal(models.quota("nvidia").remainingMinute,30);
+ models.observe("nvidia",{status:429,headers:{"retry-after":"10"}});models.cooldown("nvidia");
+ assert.equal(models.quota("nvidia").reason,"cooldown");assert.equal(models.quota("nvidia").waitMs,300000);assert.equal(models.quota("nvidia").lastRejection.status,429);
+ time+=300001;assert.equal(models.quota("nvidia").reason,null);
+ }finally{store.db.close();}
+});
+test("provider exposes safe quota headers and HTTP status without raw response bodies",async()=>{
+ const {quotaHeaders}=await import("../providers.mjs");
+ const headers=new Headers({"retry-after":"15","x-ratelimit-remaining-requests":"0","authorization":"Bearer secret","x-ratelimit-reset":"private-data"});
+ assert.deepEqual(quotaHeaders(headers),{"retry-after":"15","x-ratelimit-remaining-requests":"0"});
+ const seen=[];
+ await assert.rejects(()=>generateReply({config:{provider:"nvidia",model:"test",key:"synthetic-test-key"},system:"test",history:[],onResponse:r=>seen.push(r),fetchImpl:async()=>new Response("private upstream details",{status:429,headers})}),e=>e.upstreamStatus===429&&!e.message.includes("private"));
+ assert.deepEqual(seen,[{status:429,headers:{"retry-after":"15","x-ratelimit-remaining-requests":"0"}}]);
+});

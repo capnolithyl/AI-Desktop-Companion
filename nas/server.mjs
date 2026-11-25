@@ -63,8 +63,8 @@ export function makeServer({store,config,key,promptFile="",maintenanceFile="/dat
   const maintenance=()=>existsSync(maintenanceFile);
   const unavailable=()=>busy||store.learning.isRunning()||brain.isRunning()||knowledge.isRunning();
   const requestModel=async args=>{
-    try{return await generate(args);}
-    catch(error){if(error?.upstreamStatus===429)models.cooldown(args.config.provider);throw error;}
+    try{return await generate({...args,onResponse:response=>models.observe(args.config.provider,response)});}
+    catch(error){if(error?.upstreamStatus===429){models.cooldown(args.config.provider);error.quota=models.quota(args.config.provider);}throw error;}
   };
   const brain=createBrainLab({db:store.db,models,requestModel,search,read,build:BUILD});
   const server=createServer(async(req,res)=>{

@@ -23,7 +23,7 @@ export function createBrainLab({db,models,requestModel,search,read,build,pace=pa
   for(const r of recent())if(r.state==="running"||r.state==="stopping"){r.state="interrupted";r.finishedAt=Date.now();save(r);}
   let current=null,controller=null;
   const catalog=()=>scenarioInfo;
-  const status=()=>({running:!!controller,current,history:db.prepare("SELECT json_remove(report_json,'$.cases') AS report_json FROM nas_brain_reports ORDER BY created_at DESC LIMIT 20").all().map(r=>JSON.parse(r.report_json)).filter(r=>r.id!==current?.id)});
+  const status=()=>({running:!!controller,current,providerDiagnostics:models.diagnostics(),history:db.prepare("SELECT json_remove(report_json,'$.cases') AS report_json FROM nas_brain_reports ORDER BY created_at DESC LIMIT 20").all().map(r=>JSON.parse(r.report_json)).filter(r=>r.id!==current?.id)});
   function start(body){
     if(controller)throw invalid("Brain Lab is already running",409);
     const {provider,model,scenarioIds,mode,repetitions,publicAgent=false}=body??{};
@@ -36,7 +36,7 @@ export function createBrainLab({db,models,requestModel,search,read,build,pace=pa
     const budget=CLOUD_EVAL_BUDGETS[provider];
     if(total>budget.maxTurns)throw invalid("Choose at most "+budget.maxTurns+" turns for "+provider);
     if(mode==="off"&&scenarios.some(s=>s.steps.some(t=>t.expect.web===true||t.expect.route==="research")))throw invalid("Enable Simple or Strict for web scenarios");
-    if(!models.available(provider))throw invalid("Provider request budget exhausted",429);
+    if(!models.available(provider))throw models.quotaError(provider);
     controller=new AbortController();const signal=controller.signal;
     const report={id:randomUUID(),state:"running",startedAt:Date.now(),finishedAt:null,build,provider,model,mode,repetitions,publicAgent,scenarioIds,total,done:0,currentLabel:"Starting",cases:[],environment:mode==="off"?"isolated-synthetic":"isolated-synthetic+live-public-web",writesToRealMemories:false};
     current=report;
@@ -55,15 +55,15 @@ export function createBrainLab({db,models,requestModel,search,read,build,pace=pa
           for(const step of scenario.steps){
             signal.throwIfAborted();report.currentLabel=row.number+" · "+scenario.label;save(report);
             await pace(selected.provider,signal);signal.throwIfAborted();
-            if(!models.available(selected.provider))throw invalid("Provider request budget exhausted",429);
+            if(!models.available(selected.provider))throw models.quotaError(selected.provider);
             const events=[],trace=turnTrace(report.mode);
             sandbox.append(chat.id,"user",step.user);
             // Each real request is counted by the production quota ledger.
-            if(!models.available(selected.provider))throw Object.assign(Error("NAS cloud request budget reached"),{status:429});
+            if(!models.available(selected.provider))throw models.quotaError(selected.provider);
             let result;
             try{result=await executeNasTurn({store:sandbox,conversationId:chat.id,question:step.user,selected,mode:report.mode,publicAgent:report.publicAgent,agentDiagnostics:true,requestModel,search,read,signal,trace,
               reserve:()=>models.reserve(selected.provider),canRequest:(slots=1)=>models.available(selected.provider,slots),activity:e=>events.push(e)});
-            }catch(e){row.steps.push({user:step.user,error:signal.aborted?"Stopped":typeof e?.code==="string"?e.code:"Provider or turn failed",timing:trace.snapshot(),events,actualModel:trace.actualModel()});report.done++;save(report);if(signal.aborted||e?.status===429||e?.upstreamStatus===429)throw e;continue;}
+            }catch(e){row.steps.push({user:step.user,error:signal.aborted?"Stopped":e?.upstreamStatus===429?"Upstream HTTP 429":typeof e?.code==="string"?e.code:"Provider or turn failed",...(e?.upstreamStatus===429?{upstreamStatus:429}:{}),timing:trace.snapshot(),events,actualModel:trace.actualModel()});report.done++;save(report);if(signal.aborted||e?.status===429||e?.upstreamStatus===429)throw e;continue;}
             signal.throwIfAborted();
             sandbox.append(chat.id,"assistant",result.answer,{...(result.researched.task?{researchTask:result.researched.task}:{}),...(result.researched.agentEvidence?.length?{agentEvidence:result.researched.agentEvidence}:{})});
             sandbox.library.markRecalled(result.memory.ids);
@@ -74,7 +74,7 @@ export function createBrainLab({db,models,requestModel,search,read,build,pace=pa
         }finally{sandbox.db.close();}
       }
       report.state="finished";
-    }catch(e){report.state=signal.aborted?"stopped":e?.status===429||e?.upstreamStatus===429?"quota":"failed";report.error=report.state==="quota"?"Provider quota reached; no retries":report.state==="failed"?"Turn or fixture execution failed":null;}
+    }catch(e){report.state=signal.aborted?"stopped":e?.status===429||e?.upstreamStatus===429?"quota":"failed";if(report.state==="quota"){report.quotaFailure={origin:e?.upstreamStatus===429?"upstream":e?.code??"local-unknown",upstreamStatus:e?.upstreamStatus===429?429:null,snapshot:e?.quota??models.quota(selected.provider)};report.error=report.quotaFailure.origin==="upstream"?"Provider returned HTTP 429; no retries":"NAS quota guard: "+report.quotaFailure.origin+"; no retries";}else report.error=report.state==="failed"?"Turn or fixture execution failed":null;}
     finally{report.finishedAt=Date.now();report.currentLabel="";controller=null;save(report);db.prepare("DELETE FROM nas_brain_reports WHERE id NOT IN (SELECT id FROM nas_brain_reports ORDER BY created_at DESC LIMIT 50)").run();}
   }
   function stop(){if(controller){current.state="stopping";controller.abort();save(current);}return {running:!!controller};}

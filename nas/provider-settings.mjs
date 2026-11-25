@@ -73,22 +73,34 @@ export function providerSettings({initial,env={},file="",db,now=Date.now}){
   // Count actual outbound attempts (not chat turns); retain counts across restarts.
   db.exec("CREATE TABLE IF NOT EXISTS nas_provider_requests (provider TEXT NOT NULL,started_at INTEGER NOT NULL); CREATE INDEX IF NOT EXISTS nas_provider_request_time ON nas_provider_requests(provider,started_at); CREATE TABLE IF NOT EXISTS nas_provider_cooldown(provider TEXT PRIMARY KEY,until_ms INTEGER NOT NULL)");
   const limits={nvidia:30,openrouter:15,gemini:5};
-  function available(p,slots=1){
-    const t=now();
-    const cooldown=db.prepare("SELECT until_ms FROM nas_provider_cooldown WHERE provider=?").get(p)?.until_ms??0;
-    if(cooldown>t)return false;
-    const recent=db.prepare("SELECT count(*) AS n FROM nas_provider_requests WHERE provider=? AND started_at>?").get(p,t-60000).n;
-    const daily=p==="openrouter"?db.prepare("SELECT count(*) AS n FROM nas_provider_requests WHERE provider=? AND started_at>=?").get(p,Math.floor(t/86400000)*86400000).n:0;
-    return recent+slots<=limits[p]&&daily+slots<=40;
+  const lastResponse=new Map(),lastRejection=new Map();
+  function quota(p,slots=1){
+    const t=now(),minuteLimit=limits[p],dayLimit=p==="openrouter"?40:null;
+    const cooldownUntil=db.prepare("SELECT until_ms FROM nas_provider_cooldown WHERE provider=?").get(p)?.until_ms??0;
+    const {n:requestsLastMinute,oldest}=db.prepare("SELECT count(*) AS n,min(started_at) AS oldest FROM nas_provider_requests WHERE provider=? AND started_at>?").get(p,t-60000);
+    const requestsToday=dayLimit===null?null:db.prepare("SELECT count(*) AS n FROM nas_provider_requests WHERE provider=? AND started_at>=?").get(p,Math.floor(t/86400000)*86400000).n;
+    const remainingMinute=Math.max(0,minuteLimit-requestsLastMinute),remainingDay=dayLimit===null?null:Math.max(0,dayLimit-requestsToday);
+    const reason=cooldownUntil>t?"cooldown":remainingDay!==null&&remainingDay<slots?"local-daily":remainingMinute<slots?"local-minute":null;
+    return {provider:p,observedAt:t,requestsLastMinute,minuteLimit,remainingMinute,requestsToday,dayLimit,remainingDay,cooldownUntil:cooldownUntil>t?cooldownUntil:null,waitMs:reason==="cooldown"?cooldownUntil-t:reason==="local-minute"?Math.max(1,(oldest??t)+60000-t):reason==="local-daily"?Math.floor(t/86400000+1)*86400000-t:0,reason,lastResponse:lastResponse.get(p)??null,lastRejection:lastRejection.get(p)??null};
+  }
+  function available(p,slots=1){return quota(p,slots).reason===null;}
+  function observe(p,response){
+    const record={...response,at:now()};
+    lastResponse.set(p,record);
+    if(record.status===429)lastRejection.set(p,record);
+  }
+  function quotaError(p){
+    const snapshot=quota(p);
+    return Object.assign(invalid("NAS provider budget unavailable: "+(snapshot.reason??"unknown"),429),{code:snapshot.reason??"local-quota",quota:snapshot});
   }
   function reserve(p){
-    if(!available(p))throw invalid("NAS cloud request budget reached. Try again later or select another provider.",429);
+    if(!available(p))throw quotaError(p);
     const t=now();
     db.prepare("DELETE FROM nas_provider_requests WHERE started_at<?").run(t-2*86400000);
     db.prepare("INSERT INTO nas_provider_requests(provider,started_at) VALUES(?,?)").run(p,t);
   }
   function cooldown(p){db.prepare("INSERT INTO nas_provider_cooldown(provider,until_ms) VALUES(?,?) ON CONFLICT(provider) DO UPDATE SET until_ms=excluded.until_ms").run(p,now()+300000);}
-  return {view,active,configFor,save,available,reserve,cooldown};
+  return {view,active,configFor,save,available,reserve,cooldown,quota,quotaError,observe,diagnostics:()=>PROVIDERS.map(p=>quota(p))};
 }
 export function boundedHistory(messages,budget){
   let remaining=budget;

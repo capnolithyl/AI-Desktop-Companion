@@ -13,6 +13,15 @@ export function providerConfig(env = process.env) {
   if (!key || key.length < 12) throw new Error("Configure the selected provider API key in nas/.env");
   return { provider, model, key };
 }
+// Only allowlisted numeric quota metadata; never retain raw provider bodies or arbitrary headers.
+export function quotaHeaders(headers){
+  const result={};
+  for(const name of ["retry-after","x-ratelimit-limit","x-ratelimit-remaining","x-ratelimit-reset","x-ratelimit-limit-requests","x-ratelimit-remaining-requests","x-ratelimit-reset-requests","x-ratelimit-limit-tokens","x-ratelimit-remaining-tokens","x-ratelimit-reset-tokens","ratelimit-limit","ratelimit-remaining","ratelimit-reset"]){
+    const value=headers?.get(name);
+    if(value&&value.length<=80&&(/^[0-9]+(?:\.[0-9]+)?(?:ms|s|m|h)?$/.test(value)||(name==="retry-after"&&/^[A-Z][a-z]{2}, \d{2} [A-Z][a-z]{2} \d{4} \d{2}:\d{2}:\d{2} GMT$/.test(value))))result[name]=value;
+  }
+  return result;
+}
 function remoteError(status) {
   return Object.assign(new Error("Cloud model request failed ("+status+")"),{upstreamStatus:status});
 }
@@ -20,7 +29,7 @@ function remoteError(status) {
 const safeReason=value=>typeof value==="string"&&/^[a-zA-Z0-9_-]{1,40}$/.test(value)?value:null;
 const tokenCount=value=>Number.isSafeInteger(value)&&value>=0&&value<=10000000?value:null;
 export function inferenceError(code){return Object.assign(Error(code),{code});}
-export async function generateReply({config, system, history, onDelta=()=>{}, onModel=()=>{}, onUsage=()=>{}, fetchImpl=fetch, temperature=0.7, maxTokens=4096,signal,structuredTool,agentTools,agentToolChoice="auto",agentThinking=false,agentEffort,rejectTruncated=false}) {
+export async function generateReply({config, system, history, onDelta=()=>{}, onModel=()=>{}, onUsage=()=>{}, onResponse=()=>{}, fetchImpl=fetch, temperature=0.7, maxTokens=4096,signal,structuredTool,agentTools,agentToolChoice="auto",agentThinking=false,agentEffort,rejectTruncated=false}) {
   const {provider,model,key} = config;
   const ultra=provider==="nvidia"&&model==="nvidia/nemotron-3-ultra-550b-a55b";
   // Ultra documents enable_thinking and medium_effort in chat_template_kwargs.
@@ -39,6 +48,7 @@ export async function generateReply({config, system, history, onDelta=()=>{}, on
           generationConfig:{maxOutputTokens:maxTokens,temperature,...(structuredTool?{responseMimeType:"application/json"}:{})}}),
         signal:signal?AbortSignal.any([signal,AbortSignal.timeout(120000)]):AbortSignal.timeout(120000)}
     );
+    onResponse({status:response.status,headers:quotaHeaders(response.headers)});
     const raw = await response.text();
     if (!response.ok) throw remoteError(response.status);
     const json = JSON.parse(raw);
@@ -68,6 +78,7 @@ export async function generateReply({config, system, history, onDelta=()=>{}, on
       messages:[{role:"system",content:system},...history.map(m=>agentTools&&m.role==="tool"?{role:"tool",tool_call_id:m.tool_call_id,content:m.content}:agentTools&&m.role==="assistant"&&m.tool_calls?{role:"assistant",content:m.content??null,tool_calls:m.tool_calls}:{role:m.role,content:m.content})]}),
     signal:signal?AbortSignal.any([signal,AbortSignal.timeout(120000)]):AbortSignal.timeout(120000)
   });
+  onResponse({status:response.status,headers:quotaHeaders(response.headers)});
   if (!response.ok) throw remoteError(response.status);
   if(structuredTool||agentTools){
     const data=await response.json(),choice=data.choices?.[0],message=choice?.message;
@@ -99,7 +110,7 @@ export async function generateReply({config, system, history, onDelta=()=>{}, on
     if(!data)return;
     let event;
     try {event=JSON.parse(data);}catch{return;}
-    if (event.error) throw Object.assign(new Error("Provider rejected the stream"),{upstreamStatus:Number(event.error.code)===429?429:undefined});
+    if (event.error){const status=Number(event.error.code)===429?429:undefined;if(status)onResponse({status,headers:quotaHeaders(response.headers),stream:true});throw Object.assign(new Error("Provider rejected the stream"),{upstreamStatus:status});}
     if(typeof event.model==="string"&&event.model.length<=160&&/^[\w./:-]+$/.test(event.model)&&!event.model.includes(key))onModel(event.model);
     finishReason=safeReason(event.choices?.[0]?.finish_reason)??finishReason;
     outputTokens=tokenCount(event.usage?.completion_tokens)??outputTokens;
