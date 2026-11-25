@@ -56,7 +56,11 @@ public class HomeActivity extends Activity {
     private GridView results;
     private DrawerAdapter drawerAdapter;
     private int drawerOpenCount;
-    private TextView clock, date, greeting;
+    private TextView clock, date, greeting, systemStats;
+    private DeviceStats.Snapshot statsSnapshot;
+    private boolean statsBusy;
+    private long lastStats=-30000;
+    private final Runnable statsRefresh=()->refreshSystemStats();
     private EditText search;
     private boolean drawer=false;
     private boolean settings=false;
@@ -80,7 +84,7 @@ public class HomeActivity extends Activity {
     private float touchX,touchY;
     private boolean seekGesture;
     private final Runnable progressTick=new Runnable(){public void run(){if(music!=null)music.updatePosition();handler.postDelayed(this,1000);}};
-    private final Runnable tick=new Runnable(){ public void run(){ updateClock(); handler.postDelayed(this,15000); } };
+    private final Runnable tick=new Runnable(){ public void run(){ updateClock(); refreshSystemStats(); handler.postDelayed(this,15000); } };
     private static final class App {
         final ComponentName component; final String label; final ResolveInfo info; final String folderKey;
         App(ComponentName component,String label,ResolveInfo info){this.component=component;this.label=label;this.info=info;this.folderKey=null;}
@@ -124,11 +128,11 @@ public class HomeActivity extends Activity {
         handler.removeCallbacks(tick);handler.postDelayed(tick,15000);
         handler.removeCallbacks(refreshExtras);handler.postDelayed(refreshExtras,2500);
         handler.removeCallbacks(progressTick);handler.postDelayed(progressTick,1000);
-        queueExtras();dashboard.resume();
+        queueExtras();dashboard.resume();queueSystemStats();
         if(catalogDirty)scheduleCatalog();
     }
     @Override protected void onPause(){
-        foreground=false;dashboard.pause();handler.removeCallbacks(tick);handler.removeCallbacks(refreshExtras);handler.removeCallbacks(progressTick);handler.removeCallbacks(delayedExtras);handler.removeCallbacks(catalogRefresh);
+        foreground=false;dashboard.pause();handler.removeCallbacks(statsRefresh);handler.removeCallbacks(tick);handler.removeCallbacks(refreshExtras);handler.removeCallbacks(progressTick);handler.removeCallbacks(delayedExtras);handler.removeCallbacks(catalogRefresh);
         entryKind=null;entryGeneration++;super.onPause();
     }
     @Override protected void onDestroy(){
@@ -141,7 +145,7 @@ public class HomeActivity extends Activity {
         beginEntry("Home intent");
         if(drawer||settings||homePage!=0){hideKeyboard();homePage=0;showHome();}
         else updateClock();
-        if(foreground){observeEntry();queueExtras();}
+        if(foreground){observeEntry();queueExtras();queueSystemStats();}
     }
     @Override public void onTrimMemory(int level){
         super.onTrimMemory(level);
@@ -213,7 +217,7 @@ public class HomeActivity extends Activity {
     }
     private Drawable homeWallpaper(){String name=prefs.getString("wallpaper","reading-nook.webp");Drawable d="custom".equals(name)?wallpaperArt.get():asset(name);return d!=null?d:asset("reading-nook.webp");}
     private void createPage(){
-        results=null;drawerAdapter=null;
+        results=null;drawerAdapter=null;systemStats=null;handler.removeCallbacks(statsRefresh);
         badgeViews.clear();music=null;mikanCard=null;clock=null;date=null;greeting=null;ampm=null;dashboard.detach();
         root=new FrameLayout(this);root.setBackgroundColor(0xff191417);
         ImageView bg=new ImageView(this);bg.setScaleType(ImageView.ScaleType.CENTER_CROP);bg.setImageDrawable(homeWallpaper());
@@ -287,7 +291,16 @@ public class HomeActivity extends Activity {
         LinearLayout header=horizontal();
         TextView brand=text("Mikan OS",15,CREAM,true);
         ImageView mark=new ImageView(this);mark.setImageDrawable(new MikanMark(MikanMark.CAT,PEACH));LinearLayout.LayoutParams markParams=new LinearLayout.LayoutParams(dp(23),dp(23));markParams.rightMargin=dp(7);header.addView(mark,markParams);
+        brand.setSingleLine(true);brand.setEllipsize(android.text.TextUtils.TruncateAt.END);
         header.addView(brand,new LinearLayout.LayoutParams(0,-2,1));
+        if(prefs.getBoolean("showSystemStats",true)){
+            systemStats=text("",10,MUTED,false);systemStats.setGravity(Gravity.END|Gravity.CENTER_VERTICAL);systemStats.setIncludeFontPadding(false);systemStats.setMaxLines(2);
+            systemStats.setTypeface(Typeface.create("sans-serif-medium",Typeface.NORMAL));
+            systemStats.setPadding(dp(4),0,dp(4),0);systemStats.setFocusable(true);
+            systemStats.setOnClickListener(v->showSystemStatsDetails());
+            header.addView(systemStats,new LinearLayout.LayoutParams(0,-2,1));
+            renderSystemStats();queueSystemStats();
+        }
         header.addView(markButton(MikanMark.GEAR,"Launcher settings",this::openSettings),new LinearLayout.LayoutParams(dp(44),dp(44)));page.addView(header);
         ScrollView scroll=new ScrollView(this);scroll.setFillViewport(false);scroll.setVerticalScrollBarEnabled(true);scroll.setScrollbarFadingEnabled(true);
         page.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
@@ -402,6 +415,35 @@ public class HomeActivity extends Activity {
         }).show();
     }
     private TextView pageArrow(String label,Runnable r){TextView v=action(label,r);v.setMinHeight(dp(36));v.setPadding(dp(16),dp(4),dp(16),dp(4));return v;}
+    private void queueSystemStats(){
+        if(!foreground||closed||systemStats==null)return;
+        handler.removeCallbacks(statsRefresh);handler.postDelayed(statsRefresh,180);
+    }
+    private void refreshSystemStats(){
+        if(!foreground||closed||systemStats==null||statsBusy)return;
+        long now=android.os.SystemClock.elapsedRealtime();
+        if(now-lastStats<30000)return;
+        statsBusy=true;lastStats=now;
+        catalogWorker.execute(()->{
+            DeviceStats.Snapshot result=DeviceStats.read(getApplicationContext());
+            handler.post(()->{
+                statsBusy=false;if(closed)return;statsSnapshot=result;
+                if(foreground)renderSystemStats();
+            });
+        });
+    }
+    private void renderSystemStats(){
+        if(systemStats==null)return;
+        String value=statsSnapshot==null?"RAM · —\nStorage · —":statsSnapshot.compact();
+        if(!value.contentEquals(systemStats.getText()))systemStats.setText(value);
+        systemStats.setContentDescription((statsSnapshot==null?"Device statistics loading":statsSnapshot.details())+". Tap for details.");
+    }
+    private void showSystemStatsDetails(){
+        queueSystemStats();
+        new AlertDialog.Builder(this).setTitle("Device statistics")
+            .setMessage(statsSnapshot==null?"Collecting device statistics. Check again in a moment.":statsSnapshot.details())
+            .setPositiveButton("Close",null).show();
+    }
     private void updateClock(){
         if(drawer||settings)return;
         Date now=new Date();if(clock!=null){boolean use24=android.text.format.DateFormat.is24HourFormat(this);clock.setText(compactClock?new java.text.SimpleDateFormat(use24?"HH:mm":"h:mm",Locale.getDefault()).format(now):android.text.format.DateFormat.getTimeFormat(this).format(now));if(ampm!=null){ampm.setText(use24?"":new java.text.SimpleDateFormat("a",Locale.getDefault()).format(now));ampm.setVisibility(use24?View.GONE:View.VISIBLE);}}
@@ -548,6 +590,7 @@ public class HomeActivity extends Activity {
                 break;
             case HOME:
                 settingsUi.heading(body,"LAYOUT");
+                settingsUi.toggle(body,"Header system stats","Small RAM and storage indicators",prefs.getBoolean("showSystemStats",true),on->{prefs.edit().putBoolean("showSystemStats",on).apply();showSettings();});
                 settingsUi.choice(body,"App grid",new String[]{"4 columns","5 columns"},prefs.getInt("columns",4)-4,i->{prefs.edit().putInt("columns",i+4).apply();showSettings();});
                 settingsUi.choice(body,"Rows per home page",new String[]{"1","2","3","4"},prefs.getInt("homeRows",2)-1,i->{prefs.edit().putInt("homeRows",i+1).apply();showSettings();});
                 settingsUi.choice(body,"Icon size",new String[]{"Small","Default","Large"},prefs.getInt("iconSize",50)==42?0:prefs.getInt("iconSize",50)==58?2:1,i->{prefs.edit().putInt("iconSize",new int[]{42,50,58}[i]).apply();showSettings();});

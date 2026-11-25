@@ -1,6 +1,6 @@
 # Mikan Launcher — living feature reference
 
-**Source baseline:** v0.11.5 (versionCode 16), calendar query fix, 2026-11-24. See Git history for implementation commit.
+**Source baseline:** v0.11.6 (versionCode 17), system stats header, 2026-11-24. See Git history for implementation commit.
 **Development:** [PR #117](https://github.com/capnolithyl/AI-Desktop-Companion/pull/117), branch `feature/mikan-launcher-v01`. Check current branch and Gradle version before changing this document.
 **Purpose:** a free, personal, offline-first Android launcher inspired by the Mikan OS home-screen mockup. Separate from Pocket Mikan, desktop Mikan and the NAS. This document tracks the launcher only.
 
@@ -17,6 +17,7 @@ Build success, release publication, installation and individual feature verifica
 | Feature | Introduced | Current implementation / use | Evidence |
 | --- | --- | --- | --- |
 | Independent Android home app | 0.1 | HOME/DEFAULT role and normal launch entry; Settings > Default home app to select or switch home. | Initial install and home UI observed; stock fallback and cold boot still pending. |
+| Header system stats | 0.11.6 | Subtle two-line RAM and internal data storage used/total beside Mikan OS; tap for details and available values. Enabled by default, toggle in Home screen settings. Uses Android MemoryInfo/StatFs, local asynchronous snapshots at most every 30 seconds while Home visible; no new permission or persistent service. RAM is an estimate, storage is usable data filesystem. Display preference included in backup. | Implemented; device and layout validation pending. |
 | App drawer | 0.1 / 0.11.4 | Search installed launchable apps by label or package; tap search field or swipe up near bottom; field opens keyboard. Native adapter-backed GridView creates/recycles visible cells, filters existing catalog without recreating the grid; 4/5 columns, existing icons, badge updates, and click/long-press actions. | Implemented; device latency, search, scroll and launch regression pending. |
 | Favorites | 0.1 | Long-press drawer app to pin; drawer/Manage favorites menu to unpin and move; saved locally. | Favorites visible across screenshots; persistence on updates observed, complete CRUD pending. |
 | Dock | 0.1–0.2 | First 3–5 available pinned entries, configurable, persists across pages. Default 5; floating dock (default on in v0.8) or framed dock. | Floating dock observed in v0.8; toggle pending. |
@@ -69,7 +70,7 @@ v0.9 replaces the long list with a themed category hub, icons, descriptions and 
 | --- | --- |
 | Appearance | Reading nook / Study nook wallpaper previews, custom wallpaper import/use, Amber / Original icon style |
 | Lockscreen | Import image, preview screen-ratio crop with horizontal/vertical position and zoom, apply lock-only wallpaper or current home wallpaper, Android wallpaper settings |
-| Home screen | Grid (4/5 columns), rows (1–4), icon size, Dock (3–5 apps), Floating dock, Favorites heading, Minimum home pages (1–5), Manage favorites, Customize app icons, Create app folder, Manage folders |
+| Home screen | Header system stats, Grid (4/5 columns), rows (1–4), icon size, Dock (3–5 apps), Floating dock, Favorites heading, Minimum home pages (1–5), Manage favorites, Customize app icons, Create app folder, Manage folders |
 | Widgets | Clock, Mikan, Music, Weather, Upcoming events placement/visibility, Widget layout (Side by side/Stacked), independent pair toggles, section order |
 | Weather & calendar | Weather city, Temperature units, Refresh weather, Calendar access, Show calendar titles, Calendar diagnostics |
 | Mikan | Active artwork preview, Choose portrait, Choose character artwork, Remove character artwork, Reset portrait, Open Pocket Mikan, Open Mikan Web in browser, Mikan Web address, Check Mikan Web connection |
@@ -119,6 +120,8 @@ Weather card also exposes refresh, city, units and clear location. No full-scree
 | 0.11.4 | Virtualized native drawer grid, recycled cells and local drawer timing diagnostics | Implemented; CI and device performance/regression pending. |
 | 0.11.5 | Null-safe calendar filtering, resume/manual refresh, counts-only provider diagnostics | Owner confirmed basic populated agenda after Google Calendar data sharing and sync; other regressions pending. |
 
+| 0.11.6 | Compact header RAM/storage stats, details, toggle and backup support | Implemented; CI/device validation pending. |
+
 ## 7. Outstanding verification checklist
 
 - [ ] Cold boot/reboot with airplane mode and NAS down; open drawer, favorites and folders.
@@ -151,6 +154,8 @@ Weather card also exposes refresh, city, units and clear location. No full-scree
 
 - [ ] v0.11.5 verify upcoming timed/all-day/recurring events from multiple visible calendars; unset and canceled statuses, local date/time boundaries, permission grant/revoke, empty and hidden/unsynced calendars, resume/long-press refresh, diagnostics from settings and widget; no event titles/accounts in diagnostic copy. Remaining regression cases pending.
 - [x] v0.11.5 basic agenda populated after enabling Google Calendar > Settings > General > Share Google Calendar data with other apps and refreshing/synchronizing. Diagnostic report initially showed zero local calendars, then calendars but no occurrences, before successful sync.
+
+- [ ] v0.11.6 verify header RAM and storage values, tap details, hide/show, backup/restore preference, narrow screens/large fonts, unavailable metrics, normal Home return and no refresh while paused or in drawer/settings. Compare resource overhead; no benchmark yet.
 
 ## 8. Roadmap (not implemented)
 
