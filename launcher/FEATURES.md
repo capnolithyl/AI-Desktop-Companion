@@ -97,7 +97,7 @@ Weather card also exposes refresh, city, units and clear location. No full-scree
 | 0.7 | Responsive widget pairs, weather, calendar, compact music | Source implemented; build job in run [45513874730](https://github.com/capnolithyl/AI-Desktop-Companion/actions/runs/45513874730) succeeded, publish job skipped in that run. Owner screenshot subsequently confirms installed v0.7, paired layout, weather data and empty agenda. Other functional tests remain pending. |
 
 | 0.8 | Two-tone glyphs, shared panel/tile styling, floating dock, page dots, equal paired heights, circular play, calendar decoration, search and voice affordances | Owner v0.8 screenshot confirms floating dock, two-tone glyphs, paired card heights, circular play and search bar rendering; behavior of new actions pending. |
-| 0.9 | Categorized settings hub, dedicated submenus, native switches, segmented choices, wallpaper and portrait previews, permission status and installed version | Implemented; CI and device validation pending. |
+| 0.9 | Categorized settings hub, dedicated submenus, native switches, segmented choices, wallpaper and portrait previews, permission status and installed version | Owner reports improved settings after v0.9 update; detailed control/navigation verification pending. |
 
 ## 7. Outstanding verification checklist
 
@@ -119,7 +119,7 @@ Weather card also exposes refresh, city, units and clear location. No full-scree
 
 ## 8. Roadmap (not implemented)
 
-**v0.8 implemented:** shared warm design styling, two-tone glyphs, floating dock, page dots, circular play, search bar and voice/browser actions. Visual design observed on device; behavioral validation pending. **v0.9 implemented:** categorized settings, visual choices and permission status; pending device validation. **Remaining mockup gaps:** transparent character cutout artwork (not bundled), richer ambient effects, full icon pack, shuffle/repeat (needs reliable media-provider support), camera/Lens shortcut, lockscreen customization.
+**v0.8 implemented:** shared warm design styling, two-tone glyphs, floating dock, page dots, circular play, search bar and voice/browser actions. Visual design observed on device; behavioral validation pending. **v0.9 implemented:** categorized settings, visual choices and permission status; owner reports improved settings, detailed behavior checks pending. **Remaining mockup gaps:** transparent character cutout artwork (not bundled), richer ambient effects, full icon pack, shuffle/repeat (needs reliable media-provider support), camera/Lens shortcut, lockscreen customization.
 
 **Later / separate milestones:** free-position app/widget grid and drag-to-create folders; third-party Android widget hosting; richer folder UI; custom wallpapers/icon packs; bundled transparent/alternate Mikan art and optional outfit variants; optional actual NAS/model status; improved Pocket Mikan integration; lockscreen wallpaper and Android-supported lockscreen customization (do not replace or bypass secure Android lockscreen). No promised dates. Check Trello and current source before selecting next features.
 
