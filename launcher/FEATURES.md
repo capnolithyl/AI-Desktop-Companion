@@ -1,6 +1,6 @@
 # Mikan Launcher — living feature reference
 
-**Source baseline:** v0.15.0 (versionCode 33), optional device information widget, 2026-11-25. See Git history for implementation commit.
+**Source baseline:** v0.15.1 (versionCode 34), first native Android widget hosting, 2026-11-25. See Git history for implementation commit.
 **Development:** [PR #117](https://github.com/capnolithyl/AI-Desktop-Companion/pull/117), branch `feature/mikan-launcher-v01`. Check current branch and Gradle version before changing this document.
 **Purpose:** a free, personal, offline-first Android launcher inspired by the Mikan OS home-screen mockup. Separate from Pocket Mikan, desktop Mikan and the NAS. This document tracks the launcher only.
 
@@ -65,7 +65,8 @@ All six built-in widgets (clock, Mikan, music, weather, upcoming events, device 
 
 | Feature | Introduced | Current implementation / use | Evidence |
 | --- | --- | --- | --- |
-| Device information | 0.15.0 | Optional themed battery percentage/status and charge bar, RAM and internal storage usage; tap for details. Settings > Widgets > Device information selects page or Hidden (default). Both section and mixed layouts; movable/resizable in mixed grid and page manager; page/placement backed up. Shares asynchronous foreground-only 30s stats sampling with header, even if header is hidden. Android battery sticky snapshot, no network or new permission. Missing data shown as unavailable; no battery-life prediction. | Implemented; CI/device pending. |
+| Android app widgets | 0.15.1 | Settings > Widgets > Add Android widget chooses an existing page and current-profile home-screen provider. Android consent/configuration flow; canceled bindings are deleted. Up to 12 live full-width widgets appended below either home layout, provider-native appearance/actions, configurable height, page move and removal via settings/page manager. Host listens while Activity visible; no launcher network requests or new manifest permissions. Device-specific bindings and heights excluded from portable JSON backup; retained on same-device layout restore. No mixed-grid drag, arbitrary width, work-profile or pinned-widget support yet. Provider-specific compatibility and network behavior vary. | Implemented; CI/device pending. |
+| Device information | 0.15.0 | Optional themed battery percentage/status and charge bar, RAM and internal storage usage; tap for details. Settings > Widgets > Device information selects page or Hidden (default). Both section and mixed layouts; movable/resizable in mixed grid and page manager; page/placement backed up. Shares asynchronous foreground-only 30s stats sampling with header, even if header is hidden. Android battery sticky snapshot, no network or new permission. Missing data shown as unavailable; no battery-life prediction. | Owner confirmed working; detailed regression pending. |
 | Clock/date | 0.1–0.7 | Local time and locale, respects Android 12/24-hour preference; short date, paw decoration; compact AM/PM line when paired. | Full-width and compact clock observed in 0.6/0.7; v0.8 typography observed. |
 | Music metadata/art | 0.4 | Android active MediaSession, prefer playing session, title/artist and album art where available. Notification listener access required. | Owner screenshot shows track, artist and artwork. |
 | Music controls | 0.4–0.5 | Previous, play/pause, next; supported actions only. Custom amber-painted icons, no emoji; circular amber play/pause in v0.8. | Controls rendered; actions not explicitly confirmed. |
@@ -167,7 +168,8 @@ Weather card also exposes refresh, city, units and clear location. No full-scree
 | 0.14.2 | Existing NAS health endpoint, typed status and credential-free checks | Implemented; CI/device pending. |
 
 | 0.14.3 | Holiday calendar expansion and eight date-linked portraits | Implemented; CI/device pending. |
-| 0.15.0 | Optional local battery/device information widget | Implemented; CI/device pending. |
+| 0.15.0 | Optional local battery/device information widget | Launcher CI 45694485813 passed; owner confirmed widget works on phone. Detailed regression pending. |
+| 0.15.1 | Native Android AppWidget host, picker, consent/configuration, page and height management | Implemented; CI/device pending. |
 
 ## 7. Outstanding verification checklist
 
@@ -236,6 +238,8 @@ Weather card also exposes refresh, city, units and clear location. No full-scree
 
 - [ ] v0.15.0 verify default hidden on upgrade, placement on both layouts, header disabled with widget active, page moves/reorder/removal, resize, backup/restore, battery status changes and unknown values, RAM/storage, resume and offline; no background polling. CI/device pending.
 
+- [ ] v0.15.1 verify picker, Android binding approval/denial, configuration and cancellation, persistence across process restart/update, provider interactions, multiple widgets, height and page changes, mixed/section modes, provider uninstall, backup restore, stock launcher switching and offline boot. CI/device pending.
+
 ## 8. Roadmap (not implemented)
 
 Planned milestones; version targets flexible. See [Trello roadmap](https://trello.com/c/VEk6xVz6). No arbitrary deadlines.
@@ -260,7 +264,7 @@ Eight uploaded portraits wired in v0.14.0 (launcher CI 45683723437 passed; owner
 Time-based expressions/artwork synchronized to remark context (owner approved), extend local remarks (contextual rotation in v0.11.7 and typed actions in v0.11.8), optional bounded NAS responses/status and offline personality. Delivery hints require reliable notification signal; cached expression art and default fallback.
 
 ### v0.15 — Expanded widgets
-First phase v0.15.0: optional battery/device information widget implemented; CI/device pending. Remaining: native Android widget hosting (subject to compatibility), tasks/reminders, quick contacts, optional daily briefing and local fallback.
+v0.15.0 device information widget implemented, CI passed and owner confirmed working. v0.15.1 first native Android AppWidget hosting implemented (full-width managed section; compatibility pending). Remaining: native widget mixed-grid positioning/width, tasks/reminders, quick contacts, optional daily briefing and local fallback.
 
 ### v1.0 — Daily-driver release
 Performance/battery/startup regression, full backup/restore, crash recovery, offline boot and NAS-outage tests, stock launcher fallback, resolve outstanding bugs and merge with owner approval.
