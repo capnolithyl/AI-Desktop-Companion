@@ -80,6 +80,10 @@ public class HomeActivity extends Activity {
     private boolean checkingWeb;
     private HomeFolders folders;
     private int homePage=0;
+    private boolean editingHome;
+    private HomeSlots homeSlots;
+    private int selectedSlot=-1;
+    private static final String[] WIDGET_PAGES={"clockPage","mikanPage","musicPage","weatherPage","agendaPage"};
     private MusicPanel music;
     private final Map<TextView,String> badgeViews=new HashMap<>();
     private final Runnable refreshExtras=new Runnable(){public void run(){refreshExtras();handler.postDelayed(this,2500);}};
@@ -144,7 +148,8 @@ public class HomeActivity extends Activity {
     }
     @Override protected void onNewIntent(Intent intent){
         super.onNewIntent(intent);setIntent(intent);
-        closeQuickSearch();beginEntry("Home intent");
+        closeQuickSearch();if(editingHome){editingHome=false;selectedSlot=-1;homePage=0;showHome();}
+        beginEntry("Home intent");
         if(drawer||settings||homePage!=0){hideKeyboard();homePage=0;showHome();}
         else updateClock();
         if(foreground){observeEntry();queueExtras();queueSystemStats();}
@@ -199,7 +204,7 @@ public class HomeActivity extends Activity {
             });
         });
     }
-    @Override public void onBackPressed(){if(quickSearch!=null){closeQuickSearch();return;}if(settings){backFromSettings();}else if(drawer){hideKeyboard();showHome();}else if(homePage!=0){homePage=0;showHome();}}
+    @Override public void onBackPressed(){if(editingHome){finishHomeEdit();return;}if(quickSearch!=null){closeQuickSearch();return;}if(settings){backFromSettings();}else if(drawer){hideKeyboard();showHome();}else if(homePage!=0){homePage=0;showHome();}}
     private int dp(float n){return Math.round(n*getResources().getDisplayMetrics().density);}
     private GradientDrawable shape(int color,int radius,boolean border){
         GradientDrawable d=new GradientDrawable();d.setColor(color);d.setCornerRadius(dp(radius));if(border)d.setStroke(dp(1),BORDER);return d;
@@ -272,7 +277,14 @@ public class HomeActivity extends Activity {
             saveFavorites();
         }
     }
-    private void saveFavorites(){prefs.edit().putString("favorites",String.join("\n",favorites)).apply();}
+    private void saveFavorites(){
+        prefs.edit().putString("favorites",String.join("\n",favorites)).apply();
+        if(prefs.contains("homeSlotsV1")){ensureHomeSlots();persistSlots();}
+    }
+    private void resetSlotOrder(){
+        if(!prefs.contains("homeSlotsV1"))return;
+        homeSlots=new HomeSlots();ensureHomeSlots();persistSlots();
+    }
     private void toggle(App app){
         if(favorites.contains(app.key())){favorites.remove(app.key());Toast.makeText(this,"Unpinned "+app.label,Toast.LENGTH_SHORT).show();}
         else{favorites.add(app.key());Toast.makeText(this,"Pinned "+app.label,Toast.LENGTH_SHORT).show();}
@@ -288,13 +300,14 @@ public class HomeActivity extends Activity {
         TextView b=text(label,14,PEACH,true);b.setGravity(Gravity.CENTER);b.setPadding(dp(12),dp(10),dp(12),dp(10));b.setBackground(shape(PANEL,20,true));b.setMinHeight(dp(48));b.setOnClickListener(v->run.run());return b;
     }
     private void showHome(){
+        if(editingHome){showHomeEditor();return;}
         long buildStarted=android.os.SystemClock.elapsedRealtime();
         drawer=false;settings=false;search=null;results=null;homePage=Math.max(0,Math.min(homePage,pageCount()-1));createPage();
         LinearLayout header=horizontal();
         TextView brand=text("Mikan OS",15,CREAM,true);
         ImageView mark=new ImageView(this);mark.setImageDrawable(new MikanMark(MikanMark.CAT,PEACH));LinearLayout.LayoutParams markParams=new LinearLayout.LayoutParams(dp(23),dp(23));markParams.rightMargin=dp(7);header.addView(mark,markParams);
         brand.setSingleLine(true);brand.setEllipsize(android.text.TextUtils.TruncateAt.END);
-        header.addView(brand,new LinearLayout.LayoutParams(0,-2,1));
+        header.addView(brand,new LinearLayout.LayoutParams(0,-2,1));brand.setOnLongClickListener(v->{openHomeEditor();return true;});
         if(prefs.getBoolean("showSystemStats",true)){
             systemStats=text("",10,MUTED,false);systemStats.setGravity(Gravity.END|Gravity.CENTER_VERTICAL);systemStats.setIncludeFontPadding(false);systemStats.setMaxLines(2);
             systemStats.setTypeface(Typeface.create("sans-serif-medium",Typeface.NORMAL));
@@ -307,6 +320,7 @@ public class HomeActivity extends Activity {
         ScrollView scroll=new ScrollView(this);scroll.setFillViewport(false);scroll.setVerticalScrollBarEnabled(true);scroll.setScrollbarFadingEnabled(true);
         page.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
         LinearLayout body=vertical();scroll.addView(body,new ScrollView.LayoutParams(-1,-2));
+        body.setOnLongClickListener(v->{openHomeEditor();return true;});scroll.setOnLongClickListener(v->{openHomeEditor();return true;});
         gap(body,6);
         LinearLayout topWidgets=vertical(),characterBlock=vertical(),appBlock=vertical(),bottomWidgets=vertical();
         boolean showClock=widgetHere("clockPage",1),showWeather=widgetHere("weatherPage",1);
@@ -329,7 +343,7 @@ public class HomeActivity extends Activity {
         int dockCount=prefs.getInt("dockCount",5);
         int columns=prefs.getInt("columns",4), perPage=columns*prefs.getInt("homeRows",2);
         int start=Math.min(pinned.size(),dockCount+homePage*perPage),end=Math.min(pinned.size(),start+perPage);
-        if(start==end)appBlock.addView(text("Pin apps from the drawer or create a folder in settings.",14,MUTED,false));else addGrid(appBlock,pinned.subList(start,end),columns);
+        if(prefs.contains("homeSlotsV1")){ensureHomeSlots();addPositionedApps(appBlock,columns,perPage);}else if(start==end){TextView empty=text("Pin apps from the drawer or create a folder in settings.",14,MUTED,false);empty.setOnLongClickListener(v->{openHomeEditor();return true;});appBlock.addView(empty);}else addGrid(appBlock,pinned.subList(start,end),columns);
         gap(appBlock,10);
         boolean showMusic=widgetHere("musicPage",1),showAgenda=widgetHere("agendaPage",1);
         boolean pair=showMusic&&showAgenda&&canPair()&&prefs.getBoolean("pairBottom",true);
@@ -338,8 +352,8 @@ public class HomeActivity extends Activity {
         int order=prefs.getInt("sectionOrder",0);
         LinearLayout[] sections=order==1?new LinearLayout[]{topWidgets,characterBlock,bottomWidgets,appBlock}:order==2?new LinearLayout[]{appBlock,topWidgets,characterBlock,bottomWidgets}:new LinearLayout[]{topWidgets,characterBlock,appBlock,bottomWidgets};
         for(LinearLayout section:sections)if(section.getChildCount()>0)body.addView(section);
-        LinearLayout dock=horizontal();dock.setPadding(0,dp(3),0,dp(3));if(!prefs.getBoolean("floatingDock",true)){dock.setBackground(panelShape(24));dock.setElevation(dp(2));}
-        for(int i=0;i<dockCount;i++){if(i<pinned.size())dock.addView(tile(pinned.get(i),false),new LinearLayout.LayoutParams(0,-2,1));else{View blank=new View(this);dock.addView(blank,new LinearLayout.LayoutParams(0,dp(56),1));}}
+        LinearLayout dock=horizontal();dock.setOnLongClickListener(v->{openHomeEditor();return true;});dock.setPadding(0,dp(3),0,dp(3));if(!prefs.getBoolean("floatingDock",true)){dock.setBackground(panelShape(24));dock.setElevation(dp(2));}
+        for(int i=0;i<dockCount;i++){if(i<pinned.size())dock.addView(tile(pinned.get(i),false),new LinearLayout.LayoutParams(0,-2,1));else{View blank=new View(this);blank.setOnLongClickListener(v->{openHomeEditor();return true;});dock.addView(blank,new LinearLayout.LayoutParams(0,dp(56),1));}}
         LinearLayout nav=horizontal();nav.setGravity(Gravity.CENTER);int count=pageCount();
         if(count>1){
         if(homePage>0)nav.addView(pageArrow("‹",()->changePage(-1)));
@@ -404,7 +418,7 @@ public class HomeActivity extends Activity {
         return bar;
     }
     private void openAppSearch(){
-        if(!foreground||closed||drawer||settings||quickSearch!=null)return;
+        if(!foreground||closed||drawer||settings||editingHome||quickSearch!=null)return;
         final long started=android.os.SystemClock.elapsedRealtime();
         final QuickSearchDialog<App> overlay=new QuickSearchDialog<>(this,new QuickSearchDialog.Source<App>(){
             @Override public List<App> matches(String query){return quickMatches(query);}
@@ -515,8 +529,8 @@ public class HomeActivity extends Activity {
         TextView dot=text("•",18,PEACH,true);dot.setGravity(Gravity.CENTER);dot.setBackground(shape(0xff50332b,20,false));dot.setVisibility(View.GONE);FrameLayout.LayoutParams bp=new FrameLayout.LayoutParams(dp(16),dp(16),Gravity.TOP|Gravity.RIGHT);iconFrame.addView(dot,bp);badgeViews.put(dot,app.key());
         int size=prefs.getInt("iconSize",50);int maxSize=(getResources().getConfiguration().screenWidthDp-48)/Math.max(prefs.getInt("columns",4),prefs.getInt("dockCount",5));size=Math.max(32,Math.min(size,maxSize));cell.addView(iconFrame,new LinearLayout.LayoutParams(dp(size),dp(size)));
         if(label){TextView name=text(app.label,11,CREAM,false);name.setGravity(Gravity.TOP|Gravity.CENTER_HORIZONTAL);name.setIncludeFontPadding(false);name.setMaxLines(2);name.setMinLines(2);name.setEllipsize(android.text.TextUtils.TruncateAt.END);LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(-1,-2);p.topMargin=dp(3);cell.addView(name,p); }
-        cell.setContentDescription(app.label);cell.setOnClickListener(v->launch(app));cell.setOnLongClickListener(v->{if(!drawer&&favorites.contains(app.key())){ClipData data=ClipData.newPlainText("mikan-favorite",app.key());v.startDragAndDrop(data,new View.DragShadowBuilder(v),app.key(),0);}else appOptions(app);return true;});
-        if(!drawer)cell.setOnDragListener((v,event)->{if(event.getAction()==android.view.DragEvent.ACTION_DRAG_STARTED)return event.getLocalState() instanceof String;
+        cell.setContentDescription(app.label);cell.setOnClickListener(v->launch(app));cell.setOnLongClickListener(v->{if(!drawer&&favorites.contains(app.key())&&prefs.contains("homeSlotsV1")){openHomeEditor();}else if(!drawer&&favorites.contains(app.key())){ClipData data=ClipData.newPlainText("mikan-favorite",app.key());v.startDragAndDrop(data,new View.DragShadowBuilder(v),app.key(),0);}else appOptions(app);return true;});
+        if(!drawer&&!prefs.contains("homeSlotsV1"))cell.setOnDragListener((v,event)->{if(event.getAction()==android.view.DragEvent.ACTION_DRAG_STARTED)return event.getLocalState() instanceof String;
             if(event.getAction()==android.view.DragEvent.ACTION_DRAG_ENTERED)v.setAlpha(.55f);
             if(event.getAction()==android.view.DragEvent.ACTION_DRAG_EXITED||event.getAction()==android.view.DragEvent.ACTION_DRAG_ENDED)v.setAlpha(1f);
             if(event.getAction()==android.view.DragEvent.ACTION_DROP){String from=(String)event.getLocalState();int target=favorites.indexOf(app.key()),old=favorites.indexOf(from);if(target>=0&&old>=0&&target!=old){App source=find(from);if(app.folderKey!=null&&source!=null&&source.folderKey==null){handler.post(()->dropOnFolder(source,app.folderKey));}else{favorites.remove(old);favorites.add(target,from);saveFavorites();handler.post(this::showHome);}}return true;}return true;});
@@ -647,6 +661,7 @@ public class HomeActivity extends Activity {
                 break;
             case HOME:
                 settingsUi.heading(body,"LAYOUT");
+                setting(body,"Edit home screen",this::openHomeEditor);
                 settingsUi.toggle(body,"Header system stats","Small RAM and storage indicators",prefs.getBoolean("showSystemStats",true),on->{prefs.edit().putBoolean("showSystemStats",on).apply();showSettings();});
                 settingsUi.choice(body,"App grid",new String[]{"4 columns","5 columns"},prefs.getInt("columns",4)-4,i->{prefs.edit().putInt("columns",i+4).apply();showSettings();});
                 settingsUi.choice(body,"Rows per home page",new String[]{"1","2","3","4"},prefs.getInt("homeRows",2)-1,i->{prefs.edit().putInt("homeRows",i+1).apply();showSettings();});
@@ -655,6 +670,7 @@ public class HomeActivity extends Activity {
                 settingsUi.toggle(body,"Floating dock","Individual icons without a shared background",prefs.getBoolean("floatingDock",true),on->{prefs.edit().putBoolean("floatingDock",on).apply();showSettings();});
                 settingsUi.toggle(body,"Favorites heading","Show the label above your pinned apps",prefs.getBoolean("showFavoritesLabel",false),on->{prefs.edit().putBoolean("showFavoritesLabel",on).apply();showSettings();});
                 setting(body,"Minimum home pages: "+prefs.getInt("minPages",1),()->chooseNumber("minPages","Minimum home pages",new int[]{1,2,3,4,5}));
+                if(prefs.contains("homeSlotsV1"))setting(body,"Reset app positions",()->new AlertDialog.Builder(this).setTitle("Reset app positions?").setMessage("Return to automatically packed apps. Favorites, folders, dock and widgets remain.").setNegativeButton("Cancel",null).setPositiveButton("Reset",(d,i)->{prefs.edit().remove("homeSlotsV1").apply();homeSlots=null;showSettings();}).show());
                 settingsUi.heading(body,"SHORTCUTS & FOLDERS");
                 setting(body,"Manage favorites",this::manageFavorites);
                 setting(body,"Customize app icons",this::chooseIconApp);
@@ -752,7 +768,7 @@ public class HomeActivity extends Activity {
             if(i==8){iconOptions(app);return;}
             if(i==7){addToFolder(app);return;}
             if(i==0){favorites.remove(app.key());saveFavorites();}
-            else{int old=favorites.indexOf(app.key());int target=i==1?0:i==2?Math.max(0,old-1):i==3?Math.min(favorites.size()-1,old+1):i==5?Math.min(favorites.size()-1,old+prefs.getInt("columns",4)*prefs.getInt("homeRows",2)):i==6?Math.max(prefs.getInt("dockCount",5),old-prefs.getInt("columns",4)*prefs.getInt("homeRows",2)):favorites.size()-1;target=Math.max(0,Math.min(favorites.size()-1,target));favorites.remove(old);favorites.add(target,app.key());saveFavorites();}
+            else{int old=favorites.indexOf(app.key());int target=i==1?0:i==2?Math.max(0,old-1):i==3?Math.min(favorites.size()-1,old+1):i==5?Math.min(favorites.size()-1,old+prefs.getInt("columns",4)*prefs.getInt("homeRows",2)):i==6?Math.max(prefs.getInt("dockCount",5),old-prefs.getInt("columns",4)*prefs.getInt("homeRows",2)):favorites.size()-1;target=Math.max(0,Math.min(favorites.size()-1,target));favorites.remove(old);favorites.add(target,app.key());saveFavorites();resetSlotOrder();}
             if(settings)showSettings();else if(drawer)renderResults(search.getText().toString());else showHome();
         }).show();
     }
@@ -865,7 +881,7 @@ public class HomeActivity extends Activity {
                 else{Map<String,Object> restored=LauncherBackup.read(this,uri);runOnUiThread(()->{
                     fileBusy=false;if(isDestroyed()||isFinishing())return;
                     new AlertDialog.Builder(this).setTitle("Restore launcher settings?").setMessage("Replace saved layout, folders and supported appearance settings. Imported artwork, private connection settings and Android permissions are not changed.").setNegativeButton("Cancel",null).setPositiveButton("Restore",(d,w)->{
-                        boolean saved=LauncherBackup.apply(prefs,restored);folders=new HomeFolders(prefs);restoreFavorites();monoCache.evictAll();homePage=0;refreshScreen();Toast.makeText(this,saved?"Settings restored":"Settings changed in memory, but disk save failed. Check available storage.",Toast.LENGTH_LONG).show();
+                        boolean saved=LauncherBackup.apply(prefs,restored);homeSlots=null;folders=new HomeFolders(prefs);restoreFavorites();monoCache.evictAll();homePage=0;refreshScreen();Toast.makeText(this,saved?"Settings restored":"Settings changed in memory, but disk save failed. Check available storage.",Toast.LENGTH_LONG).show();
                     }).show();
                 });}
             }catch(Exception ex){runOnUiThread(()->{fileBusy=false;if(!isDestroyed())Toast.makeText(this,"Backup could not be "+(export?"saved":"read")+". Existing settings kept.",Toast.LENGTH_LONG).show();});}
@@ -937,9 +953,151 @@ public class HomeActivity extends Activity {
         int count=0;for(String key:favorites)if(find(key)!=null)count++;
         int cap=prefs.getInt("columns",4)*prefs.getInt("homeRows",2),dock=prefs.getInt("dockCount",5);
         int pages=Math.max(prefs.getInt("minPages",1),(Math.max(0,count-dock)+cap-1)/cap);
-        for(String key:new String[]{"clockPage","mikanPage","musicPage","weatherPage","agendaPage"})pages=Math.max(pages,prefs.getInt(key,1));
+        if(prefs.contains("homeSlotsV1")){ensureHomeSlots();pages=Math.max(pages,homeSlots.last()/cap+1);}
+        for(String key:WIDGET_PAGES)pages=Math.max(pages,prefs.getInt(key,1));
         return Math.max(1,pages);
     }
+    private List<String> homeKeys(){
+        ArrayList<String> available=new ArrayList<>();
+        for(String key:favorites)if(find(key)!=null)available.add(key);
+        return new ArrayList<>(available.subList(Math.min(available.size(),prefs.getInt("dockCount",5)),available.size()));
+    }
+    private void ensureHomeSlots(){
+        if(homeSlots==null){
+            try{homeSlots=HomeSlots.parse(prefs.getString("homeSlotsV1",""));}
+            catch(RuntimeException ex){homeSlots=new HomeSlots();}
+        }
+        homeSlots.reconcile(homeKeys());
+    }
+    private void persistSlots(){if(homeSlots!=null)prefs.edit().putString("homeSlotsV1",homeSlots.encode()).apply();}
+    private void openHomeEditor(){
+        closeQuickSearch();hideKeyboard();drawer=false;settings=false;
+        ensureHomeSlots();editingHome=true;selectedSlot=-1;showHomeEditor();
+    }
+    private void finishHomeEdit(){editingHome=false;selectedSlot=-1;showHome();}
+    private void addPositionedApps(LinearLayout parent,int columns,int capacity){
+        int start=homePage*capacity,last=-1;
+        for(int n=0;n<capacity;n++)if(homeSlots.at(start+n)!=null)last=n;
+        if(last<0){TextView empty=text("Long-press to edit this page",13,MUTED,false);empty.setMinHeight(dp(52));empty.setGravity(Gravity.CENTER_VERTICAL);empty.setOnLongClickListener(v->{openHomeEditor();return true;});parent.addView(empty);return;}
+        for(int row=0;row<=last/columns;row++){
+            LinearLayout line=horizontal();line.setGravity(Gravity.TOP);
+            for(int col=0;col<columns;col++){
+                String key=homeSlots.at(start+row*columns+col);App app=key==null?null:find(key);
+                View cell=app==null?new View(this):tile(app,true);
+                if(app==null){cell.setMinimumHeight(dp(76));cell.setOnLongClickListener(v->{openHomeEditor();return true;});}
+                line.addView(cell,new LinearLayout.LayoutParams(0,-2,1));
+            }
+            parent.addView(line);
+        }
+    }
+    private void showHomeEditor(){
+        ensureHomeSlots();homePage=Math.max(0,Math.min(homePage,editorPageCount()-1));createPage();
+        LinearLayout bar=horizontal();bar.addView(action("Done",this::finishHomeEdit));TextView title=text("  Edit Home",21,CREAM,true);bar.addView(title,new LinearLayout.LayoutParams(0,-2,1));page.addView(bar);
+        gap(page,8);page.addView(text("Hold and drag a shortcut, or tap it then tap a destination. Changes save immediately.",13,MUTED,false));gap(page,10);
+        LinearLayout nav=horizontal();nav.addView(action("‹",()->editorPage(-1)));TextView position=text("Page "+(homePage+1)+" / "+editorPageCount(),15,CREAM,true);position.setGravity(Gravity.CENTER);nav.addView(position,new LinearLayout.LayoutParams(0,-2,1));nav.addView(action("›",()->editorPage(1)));page.addView(nav);gap(page,8);
+        if(selectedSlot>=0){String selected=homeSlots.at(selectedSlot);App app=selected==null?null:find(selected);page.addView(text(app==null?"Select a shortcut":"Moving "+app.label+" · tap a cell",13,PEACH,true));gap(page,6);}
+        ScrollView scroll=new ScrollView(this);LinearLayout body=vertical();scroll.addView(body);page.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
+        int cols=prefs.getInt("columns",4),cap=slotCapacity(),start=homePage*cap;
+        for(int row=0;row<cap/cols;row++){
+            LinearLayout line=horizontal();
+            for(int col=0;col<cols;col++){
+                int slot=start+row*cols+col;String key=homeSlots.at(slot);App app=key==null?null:find(key);
+                LinearLayout cell=vertical();cell.setGravity(Gravity.CENTER);cell.setPadding(dp(3),dp(6),dp(3),dp(6));cell.setBackground(shape(slot==selectedSlot?0xaa74513d:0x443c2a27,12,true));
+                if(app!=null){
+                    ImageView image=new ImageView(this);image.setImageDrawable(themedIcon(app));image.setScaleType(ImageView.ScaleType.FIT_CENTER);cell.addView(image,new LinearLayout.LayoutParams(dp(38),dp(38)));
+                    TextView name=text(app.label,11,CREAM,false);name.setGravity(Gravity.CENTER);name.setMaxLines(2);name.setMinLines(2);name.setEllipsize(android.text.TextUtils.TruncateAt.END);cell.addView(name,new LinearLayout.LayoutParams(-1,-2));
+                    cell.setContentDescription(app.label+", slot "+(slot-start+1));
+                    cell.setOnLongClickListener(v->{ClipData data=ClipData.newPlainText("mikan-home-slot",String.valueOf(slot));return v.startDragAndDrop(data,new View.DragShadowBuilder(v),Integer.valueOf(slot),0);});
+                }else{TextView plus=text("+",22,MUTED,false);plus.setGravity(Gravity.CENTER);cell.addView(plus,new LinearLayout.LayoutParams(-1,dp(62)));cell.setContentDescription("Empty slot "+(slot-start+1));}
+                cell.setFocusable(true);cell.setOnClickListener(v->selectHomeSlot(slot));
+                cell.setOnDragListener((v,event)->{
+                    if(event.getAction()==android.view.DragEvent.ACTION_DRAG_STARTED)return event.getLocalState() instanceof Integer;
+                    if(event.getAction()==android.view.DragEvent.ACTION_DRAG_ENTERED)v.setAlpha(.6f);
+                    if(event.getAction()==android.view.DragEvent.ACTION_DRAG_EXITED||event.getAction()==android.view.DragEvent.ACTION_DRAG_ENDED)v.setAlpha(1f);
+                    if(event.getAction()==android.view.DragEvent.ACTION_DROP){int from=(Integer)event.getLocalState();handler.post(()->moveHomeSlot(from,slot));return true;}
+                    return true;
+                });
+                LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,-2,1);lp.setMargins(dp(2),dp(3),dp(2),dp(3));line.addView(cell,lp);
+            }body.addView(line);
+        }
+        gap(body,12);body.addView(text("WIDGETS ON THIS PAGE",12,MUTED,true));
+        String[] names={"Clock","Mikan","Music","Weather","Upcoming events"};
+        for(int k=0;k<WIDGET_PAGES.length;k++)if(prefs.getInt(WIDGET_PAGES[k],1)==homePage+1){final String widget=WIDGET_PAGES[k];final String name=names[k];body.addView(action(name+" · Move",()->moveEditorWidget(widget,name)));}
+        body.addView(text("Widget sizing and free placement are coming in the next editor phase. Dock and existing widget layouts stay unchanged.",12,MUTED,false));gap(body,10);
+        LinearLayout controls=horizontal();controls.addView(action("+ Page",this::addEditorPage),new LinearLayout.LayoutParams(0,-2,1));controls.addView(action("Remove",this::removeEditorPage),new LinearLayout.LayoutParams(0,-2,1));page.addView(controls);
+        LinearLayout reorder=horizontal();reorder.addView(action("Move page ‹",()->swapEditorPage(-1)),new LinearLayout.LayoutParams(0,-2,1));reorder.addView(action("Move page ›",()->swapEditorPage(1)),new LinearLayout.LayoutParams(0,-2,1));page.addView(reorder);
+    }
+    private int editorPageCount(){
+        int cap=slotCapacity(),count=Math.max(prefs.getInt("minPages",1),homeSlots.last()<0?1:homeSlots.last()/cap+1);
+        for(String key:WIDGET_PAGES)count=Math.max(count,prefs.getInt(key,1));return Math.max(1,count);
+    }
+    private void editorPage(int direction){homePage=Math.max(0,Math.min(editorPageCount()-1,homePage+direction));showHomeEditor();}
+    private void selectHomeSlot(int slot){
+        if(selectedSlot==slot){selectedSlot=-1;showHomeEditor();return;}
+        if(selectedSlot>=0){moveHomeSlot(selectedSlot,slot);return;}
+        if(homeSlots.at(slot)!=null){selectedSlot=slot;showHomeEditor();return;}
+        ArrayList<App> options=new ArrayList<>();for(App app:apps)if(!favorites.contains(app.key()))options.add(app);
+        if(options.isEmpty()){Toast.makeText(this,"All available apps are already pinned.",Toast.LENGTH_SHORT).show();return;}
+        String[] labels=new String[options.size()];for(int i=0;i<labels.length;i++)labels[i]=options.get(i).label;
+        new AlertDialog.Builder(this).setTitle("Add app to this slot").setItems(labels,(d,i)->{
+            App app=appIndex.get(options.get(i).key());if(app==null||!editingHome)return;
+            if(homeSlots.at(slot)!=null)return;
+            // Legacy dock takes the first N pinned apps; do not silently replace it.
+            int available=0;for(String key:favorites)if(find(key)!=null)available++;
+            if(available<prefs.getInt("dockCount",5)){Toast.makeText(this,"Fill the dock first, or reduce its size in Home settings.",Toast.LENGTH_LONG).show();return;}
+            favorites.add(app.key());saveFavorites();ensureHomeSlots();int from=homeSlots.locate(app.key());if(from>=0&&from!=slot)homeSlots.move(from,slot);persistSlots();showHomeEditor();
+        }).setNegativeButton("Cancel",null).show();
+    }
+    private void moveHomeSlot(int from,int to){
+        if(!editingHome)return;ensureHomeSlots();selectedSlot=-1;
+        if(from==to){showHomeEditor();return;}
+        String source=homeSlots.at(from),target=homeSlots.at(to);
+        if(source==null){showHomeEditor();return;}
+        if(target!=null&&!source.startsWith("folder:")&&!target.startsWith("folder:")){
+            App first=find(source),second=find(target);
+            if(first!=null&&second!=null){
+                new AlertDialog.Builder(this).setTitle("Move "+first.label).setItems(new String[]{"Swap positions","Create folder"},(d,i)->{
+                    if(!editingHome)return;
+                    if(i==0){if(homeSlots.move(from,to))persistSlots();showHomeEditor();}
+                    else createEditorFolder(from,to,source,target);
+                }).setOnCancelListener(d->showHomeEditor()).show();return;
+            }
+        }
+        if(homeSlots.move(from,to))persistSlots();showHomeEditor();
+    }
+    private void createEditorFolder(int from,int to,String source,String target){
+        EditText name=new EditText(this);name.setSingleLine(true);name.setText("Folder");name.selectAll();
+        new AlertDialog.Builder(this).setTitle("Name folder").setView(name).setNegativeButton("Cancel",(d,i)->showHomeEditor()).setPositiveButton("Create",(d,i)->{
+            if(!editingHome||!source.equals(homeSlots.at(from))||!target.equals(homeSlots.at(to)))return;
+            String label=name.getText().toString().trim();if(label.isEmpty())label="Folder";
+            String folder=folders.save(null,label,Arrays.asList(target,source));
+            favorites.remove(source);favorites.remove(target);favorites.add(folder);
+            saveFavorites();ensureHomeSlots();int placed=homeSlots.locate(folder);if(placed>=0&&placed!=to)homeSlots.move(placed,to);persistSlots();showHomeEditor();
+        }).setOnCancelListener(d->showHomeEditor()).show();
+    }
+    private void addEditorPage(){
+        int count=editorPageCount();if(count>=Math.min(1000,(HomeSlots.MAX_SLOT+1)/slotCapacity())){Toast.makeText(this,"Page limit reached.",Toast.LENGTH_SHORT).show();return;}
+        prefs.edit().putInt("minPages",count+1).apply();persistSlots();homePage=count;showHomeEditor();
+    }
+    private void removeEditorPage(){
+        int count=editorPageCount();if(count<=1){Toast.makeText(this,"Keep at least one home page.",Toast.LENGTH_SHORT).show();return;}
+        if(!homeSlots.emptyPage(homePage,slotCapacity())){Toast.makeText(this,"Move the apps off this page first.",Toast.LENGTH_SHORT).show();return;}
+        for(String key:WIDGET_PAGES)if(prefs.getInt(key,1)==homePage+1){Toast.makeText(this,"Move the widgets off this page first.",Toast.LENGTH_SHORT).show();return;}
+        homeSlots.removeEmptyPage(homePage,slotCapacity());SharedPreferences.Editor changes=prefs.edit().putInt("minPages",count-1);
+        for(String key:WIDGET_PAGES){int value=prefs.getInt(key,1);if(value>homePage+1)changes.putInt(key,value-1);}
+        changes.putString("homeSlotsV1",homeSlots.encode()).apply();selectedSlot=-1;homePage=Math.min(homePage,count-2);showHomeEditor();
+    }
+    private void swapEditorPage(int direction){
+        int other=homePage+direction;if(other<0||other>=editorPageCount())return;
+        homeSlots.swapPages(homePage,other,slotCapacity());SharedPreferences.Editor changes=prefs.edit().putInt("minPages",editorPageCount());
+        for(String key:WIDGET_PAGES){int value=prefs.getInt(key,1);if(value==homePage+1)changes.putInt(key,other+1);else if(value==other+1)changes.putInt(key,homePage+1);}
+        changes.putString("homeSlotsV1",homeSlots.encode()).apply();selectedSlot=-1;homePage=other;showHomeEditor();
+    }
+    private void moveEditorWidget(String key,String name){
+        String[] choices=new String[editorPageCount()];for(int i=0;i<choices.length;i++)choices[i]="Page "+(i+1);
+        new AlertDialog.Builder(this).setTitle("Move "+name).setItems(choices,(d,i)->{prefs.edit().putInt(key,i+1).apply();showHomeEditor();}).setNegativeButton("Cancel",null).show();
+    }
+    private int slotCapacity(){return prefs.getInt("columns",4)*prefs.getInt("homeRows",2);}
     private void changePage(int delta){int next=Math.max(0,Math.min(pageCount()-1,homePage+delta));if(next!=homePage){homePage=next;showHome();}}
     private void widgetSetting(LinearLayout body,String label,String key,int def){
         int p=prefs.getInt(key,def);setting(body,label+": "+(p==0?"Hidden":"Page "+p),()->{
@@ -1067,7 +1225,7 @@ public class HomeActivity extends Activity {
         }catch(Exception e){new AlertDialog.Builder(this).setMessage("Open Android Settings → Apps → Default apps → Home app.").setPositiveButton("OK",null).show();}
     }
     @Override public boolean dispatchTouchEvent(MotionEvent event){
-        if(quickSearch!=null)return super.dispatchTouchEvent(event);
+        if(quickSearch!=null||editingHome)return super.dispatchTouchEvent(event);
         if(event.getActionMasked()==MotionEvent.ACTION_DOWN){touchX=event.getX();touchY=event.getY();seekGesture=music!=null&&music.isSeekTouch(event.getRawX(),event.getRawY());}
         if(!seekGesture&&!drawer&&!settings&&event.getActionMasked()==MotionEvent.ACTION_UP&&Math.abs(event.getX()-touchX)>dp(90)&&Math.abs(event.getY()-touchY)<dp(55)){MotionEvent cancel=MotionEvent.obtain(event);cancel.setAction(MotionEvent.ACTION_CANCEL);super.dispatchTouchEvent(cancel);cancel.recycle();changePage(event.getX()<touchX?1:-1);return true;}
         if(!seekGesture&&!drawer&&!settings&&event.getActionMasked()==MotionEvent.ACTION_UP&&root!=null&&touchY>root.getHeight()-dp(180)&&touchY-event.getY()>dp(70)&&Math.abs(event.getX()-touchX)<dp(90)){

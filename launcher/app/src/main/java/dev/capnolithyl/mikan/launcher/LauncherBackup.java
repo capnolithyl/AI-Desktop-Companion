@@ -17,7 +17,7 @@ final class LauncherBackup {
     private static final String ICON="iconStyle:";
     private static boolean component(String key){return key.length()<=512&&ComponentName.unflattenFromString(key)!=null&&!key.contains("\n")&&!key.contains("\r");}
     private static boolean folder(String key){return key.matches("folder:[0-9a-fA-F-]{36}");}
-    private static boolean known(String k){return BOOL.contains(k)||PAGES.contains(k)||Arrays.asList("columns","dockCount","minPages","homeRows","iconSize","sectionOrder","wallpaper","favorites","foldersV1").contains(k);}
+    private static boolean known(String k){return BOOL.contains(k)||PAGES.contains(k)||Arrays.asList("columns","dockCount","minPages","homeRows","iconSize","sectionOrder","wallpaper","favorites","foldersV1","homeSlotsV1").contains(k);}
     private static int integer(Object value,int min,int max)throws IOException{
         if(!(value instanceof Number))throw new IOException("Expected integer");
         double n=((Number)value).doubleValue();if(n!=Math.rint(n)||n<min||n>max)throw new IOException("Out of range");
@@ -34,6 +34,9 @@ final class LauncherBackup {
             case "sectionOrder":return integer(v,0,2);
             case "iconSize":int size=integer(v,42,58);if(size!=42&&size!=50&&size!=58)throw new IOException("Invalid icon size");return size;
             case "wallpaper":if(!"reading-nook.webp".equals(v)&&!"study-nook.webp".equals(v))throw new IOException("Invalid wallpaper");return v;
+            case "homeSlotsV1":{
+                if(!(v instanceof String))throw new IOException("Invalid home slots");HomeSlots slots=HomeSlots.parse((String)v);for(String key:slots.keys())if(!component(key)&&!folder(key))throw new IOException("Invalid shortcut");return slots.encode();
+            }
             case "favorites":{
                 if(!(v instanceof String)||((String)v).length()>250000)throw new IOException("Invalid favorites");
                 LinkedHashSet<String> keys=new LinkedHashSet<>();
@@ -80,6 +83,7 @@ final class LauncherBackup {
         if(!result.containsKey("favorites"))throw new IOException("Missing layout");
         JSONObject folders=new JSONObject((String)result.getOrDefault("foldersV1","{}"));
         for(String key:((String)result.get("favorites")).split("\n"))if(folder(key)&&!folders.has(key))throw new IOException("Missing folder");
+        if(result.containsKey("homeSlotsV1")){Set<String> favorites=new HashSet<>(Arrays.asList(((String)result.get("favorites")).split("\\n")));for(String key:HomeSlots.parse((String)result.get("homeSlotsV1")).keys())if(!favorites.contains(key))throw new IOException("Unknown positioned shortcut");}
         return result;
     }
     static boolean apply(SharedPreferences prefs,Map<String,Object> restored){
