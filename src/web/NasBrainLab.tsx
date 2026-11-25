@@ -8,7 +8,7 @@ type Tab="run"|"scenarios"|"results";
 const PAGE_SIZE=16;
 const stateName:Record<string,string>={running:"Running",stopping:"Stopping",finished:"Finished",stopped:"Stopped",failed:"Failed",quota:"Quota reached",interrupted:"Interrupted"};
 export function NasBrainLab({client,models,busy}:{client:NasClient;models:NasModels;busy:boolean}){
-  const [catalog,setCatalog]=useState<BrainScenario[]>([]),[report,setReport]=useState<BrainReport|null>(null),[history,setHistory]=useState<BrainSummary[]>([]),[view,setView]=useState<BrainReport|null>(null),[running,setRunning]=useState(false),[loading,setLoading]=useState(true),[working,setWorking]=useState(false),[error,setError]=useState("");
+  const [catalog,setCatalog]=useState<BrainScenario[]>([]),[report,setReport]=useState<BrainReport|null>(null),[history,setHistory]=useState<BrainSummary[]>([]),[view,setView]=useState<BrainReport|null>(null),[running,setRunning]=useState(false),[loading,setLoading]=useState(true),[working,setWorking]=useState(false),[error,setError]=useState(""),[statusError,setStatusError]=useState("");
   const [choice,setChoice]=useState(JSON.stringify([models.provider,models.model])),[mode,setMode]=useState<ResearchMode>("strict"),[repetitions,setRepetitions]=useState(1),[numbers,setNumbers]=useState(""),[filter,setFilter]=useState(""),[category,setCategory]=useState("all");
   const [publicAgent,setPublicAgent]=useState(false);
   const [ids,setIds]=useState<string[]>([]),[tab,setTab]=useState<Tab>("run"),[page,setPage]=useState(0);
@@ -16,15 +16,15 @@ export function NasBrainLab({client,models,busy}:{client:NasClient;models:NasMod
   const options=models.providers.filter(p=>p.configured).flatMap(p=>p.models.map(m=>({provider:p.provider,model:m,id:JSON.stringify([p.provider,m])})));
   const selected=catalog.filter(s=>ids.includes(s.id));
   const turns=selected.reduce((n,s)=>n+s.turns,0)*repetitions,limit=CLOUD_EVAL_BUDGETS[provider].maxTurns;
-  const locked=running||working;
+  const locked=running||working||!!statusError;
   const groups=[...new Set(catalog.map(s=>s.group))];
   const filtered=catalog.filter(s=>(category==="all"||s.group===category)&&(s.label+" "+s.group+" "+s.number).toLowerCase().includes(filter.toLowerCase()));
   const pages=Math.max(1,Math.ceil(filtered.length/PAGE_SIZE)),safePage=Math.min(page,pages-1);
   const visible=filtered.slice(safePage*PAGE_SIZE,(safePage+1)*PAGE_SIZE);
-  async function refresh(){const s=await client.brainStatus();setReport(s.current);setHistory(s.history);setRunning(s.running);}
-  useEffect(()=>{let live=true;let updating=false;const poll=async()=>{if(updating)return;updating=true;try{const s=await client.brainStatus();if(live){setReport(s.current);setHistory(s.history);setRunning(s.running);setLoading(false);}}catch(e){if(live)setError(String(e));}finally{updating=false;}};void client.brainCatalog().then(c=>{if(live)setCatalog(c);}).catch(e=>{if(live)setError(String(e));});void poll();const timer=setInterval(()=>void poll(),2500);return()=>{live=false;clearInterval(timer);};},[client]);
-  async function start(){setWorking(true);setError("");setView(null);try{await client.startBrain({provider,model,mode,scenarioIds:ids,repetitions,publicAgent:provider==="nvidia"&&publicAgent});await refresh();}catch(e){setError(String(e));}finally{setWorking(false);}}
-  async function stop(){setWorking(true);try{await client.stopBrain();await refresh();}catch(e){setError(String(e));}finally{setWorking(false);}}
+  async function refresh(){try{const s=await client.brainStatus();setReport(s.current);setHistory(s.history);setRunning(s.running);setLoading(false);setStatusError("");}catch(e){setStatusError(String(e));throw e;}}
+  useEffect(()=>{let live=true;let updating=false;const poll=async()=>{if(updating)return;updating=true;try{const s=await client.brainStatus();if(live){setReport(s.current);setHistory(s.history);setRunning(s.running);setLoading(false);setStatusError("");}}catch(e){if(live)setStatusError(String(e));}finally{updating=false;}};void client.brainCatalog().then(c=>{if(live)setCatalog(c);}).catch(e=>{if(live)setError(String(e));});void poll();const timer=setInterval(()=>void poll(),2500);return()=>{live=false;clearInterval(timer);};},[client]);
+  async function start(){setWorking(true);setError("");setView(null);try{await client.startBrain({provider,model,mode,scenarioIds:ids,repetitions,publicAgent:provider==="nvidia"&&publicAgent});await refresh().catch(()=>{});}catch(e){setError(String(e));void refresh().catch(()=>{});}finally{setWorking(false);}}
+  async function stop(){setWorking(true);setError("");try{await client.stopBrain();await refresh().catch(()=>{});}catch(e){setError(String(e));void refresh().catch(()=>{});}finally{setWorking(false);}}
   function selectNumbers(){const values=numbers.split(",").map(v=>Number(v.trim()));const found=catalog.filter(s=>s.supported&&values.includes(s.number));if(!found.length||found.length!==new Set(values).size){setError("Enter supported scenario numbers separated by commas.");return;}setIds(found.map(s=>s.id));setError("");}
   const shown=view??report,steps=shown?.cases.flatMap(c=>c.steps)??[];
   const exportReport=()=>{if(!shown)return;const url=URL.createObjectURL(new Blob([JSON.stringify(shown,null,2)],{type:"application/json"}));const a=document.createElement("a");a.href=url;a.download="mikan-nas-brain-"+shown.id+".json";a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);};
@@ -36,9 +36,11 @@ export function NasBrainLab({client,models,busy}:{client:NasClient;models:NasMod
       <button type="button" className={tab==="results"?"active":""} aria-pressed={tab==="results"} onClick={()=>setTab("results")}><ChartNoAxesCombined size={18}/> Results</button>
     </nav>
     {error&&<p className="brain-eval-message nas-brain-error" role="alert">{error}</p>}
+    {statusError&&<div className="brain-eval-message nas-brain-error" role="alert"><p>Connection to Beholder lost. Run status is not confirmed. Last known results are preserved. {statusError}</p><div className="brain-eval-actions"><button className="secondary-action" disabled={working} onClick={()=>void refresh().catch(()=>{})}>Reconnect / refresh status</button>{!running&&<button className="secondary-action" disabled={working} onClick={()=>void stop()}><Square size={14}/> Stop any active run</button>}</div></div>}
     {report&&<section className={"brain-eval-run-monitor nas-brain-monitor "+(running?"running":report.state==="finished"?"complete":report.state==="failed"?"failed":"stopped")} aria-live="polite">
-      <div className="brain-eval-run-heading"><strong>{stateName[report.state]??report.state}</strong><span>{report.done}/{report.total} turns</span></div>
+      <div className="brain-eval-run-heading"><strong>{stateName[report.state]??report.state}{statusError?" (last known)":""}</strong><span>{report.done}/{report.total} turns</span></div>
       <progress max={report.total||1} value={report.done}/><div className="brain-eval-run-details"><span>{report.model}</span><span>{report.currentLabel}</span></div>
+      {report.state==="quota"&&!running&&<p className="brain-eval-muted-note">The provider quota ended this run. No further tests are running. Partial results are saved; start a new run once the provider budget is available.</p>}
       <div className="brain-eval-actions">{running&&<button className="secondary-action" disabled={working} onClick={()=>void stop()}><Square size={14}/> Stop run</button>}<button className="secondary-action" onClick={()=>{setView(null);setTab("results");}}>View results</button></div>
     </section>}
     {tab==="run"&&<div className="brain-workspace-view">

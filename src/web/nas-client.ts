@@ -50,10 +50,10 @@ export class NasClient {
   updates(){return this.json<NasUpdateStatus>("updates");}
   requestUpdate(action:UpdateAction){return this.json<{queued:string}>("updates",{method:"POST",body:JSON.stringify({action})});}
   brainCatalog(){return this.json<BrainScenario[]>("brain-lab/catalog");}
-  brainStatus(){return this.json<{running:boolean;current:BrainReport|null;history:BrainSummary[]}>("brain-lab");}
+  brainStatus(){return this.json<{running:boolean;current:BrainReport|null;history:BrainSummary[]}>("brain-lab",{signal:AbortSignal.timeout(10000)});}
   brainReport(id:string){return this.json<BrainReport>("brain-lab/report/"+encodeURIComponent(id));}
-  startBrain(config:{provider:CloudProvider;model:string;mode:ResearchMode;scenarioIds:string[];repetitions:number;publicAgent?:boolean}){return this.json<{id:string}>("brain-lab/start",{method:"POST",body:JSON.stringify(config)});}
-  stopBrain(){return this.json<{running:boolean}>("brain-lab/stop",{method:"POST",body:"{}"});}
+  startBrain(config:{provider:CloudProvider;model:string;mode:ResearchMode;scenarioIds:string[];repetitions:number;publicAgent?:boolean}){return this.json<{id:string}>("brain-lab/start",{method:"POST",body:JSON.stringify(config),signal:AbortSignal.timeout(15000)});}
+  stopBrain(){return this.json<{running:boolean}>("brain-lab/stop",{method:"POST",body:"{}",signal:AbortSignal.timeout(15000)});}
   knowledge(){return this.json<KnowledgeStatus>("knowledge");}
   knowledgeAction(action:string,args:object={}){return this.json<KnowledgeStatus>("knowledge",{method:"POST",body:JSON.stringify({action,...args})});}
   knowledgeDocument(kind:"notion"|"web",id:string){return this.json<KnowledgeDocument>("knowledge/document?"+new URLSearchParams({kind,id}));}
