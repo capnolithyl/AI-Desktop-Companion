@@ -2,7 +2,6 @@ import java.util.Properties
 
 plugins {
     id("com.android.application")
-    id("org.jetbrains.kotlin.android")
 }
 
 // A single, private signing identity for all GitHub Actions APKs.
@@ -22,8 +21,8 @@ android {
         applicationId = "dev.capnolithyl.mikan.pocket"
         minSdk = 26
         targetSdk = 35
-        versionCode = 20
-        versionName = "0.4.9"
+        versionCode = 21
+        versionName = "0.5.0"
     }
 
     signingConfigs {
@@ -47,6 +46,17 @@ android {
         }
     }
 
+    // Preserve legacy Pocket sources in Git, but exclude them and their bundled UI from the APK.
+    sourceSets {
+        getByName("main") {
+            java.setSrcDirs(listOf("src/wrapper/java"))
+            assets.setSrcDirs(emptyList<String>())
+        }
+        getByName("test") {
+            java.setSrcDirs(listOf("src/wrapperTest/java"))
+        }
+    }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
@@ -54,14 +64,5 @@ android {
 }
 
 dependencies {
-    implementation("com.google.mlkit:genai-prompt:1.0.0-beta5")
-    implementation("androidx.webkit:webkit:1.13.0")
     testImplementation("junit:junit:4.13.2")
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
-}
-
-kotlin {
-    compilerOptions {
-        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
-    }
 }

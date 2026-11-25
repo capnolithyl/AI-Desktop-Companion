@@ -1,3 +1,15 @@
+# Pocket Mikan 0.5.0 · NAS web app wrapper (experimental)
+
+Pocket now loads the exact owner-configured HTTPS browser application from Beholder, with no local inference, phone database access, independent React UI or research pipeline. On first launch enter the same URL used in your browser (Tailscale must be connected) and use the existing NAS login screen. Only the URL is saved by the native wrapper. The site's own session behavior is unchanged; browser and WebView cookies/session storage are separate, and a cold restart may require login again. No access key is embedded in the APK.
+
+The package ID and signing identity are unchanged. Install the signed APK over the existing app; do not uninstall or clear data. Legacy phone data is left untouched, not migrated to the NAS or shown in the new UI. Previous source and docs below are retained for recovery/history, but excluded from the wrapper build. No changes to Beholder or Windows are required. Future web deployments appear on reload, without an APK update.
+
+Device acceptance: first launch and reconnect, chat and memory parity against the browser, Iki/WebGL, keyboard and system Back, source links, file picker, app resume, invalid TLS and Tailscale outage. Blob-based web exports currently open the browser instead; direct export support is a known parity gap. No claim of real-device validation until tested.
+
+---
+
+# Historical documentation (independent Pocket app, through 0.4.9)
+
 ## Pocket Mikan v0.4.9: Memory-first personal questions
 
 Pocket now routes self-referential questions to phone-local SQLite rather than Tavily. It waits for any in-flight automatic memory extraction to finish, then reads fresh saved facts before preparing Nano's prompt. The web research cache is not reused for personal questions, so "How old am I?" never searches public age-calculator websites. When a saved birth date exists, the app calculates age deterministically using the phone's local calendar date, including birthday boundaries and time zones; if not saved, it explains the missing fact rather than guessing. Broader questions such as "Where do I work?" and "What do you remember about me?" stay local and use saved facts with explicit instructions not to invent personal details. This is a reusable, privacy-preserving memory-first route rather than a special-purpose web search exception.

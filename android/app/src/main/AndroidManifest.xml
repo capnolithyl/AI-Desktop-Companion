@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <!-- Only Kotlin's pinned Tavily HTTPS client uses the network. The WebView
-         continues to block external resources, and Gemini Nano stays local. -->
+    <!-- HTTPS access to the owner-configured NAS website. -->
     <uses-permission android:name="android.permission.INTERNET" />
     <application
         android:allowBackup="false"
@@ -9,7 +8,7 @@
         android:theme="@style/Theme.MikanPocket"
         android:usesCleartextTraffic="false">
         <activity
-            android:name=".ReactActivity"
+            android:name=".NasActivity"
             android:exported="true"
             android:windowSoftInputMode="adjustResize">
             <intent-filter>
