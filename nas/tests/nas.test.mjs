@@ -1096,3 +1096,42 @@ test("token endpoint is authenticated and includes real provider adapter usage v
   assert.equal(data.groups.groq.sources.chat.calls,1);assert.ok(!JSON.stringify(data).includes("synthetic-groq-secret"));
  }finally{await new Promise(resolve=>server.close(resolve));store.db.close();}
 });
+
+test("Cerebras configuration is selectable, persisted, model-validated and trial-safe",()=>{
+ const root=mkdtempSync(join(tmpdir(),"mikan-cerebras-")),store=openStore(join(root,"db.sqlite3"));
+ try{
+  const file=join(root,"providers.json");
+  const models=providerSettings({db:store.db,file});
+  const view=models.save({provider:"cerebras",apiKey:"synthetic-cerebras-secret",model:"gpt-oss-120b",select:true});
+  assert.equal(view.reasoningEffort,"medium");assert.equal(view.cerebrasTier,"trial");assert.equal(models.quota("cerebras").minuteLimit,5);
+  assert.ok(!JSON.stringify(view).includes("synthetic-cerebras-secret"));
+  assert.throws(()=>models.save({provider:"cerebras",model:"not-supported"}),/Invalid model/);
+  assert.throws(()=>models.save({provider:"cerebras",reasoningEffort:"none"}),/Unsupported reasoning/);
+  models.save({provider:"cerebras",cerebrasTier:"paid",reasoningEffort:"high"});
+  const reopened=providerSettings({db:store.db,file});assert.equal(reopened.active().reasoningEffort,"high");assert.equal(reopened.quota("cerebras").minuteLimit,1000);
+ }finally{store.db.close();rmSync(root,{recursive:true,force:true});}
+});
+test("Cerebras stream uses its own documented parameters and counts usage",async()=>{
+ const usage=[],deltas=[];
+ const result=await generateReply({config:{provider:"cerebras",model:"gpt-oss-120b",key:"synthetic-cerebras-secret"},system:"test",history:[{role:"user",content:"Hi"}],agentEffort:"medium",onUsage:v=>usage.push(v),onDelta:v=>deltas.push(v),fetchImpl:async(url,opts)=>{
+  assert.equal(url,"https://api.cerebras.ai/v1/chat/completions");const body=JSON.parse(opts.body);
+  assert.equal(body.reasoning_format,"hidden");assert.equal(body.reasoning_effort,"medium");assert.equal(body.include_reasoning,undefined);assert.equal(body.stream_options,undefined);assert.equal(body.max_completion_tokens,4096);
+  return new Response('data: {"choices":[{"delta":{"content":"Hi!"},"finish_reason":"stop"}],"usage":{"prompt_tokens":600,"completion_tokens":35,"completion_tokens_details":{"reasoning_tokens":20}}}\n\ndata: [DONE]\n\n');
+ }});
+ assert.equal(result,"Hi!");assert.deepEqual(deltas,["Hi!"]);assert.equal(usage[0].inputTokens,600);assert.equal(usage[0].outputTokens,35);assert.equal(usage[0].reasoningTokens,20);
+});
+test("Cerebras supports native tool call and tool result continuation",async()=>{
+ const call={id:"call_1",type:"function",function:{name:"search_web",arguments:'{"query":"public topic"}'}};
+ const config={provider:"cerebras",model:"gpt-oss-120b",key:"synthetic-cerebras-secret"},agentTools=[{type:"function",function:{name:"search_web",parameters:{type:"object"}}}];
+ const history=[{role:"user",content:"Find public topic"}];
+ const first=await generateReply({config,system:"test",history,agentTools,agentEffort:"medium",fetchImpl:async(_url,opts)=>{
+  const body=JSON.parse(opts.body);assert.equal(body.stream,false);assert.equal(body.tool_choice,"auto");assert.equal(body.parallel_tool_calls,false);assert.equal(body.max_completion_tokens,2048);
+  return Response.json({choices:[{finish_reason:"tool_calls",message:{content:null,tool_calls:[call]}}],usage:{prompt_tokens:1000,completion_tokens:100}});
+ }});
+ assert.deepEqual(first.toolCalls,[call]);
+ const second=await generateReply({config,system:"test",history:[...history,{role:"assistant",content:null,tool_calls:first.toolCalls},{role:"tool",tool_call_id:call.id,content:"Public evidence"}],agentTools,fetchImpl:async(_url,opts)=>{
+  const body=JSON.parse(opts.body);assert.deepEqual(body.messages.at(-1),{role:"tool",tool_call_id:"call_1",content:"Public evidence"});
+  return Response.json({choices:[{finish_reason:"stop",message:{content:"Found it."}}],usage:{prompt_tokens:1200,completion_tokens:50}});
+ }});
+ assert.equal(second.content,"Found it.");
+});

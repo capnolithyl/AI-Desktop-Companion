@@ -27,7 +27,7 @@ export function createBrainLab({db,models,requestModel,search,read,build,pace=pa
   function start(body){
     if(controller)throw invalid("Brain Lab is already running",409);
     const {provider,model,scenarioIds,mode,repetitions,publicAgent=false}=body??{};
-    if(typeof publicAgent!=="boolean"||publicAgent&&!["nvidia","groq"].includes(provider))throw invalid("Native agent requires NVIDIA or Groq");
+    if(typeof publicAgent!=="boolean"||publicAgent&&!["nvidia","groq","cerebras"].includes(provider))throw invalid("Native agent requires NVIDIA, Groq or Cerebras");
     if(!["simple","strict","off"].includes(mode)||![1,2,3,5].includes(repetitions)||!Array.isArray(scenarioIds)||!scenarioIds.length||new Set(scenarioIds).size!==scenarioIds.length)throw invalid("Select scenarios, mode and repetitions");
     const selected=models.configFor(provider,model);
     const scenarios=scenarioIds.map(id=>EVAL_SCENARIOS.find(s=>s.id===id));

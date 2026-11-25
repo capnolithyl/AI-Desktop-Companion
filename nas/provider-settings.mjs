@@ -1,22 +1,22 @@
 import {readFileSync,writeFileSync,renameSync,unlinkSync} from "node:fs";
 import {randomUUID} from "node:crypto";
 import {NVIDIA_MODELS} from "../src/model-switcher.ts";
-export const PROVIDERS=["nvidia","openrouter","gemini","groq"];
-export const DEFAULT_MODELS={nvidia:NVIDIA_MODELS[0],openrouter:"openrouter/free",gemini:"gemini-2.5-flash",groq:"openai/gpt-oss-120b"};
-const KEY_NAMES={nvidia:"NVIDIA_API_KEY",openrouter:"OPENROUTER_API_KEY",gemini:"GEMINI_API_KEY",groq:"GROQ_API_KEY"};
+export const PROVIDERS=["nvidia","openrouter","gemini","groq","cerebras"];
+export const DEFAULT_MODELS={nvidia:NVIDIA_MODELS[0],openrouter:"openrouter/free",gemini:"gemini-2.5-flash",groq:"openai/gpt-oss-120b",cerebras:"gpt-oss-120b"};
+const KEY_NAMES={nvidia:"NVIDIA_API_KEY",openrouter:"OPENROUTER_API_KEY",gemini:"GEMINI_API_KEY",groq:"GROQ_API_KEY",cerebras:"CEREBRAS_API_KEY"};
 const invalid=(message,status=400)=>Object.assign(new Error(message),{status});
 const GROQ_MODELS=["openai/gpt-oss-120b","openai/gpt-oss-20b"];
 const modelValid=(provider,model)=>typeof model==="string"&&model.length<=120&&/^[\w./:-]{2,120}$/.test(model)&&
   (provider!=="openrouter"||model==="openrouter/free"||model.endsWith(":free"))&&
-  (provider!=="gemini"||model.startsWith("gemini-"))&&(provider!=="groq"||GROQ_MODELS.includes(model));
-const effortOptions=(provider,model)=>provider==="groq"?["low","medium","high"]:provider==="nvidia"&&model==="nvidia/nemotron-3-ultra-550b-a55b"?["auto","none","medium","high"]:[];
+  (provider!=="gemini"||model.startsWith("gemini-"))&&(provider!=="groq"||GROQ_MODELS.includes(model))&&(provider!=="cerebras"||model==="gpt-oss-120b");
+const effortOptions=(provider,model)=>["groq","cerebras"].includes(provider)?["low","medium","high"]:provider==="nvidia"&&model==="nvidia/nemotron-3-ultra-550b-a55b"?["auto","none","medium","high"]:[];
 const keyValid=key=>typeof key==="string"&&key.length>=12&&key.length<=512&&!/\s/.test(key);
 export function providerSettings({initial,env={},file="",db,now=Date.now}){
   const initialProvider=initial?.provider??env.MIKAN_PROVIDER??"nvidia";
   if(!PROVIDERS.includes(initialProvider))throw Error("Unsupported MIKAN_PROVIDER");
   const defaults={...DEFAULT_MODELS,[initialProvider]:initial?.model??env.MIKAN_MODEL??DEFAULT_MODELS[initialProvider]};
   const inherited=Object.fromEntries(PROVIDERS.map(p=>[p,initial?.provider===p?initial.key:env[KEY_NAMES[p]]||""]));
-  let saved={provider:initialProvider,models:defaults,keys:{},efforts:{groq:"medium",nvidia:"auto"},historyChars:32000};
+  let saved={provider:initialProvider,models:defaults,keys:{},efforts:{groq:"medium",cerebras:"medium",nvidia:"auto"},cerebrasTier:"trial",historyChars:32000};
   if(file){
     try{
       const disk=JSON.parse(readFileSync(file,"utf8"));
@@ -27,14 +27,15 @@ export function providerSettings({initial,env={},file="",db,now=Date.now}){
         if(effortOptions(p,DEFAULT_MODELS[p]).includes(disk.efforts?.[p]))saved.efforts[p]=disk.efforts[p];
       }
       saved.provider=disk.provider;
+      if(["trial","paid"].includes(disk.cerebrasTier))saved.cerebrasTier=disk.cerebrasTier;
       if([16000,32000,64000].includes(disk.historyChars))saved.historyChars=disk.historyChars;
     }catch(e){if(e.code!=="ENOENT")throw Error("Could not read NAS provider settings");}
   }
   const credential=(p,s=saved)=>s.keys[p]||inherited[p]||"";
   const configured=(p,s=saved)=>keyValid(credential(p,s));
-  const models=p=>p==="nvidia"?[...new Set([...NVIDIA_MODELS,defaults.nvidia,saved.models.nvidia])]:p==="groq"?GROQ_MODELS:[saved.models[p]];
+  const models=p=>p==="nvidia"?[...new Set([...NVIDIA_MODELS,defaults.nvidia,saved.models.nvidia])]:p==="groq"?GROQ_MODELS:p==="cerebras"?["gpt-oss-120b"]:[saved.models[p]];
   function view(){
-    return {provider:saved.provider,model:saved.models[saved.provider],historyChars:saved.historyChars,reasoningEffort:effortOptions(saved.provider,saved.models[saved.provider]).includes(saved.efforts[saved.provider])?saved.efforts[saved.provider]:null,reasoningOptions:effortOptions(saved.provider,saved.models[saved.provider]),
+    return {provider:saved.provider,model:saved.models[saved.provider],historyChars:saved.historyChars,cerebrasTier:saved.cerebrasTier,reasoningEffort:effortOptions(saved.provider,saved.models[saved.provider]).includes(saved.efforts[saved.provider])?saved.efforts[saved.provider]:null,reasoningOptions:effortOptions(saved.provider,saved.models[saved.provider]),
       providers:PROVIDERS.map(provider=>({provider,model:saved.models[provider],models:models(provider),configured:configured(provider),credentialSource:saved.keys[provider]?"nas":configured(provider)?"environment":"missing",imageInput:"unsupported",nativeTools:"unverified"}))};
   }
   function active(){return configFor(saved.provider,saved.models[saved.provider]);}
@@ -55,6 +56,10 @@ export function providerSettings({initial,env={},file="",db,now=Date.now}){
     if(patch.reasoningEffort!==undefined){
       if(!effortOptions(p,next.models[p]).includes(patch.reasoningEffort))throw invalid("Unsupported reasoning effort for this model");
       next.efforts[p]=patch.reasoningEffort;
+    }
+    if(patch.cerebrasTier!==undefined){
+      if(p!=="cerebras"||!["trial","paid"].includes(patch.cerebrasTier))throw invalid("Invalid Cerebras quota tier");
+      next.cerebrasTier=patch.cerebrasTier;
     }
     if(patch.apiKey!==undefined){
       if(!keyValid(patch.apiKey))throw invalid("API key must be 12–512 non-whitespace characters");
@@ -105,7 +110,7 @@ export function providerSettings({initial,env={},file="",db,now=Date.now}){
   const limits={nvidia:30,openrouter:15,gemini:5,groq:30};
   const lastResponse=new Map(),lastRejection=new Map();
   function quota(p,slots=1){
-    const t=now(),minuteLimit=limits[p],dayLimit=p==="openrouter"?40:p==="groq"?1000:null;
+    const t=now(),minuteLimit=p==="cerebras"?(saved.cerebrasTier==="paid"?1000:5):limits[p],dayLimit=p==="openrouter"?40:p==="groq"?1000:null;
     const cooldownUntil=db.prepare("SELECT until_ms FROM nas_provider_cooldown WHERE provider=?").get(p)?.until_ms??0;
     const {n:requestsLastMinute,oldest}=db.prepare("SELECT count(*) AS n,min(started_at) AS oldest FROM nas_provider_requests WHERE provider=? AND started_at>?").get(p,t-60000);
     const requestsToday=dayLimit===null?null:db.prepare("SELECT count(*) AS n FROM nas_provider_requests WHERE provider=? AND started_at>=?").get(p,Math.floor(t/86400000)*86400000).n;

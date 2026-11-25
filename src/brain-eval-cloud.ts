@@ -39,7 +39,7 @@ export const CLOUD_EVAL_BUDGETS: Record<CloudEvalProvider,CloudBudget> = {
 };
 
 // NAS-only additions; desktop provider types and native commands stay unchanged.
-export const NAS_CLOUD_EVAL_BUDGETS:Record<CloudEvalProvider|"groq",CloudBudget|{provider:"groq";maxTurns:number;minimumIntervalMs:number;estimatedCallsPerTurn:number;description:string}>={...CLOUD_EVAL_BUDGETS,groq:{provider:"groq",maxTurns:12,minimumIntervalMs:60000,estimatedCallsPerTurn:6,description:"Free tier: start at most one benchmark turn per minute. Multiple calls and large contexts can still exhaust Groq token limits."}};
+export const NAS_CLOUD_EVAL_BUDGETS:Record<CloudEvalProvider|"groq"|"cerebras",CloudBudget|{provider:"groq"|"cerebras";maxTurns:number;minimumIntervalMs:number;estimatedCallsPerTurn:number;description:string}>={...CLOUD_EVAL_BUDGETS,groq:{provider:"groq",maxTurns:12,minimumIntervalMs:60000,estimatedCallsPerTurn:6,description:"Free tier: start at most one benchmark turn per minute. Multiple calls and large contexts can still exhaust Groq token limits."},cerebras:{provider:"cerebras",maxTurns:12,minimumIntervalMs:60000,estimatedCallsPerTurn:5,description:"Trial-safe pacing: at most one benchmark turn per minute. Cerebras GPT-OSS trial permits 5 calls/min; paid accounts have higher limits. Tool-heavy turns may still hit limits."}};
 
 export function brainCloudChoices(settings:BrainModelSettings):BrainEvalModelChoice[]{
   const choices:BrainEvalModelChoice[]=NVIDIA_MODELS.map(model=>({
@@ -107,10 +107,10 @@ export function validateCloudTurnBudget(
   }
 }
 
-const nextProviderTurn=new Map<CloudEvalProvider|"groq",number>();
+const nextProviderTurn=new Map<CloudEvalProvider|"groq"|"cerebras",number>();
 /** All Brain Lab runs share this in-process gate. No timer runs in the background. */
 export async function paceCloudBrainTurn(
-  provider:CloudEvalProvider|"groq",signal:AbortSignal,
+  provider:CloudEvalProvider|"groq"|"cerebras",signal:AbortSignal,
   onWait:(milliseconds:number)=>void=()=>{},
   now:()=>number=Date.now,
   sleep:(ms:number,signal:AbortSignal)=>Promise<void>=abortableCloudSleep
