@@ -588,7 +588,8 @@ public class HomeActivity extends Activity {
             setDescendantFocusability(FOCUS_BLOCK_DESCENDANTS);
         }
         void bind(App app,boolean badges){
-            bound=app;icon.setImageDrawable(themedIcon(app));name.setText(app.label);setContentDescription(app.label);updateBadge(badges);
+            bound=app;int size=Math.max(32,Math.min(prefs.getInt("iconSize",50),(getResources().getConfiguration().screenWidthDp-68)/drawerColumns()));View frame=getChildAt(0);android.view.ViewGroup.LayoutParams layout=frame.getLayoutParams();if(layout.width!=dp(size)||layout.height!=dp(size)){layout.width=dp(size);layout.height=dp(size);frame.setLayoutParams(layout);}
+            icon.setImageDrawable(themedIcon(app));name.setText(app.label);setContentDescription(app.label);updateBadge(badges);
         }
         void updateBadge(boolean enabled){
             int visibility=enabled&&bound!=null&&LauncherNotifications.has(bound.component.getPackageName())?View.VISIBLE:View.GONE;
@@ -724,7 +725,7 @@ public class HomeActivity extends Activity {
         gap(page,8);
         LinearLayout tools=horizontal();drawerSortButton=action(drawerSortName(),this::chooseDrawerSort);tools.addView(drawerSortButton,new LinearLayout.LayoutParams(0,-2,1));
         drawerCategoryButton=action("All apps",this::chooseDrawerCategory);drawerCategoryButton.setSingleLine(true);drawerCategoryButton.setEllipsize(android.text.TextUtils.TruncateAt.END);tools.addView(drawerCategoryButton,new LinearLayout.LayoutParams(0,-2,1));
-        tools.addView(action("⋯",this::drawerOptions),new LinearLayout.LayoutParams(dp(48),-2));page.addView(tools);gap(page,8);
+        TextView more=action("⋯",this::drawerOptions);more.setContentDescription("Drawer settings");tools.addView(more,new LinearLayout.LayoutParams(dp(48),-2));page.addView(tools);gap(page,8);
         // Explicitly constrain grid height to the remaining viewport. No ScrollView
         // wrapper: GridView measures/attaches only the cells it needs.
         FrameLayout viewport=new FrameLayout(this);page.addView(viewport,new LinearLayout.LayoutParams(-1,0,1));

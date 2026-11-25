@@ -35,7 +35,7 @@ final class DrawerIndexView extends View {
     @Override public boolean onTouchEvent(MotionEvent e){
         switch(e.getActionMasked()){
             case MotionEvent.ACTION_DOWN:
-                getParent().requestDisallowInterceptTouchEvent(true);requested=-1;
+                if(getParent()!=null)getParent().requestDisallowInterceptTouchEvent(true);requested=-1;
                 // fall through
             case MotionEvent.ACTION_MOVE:
                 if(getHeight()<=0)return true;
@@ -47,7 +47,7 @@ final class DrawerIndexView extends View {
                 }return true;
             case MotionEvent.ACTION_UP:
             case MotionEvent.ACTION_CANCEL:
-                requested=-1;active=-1;finish.run();getParent().requestDisallowInterceptTouchEvent(false);invalidate();return true;
+                requested=-1;active=-1;finish.run();if(getParent()!=null)getParent().requestDisallowInterceptTouchEvent(false);invalidate();return true;
             default:return true;
         }
     }
