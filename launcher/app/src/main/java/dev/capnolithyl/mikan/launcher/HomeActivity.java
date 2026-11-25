@@ -81,7 +81,8 @@ public class HomeActivity extends Activity {
     private DashboardCards dashboard;
     private TextView ampm;
     private boolean compactClock;
-    private String checkedWebUrl="",webStatus="";
+    private String checkedWebUrl="";
+    private MikanHealth webStatus;
     private long webCheckedAt=-1,webStartedAt=-1,batteryReadAt=-1;
     private String webStartedUrl="";
     private MikanPersonality.Line batteryRemark;
@@ -914,7 +915,7 @@ public class HomeActivity extends Activity {
                 settingsUi.toggle(body,"Battery reactions","React to low battery, charging and full charge",prefs.getBoolean("mikanBatteryHints",true),on->{prefs.edit().putBoolean("mikanBatteryHints",on).apply();batteryReadAt=-1;showSettings();});
                 settingsUi.toggle(body,"Holiday greetings","Local date-based greetings for selected holidays",prefs.getBoolean("mikanHolidayHints",true),on->{prefs.edit().putBoolean("mikanHolidayHints",on).apply();showSettings();});
                 settingsUi.toggle(body,"Delivery app hints","Mention notifications from supported tracking apps; requires notification hints",prefs.getBoolean("mikanDeliveryHints",true),on->{prefs.edit().putBoolean("mikanDeliveryHints",on).apply();showSettings();});
-                settingsUi.toggle(body,"Web reachability remarks","Optional HTTPS check every 5 minutes while Mikan is visible; not an AI/NAS health check",prefs.getBoolean("mikanWebHints",false),on->{prefs.edit().putBoolean("mikanWebHints",on).apply();webStartedAt=-1;showSettings();});
+                settingsUi.toggle(body,"NAS health remarks","Check Beholder’s health every 5 minutes while Mikan is visible; no login required",prefs.getBoolean("mikanWebHints",false),on->{prefs.edit().putBoolean("mikanWebHints",on).apply();webStartedAt=-1;showSettings();});
                 settingsUi.row(body,"Notification access",LauncherNotifications.allowed(this)?"Allowed":"Not granted",this::notificationAccess);
                 settingsUi.note(body,"Remarks rotate while Home is visible. Tap the artwork for Pocket Mikan, the bubble for its indicated app, or an idle bubble for another remark. No AI or notification contents. Network requests only if optional web reachability checks are enabled.");
                 settingsUi.heading(body,"COMPANION CONNECTION");
@@ -922,8 +923,8 @@ public class HomeActivity extends Activity {
                 settingsUi.note(body,"The home card prefers Pocket Mikan. The saved web address is only a fallback; Pocket Mikan manages its own connection.");
                 setting(body,"Open Mikan Web in browser",this::openMikanWeb);
                 settingsUi.row(body,"Mikan Web address",prefs.getString("mikanWebUrl","").isEmpty()?"Not configured":"Configured",()->editMikanUrl(false));
-                setting(body,"Check Mikan Web connection",this::checkMikanWeb);
-                if(!webStatus.isEmpty())settingsUi.note(body,"Last check: "+webStatus);
+                setting(body,"Check NAS health now",this::checkMikanWeb);
+                if(webStatus!=null)settingsUi.note(body,"Last health check: "+webStatus.label+" · provider status unknown");
                 break;
             case ACCESS:
                 settingsUi.heading(body,"NOTIFICATIONS & MEDIA");
@@ -1094,25 +1095,13 @@ public class HomeActivity extends Activity {
         long now=android.os.SystemClock.elapsedRealtime();
         if(!manual&&url.equals(webStartedUrl)&&webStartedAt>=0&&now-webStartedAt<5*60*1000L)return;
         webStartedAt=now;webStartedUrl=url;checkingWeb=true;
-        if(manual)Toast.makeText(this,"Checking Mikan Web…",Toast.LENGTH_SHORT).show();
+        if(manual)Toast.makeText(this,"Checking NAS health…",Toast.LENGTH_SHORT).show();
         new Thread(()->{
-            String result="Web unreachable";
-            java.net.HttpURLConnection connection=null;
-            try{
-                java.net.URL endpoint=new java.net.URL(url);
-                if(!"https".equalsIgnoreCase(endpoint.getProtocol())||endpoint.getUserInfo()!=null)throw new java.io.IOException("HTTPS required");
-                connection=(java.net.HttpURLConnection)endpoint.openConnection();
-                connection.setRequestMethod("HEAD");connection.setInstanceFollowRedirects(false);connection.setConnectTimeout(5000);connection.setReadTimeout(5000);connection.setUseCaches(false);
-                int code=connection.getResponseCode();
-                if(code>=200&&code<400)result="Web responded";
-                else if(code==401||code==403)result="Web requires access";
-                else result="Web HTTP "+code;
-            }catch(Exception ignored){}finally{if(connection!=null)connection.disconnect();}
-            final String status=result;
+            final MikanHealth status=MikanHealthClient.check(url);
             runOnUiThread(()->{
                 checkingWeb=false;if(isFinishing()||isDestroyed()||!url.equals(prefs.getString("mikanWebUrl","")))return;
                 checkedWebUrl=url;webStatus=status;webCheckedAt=android.os.SystemClock.elapsedRealtime();
-                if(manual){Toast.makeText(this,status+" · last check only",Toast.LENGTH_LONG).show();if(settings&&settingsSection==SettingsHub.Section.MIKAN)showSettings();}
+                if(manual){Toast.makeText(this,status.label+" · last check only",Toast.LENGTH_LONG).show();if(settings&&settingsSection==SettingsHub.Section.MIKAN)showSettings();}
                 // Foreground refresh consumes this snapshot only when opt-in is enabled.
             });
         },"mikan-web-check").start();
@@ -1146,7 +1135,7 @@ public class HomeActivity extends Activity {
             try{
                 java.net.URI uri=new java.net.URI(value);
                 if(!"https".equalsIgnoreCase(uri.getScheme())||uri.getHost()==null||uri.getUserInfo()!=null)throw new IllegalArgumentException();
-                prefs.edit().putString("mikanWebUrl",value).apply();checkedWebUrl="";webStatus="";webCheckedAt=-1;webStartedAt=-1;dialog.dismiss();if(openAfter)openMikanWeb();else if(settings)showSettings();
+                prefs.edit().putString("mikanWebUrl",value).apply();checkedWebUrl="";webStatus=null;webCheckedAt=-1;webStartedAt=-1;dialog.dismiss();if(openAfter)openMikanWeb();else if(settings)showSettings();
             }catch(Exception e){field.setError("Enter a valid HTTPS web address.");}
         }));dialog.show();
     }
@@ -1464,7 +1453,7 @@ public class HomeActivity extends Activity {
             }catch(RuntimeException ignored){}
         }
         checkMikanWeb(false);
-        String recentWeb=prefs.getBoolean("mikanWebHints",false)&&!webStatus.isEmpty()&&checkedWebUrl.equals(prefs.getString("mikanWebUrl",""))&&webCheckedAt>=0&&now-webCheckedAt<10*60*1000L?webStatus:null;
+        MikanHealth recentWeb=prefs.getBoolean("mikanWebHints",false)&&webStatus!=null&&checkedWebUrl.equals(prefs.getString("mikanWebUrl",""))&&webCheckedAt>=0&&now-webCheckedAt<10*60*1000L?webStatus:null;
         mikanCard.setRemark(remarks.choose(prefs,packages,agenda,Calendar.getInstance().get(Calendar.HOUR_OF_DAY),java.time.LocalDate.now(),batteryRemark,recentWeb));
     }
     private void openRemark(MikanRemarks.Remark remark){

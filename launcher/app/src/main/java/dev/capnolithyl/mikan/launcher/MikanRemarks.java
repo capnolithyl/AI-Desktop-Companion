@@ -36,7 +36,7 @@ final class MikanRemarks {
         if(packages.contains(pkg))options.add(new Remark(label+" has a notification. Want to take a look?",Action.APP,pkg,label,MikanExpression.EXCITED));
     }
     void advance(){rotation.advance();}
-    Remark choose(SharedPreferences prefs,Set<String> packages,String agenda,int hour,LocalDate date,MikanPersonality.Line battery,String webStatus){
+    Remark choose(SharedPreferences prefs,Set<String> packages,String agenda,int hour,LocalDate date,MikanPersonality.Line battery,MikanHealth webStatus){
         if(!prefs.getBoolean("mikanRemarks",true)){rotation.reset();return null;}
         List<Remark> options=new ArrayList<>();
         if(prefs.getBoolean("mikanBatteryHints",true)&&battery!=null)options.add(local(battery));
@@ -71,9 +71,7 @@ final class MikanRemarks {
             Remark weather=weatherRemark(prefs);if(weather!=null)options.add(weather);
         }
         if(prefs.getBoolean("mikanWebHints",false)&&webStatus!=null){
-            boolean responded=webStatus.equals("Web responded");
-            String note=responded?"Mikan Web responded to its latest check ♡":webStatus.equals("Web requires access")?"Mikan Web requires access at its latest check.":"Mikan Web check: "+webStatus+".";
-            options.add(new Remark(note,Action.NONE,"","",responded?MikanExpression.DEFAULT:MikanExpression.CONCERNED,"web:"+webStatus));
+            options.add(new Remark(webStatus.remark,Action.NONE,"","",webStatus.expression,"health:"+webStatus.name()));
         }
         for(MikanPersonality.Line line:MikanPersonality.idle(hour))options.add(local(line));
         List<String> keys=new ArrayList<>();for(Remark option:options)keys.add(option.key());

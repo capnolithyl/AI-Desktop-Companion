@@ -73,6 +73,11 @@ jobs:
           mkdir -p /tmp/mikan-personality-tests
           javac -d /tmp/mikan-personality-tests launcher/app/src/main/java/dev/capnolithyl/mikan/launcher/MikanExpression.java launcher/app/src/main/java/dev/capnolithyl/mikan/launcher/MikanPersonality.java launcher/tests/MikanPersonalityTest.java
           java -cp /tmp/mikan-personality-tests dev.capnolithyl.mikan.launcher.MikanPersonalityTest
+      - name: Test NAS health contract
+        run: |
+          mkdir -p /tmp/mikan-health-tests
+          javac -d /tmp/mikan-health-tests launcher/app/src/main/java/dev/capnolithyl/mikan/launcher/MikanExpression.java launcher/app/src/main/java/dev/capnolithyl/mikan/launcher/MikanHealth.java launcher/tests/MikanHealthTest.java
+          java -cp /tmp/mikan-health-tests dev.capnolithyl.mikan.launcher.MikanHealthTest
       - name: Compile launcher
         working-directory: launcher
         run: gradle :app:assembleDebug --stacktrace
