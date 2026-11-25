@@ -41,7 +41,7 @@ public class HomeActivity extends Activity {
     private final LauncherPerf perf=new LauncherPerf();
     private boolean foreground,closed,catalogDirty,catalogBusy,catalogRenderPending,receiverRegistered;
     private boolean lastMediaPermission,lastCalendarPermission;
-    private long entryStart;
+    private long entryStart,entryGeneration;
     private String entryKind;
     private final Runnable catalogRefresh=()->refreshCatalog();
     private final Runnable delayedExtras=()->{if(foreground&&!closed)refreshExtras();};
@@ -103,6 +103,8 @@ public class HomeActivity extends Activity {
         registerPackageChanges();
         long scan=android.os.SystemClock.elapsedRealtime();applyCatalog(scanApps());perf.record("initial app catalog",scan);
         restoreFavorites();
+        lastMediaPermission=LauncherNotifications.allowed(this);
+        lastCalendarPermission=checkSelfPermission(android.Manifest.permission.READ_CALENDAR)==android.content.pm.PackageManager.PERMISSION_GRANTED;
         if(settings)showSettings();else showHome();
     }
     @Override protected void onSaveInstanceState(Bundle out){super.onSaveInstanceState(out);out.putString("pendingIconKey",pendingIconKey);if(settings)out.putString("settingsSection",settingsSection.name());}
@@ -123,7 +125,7 @@ public class HomeActivity extends Activity {
     }
     @Override protected void onPause(){
         foreground=false;dashboard.pause();handler.removeCallbacks(tick);handler.removeCallbacks(refreshExtras);handler.removeCallbacks(progressTick);handler.removeCallbacks(delayedExtras);handler.removeCallbacks(catalogRefresh);
-        entryKind=null;super.onPause();
+        entryKind=null;entryGeneration++;super.onPause();
     }
     @Override protected void onDestroy(){
         closed=true;foreground=false;handler.removeCallbacksAndMessages(null);catalogWorker.shutdownNow();
@@ -139,21 +141,22 @@ public class HomeActivity extends Activity {
     }
     @Override public void onTrimMemory(int level){
         super.onTrimMemory(level);
-        if(level>=android.content.ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW){
+        // UI_HIDDEN is a normal app switch, not a low-memory signal.
+        if(level==android.content.ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW||level==android.content.ComponentCallbacks2.TRIM_MEMORY_RUNNING_CRITICAL||level>=android.content.ComponentCallbacks2.TRIM_MEMORY_MODERATE){
             monoCache.evictAll();originalIcons.evictAll();assetCache.evictAll();PortraitStore.clearCache();
         }
     }
-    private void beginEntry(String kind){entryKind=kind;entryStart=android.os.SystemClock.elapsedRealtime();}
+    private void beginEntry(String kind){entryGeneration++;entryKind=kind;entryStart=android.os.SystemClock.elapsedRealtime();}
     private void observeEntry(){
         if(root==null||entryKind==null)return;
-        final View target=root;final long started=entryStart;final String kind=entryKind;
+        final View target=root;final long started=entryStart,generation=entryGeneration;final String kind=entryKind;
         entryKind=null;
         final android.view.ViewTreeObserver observer=target.getViewTreeObserver();
         if(!observer.isAlive())return;
         observer.addOnPreDrawListener(new android.view.ViewTreeObserver.OnPreDrawListener(){
             @Override public boolean onPreDraw(){
                 android.view.ViewTreeObserver current=target.getViewTreeObserver();if(current.isAlive())current.removeOnPreDrawListener(this);
-                if(foreground&&!closed&&root==target)perf.record(kind+" to pre-draw",started);
+                if(foreground&&!closed&&root==target&&generation==entryGeneration)perf.record(kind+" to pre-draw",started);
                 return true;
             }
         });

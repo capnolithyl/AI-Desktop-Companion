@@ -13,7 +13,7 @@ final class LauncherPerf {
         for(Map.Entry<String,ArrayDeque<Long>> e:samples.entrySet()){
             ArrayList<Long> sorted=new ArrayList<>(e.getValue());Collections.sort(sorted);int n=sorted.size();
             if(n==0)continue;
-            long median=sorted.get((n-1)/2),p95=sorted.get(Math.max(0,(int)Math.ceil(n*.95)-1)),max=sorted.get(n-1);
+            double median=(sorted.get((n-1)/2)+sorted.get(n/2))/2.0;long p95=sorted.get(Math.max(0,(int)Math.ceil(n*.95)-1)),max=sorted.get(n-1);
             out.append("\n").append(e.getKey()).append("\n").append("n=").append(n).append("  median=").append(median).append("  p95=").append(p95).append("  max=").append(max).append(" ms\n");
         }
         if(samples.isEmpty())out.append("\nNo samples yet. Return Home from several apps.");
