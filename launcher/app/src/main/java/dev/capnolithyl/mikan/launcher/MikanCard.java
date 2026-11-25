@@ -29,14 +29,14 @@ final class MikanCard {
     private final LinearLayout bubble;
     private final ImageView picture;
     private final Drawable fallbackArtwork;
-    private final java.util.function.Function<MikanExpression,Drawable> expressionArt;
-    private MikanExpression shownExpression;
+    private final java.util.function.BiFunction<MikanExpression,String,Drawable> expressionArt;
+    private String shownArtKey;
     private Drawable shownArtwork;
     private int artRevision;
     private MikanRemarks.Remark currentRemark;
     private boolean bubbleTouch;
     private String fallback="";
-    MikanCard(Context context,Drawable artwork,boolean transparent,String shortcutLabel,Runnable open,java.util.function.Consumer<MikanRemarks.Remark> onRemark,java.util.function.Function<MikanExpression,Drawable> expressionArt){
+    MikanCard(Context context,Drawable artwork,boolean transparent,String shortcutLabel,Runnable open,java.util.function.Consumer<MikanRemarks.Remark> onRemark,java.util.function.BiFunction<MikanExpression,String,Drawable> expressionArt){
         this.context=context;this.fallbackArtwork=artwork;this.expressionArt=expressionArt;
         root=new FrameLayout(context);root.setMinimumHeight(dp(172));root.setClipToOutline(true);
         GradientDrawable background=MikanTheme.panel(context,25);
@@ -87,7 +87,7 @@ final class MikanCard {
     }
     void setRemark(MikanRemarks.Remark value){
         if(bubbleTouch)return;
-        currentRemark=value;updateExpression(value==null?MikanExpression.DEFAULT:value.expression);String note=value==null?fallback:value.text;
+        currentRemark=value;updateExpression(value==null?MikanExpression.DEFAULT:value.expression,value==null?null:value.portraitAsset);String note=value==null?fallback:value.text;
         if(!note.contentEquals(subtitle.getText()))subtitle.setText(note);
         boolean actionable=value!=null&&value.actionable();
         String hint=actionable?value.label+" ↗":"";
@@ -97,10 +97,11 @@ final class MikanCard {
         String description=greeting.getText()+". "+note+(actionable?". Open "+value.label:value!=null?". Tap for another remark.":"");
         if(!description.contentEquals(bubble.getContentDescription()==null?"":bubble.getContentDescription()))bubble.setContentDescription(description);
     }
-    private void updateExpression(MikanExpression expression){
-        if(expressionArt==null||shownExpression==expression)return;
-        shownExpression=expression;
-        Drawable next=expressionArt.apply(expression);if(next==null)next=fallbackArtwork;
+    private void updateExpression(MikanExpression expression,String portraitAsset){
+        String key=portraitAsset==null?expression.asset():portraitAsset;
+        if(expressionArt==null||key.equals(shownArtKey))return;
+        shownArtKey=key;
+        Drawable next=expressionArt.apply(expression,portraitAsset);if(next==null)next=fallbackArtwork;
         Drawable previous=shownArtwork;shownArtwork=next;
         int revision=++artRevision;
         if(previous==null||next==null||previous==next||!picture.isAttachedToWindow()||!ValueAnimator.areAnimatorsEnabled()){

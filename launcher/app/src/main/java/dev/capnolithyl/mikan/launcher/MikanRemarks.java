@@ -16,11 +16,12 @@ final class MikanRemarks {
         final String text,packageName,label;
         final Action action;
         final MikanExpression expression;
-        final String identity;
+        final String identity,portraitAsset;
         Remark(String text,Action action,String packageName,String label,MikanExpression expression){
             this(text,action,packageName,label,expression,action.name()+":"+packageName);
         }
-        Remark(String text,Action action,String packageName,String label,MikanExpression expression,String identity){this.text=text;this.action=action;this.packageName=packageName;this.label=label;this.expression=expression;this.identity=identity;}
+        Remark(String text,Action action,String packageName,String label,MikanExpression expression,String identity){this(text,action,packageName,label,expression,identity,null);}
+        Remark(String text,Action action,String packageName,String label,MikanExpression expression,String identity,String portraitAsset){this.text=text;this.action=action;this.packageName=packageName;this.label=label;this.expression=expression;this.identity=identity;this.portraitAsset=portraitAsset;}
         String key(){return identity;}
         boolean actionable(){return action!=Action.NONE;}
     }
@@ -31,7 +32,7 @@ final class MikanRemarks {
     private static void addApp(List<Remark> options,Set<String> packages,String pkg,String label,String text){
         if(packages.contains(pkg))options.add(new Remark(text,Action.APP,pkg,label,MikanExpression.SURPRISED));
     }
-    private static Remark local(MikanPersonality.Line line){return new Remark(line.text,Action.NONE,"","",line.expression,line.key);}
+    private static Remark local(MikanPersonality.Line line){return new Remark(line.text,Action.NONE,"","",line.expression,line.key,line.portraitAsset);}
     private static void addDelivery(List<Remark> options,Set<String> packages,String pkg,String label){
         if(packages.contains(pkg))options.add(new Remark(label+" has a notification. Want to take a look?",Action.APP,pkg,label,MikanExpression.EXCITED));
     }
@@ -39,7 +40,12 @@ final class MikanRemarks {
     Remark choose(SharedPreferences prefs,Set<String> packages,String agenda,int hour,LocalDate date,MikanPersonality.Line battery,MikanHealth webStatus){
         if(!prefs.getBoolean("mikanRemarks",true)){rotation.reset();return null;}
         List<Remark> options=new ArrayList<>();
-        if(prefs.getBoolean("mikanBatteryHints",true)&&battery!=null)options.add(local(battery));
+        boolean batteryEnabled=prefs.getBoolean("mikanBatteryHints",true)&&battery!=null;
+        boolean critical=batteryEnabled&&"battery:critical".equals(battery.key);
+        if(critical)options.add(local(battery));
+        MikanPersonality.Line holiday=prefs.getBoolean("mikanHolidayHints",true)?MikanPersonality.holiday(date):null;
+        if(holiday!=null)options.add(local(holiday));
+        if(batteryEnabled&&!critical)options.add(local(battery));
         if(notificationHintsEnabled(prefs)){
             addApp(options,packages,"com.whatsapp","WhatsApp","Psst! WhatsApp has notifications for you ♡");
             addApp(options,packages,"com.whatsapp.w4b","WhatsApp Business","WhatsApp Business has notifications for you ♡");
@@ -63,9 +69,6 @@ final class MikanRemarks {
                 addDelivery(options,packages,"com.shopify.arrive","Shop");
             }
         }
-        if(prefs.getBoolean("mikanHolidayHints",true)){
-            MikanPersonality.Line holiday=MikanPersonality.holiday(date);if(holiday!=null)options.add(local(holiday));
-        }
         if(prefs.getBoolean("mikanCalendarHints",true)&&agenda!=null)options.add(new Remark(agenda,Action.CALENDAR,"","Calendar",MikanExpression.CONCERNED));
         if(prefs.getBoolean("mikanWeatherHints",true)){
             Remark weather=weatherRemark(prefs);if(weather!=null)options.add(weather);
@@ -73,7 +76,11 @@ final class MikanRemarks {
         if(prefs.getBoolean("mikanWebHints",false)&&webStatus!=null){
             options.add(new Remark(webStatus.remark,Action.NONE,"","",webStatus.expression,"health:"+webStatus.name()));
         }
-        for(MikanPersonality.Line line:MikanPersonality.idle(hour))options.add(local(line));
+        for(MikanPersonality.Line line:MikanPersonality.idle(hour)){
+            if(holiday!=null&&holiday.portraitAsset!=null&&line.expression==MikanExpression.DEFAULT)
+                options.add(local(new MikanPersonality.Line(line.key,line.text,line.expression,holiday.portraitAsset)));
+            else options.add(local(line));
+        }
         List<String> keys=new ArrayList<>();for(Remark option:options)keys.add(option.key());
         return options.get(rotation.select(keys,SystemClock.elapsedRealtime(),ROTATE_MS));
     }

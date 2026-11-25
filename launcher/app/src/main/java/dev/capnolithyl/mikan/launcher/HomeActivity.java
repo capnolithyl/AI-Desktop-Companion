@@ -899,7 +899,9 @@ public class HomeActivity extends Activity {
             case MIKAN:
                 settingsUi.heading(body,"CHARACTER ART");
                 boolean dynamicExpressions=prefs.getBoolean("mikanExpressions",true);
-                Drawable cutout=characterArt.get();Drawable preview=dynamicExpressions?expressionArt.get(MikanExpression.DEFAULT):null;
+                Drawable cutout=characterArt.get();
+                MikanPersonality.Line holidayPreview=prefs.getBoolean("mikanRemarks",true)&&prefs.getBoolean("mikanHolidayHints",true)?MikanPersonality.holiday(java.time.LocalDate.now()):null;
+                Drawable preview=dynamicExpressions?expressionArt.get(MikanExpression.DEFAULT,holidayPreview==null?null:holidayPreview.portraitAsset):null;
                 settingsUi.artPreview(body,preview!=null?preview:cutout!=null?cutout:portraits.get(),preview!=null?"Dynamic expressions active":cutout!=null?"Character artwork saved":"Portrait saved");
                 settingsUi.toggle(body,"Dynamic expressions","Match Mikan's portrait to her remarks; turn off to use your saved artwork",dynamicExpressions,on->{prefs.edit().putBoolean("mikanExpressions",on).apply();showSettings();});
                 setting(body,"Choose portrait",this::pickPortrait);
@@ -913,7 +915,7 @@ public class HomeActivity extends Activity {
                 settingsUi.toggle(body,"Weather remarks","Use the existing fresh weather snapshot",prefs.getBoolean("mikanWeatherHints",true),on->{prefs.edit().putBoolean("mikanWeatherHints",on).apply();showSettings();});
                 settingsUi.toggle(body,"Calendar reminders","Mention an upcoming event without revealing its title",prefs.getBoolean("mikanCalendarHints",true),on->{prefs.edit().putBoolean("mikanCalendarHints",on).apply();showSettings();});
                 settingsUi.toggle(body,"Battery reactions","React to low battery, charging and full charge",prefs.getBoolean("mikanBatteryHints",true),on->{prefs.edit().putBoolean("mikanBatteryHints",on).apply();batteryReadAt=-1;showSettings();});
-                settingsUi.toggle(body,"Holiday greetings","Local date-based greetings for selected holidays",prefs.getBoolean("mikanHolidayHints",true),on->{prefs.edit().putBoolean("mikanHolidayHints",on).apply();showSettings();});
+                settingsUi.toggle(body,"Holiday greetings & outfits","Local US, German and Christian dates; festive art with dynamic expressions",prefs.getBoolean("mikanHolidayHints",true),on->{prefs.edit().putBoolean("mikanHolidayHints",on).apply();showSettings();});
                 settingsUi.toggle(body,"Delivery app hints","Mention notifications from supported tracking apps; requires notification hints",prefs.getBoolean("mikanDeliveryHints",true),on->{prefs.edit().putBoolean("mikanDeliveryHints",on).apply();showSettings();});
                 settingsUi.toggle(body,"NAS health remarks","Check Beholder’s health every 5 minutes while Mikan is visible; no login required",prefs.getBoolean("mikanWebHints",false),on->{prefs.edit().putBoolean("mikanWebHints",on).apply();webStartedAt=-1;showSettings();});
                 settingsUi.row(body,"Notification access",LauncherNotifications.allowed(this)?"Allowed":"Not granted",this::notificationAccess);

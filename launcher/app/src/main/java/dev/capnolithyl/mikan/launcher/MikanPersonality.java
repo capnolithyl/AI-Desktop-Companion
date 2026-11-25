@@ -1,15 +1,15 @@
 package dev.capnolithyl.mikan.launcher;
 
 import java.time.LocalDate;
-import java.time.DayOfWeek;
 import java.util.*;
 
 /** Pure local personality rules. No personal data, Android dependencies or network. */
 final class MikanPersonality {
     static final class Line {
-        final String key,text;
+        final String key,text,portraitAsset;
         final MikanExpression expression;
-        Line(String key,String text,MikanExpression expression){this.key=key;this.text=text;this.expression=expression;}
+        Line(String key,String text,MikanExpression expression){this(key,text,expression,null);}
+        Line(String key,String text,MikanExpression expression,String portraitAsset){this.key=key;this.text=text;this.expression=expression;this.portraitAsset=portraitAsset;}
     }
     private static Line line(String key,String text,MikanExpression expression){return new Line(key,text,expression);}
     static Line battery(int percent,boolean charging,boolean full,boolean plugged){
@@ -23,17 +23,8 @@ final class MikanPersonality {
         return null;
     }
     static Line holiday(LocalDate date){
-        int m=date.getMonthValue(),d=date.getDayOfMonth();
-        String text=null;
-        if(m==1&&d==1)text="Happy New Year! A fresh page and a fresh coffee ♡";
-        else if(m==2&&d==14)text="Happy Valentine's Day! Sending little orange hearts ♡";
-        else if(m==7&&d==4)text="Happy Fourth of July! Enjoy the festivities!";
-        else if(m==10&&d==31)text="Happy Halloween! Officially spooky cat season.";
-        else if(m==11&&d>=22&&d<=28&&date.getDayOfWeek()==DayOfWeek.THURSDAY)text="Happy Thanksgiving! May your plate be very full ♡";
-        else if(m==12&&d==24)text="Merry Christmas Eve! Time for cozy lights and cocoa.";
-        else if(m==12&&d==25)text="Merry Christmas! Wishing you a lovely day ♡";
-        else if(m==12&&d==31)text="New Year's Eve! One more cozy night before a fresh year.";
-        return text==null?null:line("holiday:"+date,text,MikanExpression.EXCITED);
+        MikanHoliday holiday=MikanHoliday.on(date);
+        return holiday==null?null:new Line("holiday:"+date,holiday.text,holiday.expression,holiday.asset);
     }
     static List<Line> idle(int hour){
         List<Line> out=new ArrayList<>();

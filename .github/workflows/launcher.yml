@@ -67,11 +67,18 @@ jobs:
               data = (root / (name + ".webp")).read_bytes()
               assert len(data) > 20 and data[:4] == b"RIFF" and data[8:12] == b"WEBP", name
               print(name, len(data), "bytes")
+          for name in ("cozy_christmas_cocoa_with_mikan.png", "cozy_halloween_witch_catgirl_cocoa.png", "mikan_s_cozy_easter_portrait.png", "mikan_s_cozy_fourth_of_july_celebration.png", "mikan_s_cozy_new_year_celebration.png", "mikan_s_cozy_st._patrick_s_day_mug.png", "mikan_s_cozy_thanksgiving_gathering.png", "mikan_s_heartfelt_valentine_gift.png"):
+              data = (root / name).read_bytes()
+              assert data[:8] == bytes.fromhex("89504e470d0a1a0a") and data[12:16] == b"IHDR", name
+              width = int.from_bytes(data[16:20], "big")
+              height = int.from_bytes(data[20:24], "big")
+              assert width * 3 == height * 4, (name, width, height)
+              print(name, width, height, len(data), "bytes")
           PY
       - name: Test local personality rules and rotation
         run: |
           mkdir -p /tmp/mikan-personality-tests
-          javac -d /tmp/mikan-personality-tests launcher/app/src/main/java/dev/capnolithyl/mikan/launcher/MikanExpression.java launcher/app/src/main/java/dev/capnolithyl/mikan/launcher/MikanPersonality.java launcher/tests/MikanPersonalityTest.java
+          javac -d /tmp/mikan-personality-tests launcher/app/src/main/java/dev/capnolithyl/mikan/launcher/MikanExpression.java launcher/app/src/main/java/dev/capnolithyl/mikan/launcher/MikanPersonality.java launcher/app/src/main/java/dev/capnolithyl/mikan/launcher/MikanHoliday.java launcher/tests/MikanPersonalityTest.java
           java -cp /tmp/mikan-personality-tests dev.capnolithyl.mikan.launcher.MikanPersonalityTest
       - name: Test NAS health contract
         run: |
