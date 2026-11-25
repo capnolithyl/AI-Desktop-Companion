@@ -47,7 +47,7 @@ export const LEARNING_PROMPT=[
   "Return only JSON with three arrays: facts, interests, canon. Each may be empty. No memory is often the best outcome. At most three proposals per array.",
   "For each proposal choose action: save for a clearly grounded durable new memory, review for a plausible but ambiguous memory or a proposed correction, skip for a duplicate or anything not worth saving. Omit skipped items if possible. Scope must be long_term. Existing records must never be silently replaced.",
   "Understand humor, sarcasm, negation, hypothetical examples, quotation, fiction, roleplay, context and ordinary conversational phrasing. A humorous remark after a sincere preference does not cancel that preference. Preserve strength, uncertainty and scope: one of several favorites is not the sole favorite. A question or a mention is not necessarily a fact; a short answer may be a fact in context. Do not turn a temporary activity, current bug, passing mood, today's event or local engineering status into an evergreen personal memory. Stable projects, habits, interests and preferences can be durable. Do not generalize.",
-  "Every proposal must cite a short exact verbatim substring from the CURRENT user message for facts/interests or CURRENT assistant reply for canon. Earlier messages only disambiguate that quote; they are not new evidence. No evidence from the other speaker. Do not invent, infer sensitive traits or save private information (credentials, exact addresses, financial/medical/religious/political/sexual information). Obey capture flags.",
+  "Every proposal must cite a short exact verbatim substring from the CURRENT user message for facts/interests or CURRENT assistant reply for canon. Earlier messages only disambiguate that quote; they are not new evidence. Assistant assertions never establish owner facts, even if they appear beside a valid owner quote. Do not copy assistant-supplied dates, titles, descriptions, genres or other factual claims into owner memories unless independently stated by the owner. No evidence from the other speaker. Do not invent, infer sensitive traits or save private information (credentials, exact addresses, financial/medical/religious/political/sexual information). Obey capture flags.",
   "Resolve calendar-relative expressions against the original message's supplied local date, NEVER the extraction time. Example: a user message dated 2026-11-25 saying 'two years ago' supports 'around 2024', not an exact concert day. Yesterday/tomorrow, last/next month or year, weekdays, and relative intervals should become absolute dates or appropriately approximate ranges. For an age, anchor it to the stated year/date rather than guessing a birthdate. For future plans preserve uncertainty and do not turn plans into completed events. Keep the verbatim evidence unchanged. If a date cannot be safely resolved, omit the temporal detail or skip the proposal rather than saving floating relative time. Earlier messages have their own dates.",
   "facts objects: {action,scope,fact,category,tags,evidence,relatedId}. Write an accurate third-person fact about the owner. Categories: profile, family, work, projects, interests, preferences, routines, other. Tags: up to eight short strings, or []. relatedId is null for a new fact, or the exact supplied existing owner-fact ID for a correction. Do not select an unrelated record. Semantically equivalent existing facts are duplicates even when phrased differently.",
   "interests objects: {action,scope,name,kind,status,evidence}. Named band, album, song, anime, show, movie, game or book only. Status: favorite, like, dislike, interested, experienced. Differentiate tracks and albums; experienced does not imply liked. Ordinary foods, hobbies and lifestyle preferences are facts, not media. Preserve an existing favorite when the owner simply says they like it. Propose review for a genuine change. Prefer a structured interest to a redundant personal fact about the same work.",
@@ -55,7 +55,15 @@ export const LEARNING_PROMPT=[
   "Use only the current exchange to propose new memories; relevant existing records and earlier messages are provided to check duplicates and meaning. If there is no grounded durable change, return {\"facts\":[],\"interests\":[],\"canon\":[]}."
 ].join("\n");
 
-function parseCandidates(raw,user,assistant,flags,relatedIds,userDate){
+function parseCandidates(raw,user,assistant,flags,relatedIds,userDate,recent=[]){
+  const ownerText=[...recent.filter(m=>m.role==="user").map(m=>m.content),user].join("\n");
+  const assistantText=[...recent.filter(m=>m.role==="assistant").map(m=>m.content),assistant].join("\n");
+  const ownerTerms=new Set(meaningfulTerms(ownerText));
+  const assistantTerms=new Set(meaningfulTerms(assistantText));
+  const ownerNumbers=new Set((normalizeFactTime(user,user,userDate)??user).match(/\b\d+(?:\.\d+)?\b/g)??[]);
+  // This is a conservative provenance check, not a semantic truth judge.
+  // Assistant-only content or unsupported precision requires owner review.
+  const needsReview=claim=>meaningfulTerms(claim).some(t=>assistantTerms.has(t)&&!ownerTerms.has(t))||[...(claim.match(/\b\d+(?:\.\d+)?\b/g)??[])].some(n=>!ownerNumbers.has(n)&&!ownerText.match(/\b\d+(?:\.\d+)?\b/g)?.includes(n));
   let source=raw.trim(),fence=String.fromCharCode(96).repeat(3);
   if(source.startsWith(fence)&&source.endsWith(fence)){
     source=source.slice(3,-3).trim();
@@ -99,7 +107,9 @@ function parseCandidates(raw,user,assistant,flags,relatedIds,userDate){
         }
       }catch{continue;}
       if(!item||sensitive.test(JSON.stringify(item)))continue;
-      list.push({kind:group.kind,item,evidence:v.evidence,auto:v.action==="save"&&relatedId===null,relatedId});
+      const claim=group.kind==="fact"?item.fact:group.kind==="interest"?item.name:"";
+      const provenanceReview=group.kind!=="canon"&&needsReview(claim);
+      list.push({kind:group.kind,item,evidence:v.evidence,auto:v.action==="save"&&relatedId===null&&!provenanceReview,relatedId,...(provenanceReview?{reviewReason:"assistant-only detail or unsupported numeric precision"}:{})});
     }
   }
   // Identical evidence for a generic media fact and structured interest is redundant.
@@ -127,6 +137,7 @@ export function createLearning(db,library){
     "CREATE TABLE IF NOT EXISTS nas_learning_reviews(id INTEGER PRIMARY KEY,source_id TEXT NOT NULL REFERENCES messages(id) ON DELETE CASCADE,kind TEXT NOT NULL,payload_json TEXT NOT NULL,evidence TEXT NOT NULL,target_id INTEGER,target_json TEXT,status TEXT NOT NULL DEFAULT 'pending',created_at INTEGER NOT NULL DEFAULT(unixepoch()),UNIQUE(source_id,kind,payload_json));"+
     "CREATE TABLE IF NOT EXISTS nas_learning_history(id INTEGER PRIMARY KEY,kind TEXT NOT NULL,record_id INTEGER NOT NULL,previous_json TEXT NOT NULL,replacement_json TEXT NOT NULL,changed_at INTEGER NOT NULL DEFAULT(unixepoch()));"+
     "CREATE TABLE IF NOT EXISTS automatic_memory_sources(memory_kind TEXT NOT NULL CHECK(memory_kind IN ('user','character')),memory_id INTEGER NOT NULL,source_message_id TEXT REFERENCES messages(id) ON DELETE SET NULL,captured_at INTEGER NOT NULL DEFAULT(unixepoch()),evidence TEXT NOT NULL,PRIMARY KEY(memory_kind,memory_id));");
+  db.exec("CREATE TRIGGER IF NOT EXISTS nas_clear_fact_provenance_update AFTER UPDATE OF fact ON user_memories WHEN old.fact<>new.fact BEGIN DELETE FROM automatic_memory_sources WHERE memory_kind=\x27user\x27 AND memory_id=old.id; END; CREATE TRIGGER IF NOT EXISTS nas_clear_fact_provenance_delete AFTER DELETE ON user_memories BEGIN DELETE FROM automatic_memory_sources WHERE memory_kind=\x27user\x27 AND memory_id=old.id; END;");
   db.exec("CREATE TABLE IF NOT EXISTS nas_learning_events(id INTEGER PRIMARY KEY AUTOINCREMENT,conversation_id TEXT REFERENCES conversations(id) ON DELETE CASCADE,assistant_id TEXT REFERENCES messages(id) ON DELETE CASCADE,kind TEXT NOT NULL,payload_json TEXT NOT NULL,created_at INTEGER NOT NULL DEFAULT(unixepoch()))");
   db.exec("UPDATE nas_learning_jobs SET status='failed' WHERE status='processing'");
   db.exec("CREATE INDEX IF NOT EXISTS idx_nas_learning_events_chat ON nas_learning_events(conversation_id,id DESC); CREATE INDEX IF NOT EXISTS idx_nas_learning_events_assistant ON nas_learning_events(assistant_id,kind)");
@@ -252,7 +263,7 @@ export function createLearning(db,library){
           save(c,source,null);saved++;entries.push({kind,description:display(kind,item),evidence:c.evidence,status:"saved"});
         }else{
           const r=db.prepare("INSERT OR IGNORE INTO nas_learning_reviews(source_id,kind,payload_json,evidence,target_id,target_json) VALUES(?,?,?,?,?,?)").run(source,kind,JSON.stringify(item),c.evidence,target?.id??null,target?JSON.stringify(target):null);
-          if(r.changes){reviewQueued++;entries.push({kind,description:display(kind,item),evidence:c.evidence,status:"review"});}
+          if(r.changes){reviewQueued++;entries.push({kind,description:display(kind,item),evidence:c.evidence,status:"review",...(c.reviewReason?{reason:c.reviewReason}:{})});}
         }
       }
       const outcome={saved,reviewQueued,entries,processedAt:Math.floor(Date.now()/1000),...diagnostic};
@@ -310,12 +321,12 @@ export function createLearning(db,library){
         .map(m=>({role:m.role,localDate:sourceDate(m.created_at),content:sensitive.test(m.content)?"[private message omitted]":m.content.slice(-1200)}));
       const currentAssistant=sensitive.test(assistant.content)?"[private message omitted]":assistant.content.slice(0,3500);
       const existing=references(snap(),[...recent.map(m=>m.content),user.content,currentAssistant].join("\n"),capture);
-      const input={capture,timeZone:memoryZone,currentUserDate:sourceDate(user.created_at),currentAssistantDate:sourceDate(assistant.created_at),currentUser:sensitive.test(user.content)?"[private message omitted]":user.content.slice(0,4000),currentAssistant,recent,existing};
+      const input={capture,timeZone:memoryZone,currentUserDate:sourceDate(user.created_at),currentAssistantDate:sourceDate(assistant.created_at),currentUser:sensitive.test(user.content)?"[private message omitted]":user.content.slice(0,4000),currentAssistant:capture.character?currentAssistant:"[not needed for owner memory extraction]",recent,existing};
       stage="provider";
       const raw=await generate({config,system:LEARNING_PROMPT,history:[{role:"user",content:JSON.stringify(input)}],onDelta:()=>{},temperature:0.1,maxTokens:2400,signal});
       signal?.throwIfAborted();
       stage="validation";
-      const {candidates,proposed,validated}=parseCandidates(raw,input.currentUser,input.currentAssistant,capture,new Set(existing.facts.map(x=>x.id)),input.currentUserDate);
+      const {candidates,proposed,validated}=parseCandidates(raw,input.currentUser,currentAssistant,capture,new Set(existing.facts.map(x=>x.id)),input.currentUserDate,recent);
       stage="persist";
       apply(job,candidates,{proposed,validated});
     }catch(error){

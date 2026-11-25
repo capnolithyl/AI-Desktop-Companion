@@ -1,7 +1,7 @@
 import {communicationGuidance} from "../src/communication-preferences.ts";
 import {COMPANION_TIME_ZONE} from "../src/runtime-context.ts";
 import {validateAgentQuery} from "./agent-research.mjs";
-import {webURL} from "./research.mjs";
+import {webURL,publicWebFailure} from "./research.mjs";
 
 // Only actual credential formats, not conversational intent, are pattern-matched.
 export const credentialPattern=/\b(?:csk-|nvapi-|gsk_|sk-(?:or-v1-)?|gh[pousr]_|github_pat_|ntn_|secret_)[A-Za-z0-9_-]{20,}\b/g;
@@ -103,7 +103,9 @@ export async function companionTurn({store,conversationId,question,history,rawHi
     const allowTools=round<maxCalls-1&&available(2)&&toolCount<10;
     // Keep the tool schema present even for the final forced-prose call so
     // adapters retain the actual assistant/tool messages in the transcript.
-    const result=await generate("agent",{system:systemWithEvidence+(allowTools?"":"\n\nNo further tools are available in this turn. Answer the user in ordinary prose using the results already received, acknowledging gaps."),history:transcript,agentTools:tools,agentToolChoice:allowTools?"auto":"none"});
+    const activeTools=tools.filter(t=>webOperations<webLimit||!["search_web","read_webpage"].includes(t.function.name));
+    const state="\n\nRuntime tool budget: "+(webAllowed?Math.max(0,webLimit-webOperations):0)+" public web operations remaining; "+(allowTools?Math.max(0,10-toolCount):0)+" total tool requests remaining.";
+    const result=await generate("agent",{system:systemWithEvidence+state+(allowTools?"":"\n\nNo further tools are available in this turn. Answer the user in ordinary prose using the results already received, acknowledging gaps."),history:transcript,agentTools:activeTools,agentToolChoice:allowTools?"auto":"none"});
     if(!result||!Array.isArray(result.toolCalls))throw Object.assign(Error("Invalid model response"),{code:"invalid-agent-response"});
     if(!result.toolCalls.length){
       answer=redactCredentials(result.content).trim();
@@ -119,13 +121,16 @@ export async function companionTurn({store,conversationId,question,history,rawHi
       signal?.throwIfAborted();
       const a=argsOf(call),name=toolName(call);
       let out=error(!a?"Invalid tool arguments: expected a JSON object":"Tool unavailable or budget exhausted");
+      let publicTarget=null;
       activity({title:"Companion tool requested",detail:name,lines:[]});
       try{
         if(++toolCount<=10&&a&&!containsCredential(call.function.arguments)&&!secret(call.function.arguments)){
           if(call.function.name==="recall_memory"&&typeof a.query==="string"&&a.query.trim()&&a.query.length<=400){
-            const found=store.library.context(a.query,conversationId,{modelLed:true,includeSessions:false,explicitRecall:true});
+            const semantic=await store.library.semanticRecall?.(a.query,{signal});
+            if(semantic&&!["unavailable","empty"].includes(semantic.status))activity({title:"Semantic memory retrieval",detail:semantic.status+" · "+semantic.indexed+"/"+semantic.total+" facts indexed",lines:semantic.ids.map(id=>"Memory #"+id)});
+            const found=store.library.context(a.query,conversationId,{modelLed:true,includeSessions:false,explicitRecall:true,semanticIds:semantic?.ids??[]});
             for(const id of found.ids)ids.add(id);auditLines.push(...found.auditLines);
-            out={memory:found.text||"No matching memory",dialogue:store.library.recallDialogue?.(a.query)??[]};activity({title:"Memory retrieved",detail:"Model requested additional context",lines:[]});
+            out={memory:found.text||"No matching memory",dialogue:store.library.recallDialogue?.(a.query)??[],retrieval:{semantic:semantic?.status??"unavailable",indexedFacts:semantic?.indexed??0,totalFacts:semantic?.total??0,completeLibrary:false}};activity({title:"Memory retrieved",detail:"Model requested additional context",lines:[]});
           }else if(call.function.name==="find_knowledge"&&knowledge&&typeof a.query==="string"&&a.query.trim()&&a.query.length<=400){
             const matches=knowledge.candidates(a.query,initial,prior).slice(0,40);
             for(const p of matches)handles.set(p.id,p);
@@ -161,7 +166,7 @@ export async function companionTurn({store,conversationId,question,history,rawHi
             else if(webOperations>=webLimit)out=error("Public web operation budget exhausted; answer with available evidence");
             else if(readURLs.has(u))out=error("Already attempted this page; use previous results or another source");
             else{
-              webOperations++;readURLs.add(u);
+              webOperations++;readURLs.add(u);publicTarget=u;
               const page=await trace.measure("read",()=>read(u,{fresh:a.fresh===true}));
               const item=publicSource({...page,url:u,retrievedAt:page.fromCache?page.fetchedAt??nowMs():nowMs(),priorTurn:false});
               const entry=addPublic(item);
@@ -172,8 +177,10 @@ export async function companionTurn({store,conversationId,question,history,rawHi
             out=error("Public web research is disabled for this turn");
           }
         }
-      }catch(e){signal?.throwIfAborted();if(e?.status===429||e?.upstreamStatus===429)throw e;out=error(name==="search_web"?"Search request failed":name==="read_webpage"?"Webpage read failed":"The requested tool could not complete.");}
+      }catch(e){signal?.throwIfAborted();if(e?.status===429||e?.upstreamStatus===429)throw e;out=error(name==="search_web"?"Search request failed":name==="read_webpage"?"Webpage read failed: "+publicWebFailure(e):"The requested tool could not complete.");
+        if(name==="read_webpage")activity({title:"Webpage read failure",detail:publicWebFailure(e),lines:publicTarget?[new URL(publicTarget).hostname]:[]});}
       if(out.error)activity({title:"Companion tool not completed",detail:name+": "+out.error,lines:[]});
+      if(name==="search_web"||name==="read_webpage")out={...out,webOperationsRemaining:webAllowed?Math.max(0,webLimit-webOperations):0};
       transcript.push(toolMessage(call,out));
     }
   }

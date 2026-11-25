@@ -45,6 +45,9 @@ jobs:
           node --check nas/server.mjs
           node --check nas/storage.mjs
           node --check nas/learning.mjs
+          node --check nas/semantic-recall.mjs
+          python3 -m py_compile nas/embed-memory.py
+          rm -rf nas/__pycache__
           node --check nas/providers.mjs
           node --check nas/provider-settings.mjs
           node --check nas/research.mjs
@@ -71,6 +74,20 @@ jobs:
           done
           curl -fsS http://127.0.0.1:3847/api/health
           printf '%s' '{"question":"test","sources":[],"passages":[]}' | docker exec -i mikan-nas-ci /app/nas/mikan-research-native | grep -F '"kind":"passages"'
+          docker exec -i mikan-nas-ci node --input-type=module <<'JS'
+          import assert from "node:assert/strict";
+          import {embedLocal,embeddingsAvailable} from "/app/nas/semantic-recall.mjs";
+          import {seedEvalStore} from "/app/nas/brain-lab.mjs";
+          assert.equal(embeddingsAvailable(),true);
+          const vectors=await embedLocal(["Where do I live now?","The user lives in Brookmere.","The user likes playing guitar."]);
+          assert.equal(vectors.length,3);assert.equal(vectors[0].length,384);
+          const s=seedEvalStore();
+          for(const q of ["Where do I live now?","And where did I grow up?"]){
+            const r=await s.library.semanticRecall(q);console.log("Semantic recall",q,r);
+            assert.equal(r.status,"ready");assert.ok(r.ids.includes(116),JSON.stringify(r));
+          }
+          s.db.close();
+          JS
           docker exec -i mikan-nas-ci node --input-type=module <<'JS'
           import assert from "node:assert/strict";
           import {nativeResearchAvailable,reviewNativeResearch} from "/app/nas/native-research.mjs";

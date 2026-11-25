@@ -262,6 +262,8 @@ test("Natural banter, hypothetical statements and contextual answers all reach t
       assert.ok(input.existing.facts.some(f=>f.fact===proposed.fact));
       return JSON.stringify({facts:[{fact:"The user prefers vanilla ice cream",evidence:"Vanilla, hands down",scope:"long_term",action:"save",category:"preferences",tags:["food"]}],interests:[],canon:[]});
     },{});
+    assert.equal(store.library.execute("snapshot",{}).facts.length,1);
+    const review=l.getStatus().reviews.find(r=>r.description==="The user prefers vanilla ice cream");assert.ok(review);l.resolve(review.id,"accept");
     assert.equal(store.library.execute("snapshot",{}).facts.length,2);
   }finally{store.db.close();rmSync(root,{recursive:true,force:true});}
 });
@@ -1367,4 +1369,76 @@ test("native web opt-out excludes web tools and rejects attempts to call them",a
   }});
   assert.equal(result.answer,"I won't search.");
  }finally{store.db.close();}
+});
+
+
+test("semantic vectors retrieve nonlexical facts and invalidate edited/deleted entries",async()=>{
+ const {createSemanticRecall}=await import("../semantic-recall.mjs");
+ const store=openStore(":memory:");
+ try{
+  store.addMemory("The user's former hometown was Alderwick and current town is Brookmere.");
+  store.addMemory("The user likes coffee.");
+  let batches=[];
+  const v=(i)=>Array.from({length:384},(_,j)=>j===i?1:0);
+  const lookup=createSemanticRecall(store.db,{available:()=>true,embed:async texts=>{batches.push(texts);return texts.map(t=>v(/coffee/i.test(t)?1:0));}});
+  const facts=()=>store.library.execute("snapshot",{}).facts;
+  const id=facts().find(f=>f.fact.includes("Brookmere")).id;
+  const result=await lookup("Where do I live now?",facts());
+  assert.deepEqual(result.ids,[id]);assert.equal(result.indexed,2);
+  assert.ok(store.library.context("Where do I live now?","",{modelLed:true,semanticIds:result.ids}).ids.includes(id));
+  await lookup("Where did I grow up?",facts());assert.equal(batches[1].length,1);
+  store.library.execute("editFact",{id,fact:"The user's hometown was Pineville."});
+  await lookup("Where did I grow up?",facts());assert.equal(batches[2].length,2);
+  store.removeMemory(id);assert.equal(store.db.prepare("SELECT COUNT(*) AS n FROM nas_memory_vectors WHERE memory_id=?").get(id).n,0);
+ }finally{store.db.close();}
+});
+
+test("assistant assertions cannot automatically become owner memories through a valid quote",async()=>{
+ const store=openStore(":memory:");
+ try{
+  const chat=store.newConversation(),l=store.learning;l.setSettings({user:true,character:false});
+  const u=store.append(chat.id,"user","Winterdome's album is fantastic. I think you'd find it interesting.");
+  const a=store.append(chat.id,"assistant","Weltendämmerung is a 1997 atmospheric black doom record.");
+  l.enqueue(u,a,chat.id);
+  await l.processNext(async req=>{
+   assert.match(JSON.parse(req.history[0].content).currentAssistant,/not needed/);
+   return JSON.stringify({facts:[{action:"save",scope:"long_term",fact:"The user recommends Winterdome's 1997 atmospheric black doom album Weltendämmerung.",category:"interests",tags:[],evidence:"I think you'd find it interesting."}],interests:[],canon:[]});
+  },{});
+  assert.equal(store.listMemories().length,0);assert.equal(l.getStatus().lastOutcome.reviewQueued,1);
+  assert.match(l.getStatus().lastOutcome.entries[0].reason,/assistant-only/);
+  const u2=store.append(chat.id,"user","I really enjoy Winterdome's album Weltendämmerung.");
+  const a2=store.append(chat.id,"assistant","Nice!");
+  l.enqueue(u2,a2,chat.id);
+  await l.processNext(async()=>JSON.stringify({facts:[{action:"save",scope:"long_term",fact:"The user enjoys Winterdome's album Weltendämmerung.",category:"interests",tags:[],evidence:u2.content}],interests:[],canon:[]}),{});
+  const id=store.listMemories()[0].id;
+  assert.match(store.library.context("Winterdome","",{modelLed:true}).text,/Owner source quote/);
+  store.library.execute("editFact",{id,fact:"The user likes Winterdome."});
+  assert.equal(store.db.prepare("SELECT COUNT(*) AS n FROM automatic_memory_sources WHERE memory_kind='user' AND memory_id=?").get(id).n,0);
+ }finally{store.db.close();}
+});
+
+test("native web tools disappear after the actual operation budget is spent",async()=>{
+ const {executeNasTurn}=await import("../turn.mjs"),store=openStore(":memory:");
+ try{
+  const chat=store.newConversation(),question="Look up this public album.";store.append(chat.id,"user",question);
+  let calls=0,searches=0;
+  const result=await executeNasTurn({store,conversationId:chat.id,question,selected:{provider:"nvidia",model:"test",historyChars:32000},mode:"simple",publicAgent:true,reserve:()=>{},canRequest:()=>true,search:async()=>{searches++;return [{url:"https://example.org/album",title:"Album",content:"Public album information.",kind:"preview"}];},requestModel:async args=>{
+   calls++;
+   if(calls<=3){assert.match(args.system,new RegExp((4-calls)+" public web operations remaining"));return {content:"",toolCalls:[{id:"s"+calls,type:"function",function:{name:"search_web",arguments:JSON.stringify({query:"Public album "+calls})}}]};}
+   assert.equal(args.agentTools.some(t=>["search_web","read_webpage"].includes(t.function.name)),false);
+   assert.match(args.system,/0 public web operations remaining/);
+   assert.match(args.history.at(-1).content,/"webOperationsRemaining":0/);
+   assert.equal(args.history.at(-1).role,"tool");
+   return {content:"I found the album.",toolCalls:[]};
+  }});
+  assert.equal(calls,4);assert.equal(searches,3);assert.equal(result.answer,"I found the album.");
+ }finally{store.db.close();}
+});
+
+test("page failure diagnostics distinguish safe categories and do not disclose upstream details",async()=>{
+ const {readWeb,publicWebFailure}=await import("../research.mjs");
+ assert.equal(publicWebFailure(Object.assign(Error("private token"),{code:"page-http-403"})),"HTTP 403");
+ assert.equal(publicWebFailure(Object.assign(Error("secret"),{code:"ECONNRESET"})),"connection reset");
+ assert.equal(publicWebFailure(Error("private URL or token")),"network or page reader error");
+ await assert.rejects(readWeb("https://example.org",async()=>({type:"text/html",body:"<html><script>nothing</script></html>"})),e=>e.code==="page-empty");
 });
