@@ -1,6 +1,6 @@
 # Mikan Launcher — living feature reference
 
-**Source baseline:** v0.15.4 (versionCode 37), local tasks and due-date reminders, 2026-11-25. See Git history for implementation commit.
+**Source baseline:** v0.15.5 (versionCode 38), ChatGPT notification hints, 2026-11-26. See Git history for implementation commit.
 **Development:** [PR #117](https://github.com/capnolithyl/AI-Desktop-Companion/pull/117), branch `feature/mikan-launcher-v01`. Check current branch and Gradle version before changing this document.
 **Purpose:** a free, personal, offline-first Android launcher inspired by the Mikan OS home-screen mockup. Separate from Pocket Mikan, desktop Mikan and the NAS. This document tracks the launcher only.
 
@@ -65,6 +65,7 @@ All seven built-in widgets (clock, Mikan, music, weather, upcoming events, devic
 
 | Feature | Introduced | Current implementation / use | Evidence |
 | --- | --- | --- | --- |
+| ChatGPT notification hints | 0.15.5 | Recognizes active non-ongoing, non-summary notifications from official Android ChatGPT package com.openai.chatgpt through the existing notification hints toggle and listener. Surprised expression, generic remark and ChatGPT target label; bubble tap rechecks permission/presence and opens the app, not the specific conversation. No notification text, counts, API, network requests or new permissions; no claim that a response is complete. | Implemented; CI/device pending. |
 | Tasks & reminders | 0.15.4 | Optional local widget (hidden by default) in both Home layouts, page assignment and mixed-grid move/resize. Up to three open tasks sorted by due date, overdue/today labels, direct completion, add/edit, full manager with reopen/delete and optional local calendar due dates. Limit 100 tasks, 200 characters per title. Settings > Widgets > Manage local tasks works while hidden. Date labels refresh on foreground clock tick; no background alarms or notifications, cloud sync, new permissions or network. Task contents stored locally and excluded from portable settings backup; page and position included. | Implemented; CI/device pending. |
 | Native widget grid | 0.15.3 | Mixed home layout includes native widgets alongside shortcuts and built-in cards. Direct body drag, resize handle/size menu, minus removal with confirmation; provider minimum dimensions and supported resize axes converted to conservative grid spans. Hosted content fills exact grid bounds and reports size changes to Android. Existing resolved tiles preserved on addition; oversized or unplaceable widgets remain below grid. Device-local placements stored separately from portable backup; reset mixed layout resets both, section mode retains full-width height setting. No new permissions. | Implemented; CI/device pending. |
 | Android widget picker | 0.15.2 | Replaces flat package-name list with themed expandable app groups, app icons, app/widget search, provider-reported default cell or dp dimensions and numbered variants for duplicate labels/sizes. Recycled rows load static provider preview images on demand; missing images use app icon and explicit no-preview label. Bounded 4 MiB thumbnail cache; no live preview layouts, dynamic previews, widget IDs, binding or network while browsing. Selection retains existing binding and configuration flow. | Owner approved picker appearance; CI passed, binding and detailed regression pending. |
@@ -175,7 +176,8 @@ Weather card also exposes refresh, city, units and clear location. No full-scree
 | 0.15.1 | Native Android AppWidget host, picker, consent/configuration, page and height management | Launcher CI 45697092452 passed; owner screenshot confirms picker opens and enumerates providers, not that binding/rendering works. Flat list usability rejected. |
 | 0.15.2 | Searchable themed app-grouped widget picker, previews and variant dimensions | Launcher CI 45698730597 passed; owner approved appearance. |
 | 0.15.3 | Native widget mixed-grid drag, resizing and removal | Launcher CI 45700919448 passed; physical provider compatibility pending. |
-| 0.15.4 | Local tasks widget and due-date reminders | Initial CI 45708944249: all model tests passed; Java compile failed because LinearLayout uses setMinimumHeight rather than TextView.setMinHeight. Fixed without incrementing unpublished versionCode 37; rebuild/device validation pending. |
+| 0.15.4 | Local tasks widget and due-date reminders | Initial CI 45708944249: all model tests passed; Java compile failed because LinearLayout uses setMinimumHeight rather than TextView.setMinHeight. Fixed without incrementing unpublished versionCode 37; corrected launcher CI 45733639508 passed; device validation pending. |
+| 0.15.5 | ChatGPT notification-aware Mikan remarks | Implemented; CI/device pending. |
 
 ## 7. Outstanding verification checklist
 
@@ -252,6 +254,8 @@ Weather card also exposes refresh, city, units and clear location. No full-scree
 
 - [ ] v0.15.4 verify hidden default, both layouts, task CRUD, due dates and midnight/resume refresh, ordering, completion/reopen/delete, restart, limits, backup privacy and offline. Pure Java model tests added; CI/device pending.
 
+- [ ] v0.15.5 verify a real ChatGPT notification appears as a generic Mikan remark, bubble opens ChatGPT, dismiss/revoke/disable removes hint, absent or ongoing/group-summary notifications do not produce hint, artwork still opens Pocket Mikan; no new notification content access. CI/device pending.
+
 ## 8. Roadmap (not implemented)
 
 Planned milestones; version targets flexible. See [Trello roadmap](https://trello.com/c/VEk6xVz6). No arbitrary deadlines.
@@ -276,7 +280,7 @@ Eight uploaded portraits wired in v0.14.0 (launcher CI 45683723437 passed; owner
 Time-based expressions/artwork synchronized to remark context (owner approved), extend local remarks (contextual rotation in v0.11.7 and typed actions in v0.11.8), optional bounded NAS responses/status and offline personality. Delivery hints require reliable notification signal; cached expression art and default fallback.
 
 ### v0.15 — Expanded widgets
-v0.15.0 device information widget implemented, CI passed and owner confirmed working. v0.15.1 first native Android AppWidget hosting implemented (full-width managed section; CI passed, picker observed, binding/rendering compatibility pending). v0.15.2 themed grouped picker passed CI and owner approved its appearance. v0.15.3 native mixed-grid placement/resizing/removal passed launcher CI; physical provider compatibility pending. v0.15.4 local tasks and visible due-date reminders implemented; CI/device pending. Remaining: quick contacts, optional daily briefing and local fallback; notification-based task alarms are a possible later enhancement.
+v0.15.0 device information widget implemented, CI passed and owner confirmed working. v0.15.1 first native Android AppWidget hosting implemented (full-width managed section; CI passed, picker observed, binding/rendering compatibility pending). v0.15.2 themed grouped picker passed CI and owner approved its appearance. v0.15.3 native mixed-grid placement/resizing/removal passed launcher CI; physical provider compatibility pending. v0.15.4 local tasks and visible due-date reminders implemented; corrected launcher CI passed, device pending. v0.15.5 adds ChatGPT notification hints using existing local listener. Remaining: quick contacts, optional daily briefing and local fallback; notification-based task alarms are a possible later enhancement.
 
 ### v0.16 — Mikan Dream Mode (planned)
 User-approved milestone after expanded widgets. Implement an optional Android `DreamService` charging screensaver, selectable in system screensaver settings. Large amber clock/date respecting system time format, sleeping Mikan artwork, battery percentage/charging indicator, portrait and landscape, dim nighttime mode and periodic content repositioning to reduce OLED burn-in risk. Optional next alarm, cached weather and holiday artwork, with local fallback. No LLM, NAS, root or continuous background service; stop updates when dreaming ends. Keep the secure keyguard and manufacturer always-on display unchanged. Verify that the owner's current charging clock is the Android screensaver and that the device supports selecting third-party dreams; charging triggers remain controlled by Android. Test charging/unplug, exit, orientation, offline, brightness, battery use and secure unlock. Not implemented yet.

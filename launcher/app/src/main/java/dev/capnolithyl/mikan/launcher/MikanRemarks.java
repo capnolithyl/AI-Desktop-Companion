@@ -61,6 +61,7 @@ final class MikanRemarks {
             addApp(options,packages,"org.telegram.messenger","Telegram","Telegram has notifications for you ♡");
             addApp(options,packages,"com.facebook.orca","Messenger","Messenger has notifications for you ♡");
             addApp(options,packages,"com.discord","Discord","Discord has notifications for you ♡");
+            addApp(options,packages,"com.openai.chatgpt","ChatGPT","Psst! ChatGPT has something waiting for you ♡");
             if(prefs.getBoolean("mikanDeliveryHints",true)){
                 addDelivery(options,packages,"com.ups.mobile.android","UPS");
                 addDelivery(options,packages,"com.fedex.ida.android","FedEx");
