@@ -10,11 +10,18 @@ export function useNasMobile(){
   useEffect(()=>{const query=window.matchMedia(mobileQuery);const update=()=>setMobile(query.matches);update();query.addEventListener("change",update);return()=>query.removeEventListener("change",update);},[]);
   return mobile;
 }
-type Props=ComponentProps<typeof DefaultCompanionShell>;
-type View="chat"|"chats"|"character";
+export type MobileView="chat"|"chats"|"character";
+type MobileDestination=MobileView|"settings";
+type Props=ComponentProps<typeof DefaultCompanionShell>&{view:MobileView;onViewChange:(view:MobileView)=>void};
+
+/** Keep primary destinations identical on every mobile screen. */
+export function NasMobileNav({active,onNavigate}:{active:MobileDestination;onNavigate:(destination:MobileDestination)=>void}){
+  const items=[{id:"chats",label:"Chats",icon:History},{id:"chat",label:"Chat",icon:MessageCircle},{id:"character",label:"Mikan",icon:Cat},{id:"settings",label:"Settings",icon:Settings2}] as const;
+  return <nav className="nas-mobile-bottom-nav" aria-label="Main navigation">{items.map(({id,label,icon:Icon})=><button key={id} type="button" aria-current={active===id?"page":undefined} onClick={()=>onNavigate(id)}><Icon size={22}/><span>{label}</span></button>)}</nav>;
+}
 
 export function NasMobileShell(p:Props){
-  const [view,setView]=useState<View>("chat");
+  const view=p.view,setView=p.onViewChange;
   const [copying,setCopying]=useState<string|null>(null);
   const [deleting,setDeleting]=useState<string|null>(null);
   const [feedback,setFeedback]=useState("");
@@ -62,11 +69,6 @@ export function NasMobileShell(p:Props){
       <section className="nas-mobile-panel workspace-activity-log"><h3><History size={18}/> Activity log</h3>{p.busy&&<p role="status">{p.lastActivity}</p>}{p.activityError&&<p role="alert">{p.activityError}</p>}{!p.activityEntries.length&&!p.activityError&&<p className="workspace-activity-empty">Memories and research activity will appear here.</p>}{p.activityEntries.map(entry=><article key={entry.id} className="workspace-activity-entry"><div className="workspace-activity-entry-title"><strong>{entry.title}</strong><time dateTime={new Date(entry.timestamp).toISOString()}>{new Date(entry.timestamp).toLocaleTimeString([],{hour:"numeric",minute:"2-digit"})}</time></div>{entry.detail&&<p className="workspace-activity-detail">{entry.detail}</p>}{entry.lines.length>0&&<ul>{entry.lines.map((line,i)=><li key={i}>{line}</li>)}</ul>}</article>)}</section>
       <div className="nas-mobile-system">{p.sidebarVersion}<button type="button" className="nas-mobile-wide-action" onClick={p.onHide}><Lock size={18}/> Lock Mikan</button></div>
     </section>}
-    <nav className="nas-mobile-bottom-nav" aria-label="Main navigation">
-      <button type="button" aria-current={view==="chats"?"page":undefined} onClick={()=>setView("chats")}><History size={21}/><span>Chats</span></button>
-      <button type="button" aria-current={view==="chat"?"page":undefined} onClick={()=>{follow.current=true;setView("chat");}}><MessageCircle size={23}/><span>Chat</span></button>
-      <button type="button" aria-current={view==="character"?"page":undefined} onClick={()=>setView("character")}><Cat size={23}/><span>Mikan</span></button>
-      <button type="button" onClick={p.onOpenSettings}><Settings2 size={21}/><span>Settings</span></button>
-    </nav>
+    <NasMobileNav active={view} onNavigate={destination=>{if(destination==="settings")p.onOpenSettings();else{if(destination==="chat")follow.current=true;setView(destination);}}}/>
   </section>;
 }

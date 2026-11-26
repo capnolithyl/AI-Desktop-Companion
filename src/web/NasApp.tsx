@@ -1,7 +1,7 @@
 import {useState,useRef,useEffect,useMemo,type FormEvent,type ChangeEvent,type CSSProperties} from "react";
 import {ArrowLeft,Cat,Brain,Shirt,WandSparkles,Settings2,PawPrint,Sparkles,History,UserRound,Download,Upload,Plug2,Lock,LoaderCircle,Check,Copy,X,AlertTriangle,RefreshCw,Cpu,Globe,BookOpen} from "lucide-react";
 import {DefaultCompanionShell} from "../DefaultCompanionShell";
-import {NasMobileShell,useNasMobile} from "./NasMobileShell";
+import {NasMobileShell,NasMobileNav,useNasMobile,type MobileView} from "./NasMobileShell";
 import {WorkspaceAvatarRays,WorkspacePawSeal,WorkspaceSendPaw} from "../WorkspaceDecor";
 import {ChatMarkdown} from "../components/ChatMarkdown";
 import {PersonalityPresets,PersonalitySliders} from "../PersonalityControls";
@@ -78,6 +78,8 @@ export function NasApp(){
   const [busy,setBusy]=useState(false);
   const [saving,setSaving]=useState(false);
   const [page,setPage]=useState<Page>("chat");
+  const [mobileView,setMobileView]=useState<MobileView>("chat");
+  const [settingsReturn,setSettingsReturn]=useState<"chat"|"control">("chat");
   const [notice,setNotice]=useState("");
   const [memoryToast,setMemoryToast]=useState<{key:number;message:string;warning:boolean}|null>(null);
   const [versionCopied,setVersionCopied]=useState(false);
@@ -171,7 +173,7 @@ export function NasApp(){
     document.addEventListener("visibilitychange",resume);
     return ()=>{cancelled=true;window.clearInterval(timer);document.removeEventListener("visibilitychange",resume);};
   },[authenticated,client,active]);
-  const lock=()=>{if(busy||saving)return;setAuthenticated(false);setKey("");setToken("");sessionStorage.removeItem(KEY);setMessages([]);setChats([]);setLibrary({facts:[],characterFacts:[],interests:[],sessionSummaries:[]});setLearning(null);setMemoryToast(null);setActivity(null);setActivityError("");setEventError("");eventCursor.current=undefined;setActive(null);setPage("chat");setNotice("");};
+  const lock=()=>{if(busy||saving)return;setAuthenticated(false);setKey("");setToken("");sessionStorage.removeItem(KEY);setMessages([]);setChats([]);setLibrary({facts:[],characterFacts:[],interests:[],sessionSummaries:[]});setLearning(null);setMemoryToast(null);setActivity(null);setActivityError("");setEventError("");eventCursor.current=undefined;setActive(null);setPage("chat");setMobileView("chat");setSettingsReturn("chat");setMenu(null);setNotice("");};
   useEffect(()=>{
     if(!authenticated)return;
     let cancelled=false;
@@ -199,19 +201,27 @@ export function NasApp(){
   const mutate=async<T,>(action:string,args:object):Promise<T>=>{const result=await client.memoryAction<T>(action,args);await refreshLibrary();return result;};
   const changeMemory=async(action:string,args:object)=>{await mutate(action,args);};
   const openPage=(next:Page)=>{
-    if(saving)return;
-    if((page==="personality"||page==="appearance")&&JSON.stringify(draft)!==JSON.stringify(profile)&&!window.confirm("Discard unsaved profile changes?"))return;
-    setNotice("");setDraft(profile);setPage(next);
+    if(saving)return false;
+    if(page===next)return true;
+    if((page==="personality"||page==="appearance")&&JSON.stringify(draft)!==JSON.stringify(profile)&&!window.confirm("Discard unsaved profile changes?"))return false;
+    if(next!=="chat"&&(page==="chat"||page==="control"))setSettingsReturn(page);
+    setNotice("");setMenu(null);setDraft(profile);setPage(next);
     if(next==="memory"||next==="history")void refreshLibrary().catch(report);
+    return true;
   };
+  const openMobileView=(view:MobileView)=>{
+    if(openPage("chat")){setMenu(null);setMobileView(view);}
+  };
+  const settingsBack=mobile&&page!=="control"?settingsReturn:"chat";
+  const settingsBackLabel=settingsBack==="control"?"Back to control center":mobile&&mobileView==="character"?"Back to Mikan":mobile&&mobileView==="chats"?"Back to chats":"Back to chat";
   const openChat=async(id:string)=>{
     if(inFlight.current||busy)return;
-    try{const history=await client.messages(id);setActive(id);setMessages(history);setPage("chat");setNotice("");localStorage.setItem("mikan-nas-chat",id);}
+    try{const history=await client.messages(id);setActive(id);setMessages(history);setPage("chat");setMobileView("chat");setNotice("");localStorage.setItem("mikan-nas-chat",id);}
     catch(error){report(error);}
   };
   const newChat=async()=>{
     if(inFlight.current||busy)return;
-    try{const chat=await client.createChat();setChats(previous=>[chat,...previous]);setMessages([]);setActive(chat.id);localStorage.setItem("mikan-nas-chat",chat.id);setPage("chat");setNotice("");}
+    try{const chat=await client.createChat();setChats(previous=>[chat,...previous]);setMessages([]);setActive(chat.id);localStorage.setItem("mikan-nas-chat",chat.id);setPage("chat");setMobileView("chat");setNotice("");}
     catch(error){report(error);}
   };
   const express=(kind:AvatarReactionKind)=>setReaction({kind,serial:++serial.current,source:"test"});
@@ -291,7 +301,7 @@ export function NasApp(){
   const latest=[...messages].reverse().find(m=>m.role==="assistant")?.id;
   return <main className={"companion nas-app "+(page==="chat"?"default-layout-active":"settings-mode settings-standalone")+(mobile?" nas-mobile":"")}
     style={{"--mikan-font":"Segoe UI, system-ui, sans-serif"} as CSSProperties}>
-    {page==="chat"?<Shell sidebarVersion={<button type="button" className={"nas-build-label"+(versionMismatch?" mismatch":"")} onClick={()=>void copyVersion()} title="Copy browser and backend build identity" aria-label="Copy NAS version"><span>v{CLIENT_BUILD.version}<small>{CLIENT_BUILD.commit.slice(0,8)}{versionMismatch?" · build mismatch":""}</small></span>{versionCopied?<Check size={14}/>:<Copy size={14}/>}</button>} avatar={avatar} avatarBackground={profile.avatarBackground} onAvatarContextMenu={event=>{event.preventDefault();setMenu({x:event.clientX,y:event.clientY});}}
+    {page==="chat"?<Shell view={mobileView} onViewChange={openMobileView} sidebarVersion={<button type="button" className={"nas-build-label"+(versionMismatch?" mismatch":"")} onClick={()=>void copyVersion()} title="Copy browser and backend build identity" aria-label="Copy NAS version"><span>v{CLIENT_BUILD.version}<small>{CLIENT_BUILD.commit.slice(0,8)}{versionMismatch?" · build mismatch":""}</small></span>{versionCopied?<Check size={14}/>:<Copy size={14}/>}</button>} avatar={avatar} avatarBackground={profile.avatarBackground} onAvatarContextMenu={event=>{event.preventDefault();setMenu({x:event.clientX,y:event.clientY});}}
       chats={chats} activeConversationId={active} transcriptVersion={messages.length+":"+(messages.at(-1)?.content.length||0)+":"+busy}
       busy={busy} muted ready memoryIssue={!!(activityError||eventError||learning?.failed)} visionActive={false} visionBusy={false}
       displayName={chats.find(c=>c.id===active)?.title||"Beholder Companion"} lastActivity={busy?"Thinking…":"Ready"} activityEntries={activityEntries} activityError={activityError||eventError}
@@ -311,8 +321,8 @@ export function NasApp(){
           onKeyDown={event=>{if(event.key==="Enter"&&!event.shiftKey&&!event.nativeEvent.isComposing){event.preventDefault();void send();}}}/>
         <button className="send-button chat-paw-send" type="submit" aria-label="Send message" disabled={busy||switching||!input.trim()}>{busy?<LoaderCircle className="spin" size={20}/>:<WorkspaceSendPaw/>}</button>
       </form></div>}/>:<section className="drawer control-center-window" role="dialog" aria-label="Mikan Control Center">
-      <header className="drawer-header control-center-header"><button type="button" className="back-button" onClick={()=>openPage(mobile&&page!=="control"?"control":"chat")} title={mobile&&page!=="control"?"Back to control center":"Back to chat"} aria-label={mobile&&page!=="control"?"Back to control center":"Back to chat"}><ArrowLeft size={20}/></button>
-        <span className="control-header-glyph"><Settings2 size={22}/></span><div className="drawer-title"><strong>{page==="control"?"Control Center":tabs.find(t=>t.id===page)?.label||"Conversation log"}</strong><span>Mikan's control center · Beholder</span></div>
+      <header className="drawer-header control-center-header"><button type="button" className="back-button" onClick={()=>openPage(settingsBack)} title={settingsBackLabel} aria-label={settingsBackLabel}><ArrowLeft size={20}/></button>
+        <span className="control-header-glyph"><Settings2 size={22}/></span><div className="drawer-title"><strong>{page==="control"?"Control Center":mobile&&page==="appearance"?"Wardrobe & appearance":tabs.find(t=>t.id===page)?.label||"Conversation log"}</strong><span>Mikan's control center · Beholder</span></div>
         <span className="control-local-indicator"><span/> NAS</span></header>
       <div className="settings-layout"><nav className="settings-tabs" aria-label="Settings categories">
         <div className="control-brand"><div className="control-brand-icon"><Cat size={25}/></div><div><strong>Mikan</strong><small>CONTROL CENTER</small></div></div>
@@ -322,7 +332,7 @@ export function NasApp(){
       </nav><div className={(page==="memory"||page==="history")?"settings-body settings-embedded settings-memory-view":"settings-body"}>
         {page==="control"&&<div className="nas-mobile-control-home">
           <div className="nas-mobile-control-hero"><img src={portrait} alt=""/><div><small>YOUR COMPANION</small><h2>Make Mikan yours ♡</h2><p>Everything you need, right at your fingertips.</p></div><Sparkles size={24} aria-hidden="true"/></div>
-          <div className="nas-mobile-control-group"><h3>Companion</h3>{tabs.filter(t=>["personality","appearance","memory","history"].includes(t.id)).map(({id,label,icon:Icon})=><button key={id} type="button" onClick={()=>openPage(id)}><span className="nas-mobile-control-icon"><Icon size={22}/></span><span>{label}</span><span aria-hidden="true">›</span></button>)}</div>
+          <div className="nas-mobile-control-group"><h3>Companion</h3>{tabs.filter(t=>["personality","appearance","memory","history"].includes(t.id)).map(({id,label,icon:Icon})=><button key={id} type="button" onClick={()=>openPage(id)}><span className="nas-mobile-control-icon"><Icon size={22}/></span><span>{id==="appearance"?"Wardrobe & appearance":label}</span><span aria-hidden="true">›</span></button>)}</div>
           <div className="nas-mobile-control-group"><h3>Brain & tools</h3>{tabs.filter(t=>["models","research","knowledge","brain-lab"].includes(t.id)).map(({id,label,icon:Icon})=><button key={id} type="button" onClick={()=>openPage(id)}><span className="nas-mobile-control-icon"><Icon size={22}/></span><span>{label}</span><span aria-hidden="true">›</span></button>)}<button type="button" onClick={()=>openPage("log")}><span className="nas-mobile-control-icon"><History size={22}/></span><span>Current conversation log</span><span aria-hidden="true">›</span></button></div>
           <div className="nas-mobile-control-group"><h3>System</h3>{tabs.filter(t=>["updates","capabilities"].includes(t.id)).map(({id,label,icon:Icon})=><button key={id} type="button" onClick={()=>openPage(id)}><span className="nas-mobile-control-icon"><Icon size={22}/></span><span>{label}</span><span aria-hidden="true">›</span></button>)}<button type="button" onClick={()=>void copyVersion()}><span className="nas-mobile-control-icon">{versionCopied?<Check size={22}/>:<Copy size={22}/>}</span><span>Copy build identity<small>v{CLIENT_BUILD.version} · {CLIENT_BUILD.commit.slice(0,8)}</small></span><span aria-hidden="true">›</span></button><button type="button" onClick={lock}><span className="nas-mobile-control-icon"><Lock size={22}/></span><span>Lock Mikan</span><span aria-hidden="true">›</span></button></div>
         </div>}
@@ -367,7 +377,7 @@ export function NasApp(){
         {notice&&<p className="settings-note" role="status">{notice}</p>}
         {(page==="personality"||page==="appearance")&&<div className="nas-save-row"><button className="secondary-action" disabled={saving} onClick={()=>void save(draft)}>{saving?"Saving…":"Save settings"}</button></div>}
       </div></div>
-      {mobile&&<nav className="nas-mobile-bottom-nav nas-mobile-settings-nav" aria-label="Main navigation"><button type="button" onClick={()=>openPage("history")} aria-current={page==="history"?"page":undefined}><History size={21}/><span>Chats</span></button><button type="button" onClick={()=>openPage("chat")}><PawPrint size={23}/><span>Chat</span></button><button type="button" onClick={()=>openPage("appearance")} aria-current={page==="appearance"?"page":undefined}><Shirt size={21}/><span>Character</span></button><button type="button" onClick={()=>openPage("control")} aria-current={page!=="history"&&page!=="appearance"?"page":undefined}><Settings2 size={21}/><span>Settings</span></button></nav>}
+      {mobile&&<NasMobileNav active="settings" onNavigate={destination=>destination==="settings"?openPage("control"):openMobileView(destination)}/>}
     </section>}
     {versionMismatch&&<div className="nas-update-notice" role="status"><AlertTriangle size={16}/><span>Browser and server builds differ.</span><button type="button" onClick={()=>{if((input.trim()||busy||saving||((page==="personality"||page==="appearance")&&JSON.stringify(profile)!==JSON.stringify(draft)))&&!window.confirm("Reload Mikan? Unsaved changes or an active reply may be lost."))return;window.location.reload();}}>Reload</button></div>}
     {memoryToast&&<div className={"workspace-memory-toast detailed nas-memory-toast"+(memoryToast.warning?" warning":"")} key={memoryToast.key} role="status" aria-live="polite">{memoryToast.warning?<AlertTriangle size={17}/>:<Check size={17}/>}<span>{memoryToast.message}</span><button type="button" onClick={()=>{setMemoryToast(null);openPage("memory");}}>Review memories</button><button type="button" aria-label="Dismiss memory notice" onClick={()=>setMemoryToast(null)}><X size={15}/></button></div>}
