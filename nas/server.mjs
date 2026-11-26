@@ -161,6 +161,16 @@ export function makeServer({store,config,key,promptFile="",maintenanceFile="/dat
         lastInteractionAt=Date.now();
         return json(res,201,store.newConversation());
       }
+      // Owner-authorized, complete export. Do not widen the normal chat/history window.
+      const exportMatch=path.match(/^\/api\/conversations\/([\w-]+)\/export$/);
+      if(req.method==="GET"&&exportMatch){
+        const id=exportMatch[1];
+        if(!store.exists(id))return json(res,404,{error:"Conversation not found"});
+        const live=models.view();
+        const payload={service:"nas",configuredProvider:live.provider,configuredModel:live.model,serverBuild:BUILD,conversation:id,messages:store.messages(id,-1),memoryEvents:store.learning.diagnostics(id,-1)};
+        if(Buffer.byteLength(JSON.stringify(payload),"utf8")>8*1024*1024)return json(res,413,{error:"Conversation export exceeds 8 MB. No messages were truncated."});
+        return json(res,200,payload);
+      }
       const match=path.match(/^\/api\/conversations\/([\w-]+)\/messages$/);
       if (req.method==="GET" && match) {
         const items=store.messages(match[1]);

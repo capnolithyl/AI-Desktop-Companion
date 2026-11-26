@@ -75,6 +75,7 @@ export class NasClient {
   async saveProfile(profile:CompanionProfile){return importCompanionProfile(await this.json<unknown>("profile",{method:"PUT",body:JSON.stringify(exportCompanionProfile(profile))}));}
   async chats(){return (await this.json<{conversations:NasChat[]}>("conversations")).conversations;}
   createChat(){return this.json<NasChat>("conversations",{method:"POST",body:"{}"});}
+  chatExport(id:string){return this.json<{service:"nas";configuredProvider:CloudProvider;configuredModel:string;serverBuild:NasStatus["build"];conversation:string;messages:NasMessage[];memoryEvents:LearningEvent[]}>("conversations/"+encodeURIComponent(id)+"/export");}
   async messages(id:string){return (await this.json<{messages:NasMessage[]}>("conversations/"+encodeURIComponent(id)+"/messages")).messages;}
   async facts(){return (await this.json<{memories:NasFact[]}>("memories")).memories;}
   addFact(fact:string){return this.json("memories",{method:"POST",body:JSON.stringify({fact})});}

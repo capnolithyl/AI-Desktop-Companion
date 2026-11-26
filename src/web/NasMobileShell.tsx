@@ -1,5 +1,5 @@
 import {useEffect,useRef,useState,type ComponentProps,type CSSProperties} from "react";
-import {BookHeart,Cat,Copy,History,Layers3,LoaderCircle,Lock,MessageCircle,PawPrint,Plus,Search,Settings2,Shirt,Sparkles,Trash2} from "lucide-react";
+import {BookHeart,Cat,Copy,Download,History,Layers3,LoaderCircle,Lock,MessageCircle,PawPrint,Plus,Search,Settings2,Shirt,Sparkles,Trash2} from "lucide-react";
 import type {DefaultCompanionShell} from "../DefaultCompanionShell";
 import {WorkspacePeekCat} from "../WorkspaceDecor";
 
@@ -12,7 +12,7 @@ export function useNasMobile(){
 }
 export type MobileView="chat"|"chats"|"character";
 type MobileDestination=MobileView|"settings";
-type Props=ComponentProps<typeof DefaultCompanionShell>&{view:MobileView;onViewChange:(view:MobileView)=>void};
+type Props=ComponentProps<typeof DefaultCompanionShell>&{view:MobileView;onViewChange:(view:MobileView)=>void;onDownloadChatDebug:(id:string)=>Promise<void>;exporting:boolean};
 
 /** Keep primary destinations identical on every mobile screen. */
 export function NasMobileNav({active,onNavigate}:{active:MobileDestination;onNavigate:(destination:MobileDestination)=>void}){
@@ -42,7 +42,7 @@ export function NasMobileShell(p:Props){
       <div className="nas-mobile-header-actions"><button type="button" onClick={create} disabled={p.busy||!!deleting} aria-label="New chat" title="New chat"><Plus size={23}/></button><button type="button" onClick={p.onOpenSettings} aria-label="Control Center" title="Control Center"><Settings2 size={22}/></button></div>
     </header>
     {view==="chat"&&<section className="workspace-chat nas-mobile-chat" aria-label="Current conversation">
-      <div className="nas-mobile-chat-title"><div><small>CONVERSATION</small><strong>{p.displayName}</strong></div><button type="button" onClick={p.onOpenCurrentLog} aria-label="Conversation log"><History size={19}/></button></div>
+      <div className="nas-mobile-chat-title"><div><small>CONVERSATION</small><strong>{p.displayName}</strong></div><button type="button" onClick={p.onOpenCurrentLog} aria-label="Conversation log"><History size={19}/></button><button type="button" disabled={!active||p.exporting} onClick={()=>{if(active)void p.onDownloadChatDebug(active);}} aria-label="Download current chat JSON" title="Download chat JSON">{p.exporting?<LoaderCircle className="spin" size={19}/>:<Download size={19}/>}</button></div>
       <div className="workspace-transcript" role="log" aria-live="polite" ref={feed} onScroll={e=>{const el=e.currentTarget;follow.current=el.scrollHeight-el.scrollTop-el.clientHeight<100;}}>{p.transcript}</div>
       <div className="workspace-composer">{p.composer}</div>
     </section>}

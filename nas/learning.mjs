@@ -161,8 +161,8 @@ export function createLearning(db,library){
   function recordRecall(conversationId,assistantId,lines){
     if(lines.length)emit("recall",{lines},{conversation_id:conversationId,assistant_id:assistantId});
   }
-  function diagnostics(conversationId){
-    return db.prepare("SELECT id,conversation_id AS conversationId,assistant_id AS assistantId,kind,payload_json AS payload,created_at AS createdAt FROM nas_learning_events WHERE conversation_id=? ORDER BY id DESC LIMIT 100").all(conversationId).map(r=>({...r,payload:JSON.parse(r.payload)}));
+  function diagnostics(conversationId,limit=100){
+    return db.prepare("SELECT id,conversation_id AS conversationId,assistant_id AS assistantId,kind,payload_json AS payload,created_at AS createdAt FROM nas_learning_events WHERE conversation_id=? ORDER BY id DESC LIMIT ?").all(conversationId,limit).map(r=>({...r,payload:JSON.parse(r.payload)}));
   }
   db.exec("CREATE TABLE IF NOT EXISTS nas_session_settings(id INTEGER PRIMARY KEY CHECK(id=1),enabled INTEGER NOT NULL DEFAULT 0); INSERT OR IGNORE INTO nas_session_settings(id) VALUES(1)");
   const settings=()=>{const r=db.prepare("SELECT capture_user AS user,capture_character AS character FROM nas_learning_settings WHERE id=1").get();return {user:!!r.user,character:!!r.character,sessions:!!db.prepare("SELECT enabled FROM nas_session_settings WHERE id=1").get().enabled};};

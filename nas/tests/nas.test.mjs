@@ -114,6 +114,21 @@ test("NAS HTTP requires a key, streams replies and persists them",async()=>{
     const activity=await (await fetch(base+"/api/learning/diagnostics/"+created.id,{headers})).json();
     assert.ok(!activity.events.some(e=>e.kind==="recall"&&e.payload.lines.some(line=>line.includes("A new owner-approved test fact"))),"Unrelated pins must not enter ordinary chat");
     assert.equal((await fetch(base+"/api/learning/diagnostics/"+created.id)).status,401);
+    // Complete exports stay private and are independent of the 80-message UI window.
+    for(let i=0;i<90;i++)store.append(created.id,"user","Export message "+i);
+    for(let i=0;i<110;i++)store.learning.recordSearch(created.id,saved.messages[1].id,{title:"Export event "+i,detail:"",lines:[]});
+    const exportPath=base+"/api/conversations/"+created.id+"/export";
+    assert.equal((await fetch(exportPath)).status,401);
+    const exported=await (await fetch(exportPath,{headers})).json();
+    assert.equal(exported.messages.length,92);
+    assert.equal(exported.messages[0].id,saved.messages[0].id);
+    assert.equal(exported.messages.at(-1).content,"Export message 89");
+    assert.ok(exported.memoryEvents.length>=110);
+    assert.equal(exported.conversation,created.id);
+    assert.ok(!JSON.stringify(exported).includes(key));
+    assert.equal((await (await fetch(base+"/api/conversations/"+created.id+"/messages",{headers})).json()).messages.length,80);
+    assert.equal((await fetch(base+"/api/conversations/missing/export",{headers})).status,404);
+
   } finally {
     await new Promise(resolve=>server.close(resolve));store.db.close();
     rmSync(root,{recursive:true,force:true});
