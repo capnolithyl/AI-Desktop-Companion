@@ -1,6 +1,6 @@
 # Mikan Launcher — living feature reference
 
-**Source baseline:** v0.16.0 (versionCode 41), native Dream Mode and time-aware artwork, 2026-11-26. See Git history for implementation commit.
+**Source baseline:** v0.16.1 (versionCode 42), accurate Dream preview and local artwork pack import, 2026-11-26. See Git history for implementation commit.
 **Development:** [PR #117](https://github.com/capnolithyl/AI-Desktop-Companion/pull/117), branch `feature/mikan-launcher-v01`. Check current branch and Gradle version before changing this document.
 **Purpose:** a free, personal, offline-first Android launcher inspired by the Mikan OS home-screen mockup. Separate from Pocket Mikan, desktop Mikan and the NAS. This document tracks the launcher only.
 
@@ -65,6 +65,7 @@ All nine built-in widgets (clock, Mikan, music, weather, upcoming events, device
 
 | Feature | Introduced | Current implementation / use | Evidence |
 | --- | --- | --- | --- |
+| Dream preview & artwork packs | 0.16.1 | Portrait/landscape previews use physical display aspect; fullscreen preview fits chosen orientation in the current window, tap to close, no charging required. Shared DreamView renderer, larger artwork and three sizes. Import one local ZIP with exact root morning/day/evening/night.webp entries, bounded archive/image/dimension validation, atomic private replacement, no extraction, remove to revert; custom pack excluded from portable backup, artwork size backed up. Holiday override remains. No new permissions/network. | Implemented; CI/device pending. |
 | Mikan Dream Mode | 0.16.0 | Native noninteractive DreamService with system picker/Customize metadata and launcher Dream Mode settings. Full-screen black clock/date, optional battery, portrait/landscape responsive layout, time-of-day greetings/artwork (06–11 morning, 11–17 day, 17–22 evening, 22–06 night), fixed sleepy/day or deterministic random per period, optional daytime holiday override, cozy/minimal/deep sleep styles and clock sizes. Existing portraits are fallbacks; dedicated slots prepared but art not supplied. Settings preview by time period; minute-aligned refresh only while dreaming, dimmed night/deep style, bounded whole-content pixel shift enabled by default. Android controls activation/exit, display and low-light behavior. No NAS, network, inference, additional user permission or keyguard changes. Preferences backed up; OS dream selection not backed up. | Implemented; CI/device pending. |
 | Quick contacts | 0.15.7 | Optional Home widget hidden by default; up to eight manually selected or entered names and phone numbers, local snapshots with bounded thumbnail if picker grants it and initials fallback. Tap person for dialer, SMS composer, or installed WhatsApp/Business (international + number required); no automatic call/message or browser fallback. Edit, reorder and remove from local favorites manager; Android address book unchanged. Both Home layouts, page placement and grid resize/move; personal contact data/photos excluded from portable backup. No broad contact permission, direct call/SMS permission, NAS or launcher network request. Contacts are snapshots, not synced. | Implemented; CI/device pending. |
 | Mikan daily briefing | 0.15.6 | Optional themed Home card, hidden by default, both layouts and page/position backup. Local date/time greeting, current weather and high/low from shared cache (stale conditions marked cached), remaining visible calendar events today and next timed event, local task counts and due/overdue totals, active notification app count (not notification count) and ChatGPT presence. Rows open relevant app/manager or permission setup. Shared dashboard worker operates when briefing visible even if individual weather/calendar widgets hidden; existing permission and configured city required. Notification overview independently toggled, no message content or calendar/task titles in briefing, no extra worker, AI, NAS requests or permissions. | Implemented; CI/device pending. |
@@ -184,7 +185,8 @@ Weather card also exposes refresh, city, units and clear location. No full-scree
 | 0.15.5 | ChatGPT notification-aware Mikan remarks | Launcher CI 45835071700 passed; device pending. |
 | 0.15.6 | Local Mikan daily briefing widget | Launcher CI 45835679745 passed; device pending. |
 | 0.15.7 | Local quick contacts widget | Launcher CI 45838572792 passed; device pending. |
-| 0.16.0 | Combined native charging screensaver and time-of-day artwork customization | Implemented; CI/device pending. |
+| 0.16.0 | Combined native charging screensaver and time-of-day artwork customization | Launcher CI 45855167960 passed; owner screenshot confirms settings and holiday preview, but preview showed landscape on portrait phone. Actual dream untested. |
+| 0.16.1 | Accurate preview, fullscreen preview, larger artwork and one-ZIP local import | Implemented; CI/device pending. |
 
 ## 7. Outstanding verification checklist
 
@@ -269,6 +271,8 @@ Weather card also exposes refresh, city, units and clear location. No full-scree
 
 - [ ] v0.16.0 verify Pixel screen saver discovery, Customize, Android preview/start while charging, tap/unplug/secure keyguard, orientation, time format, all four time bands and holiday override, clock-only/deep modes, battery charging/full/unknown, dimming and bounded pixel shift, lifecycle cleanup, settings backup, offline operation and low-light system substitution. Pure Java DreamRules tests added; CI/device pending.
 
+- [ ] v0.16.1 verify phone-aspect portrait and landscape preview, fullscreen tap/back, actual charging comparison, art sizing, ZIP select/cancel, malformed/oversize/duplicate entries rejected without replacing pack, all four time periods, remove/restart/backup, holiday precedence and offline. CI/device pending.
+
 ## 8. Roadmap (not implemented)
 
 Planned milestones; version targets flexible. See [Trello roadmap](https://trello.com/c/VEk6xVz6). No arbitrary deadlines.
@@ -299,7 +303,7 @@ v0.15.0 device information widget implemented, CI passed and owner confirmed wor
 Owner requests saving the design until PC/NAS access is available. Keep factual local briefing; opt-in short personality summary via authenticated POST /api/briefing, dedicated revocable scoped token stored securely on Android, never backed up. Reuse configured inference provider, quota and busy checks. Per-source sharing toggles: date/time, weather, calendar times, task counts and notification app presence; event/task titles separate opt-in; no notification contents. One bounded generation on first morning Home visit, daily cache, explicit rate-limited refresh and offline/busy/maintenance/quota fallback. No normal conversation history, web research, tool calls or memory learning; no sensitive payload logs or implicit retries. Provider receives opted-in facts. No keys or NAS implementation yet. Not a blocker for Dream Mode.
 
 ### v0.16 — Mikan Dream Mode
-Owner screenshot confirmed stock Clock screen saver is selected while charging. Owner approved combining 0.16.0 and 0.16.1 into v0.16.0: native DreamService, clock/date, battery, four time bands and artwork settings, portrait/landscape, holiday override, initial dimming and pixel shift. Existing portraits used until dedicated day/night artwork supplied. CI and device discovery/actual charging/low-light behavior pending. Next: dedicated art pack, visual polish and optional reduced-motion animation, next alarm and cached weather. No keyguard modification, NAS or inference. Burn-in mitigation reduces risk but cannot eliminate it.
+Owner screenshot confirmed stock Clock screen saver is selected while charging. Owner approved combining 0.16.0 and 0.16.1 into v0.16.0: native DreamService, clock/date, battery, four time bands and artwork settings, portrait/landscape, holiday override, initial dimming and pixel shift. Existing portraits used until dedicated day/night artwork supplied. v0.16.0 CI passed; owner observed preview layout mismatch. v0.16.1 corrects preview aspect, adds fullscreen, larger artwork and one-file import. Four revised portrait images supplied separately as ZIP (not bundled); no GitHub upload needed. Actual charging/low-light and import verification pending. Next: optional reduced-motion animation, next alarm and cached weather. No keyguard modification, NAS or inference. Burn-in mitigation reduces risk but cannot eliminate it.
 
 ### v1.0 — Daily-driver release
 Performance/battery/startup regression, full backup/restore, crash recovery, offline boot and NAS-outage tests, stock launcher fallback, resolve outstanding bugs and merge with owner approval.
