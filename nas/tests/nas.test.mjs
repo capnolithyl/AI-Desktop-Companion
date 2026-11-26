@@ -1553,3 +1553,49 @@ test("native agent uses the same authoritative local date in planning and synthe
   assert.deepEqual(reads,[old]);assert.equal(calls,4);assert.equal(result.answer,"The 2025 dates are past; I could not verify upcoming dates.");assert.equal(result.researched.sources.find(s=>s.url===old).publishedDate,"2025-07-25");
  }finally{store.db.close();}
 });
+
+
+test("native foundational context preserves several owner pins without replacing topical recall",()=>{
+ const store=openStore(":memory:");
+ try{
+  const pinned=["The user lives in Brookmere.","The user uses a Radeon GPU.","The user speaks German.","The user prefers concise replies.","The user develops websites.","The user works from home."];
+  store.library.execute("importFacts",{items:pinned.map(fact=>({fact,category:"profile",tags:[],pinned:true}))});
+  for(let i=0;i<6;i++)store.addMemory("Lantern project detail "+i);
+  const chat=store.newConversation();
+  const result=store.library.context("Lantern project",chat.id,{modelLed:true});
+  assert.match(result.text,/Owner-pinned foundational context/);
+  for(const fact of pinned)assert.ok(result.text.includes(fact),fact);
+  assert.equal(result.ids.length,10);assert.equal(new Set(result.ids).size,10);
+  assert.equal(result.auditLines.filter(s=>s.includes("Lantern project detail")).length,4);
+  const city=store.library.execute("snapshot",{}).facts.find(f=>f.fact===pinned[0]);
+  store.library.execute("pinFact",{id:city.id,pinned:false});
+  const unpinned=store.library.context("Lantern project",chat.id,{modelLed:true});
+  assert.ok(!unpinned.ids.includes(city.id));assert.ok(!unpinned.text.includes(pinned[0]));
+  const recalled=store.library.context("Brookmere",chat.id,{modelLed:true,explicitRecall:true});
+  assert.ok(recalled.ids.includes(city.id));
+ }finally{store.db.close();}
+});
+
+test("native foundational context stays bounded when many long facts are pinned",()=>{
+ const store=openStore(":memory:");
+ try{
+  store.library.execute("importFacts",{items:Array.from({length:12},(_,i)=>({fact:"Owner pin "+i+" "+"z".repeat(440),category:"profile",tags:[],pinned:true}))});
+  store.addMemory("Lantern project uses React.");
+  const result=store.library.context("Lantern project","",{modelLed:true});
+  const foundation=result.text.split("Owner facts (date saved):")[0];
+  assert.ok(foundation.length<1300);assert.match(result.text,/Lantern project uses React/);assert.ok(result.ids.length<=7);
+ }finally{store.db.close();}
+});
+
+test("native agent receives pragmatic context guidance with optional recall and no mandatory extra call",async()=>{
+ const {executeNasTurn}=await import("../turn.mjs"),store=openStore(":memory:");
+ try{
+  store.library.execute("importFacts",{items:[{fact:"The user lives in Brookmere.",category:"profile",tags:[],pinned:true}]});
+  const chat=store.newConversation(),question="A band has shows in Brookmere and Alderwick. What do you think?";store.append(chat.id,"user",question);let calls=0;
+  const result=await executeNasTurn({store,conversationId:chat.id,question,selected:{provider:"nvidia",model:"test",historyChars:32000},mode:"off",publicAgent:true,reserve:()=>{},canRequest:()=>true,requestModel:async args=>{
+    calls++;assert.match(args.system,/likely practical purpose/);assert.match(args.system,/without silently narrowing/);assert.match(args.system,/Owner-pinned foundational context/);assert.match(args.system,/lives in Brookmere/);assert.match(args.system,/Keep saved personal context out of public queries/);assert.match(args.system,/If personalization adds no value, simply answer/);assert.match(args.agentTools.find(t=>t.function.name==="recall_memory").function.description,/practical goal/);
+    return {content:"Both dates are interesting; Brookmere is especially convenient since you live there.",toolCalls:[]};
+  }});
+  assert.equal(calls,1);assert.match(result.answer,/Both dates/);
+ }finally{store.db.close();}
+});
