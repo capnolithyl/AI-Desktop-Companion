@@ -96,6 +96,7 @@ final class DreamView extends View {
     private void scheduleMotion(){if(motionFrame==null)return;removeCallbacks(motionFrame);if(canAnimate())postDelayed(motionFrame,DreamRules.frameDelay(motion,period));}
     @Override protected void onAttachedToWindow(){super.onAttachedToWindow();scheduleMotion();}
     @Override protected void onWindowVisibilityChanged(int visibility){super.onWindowVisibilityChanged(visibility);scheduleMotion();}
+    @Override public void onVisibilityAggregated(boolean visible){super.onVisibilityAggregated(visible);scheduleMotion();}
     @Override protected void onDetachedFromWindow(){removeCallbacks(motionFrame);super.onDetachedFromWindow();}
     boolean dim(){return night;}
     void release(){setMotionActive(false);portrait=null;art.clear();backdrop.clear();artKey="";}
@@ -141,7 +142,7 @@ final class DreamView extends View {
             portrait.setBounds(Math.round(ax-width/2),Math.round(ay-height/2),Math.round(ax+width/2),Math.round(ay+height/2));
             int alpha=style==DreamRules.DEEP?75:night?145:integrated?255:215;
             if(!integrated||!backdrop.drawPortrait(canvas,portrait.getBounds(),alpha)){portrait.setAlpha(alpha);portrait.draw(canvas);}
-            if(canAnimate())ambient.draw(canvas,portrait.getBounds(),unit,period,motion,sleepingArt,android.os.SystemClock.uptimeMillis()-motionStart);
+            if(canAnimate())ambient.draw(canvas,portrait.getBounds(),w,h,unit,period,motion,sleepingArt,android.os.SystemClock.uptimeMillis()-motionStart);
         }
         line(canvas,clock,cx,cy,size,textWidth,color,light);
         line(canvas,date,cx,cy+unit*.075f,unit*.041f,textWidth,color,regular);

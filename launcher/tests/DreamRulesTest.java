@@ -45,6 +45,13 @@ public final class DreamRulesTest {
         check(DreamRules.phase(12000,10000,3000)==.5f);
         check(DreamRules.phase(-1000,10000,0)==.9f);
         check(DreamRules.envelope(0)==0&&DreamRules.envelope(.5f)==1&&DreamRules.envelope(1)<.0001f);
+        check(DreamRules.particleCount(2,DreamRules.Period.DAY)==16);
+        check(DreamRules.particleRadius(2,DreamRules.Period.DAY,0)>=.0048f);
+        check(DreamRules.particleRadius(2,DreamRules.Period.DAY,0)>DreamRules.particleRadius(1,DreamRules.Period.DAY,0));
+        check(DreamRules.particleAlpha(2,DreamRules.Period.DAY)>=200);
+        check(DreamRules.particleAlpha(2,DreamRules.Period.NIGHT)<DreamRules.particleAlpha(2,DreamRules.Period.DAY));
+        check(DreamRules.particleAlpha(0,DreamRules.Period.DAY)==0);
+        check(DreamRules.particleDuration(2,0)<DreamRules.particleDuration(1,0));
         System.out.println("DreamRules tests passed");
     }
 }

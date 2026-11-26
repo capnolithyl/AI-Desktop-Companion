@@ -66,7 +66,8 @@ public final class DreamSettingsActivity extends Activity {
         ui.note(body,"Cozy Mikan blends the portrait edges into a time-aware amber, cocoa or mocha backdrop. Minimal clock and Deep sleep remain black; Pure black retains the original portrait treatment. Night backgrounds are deliberately darker.");
         ui.heading(body,"AMBIENT ANIMATION");
         choose("Animation intensity","dreamMotion",new String[]{"Off","Subtle","Full"},DreamRules.MOTION_SUBTLE);
-        ui.note(body,"Gentle morning dust, daytime sparkles, evening fireflies and nighttime stars with little Zs. Open Fullscreen preview to see motion. Minimal clock, Deep sleep and Android disabled animations stay still. No new artwork needed.");
+        ui.note(body,"Full now makes brighter, larger effects travel farther across the artwork and its margins. Open Fullscreen preview to see motion. Minimal clock and Deep sleep stay still.");
+        ui.note(body,android.animation.ValueAnimator.areAnimatorsEnabled()?"Android animations: enabled.":"Android animations: disabled. Dream effects respect this system setting. Check Android Accessibility > Color and motion > Remove animations, or Battery Saver.");
         ui.heading(body,"ARTWORK PACK");
         ui.row(body,"Import Dream artwork ZIP",importing?"Importing…":pack.installed()?"Custom pack installed · replace all four images":"Select one ZIP containing morning, day, evening and night",this::pickPack);
         if(pack.installed())ui.row(body,"Remove imported pack","Restore bundled artwork",()->new AlertDialog.Builder(this).setTitle("Remove Dream artwork?").setMessage("Only removes the imported copy. Your original ZIP is untouched.").setNegativeButton("Cancel",null).setPositiveButton("Remove",(d,i)->{if(importing)return;if(pack.remove()){render();}else Toast.makeText(this,"Could not remove pack.",Toast.LENGTH_SHORT).show();}).show());

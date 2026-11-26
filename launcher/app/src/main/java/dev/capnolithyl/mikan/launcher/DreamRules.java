@@ -10,7 +10,10 @@ final class DreamRules {
     static final int MOTION_OFF=0,MOTION_SUBTLE=1,MOTION_FULL=2;
     static int motion(int requested,int style,boolean systemEnabled){return style==COZY&&systemEnabled?Math.max(0,Math.min(2,requested)):MOTION_OFF;}
     static int frameDelay(int motion,Period period){return motion==MOTION_OFF?0:period==Period.NIGHT?(motion==MOTION_FULL?166:250):(motion==MOTION_FULL?83:125);}
-    static int particleCount(int motion,Period period){return motion==MOTION_OFF?0:period==Period.NIGHT?(motion==MOTION_FULL?5:3):(motion==MOTION_FULL?9:5);}
+    static int particleCount(int motion,Period period){return motion==MOTION_OFF?0:period==Period.NIGHT?(motion==MOTION_FULL?7:3):(motion==MOTION_FULL?16:7);}
+    static float particleRadius(int motion,Period period,int index){return motion==MOTION_OFF?0:(period==Period.NIGHT?.0028f:.0048f)*(motion==MOTION_FULL?1f:.65f)*(1f+(index%3)*.32f);}
+    static int particleAlpha(int motion,Period period){return motion==MOTION_OFF?0:period==Period.NIGHT?(motion==MOTION_FULL?105:60):(motion==MOTION_FULL?225:145);}
+    static int particleDuration(int motion,int index){return (motion==MOTION_FULL?5500:8500)+(index%4)*1300;}
     static float phase(long elapsed,int duration,int offset){return Math.floorMod(elapsed+offset,(long)duration)/(float)duration;}
     static float envelope(float phase){return (float)Math.sin(Math.PI*Math.max(0f,Math.min(1f,phase)));}
     static int background(int requested,int style){return style!=COZY?BLACK:Math.max(BLACK,Math.min(TINTED,requested));}
