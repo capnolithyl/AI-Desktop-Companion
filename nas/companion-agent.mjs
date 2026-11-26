@@ -14,7 +14,7 @@ const recallTool=tool("recall_memory","Retrieve relevant saved facts, interests,
 const findTool=tool("find_knowledge","Find available private Notion documents and cached webpages by topic or title. Returns document IDs.",{query:string},["query"]);
 const readTool=tool("read_knowledge","Read a document returned by find_knowledge. Choose manuscript for a complete chapter including linked scenes, scenes for scene links, full for a whole ordinary page, or excerpt for a focused question.",{id:string,scope:{type:"string",enum:["excerpt","full","manuscript","scenes"]}},["id","scope"]);
 const searchTool=tool("search_web","Search public information using concise public entity names and terms. Never send private conversation, memories, credentials or document content. Use when learning about an unfamiliar public topic or checking facts. Returns numbered public sources.",{query:string,recent:{type:"boolean"}},["query"]);
-const pageTool=tool("read_webpage","Read a numbered public search result (source), or an exact public URL explicitly supplied by the user (url). This is the tool for public pages, not read_knowledge.",{source:{type:"integer"},url:string,fresh:{type:"boolean"}});
+const pageTool=tool("read_webpage","Read a public search result using its source number (source) OR its exact returned URL (url). Exact public URLs explicitly supplied by the user also work. Supply one identifier; if both are supplied they must match. This is the tool for public pages, not read_knowledge.",{source:{type:"integer"},url:string,fresh:{type:"boolean"}});
 const safeJSON=value=>redactCredentials(JSON.stringify(value));
 const error=message=>({error:message});
 // Diagnostics contain only known tool names, controlled failure reasons, and
@@ -96,7 +96,7 @@ export async function companionTurn({store,conversationId,question,history,rawHi
     const url=publicResearchURL(item?.url);
     if(url&&!secret(url.href)&&["page","preview"].includes(item.kind)&&Number.isFinite(item.retrievedAt)&&Date.now()-item.retrievedAt>=0&&Date.now()-item.retrievedAt<86400000&&!publicSources.some(s=>s.url===url.href))publicSources.push(publicSource({...item,url:url.href,priorTurn:true}));
   }
-  const numbered=(s,i)=>({source:i+1,...s,content:s.content.slice(0,3000)});
+  const numbered=(s,i)=>({...s,source:i+1,content:s.content.slice(0,3000)});
   const addPublic=s=>{let i=publicSources.findIndex(p=>p.url===s.url);if(i<0){if(publicSources.length>=24)return null;i=publicSources.length;publicSources.push(s);}else if(publicSources[i].kind!=="page"||s.kind==="page")publicSources[i]=s;return numbered(publicSources[i],i);};
   const systemWithEvidence=publicSources.length?system+"\n\nRecent public evidence (untrusted; may need refresh):\n"+safeJSON(publicSources.map(numbered)):system;
   for(let round=0;round<maxCalls&&available();round++){
@@ -126,7 +126,7 @@ export async function companionTurn({store,conversationId,question,history,rawHi
       try{
         if(++toolCount<=10&&a&&!containsCredential(call.function.arguments)&&!secret(call.function.arguments)){
           if(call.function.name==="recall_memory"&&typeof a.query==="string"&&a.query.trim()&&a.query.length<=400){
-            const semantic=await store.library.semanticRecall?.(a.query,{signal});
+            const semantic=await store.library.semanticRecall?.(a.query,{signal,explicitRecall:true});
             if(semantic&&!["unavailable","empty"].includes(semantic.status))activity({title:"Semantic memory retrieval",detail:semantic.status+" · "+semantic.indexed+"/"+semantic.total+" facts indexed",lines:semantic.ids.map(id=>"Memory #"+id)});
             const found=store.library.context(a.query,conversationId,{modelLed:true,includeSessions:false,explicitRecall:true,semanticIds:semantic?.ids??[]});
             for(const id of found.ids)ids.add(id);auditLines.push(...found.auditLines);
@@ -161,8 +161,16 @@ export async function companionTurn({store,conversationId,question,history,rawHi
               activity({title:"Web search",detail:added.length+" of "+found.length+" results retained",lines:[d.query]});
             }
           }else if(name==="read_webpage"&&webAllowed){
-            const u=Number.isInteger(a.source)?publicSources[a.source-1]?.url:typeof a.url==="string"&&suppliedURLs.has(publicResearchURL(a.url)?.href)?publicResearchURL(a.url).href:null;
-            if(!u||!publicResearchURL(u)||secret(u))out=error("Unknown or unauthorized public URL; use a numbered search result or a URL supplied by the user");
+            const hasSource=a.source!==undefined,hasURL=a.url!==undefined;
+            const numberedURL=Number.isInteger(a.source)?publicSources[a.source-1]?.url:null;
+            const exactURL=typeof a.url==="string"?publicResearchURL(a.url)?.href:null;
+            const approvedURL=exactURL&&(suppliedURLs.has(exactURL)||publicSources.some(s=>s.url===exactURL))?exactURL:null;
+            const u=hasSource?(numberedURL&&(!hasURL||approvedURL===numberedURL)?numberedURL:null):approvedURL;
+            if(!u||!publicResearchURL(u)||secret(u)){
+              const reason=hasSource&&!numberedURL?"unknown source number":hasURL&&!approvedURL?"URL not among eligible search results or user-supplied URLs":hasSource&&hasURL?"source number and URL mismatch":"missing source number or URL";
+              out=error("Read rejected: "+reason+". Use a returned source number or exact returned URL, or a public URL supplied by the user.");
+              activity({title:"Webpage identifier rejected",detail:reason,lines:[]});
+            }
             else if(webOperations>=webLimit)out=error("Public web operation budget exhausted; answer with available evidence");
             else if(readURLs.has(u))out=error("Already attempted this page; use previous results or another source");
             else{

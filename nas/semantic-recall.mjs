@@ -13,12 +13,13 @@ const valid=v=>Array.isArray(v)&&v.length===384&&v.every(n=>typeof n==="number"&
 const factText=f=>[f.fact,f.category,...(f.tags??[])].join(" ").slice(0,2000);
 const hash=text=>createHash("sha256").update(EMBEDDING_REVISION+"\0"+text).digest("hex");
 const cosine=(a,b)=>{let dot=0,aa=0,bb=0;for(let i=0;i<a.length;i++){dot+=a[i]*b[i];aa+=a[i]*a[i];bb+=b[i]*b[i];}return dot/Math.sqrt(aa*bb);};
-export function rankSemantic(query,rows){
+export function rankSemantic(query,rows,{explicitRecall=false}={}){
   if(!valid(query))return [];
   const scored=rows.filter(r=>valid(r.vector)).map(r=>({id:r.id,score:cosine(query,r.vector)})).filter(r=>Number.isFinite(r.score)).sort((a,b)=>b.score-a.score||a.id-b.id);
-  // Nearest does not mean relevant. Conservative, tunable similarity floor.
-  const floor=Math.max(0.45,(scored[0]?.score??0)-0.14);
-  return scored.filter(r=>r.score>=floor).slice(0,6).map(r=>r.id);
+  // Automatic context is selective; a deliberate recall request may explore
+  // a wider neighborhood. Never pad with the nearest unrelated records.
+  const floor=Math.max(explicitRecall?0.45:0.50,(scored[0]?.score??0)-(explicitRecall?0.14:0.08));
+  return scored.filter(r=>r.score>=floor).slice(0,explicitRecall?6:4).map(r=>r.id);
 }
 
 export function embedLocal(texts,{signal,timeoutMs=25000}={}){
@@ -46,7 +47,7 @@ export function embedLocal(texts,{signal,timeoutMs=25000}={}){
 export function createSemanticRecall(db,{embed=embedLocal,available=embeddingsAvailable}={}){
   db.exec("CREATE TABLE IF NOT EXISTS nas_memory_vectors(memory_id INTEGER PRIMARY KEY REFERENCES user_memories(id) ON DELETE CASCADE, fingerprint TEXT NOT NULL, vector_json TEXT NOT NULL)");
   let retryAfter=0;
-  return async function lookup(query,facts,{signal}={}){
+  return async function lookup(query,facts,{signal,explicitRecall=false}={}){
     const fallback=(status,indexed=0)=>({ids:[],status,indexed,total:facts.length});
     if(!available())return fallback("unavailable");
     if(!query.trim()||!facts.length)return fallback("empty");
@@ -69,7 +70,7 @@ export function createSemanticRecall(db,{embed=embedLocal,available=embeddingsAv
       if(!Array.isArray(result)||result.length!==batch.length+1||!result.every(valid))throw Error("Invalid vectors");
       const write=db.prepare("INSERT INTO nas_memory_vectors(memory_id,fingerprint,vector_json) SELECT id,?,? FROM user_memories WHERE id=? ON CONFLICT(memory_id) DO UPDATE SET fingerprint=excluded.fingerprint,vector_json=excluded.vector_json");
       for(let i=0;i<batch.length;i++){const row=batch[i],vector=result[i+1];write.run(row.fingerprint,JSON.stringify(vector),row.id);indexed.push({id:row.id,vector});}
-      return {ids:rankSemantic(result[0],indexed),status:indexed.length===facts.length?"ready":"partial",indexed:indexed.length,total:facts.length};
+      return {ids:rankSemantic(result[0],indexed,{explicitRecall}),status:indexed.length===facts.length?"ready":"partial",indexed:indexed.length,total:facts.length};
     }catch{
       signal?.throwIfAborted();retryAfter=Date.now()+60000;return fallback("failed",indexed.length);
     }

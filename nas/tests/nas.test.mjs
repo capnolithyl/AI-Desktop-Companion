@@ -1457,3 +1457,50 @@ test("page failure diagnostics distinguish safe categories and do not disclose u
  assert.equal(publicWebFailure(Error("private URL or token")),"network or page reader error");
  await assert.rejects(readWeb("https://example.org",async()=>({type:"text/html",body:"<html><script>nothing</script></html>"})),e=>e.code==="page-empty");
 });
+
+test("semantic automatic recall is selective without disabling wider explicit recall",async()=>{
+ const {rankSemantic}=await import("../semantic-recall.mjs");
+ const v=(score)=>[score,Math.sqrt(1-score*score),...Array(382).fill(0)];
+ const rows=[.80,.77,.74,.71,.68,.64,.48].map((score,i)=>({id:i+1,vector:v(score)}));
+ assert.deepEqual(rankSemantic(v(1),rows),[1,2,3]);
+ assert.deepEqual(rankSemantic(v(1),rows,{explicitRecall:true}),[1,2,3,4,5]);
+ assert.deepEqual(rankSemantic(v(1),[{id:1,vector:v(.49)}]),[]);
+});
+
+test("native automatic context caps owner candidates but explicit recall preserves broader lexical matches",()=>{
+ const store=openStore(":memory:");
+ try{
+  for(let i=0;i<8;i++)store.addMemory("Lantern project detail "+i);
+  const chat=store.newConversation();
+  assert.equal(store.library.context("Lantern project",chat.id,{modelLed:true}).ids.length,4);
+  assert.equal(store.library.context("Lantern project",chat.id,{modelLed:true,explicitRecall:true}).ids.length,8);
+ }finally{store.db.close();}
+});
+
+test("native webpage reads accept exact returned URLs and reject unknown, conflicting and sensitive identifiers",async()=>{
+ const {executeNasTurn}=await import("../turn.mjs"),store=openStore(":memory:");
+ try{
+  const chat=store.newConversation(),question="Find the public release notes.";store.append(chat.id,"user",question);
+  const reads=[],events=[];let calls=0;
+  const call=(name,args,id)=>({content:"",toolCalls:[{id,type:"function",function:{name,arguments:JSON.stringify(args)}}]});
+  const first="https://example.org/release",second="https://example.org/notes";
+  const result=await executeNasTurn({store,conversationId:chat.id,question,selected:{provider:"nvidia",model:"test",historyChars:32000},mode:"strict",publicAgent:true,reserve:()=>{},canRequest:()=>true,activity:e=>events.push(e),
+   search:async()=>[first,second,"https://example.org/private?token=private-token"].map(url=>({url,title:"Release",kind:"preview",content:"Preview"})),
+   read:async url=>{reads.push(url);return {url,title:"Release",kind:"page",content:"Verified release"};},
+   requestModel:async args=>{
+    calls++;
+    if(calls===1)return call("search_web",{query:"public release notes"},"search");
+    if(calls===2)return call("read_webpage",{url:"https://example.org/unlisted"},"unknown");
+    if(calls===3){assert.match(args.history.at(-1).content,/URL not among eligible/);return call("read_webpage",{source:1,url:second},"conflict");}
+    if(calls===4){assert.match(args.history.at(-1).content,/mismatch/);return call("read_webpage",{url:"https://example.org/private?token=private-token"},"sensitive");}
+    if(calls===5){assert.match(args.history.at(-1).content,/URL not among eligible/);return call("read_webpage",{url:first},"exact");}
+    if(calls===6){assert.match(args.history.at(-1).content,/Verified release/);return call("read_webpage",{source:2},"number");}
+    assert.match(args.history.at(-1).content,/Verified release/);
+    return {content:"Release verified.",toolCalls:[]};
+   }});
+  assert.deepEqual(reads,[first,second]);
+  assert.equal(result.answer,"Release verified.");
+  assert.equal(events.filter(e=>e.title==="Webpage identifier rejected").length,3);
+  assert.doesNotMatch(JSON.stringify(events),/private-token|unlisted/);
+ }finally{store.db.close();}
+});

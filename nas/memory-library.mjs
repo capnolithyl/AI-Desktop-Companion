@@ -156,7 +156,7 @@ export function createMemoryLibrary(db){
     const matched=rankMemories(candidates.filter(f=>!pinned.some(p=>p.id===f.id)&&relevant(f)),query,semanticIds);
     const rows=[];let length=0;
     const hasProvenance=!!db.prepare("SELECT 1 FROM sqlite_master WHERE type=\x27table\x27 AND name=\x27automatic_memory_sources\x27").get();
-    for(const f of [...pinned,...matched]){
+    for(const f of [...pinned,...matched.slice(0,explicitRecall?budget.maxFacts:4)]){
       const stamp=new Date(f.createdAt<1e12?f.createdAt*1000:f.createdAt);
       const date=Number.isFinite(stamp.getTime())?stamp.toISOString().slice(0,10):"unknown date";
       const provenance=hasProvenance?db.prepare("SELECT evidence FROM automatic_memory_sources WHERE memory_kind=\x27user\x27 AND memory_id=? AND source_message_id IN (SELECT id FROM messages WHERE role=\x27user\x27)").get(f.id):null;
@@ -164,7 +164,7 @@ export function createMemoryLibrary(db){
       if(rows.length>=budget.maxFacts||length+line.length>budget.factChars)continue;
       rows.push({id:f.id,line});length+=line.length;
     }
-    const tastes=interests().map(i=>({i,score:overlap([i.name,i.kind,i.status,i.notes,...i.tags].join(" "))})).filter(x=>x.score>0).sort((a,b)=>b.score-a.score).slice(0,12).map(({i})=>"- "+i.kind+": "+i.name+" ("+i.status+(i.rating!==null?", rating "+i.rating:"")+")");
+    const tastes=interests().map(i=>({i,score:overlap([i.name,i.notes,...i.tags].join(" "))})).filter(x=>x.score>0).sort((a,b)=>b.score-a.score).slice(0,12).map(({i})=>"- "+i.kind+": "+i.name+" ("+i.status+(i.rating!==null?", rating "+i.rating:"")+")");
     const character=canon().map(i=>({i,score:overlap(i.label+" "+i.value)})).sort((a,b)=>b.score-a.score).slice(0,10).map(({i})=>"- "+i.label+": "+i.value);
     const sections=[rows.length?"Owner facts (date saved):\n"+rows.map(r=>r.line).join("\n"):"",tastes.length?"Owner interests:\n"+tastes.join("\n").slice(0,2000):"",character.length?"Character canon:\n"+character.join("\n").slice(0,2000):""].filter(Boolean);
     return {text:sections.join("\n\n"),ids:rows.map(r=>r.id),auditLines:sections.flatMap(s=>s.split("\n")).slice(0,32)};
