@@ -24,6 +24,7 @@ import {NasModels,NasTokenUsage} from "./NasModels";
 import type {NasModels as ModelSettings,CloudProvider,ReasoningEffort} from "./nas-client";
 import {memoryNotice} from "./memory-notifications";
 import {nasActivity} from "./nas-activity";
+import {saveNasJson} from "./nas-json-export";
 const portrait=new URL("../../assets/iki/mikan-chat-avatar.webp",import.meta.url).href;
 const referencePortrait=new URL("../../assets/iki/mikan-reference.png",import.meta.url).href;
 const KEY="mikan-nas-key";
@@ -83,6 +84,7 @@ export function NasApp(){
   const [notice,setNotice]=useState("");
   const [memoryToast,setMemoryToast]=useState<{key:number;message:string;warning:boolean}|null>(null);
   const [versionCopied,setVersionCopied]=useState(false);
+  const [exporting,setExporting]=useState(false);
   const toastSerial=useRef(0);
   const eventCursor=useRef<number|undefined>(undefined);
   const [activity,setActivity]=useState<{conversationId:string;events:LearningEvent[]}|null>(null);
@@ -186,6 +188,14 @@ export function NasApp(){
   const versionMismatch=!!status&&(!status.build||CLIENT_BUILD.commit!==status.build.commit||CLIENT_BUILD.backendHash!==status.build.actualBackendHash);
   const copyVersion=async()=>{try{const live=await client.status();setStatus(live);await navigator.clipboard.writeText(JSON.stringify({service:"nas",browser:CLIENT_BUILD,server:live.build??null},null,2));setVersionCopied(true);}catch(error){setNotice(error instanceof Error?error.message:String(error));}};
   const report=(error:unknown)=>setNotice(error instanceof Error?error.message:String(error));
+  const chatDebug=async(id:string)=>({...await client.chatExport(id),browserBuild:CLIENT_BUILD});
+  const downloadChat=async(id:string)=>{
+    if(exporting)return;
+    setExporting(true);
+    try{const result=saveNasJson("mikan-nas-chat-"+id+".json",await chatDebug(id));setNotice(result==="native"?"Choose where to save the private JSON export.":"JSON download requested. Review before sharing.");}
+    catch(error){report(error);}
+    finally{setExporting(false);}
+  };
   const [switching,setSwitching]=useState(false);
   const applyModels=(models:ModelSettings)=>setStatus(old=>old?{...old,...models}:old);
   const switchModel=async(value:string)=>{
@@ -307,7 +317,7 @@ export function NasApp(){
       displayName={chats.find(c=>c.id===active)?.title||"Beholder Companion"} lastActivity={busy?"Thinking…":"Ready"} activityEntries={activityEntries} activityError={activityError||eventError}
       webMode unavailable={{voice:true,vision:true,search:true}} onDrag={()=>{}} onHide={lock}
       onNewChat={()=>void newChat()} onOpenChat={id=>void openChat(id)} onOpenHistory={()=>openPage("history")}
-      onCopyChatDebug={async id=>{const [history,live,diagnostics]=await Promise.all([client.messages(id),client.status(),client.learningDiagnostics(id).catch(()=>({events:[]}))]);await navigator.clipboard.writeText(JSON.stringify({service:"nas",configuredProvider:live.provider,configuredModel:live.model,browserBuild:CLIENT_BUILD,serverBuild:live.build??null,conversation:id,messages:history,memoryEvents:diagnostics.events},null,2));}}
+      onCopyChatDebug={async id=>{await navigator.clipboard.writeText(JSON.stringify(await chatDebug(id),null,2));}} onDownloadChatDebug={downloadChat} exporting={exporting}
       onDeleteChat={deleteChat}
       onOpenCurrentLog={()=>openPage("log")} onOpenMemory={()=>openPage("memory")} onOpenSettings={()=>openPage(mobile?"control":"personality")}
       onOpenSearch={()=>openPage("research")} onToggleVision={()=>{}} onVoice={()=>{}} onMute={()=>{}}
@@ -367,7 +377,7 @@ export function NasApp(){
           onImportFacts={items=>mutate<{inserted:number;duplicates:number}>("importFacts",{items})} onExportFacts={exportFacts}
           onRefresh={refreshLibrary} onAddCharacter={(category,label,value)=>changeMemory("addCanon",{item:{category,label,value}})}
           onEditCharacter={(id,category,label,value)=>changeMemory("editCanon",{id,item:{category,label,value}})} onDeleteCharacter={id=>changeMemory("deleteCanon",{id})}/>}
-        {page==="log"&&<><div className="settings-section-title">Conversation log</div><p className="settings-note">Currently selected: {status?.provider} · {status?.model}</p>{messages.map(message=><div key={message.id} className="control-form-section"><strong>{message.role==="assistant"?"Mikan":"You"}</strong>{message.inference&&<p className="settings-note">{message.inference.provider} · {message.inference.actualModel||message.inference.requestedModel} · {message.inference.outcome}{!message.inference.actualModel?" (actual model not reported)":""}</p>}{message.inference?.timing&&<NasTiming timing={message.inference.timing}/>}<ChatMarkdown text={message.content} onOpenLink={openLink}/></div>)}</>}
+        {page==="log"&&<><div className="settings-section-title">Conversation log</div><div className="nas-profile-actions"><button type="button" className="secondary-action" disabled={!active||exporting} onClick={()=>{if(active)void downloadChat(active);}}>{exporting?<LoaderCircle className="spin" size={16}/>:<Download size={16}/>} Download chat JSON</button></div><p className="settings-note">Includes all saved messages and private diagnostics. Review before sharing.</p><p className="settings-note">Currently selected: {status?.provider} · {status?.model}</p>{messages.map(message=><div key={message.id} className="control-form-section"><strong>{message.role==="assistant"?"Mikan":"You"}</strong>{message.inference&&<p className="settings-note">{message.inference.provider} · {message.inference.actualModel||message.inference.requestedModel} · {message.inference.outcome}{!message.inference.actualModel?" (actual model not reported)":""}</p>}{message.inference?.timing&&<NasTiming timing={message.inference.timing}/>}<ChatMarkdown text={message.content} onOpenLink={openLink}/></div>)}</>}
         {page==="models"&&status?.providers&&<NasModels models={status} client={client} onChanged={applyModels} busy={busy||switching||status.busy||!!status.memoryBusy}/>}
         {page==="brain-lab"&&status?.providers&&<NasBrainLab client={client} models={status} busy={busy||!!status.busy||!!status.memoryBusy}/>}
         {page==="knowledge"&&<NasKnowledge client={client} busy={busy||!!status?.busy||!!status?.memoryBusy}/>}

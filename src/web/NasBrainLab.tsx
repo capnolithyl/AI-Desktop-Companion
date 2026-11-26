@@ -1,4 +1,5 @@
 import {useEffect,useState} from "react";
+import {saveNasJson} from "./nas-json-export";
 import {BrainCircuit,Play,Square,ListChecks,ChartNoAxesCombined,Download,Search,ChevronLeft,ChevronRight,FlaskConical} from "lucide-react";
 import type {NasClient,NasModels,BrainScenario,BrainReport,BrainSummary,ResearchMode,CloudProvider,ProviderQuota} from "./nas-client";
 import {NasTiming} from "./NasTiming";
@@ -28,7 +29,7 @@ export function NasBrainLab({client,models,busy}:{client:NasClient;models:NasMod
   async function stop(){setWorking(true);setError("");try{await client.stopBrain();await refresh().catch(()=>{});}catch(e){setError(String(e));void refresh().catch(()=>{});}finally{setWorking(false);}}
   function selectNumbers(){const values=numbers.split(",").map(v=>Number(v.trim()));const found=catalog.filter(s=>s.supported&&values.includes(s.number));if(!found.length||found.length!==new Set(values).size){setError("Enter supported scenario numbers separated by commas.");return;}setIds(found.map(s=>s.id));setError("");}
   const shown=view??report,steps=shown?.cases.flatMap(c=>c.steps)??[];
-  const exportReport=(target:BrainReport|null=shown)=>{if(!target)return;const url=URL.createObjectURL(new Blob([JSON.stringify(target,null,2)],{type:"application/json"}));const a=document.createElement("a");a.href=url;a.download="mikan-nas-brain-"+target.id+(target.state==="finished"?"":"-partial")+".json";a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);};
+  const exportReport=(target:BrainReport|null=shown)=>{if(!target)return;try{saveNasJson("mikan-nas-brain-"+target.id+(target.state==="finished"?"":"-partial")+".json",target);}catch(error){setError(error instanceof Error?error.message:String(error));}};
   return <div className="brain-eval-panel nas-brain-lab">
     <header className="brain-workspace-header"><div className="brain-workspace-icon"><BrainCircuit size={29}/></div><div><h2>Brain Lab</h2><p>Live model evaluations on Beholder. Real research, isolated synthetic memories, measurable results.</p></div></header>
     <nav className="brain-workspace-tabs" aria-label="Brain Lab sections">
