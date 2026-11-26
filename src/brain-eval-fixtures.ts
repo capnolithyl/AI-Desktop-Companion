@@ -427,6 +427,13 @@ export const EVAL_SCENARIOS:ReadonlyArray<EvalScenario>=[
       "Carry forward the named title and compare the event date to the trusted live local clock. Distinguish an older future-tense plan from independently confirmed release or completion, cite the actual sources used, and admit missing evidence.",
       "That was the schedule at the time. I'll look for subsequent reporting to establish what actually happened.",{route:"any",web:true,
         publicQueryIncludes:["Chainsmoker Cat"]})),
+  scenario("temporal-upcoming-tour","Upcoming tour versus expired announcements","Evidence and attribution",
+    conversation("Are there any upcoming tour dates for Cattle Decapitation?",
+      "Use the host local calendar date for search planning and final synthesis. Check current relevant listings and distinguish event dates from publication/retrieval dates. Do not present an expired 2025 tour as upcoming, assert absence from unread aggregators, or assume a past scheduled show occurred. If no future dates are verified, say so without treating past announcements as future opportunities.",
+      "I'll check current tour listings for verified future dates.",{route:"any",web:true,publicQueryIncludes:["Cattle Decapitation"]}),
+    conversation("I found an old announcement for November 16 to December 20, 2025. Is that still upcoming?",
+      "Compare the specified date range with the actual host local date, not article tense or training date. Correctly classify the expired schedule, distinguish announcement from outcome, retain the band identity and only discuss a newer confirmed future opportunity if supported.",
+      "Those dates have already passed; that announcement isn't an upcoming tour.",{route:"any"})),
   scenario("reaction-after-anime-news","React to news without unsolicited recommendations; capture preferences","Memory and conversation",
     e("Any updates on the Chainsmoker Cat catgirl anime?",{
       route:"any",web:true,conversationGoal:"Research the anime's current status with genuine web sources. This news LOOKUP is not permission to continue finding recommendations after the user changes to a personal reaction.",

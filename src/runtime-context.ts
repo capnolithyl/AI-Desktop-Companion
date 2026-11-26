@@ -22,7 +22,8 @@ export function localWeekendWindow(now: Date = new Date()): {friday:string;sunda
 }
 
 
-export function runtimeContext(now: Date = new Date()): string {
+/** Shared host clock and temporal reasoning for both native and compatibility agents. */
+export function temporalContext(now: Date = new Date()): string {
   const eastern = new Intl.DateTimeFormat("en-US", {
     timeZone: COMPANION_TIME_ZONE,
     weekday: "long",
@@ -55,7 +56,13 @@ export function runtimeContext(now: Date = new Date()): string {
     `Current/coming Friday–Sunday weekend in local calendar dates: ${localWeekendWindow(now).friday} to ${localWeekendWindow(now).sunday}.`,
     "Use the local date above to interpret today, yesterday, latest, new, and upcoming. Eastern Time is EST in winter and EDT during daylight saving time. Do not use an assumed model training date.",
     "Before describing any event as upcoming, completed, ongoing, or scheduled, compare its event date with the local calendar date. A past scheduled date is NOT evidence the event actually happened; confirm the outcome from a source or describe it as a past plan with unconfirmed status.",
-    "Watch for outdated future-tense descriptions in old articles (e.g., 'later this year'). Do not repeat them as current. Prefer newer dated official updates when timelines conflict, and state uncertainty if the evidence cannot resolve the status.",
+    "Watch for outdated future-tense descriptions in old articles (e.g., 'later this year'). Do not repeat them as current. Prefer newer dated official updates when timelines conflict, and state uncertainty if the evidence cannot resolve the status."
+  ].join("\n");
+}
+
+export function runtimeContext(now: Date = new Date()): string {
+  return [
+    temporalContext(now),
     "Interpret ambiguous names and references from the user's conversation and retrieved evidence. Do not assume the meaning of an unfamiliar proper name from its ordinary-language connotation; ask only when its meaning remains genuinely unclear.",
     "Carry the established topic into follow-up questions. Once the user or sources identify what a name refers to, don't ask again as though the conversation were starting over. Distinguish separate entities, stages and outcomes when sources discuss them together.",
     "When asked for a prediction, give a clear base-case expectation and the concrete reasons or uncertainties behind it. Clearly label it as a guess; never turn an estimate into a confirmed fact or official announcement. Avoid invented confidence percentages.",
