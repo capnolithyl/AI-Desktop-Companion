@@ -135,7 +135,7 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: Mikan-Launcher
-      - name: Publish versioned launcher preview
+      - name: Publish versioned launcher APK
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
@@ -149,5 +149,9 @@ jobs:
           if gh release view "$TAG" >/dev/null 2>&1; then
             echo "Release already exists; increment versionCode for the next update."
           else
-            gh release create "$TAG" Mikan-Launcher.apk --target "$SOURCE_SHA" --title "Mikan Launcher v$VERSION" --notes "Signed experimental Android launcher APK, build $CODE." --prerelease --latest=false
+            if [ "${VERSION%%.*}" = "0" ]; then
+              gh release create "$TAG" Mikan-Launcher.apk --target "$SOURCE_SHA" --title "Mikan Launcher v$VERSION" --notes "Signed experimental Android launcher APK, build $CODE." --prerelease --latest=false
+            else
+              gh release create "$TAG" Mikan-Launcher.apk --target "$SOURCE_SHA" --title "Mikan Launcher v$VERSION" --notes "Signed personal Mikan Launcher APK, build $CODE. The 1.0.0 milestone promotes the existing v0.16.5 feature set without new runtime features. Local-first home, widgets, Mikan personality and Dream Mode. Device regression and long-duration charging checks remain ongoing. See launcher/FEATURES.md for verification and roadmap." --latest=false
+            fi
           fi
