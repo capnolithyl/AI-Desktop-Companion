@@ -152,22 +152,38 @@ export function createMemoryLibrary(db){
     const semantic=new Set(semanticIds);
     const relevant=f=>semantic.has(f.id)||overlap([f.fact,f.category,...(f.tags??[])].join(" "))>0;
     const candidates=facts().filter(f=>f.importance>=90||relevant(f));
-    const pinned=rankMemories(candidates.filter(f=>f.importance>=90),query).slice(0,2);
-    const matched=rankMemories(candidates.filter(f=>!pinned.some(p=>p.id===f.id)&&relevant(f)),query,semanticIds);
-    const rows=[];let length=0;
+    // Owner-chosen pins are durable context, not merely topical search hits.
+    // Bound their own section so they cannot crowd out task-specific recall.
+    const pinned=rankMemories(candidates.filter(f=>f.importance>=90),query,semanticIds);
+    const foundations=[],rows=[];let foundationLength=0,length=0;
     const hasProvenance=!!db.prepare("SELECT 1 FROM sqlite_master WHERE type=\x27table\x27 AND name=\x27automatic_memory_sources\x27").get();
-    for(const f of [...pinned,...matched.slice(0,explicitRecall?budget.maxFacts:4)]){
+    const formatFact=f=>{
       const stamp=new Date(f.createdAt<1e12?f.createdAt*1000:f.createdAt);
       const date=Number.isFinite(stamp.getTime())?stamp.toISOString().slice(0,10):"unknown date";
       const provenance=hasProvenance?db.prepare("SELECT evidence FROM automatic_memory_sources WHERE memory_kind=\x27user\x27 AND memory_id=? AND source_message_id IN (SELECT id FROM messages WHERE role=\x27user\x27)").get(f.id):null;
       const line="- ["+date+"] "+f.fact+(provenance?.evidence?" [Owner source quote: "+JSON.stringify(provenance.evidence.slice(0,180))+"]":"");
-      if(rows.length>=budget.maxFacts||length+line.length>budget.factChars)continue;
-      rows.push({id:f.id,line});length+=line.length;
+      return {id:f.id,line};
+    };
+    // Six short pins / 1,200 characters, plus up to four topical facts in
+    // automatic recall. No automatic promotion, new records or topic rules.
+    for(const f of pinned){
+      if(foundations.length>=6)break;
+      const row=formatFact(f);
+      if(foundationLength+row.line.length>1200)continue;
+      foundations.push(row);foundationLength+=row.line.length;
+    }
+    const foundationIds=new Set(foundations.map(r=>r.id));
+    const matched=rankMemories(candidates.filter(f=>!foundationIds.has(f.id)&&relevant(f)),query,semanticIds);
+    for(const f of matched){
+      if(rows.length>=(explicitRecall?budget.maxFacts:4)||rows.length+foundations.length>=budget.maxFacts)break;
+      const row=formatFact(f);
+      if(foundationLength+length+row.line.length>budget.factChars)continue;
+      rows.push(row);length+=row.line.length;
     }
     const tastes=interests().map(i=>({i,score:overlap([i.name,i.notes,...i.tags].join(" "))})).filter(x=>x.score>0).sort((a,b)=>b.score-a.score).slice(0,12).map(({i})=>"- "+i.kind+": "+i.name+" ("+i.status+(i.rating!==null?", rating "+i.rating:"")+")");
     const character=canon().map(i=>({i,score:overlap(i.label+" "+i.value)})).sort((a,b)=>b.score-a.score).slice(0,10).map(({i})=>"- "+i.label+": "+i.value);
-    const sections=[rows.length?"Owner facts (date saved):\n"+rows.map(r=>r.line).join("\n"):"",tastes.length?"Owner interests:\n"+tastes.join("\n").slice(0,2000):"",character.length?"Character canon:\n"+character.join("\n").slice(0,2000):""].filter(Boolean);
-    return {text:sections.join("\n\n"),ids:rows.map(r=>r.id),auditLines:sections.flatMap(s=>s.split("\n")).slice(0,32)};
+    const sections=[foundations.length?"Owner-pinned foundational context (use only when helpful; date saved):\n"+foundations.map(r=>r.line).join("\n"):"",rows.length?"Owner facts (date saved):\n"+rows.map(r=>r.line).join("\n"):"",tastes.length?"Owner interests:\n"+tastes.join("\n").slice(0,2000):"",character.length?"Character canon:\n"+character.join("\n").slice(0,2000):""].filter(Boolean);
+    return {text:sections.join("\n\n"),ids:[...foundations,...rows].map(r=>r.id),auditLines:sections.flatMap(s=>s.split("\n")).slice(0,32)};
   }
   function markRecalled(ids){const write=db.prepare("INSERT INTO user_memory_usage(memory_id,reference_count,last_accessed) SELECT id,1,unixepoch() FROM user_memories WHERE id=? ON CONFLICT(memory_id) DO UPDATE SET reference_count=MIN(10000,user_memory_usage.reference_count+1),last_accessed=unixepoch()");for(const id of new Set(ids.slice(0,20)))write.run(id);}
   // Search the original user-authored FTS index, then include the surrounding
