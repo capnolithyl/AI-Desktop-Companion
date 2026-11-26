@@ -24,12 +24,24 @@ import android.widget.FrameLayout;
 import android.widget.Toast;
 
 import java.net.URI;
+import java.io.OutputStream;
+import java.nio.charset.StandardCharsets;
+import java.util.Collections;
+import java.util.Locale;
+import androidx.webkit.WebViewCompat;
+import androidx.webkit.WebViewFeature;
+import org.json.JSONObject;
 
 /** A browser shell only. All chat, inference, memory and UI run on Beholder. */
 public final class NasActivity extends Activity {
     private static final String PREFS = "pocket_nas_wrapper";
     private static final String SERVER = "server_url";
     private static final int PICK_FILE = 4546;
+    private static final int SAVE_JSON = 4547;
+    private static final int MAX_EXPORT_BYTES = 8 * 1024 * 1024;
+    private static final String EXPORT_BRIDGE = "MikanJsonExport";
+    private byte[] pendingExport;
+    private boolean exportBridgeInstalled;
     private WebView web;
     private String endpoint;
     private ValueCallback<Uri[]> chooser;
@@ -56,6 +68,65 @@ public final class NasActivity extends Activity {
         } catch (Exception e) { return false; }
     }
 
+    static String exportOrigin(String value) {
+        String normalized = value == null ? null : normalizeEndpoint(value);
+        if (normalized == null) return null;
+        URI uri = URI.create(normalized);
+        return "https://" + uri.getHost().toLowerCase(Locale.ROOT)
+            + (uri.getPort() == -1 || uri.getPort() == 443 ? "" : ":" + uri.getPort());
+    }
+
+    static boolean validExportFilename(String filename) {
+        return filename != null && filename.matches("mikan-nas-(chat|brain)-[A-Za-z0-9_-]{1,100}\\.json");
+    }
+
+    // Only the configured HTTPS main frame can request a user-approved JSON save.
+    // No credentials, filesystem reads, arbitrary paths, or general JavaScript interface.
+    private void installExportBridge() {
+        if (!WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)) return;
+        if (exportBridgeInstalled) {
+            WebViewCompat.removeWebMessageListener(web, EXPORT_BRIDGE);
+            exportBridgeInstalled = false;
+        }
+        String origin = exportOrigin(endpoint);
+        if (origin == null) return;
+        WebViewCompat.addWebMessageListener(web, EXPORT_BRIDGE, Collections.singleton(origin),
+            (view, message, sourceOrigin, isMainFrame, replyProxy) -> {
+                if (!isMainFrame || !sameOrigin(endpoint, sourceOrigin.toString()) ||
+                    !sameOrigin(endpoint, view.getUrl()) || isFinishing() || isDestroyed()) return;
+                try {
+                    String data = message.getData();
+                    if (data == null || data.length() > MAX_EXPORT_BYTES * 2 + 1024)
+                        throw new IllegalArgumentException("Export exceeds limit");
+                    JSONObject request = new JSONObject(data);
+                    Object rawName = request.opt("filename"), rawText = request.opt("text");
+                    if (!(rawName instanceof String) || !(rawText instanceof String) ||
+                        !validExportFilename((String) rawName))
+                        throw new IllegalArgumentException("Invalid export");
+                    if (pendingExport != null) {
+                        Toast.makeText(this, "Finish the current save first.", Toast.LENGTH_SHORT).show();
+                        return;
+                    }
+                    byte[] bytes = ((String) rawText).getBytes(StandardCharsets.UTF_8);
+                    if (bytes.length == 0 || bytes.length > MAX_EXPORT_BYTES)
+                        throw new IllegalArgumentException("Export exceeds limit");
+                    Intent picker = new Intent(Intent.ACTION_CREATE_DOCUMENT)
+                        .addCategory(Intent.CATEGORY_OPENABLE)
+                        .setType("application/json")
+                        .putExtra(Intent.EXTRA_TITLE, (String) rawName);
+                    pendingExport = bytes;
+                    try { startActivityForResult(picker, SAVE_JSON); }
+                    catch (Exception e) {
+                        pendingExport = null;
+                        Toast.makeText(this, "Could not open the document picker.", Toast.LENGTH_LONG).show();
+                    }
+                } catch (Exception e) {
+                    Toast.makeText(this, "Invalid JSON export or file exceeds 8 MB.", Toast.LENGTH_LONG).show();
+                }
+            });
+        exportBridgeInstalled = true;
+    }
+
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
         windowSetup();
@@ -76,6 +147,7 @@ public final class NasActivity extends Activity {
         s.setSafeBrowsingEnabled(true);
         CookieManager.getInstance().setAcceptThirdPartyCookies(web, false);
         // No JavascriptInterface, injected credentials, or native AI methods.
+        installExportBridge();
         web.setWebViewClient(new WebViewClient() {
             @Override public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
                 if (!request.isForMainFrame()) return false;
@@ -166,6 +238,7 @@ public final class NasActivity extends Activity {
             endpoint = target;
             getSharedPreferences(PREFS, MODE_PRIVATE).edit().putString(SERVER, target).apply();
             web.stopLoading();
+            installExportBridge();
             web.loadUrl(target);
             dialog.dismiss();
         }));
@@ -195,6 +268,35 @@ public final class NasActivity extends Activity {
 
     @Override protected void onActivityResult(int request, int result, Intent data) {
         super.onActivityResult(request, result, data);
+        if (request == SAVE_JSON) {
+            byte[] bytes = pendingExport;
+            pendingExport = null;
+            if (result != RESULT_OK) {
+                Toast.makeText(this, "Save cancelled.", Toast.LENGTH_SHORT).show();
+                return;
+            }
+            Uri destination = data == null ? null : data.getData();
+            if (bytes == null || destination == null || !"content".equals(destination.getScheme())) {
+                Toast.makeText(this, "Export unavailable. Try downloading again.", Toast.LENGTH_LONG).show();
+                return;
+            }
+            new Thread(() -> {
+                boolean saved = false;
+                try (OutputStream out = getContentResolver().openOutputStream(destination, "wt")) {
+                    if (out == null) throw new IllegalStateException("No output stream");
+                    out.write(bytes);
+                    out.flush();
+                    saved = true;
+                } catch (Exception ignored) {
+                    // Do not log private document content or its destination.
+                    saved = false;
+                }
+                final boolean ok = saved;
+                runOnUiThread(() -> Toast.makeText(this, ok ? "JSON saved. Review before sharing." :
+                    "Could not save JSON. Try again.", Toast.LENGTH_LONG).show());
+            }, "MikanJsonSave").start();
+            return;
+        }
         if (request == PICK_FILE && chooser != null) {
             ValueCallback<Uri[]> callback = chooser;
             chooser = null;
@@ -212,6 +314,7 @@ public final class NasActivity extends Activity {
     @Override protected void onResume() { super.onResume(); web.onResume(); }
     @Override protected void onDestroy() {
         if (chooser != null) { chooser.onReceiveValue(null); chooser = null; }
+        pendingExport = null;
         ((FrameLayout) web.getParent()).removeView(web);
         web.destroy();
         super.onDestroy();

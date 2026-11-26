@@ -21,8 +21,8 @@ android {
         applicationId = "dev.capnolithyl.mikan.pocket"
         minSdk = 26
         targetSdk = 35
-        versionCode = 21
-        versionName = "0.5.0"
+        versionCode = 22
+        versionName = "0.5.1"
     }
 
     signingConfigs {
@@ -64,5 +64,6 @@ android {
 }
 
 dependencies {
+    implementation("androidx.webkit:webkit:1.12.1")
     testImplementation("junit:junit:4.13.2")
 }
