@@ -1,0 +1,116 @@
+/* NAS phone presentation only. Same profile, messages, API and settings panels. */
+.nas-mobile{--mobile-base:#211412;--mobile-panel:#38231f;--mobile-line:#84543c;--mobile-accent:#ffbd80;--mobile-text:#fff0e3;--mobile-muted:#d6b2a0;--mikan-font-size:15px;overflow:hidden;}
+.nas-mobile .nas-mobile-shell.mikan-workspace{inset:0;border:0;border-radius:0;box-shadow:none;gap:0;background:radial-gradient(ellipse at 90% 0%,#59301f77,transparent 35%),#211412;}
+.nas-mobile .nas-mobile-header{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:74px;flex:0 0 auto;padding:calc(10px + env(safe-area-inset-top,0px)) max(15px,env(safe-area-inset-right,0px)) 10px max(15px,env(safe-area-inset-left,0px));background:linear-gradient(110deg,#42251c,#281918);border-bottom:1px solid #a96844;box-shadow:0 4px 18px #f9952d14;}
+.nas-mobile .nas-mobile-brand{display:flex;align-items:center;gap:11px;min-width:0;padding:0;text-align:left;border:0;background:none;}
+.nas-mobile .nas-mobile-brand img{width:48px;height:48px;object-fit:cover;border:1px solid #ffd097;border-radius:50%;box-shadow:0 0 12px #f58e4659;}
+.nas-mobile .nas-mobile-brand>span{display:grid;gap:2px;min-width:0;}
+.nas-mobile .nas-mobile-brand strong{font-size:23px;font-weight:700;color:#ffe2bd;line-height:1.1;letter-spacing:.025em;}
+.nas-mobile .nas-mobile-heart{color:#ffb06d;text-shadow:0 0 12px #ff983e;}
+.nas-mobile .nas-mobile-brand small{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--mobile-muted);white-space:nowrap;}
+.nas-mobile .nas-mobile-brand i{width:7px;height:7px;border-radius:50%;background:#a0d6a4;box-shadow:0 0 7px #92db8f77;}
+.nas-mobile .nas-mobile-brand i.thinking{background:#ffb568;box-shadow:0 0 9px #ffad68;}
+.nas-mobile .nas-mobile-header-actions{display:flex;align-items:center;gap:7px;}
+.nas-mobile .nas-mobile-header-actions button,.nas-mobile .nas-mobile-icon-button,.nas-mobile .nas-mobile-chat-title button{display:grid;place-items:center;flex:0 0 44px;width:44px;height:44px;border:1px solid #85583f;border-radius:14px;background:#4b2e24;color:#ffd3a2;}
+.nas-mobile .nas-mobile-bottom-nav{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));flex:0 0 auto;gap:5px;padding:7px max(9px,env(safe-area-inset-right,0px)) calc(7px + env(safe-area-inset-bottom,0px)) max(9px,env(safe-area-inset-left,0px));background:linear-gradient(180deg,#35211d,#281918);border-top:1px solid #956143;z-index:4;color:var(--mobile-text);}
+.nas-mobile .nas-mobile-bottom-nav button{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;min-height:53px;min-width:0;padding:5px 3px;border:1px solid transparent;border-radius:13px;background:none;color:#d6ad95;font:inherit;font-size:11px;font-weight:600;}
+.nas-mobile .nas-mobile-bottom-nav button[aria-current=page]{border-color:#c38652;background:linear-gradient(150deg,#754026,#492b21);box-shadow:inset 0 0 12px #ffb16a1f,0 0 10px #ff8b3422;color:#ffdaa7;}
+.nas-mobile .nas-mobile-chat.workspace-chat{flex:1;min-height:0;margin:0;padding:0;border:0;border-radius:0;background:transparent;box-shadow:none;}
+.nas-mobile .nas-mobile-chat-title{display:flex;align-items:center;gap:10px;padding:9px 15px;border-bottom:1px solid #74473277;}
+.nas-mobile .nas-mobile-chat-title>div{display:grid;min-width:0;flex:1;gap:2px;}
+.nas-mobile .nas-mobile-chat-title small,.nas-mobile .nas-mobile-section-heading small,.nas-mobile .nas-mobile-control-hero small{font-size:10px;letter-spacing:.10em;color:#d9a37f;font-weight:700;}
+.nas-mobile .nas-mobile-chat-title strong{font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#ffe9d1;}
+.nas-mobile .nas-mobile-chat-title button{height:38px;width:44px;}
+.nas-mobile .workspace-transcript{padding:16px 13px 22px;gap:17px;overscroll-behavior:contain;}
+.nas-mobile .workspace-message{max-width:98%;gap:8px;}
+.nas-mobile .workspace-message.assistant .workspace-message-avatar{width:34px;height:34px;flex-basis:34px;margin-top:24px;}
+.nas-mobile .workspace-message.user .workspace-message-avatar{display:none;}
+.nas-mobile .workspace-message.user{max-width:87%;}
+.nas-mobile .workspace-message-bubble{padding:11px 12px 7px;font-size:15px;line-height:1.6;border-radius:17px;}
+.nas-mobile .workspace-message-bubble .markdown-text{font-size:inherit;overflow-wrap:anywhere;}
+.nas-mobile .workspace-message-bubble .markdown-text pre{max-width:100%;overflow-x:auto;}
+.nas-mobile .workspace-message-bubble .markdown-text table{display:block;max-width:100%;overflow-x:auto;}
+.nas-mobile .workspace-bubble-tail,.nas-mobile .workspace-avatar-rays,.nas-mobile .workspace-paw-seal{display:none;}
+.nas-mobile .workspace-composer{flex:0 0 auto;padding:7px 12px 10px;margin:0;background:linear-gradient(180deg,#281918,#38221d);border-top:1px solid #72463077;}
+.nas-mobile .workspace-composer .input-row{margin:0;gap:4px;border-radius:19px;padding:3px 5px 3px 10px;}
+.nas-mobile.default-layout-active .workspace-composer .input-row textarea{font-size:16px;line-height:1.45;height:52px;min-height:48px;}
+.nas-mobile .nas-thinking-row{padding:0;}
+.nas-mobile .nas-thinking-select{min-height:32px;padding:3px 9px;font-size:12px;}
+.nas-mobile .nas-thinking-select select{min-height:27px;}
+.nas-mobile .nas-mobile-scroll{flex:1;min-height:0;min-width:0;overflow:auto;padding:20px 15px;display:flex;flex-direction:column;gap:11px;overscroll-behavior:contain;}
+.nas-mobile .nas-mobile-section-heading{display:flex;align-items:center;justify-content:space-between;color:#ffb677;margin-bottom:7px;}
+.nas-mobile .nas-mobile-section-heading h2{margin:2px 0;font-size:26px;color:#ffe5c7;}
+.nas-mobile .nas-mobile-chat-card{display:flex;align-items:center;gap:4px;min-width:0;border:1px solid #754c3b;background:linear-gradient(140deg,#3b2722,#2e201e);border-radius:16px;padding:5px;}
+.nas-mobile .nas-mobile-chat-card.active{border-color:#eaa467;box-shadow:0 0 10px #ff9b3426;}
+.nas-mobile .nas-mobile-chat-open{min-width:0;flex:1;display:flex;align-items:center;gap:10px;min-height:55px;text-align:left;padding:7px;border:0;background:none;}
+.nas-mobile .nas-mobile-chat-open>svg{flex-shrink:0;color:#f3b180;}
+.nas-mobile .nas-mobile-chat-open>span{display:grid;min-width:0;gap:3px;}
+.nas-mobile .nas-mobile-chat-open strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:14px;}
+.nas-mobile .nas-mobile-chat-open small{font-size:11px;color:#d2aa95;}
+.nas-mobile .nas-mobile-icon-button{background:#422b24;border-color:#76503b;}
+.nas-mobile .nas-mobile-feedback{color:#ffce9d;overflow-wrap:anywhere;font-size:13px;}
+.nas-mobile .nas-mobile-wide-action,.nas-mobile .nas-mobile-character-actions button,.nas-mobile .nas-mobile-expression-grid button{display:flex;align-items:center;justify-content:center;gap:9px;min-height:44px;padding:9px 12px;border:1px solid #966343;border-radius:12px;background:#492e25;color:#ffdbba;font:inherit;text-align:center;}
+.nas-mobile .nas-mobile-wide-action small{margin-left:auto;color:#d0bc9d;font-size:12px;}
+.nas-mobile .nas-mobile-peek{display:grid;place-items:center;padding-top:10px;opacity:.8;}
+.nas-mobile .nas-mobile-character .workspace-avatar-card{display:flex;flex-direction:column;position:relative;min-height:300px;height:clamp(300px,48dvh,480px);flex:0 0 auto;margin:0;padding:7px;overflow:hidden;border-radius:20px;}
+.nas-mobile .nas-mobile-character .workspace-iki-stage{flex:1;min-height:0;height:auto;max-height:none;overflow:hidden;}
+.nas-mobile .nas-mobile-character .workspace-avatar-status{flex:0 0 auto;margin:0;min-height:38px;}
+.nas-mobile .nas-mobile-character-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+.nas-mobile .nas-mobile-expression-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px;}
+.nas-mobile .nas-mobile-panel{display:flex;flex-direction:column;gap:10px;min-width:0;padding:14px;border:1px solid #80533e;border-radius:16px;background:linear-gradient(145deg,#39251f,#2e201f);overflow-wrap:anywhere;}
+.nas-mobile .nas-mobile-panel h3{display:flex;align-items:center;gap:8px;margin:0;color:#ffc38f;font-size:15px;}
+.nas-mobile .nas-mobile-panel.workspace-activity-log{flex:none;max-height:none;overflow:visible;margin:0;}
+.nas-mobile .nas-mobile-system{display:grid;gap:8px;}
+.nas-mobile .nas-mobile-system .nas-build-label{background:none;color:#d8b19b;border:1px solid #76503b;border-radius:10px;min-height:44px;display:flex;align-items:center;justify-content:center;gap:8px;}
+/* Real full-width mobile control pages; no collapsed icon-only desktop rail. */
+.nas-mobile.settings-standalone>.drawer.control-center-window{inset:0;width:100%;height:100%;max-width:none;max-height:none;border:0;border-radius:0;display:flex;flex-direction:column;overflow:hidden;}
+.nas-mobile.settings-standalone .control-center-header{flex:0 0 auto;min-height:70px;padding:calc(10px + env(safe-area-inset-top,0px)) 13px 10px;gap:10px;}
+.nas-mobile.settings-standalone .control-center-header .back-button{width:44px;height:44px;flex:0 0 44px;}
+.nas-mobile.settings-standalone .control-center-header .control-header-glyph{display:none;}
+.nas-mobile.settings-standalone .control-center-header .drawer-title{min-width:0;flex:1;}
+.nas-mobile.settings-standalone .control-center-header .drawer-title strong{font-size:19px;white-space:normal;}
+.nas-mobile.settings-standalone .control-center-header .drawer-title span{font-size:11px;}
+.nas-mobile.settings-standalone .settings-layout{flex:1;min-height:0;min-width:0;overflow:hidden;display:flex;}
+.nas-mobile.settings-standalone .settings-layout>.settings-tabs{display:none;}
+.nas-mobile.settings-standalone .settings-layout>.settings-body{flex:1;min-height:0;min-width:0;max-width:100%;width:100%;padding:17px 13px 24px;overflow:auto;overscroll-behavior:contain;}
+.nas-mobile.settings-standalone .settings-layout>.settings-body.settings-memory-view{padding:0;overflow:hidden;}
+.nas-mobile.settings-standalone .settings-inner-panel{min-width:0;min-height:0;}
+.nas-mobile.settings-standalone .settings-inner-panel .drawer-header{padding:12px;gap:8px;}
+.nas-mobile.settings-standalone .settings-inner-panel .memory-body{padding:12px 13px 22px;overflow-wrap:anywhere;}
+.nas-mobile.settings-standalone .memory-tabs{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;padding:9px;}
+.nas-mobile.settings-standalone .memory-tabs button{min-width:0;min-height:44px;font-size:12px;padding:7px;}
+.nas-mobile.settings-standalone .memory-body .memory-item{padding:12px;min-width:0;}
+.nas-mobile.settings-standalone .settings-body :is(.control-form-section,.service-panel,.control-disclosure){min-width:0;overflow-wrap:anywhere;}
+.nas-mobile.settings-standalone .settings-body :is(input:not([type=checkbox]):not([type=radio]):not([type=range]),select,textarea){min-width:0;max-width:100%;font-size:16px;}
+.nas-mobile.settings-standalone .settings-body :is(button.secondary-action,button.save-button,button.inline-action){min-height:44px;white-space:normal;max-width:100%;}
+.nas-mobile.settings-standalone .settings-body .brain-eval-metrics{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;}
+.nas-mobile.settings-standalone .settings-body .brain-eval-metric{min-width:0;overflow-wrap:anywhere;padding:11px;}
+.nas-mobile.settings-standalone .settings-body .brain-eval-metric strong{font-size:22px;}
+.nas-mobile.settings-standalone .settings-body .brain-workspace-header{flex-wrap:wrap;padding:14px;}
+.nas-mobile.settings-standalone .settings-body .brain-eval-test-row{flex-wrap:wrap;padding:12px;}
+.nas-mobile.settings-standalone .settings-body .brain-eval-test-row label{min-width:0;flex:1 1 100%;}
+.nas-mobile.settings-standalone .settings-body .brain-eval-action-buttons{flex-wrap:wrap;gap:8px;}
+.nas-mobile.settings-standalone .settings-body .brain-eval-action-buttons button{flex:1 1 140px;}
+.nas-mobile.settings-standalone .settings-body .nas-brain-lab .brain-eval-toolbar{grid-template-columns:minmax(0,1fr);}
+.nas-mobile.settings-standalone .settings-body .nas-token-table{font-size:12px;}
+.nas-mobile.settings-standalone .settings-body .nas-token-usage{overflow:auto;}
+.nas-mobile.settings-standalone .settings-body .nas-save-row{position:sticky;bottom:0;z-index:2;background:linear-gradient(transparent,#21191a 30%);padding:15px 0 3px;}
+.nas-mobile.settings-standalone .settings-body .nas-save-row button{width:100%;min-height:48px;}
+.nas-mobile .nas-update-notice{bottom:calc(76px + env(safe-area-inset-bottom,0px));}
+.nas-mobile .nas-memory-toast{top:calc(8px + env(safe-area-inset-top,0px));}
+.nas-mobile-control-home{display:grid;gap:20px;width:100%;min-width:0;max-width:700px;margin:0 auto;}
+.nas-mobile-control-hero{display:flex;align-items:center;gap:13px;position:relative;overflow:hidden;padding:17px;border:1px solid #bf8354;border-radius:20px;background:radial-gradient(ellipse at right top,#85442366,transparent 75%),linear-gradient(145deg,#4a2d25,#30201f);box-shadow:0 0 19px #e9812b23;}
+.nas-mobile-control-hero img{width:65px;height:65px;border-radius:19px;object-fit:cover;border:1px solid #ffce98;box-shadow:0 0 12px #f4a45a44;}
+.nas-mobile-control-hero>div{flex:1;min-width:0;}
+.nas-mobile-control-hero h2{font-size:19px;line-height:1.25;margin:4px 0;color:#ffe0bc;}
+.nas-mobile-control-hero p{font-size:12px;line-height:1.5;color:#dcbba7;margin:0;}
+.nas-mobile-control-hero>svg{position:absolute;right:9px;top:9px;color:#ffae6a;opacity:.55;pointer-events:none;}
+.nas-mobile-control-group{display:grid;gap:7px;min-width:0;}
+.nas-mobile-control-group h3{font-size:12px;margin:0 2px 3px;text-transform:uppercase;letter-spacing:.08em;color:#dfae8b;}
+.nas-mobile-control-group button{display:flex;align-items:center;gap:12px;min-width:0;min-height:58px;padding:9px 12px;border:1px solid #78503e;border-radius:14px;background:linear-gradient(135deg,#3d2a24,#302122);color:#ffe7d1;font:inherit;font-size:14px;text-align:left;}
+.nas-mobile-control-group button>span:nth-child(2){flex:1;min-width:0;overflow-wrap:anywhere;}
+.nas-mobile-control-group button>span:last-child{color:#eab381;font-size:23px;}
+.nas-mobile-control-group button small{display:block;color:#cba994;font-size:11px;margin-top:3px;}
+.nas-mobile-control-icon{display:grid;place-items:center;width:39px;height:39px;flex:0 0 39px;border:1px solid #a5714d;border-radius:11px;background:#613b28;color:#ffd09c;}
+.nas-mobile button:focus-visible{outline:2px solid #ffcf94;outline-offset:2px;}
+@media(max-height:500px){.nas-mobile .nas-mobile-header{min-height:52px;padding-top:5px;padding-bottom:5px;}.nas-mobile .nas-mobile-brand img{width:36px;height:36px;}.nas-mobile .nas-mobile-chat-title{padding-block:4px;}.nas-mobile .nas-mobile-bottom-nav button{min-height:44px;gap:1px;}.nas-mobile .nas-mobile-bottom-nav{padding-top:3px;padding-bottom:3px;}}
