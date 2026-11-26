@@ -83,6 +83,7 @@ public class HomeActivity extends Activity {
     private DashboardCards dashboard;
     private TaskPanel tasks;
     private BriefingPanel briefing;
+    private QuickContacts contacts;
     private NativeWidgets nativeWidgets;
     private TextView ampm;
     private boolean compactClock;
@@ -97,10 +98,10 @@ public class HomeActivity extends Activity {
     private boolean editingHome,editingMixed;
     private int mixedScrollY;
     private ScrollView mixedScroll;
-    private static final String[] WIDGET_NAMES={"Clock","Mikan","Music","Weather","Upcoming events","Device information","Tasks & reminders","Mikan daily briefing"};
+    private static final String[] WIDGET_NAMES={"Clock","Mikan","Music","Weather","Upcoming events","Device information","Tasks & reminders","Mikan daily briefing","Quick contacts"};
     private HomeSlots homeSlots;
     private int selectedSlot=-1;
-    private static final String[] WIDGET_PAGES={"clockPage","mikanPage","musicPage","weatherPage","agendaPage","devicePage","tasksPage","briefingPage"};
+    private static final String[] WIDGET_PAGES={"clockPage","mikanPage","musicPage","weatherPage","agendaPage","devicePage","tasksPage","briefingPage","contactsPage"};
     private MusicPanel music;
     private final Map<TextView,String> badgeViews=new HashMap<>();
     private final Runnable refreshExtras=new Runnable(){public void run(){refreshExtras();handler.postDelayed(this,2500);}};
@@ -134,6 +135,7 @@ public class HomeActivity extends Activity {
         dashboard=new DashboardCards(this,prefs,()->{if(settings)showSettings();},()->openWidgetApp("weather"));
         briefing=new BriefingPanel(this,prefs,dashboard,tasks,this::notificationAccess);
         tasks.setOnChanged(briefing::refresh);
+        contacts=new QuickContacts(this,prefs);
         settingsUi=new SettingsHub(this);
         registerPackageChanges();
         long scan=android.os.SystemClock.elapsedRealtime();applyCatalog(scanApps());perf.record("initial app catalog",scan);
@@ -168,7 +170,7 @@ public class HomeActivity extends Activity {
     @Override protected void onDestroy(){
         closed=true;foreground=false;closeQuickSearch();handler.removeCallbacksAndMessages(null);catalogWorker.shutdownNow();
         if(receiverRegistered)unregisterReceiver(packagesChanged);
-        if(dashboard!=null)dashboard.close();if(nativeWidgets!=null)nativeWidgets.detach();super.onDestroy();
+        if(dashboard!=null)dashboard.close();if(contacts!=null)contacts.close();if(nativeWidgets!=null)nativeWidgets.detach();super.onDestroy();
     }
     @Override protected void onNewIntent(Intent intent){
         super.onNewIntent(intent);setIntent(intent);
@@ -248,7 +250,7 @@ public class HomeActivity extends Activity {
     }
     private Drawable homeWallpaper(){String name=prefs.getString("wallpaper","reading-nook.webp");Drawable d="custom".equals(name)?wallpaperArt.get():asset(name);return d!=null?d:asset("reading-nook.webp");}
     private void createPage(){
-        nativeWidgets.detach();tasks.detach();briefing.detach();
+        nativeWidgets.detach();tasks.detach();briefing.detach();contacts.detach();
         closeQuickSearch();mixedScroll=null;results=null;drawerAdapter=null;drawerIndex=null;drawerSortButton=null;drawerCategoryButton=null;systemStats=null;deviceBattery=null;deviceMemory=null;deviceCharge=null;handler.removeCallbacks(statsRefresh);
         badgeViews.clear();music=null;mikanCard=null;clock=null;date=null;greeting=null;ampm=null;dashboard.detach();
         root=new FrameLayout(this);root.setBackgroundColor(0xff191417);
@@ -380,6 +382,7 @@ public class HomeActivity extends Activity {
         if(widgetHere("devicePage",0)){bottomWidgets.addView(deviceWidget());gap(bottomWidgets,10);}
         if(widgetHere("tasksPage",0)){bottomWidgets.addView(tasks.view());gap(bottomWidgets,10);}
         if(widgetHere("briefingPage",0)){bottomWidgets.addView(briefing.view());gap(bottomWidgets,10);}
+        if(widgetHere("contactsPage",0)){bottomWidgets.addView(contacts.view(false));gap(bottomWidgets,10);}
         int order=prefs.getInt("sectionOrder",0);
         LinearLayout[] sections=order==1?new LinearLayout[]{topWidgets,characterBlock,bottomWidgets,appBlock}:order==2?new LinearLayout[]{appBlock,topWidgets,characterBlock,bottomWidgets}:new LinearLayout[]{topWidgets,characterBlock,appBlock,bottomWidgets};
         for(LinearLayout section:sections)if(section.getChildCount()>0)body.addView(section);
@@ -915,6 +918,8 @@ public class HomeActivity extends Activity {
                 widgetSetting(body,"Device information","devicePage",0);
                 widgetSetting(body,"Tasks & reminders","tasksPage",0);
                 widgetSetting(body,"Mikan daily briefing","briefingPage",0);
+                widgetSetting(body,"Quick contacts","contactsPage",0);
+                settingsUi.row(body,"Manage quick contacts","Choose favorite people and numbers",contacts::manage);
                 settingsUi.toggle(body,"Briefing notifications","Show number of apps with active notifications, not message contents",prefs.getBoolean("briefingNotify",true),on->{prefs.edit().putBoolean("briefingNotify",on).apply();LauncherNotifications.refreshIfConnected();if(on&&!LauncherNotifications.allowed(this))notificationAccess();showSettings();});
                 settingsUi.row(body,"Manage local tasks","Add, edit or complete tasks",tasks::manage);
                 settingsUi.heading(body,"ANDROID WIDGETS");
@@ -1050,6 +1055,7 @@ public class HomeActivity extends Activity {
     @Override protected void onActivityResult(int request,int result,Intent data){
         super.onActivityResult(request,result,data);
         if(nativeWidgets.result(request,result))return;
+        if(contacts.result(request,result,data))return;
         if(request==75){if(result==RESULT_OK&&data!=null){ArrayList<String> words=data.getStringArrayListExtra(android.speech.RecognizerIntent.EXTRA_RESULTS);if(words!=null&&!words.isEmpty())webSearchDialog(words.get(0));}return;}
         if(request==78||request==79){if(result==RESULT_OK&&data!=null&&data.getData()!=null)handleBackup(request==78,data.getData());return;}
         if((request!=73&&request!=74&&request!=76&&request!=77&&request!=80)||result!=RESULT_OK||data==null||data.getData()==null)return;
@@ -1191,7 +1197,7 @@ public class HomeActivity extends Activity {
     }
 
     private boolean widgetHere(String key,int def){return prefs.getInt(key,def)==homePage+1;}
-    private int widgetPage(String key){return prefs.getInt(key,("devicePage".equals(key)||"tasksPage".equals(key)||"briefingPage".equals(key))?0:1);}
+    private int widgetPage(String key){return prefs.getInt(key,("devicePage".equals(key)||"tasksPage".equals(key)||"briefingPage".equals(key)||"contactsPage".equals(key))?0:1);}
     private int pageCount(){
         int count=0;for(String key:favorites)if(find(key)!=null)count++;
         int cap=prefs.getInt("columns",4)*prefs.getInt("homeRows",2),dock=prefs.getInt("dockCount",5);
@@ -1221,7 +1227,7 @@ public class HomeActivity extends Activity {
         else if(key.equals("musicPage"))w=large?columns:(canPair()&&prefs.getBoolean("pairBottom",true)?2:columns);
         else if(key.equals("agendaPage"))w=large?columns:(canPair()&&prefs.getBoolean("pairBottom",true)?columns-2:columns);
         else if(key.equals("devicePage"))w=columns;
-        else if(key.equals("tasksPage")||key.equals("briefingPage")){w=columns;h=3;}
+        else if(key.equals("tasksPage")||key.equals("briefingPage")||key.equals("contactsPage")){w=columns;h=3;}
         return new MixedLayout.Spec(widgetGridKey(key),min,key.equals("mikanPage")?2:1,w,h);
     }
     private void renderMixedHome(LinearLayout body){
@@ -1236,6 +1242,7 @@ public class HomeActivity extends Activity {
         if(widgetHere("devicePage",0))bottom.add(mixedWidgetSpec("devicePage",columns));
         if(widgetHere("tasksPage",0))bottom.add(mixedWidgetSpec("tasksPage",columns));
         if(widgetHere("briefingPage",0))bottom.add(mixedWidgetSpec("briefingPage",columns));
+        if(widgetHere("contactsPage",0))bottom.add(mixedWidgetSpec("contactsPage",columns));
         int order=prefs.getInt("sectionOrder",0);
         if(order==2)specs.addAll(shortcuts);specs.addAll(top);specs.addAll(middle);if(order==0)specs.addAll(shortcuts);specs.addAll(bottom);if(order==1)specs.addAll(shortcuts);
         MixedLayout model=mixedLayout();LinkedHashMap<String,MixedLayout.Rect> layout=model.resolve(specs,columns);
@@ -1300,6 +1307,7 @@ public class HomeActivity extends Activity {
             case "devicePage":return deviceWidget();
             case "tasksPage":return tasks.view();
             case "briefingPage":return briefing.view();
+            case "contactsPage":return contacts.view(compact);
             default:return null;
         }
     }
