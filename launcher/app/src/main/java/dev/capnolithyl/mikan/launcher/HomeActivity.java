@@ -579,7 +579,7 @@ public class HomeActivity extends Activity {
         }
     }
     private View deviceWidget(){
-        LinearLayout card=vertical();card.setPadding(dp(14),dp(12),dp(14),dp(12));card.setBackground(panelShape(20));
+        LinearLayout card=vertical();card.setGravity(Gravity.CENTER_VERTICAL);card.setPadding(dp(14),dp(12),dp(14),dp(12));card.setBackground(panelShape(20));
         card.setFocusable(true);card.setOnClickListener(v->showSystemStatsDetails());
         card.addView(text("Device information",14,CREAM,true));gap(card,7);
         deviceBattery=text("Battery · —",18,PEACH,true);card.addView(deviceBattery);
@@ -1313,7 +1313,7 @@ public class HomeActivity extends Activity {
     private View buildMixedWidget(String key,boolean compact){
         switch(key){
             case "clockPage":
-                compactClock=compact;LinearLayout clockBlock=vertical();LinearLayout timeRow=horizontal();
+                compactClock=compact;LinearLayout clockBlock=vertical();clockBlock.setGravity(Gravity.CENTER_VERTICAL);LinearLayout timeRow=horizontal();
                 clock=text("",compact?40:48,CREAM,false);clock.setTypeface(Typeface.create("sans-serif-light",Typeface.NORMAL));clock.setIncludeFontPadding(false);timeRow.addView(clock);clockBlock.addView(timeRow);
                 if(compact){ampm=text("",11,PEACH,false);clockBlock.addView(ampm);}
                 date=text("",15,MUTED,false);clockBlock.addView(date);widgetLink(clockBlock,"Open clock app",()->openWidgetApp("clock"));return clockBlock;

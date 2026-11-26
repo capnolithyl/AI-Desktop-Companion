@@ -49,6 +49,7 @@ final class MusicPanel {
         this.context=context;
         root=new LinearLayout(context);root.setOrientation(LinearLayout.VERTICAL);root.setPadding(dp(compact?9:12),dp(9),dp(compact?9:12),dp(7));
         root.setBackground(MikanTheme.panel(context,23));root.setElevation(dp(2));
+        root.setMinimumHeight(dp(compact?148:145));
         LinearLayout row=new LinearLayout(context);row.setGravity(Gravity.CENTER_VERTICAL);root.addView(row);
         artwork=new ImageView(context);artwork.setScaleType(ImageView.ScaleType.CENTER_CROP);
         GradientDrawable artBg=new GradientDrawable();artBg.setColor(0xff50332b);artBg.setCornerRadius(dp(8));artwork.setBackground(artBg);artwork.setClipToOutline(true);
@@ -57,6 +58,7 @@ final class MusicPanel {
         title=label("Now playing",compact?13:15,CREAM);title.setTypeface(Typeface.DEFAULT,Typeface.BOLD);title.setMaxLines(1);title.setEllipsize(android.text.TextUtils.TruncateAt.END);copy.addView(title);
         artist=label("",compact?10:12,MUTED);artist.setMaxLines(2);copy.addView(artist);
 
+        root.addView(new View(context),new LinearLayout.LayoutParams(1,0,1));
         timeline=new LinearLayout(context);timeline.setGravity(Gravity.CENTER_VERTICAL);
         timeline.setOrientation(compact?LinearLayout.VERTICAL:LinearLayout.HORIZONTAL);
         root.addView(timeline,new LinearLayout.LayoutParams(-1,dp(compact?39:30)));
@@ -76,6 +78,7 @@ final class MusicPanel {
             @Override public void onStartTrackingTouch(SeekBar bar){scrubbing=true;scrubToken=controller==null?null:controller.getSessionToken();scrubTrack=track;scrubDuration=duration;bar.getParent().requestDisallowInterceptTouchEvent(true);}
             @Override public void onStopTrackingTouch(SeekBar bar){if(scrubbing)seekTo(bar.getProgress(),scrubToken,scrubTrack,scrubDuration);scrubbing=false;bar.getParent().requestDisallowInterceptTouchEvent(false);updatePosition();}
         });
+        root.addView(new View(context),new LinearLayout.LayoutParams(1,0,1));
         buttons=new LinearLayout(context);buttons.setGravity(Gravity.CENTER);root.addView(buttons);
         prev=control(0,"Previous track",()->command(0));play=control(1,"Play or pause",()->command(1));next=control(2,"Next track",()->command(2));
         empty("Loading music…");
@@ -103,7 +106,9 @@ final class MusicPanel {
         }catch(RuntimeException ignored){}
     }
     private void empty(String message){
-        controller=null;playback=null;duration=0;track=null;scrubbing=false;optimisticUntil=0;displayedArtwork=null;title.setText("Now playing");artist.setText(message);artwork.setImageResource(android.R.drawable.ic_media_play);buttons.setVisibility(View.GONE);timeline.setVisibility(View.GONE);
+        controller=null;playback=null;duration=0;track=null;scrubbing=false;optimisticUntil=0;displayedArtwork=null;title.setText("Now playing");artist.setText(message);artwork.setImageResource(android.R.drawable.ic_media_play);
+        buttons.setVisibility(View.VISIBLE);play.setPlaying(false);enable(prev,false);enable(play,false);enable(next,false);
+        timeline.setVisibility(View.INVISIBLE);seek.setEnabled(false);seek.setProgress(0);elapsed.setText("--:--");total.setText("--:--");
     }
     private static String trackKey(MediaMetadata m){
         if(m==null)return null;
@@ -148,7 +153,7 @@ final class MusicPanel {
             if(bitmap==null){if(displayedArtwork!=null||artwork.getDrawable()==null)artwork.setImageResource(android.R.drawable.ic_media_play);}else if(bitmap!=displayedArtwork)artwork.setImageBitmap(bitmap);displayedArtwork=bitmap;
             buttons.setVisibility(View.VISIBLE);boolean playing=state!=null&&state.getState()==PlaybackState.STATE_PLAYING;play.setPlaying(playing);
             long actions=state==null?0:state.getActions();enable(prev,(actions&PlaybackState.ACTION_SKIP_TO_PREVIOUS)!=0);enable(next,(actions&PlaybackState.ACTION_SKIP_TO_NEXT)!=0);enable(play,(actions&(PlaybackState.ACTION_PLAY_PAUSE|(playing?PlaybackState.ACTION_PAUSE:PlaybackState.ACTION_PLAY)))!=0);
-            timeline.setVisibility(duration>0?View.VISIBLE:View.GONE);boolean canSeek=duration>0&&(actions&PlaybackState.ACTION_SEEK_TO)!=0;
+            timeline.setVisibility(duration>0?View.VISIBLE:View.INVISIBLE);boolean canSeek=duration>0&&(actions&PlaybackState.ACTION_SEEK_TO)!=0;
             seek.setEnabled(canSeek);seek.setThumbTintList(ColorStateList.valueOf(canSeek?PEACH:0xff99765f));total.setText(format(duration));updatePosition();
         }catch(RuntimeException e){empty("Music unavailable. Check notification access.");}
     }

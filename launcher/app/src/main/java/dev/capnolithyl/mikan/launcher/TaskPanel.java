@@ -61,6 +61,7 @@ final class TaskPanel {
         for(LocalTasks.Task task:model.ordered()){
             if(task.done||shown>=3)continue;card.addView(row(task,false));shown++;
         }
+        card.addView(new View(activity),new LinearLayout.LayoutParams(1,0,1));
         card.addView(action(pending>shown?"View all · "+pending:"Manage tasks","Manage all tasks",this::manage));
     }
     private View row(LocalTasks.Task task,boolean full){

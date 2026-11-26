@@ -24,6 +24,7 @@ final class MixedHomeGrid extends ViewGroup {
     private final Map<String,MixedLayout.Rect> positions;
     private final Map<String,MixedLayout.Spec> specs=new HashMap<>();
     private final Map<View,String> keys=new LinkedHashMap<>();
+    private final Map<View,View> contents=new HashMap<>();
     private final int columns;private final boolean editing;private final Callbacks callbacks;
     private int[] edges;private int rows;private MixedLayout.Rect preview;private boolean valid;
     private String selected;private float downX,downY;
@@ -49,7 +50,7 @@ final class MixedHomeGrid extends ViewGroup {
         // put them above the editor's touch surface (or its resize/remove controls).
         FrameLayout contentLayer=new FrameLayout(getContext());
         boolean nativeWidget=MixedLayout.nativeKey(key);
-        int contentHeight=nativeWidget?-1:-2;
+        int contentHeight=key.startsWith("widget:")?-1:-2;
         contentLayer.addView(content,new FrameLayout.LayoutParams(-1,contentHeight,Gravity.TOP));
         frame.addView(contentLayer,new FrameLayout.LayoutParams(-1,contentHeight,Gravity.TOP));
         if(editing){
@@ -71,7 +72,7 @@ final class MixedHomeGrid extends ViewGroup {
                 frame.addView(remove,new FrameLayout.LayoutParams(dp(36),dp(36),Gravity.TOP|Gravity.RIGHT));
             }
         }
-        keys.put(frame,key);addView(frame,new ViewGroup.LayoutParams(-1,-2));
+        keys.put(frame,key);contents.put(frame,content);addView(frame,new ViewGroup.LayoutParams(-1,-2));
     }
     private GradientDrawable controlBackground(){
         GradientDrawable background=new GradientDrawable();background.setColor(0xff704339);background.setCornerRadius(dp(18));background.setStroke(dp(1),0xffb68158);return background;
@@ -128,9 +129,10 @@ final class MixedHomeGrid extends ViewGroup {
             // Hosted RemoteViews fill the final exact grid rectangle; their intrinsic
             // measurement must not force a row larger than the user's chosen span.
             if(MixedLayout.nativeKey(entry.getValue()))continue;
-            v.measure(MeasureSpec.makeMeasureSpec(childWidth,MeasureSpec.EXACTLY),MeasureSpec.makeMeasureSpec(0,MeasureSpec.UNSPECIFIED));
-            int need=v.getMeasuredHeight()+dp(6),current=0;for(int y=r.y;y<r.y+r.h;y++)current+=heights[y];
-            if(need>current){int extra=need-current;for(int y=0;y<r.h;y++)heights[r.y+y]+=extra/r.h+(y<extra%r.h?1:0);}
+            // Measure natural content directly, not the MATCH_PARENT frame or edit handles.
+            // The second pass then gives every widget its full exact rectangle.
+            View content=contents.get(v);content.measure(MeasureSpec.makeMeasureSpec(childWidth,MeasureSpec.EXACTLY),MeasureSpec.makeMeasureSpec(0,MeasureSpec.UNSPECIFIED));
+            WidgetSizing.ensureHeight(heights,r.y,r.h,content.getMeasuredHeight()+dp(6));
         }
         edges=new int[rows+1];for(int y=0;y<rows;y++)edges[y+1]=edges[y]+heights[y];
         for(Map.Entry<View,String> entry:keys.entrySet()){

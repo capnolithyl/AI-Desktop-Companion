@@ -78,6 +78,7 @@ final class QuickContacts {
                 row.addView(item,new LinearLayout.LayoutParams(0,-2,1));
             }card.addView(row);
         }
+        card.addView(new View(activity),new LinearLayout.LayoutParams(1,0,1));
         card.addView(action("Manage contacts",this::manage));
     }
     private void changed(){prefs.edit().putString("quickContactsV1",model.encode()).apply();renderCard();renderManager();}

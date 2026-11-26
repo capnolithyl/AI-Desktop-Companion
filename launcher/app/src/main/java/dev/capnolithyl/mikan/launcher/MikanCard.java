@@ -42,7 +42,7 @@ final class MikanCard {
         GradientDrawable background=MikanTheme.panel(context,25);
         root.setBackground(background);root.setElevation(dp(2));
         LinearLayout row=new LinearLayout(context);row.setOrientation(LinearLayout.HORIZONTAL);row.setGravity(Gravity.CENTER_VERTICAL);row.setBaselineAligned(false);
-        root.addView(row,new FrameLayout.LayoutParams(-1,-2));
+        root.addView(row,new FrameLayout.LayoutParams(-1,-1));
         FrameLayout art=new FrameLayout(context);
         row.addView(art,new LinearLayout.LayoutParams(0,-1,0.94f));
         picture=new ImageView(context);picture.setImageDrawable(artwork);picture.setScaleType(transparent?ImageView.ScaleType.FIT_END:ImageView.ScaleType.CENTER_CROP);

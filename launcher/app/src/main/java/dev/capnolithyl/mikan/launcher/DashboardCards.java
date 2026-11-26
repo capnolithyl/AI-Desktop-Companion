@@ -121,7 +121,7 @@ final class DashboardCards {
     private String coordinates(){return prefs.getString("weatherCoords","");}
     void toggleUnits(){prefs.edit().putBoolean("weatherF",!prefs.getBoolean("weatherF",true)).apply();renderWeather();}
     View weatherView(){
-        weatherRoot=panel();
+        weatherRoot=panel();weatherRoot.setGravity(Gravity.CENTER_VERTICAL);
         LinearLayout row=horizontal();weatherRoot.addView(row);
         weatherGlyph=new WeatherGlyph(activity);row.addView(weatherGlyph,new LinearLayout.LayoutParams(dp(40),dp(43)));
         LinearLayout copy=vertical();copy.setPadding(dp(6),0,0,0);row.addView(copy,new LinearLayout.LayoutParams(0,-2,1));

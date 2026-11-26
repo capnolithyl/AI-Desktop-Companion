@@ -51,7 +51,7 @@ final class BriefingPanel {
     private TextView row(LinearLayout card,int glyph,String name,Runnable click){
         LinearLayout row=new LinearLayout(activity);row.setGravity(Gravity.CENTER_VERTICAL);row.setMinimumHeight(dp(48));row.setPadding(dp(3),dp(7),dp(3),dp(7));row.setBackground(MikanTheme.ripple(activity,12));row.setFocusable(true);row.setOnClickListener(v->click.run());
         ImageView icon=new ImageView(activity);icon.setImageDrawable(new MikanMark(glyph,PEACH));icon.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);row.addView(icon,new LinearLayout.LayoutParams(dp(21),dp(21)));
-        LinearLayout copy=vertical();copy.setPadding(dp(9),0,0,0);copy.addView(text(name,11,PEACH,true));TextView value=text("",13,CREAM,false);value.setPadding(0,dp(3),0,0);copy.addView(value);row.addView(copy,new LinearLayout.LayoutParams(0,-2,1));card.addView(row);return value;
+        LinearLayout copy=vertical();copy.setPadding(dp(9),0,0,0);copy.addView(text(name,11,PEACH,true));TextView value=text("",13,CREAM,false);value.setPadding(0,dp(3),0,0);copy.addView(value);row.addView(copy,new LinearLayout.LayoutParams(0,-2,1));card.addView(row,new LinearLayout.LayoutParams(-1,-2,1));return value;
     }
     private void set(TextView view,String value){if(!value.contentEquals(view.getText()))view.setText(value);}
     void refresh(){

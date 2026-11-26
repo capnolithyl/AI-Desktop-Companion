@@ -45,6 +45,11 @@ jobs:
           mkdir -p /tmp/mikan-home-tests
           javac -d /tmp/mikan-home-tests launcher/app/src/main/java/dev/capnolithyl/mikan/launcher/HomeSlots.java launcher/tests/HomeSlotsTest.java
           java -cp /tmp/mikan-home-tests dev.capnolithyl.mikan.launcher.HomeSlotsTest
+      - name: Test widget sizing
+        run: |
+          mkdir -p /tmp/mikan-sizing-tests
+          javac -d /tmp/mikan-sizing-tests launcher/app/src/main/java/dev/capnolithyl/mikan/launcher/WidgetSizing.java launcher/tests/WidgetSizingTest.java
+          java -cp /tmp/mikan-sizing-tests dev.capnolithyl.mikan.launcher.WidgetSizingTest
       - name: Test mixed grid model
         run: |
           mkdir -p /tmp/mikan-grid-tests
