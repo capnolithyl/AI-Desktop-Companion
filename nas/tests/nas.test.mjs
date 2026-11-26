@@ -1509,13 +1509,13 @@ test("native webpage reads accept exact returned URLs and reject unknown, confli
 test("NAS message retry is idempotent across provider failures, lost replies and stale clients",async()=>{
   const store=openStore(":memory:"),key="0123456789abcdef0123456789abcdef";
   let calls=0,fail=true;
-  const server=makeServer({store,key,config:{provider:"nvidia",model:"test",key:"test-key"},generate:async({history,onDelta})=>{calls++;assert.equal(history.filter(m=>m.role==="user"&&m.content==="Please answer me").length,1);if(fail)throw new Error("Simulated stream failure");onDelta?.("Recovered");return "Recovered";}});
+  const server=makeServer({store,key,config:{provider:"nvidia",model:"test",key:"not-a-real-provider-key"},generate:async({history,onDelta})=>{calls++;assert.equal(history.filter(m=>m.role==="user"&&m.content==="Please answer me").length,1);if(fail)throw new Error("Simulated stream failure");onDelta?.("Recovered");return "Recovered";}});
   await new Promise(resolve=>server.listen(0,"127.0.0.1",resolve));
   const base="http://127.0.0.1:"+server.address().port,headers={Authorization:"Bearer "+key,"Content-Type":"application/json"};
   const c=store.newConversation();
   const send=(body)=>fetch(base+"/api/chat",{method:"POST",headers,body:JSON.stringify({conversationId:c.id,text:"Please answer me",...body})});
   try{
-    const first=await send({messageId:"retry-test-user",expectedLastMessageId:null});assert.match(await first.text(),/event: error/);
+    const first=await send({messageId:"retry-test-user",expectedLastMessageId:null});const failedStream=await first.text();assert.match(failedStream,/: connected/);assert.match(failedStream,/event: error/);
     assert.deepEqual(store.messages(c.id).map(m=>[m.id,m.role]),[["retry-test-user","user"]]);
     assert.equal(store.messages(c.id)[0].inference.outcome,"failed");
     fail=false;

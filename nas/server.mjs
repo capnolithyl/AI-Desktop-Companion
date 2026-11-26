@@ -251,7 +251,7 @@ export function makeServer({store,config,key,promptFile="",maintenanceFile="/dat
         const selected=models.active();
         if(!models.available(selected.provider))return json(res,429,{error:"NAS cloud request budget reached. Try again later or select another provider."});
         busy=true;lastInteractionAt=Date.now();
-        let user;const mode=research.get(),trace=turnTrace(mode);
+        let user,heartbeat;const mode=research.get(),trace=turnTrace(mode);
         try {
         // Claim the foreground slot before yielding. Abort and drain the
         // background worker before starting another provider request.
@@ -263,6 +263,11 @@ export function makeServer({store,config,key,promptFile="",maintenanceFile="/dat
         res.writeHead(200,{"Content-Type":"text/event-stream; charset=utf-8",
           "Cache-Control":"no-cache, no-transform","X-Accel-Buffering":"no",
           "X-Content-Type-Options":"nosniff"});
+          // Flush immediately and send SSE comments while the provider is thinking.
+          // Comments do not enter the message text or invoke any model.
+          res.flushHeaders();res.write(": connected\n\n");
+          heartbeat=setInterval(()=>{if(!res.destroyed&&!res.writableEnded)res.write(": keepalive\n\n");},10000);
+          res.once("close",()=>clearInterval(heartbeat));
           const {answer,memory,researched}=await executeNasTurn({store,conversationId,question,selected,mode,promptFile,requestModel,trace,publicAgent:research.engine()==="native",search,read:(url,opts)=>knowledge.cachedRead(url,opts),knowledge,
             canRequest:(slots=1)=>models.available(selected.provider,slots),reserve:()=>models.reserve(selected.provider),
             onDelta:part=>sse(res,"delta",{text:part}),activity:event=>{try{store.learning.recordSearch(conversationId,user.id,event);}catch{console.error("Could not record NAS research activity");}}});
@@ -280,7 +285,7 @@ export function makeServer({store,config,key,promptFile="",maintenanceFile="/dat
           if (!res.headersSent) json(res,500,{error:"Could not prepare the conversation"});
           else sse(res,"error",{error:(upstreamStatus===429||error?.status===429)?"Provider quota reached (HTTP 429). No automatic retry.":"Cloud reply failed ("+selected.provider+(upstreamStatus?" HTTP "+upstreamStatus:"")+"). Check the selected model and provider quota."});
         } finally {
-          lastInteractionAt=Date.now();busy=false;
+          clearInterval(heartbeat);lastInteractionAt=Date.now();busy=false;
           res.end();
         }
         return;

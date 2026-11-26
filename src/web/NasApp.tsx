@@ -265,6 +265,42 @@ export function NasApp(){
     try{if(selected.size>64000)throw new Error("Profile is too large");const imported=importCompanionProfile(JSON.parse(await selected.text()));setDraft(imported);setNotice("Profile loaded. Review it, then Save settings to apply.");}
     catch(error){report(error);}
   };
+  // Recover a committed reply after a dropped stream or an app resume.
+  // Only read the current conversation; never automatically submit inference.
+  const recoveryMessage=messages.at(-1);
+  const recoveryId=failedAttempt?.conversationId===active?failedAttempt.messageId:recoveryMessage?.role==="user"&&recoveryMessage.inference?.outcome!=="failed"?recoveryMessage.id:null;
+  useEffect(()=>{
+    if(!authenticated||!active||busy||!recoveryId)return;
+    let stopped=false,running=false,checks=0,timer:number|undefined;
+    const controller=new AbortController();
+    const cancelTimer=()=>{if(timer!==undefined)window.clearTimeout(timer);timer=undefined;};
+    const check=async()=>{
+      if(stopped||running||inFlight.current||document.visibilityState!=="visible")return;
+      running=true;checks++;
+      try{
+        const history=await client.messages(active,AbortSignal.any([controller.signal,AbortSignal.timeout(8000)]));
+        if(stopped||inFlight.current)return;
+        const index=history.findIndex(m=>m.id===recoveryId);
+        if(index>=0&&history[index+1]?.role==="assistant"){
+          setMessages(history);setFailedAttempt(null);setNotice("");stopped=true;
+        }else if(index>=0&&history[index].inference?.outcome==="failed"){
+          setMessages(history);stopped=true;
+        }else if(index>=0&&index!==history.length-1){
+          setMessages(history);setFailedAttempt(null);setNotice("Conversation changed on another device.");stopped=true;
+        }
+      }catch{/* A later foreground/online event can recover the saved answer. */}
+      finally{
+        running=false;
+        if(!stopped&&checks<24&&document.visibilityState==="visible")timer=window.setTimeout(()=>void check(),2500);
+      }
+    };
+    const resume=()=>{cancelTimer();checks=0;void check();};
+    const visibility=()=>{if(document.visibilityState==="visible")resume();else cancelTimer();};
+    document.addEventListener("visibilitychange",visibility);
+    window.addEventListener("online",resume);
+    void check();
+    return()=>{stopped=true;controller.abort();cancelTimer();document.removeEventListener("visibilitychange",visibility);window.removeEventListener("online",resume);};
+  },[authenticated,active,busy,recoveryId,client]);
   const runAttempt=async(attempt:ChatAttempt)=>{
     const {conversationId:id,messageId,text,expectedLastMessageId}=attempt;
     if(id!==active||busy||switching||inFlight.current)return;
@@ -287,7 +323,7 @@ export function NasApp(){
       setFailedAttempt(attempt);report(error);
     }finally{
       try{
-        const history=await client.messages(id);
+        const history=await client.messages(id,AbortSignal.timeout(8000));
         if(mounted.current){
           setMessages(history);
           const index=history.findIndex(m=>m.id===messageId);
