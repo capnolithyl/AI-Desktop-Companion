@@ -7,6 +7,12 @@ final class DreamRules {
     static final int AUTO=0,SLEEPY=1,DAY=2,RANDOM=3;
     static final int COZY=0,MINIMAL=1,DEEP=2;
     static final int BLACK=0,WARM=1,BLURRED=2,TINTED=3;
+    static final int MOTION_OFF=0,MOTION_SUBTLE=1,MOTION_FULL=2;
+    static int motion(int requested,int style,boolean systemEnabled){return style==COZY&&systemEnabled?Math.max(0,Math.min(2,requested)):MOTION_OFF;}
+    static int frameDelay(int motion,Period period){return motion==MOTION_OFF?0:period==Period.NIGHT?(motion==MOTION_FULL?166:250):(motion==MOTION_FULL?83:125);}
+    static int particleCount(int motion,Period period){return motion==MOTION_OFF?0:period==Period.NIGHT?(motion==MOTION_FULL?5:3):(motion==MOTION_FULL?9:5);}
+    static float phase(long elapsed,int duration,int offset){return Math.floorMod(elapsed+offset,(long)duration)/(float)duration;}
+    static float envelope(float phase){return (float)Math.sin(Math.PI*Math.max(0f,Math.min(1f,phase)));}
     static int background(int requested,int style){return style!=COZY?BLACK:Math.max(BLACK,Math.min(TINTED,requested));}
     static int blend(int requested){return Math.max(0,Math.min(2,requested));}
     static float feather(int strength){return new float[]{.075f,.15f,.23f}[blend(strength)];}

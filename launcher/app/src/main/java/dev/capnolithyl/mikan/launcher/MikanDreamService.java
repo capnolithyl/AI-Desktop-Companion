@@ -31,9 +31,9 @@ public final class MikanDreamService extends DreamService {
         if(params.screenBrightness!=brightness){params.screenBrightness=brightness;window.setAttributes(params);}
     }
     @Override public void onDreamingStarted(){
-        super.onDreamingStarted();dreaming=true;handler.removeCallbacks(tick);tick.run();
+        super.onDreamingStarted();dreaming=true;handler.removeCallbacks(tick);tick.run();if(view!=null)view.setMotionActive(true);
     }
-    private void stop(){dreaming=false;handler.removeCallbacks(tick);}
+    private void stop(){dreaming=false;handler.removeCallbacks(tick);if(view!=null)view.setMotionActive(false);}
     @Override public void onDreamingStopped(){stop();super.onDreamingStopped();}
     @Override public void onDetachedFromWindow(){stop();if(view!=null){view.release();view=null;}super.onDetachedFromWindow();}
     @Override public void onDestroy(){stop();if(view!=null){view.release();view=null;}super.onDestroy();}

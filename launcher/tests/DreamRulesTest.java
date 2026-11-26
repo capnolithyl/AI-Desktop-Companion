@@ -33,6 +33,18 @@ public final class DreamRulesTest {
         check((soft[0]&255)>0&&(soft[1]&255)<255&&soft[0]==soft[2]);
         check(sharp[1]==0xffffffff);
         check(DreamRules.blurRgb(new int[]{0xff123456},1,1,24)[0]==0xff123456);
+        check(DreamRules.motion(2,DreamRules.COZY,true)==2);
+        check(DreamRules.motion(2,DreamRules.MINIMAL,true)==0);
+        check(DreamRules.motion(2,DreamRules.DEEP,true)==0);
+        check(DreamRules.motion(2,DreamRules.COZY,false)==0);
+        check(DreamRules.motion(-1,DreamRules.COZY,true)==0);
+        check(DreamRules.frameDelay(0,DreamRules.Period.DAY)==0);
+        check(DreamRules.frameDelay(1,DreamRules.Period.NIGHT)>DreamRules.frameDelay(1,DreamRules.Period.DAY));
+        check(DreamRules.particleCount(2,DreamRules.Period.DAY)>DreamRules.particleCount(1,DreamRules.Period.DAY));
+        check(DreamRules.particleCount(0,DreamRules.Period.NIGHT)==0);
+        check(DreamRules.phase(12000,10000,3000)==.5f);
+        check(DreamRules.phase(-1000,10000,0)==.9f);
+        check(DreamRules.envelope(0)==0&&DreamRules.envelope(.5f)==1&&DreamRules.envelope(1)<.0001f);
         System.out.println("DreamRules tests passed");
     }
 }

@@ -17,7 +17,7 @@ import java.time.format.DateTimeFormatter;
 import java.time.format.FormatStyle;
 import java.util.Date;
 
-/** A single lightweight scene. No animation loop, network, sensors or private data. */
+/** Shared dream and preview scene, with bounded opt-in ambient redraws. */
 final class DreamView extends View {
     private final SharedPreferences prefs;
     private final ExpressionArt art;
@@ -26,6 +26,16 @@ final class DreamView extends View {
     private final Typeface regular=Typeface.create("sans-serif",Typeface.NORMAL);
     private Drawable portrait;
     private final DreamBackgrounds backdrop=new DreamBackgrounds();
+    private final DreamAmbient ambient=new DreamAmbient();
+    private int motion=DreamRules.MOTION_OFF;
+    private boolean motionActive, sleepingArt;
+    private long motionStart;
+    private final Runnable motionFrame=new Runnable(){
+        @Override public void run(){
+            if(!canAnimate())return;
+            invalidate();postDelayed(this,DreamRules.frameDelay(motion,period));
+        }
+    };
     private DreamRules.Period period=DreamRules.Period.DAY;
     private int backgroundMode,blendStrength;
     private float previewAspect=0;
@@ -47,6 +57,7 @@ final class DreamView extends View {
         DreamRules.Period current=DreamRules.period(hour);period=current;
         int mode=prefs.getInt("dreamArtMode",DreamRules.AUTO);
         style=prefs.getInt("dreamStyle",DreamRules.COZY);
+        motion=DreamRules.motion(prefs.getInt("dreamMotion",DreamRules.MOTION_SUBTLE),style,android.animation.ValueAnimator.areAnimatorsEnabled());
         backgroundMode=DreamRules.background(prefs.getInt("dreamBackground",DreamRules.TINTED),style);
         blendStrength=DreamRules.blend(prefs.getInt("dreamBlend",1));
         clockSize=prefs.getInt("dreamClockSize",1);
@@ -55,6 +66,7 @@ final class DreamView extends View {
         night=current==DreamRules.Period.NIGHT||style==DreamRules.DEEP;
         DreamRules.Period chosen=DreamRules.artwork(mode,today,current);
         String holiday=DreamRules.holiday(mode,prefs.getBoolean("dreamHoliday",true),today,current);
+        sleepingArt=chosen==DreamRules.Period.NIGHT&&holiday==null;
         String next=style==DreamRules.MINIMAL?"none":chosen.name()+":"+holiday+":"+pack.revision();
         if(!next.equals(artKey)){
             artKey=next;
@@ -74,10 +86,19 @@ final class DreamView extends View {
         color=style==DreamRules.DEEP?0xff805d51:current.color;
         battery=batteryLabel();minute=System.currentTimeMillis()/60000L;
         setContentDescription(clock+", "+date+(showBattery?", "+battery:""));
-        invalidate();
+        invalidate();scheduleMotion();
     }
+    void setMotionActive(boolean active){
+        if(active&&!motionActive)motionStart=android.os.SystemClock.uptimeMillis();
+        motionActive=active;scheduleMotion();invalidate();
+    }
+    private boolean canAnimate(){return motionActive&&motion!=DreamRules.MOTION_OFF&&portrait!=null&&isAttachedToWindow()&&getWindowVisibility()==VISIBLE&&isShown()&&android.animation.ValueAnimator.areAnimatorsEnabled();}
+    private void scheduleMotion(){if(motionFrame==null)return;removeCallbacks(motionFrame);if(canAnimate())postDelayed(motionFrame,DreamRules.frameDelay(motion,period));}
+    @Override protected void onAttachedToWindow(){super.onAttachedToWindow();scheduleMotion();}
+    @Override protected void onWindowVisibilityChanged(int visibility){super.onWindowVisibilityChanged(visibility);scheduleMotion();}
+    @Override protected void onDetachedFromWindow(){removeCallbacks(motionFrame);super.onDetachedFromWindow();}
     boolean dim(){return night;}
-    void release(){portrait=null;art.clear();backdrop.clear();artKey="";}
+    void release(){setMotionActive(false);portrait=null;art.clear();backdrop.clear();artKey="";}
     private String batteryLabel(){
         try{
             Intent i=getContext().registerReceiver(null,new IntentFilter(Intent.ACTION_BATTERY_CHANGED));
@@ -120,6 +141,7 @@ final class DreamView extends View {
             portrait.setBounds(Math.round(ax-width/2),Math.round(ay-height/2),Math.round(ax+width/2),Math.round(ay+height/2));
             int alpha=style==DreamRules.DEEP?75:night?145:integrated?255:215;
             if(!integrated||!backdrop.drawPortrait(canvas,portrait.getBounds(),alpha)){portrait.setAlpha(alpha);portrait.draw(canvas);}
+            if(canAnimate())ambient.draw(canvas,portrait.getBounds(),unit,period,motion,sleepingArt,android.os.SystemClock.uptimeMillis()-motionStart);
         }
         line(canvas,clock,cx,cy,size,textWidth,color,light);
         line(canvas,date,cx,cy+unit*.075f,unit*.041f,textWidth,color,regular);

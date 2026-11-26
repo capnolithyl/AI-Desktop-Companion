@@ -64,6 +64,9 @@ public final class DreamSettingsActivity extends Activity {
         choose("Background style","dreamBackground",new String[]{"Pure black","Warm gradient","Blurred artwork","Blurred artwork + warm tint"},DreamRules.TINTED);
         choose("Blend strength","dreamBlend",new String[]{"Subtle","Medium","Strong"},1);
         ui.note(body,"Cozy Mikan blends the portrait edges into a time-aware amber, cocoa or mocha backdrop. Minimal clock and Deep sleep remain black; Pure black retains the original portrait treatment. Night backgrounds are deliberately darker.");
+        ui.heading(body,"AMBIENT ANIMATION");
+        choose("Animation intensity","dreamMotion",new String[]{"Off","Subtle","Full"},DreamRules.MOTION_SUBTLE);
+        ui.note(body,"Gentle morning dust, daytime sparkles, evening fireflies and nighttime stars with little Zs. Open Fullscreen preview to see motion. Minimal clock, Deep sleep and Android disabled animations stay still. No new artwork needed.");
         ui.heading(body,"ARTWORK PACK");
         ui.row(body,"Import Dream artwork ZIP",importing?"Importing…":pack.installed()?"Custom pack installed · replace all four images":"Select one ZIP containing morning, day, evening and night",this::pickPack);
         if(pack.installed())ui.row(body,"Remove imported pack","Restore bundled artwork",()->new AlertDialog.Builder(this).setTitle("Remove Dream artwork?").setMessage("Only removes the imported copy. Your original ZIP is untouched.").setNegativeButton("Cancel",null).setPositiveButton("Remove",(d,i)->{if(importing)return;if(pack.remove()){render();}else Toast.makeText(this,"Could not remove pack.",Toast.LENGTH_SHORT).show();}).show());
@@ -87,7 +90,7 @@ public final class DreamSettingsActivity extends Activity {
         fullPreview=dialog;fullScene=new DreamView(this,prefs);fullScene.previewAspect(aspect());fullScene.refresh(previewHour);
         fullScene.setOnClickListener(view->dialog.dismiss());dialog.setContentView(fullScene);
         dialog.setOnDismissListener(d->{if(fullScene!=null)fullScene.release();fullScene=null;fullPreview=null;});
-        dialog.show();android.view.Window window=dialog.getWindow();
+        dialog.show();fullScene.setMotionActive(true);android.view.Window window=dialog.getWindow();
         if(window!=null){window.setLayout(-1,-1);window.getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_FULLSCREEN|View.SYSTEM_UI_FLAG_HIDE_NAVIGATION|View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY|View.SYSTEM_UI_FLAG_LAYOUT_STABLE|View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN|View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION);}
     }
     private void pickPack(){
@@ -111,6 +114,7 @@ public final class DreamSettingsActivity extends Activity {
         int index=Math.max(0,Math.min(items.length-1,prefs.getInt(key,fallback)));
         ui.row(body,title,items[index],()->new AlertDialog.Builder(this).setTitle(title).setSingleChoiceItems(items,index,(dialog,i)->{prefs.edit().putInt(key,i).apply();dialog.dismiss();render();}).setNegativeButton("Cancel",null).show());
     }
-    @Override protected void onResume(){super.onResume();if(preview!=null)preview.refresh(previewHour);}
+    @Override protected void onResume(){super.onResume();if(preview!=null)preview.refresh(previewHour);if(fullScene!=null){fullScene.refresh(previewHour);fullScene.setMotionActive(true);}}
+    @Override protected void onPause(){if(fullScene!=null)fullScene.setMotionActive(false);super.onPause();}
     @Override protected void onDestroy(){if(fullPreview!=null)fullPreview.dismiss();if(preview!=null)preview.release();worker.shutdown();super.onDestroy();}
 }
