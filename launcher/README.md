@@ -126,3 +126,5 @@ Enable Home screen > Mixed app & widget grid, then long-press empty Home space o
 ## v0.15.4 local tasks & reminders
 
 Settings > Widgets > Tasks & reminders selects a Home page or Hidden (default). Manage local tasks from settings even when hidden. The card shows up to three open tasks by due date, highlights overdue/due today, supports adding and checking off tasks; tap a title to edit, or Manage tasks to reopen/delete completed items. Optional date only, no alarm notifications, sync, network or background service. Up to 100 tasks, 200 characters each; contents remain in local preferences and are excluded from portable settings backups, which retain placement. Both Home layouts supported. v0.15.3 launcher CI passed; v0.15.4 model tests added to CI and physical validation pending.
+
+Build correction: initial launcher CI 45708944249 passed all model tests, including LocalTasksTest, but Java compilation failed on LinearLayout.setMinHeight. Corrected to setMinimumHeight; retained unpublished versionCode 37. Rebuild and device verification pending.

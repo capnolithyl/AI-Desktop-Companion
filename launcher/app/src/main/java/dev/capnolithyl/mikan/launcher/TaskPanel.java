@@ -74,7 +74,7 @@ final class TaskPanel {
         copy.addView(title);
         String due=dueLabel(task,LocalDate.now());
         if(!due.isEmpty()){TextView sub=text(due,11,LocalTasks.urgency(task,LocalDate.now())>0?URGENT:MUTED,false);sub.setPadding(0,dp(3),0,0);copy.addView(sub);}
-        copy.setMinHeight(dp(44));copy.setGravity(Gravity.CENTER_VERTICAL);copy.setFocusable(true);copy.setContentDescription("Edit "+task.title);copy.setOnClickListener(v->edit(task.id));
+        copy.setMinimumHeight(dp(44));copy.setGravity(Gravity.CENTER_VERTICAL);copy.setFocusable(true);copy.setContentDescription("Edit "+task.title);copy.setOnClickListener(v->edit(task.id));
         row.addView(copy,new LinearLayout.LayoutParams(0,-2,1));
         if(full)row.addView(action("×","Delete "+task.title,()->confirmDelete(task.id)),new LinearLayout.LayoutParams(dp(44),dp(44)));
         return row;

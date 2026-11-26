@@ -175,7 +175,7 @@ Weather card also exposes refresh, city, units and clear location. No full-scree
 | 0.15.1 | Native Android AppWidget host, picker, consent/configuration, page and height management | Launcher CI 45697092452 passed; owner screenshot confirms picker opens and enumerates providers, not that binding/rendering works. Flat list usability rejected. |
 | 0.15.2 | Searchable themed app-grouped widget picker, previews and variant dimensions | Launcher CI 45698730597 passed; owner approved appearance. |
 | 0.15.3 | Native widget mixed-grid drag, resizing and removal | Launcher CI 45700919448 passed; physical provider compatibility pending. |
-| 0.15.4 | Local tasks widget and due-date reminders | Implemented; CI/device pending. |
+| 0.15.4 | Local tasks widget and due-date reminders | Initial CI 45708944249: all model tests passed; Java compile failed because LinearLayout uses setMinimumHeight rather than TextView.setMinHeight. Fixed without incrementing unpublished versionCode 37; rebuild/device validation pending. |
 
 ## 7. Outstanding verification checklist
 
