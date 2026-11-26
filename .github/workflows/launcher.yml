@@ -35,6 +35,11 @@ jobs:
           mkdir -p /tmp/mikan-quick-search-tests
           javac -d /tmp/mikan-quick-search-tests launcher/app/src/main/java/dev/capnolithyl/mikan/launcher/QuickAppRank.java launcher/tests/QuickAppRankTest.java
           java -cp /tmp/mikan-quick-search-tests dev.capnolithyl.mikan.launcher.QuickAppRankTest
+      - name: Test Home page gestures
+        run: |
+          mkdir -p /tmp/mikan-page-tests
+          javac -d /tmp/mikan-page-tests launcher/app/src/main/java/dev/capnolithyl/mikan/launcher/HomePageRules.java launcher/tests/HomePageRulesTest.java
+          java -cp /tmp/mikan-page-tests dev.capnolithyl.mikan.launcher.HomePageRulesTest
       - name: Test home slot model
         run: |
           mkdir -p /tmp/mikan-home-tests

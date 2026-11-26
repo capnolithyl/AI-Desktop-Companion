@@ -106,7 +106,10 @@ public class HomeActivity extends Activity {
     private final Map<TextView,String> badgeViews=new HashMap<>();
     private final Runnable refreshExtras=new Runnable(){public void run(){refreshExtras();handler.postDelayed(this,2500);}};
     private float touchX,touchY;
-    private boolean seekGesture;
+    private boolean seekGesture,pageDragging,pageGestureBlocked;
+    private ScrollView homeScroll;
+    private FrameLayout homeViewport;
+    private final HomePageMotion pageMotion=new HomePageMotion();
     private final Runnable progressTick=new Runnable(){public void run(){if(music!=null)music.updatePosition();handler.postDelayed(this,1000);}};
     private final Runnable tick=new Runnable(){ public void run(){ updateClock(); refreshSystemStats(); handler.postDelayed(this,15000); } };
     private static final class App {
@@ -164,11 +167,11 @@ public class HomeActivity extends Activity {
         if(catalogDirty)scheduleCatalog();
     }
     @Override protected void onPause(){
-        foreground=false;closeQuickSearch();dashboard.pause();handler.removeCallbacks(statsRefresh);handler.removeCallbacks(tick);handler.removeCallbacks(refreshExtras);handler.removeCallbacks(progressTick);handler.removeCallbacks(delayedExtras);handler.removeCallbacks(catalogRefresh);
+        foreground=false;resetPageGesture();pageMotion.finish();closeQuickSearch();dashboard.pause();handler.removeCallbacks(statsRefresh);handler.removeCallbacks(tick);handler.removeCallbacks(refreshExtras);handler.removeCallbacks(progressTick);handler.removeCallbacks(delayedExtras);handler.removeCallbacks(catalogRefresh);
         entryKind=null;entryGeneration++;super.onPause();
     }
     @Override protected void onDestroy(){
-        closed=true;foreground=false;closeQuickSearch();handler.removeCallbacksAndMessages(null);catalogWorker.shutdownNow();
+        closed=true;foreground=false;resetPageGesture();pageMotion.finish();closeQuickSearch();handler.removeCallbacksAndMessages(null);catalogWorker.shutdownNow();
         if(receiverRegistered)unregisterReceiver(packagesChanged);
         if(dashboard!=null)dashboard.close();if(contacts!=null)contacts.close();if(nativeWidgets!=null)nativeWidgets.detach();super.onDestroy();
     }
@@ -250,6 +253,7 @@ public class HomeActivity extends Activity {
     }
     private Drawable homeWallpaper(){String name=prefs.getString("wallpaper","reading-nook.webp");Drawable d="custom".equals(name)?wallpaperArt.get():asset(name);return d!=null?d:asset("reading-nook.webp");}
     private void createPage(){
+        resetPageGesture();pageMotion.finish();homeScroll=null;homeViewport=null;
         nativeWidgets.detach();tasks.detach();briefing.detach();contacts.detach();
         closeQuickSearch();mixedScroll=null;results=null;drawerAdapter=null;drawerIndex=null;drawerSortButton=null;drawerCategoryButton=null;systemStats=null;deviceBattery=null;deviceMemory=null;deviceCharge=null;handler.removeCallbacks(statsRefresh);
         badgeViews.clear();music=null;mikanCard=null;clock=null;date=null;greeting=null;ampm=null;dashboard.detach();
@@ -348,7 +352,9 @@ public class HomeActivity extends Activity {
         if(editingMixed)header.addView(action("Done",this::finishMixedEdit));else header.addView(markButton(MikanMark.GEAR,"Launcher settings",this::openSettings),new LinearLayout.LayoutParams(dp(44),dp(44)));page.addView(header);
         if(editingMixed){page.addView(text("Drag any app or widget · ↘ to resize · − to remove apps",12,MUTED,false));gap(page,6);}
         ScrollView scroll=new ScrollView(this);scroll.setFillViewport(false);scroll.setVerticalScrollBarEnabled(true);scroll.setScrollbarFadingEnabled(true);
-        page.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
+        homeViewport=new FrameLayout(this);homeViewport.setClipChildren(true);homeViewport.setClipToPadding(true);
+        homeScroll=scroll;homeViewport.addView(scroll,new FrameLayout.LayoutParams(-1,-1));
+        page.addView(homeViewport,new LinearLayout.LayoutParams(-1,0,1));
         LinearLayout body=vertical();scroll.addView(body,new ScrollView.LayoutParams(-1,-2));
         body.setOnLongClickListener(v->{openHomeEditor();return true;});scroll.setOnLongClickListener(v->{openHomeEditor();return true;});
         gap(body,6);
@@ -398,12 +404,20 @@ public class HomeActivity extends Activity {
         }
         LinearLayout nav=horizontal();nav.setGravity(Gravity.CENTER);int count=pageCount();
         if(count>1){
-        if(homePage>0)nav.addView(pageArrow("‹",()->changePage(-1)));
         LinearLayout dots=horizontal();dots.setGravity(Gravity.CENTER);
-        if(count>8){TextView counter=text((homePage+1)+" / "+count,13,MUTED,true);counter.setGravity(Gravity.CENTER);dots.addView(counter);}
-        else for(int i=0;i<count;i++){final int target=i;View dot=new View(this);dot.setBackground(shape(i==homePage?PEACH:0xff967a69,10,false));LinearLayout.LayoutParams d=new LinearLayout.LayoutParams(dp(i==homePage?9:6),dp(i==homePage?9:6));d.setMargins(dp(4),0,dp(4),0);dots.addView(dot,d);dot.setContentDescription("Page "+(i+1));dot.setOnClickListener(v->{homePage=target;mixedScrollY=0;showHome();});}
+        if(count>8){
+            TextView counter=text((homePage+1)+" / "+count,13,MUTED,true);counter.setGravity(Gravity.CENTER);counter.setPadding(dp(12),0,dp(12),0);
+            counter.setContentDescription("Page "+(homePage+1)+" of "+count+". Choose page");counter.setOnClickListener(v->{String[] labels=new String[count];for(int i=0;i<count;i++)labels[i]="Page "+(i+1);new AlertDialog.Builder(this).setTitle("Go to page").setSingleChoiceItems(labels,homePage,(dialog,i)->{dialog.dismiss();goToPage(i);}).setNegativeButton("Cancel",null).show();});
+            dots.addView(counter,new LinearLayout.LayoutParams(-2,-1));
+        }else for(int i=0;i<count;i++){
+            final int target=i;boolean selected=i==homePage;
+            FrameLayout hit=new FrameLayout(this);View dot=new View(this);dot.setBackground(shape(selected?PEACH:0xff967a69,10,false));
+            int diameter=dp(selected?9:6);hit.addView(dot,new FrameLayout.LayoutParams(diameter,diameter,Gravity.CENTER));
+            dots.addView(hit,new LinearLayout.LayoutParams(dp(30),-1));hit.setSelected(selected);hit.setFocusable(true);
+            hit.setContentDescription("Page "+(i+1)+" of "+count+(selected?", current page":""));
+            hit.setOnClickListener(v->goToPage(target));
+        }
         nav.addView(dots,new LinearLayout.LayoutParams(-2,dp(36)));
-        if(homePage+1<count)nav.addView(pageArrow("›",()->changePage(1)));
         page.addView(nav);gap(page,4);}
         page.addView(dock);gap(page,7);
         if(editingMixed)page.addView(action("Manage pages & apps",this::openPageManager));else page.addView(searchBar(),new LinearLayout.LayoutParams(-1,dp(50)));
@@ -533,7 +547,6 @@ public class HomeActivity extends Activity {
             try{startActivityForResult(i,75);}catch(Exception e){Toast.makeText(this,"Speech recognition unavailable.",Toast.LENGTH_SHORT).show();}
         }).show();
     }
-    private TextView pageArrow(String label,Runnable r){TextView v=action(label,r);v.setMinHeight(dp(36));v.setPadding(dp(16),dp(4),dp(16),dp(4));return v;}
     private void queueSystemStats(){
         if(!foreground||closed||(systemStats==null&&deviceBattery==null))return;
         handler.removeCallbacks(statsRefresh);handler.postDelayed(statsRefresh,180);
@@ -1539,7 +1552,24 @@ public class HomeActivity extends Activity {
         new AlertDialog.Builder(this).setTitle("Move "+name).setItems(choices,(d,i)->{prefs.edit().putInt(key,i+1).apply();showHomeEditor();}).setNegativeButton("Cancel",null).show();
     }
     private int slotCapacity(){return prefs.getInt("columns",4)*prefs.getInt("homeRows",2);}
-    private void changePage(int delta){int next=Math.max(0,Math.min(pageCount()-1,homePage+delta));if(next!=homePage){homePage=next;mixedScrollY=0;showHome();}}
+    private void goToPage(int target){
+        int next=Math.max(0,Math.min(pageCount()-1,target));
+        if(next==homePage){resetPageGesture();pageMotion.finish();return;}
+        boolean animate=!editingMixed&&!editingHome&&!drawer&&!settings&&android.animation.ValueAnimator.areAnimatorsEnabled()&&homeScroll!=null&&homeViewport!=null&&homeViewport.getWidth()>0;
+        int direction=next>homePage?1:-1;
+        HomePageMotion.Snapshot old=animate?pageMotion.capture(homeScroll):null;
+        homePage=next;mixedScrollY=0;showHome();
+        if(animate&&homeScroll!=null&&homeViewport!=null)pageMotion.slide(homeViewport,homeScroll,old,direction);
+        else if(old!=null)old.release();
+    }
+    private void resetPageGesture(){
+        pageDragging=false;pageGestureBlocked=false;seekGesture=false;
+        if(homeScroll!=null)homeScroll.setTranslationX(0);
+    }
+    private void cancelPageTouch(MotionEvent event){
+        MotionEvent cancel=MotionEvent.obtain(event);cancel.setAction(MotionEvent.ACTION_CANCEL);
+        super.dispatchTouchEvent(cancel);cancel.recycle();
+    }
     private void widgetSetting(LinearLayout body,String label,String key,int def){
         int p=prefs.getInt(key,def);setting(body,label+": "+(p==0?"Hidden":"Page "+p),()->{
             int count=Math.max(5,pageCount());String[] options=new String[count+1];options[0]="Hidden";for(int i=1;i<=count;i++)options[i]="Page "+i;
@@ -1687,12 +1717,42 @@ public class HomeActivity extends Activity {
         }catch(Exception e){new AlertDialog.Builder(this).setMessage("Open Android Settings → Apps → Default apps → Home app.").setPositiveButton("OK",null).show();}
     }
     @Override public boolean dispatchTouchEvent(MotionEvent event){
-        if(quickSearch!=null||editingHome||editingMixed)return super.dispatchTouchEvent(event);
-        if(event.getActionMasked()==MotionEvent.ACTION_DOWN){touchX=event.getX();touchY=event.getY();seekGesture=(music!=null&&music.isSeekTouch(event.getRawX(),event.getRawY()))||nativeWidgets.isTouch(event.getRawX(),event.getRawY());}
-        if(!seekGesture&&!drawer&&!settings&&event.getActionMasked()==MotionEvent.ACTION_UP&&Math.abs(event.getX()-touchX)>dp(90)&&Math.abs(event.getY()-touchY)<dp(55)){MotionEvent cancel=MotionEvent.obtain(event);cancel.setAction(MotionEvent.ACTION_CANCEL);super.dispatchTouchEvent(cancel);cancel.recycle();changePage(event.getX()<touchX?1:-1);return true;}
-        if(!seekGesture&&!drawer&&!settings&&event.getActionMasked()==MotionEvent.ACTION_UP&&root!=null&&touchY>root.getHeight()-dp(180)&&touchY-event.getY()>dp(70)&&Math.abs(event.getX()-touchX)<dp(90)){
-            MotionEvent cancel=MotionEvent.obtain(event);cancel.setAction(MotionEvent.ACTION_CANCEL);super.dispatchTouchEvent(cancel);cancel.recycle();showDrawer();return true;
+        if(quickSearch!=null||editingHome||editingMixed||drawer||settings)return super.dispatchTouchEvent(event);
+        int action=event.getActionMasked();
+        if(action==MotionEvent.ACTION_DOWN){
+            pageMotion.finish();resetPageGesture();touchX=event.getX();touchY=event.getY();
+            seekGesture=(music!=null&&music.isSeekTouch(event.getRawX(),event.getRawY()))||nativeWidgets.isTouch(event.getRawX(),event.getRawY());
         }
+        if(action==MotionEvent.ACTION_POINTER_DOWN){
+            boolean wasDragging=pageDragging;pageDragging=false;pageGestureBlocked=true;
+            if(wasDragging){seekGesture=true;pageMotion.snapBack(homeScroll);return true;}
+        }
+        float dx=event.getX()-touchX,dy=event.getY()-touchY;
+        int slop=android.view.ViewConfiguration.get(this).getScaledTouchSlop();
+        if(action==MotionEvent.ACTION_MOVE&&!seekGesture&&!pageGestureBlocked&&homeScroll!=null){
+            if(!pageDragging){
+                if(Math.abs(dy)>slop&&Math.abs(dy)>=Math.abs(dx))pageGestureBlocked=true;
+                else if(pageCount()>1&&HomePageRules.horizontal(dx,dy,slop)){pageDragging=true;cancelPageTouch(event);}
+            }
+            if(pageDragging){
+                if(android.animation.ValueAnimator.areAnimatorsEnabled()){
+                    boolean available=dx<0?homePage+1<pageCount():homePage>0;
+                    homeScroll.setTranslationX(HomePageRules.dragOffset(dx,homeViewport.getWidth(),available));
+                }
+                return true;
+            }
+        }
+        if(pageDragging&&(action==MotionEvent.ACTION_UP||action==MotionEvent.ACTION_CANCEL)){
+            pageDragging=false;pageGestureBlocked=false;
+            int direction=HomePageRules.targetDirection(dx,homeViewport==null?0:homeViewport.getWidth(),dp(48));
+            if(action==MotionEvent.ACTION_UP&&direction!=0&&homePage+direction>=0&&homePage+direction<pageCount())goToPage(homePage+direction);
+            else pageMotion.snapBack(homeScroll);
+            return true;
+        }
+        if(action==MotionEvent.ACTION_UP&&!seekGesture&&root!=null&&touchY>root.getHeight()-dp(180)&&touchY-event.getY()>dp(70)&&Math.abs(dx)<dp(90)){
+            cancelPageTouch(event);showDrawer();return true;
+        }
+        if(action==MotionEvent.ACTION_CANCEL)resetPageGesture();
         return super.dispatchTouchEvent(event);
     }
 }
