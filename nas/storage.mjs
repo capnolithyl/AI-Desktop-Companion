@@ -72,9 +72,9 @@ export function openStore(path) {
   function recordInference(id,inference){
     db.prepare("UPDATE messages SET metadata_json=? WHERE id=?").run(JSON.stringify({nasInference:inference}),id);
   }
-  function append(id, role, content, inference=null) {
+  function append(id, role, content, inference=null, messageId=randomUUID()) {
     if (!exists(id)) throw new Error("Conversation not found");
-    const message = { id:randomUUID(), role, content, createdAt:Date.now() };
+    const message = { id:messageId, role, content, createdAt:Date.now() };
     db.prepare(`INSERT INTO messages
       (id,conversation_id,role,content,created_at,metadata_json) VALUES(?,?,?,?,?,?)`)
       .run(message.id,id,role,content,message.createdAt,JSON.stringify(inference?{nasInference:inference}:{}));

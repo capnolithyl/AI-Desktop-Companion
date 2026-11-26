@@ -12,7 +12,7 @@ import {AVATAR_BACKGROUNDS} from "../avatar-background";
 import {PortraitContextMenu,type PortraitMenuItem} from "../PortraitContextMenu";
 import {reactionFromReply,type AvatarReaction,type AvatarReactionKind} from "../avatar-reactions";
 import {DEFAULT_COMPANION_PROFILE,importCompanionProfile,exportCompanionProfile,type CompanionProfile} from "../companion-profile";
-import {NasClient,NasRequestError,type NasMessage,type NasChat,type LibrarySnapshot,type NasStatus,type LearningStatus,type LearningSettings,type LearningEvent} from "./nas-client";
+import {NasClient,type NasMessage,type NasChat,type LibrarySnapshot,type NasStatus,type LearningStatus,type LearningSettings,type LearningEvent} from "./nas-client";
 import {MemoryPanel} from "../MemoryPanel";
 import {NasLearningReviews} from "./NasLearningReviews";
 import {NasUpdates} from "./NasUpdates";
@@ -47,8 +47,25 @@ function downloadProfile(profile:CompanionProfile){
   const a=document.createElement("a");a.href=url;a.download="mikan-companion-profile.json";document.body.appendChild(a);a.click();a.remove();window.setTimeout(()=>URL.revokeObjectURL(url),1000);
 }
 function openLink(href:string){try{const url=new URL(href);if(["https:","http:"].includes(url.protocol))window.open(url.href,"_blank","noopener,noreferrer");}catch{/* Reject invalid URLs. */}}
-function Bubble({message,latest,busy}:{message:NasMessage;latest:boolean;busy:boolean}){
+type ChatAttempt={conversationId:string;messageId:string;text:string;expectedLastMessageId?:string|null};
+function newMessageId(){return Array.from(crypto.getRandomValues(new Uint8Array(16)),byte=>byte.toString(16).padStart(2,"0")).join("");}
+async function copyMessageText(text:string){
+  if(navigator.clipboard?.writeText){
+    try{await navigator.clipboard.writeText(text);return;}catch{/* Some embedded browsers restrict the Clipboard API. */}
+  }
+  const field=document.createElement("textarea");field.value=text;field.readOnly=true;
+  Object.assign(field.style,{position:"fixed",left:"0",top:"0",opacity:"0",pointerEvents:"none"});
+  document.body.appendChild(field);
+  const focused=document.activeElement;
+  try{field.select();field.setSelectionRange(0,field.value.length);if(!document.execCommand("copy"))throw new Error("Could not copy this message.");}
+  finally{field.remove();if(focused instanceof HTMLElement)focused.focus({preventScroll:true});}
+}
+function Bubble({message,latest,busy,onCopyError}:{message:NasMessage;latest:boolean;busy:boolean;onCopyError:(error:unknown)=>void}){
   const assistant=message.role==="assistant";
+  const pending=assistant&&message.id.startsWith("nas-pending-");
+  const [copied,setCopied]=useState(false);
+  useEffect(()=>{if(!copied)return;const timer=window.setTimeout(()=>setCopied(false),1600);return()=>window.clearTimeout(timer);},[copied]);
+  const copy=async()=>{try{await copyMessageText(message.content);setCopied(true);}catch(error){onCopyError(error);}};
   const timestamp=message.createdAt<1e12?message.createdAt*1000:message.createdAt;
   const date=new Date(timestamp);
   return <article className={"workspace-message "+message.role}>
@@ -56,8 +73,8 @@ function Bubble({message,latest,busy}:{message:NasMessage;latest:boolean;busy:bo
     <span className="workspace-message-avatar" aria-hidden="true">{assistant?<img className="workspace-chat-portrait" src={portrait} alt="" width={58} height={58} draggable={false}/>:<UserRound size={19}/>}</span>
     <div className="workspace-message-body"><div className="workspace-message-author"><strong>{assistant?"Mikan ♡":"You"}</strong></div>
       <div className="workspace-message-bubble"><svg className="workspace-bubble-tail" viewBox="0 0 18 22" aria-hidden="true"><path d="M18 2 H13 Q11 8 2 8 Q8 12 13 20 H18Z" fill="var(--bubble-tail)"/><path d="M13 2 Q11 8 2 8 Q8 12 13 20" fill="none" stroke="var(--bubble-edge)" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/></svg>
-      <div className="workspace-bubble-content"><ChatMarkdown text={message.content||(busy?"Thinking…":"")} onOpenLink={openLink}/>{assistant&&message.content.length>=120&&<WorkspacePawSeal/>}</div>
-      <div className="workspace-bubble-footer"><time dateTime={date.toISOString()}>{date.toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"})}</time></div></div>
+      <div className="workspace-bubble-content"><ChatMarkdown text={message.content||(pending&&busy?"Thinking…":"")} onOpenLink={openLink}/>{assistant&&message.content.length>=120&&<WorkspacePawSeal/>}</div>
+      <div className="workspace-bubble-footer">{!!message.content&&!pending&&<button type="button" className="nas-message-copy" onClick={()=>void copy()} title={copied?"Copied":"Copy message text"} aria-label={copied?"Message copied":"Copy message text"}>{copied?<Check size={16}/>:<Copy size={16}/>}</button>}<time dateTime={date.toISOString()}>{date.toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"})}</time></div></div>
     </div>
   </article>;
 }
@@ -74,6 +91,7 @@ export function NasApp(){
   const [draft,setDraft]=useState<CompanionProfile>(DEFAULT_COMPANION_PROFILE);
   const [chats,setChats]=useState<NasChat[]>([]);
   const [messages,setMessages]=useState<NasMessage[]>([]);
+  const [failedAttempt,setFailedAttempt]=useState<ChatAttempt|null>(null);
   const [active,setActive]=useState<string|null>(null);
   const [input,setInput]=useState("");
   const [busy,setBusy]=useState(false);
@@ -175,7 +193,7 @@ export function NasApp(){
     document.addEventListener("visibilitychange",resume);
     return ()=>{cancelled=true;window.clearInterval(timer);document.removeEventListener("visibilitychange",resume);};
   },[authenticated,client,active]);
-  const lock=()=>{if(busy||saving)return;setAuthenticated(false);setKey("");setToken("");sessionStorage.removeItem(KEY);setMessages([]);setChats([]);setLibrary({facts:[],characterFacts:[],interests:[],sessionSummaries:[]});setLearning(null);setMemoryToast(null);setActivity(null);setActivityError("");setEventError("");eventCursor.current=undefined;setActive(null);setPage("chat");setMobileView("chat");setSettingsReturn("chat");setMenu(null);setNotice("");};
+  const lock=()=>{if(busy||saving)return;setAuthenticated(false);setKey("");setToken("");sessionStorage.removeItem(KEY);setMessages([]);setFailedAttempt(null);setChats([]);setLibrary({facts:[],characterFacts:[],interests:[],sessionSummaries:[]});setLearning(null);setMemoryToast(null);setActivity(null);setActivityError("");setEventError("");eventCursor.current=undefined;setActive(null);setPage("chat");setMobileView("chat");setSettingsReturn("chat");setMenu(null);setNotice("");};
   useEffect(()=>{
     if(!authenticated)return;
     let cancelled=false;
@@ -226,12 +244,12 @@ export function NasApp(){
   const settingsBackLabel=settingsBack==="control"?"Back to control center":mobile&&mobileView==="character"?"Back to Mikan":mobile&&mobileView==="chats"?"Back to chats":"Back to chat";
   const openChat=async(id:string)=>{
     if(inFlight.current||busy)return;
-    try{const history=await client.messages(id);setActive(id);setMessages(history);setPage("chat");setMobileView("chat");setNotice("");localStorage.setItem("mikan-nas-chat",id);}
+    try{const history=await client.messages(id);setActive(id);setMessages(history);setFailedAttempt(null);setPage("chat");setMobileView("chat");setNotice("");localStorage.setItem("mikan-nas-chat",id);}
     catch(error){report(error);}
   };
   const newChat=async()=>{
     if(inFlight.current||busy)return;
-    try{const chat=await client.createChat();setChats(previous=>[chat,...previous]);setMessages([]);setActive(chat.id);localStorage.setItem("mikan-nas-chat",chat.id);setPage("chat");setMobileView("chat");setNotice("");}
+    try{const chat=await client.createChat();setChats(previous=>[chat,...previous]);setMessages([]);setFailedAttempt(null);setActive(chat.id);localStorage.setItem("mikan-nas-chat",chat.id);setPage("chat");setMobileView("chat");setNotice("");}
     catch(error){report(error);}
   };
   const express=(kind:AvatarReactionKind)=>setReaction({kind,serial:++serial.current,source:"test"});
@@ -247,22 +265,85 @@ export function NasApp(){
     try{if(selected.size>64000)throw new Error("Profile is too large");const imported=importCompanionProfile(JSON.parse(await selected.text()));setDraft(imported);setNotice("Profile loaded. Review it, then Save settings to apply.");}
     catch(error){report(error);}
   };
+  // Recover a committed reply after a dropped stream or an app resume.
+  // Only read the current conversation; never automatically submit inference.
+  const recoveryMessage=messages.at(-1);
+  const recoveryId=failedAttempt?.conversationId===active?failedAttempt.messageId:recoveryMessage?.role==="user"&&recoveryMessage.inference?.outcome!=="failed"?recoveryMessage.id:null;
+  useEffect(()=>{
+    if(!authenticated||!active||busy||!recoveryId)return;
+    let stopped=false,running=false,checks=0,timer:number|undefined;
+    const controller=new AbortController();
+    const cancelTimer=()=>{if(timer!==undefined)window.clearTimeout(timer);timer=undefined;};
+    const check=async()=>{
+      if(stopped||running||inFlight.current||document.visibilityState!=="visible")return;
+      running=true;checks++;
+      try{
+        const history=await client.messages(active,AbortSignal.any([controller.signal,AbortSignal.timeout(8000)]));
+        if(stopped||inFlight.current)return;
+        const index=history.findIndex(m=>m.id===recoveryId);
+        if(index>=0&&history[index+1]?.role==="assistant"){
+          setMessages(history);setFailedAttempt(null);setNotice("");stopped=true;
+        }else if(index>=0&&history[index].inference?.outcome==="failed"){
+          setMessages(history);stopped=true;
+        }else if(index>=0&&index!==history.length-1){
+          setMessages(history);setFailedAttempt(null);setNotice("Conversation changed on another device.");stopped=true;
+        }
+      }catch{/* A later foreground/online event can recover the saved answer. */}
+      finally{
+        running=false;
+        if(!stopped&&checks<24&&document.visibilityState==="visible")timer=window.setTimeout(()=>void check(),2500);
+      }
+    };
+    const resume=()=>{cancelTimer();checks=0;void check();};
+    const visibility=()=>{if(document.visibilityState==="visible")resume();else cancelTimer();};
+    document.addEventListener("visibilitychange",visibility);
+    window.addEventListener("online",resume);
+    void check();
+    return()=>{stopped=true;controller.abort();cancelTimer();document.removeEventListener("visibilitychange",visibility);window.removeEventListener("online",resume);};
+  },[authenticated,active,busy,recoveryId,client]);
+  const runAttempt=async(attempt:ChatAttempt)=>{
+    const {conversationId:id,messageId,text,expectedLastMessageId}=attempt;
+    if(id!==active||busy||switching||inFlight.current)return;
+    inFlight.current=true;setBusy(true);setNotice("");setFailedAttempt(null);
+    const stamp=Date.now(),pending="nas-pending-"+messageId;
+    setMessages(previous=>{
+      const history=previous.filter(m=>m.id!==pending);
+      if(!history.some(m=>m.id===messageId))history.push({id:messageId,role:"user",content:text,createdAt:stamp});
+      return [...history,{id:pending,role:"assistant",content:"",createdAt:stamp+1}];
+    });
+    let full="",saved:NasMessage|undefined;
+    try{
+      saved=await client.chat(id,text,delta=>{full+=delta;setMessages(previous=>previous.map(m=>m.id===pending?{...m,content:full}:m));},{messageId,expectedLastMessageId});
+      const reply=saved;
+      setMessages(previous=>previous.map(m=>m.id===pending?reply:m));
+      const kind=reactionFromReply(reply.content);if(kind)setReaction({kind,serial:++serial.current,source:"reply"});
+    }catch(error){
+      // Never leave a blank or uncommitted assistant bubble after a failed stream.
+      setMessages(previous=>previous.filter(m=>m.id!==pending));
+      setFailedAttempt(attempt);report(error);
+    }finally{
+      try{
+        const history=await client.messages(id,AbortSignal.timeout(8000));
+        if(mounted.current){
+          setMessages(history);
+          const index=history.findIndex(m=>m.id===messageId);
+          if(index>=0&&history[index+1]?.role==="assistant"){setFailedAttempt(null);setNotice("");}
+          else if(!saved&&((index>=0&&index!==history.length-1)||(index<0&&expectedLastMessageId!==(history.at(-1)?.id??null)))){
+            setFailedAttempt(null);setNotice("Conversation changed. Check the latest messages before sending again.");
+            setInput(previous=>previous||text);
+          }
+        }
+      }catch{/* Retain the known reply or retry identity when the network is still unavailable. */}
+      try{const list=await client.chats();if(mounted.current)setChats(list);}catch{/* Conversation refresh is independent of message recovery. */}
+      inFlight.current=false;setBusy(false);
+    }
+  };
   const send=async(event?:FormEvent)=>{
     event?.preventDefault();
     const text=input.trim(),id=active;
     if(!text||!id||busy||switching||inFlight.current)return;
-    inFlight.current=true;setBusy(true);setNotice("");setInput("");
-    const stamp=Date.now(),pending="nas-pending-"+stamp;
-    setMessages(previous=>[...previous,{id:pending+"-user",role:"user",content:text,createdAt:stamp},{id:pending,role:"assistant",content:"",createdAt:stamp+1}]);
-    let full="";
-    try{await client.chat(id,text,delta=>{full+=delta;setMessages(previous=>previous.map(m=>m.id===pending?{...m,content:full}:m));});
-      const kind=reactionFromReply(full);if(kind)setReaction({kind,serial:++serial.current,source:"reply"});
-    }catch(error){if(error instanceof NasRequestError&&[409,429,503].includes(error.status))setInput(previous=>previous||text);report(error);}
-    finally{
-      try{const [history,list]=await Promise.all([client.messages(id),client.chats()]);if(mounted.current){setMessages(history);setChats(list);}}
-      catch(error){report(error);}
-      inFlight.current=false;setBusy(false);
-    }
+    setInput("");
+    await runAttempt({conversationId:id,messageId:newMessageId(),text,expectedLastMessageId:messages.at(-1)?.id??null});
   };
   const exportFacts=async()=>{
     const snapshot=await client.library();
@@ -278,7 +359,7 @@ export function NasApp(){
       await client.memoryAction("deleteChat",{id});
       setChats(previous=>previous.filter(chat=>chat.id!==id));
       if(active===id){
-        setActive(null);setMessages([]);setInput("");localStorage.removeItem("mikan-nas-chat");
+        setActive(null);setMessages([]);setFailedAttempt(null);setInput("");localStorage.removeItem("mikan-nas-chat");
         // Deletion is already committed; failure to create a replacement must
         // not resurrect the deleted chat or report that deletion failed.
         try{
@@ -309,6 +390,8 @@ export function NasApp(){
   ];
   const activityEntries=activity&&activity.conversationId===active?nasActivity(activity.events):[];
   const latest=[...messages].reverse().find(m=>m.role==="assistant")?.id;
+  const lastMessage=messages.at(-1);
+  const retryAttempt=!busy&&active?(failedAttempt?.conversationId===active?failedAttempt:lastMessage?.role==="user"?{conversationId:active,messageId:lastMessage.id,text:lastMessage.content}:null):null;
   return <main className={"companion nas-app "+(page==="chat"?"default-layout-active":"settings-mode settings-standalone")+(mobile?" nas-mobile":"")}
     style={{"--mikan-font":"Segoe UI, system-ui, sans-serif"} as CSSProperties}>
     {page==="chat"?<Shell view={mobileView} onViewChange={openMobileView} sidebarVersion={<button type="button" className={"nas-build-label"+(versionMismatch?" mismatch":"")} onClick={()=>void copyVersion()} title="Copy browser and backend build identity" aria-label="Copy NAS version"><span>v{CLIENT_BUILD.version}<small>{CLIENT_BUILD.commit.slice(0,8)}{versionMismatch?" · build mismatch":""}</small></span>{versionCopied?<Check size={14}/>:<Copy size={14}/>}</button>} avatar={avatar} avatarBackground={profile.avatarBackground} onAvatarContextMenu={event=>{event.preventDefault();setMenu({x:event.clientX,y:event.clientY});}}
@@ -324,8 +407,8 @@ export function NasApp(){
       onExpression={express} onOutfit={()=>openPage("appearance")}
       modelPicker={<div className="nas-model-controls"><div className="model-switcher"><select aria-label="Select NAS model" value={status?JSON.stringify([status.provider,status.model]):""} disabled={busy||switching||!!status?.busy||!!status?.memoryBusy||!status?.providers?.length} onChange={e=>void switchModel(e.target.value)}>{status?.providers?.filter(p=>p.configured||p.provider===status.provider).map(p=><optgroup key={p.provider} label={p.provider}>{p.models.map(model=><option key={model} value={JSON.stringify([p.provider,model])} disabled={!p.configured}>{model}</option>)}</optgroup>)??<option value="">Cloud model</option>}</select></div>{status&&<NasTokenUsage client={client} models={status} compact/>}</div>}
       transcript={<>{!messages.length&&<div className="workspace-greeting"><PawPrint size={42}/><strong>Ready for a little conversation?</strong><span>Beholder is awake.</span></div>}
-        {messages.map(message=><Bubble key={message.id} message={message} latest={message.id===latest} busy={busy}/>)}
-        {notice&&<div className="workspace-system-feedback" role="status"><Sparkles size={18}/><span>{notice}</span></div>}</>}
+        {messages.map(message=><Bubble key={message.id} message={message} latest={message.id===latest} busy={busy} onCopyError={report}/>)}
+        {(notice||retryAttempt)&&<div className="workspace-system-feedback nas-reply-feedback" role="status"><Sparkles size={18}/><span>{notice||"Mikan hasn't answered this message yet."}</span>{retryAttempt&&<button type="button" className="nas-reply-retry" disabled={busy||switching} onClick={()=>void runAttempt(retryAttempt)}><RefreshCw size={16}/> Retry</button>}</div>}</>}
       composer={<div className="nas-composer-stack">{!!status?.reasoningOptions?.length&&<div className="nas-thinking-row"><label className="nas-thinking-select"><Brain size={14}/><span>Thinking effort</span><select aria-label="Thinking effort" value={status.reasoningEffort??""} disabled={busy||switching||!!status.busy||!!status.memoryBusy} onChange={e=>void switchEffort(e.target.value as ReasoningEffort)}>{status.reasoningOptions.map(effort=><option key={effort} value={effort}>{({auto:"Auto",none:"Off",low:"Low",medium:"Medium",high:"High"})[effort]}</option>)}</select></label></div>}<form className="input-row" onSubmit={event=>void send(event)}>
         <textarea aria-label="Message Mikan" rows={2} placeholder="Message Mikan…" maxLength={4000} value={input} onChange={event=>setInput(event.target.value)}
           onKeyDown={event=>{if(event.key==="Enter"&&!event.shiftKey&&!event.nativeEvent.isComposing){event.preventDefault();void send();}}}/>

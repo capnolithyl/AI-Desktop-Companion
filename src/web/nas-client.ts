@@ -76,7 +76,7 @@ export class NasClient {
   async chats(){return (await this.json<{conversations:NasChat[]}>("conversations")).conversations;}
   createChat(){return this.json<NasChat>("conversations",{method:"POST",body:"{}"});}
   chatExport(id:string){return this.json<{service:"nas";configuredProvider:CloudProvider;configuredModel:string;serverBuild:NasStatus["build"];conversation:string;messages:NasMessage[];memoryEvents:LearningEvent[]}>("conversations/"+encodeURIComponent(id)+"/export");}
-  async messages(id:string){return (await this.json<{messages:NasMessage[]}>("conversations/"+encodeURIComponent(id)+"/messages")).messages;}
+  async messages(id:string,signal?:AbortSignal){return (await this.json<{messages:NasMessage[]}>("conversations/"+encodeURIComponent(id)+"/messages",{signal})).messages;}
   async facts(){return (await this.json<{memories:NasFact[]}>("memories")).memories;}
   addFact(fact:string){return this.json("memories",{method:"POST",body:JSON.stringify({fact})});}
   removeFact(id:number){return this.json("memories/"+id,{method:"DELETE"});}
@@ -88,11 +88,11 @@ export class NasClient {
   resolveLearning(id:number,action:"accept"|"dismiss"){return this.json("learning/review",{method:"POST",body:JSON.stringify({id,action})});}
   library(){return this.json<LibrarySnapshot>("library");}
   memoryAction<T=unknown>(action:string,args:object){return this.json<T>("library",{method:"POST",body:JSON.stringify({action,args})});}
-  async chat(id:string,text:string,onDelta:(text:string)=>void){
-    const response=await this.request("chat",{method:"POST",body:JSON.stringify({conversationId:id,text})});
+  async chat(id:string,text:string,onDelta:(text:string)=>void,attempt?:{messageId:string;expectedLastMessageId?:string|null}):Promise<NasMessage>{
+    const response=await this.request("chat",{method:"POST",body:JSON.stringify({conversationId:id,text,...attempt})});
     if(!response.body)throw new Error("No response stream");
     const reader=response.body.getReader(),decoder=new TextDecoder();
-    let buffer="",complete=false;
+    let buffer="",complete:NasMessage|undefined;
     function event(packet:string){
       const lines=packet.split("\n"),kind=lines.find(line=>line.startsWith("event:"))?.slice(6).trim();
       const payload=lines.find(line=>line.startsWith("data:"))?.slice(5).trim();
@@ -100,7 +100,7 @@ export class NasClient {
       const data=JSON.parse(payload);
       if(kind==="delta"&&typeof data.text==="string")onDelta(data.text);
       if(kind==="error")throw new Error(data.error||"Model failed");
-      if(kind==="done")complete=true;
+      if(kind==="done")complete=data.message as NasMessage;
     }
     try{
       while(true){
@@ -110,7 +110,8 @@ export class NasClient {
         let at;while((at=buffer.indexOf("\n\n"))>=0){event(buffer.slice(0,at));buffer=buffer.slice(at+2);}
       }
       if(buffer.trim())event(buffer);
-      if(!complete)throw new Error("Reply interrupted; reopen the conversation to check its saved state");
+      if(!complete)throw new Error("Reply interrupted. Retry to recover the saved answer or request it again.");
+      return complete;
     }finally{reader.releaseLock();}
   }
 }
