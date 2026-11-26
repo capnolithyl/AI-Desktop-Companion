@@ -8,6 +8,21 @@ final class DreamRules {
     static final int COZY=0,MINIMAL=1,DEEP=2;
     static final int BLACK=0,WARM=1,BLURRED=2,TINTED=3;
     static final int MOTION_OFF=0,MOTION_SUBTLE=1,MOTION_FULL=2;
+    // Same 30-minute freshness threshold as the dashboard; do not present an old
+    // observation as current conditions after six hours of unattended charging.
+    static int weatherFreshness(long sampled,long now){
+        if(sampled<=0||sampled>now)return 0;
+        long age=now-sampled;
+        return age<30*60*1000L?1:age<6*60*60*1000L?2:0;
+    }
+    static String temperature(double celsius,boolean fahrenheit){
+        return Math.round(fahrenheit?celsius*9/5+32:celsius)+"°"+(fahrenheit?"F":"C");
+    }
+    static String alarmDay(LocalDate today,LocalDate date){
+        if(date.equals(today))return "Today";
+        if(date.equals(today.plusDays(1)))return "Tomorrow";
+        return date.format(java.time.format.DateTimeFormatter.ofLocalizedDate(java.time.format.FormatStyle.MEDIUM));
+    }
     static int motion(int requested,int style,boolean systemEnabled){return style==COZY&&systemEnabled?Math.max(0,Math.min(2,requested)):MOTION_OFF;}
     static int frameDelay(int motion,Period period){return motion==MOTION_OFF?0:period==Period.NIGHT?(motion==MOTION_FULL?166:250):(motion==MOTION_FULL?83:125);}
     static int particleCount(int motion,Period period){return motion==MOTION_OFF?0:period==Period.NIGHT?(motion==MOTION_FULL?7:3):(motion==MOTION_FULL?16:7);}

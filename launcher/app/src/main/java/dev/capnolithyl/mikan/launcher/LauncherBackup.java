@@ -12,7 +12,7 @@ import org.json.*;
 /** Deliberately limited to portable launcher configuration, not private endpoints or artwork. */
 final class LauncherBackup {
     private static final int LIMIT=1024*1024;
-    private static final Set<String> BOOL=new HashSet<>(Arrays.asList("themed","showFavoritesLabel","floatingDock","pairWidgets","pairTop","pairBottom","weatherF","agendaTitles","badges","showSystemStats","mikanRemarks","mikanNotifyHints","mikanWeatherHints","mikanCalendarHints","mikanExpressions","mikanBatteryHints","mikanHolidayHints","mikanDeliveryHints","mikanWebHints","mixedHome","drawerIndex","briefingNotify","dreamHoliday","dreamBattery","dreamShift"));
+    private static final Set<String> BOOL=new HashSet<>(Arrays.asList("themed","showFavoritesLabel","floatingDock","pairWidgets","pairTop","pairBottom","weatherF","agendaTitles","badges","showSystemStats","mikanRemarks","mikanNotifyHints","mikanWeatherHints","mikanCalendarHints","mikanExpressions","mikanBatteryHints","mikanHolidayHints","mikanDeliveryHints","mikanWebHints","mixedHome","drawerIndex","briefingNotify","dreamHoliday","dreamBattery","dreamShift","dreamWeather","dreamAlarm"));
     private static final Set<String> PAGES=new HashSet<>(Arrays.asList("clockPage","mikanPage","musicPage","weatherPage","agendaPage","devicePage","tasksPage","briefingPage","contactsPage"));
     private static final String ICON="iconStyle:";
     private static boolean component(String key){return key.length()<=512&&ComponentName.unflattenFromString(key)!=null&&!key.contains("\n")&&!key.contains("\r");}

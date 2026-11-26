@@ -52,6 +52,18 @@ public final class DreamRulesTest {
         check(DreamRules.particleAlpha(2,DreamRules.Period.NIGHT)<DreamRules.particleAlpha(2,DreamRules.Period.DAY));
         check(DreamRules.particleAlpha(0,DreamRules.Period.DAY)==0);
         check(DreamRules.particleDuration(2,0)<DreamRules.particleDuration(1,0));
+        long now=100000000L;
+        check(DreamRules.weatherFreshness(0,now)==0);
+        check(DreamRules.weatherFreshness(now+1,now)==0);
+        check(DreamRules.weatherFreshness(now,now)==1);
+        check(DreamRules.weatherFreshness(now-30*60*1000L+1,now)==1);
+        check(DreamRules.weatherFreshness(now-30*60*1000L,now)==2);
+        check(DreamRules.weatherFreshness(now-6*60*60*1000L,now)==0);
+        check(DreamRules.temperature(0,true).equals("32°F"));
+        check(DreamRules.temperature(-5,false).equals("-5°C"));
+        check(DreamRules.alarmDay(thanksgiving,thanksgiving).equals("Today"));
+        check(DreamRules.alarmDay(thanksgiving,thanksgiving.plusDays(1)).equals("Tomorrow"));
+        check(!DreamRules.alarmDay(thanksgiving,thanksgiving.plusDays(3)).equals("Tomorrow"));
         System.out.println("DreamRules tests passed");
     }
 }

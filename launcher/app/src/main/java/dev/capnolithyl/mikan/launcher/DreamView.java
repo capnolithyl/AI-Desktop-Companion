@@ -41,7 +41,7 @@ final class DreamView extends View {
     private float previewAspect=0;
     private int artworkSize;
     private final DreamArtPack pack;
-    private String artKey="",clock="",date="",greeting="",battery="";
+    private String artKey="",clock="",date="",greeting="",battery="",weather="",alarm="";
     private int style,clockSize,color;
     private boolean showBattery,shift,night;
     private long minute;
@@ -84,8 +84,11 @@ final class DreamView extends View {
         greeting=current.greeting;
         if(holiday!=null){MikanHoliday festival=MikanHoliday.on(today);if(festival!=null)greeting=festival.text;}
         color=style==DreamRules.DEEP?0xff805d51:current.color;
-        battery=batteryLabel();minute=System.currentTimeMillis()/60000L;
-        setContentDescription(clock+", "+date+(showBattery?", "+battery:""));
+        long actualNow=System.currentTimeMillis();
+        battery=showBattery?batteryLabel():"";minute=actualNow/60000L;
+        weather=prefs.getBoolean("dreamWeather",false)?DreamDetails.weather(prefs,actualNow):"";
+        alarm=prefs.getBoolean("dreamAlarm",true)?DreamDetails.alarm(getContext(),actualNow):"";
+        setContentDescription(clock+", "+date+(showBattery?", "+battery:"")+(weather.isEmpty()?"":", "+weather)+(alarm.isEmpty()?"":", "+alarm));
         invalidate();scheduleMotion();
     }
     void setMotionActive(boolean active){
@@ -130,6 +133,17 @@ final class DreamView extends View {
         float cy=landscape?h*.43f:withArt?h*.15f:h*.44f;
         float textWidth=landscape&&withArt?w*.49f:w-2*margin;
         float size=unit*(clockSize==0?.17f:clockSize==2?.27f:.22f);
+        int extras=(weather.isEmpty()?0:1)+(alarm.isEmpty()?0:1);
+        float step=unit*.060f;
+        float bottom=landscape?h*.78f:withArt?h*.90f:h*.60f;
+        // Keep all footer lines above the existing bottom safe area; in landscape
+        // also leave room for the date above the footer.
+        int rows=(style==DreamRules.MINIMAL?0:1)+(showBattery?1:0)+extras;
+        if(extras>0){
+            float end=Math.min(h-unit*.065f,bottom+((style!=DreamRules.MINIMAL&&showBattery)?unit*.065f:0));
+            bottom=end-Math.max(0,rows-1)*step;
+            if(landscape)bottom=Math.max(bottom,cy+unit*.145f);
+        }
         if(withArt){
             float factor=artworkSize==0?.78f:artworkSize==2?1.08f:1f;
             boolean integrated=backgroundMode!=DreamRules.BLACK;
@@ -139,6 +153,12 @@ final class DreamView extends View {
             float scale=Math.min(areaW/aw,areaH/ah);
             float width=aw*scale,height=ah*scale;
             float ax=landscape?w*.75f:w*.5f,ay=landscape?h*.49f:h*.53f;
+            if(!landscape&&extras>0){
+                float top=Math.max(h*.22f,cy+unit*.14f),end=bottom-unit*.08f;
+                float available=Math.max(unit*.10f,end-top);
+                if(height>available){float fit=available/height;width*=fit;height*=fit;}
+                ay=Math.max(top+height/2,Math.min(ay,end-height/2));
+            }
             portrait.setBounds(Math.round(ax-width/2),Math.round(ay-height/2),Math.round(ax+width/2),Math.round(ay+height/2));
             int alpha=style==DreamRules.DEEP?75:night?145:integrated?255:215;
             if(!integrated||!backdrop.drawPortrait(canvas,portrait.getBounds(),alpha)){portrait.setAlpha(alpha);portrait.draw(canvas);}
@@ -146,9 +166,11 @@ final class DreamView extends View {
         }
         line(canvas,clock,cx,cy,size,textWidth,color,light);
         line(canvas,date,cx,cy+unit*.075f,unit*.041f,textWidth,color,regular);
-        float bottom=landscape?h*.78f:withArt?h*.90f:h*.60f;
-        if(style!=DreamRules.MINIMAL)line(canvas,greeting,cx,bottom,unit*.041f,textWidth,color,regular);
-        if(showBattery)line(canvas,battery,cx,bottom+(style==DreamRules.MINIMAL?0:unit*.065f),unit*.036f,textWidth,color,regular);
+        float footer=bottom;
+        if(style!=DreamRules.MINIMAL){line(canvas,greeting,cx,footer,unit*.041f,textWidth,color,regular);footer+=extras>0?step:unit*.065f;}
+        if(showBattery){line(canvas,battery,cx,footer,unit*.036f,textWidth,color,regular);footer+=step;}
+        if(!weather.isEmpty()){line(canvas,weather,cx,footer,unit*.035f,textWidth,color,regular);footer+=step;}
+        if(!alarm.isEmpty())line(canvas,alarm,cx,footer,unit*.035f,textWidth,color,regular);
         canvas.restore();canvas.restore();
     }
 }
