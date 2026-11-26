@@ -82,6 +82,7 @@ public class HomeActivity extends Activity {
     private final MikanRemarks remarks=new MikanRemarks();
     private DashboardCards dashboard;
     private TaskPanel tasks;
+    private BriefingPanel briefing;
     private NativeWidgets nativeWidgets;
     private TextView ampm;
     private boolean compactClock;
@@ -96,10 +97,10 @@ public class HomeActivity extends Activity {
     private boolean editingHome,editingMixed;
     private int mixedScrollY;
     private ScrollView mixedScroll;
-    private static final String[] WIDGET_NAMES={"Clock","Mikan","Music","Weather","Upcoming events","Device information","Tasks & reminders"};
+    private static final String[] WIDGET_NAMES={"Clock","Mikan","Music","Weather","Upcoming events","Device information","Tasks & reminders","Mikan daily briefing"};
     private HomeSlots homeSlots;
     private int selectedSlot=-1;
-    private static final String[] WIDGET_PAGES={"clockPage","mikanPage","musicPage","weatherPage","agendaPage","devicePage","tasksPage"};
+    private static final String[] WIDGET_PAGES={"clockPage","mikanPage","musicPage","weatherPage","agendaPage","devicePage","tasksPage","briefingPage"};
     private MusicPanel music;
     private final Map<TextView,String> badgeViews=new HashMap<>();
     private final Runnable refreshExtras=new Runnable(){public void run(){refreshExtras();handler.postDelayed(this,2500);}};
@@ -131,6 +132,8 @@ public class HomeActivity extends Activity {
         if(state!=null){pendingIconKey=state.getString("pendingIconKey");String saved=state.getString("settingsSection");if(saved!=null)try{settingsSection=SettingsHub.Section.valueOf(saved);settings=true;}catch(IllegalArgumentException ignored){}}
         folders=new HomeFolders(prefs);
         dashboard=new DashboardCards(this,prefs,()->{if(settings)showSettings();},()->openWidgetApp("weather"));
+        briefing=new BriefingPanel(this,prefs,dashboard,tasks,this::notificationAccess);
+        tasks.setOnChanged(briefing::refresh);
         settingsUi=new SettingsHub(this);
         registerPackageChanges();
         long scan=android.os.SystemClock.elapsedRealtime();applyCatalog(scanApps());perf.record("initial app catalog",scan);
@@ -150,7 +153,7 @@ public class HomeActivity extends Activity {
         else if(settings&&(media!=lastMediaPermission||calendar!=lastCalendarPermission))showSettings();
         else if(drawer&&search!=null&&drawerSort()>=2)renderResults(search.getText().toString());
         lastMediaPermission=media;lastCalendarPermission=calendar;
-        if(media&&(prefs.getBoolean("badges",false)||MikanRemarks.notificationHintsEnabled(prefs)))handler.postDelayed(()->{if(foreground&&!closed)LauncherNotifications.refreshIfConnected();},120);
+        if(media&&(prefs.getBoolean("badges",false)||MikanRemarks.notificationHintsEnabled(prefs)||LauncherNotifications.briefingEnabled(prefs)))handler.postDelayed(()->{if(foreground&&!closed)LauncherNotifications.refreshIfConnected();},120);
         updateClock();observeEntry();
         handler.removeCallbacks(tick);handler.postDelayed(tick,15000);
         handler.removeCallbacks(refreshExtras);handler.postDelayed(refreshExtras,2500);
@@ -245,7 +248,7 @@ public class HomeActivity extends Activity {
     }
     private Drawable homeWallpaper(){String name=prefs.getString("wallpaper","reading-nook.webp");Drawable d="custom".equals(name)?wallpaperArt.get():asset(name);return d!=null?d:asset("reading-nook.webp");}
     private void createPage(){
-        nativeWidgets.detach();tasks.detach();
+        nativeWidgets.detach();tasks.detach();briefing.detach();
         closeQuickSearch();mixedScroll=null;results=null;drawerAdapter=null;drawerIndex=null;drawerSortButton=null;drawerCategoryButton=null;systemStats=null;deviceBattery=null;deviceMemory=null;deviceCharge=null;handler.removeCallbacks(statsRefresh);
         badgeViews.clear();music=null;mikanCard=null;clock=null;date=null;greeting=null;ampm=null;dashboard.detach();
         root=new FrameLayout(this);root.setBackgroundColor(0xff191417);
@@ -376,6 +379,7 @@ public class HomeActivity extends Activity {
         if(showMusic||showAgenda){addWidgetRow(bottomWidgets,showMusic?music.view():null,showAgenda?dashboard.agendaView():null,pair);gap(bottomWidgets,10);}
         if(widgetHere("devicePage",0)){bottomWidgets.addView(deviceWidget());gap(bottomWidgets,10);}
         if(widgetHere("tasksPage",0)){bottomWidgets.addView(tasks.view());gap(bottomWidgets,10);}
+        if(widgetHere("briefingPage",0)){bottomWidgets.addView(briefing.view());gap(bottomWidgets,10);}
         int order=prefs.getInt("sectionOrder",0);
         LinearLayout[] sections=order==1?new LinearLayout[]{topWidgets,characterBlock,bottomWidgets,appBlock}:order==2?new LinearLayout[]{appBlock,topWidgets,characterBlock,bottomWidgets}:new LinearLayout[]{topWidgets,characterBlock,appBlock,bottomWidgets};
         for(LinearLayout section:sections)if(section.getChildCount()>0)body.addView(section);
@@ -579,7 +583,7 @@ public class HomeActivity extends Activity {
     }
     private void updateClock(){
         if(drawer||settings)return;
-        tasks.refreshDate();
+        tasks.refreshDate();briefing.refresh();
         Date now=new Date();if(clock!=null){boolean use24=android.text.format.DateFormat.is24HourFormat(this);clock.setText(compactClock?new java.text.SimpleDateFormat(use24?"HH:mm":"h:mm",Locale.getDefault()).format(now):android.text.format.DateFormat.getTimeFormat(this).format(now));if(ampm!=null){ampm.setText(use24?"":new java.text.SimpleDateFormat("a",Locale.getDefault()).format(now));ampm.setVisibility(use24?View.GONE:View.VISIBLE);}}
         if(date!=null)date.setText(new java.text.SimpleDateFormat("EEE, MMM d",Locale.getDefault()).format(now));
         int hour=Calendar.getInstance().get(Calendar.HOUR_OF_DAY);
@@ -910,6 +914,8 @@ public class HomeActivity extends Activity {
                 widgetSetting(body,"Weather","weatherPage",1);widgetSetting(body,"Upcoming events","agendaPage",1);
                 widgetSetting(body,"Device information","devicePage",0);
                 widgetSetting(body,"Tasks & reminders","tasksPage",0);
+                widgetSetting(body,"Mikan daily briefing","briefingPage",0);
+                settingsUi.toggle(body,"Briefing notifications","Show number of apps with active notifications, not message contents",prefs.getBoolean("briefingNotify",true),on->{prefs.edit().putBoolean("briefingNotify",on).apply();LauncherNotifications.refreshIfConnected();if(on&&!LauncherNotifications.allowed(this))notificationAccess();showSettings();});
                 settingsUi.row(body,"Manage local tasks","Add, edit or complete tasks",tasks::manage);
                 settingsUi.heading(body,"ANDROID WIDGETS");
                 settingsUi.row(body,"Add Android widget","Choose an installed app's widget",()->chooseNativeWidgetPage());
@@ -1185,7 +1191,7 @@ public class HomeActivity extends Activity {
     }
 
     private boolean widgetHere(String key,int def){return prefs.getInt(key,def)==homePage+1;}
-    private int widgetPage(String key){return prefs.getInt(key,("devicePage".equals(key)||"tasksPage".equals(key))?0:1);}
+    private int widgetPage(String key){return prefs.getInt(key,("devicePage".equals(key)||"tasksPage".equals(key)||"briefingPage".equals(key))?0:1);}
     private int pageCount(){
         int count=0;for(String key:favorites)if(find(key)!=null)count++;
         int cap=prefs.getInt("columns",4)*prefs.getInt("homeRows",2),dock=prefs.getInt("dockCount",5);
@@ -1215,7 +1221,7 @@ public class HomeActivity extends Activity {
         else if(key.equals("musicPage"))w=large?columns:(canPair()&&prefs.getBoolean("pairBottom",true)?2:columns);
         else if(key.equals("agendaPage"))w=large?columns:(canPair()&&prefs.getBoolean("pairBottom",true)?columns-2:columns);
         else if(key.equals("devicePage"))w=columns;
-        else if(key.equals("tasksPage")){w=columns;h=3;}
+        else if(key.equals("tasksPage")||key.equals("briefingPage")){w=columns;h=3;}
         return new MixedLayout.Spec(widgetGridKey(key),min,key.equals("mikanPage")?2:1,w,h);
     }
     private void renderMixedHome(LinearLayout body){
@@ -1229,6 +1235,7 @@ public class HomeActivity extends Activity {
         if(widgetHere("agendaPage",1))bottom.add(mixedWidgetSpec("agendaPage",columns));
         if(widgetHere("devicePage",0))bottom.add(mixedWidgetSpec("devicePage",columns));
         if(widgetHere("tasksPage",0))bottom.add(mixedWidgetSpec("tasksPage",columns));
+        if(widgetHere("briefingPage",0))bottom.add(mixedWidgetSpec("briefingPage",columns));
         int order=prefs.getInt("sectionOrder",0);
         if(order==2)specs.addAll(shortcuts);specs.addAll(top);specs.addAll(middle);if(order==0)specs.addAll(shortcuts);specs.addAll(bottom);if(order==1)specs.addAll(shortcuts);
         MixedLayout model=mixedLayout();LinkedHashMap<String,MixedLayout.Rect> layout=model.resolve(specs,columns);
@@ -1292,6 +1299,7 @@ public class HomeActivity extends Activity {
             case "agendaPage":return dashboard.agendaView();
             case "devicePage":return deviceWidget();
             case "tasksPage":return tasks.view();
+            case "briefingPage":return briefing.view();
             default:return null;
         }
     }
@@ -1590,6 +1598,7 @@ public class HomeActivity extends Activity {
         boolean access=(prefs.getBoolean("badges",false)||hints)&&LauncherNotifications.allowed(this);
         boolean enabled=prefs.getBoolean("badges",false)&&access;
         if(mikanCard!=null)refreshMikanRemark(access&&hints);
+        briefing.refreshNotifications();
         for(Map.Entry<TextView,String> e:badgeViews.entrySet()){
             boolean show=false;
             if(enabled){App a=find(e.getValue());if(a!=null){if(a.folderKey!=null){for(String k:folders.members(a.folderKey)){App child=find(k);if(child!=null&&child.component!=null&&LauncherNotifications.has(child.component.getPackageName())){show=true;break;}}}else show=LauncherNotifications.has(a.component.getPackageName());}}

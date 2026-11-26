@@ -24,7 +24,7 @@ final class MixedLayout {
         for(String line:raw.split("\n")){
             if(line.isEmpty())continue;
             String[] parts=line.split("\t",-1);
-            if(parts.length!=5||parts[0].isEmpty()||parts[0].length()>512||parts[0].contains("\r")||model.saved.containsKey(parts[0])||model.saved.size()>=1019)throw new IllegalArgumentException("Invalid grid record");
+            if(parts.length!=5||parts[0].isEmpty()||parts[0].length()>512||parts[0].contains("\r")||model.saved.containsKey(parts[0])||model.saved.size()>=1020)throw new IllegalArgumentException("Invalid grid record");
             Rect rect=new Rect(Integer.parseInt(parts[1]),Integer.parseInt(parts[2]),Integer.parseInt(parts[3]),Integer.parseInt(parts[4]));
             if(!rect.fits(5)||rect.h>12)throw new IllegalArgumentException("Invalid grid bounds");
             model.saved.put(parts[0],rect);

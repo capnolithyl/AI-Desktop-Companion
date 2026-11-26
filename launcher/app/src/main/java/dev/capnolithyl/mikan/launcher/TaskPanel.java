@@ -22,6 +22,9 @@ final class TaskPanel {
     private final Activity activity;
     private final SharedPreferences prefs;
     private final LocalTasks model;
+    private Runnable onChanged=()->{};
+    void setOnChanged(Runnable callback){onChanged=callback;}
+    BriefingRules.TaskSummary summary(LocalDate today){return BriefingRules.tasks(model.ordered(),today);}
     private LinearLayout card,managerBody;
     private AlertDialog manager;
     private LocalDate renderedDate;
@@ -46,7 +49,7 @@ final class TaskPanel {
         int urgency=LocalTasks.urgency(task,today);
         return urgency==2?"Overdue · "+dateLabel(task.due):urgency==1?"Due today":"Due "+dateLabel(task.due);
     }
-    private void changed(){prefs.edit().putString("localTasksV1",model.encode()).apply();renderCard();renderManager();}
+    private void changed(){prefs.edit().putString("localTasksV1",model.encode()).apply();renderCard();renderManager();onChanged.run();}
     private void renderCard(){
         if(card==null)return;
         renderedDate=LocalDate.now();card.removeAllViews();

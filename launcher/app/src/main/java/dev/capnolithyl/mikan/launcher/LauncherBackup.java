@@ -12,8 +12,8 @@ import org.json.*;
 /** Deliberately limited to portable launcher configuration, not private endpoints or artwork. */
 final class LauncherBackup {
     private static final int LIMIT=1024*1024;
-    private static final Set<String> BOOL=new HashSet<>(Arrays.asList("themed","showFavoritesLabel","floatingDock","pairWidgets","pairTop","pairBottom","weatherF","agendaTitles","badges","showSystemStats","mikanRemarks","mikanNotifyHints","mikanWeatherHints","mikanCalendarHints","mikanExpressions","mikanBatteryHints","mikanHolidayHints","mikanDeliveryHints","mikanWebHints","mixedHome","drawerIndex"));
-    private static final Set<String> PAGES=new HashSet<>(Arrays.asList("clockPage","mikanPage","musicPage","weatherPage","agendaPage","devicePage","tasksPage"));
+    private static final Set<String> BOOL=new HashSet<>(Arrays.asList("themed","showFavoritesLabel","floatingDock","pairWidgets","pairTop","pairBottom","weatherF","agendaTitles","badges","showSystemStats","mikanRemarks","mikanNotifyHints","mikanWeatherHints","mikanCalendarHints","mikanExpressions","mikanBatteryHints","mikanHolidayHints","mikanDeliveryHints","mikanWebHints","mixedHome","drawerIndex","briefingNotify"));
+    private static final Set<String> PAGES=new HashSet<>(Arrays.asList("clockPage","mikanPage","musicPage","weatherPage","agendaPage","devicePage","tasksPage","briefingPage"));
     private static final String ICON="iconStyle:";
     private static boolean component(String key){return key.length()<=512&&ComponentName.unflattenFromString(key)!=null&&!key.contains("\n")&&!key.contains("\r");}
     private static boolean folder(String key){return key.matches("folder:[0-9a-fA-F-]{36}");}
@@ -44,7 +44,7 @@ final class LauncherBackup {
             }
             case "mixedGridV1":{
                 if(!(v instanceof String))throw new IOException("Invalid mixed grid");MixedLayout layout=MixedLayout.parse((String)v);
-                for(String item:layout.keys())if(!component(item)&&!folder(item)&&!Arrays.asList("widget:clockPage","widget:mikanPage","widget:musicPage","widget:weatherPage","widget:agendaPage","widget:devicePage","widget:tasksPage").contains(item))throw new IOException("Invalid grid item");return layout.encode();
+                for(String item:layout.keys())if(!component(item)&&!folder(item)&&!Arrays.asList("widget:clockPage","widget:mikanPage","widget:musicPage","widget:weatherPage","widget:agendaPage","widget:devicePage","widget:tasksPage","widget:briefingPage").contains(item))throw new IOException("Invalid grid item");return layout.encode();
             }
             case "homeSlotsV1":{
                 if(!(v instanceof String))throw new IOException("Invalid home slots");HomeSlots slots=HomeSlots.parse((String)v);for(String shortcut:slots.keys())if(!component(shortcut)&&!folder(shortcut))throw new IOException("Invalid shortcut");return slots.encode();

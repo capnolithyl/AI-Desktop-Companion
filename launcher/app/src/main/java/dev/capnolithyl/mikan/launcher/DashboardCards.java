@@ -55,6 +55,8 @@ final class DashboardCards {
     private int locationRevision=0;
     private boolean forcePending,calendarRefreshPending,calendarDiagnosticsBusy;
     private long nextTimedEvent,agendaSampleAt;
+    private boolean briefingVisible;
+    private AgendaResult briefingAgenda;
     private LinearLayout weatherRoot,agendaRoot;
     private TextView weatherTemp,weatherCondition,weatherRange,weatherNote;
     private WeatherGlyph weatherGlyph;
@@ -66,7 +68,40 @@ final class DashboardCards {
     void resume(){resumed=true;lastCalendar=-60000;if(calendarBusy)calendarRefreshPending=true;handler.removeCallbacks(tick);handler.postDelayed(tick,120);}
     void pause(){resumed=false;handler.removeCallbacks(tick);}
     void close(){closed=true;pause();detach();io.shutdownNow();}
-    void detach(){weatherRoot=null;agendaRoot=null;weatherTemp=null;weatherCondition=null;weatherRange=null;weatherNote=null;weatherGlyph=null;}
+    void detach(){briefingVisible=false;weatherRoot=null;agendaRoot=null;weatherTemp=null;weatherCondition=null;weatherRange=null;weatherNote=null;weatherGlyph=null;}
+    void showBriefing(){
+        briefingVisible=true;
+        if(briefingAgenda==null||!briefingAgenda.day.equals(java.time.LocalDate.now())||!briefingAgenda.zone.equals(java.time.ZoneId.systemDefault())){
+            lastCalendar=-60000;if(calendarBusy)calendarRefreshPending=true;
+        }
+        if(resumed){refreshWeather(false);refreshCalendar(false);}
+    }
+    void openBriefingWeather(){if(coordinates().isEmpty())chooseCity();else openWeather.run();}
+    void openBriefingCalendar(){if(calendarAllowed())openCalendar();else requestCalendar();}
+    String briefingWeather(){
+        if(coordinates().isEmpty())return "Choose a weather location";
+        try{
+            JSONObject data=new JSONObject(prefs.getString("weatherJson",""));
+            double temp=data.getDouble("temperature"),high=data.getDouble("high"),low=data.getDouble("low");
+            if(!Double.isFinite(temp)||!Double.isFinite(high)||!Double.isFinite(low))return "Weather unavailable";
+            long age=System.currentTimeMillis()-prefs.getLong("weatherAt",0);
+            String current=degrees(temp)+" · "+condition(data.getInt("code"));
+            if(age<0||age>=WEATHER_TTL||weatherFailed)return "Cached · "+current;
+            return current+" · H "+degrees(high)+" / L "+degrees(low);
+        }catch(Exception ignored){return weatherBusy?"Updating weather…":"Weather unavailable";}
+    }
+    String briefingCalendar(){
+        if(!calendarAllowed())return "Tap to enable calendar";
+        AgendaResult result=briefingAgenda;
+        if(result==null||!result.day.equals(java.time.LocalDate.now())||!result.zone.equals(java.time.ZoneId.systemDefault())||SystemClock.elapsedRealtime()-agendaSampleAt>120000)return "Updating today's events…";
+        if(result.error!=null)return "Calendar unavailable";
+        if(result.todayCount==0&&result.calendars==0)return "No local calendars";
+        if(result.todayCount==0&&result.visibleCalendars==0)return "No visible calendars";
+        if(result.todayCount==0)return "No remaining events today ♡";
+        String count=result.todayCount+(result.todayCount==1?" event":" events")+" remaining today";
+        if(result.nextToday>System.currentTimeMillis())count+=" · next "+android.text.format.DateFormat.getTimeFormat(activity).format(new Date(result.nextToday));
+        return count;
+    }
     private int dp(float n){return Math.round(n*activity.getResources().getDisplayMetrics().density);}
     private TextView label(String value,int size,int color,boolean bold){
         TextView v=new TextView(activity);v.setText(value);v.setTextSize(size);v.setTextColor(color);v.setIncludeFontPadding(false);
@@ -149,7 +184,7 @@ final class DashboardCards {
         toast("Refreshing weather…");refreshWeather(true);
     }
     private void refreshWeather(boolean force){
-        if(closed||!resumed||coordinates().isEmpty()||(!force&&weatherRoot==null))return;
+        if(closed||!resumed||coordinates().isEmpty()||(!force&&weatherRoot==null&&!briefingVisible))return;
         if(weatherBusy){if(force)forcePending=true;return;}
         long age=System.currentTimeMillis()-prefs.getLong("weatherAt",0);
         if(!force&&age>=0&&age<WEATHER_TTL&&!prefs.getString("weatherJson","").isEmpty())return;
@@ -266,6 +301,10 @@ final class DashboardCards {
         int visibleRows,canceled,outside,eligible,unsetStatus;
         int calendars=-1,visibleCalendars=-1;
         String error;
+        java.time.LocalDate day;
+        java.time.ZoneId zone;
+        int todayCount;
+        long nextToday;
         String report(){
             return "Calendar permission: granted at query start\n"+
                 "Local calendars: "+(calendars<0?"unavailable":calendars)+"\n"+
@@ -280,9 +319,12 @@ final class DashboardCards {
                 "Only counts are included. No calendar names, accounts or event titles. Android may not expose calendars that are unsynced or in another profile.";
         }
     }
-    private AgendaResult readAgenda(boolean diagnostics){
+    private AgendaResult readAgenda(boolean diagnostics){return readAgenda(diagnostics,false);}
+    private AgendaResult readAgenda(boolean diagnostics,boolean forBriefing){
         AgendaResult result=new AgendaResult();
         long start=System.currentTimeMillis(),end=start+7*24*60*60*1000L;
+        result.zone=java.time.ZoneId.systemDefault();result.day=java.time.Instant.ofEpochMilli(start).atZone(result.zone).toLocalDate();
+        BriefingRules.Day day=new BriefingRules.Day(result.day,result.zone);
         try{
             String[] columns={CalendarContract.Instances.TITLE,CalendarContract.Instances.BEGIN,CalendarContract.Instances.END,CalendarContract.Instances.ALL_DAY,CalendarContract.Instances.STATUS};
             java.util.Calendar local=java.util.Calendar.getInstance(),utc=java.util.Calendar.getInstance(TimeZone.getTimeZone("UTC"));
@@ -296,19 +338,23 @@ final class DashboardCards {
                     if(c.isNull(4))result.unsetStatus++;
                     else if(c.getInt(4)==CalendarContract.Events.STATUS_CANCELED){result.canceled++;continue;}
                     long begin=c.getLong(1),finish=c.getLong(2);boolean allDay=c.getInt(3)!=0;
+                    if(forBriefing&&day.remaining(begin,finish,allDay,start)){
+                        result.todayCount++;
+                        if(!allDay&&begin>start&&(result.nextToday==0||begin<result.nextToday))result.nextToday=begin;
+                    }
                     if(allDay?(finish<=utcToday||begin>=utcEnd):(finish<start||begin>end)){result.outside++;continue;}
                     result.eligible++;
                     if(result.events.size()<2){
                         String title=c.getString(0);
                         result.events.add(new Event(title==null||title.isEmpty()?"Calendar event":title,begin,finish,allDay));
                     }
-                    if(!diagnostics&&result.events.size()==2)break;
+                    if(!diagnostics&&!forBriefing&&result.events.size()==2)break;
                 }
             }
         }catch(Exception ex){result.error=ex.getClass().getSimpleName();result.events.clear();}
         // No account names or identifiers are read here. Counts distinguish an
         // empty provider from an empty date range without exposing hidden events.
-        if(diagnostics||result.events.isEmpty()){
+        if(diagnostics||result.events.isEmpty()||forBriefing&&result.todayCount==0){
             try(Cursor c=activity.getContentResolver().query(CalendarContract.Calendars.CONTENT_URI,new String[]{CalendarContract.Calendars.VISIBLE},null,null,null)){
                 if(c!=null){result.calendars=0;result.visibleCalendars=0;while(c.moveToNext()){result.calendars++;if(c.getInt(0)==1)result.visibleCalendars++;}}
             }catch(Exception ignored){}
@@ -316,19 +362,21 @@ final class DashboardCards {
         return result;
     }
     private void refreshCalendar(boolean force){
-        if(closed||agendaRoot==null||!resumed)return;
-        if(!calendarAllowed()){nextTimedEvent=0;agendaSampleAt=0;renderAgenda(null,"Tap to enable calendar");return;}
+        if(closed||(agendaRoot==null&&!briefingVisible)||!resumed)return;
+        if(!calendarAllowed()){nextTimedEvent=0;agendaSampleAt=0;briefingAgenda=null;renderAgenda(null,"Tap to enable calendar");return;}
         if(calendarBusy){if(force)calendarRefreshPending=true;return;}
         long now=SystemClock.elapsedRealtime();if(!force&&now-lastCalendar<60000)return;
         lastCalendar=now;calendarBusy=true;calendarRefreshPending=false;
+        final boolean includeBriefing=briefingVisible;
         io.execute(()->{
-            AgendaResult result=readAgenda(false);
+            AgendaResult result=readAgenda(false,includeBriefing);
             handler.post(()->{
                 calendarBusy=false;
-                if(closed||!resumed||agendaRoot==null){lastCalendar=-60000;return;}
-                if(!calendarAllowed()){renderAgenda(null,"Tap to enable calendar");return;}
+                if(closed||!resumed||(agendaRoot==null&&!briefingVisible)){lastCalendar=-60000;return;}
+                if(!calendarAllowed()){briefingAgenda=null;nextTimedEvent=0;agendaSampleAt=0;renderAgenda(null,"Tap to enable calendar");return;}
                 String message=result.error!=null?"Calendar unavailable":result.events.isEmpty()&&result.calendars==0?"No local calendars found":result.events.isEmpty()&&result.visibleCalendars==0?"No visible calendars":null;
                 nextTimedEvent=0;agendaSampleAt=SystemClock.elapsedRealtime();
+                if(includeBriefing&&briefingVisible)briefingAgenda=result;
                 if(result.error==null)for(Event event:result.events){if(!event.allDay&&event.begin>System.currentTimeMillis()){nextTimedEvent=event.begin;break;}}
                 renderAgenda(result.events,message);
                 if(calendarRefreshPending)refreshCalendar(true);
