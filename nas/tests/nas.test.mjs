@@ -116,7 +116,7 @@ test("NAS HTTP requires a key, streams replies and persists them",async()=>{
     assert.equal((await fetch(base+"/api/learning/diagnostics/"+created.id)).status,401);
     // Complete exports stay private and are independent of the 80-message UI window.
     for(let i=0;i<90;i++)store.append(created.id,"user","Export message "+i);
-    for(let i=0;i<110;i++)store.learning.recordSearch(created.id,"export-test",{title:"Export event "+i,detail:"",lines:[]});
+    for(let i=0;i<110;i++)store.learning.recordSearch(created.id,saved.messages[1].id,{title:"Export event "+i,detail:"",lines:[]});
     const exportPath=base+"/api/conversations/"+created.id+"/export";
     assert.equal((await fetch(exportPath)).status,401);
     const exported=await (await fetch(exportPath,{headers})).json();
