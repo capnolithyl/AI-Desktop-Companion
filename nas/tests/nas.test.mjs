@@ -1532,3 +1532,24 @@ test("NAS message retry is idempotent across provider failures, lost replies and
     assert.equal((await send({messageId:"unknown-retry"})).status,409);
   }finally{await new Promise(resolve=>server.close(resolve));store.db.close();}
 });
+
+
+test("native agent uses the same authoritative local date in planning and synthesis and exposes valid source handles",async()=>{
+ const {executeNasTurn}=await import("../turn.mjs"),store=openStore(":memory:");
+ try{
+  const chat=store.newConversation(),question="Are there any upcoming tour dates for Example Band?";store.append(chat.id,"user",question);
+  const now=new Date("2026-11-27T02:00:00Z"),old="https://example.org/old-tour",listing="https://example.org/schedule",reads=[];let calls=0;
+  const call=(name,args,id)=>({content:"",toolCalls:[{id,type:"function",function:{name,arguments:JSON.stringify(args)}}]});
+  const result=await executeNasTurn({store,conversationId:chat.id,question,selected:{provider:"nvidia",model:"test",historyChars:32000},mode:"simple",publicAgent:true,now,reserve:()=>{},canRequest:()=>true,
+   search:async(query,recent)=>{assert.equal(recent,true);return [{url:old,title:"2025 tour announcement",kind:"preview",publishedDate:"2025-07-25",content:"November 16 to December 20, 2025."},{url:listing,title:"Current schedule",kind:"preview",content:"Tour listings"}];},
+   read:async url=>{reads.push(url);return {url,title:"2025 tour announcement",kind:"page",publishedDate:null,content:"November 16 to December 20, 2025."};},requestModel:async args=>{
+    calls++;assert.match(args.system,/Current local calendar date \(YYYY-MM-DD\): 2026-11-26/);assert.match(args.system,/Current UTC time: 2026-11-27T02:00:00.000Z/);assert.match(args.system,/America\/Detroit/);assert.match(args.system,/actual event date or date range/);assert.match(args.system,/Do not start by searching past years/);
+    if(calls===1)return call("search_web",{query:"Example Band tour dates 2026 2027",recent:true},"search");
+    assert.match(args.system,/Current public source index/);assert.match(args.system,/Do not present expired event dates as upcoming/);
+    if(calls===2)return call("read_webpage",{source:99},"bad");
+    if(calls===3){const rejected=JSON.parse(args.history.at(-1).content);assert.deepEqual(rejected.availableSources.map(s=>s.source),[1,2]);return call("read_webpage",{source:1},"read");}
+    assert.match(args.history.at(-1).content,/"publishedDate":"2025-07-25"/);assert.match(args.system,/"readAttempted":true/);return {content:"The 2025 dates are past; I could not verify upcoming dates.",toolCalls:[]};
+   }});
+  assert.deepEqual(reads,[old]);assert.equal(calls,4);assert.equal(result.answer,"The 2025 dates are past; I could not verify upcoming dates.");assert.equal(result.researched.sources.find(s=>s.url===old).publishedDate,"2025-07-25");
+ }finally{store.db.close();}
+});
