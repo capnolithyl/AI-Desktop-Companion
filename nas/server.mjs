@@ -224,25 +224,55 @@ export function makeServer({store,config,key,promptFile="",maintenanceFile="/dat
         if(containsCredential(question))return json(res,400,{error:"That looks like an API credential. Enter it in Models & providers, not chat. It was not saved or sent to a model."});
         if (!store.exists(conversationId)) return json(res,404,{error:"Conversation not found"});
         if (foregroundUnavailable()) return json(res,409,{error:"Mikan is already responding"});
+        const messageId=body.messageId;
+        const expectedLast=body.expectedLastMessageId;
+        if(messageId!==undefined&&(typeof messageId!=="string"||!/^[-\w]{1,100}$/.test(messageId)))
+          return json(res,400,{error:"Invalid message ID"});
+        if(expectedLast!==undefined&&expectedLast!==null&&(typeof expectedLast!=="string"||!/^[-\w]{1,100}$/.test(expectedLast)))
+          return json(res,400,{error:"Invalid conversation position"});
+        const tail=store.messages(conversationId,2),last=tail.at(-1),beforeLast=tail.at(-2);
+        let retryUser=null;
+        if(messageId!==undefined){
+          const existing=last?.id===messageId?last:beforeLast?.id===messageId?beforeLast:null;
+          if(existing){
+            if(existing.role!=="user"||existing.content!==question)return json(res,409,{error:"Message no longer matches the original request. Reopen the chat."});
+            if(last.role==="assistant"&&beforeLast?.id===messageId){
+              // The reply survived a transport failure. Return it without another inference or learning job.
+              res.writeHead(200,{"Content-Type":"text/event-stream; charset=utf-8","Cache-Control":"no-cache, no-transform","X-Accel-Buffering":"no","X-Content-Type-Options":"nosniff"});
+              sse(res,"done",{message:last});return res.end();
+            }
+            if(last.id!==messageId)return json(res,409,{error:"Only the latest unanswered message can be retried. Reopen the chat."});
+            retryUser=existing;
+          }else{
+            if(store.db.prepare("SELECT 1 FROM messages WHERE id=?").get(messageId)||expectedLast===undefined||expectedLast!==(last?.id??null))
+              return json(res,409,{error:"Conversation changed. Reopen the chat before sending again."});
+          }
+        }
         const selected=models.active();
         if(!models.available(selected.provider))return json(res,429,{error:"NAS cloud request budget reached. Try again later or select another provider."});
         busy=true;lastInteractionAt=Date.now();
-        let user;const mode=research.get(),trace=turnTrace(mode);
+        let user,heartbeat;const mode=research.get(),trace=turnTrace(mode);
         try {
         // Claim the foreground slot before yielding. Abort and drain the
         // background worker before starting another provider request.
         await trace.measure("memory-yield",interruptMemory);
         if(!models.available(selected.provider))return json(res,429,{error:"NAS cloud request budget reached. Try again later or select another provider."});
         if(res.destroyed)return;
-        const prior=store.messages(conversationId,1)?.at(-1);
-        user=store.append(conversationId,"user",question);
+        const prior=retryUser?beforeLast:last;
+        user=retryUser??store.append(conversationId,"user",question,null,messageId);
         res.writeHead(200,{"Content-Type":"text/event-stream; charset=utf-8",
           "Cache-Control":"no-cache, no-transform","X-Accel-Buffering":"no",
           "X-Content-Type-Options":"nosniff"});
+          // Flush immediately and send SSE comments while the provider is thinking.
+          // Comments do not enter the message text or invoke any model.
+          res.flushHeaders();res.write(": connected\n\n");
+          heartbeat=setInterval(()=>{if(!res.destroyed&&!res.writableEnded)res.write(": keepalive\n\n");},10000);
+          res.once("close",()=>clearInterval(heartbeat));
           const {answer,memory,researched}=await executeNasTurn({store,conversationId,question,selected,mode,promptFile,requestModel,trace,publicAgent:research.engine()==="native",search,read:(url,opts)=>knowledge.cachedRead(url,opts),knowledge,
             canRequest:(slots=1)=>models.available(selected.provider,slots),reserve:()=>models.reserve(selected.provider),
             onDelta:part=>sse(res,"delta",{text:part}),activity:event=>{try{store.learning.recordSearch(conversationId,user.id,event);}catch{console.error("Could not record NAS research activity");}}});
           const saved=store.append(conversationId,"assistant",answer,{provider:selected.provider,requestedModel:selected.model,actualModel:trace.actualModel(),outcome:"completed",timing:trace.snapshot(),...(researched.task?{researchTask:researched.task}:{}),...(researched.agentEvidence?.length?{agentEvidence:researched.agentEvidence}:{}),...(researched.sources.length?{sources:researched.sources.map(({content,...source})=>source)}:{})});
+          if(retryUser?.inference?.outcome==="failed")store.recordInference(user.id,null);
           store.library.markRecalled(memory.ids);
           try{store.learning.recordRecall(conversationId,saved.id,memory.auditLines);}catch{console.error('Could not record NAS memory recall activity');}
           try{if(researched.local||store.messages(conversationId,80).some(m=>m.inference?.sources?.some(s=>s.kind==="notion"||s.kind==="cached-web")))store.learning.recordKnowledgeSkip(conversationId,saved.id);else store.learning.enqueue(user,saved,conversationId,prior?.role==="assistant"?prior.content:"");}catch{console.error("Could not queue NAS memory extraction");}
@@ -255,7 +285,7 @@ export function makeServer({store,config,key,promptFile="",maintenanceFile="/dat
           if (!res.headersSent) json(res,500,{error:"Could not prepare the conversation"});
           else sse(res,"error",{error:(upstreamStatus===429||error?.status===429)?"Provider quota reached (HTTP 429). No automatic retry.":"Cloud reply failed ("+selected.provider+(upstreamStatus?" HTTP "+upstreamStatus:"")+"). Check the selected model and provider quota."});
         } finally {
-          lastInteractionAt=Date.now();busy=false;
+          clearInterval(heartbeat);lastInteractionAt=Date.now();busy=false;
           res.end();
         }
         return;

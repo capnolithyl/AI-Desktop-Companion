@@ -1504,3 +1504,31 @@ test("native webpage reads accept exact returned URLs and reject unknown, confli
   assert.doesNotMatch(JSON.stringify(events),/private-token|unlisted/);
  }finally{store.db.close();}
 });
+
+
+test("NAS message retry is idempotent across provider failures, lost replies and stale clients",async()=>{
+  const store=openStore(":memory:"),key="0123456789abcdef0123456789abcdef";
+  let calls=0,fail=true;
+  const server=makeServer({store,key,config:{provider:"nvidia",model:"test",key:"not-a-real-provider-key"},generate:async({history,onDelta})=>{calls++;assert.equal(history.filter(m=>m.role==="user"&&m.content==="Please answer me").length,1);if(fail)throw new Error("Simulated stream failure");onDelta?.("Recovered");return "Recovered";}});
+  await new Promise(resolve=>server.listen(0,"127.0.0.1",resolve));
+  const base="http://127.0.0.1:"+server.address().port,headers={Authorization:"Bearer "+key,"Content-Type":"application/json"};
+  const c=store.newConversation();
+  const send=(body)=>fetch(base+"/api/chat",{method:"POST",headers,body:JSON.stringify({conversationId:c.id,text:"Please answer me",...body})});
+  try{
+    const first=await send({messageId:"retry-test-user",expectedLastMessageId:null});const failedStream=await first.text();assert.match(failedStream,/: connected/);assert.match(failedStream,/event: error/);
+    assert.deepEqual(store.messages(c.id).map(m=>[m.id,m.role]),[["retry-test-user","user"]]);
+    assert.equal(store.messages(c.id)[0].inference.outcome,"failed");
+    fail=false;
+    const recovered=await send({messageId:"retry-test-user"});assert.match(await recovered.text(),/event: done/);
+    const saved=store.messages(c.id);assert.equal(saved.length,2);assert.equal(saved[1].content,"Recovered");assert.equal(saved[0].inference,undefined);
+    const after=calls;
+    const repeated=await send({messageId:"retry-test-user",expectedLastMessageId:null});const stream=await repeated.text();assert.match(stream,/event: done/);assert.ok(stream.includes(saved[1].id));assert.equal(calls,after);
+    assert.equal((await send({messageId:"retry-test-user",text:"Different text"})).status,409);
+    assert.equal((await send({messageId:"stale-new-message",expectedLastMessageId:null})).status,409);
+    store.append(c.id,"user","Another device advanced the conversation");
+    assert.equal((await send({messageId:"retry-test-user"})).status,409);assert.equal(calls,after);
+    const other=store.newConversation();
+    const cross=await send({conversationId:other.id,messageId:"retry-test-user",expectedLastMessageId:null});assert.equal(cross.status,409);assert.equal(store.messages(other.id).length,0);
+    assert.equal((await send({messageId:"unknown-retry"})).status,409);
+  }finally{await new Promise(resolve=>server.close(resolve));store.db.close();}
+});
