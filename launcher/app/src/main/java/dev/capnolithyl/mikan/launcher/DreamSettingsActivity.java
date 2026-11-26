@@ -60,6 +60,10 @@ public final class DreamSettingsActivity extends Activity {
         choose("Artwork","dreamArtMode",artModes,0);
         choose("Clock size","dreamClockSize",sizes,1);
         choose("Artwork size","dreamArtworkSize",new String[]{"Compact","Large","Extra large"},1);
+        ui.heading(body,"BACKGROUND");
+        choose("Background style","dreamBackground",new String[]{"Pure black","Warm gradient","Blurred artwork","Blurred artwork + warm tint"},DreamRules.TINTED);
+        choose("Blend strength","dreamBlend",new String[]{"Subtle","Medium","Strong"},1);
+        ui.note(body,"Cozy Mikan blends the portrait edges into a time-aware amber, cocoa or mocha backdrop. Minimal clock and Deep sleep remain black; Pure black retains the original portrait treatment. Night backgrounds are deliberately darker.");
         ui.heading(body,"ARTWORK PACK");
         ui.row(body,"Import Dream artwork ZIP",importing?"Importing…":pack.installed()?"Custom pack installed · replace all four images":"Select one ZIP containing morning, day, evening and night",this::pickPack);
         if(pack.installed())ui.row(body,"Remove imported pack","Restore bundled artwork",()->new AlertDialog.Builder(this).setTitle("Remove Dream artwork?").setMessage("Only removes the imported copy. Your original ZIP is untouched.").setNegativeButton("Cancel",null).setPositiveButton("Remove",(d,i)->{if(importing)return;if(pack.remove()){render();}else Toast.makeText(this,"Could not remove pack.",Toast.LENGTH_SHORT).show();}).show());

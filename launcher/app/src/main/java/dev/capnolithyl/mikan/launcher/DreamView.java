@@ -25,6 +25,9 @@ final class DreamView extends View {
     private final Typeface light=Typeface.create("sans-serif-light",Typeface.NORMAL);
     private final Typeface regular=Typeface.create("sans-serif",Typeface.NORMAL);
     private Drawable portrait;
+    private final DreamBackgrounds backdrop=new DreamBackgrounds();
+    private DreamRules.Period period=DreamRules.Period.DAY;
+    private int backgroundMode,blendStrength;
     private float previewAspect=0;
     private int artworkSize;
     private final DreamArtPack pack;
@@ -41,9 +44,11 @@ final class DreamView extends View {
     void refresh(int previewHour){
         LocalDate today=LocalDate.now();
         int hour=previewHour>=0?previewHour:LocalTime.now().getHour();
-        DreamRules.Period current=DreamRules.period(hour);
+        DreamRules.Period current=DreamRules.period(hour);period=current;
         int mode=prefs.getInt("dreamArtMode",DreamRules.AUTO);
         style=prefs.getInt("dreamStyle",DreamRules.COZY);
+        backgroundMode=DreamRules.background(prefs.getInt("dreamBackground",DreamRules.TINTED),style);
+        blendStrength=DreamRules.blend(prefs.getInt("dreamBlend",1));
         clockSize=prefs.getInt("dreamClockSize",1);
         artworkSize=Math.max(0,Math.min(2,prefs.getInt("dreamArtworkSize",1)));
         showBattery=prefs.getBoolean("dreamBattery",true);shift=prefs.getBoolean("dreamShift",true);
@@ -59,6 +64,7 @@ final class DreamView extends View {
                 if(portrait==null)portrait=art.get(chosen.expression,holiday==null?DreamRules.dedicated(chosen):holiday);
             }
         }
+        backdrop.prepare(portrait,artKey,backgroundMode,blendStrength);
         Date now=new Date();
         if(previewHour>=0){java.util.Calendar cal=java.util.Calendar.getInstance();cal.set(java.util.Calendar.HOUR_OF_DAY,previewHour);now=cal.getTime();}
         clock=android.text.format.DateFormat.getTimeFormat(getContext()).format(now);
@@ -71,7 +77,7 @@ final class DreamView extends View {
         invalidate();
     }
     boolean dim(){return night;}
-    void release(){portrait=null;art.clear();artKey="";}
+    void release(){portrait=null;art.clear();backdrop.clear();artKey="";}
     private String batteryLabel(){
         try{
             Intent i=getContext().registerReceiver(null,new IntentFilter(Intent.ACTION_BATTERY_CHANGED));
@@ -95,25 +101,28 @@ final class DreamView extends View {
         boolean landscape=w>h;
         float unit=Math.min(w,h),margin=unit*.07f;
         float dx=shift?DreamRules.shiftX(minute)*unit*.009f:0,dy=shift?DreamRules.shiftY(minute)*unit*.009f:0;
+        backdrop.draw(canvas,w,h,period,backgroundMode,blendStrength,dx,dy);
         canvas.save();canvas.translate(dx,dy);
         boolean withArt=portrait!=null&&style!=DreamRules.MINIMAL;
         float cx=landscape&&withArt?w*.29f:w*.5f;
         float cy=landscape?h*.43f:withArt?h*.15f:h*.44f;
         float textWidth=landscape&&withArt?w*.49f:w-2*margin;
         float size=unit*(clockSize==0?.17f:clockSize==2?.27f:.22f);
-        line(canvas,clock,cx,cy,size,textWidth,color,light);
-        line(canvas,date,cx,cy+unit*.075f,unit*.041f,textWidth,color,regular);
         if(withArt){
             float factor=artworkSize==0?.78f:artworkSize==2?1.08f:1f;
-            float areaW=(landscape?w*.40f:w*.90f)*factor;
-            float areaH=(landscape?h*.78f:h*.60f)*factor;
+            boolean integrated=backgroundMode!=DreamRules.BLACK;
+            float areaW=(landscape?w*.40f:w*(integrated?.96f:.90f))*factor;
+            float areaH=(landscape?h*.78f:h*(integrated?.63f:.60f))*factor;
             float aw=Math.max(1,portrait.getIntrinsicWidth()),ah=Math.max(1,portrait.getIntrinsicHeight());
             float scale=Math.min(areaW/aw,areaH/ah);
             float width=aw*scale,height=ah*scale;
             float ax=landscape?w*.75f:w*.5f,ay=landscape?h*.49f:h*.53f;
             portrait.setBounds(Math.round(ax-width/2),Math.round(ay-height/2),Math.round(ax+width/2),Math.round(ay+height/2));
-            portrait.setAlpha(style==DreamRules.DEEP?75:night?145:215);portrait.draw(canvas);
+            int alpha=style==DreamRules.DEEP?75:night?145:integrated?255:215;
+            if(!integrated||!backdrop.drawPortrait(canvas,portrait.getBounds(),alpha)){portrait.setAlpha(alpha);portrait.draw(canvas);}
         }
+        line(canvas,clock,cx,cy,size,textWidth,color,light);
+        line(canvas,date,cx,cy+unit*.075f,unit*.041f,textWidth,color,regular);
         float bottom=landscape?h*.78f:withArt?h*.90f:h*.60f;
         if(style!=DreamRules.MINIMAL)line(canvas,greeting,cx,bottom,unit*.041f,textWidth,color,regular);
         if(showBattery)line(canvas,battery,cx,bottom+(style==DreamRules.MINIMAL?0:unit*.065f),unit*.036f,textWidth,color,regular);

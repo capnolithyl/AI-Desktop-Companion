@@ -19,6 +19,20 @@ public final class DreamRulesTest {
         check(DreamRules.holiday(DreamRules.AUTO,false,thanksgiving,DreamRules.Period.DAY)==null);
         for(long minute=-100;minute<100;minute++){check(Math.abs(DreamRules.shiftX(minute))<=2);check(Math.abs(DreamRules.shiftY(minute))<=2);}
         check(DreamRules.dedicated(DreamRules.Period.MORNING).equals("portraits/dream/morning.webp"));
+        check(DreamRules.background(DreamRules.TINTED,DreamRules.COZY)==DreamRules.TINTED);
+        check(DreamRules.background(DreamRules.TINTED,DreamRules.MINIMAL)==DreamRules.BLACK);
+        check(DreamRules.background(DreamRules.WARM,DreamRules.DEEP)==DreamRules.BLACK);
+        check(DreamRules.background(-1,DreamRules.COZY)==DreamRules.BLACK);
+        check(DreamRules.background(99,DreamRules.COZY)==DreamRules.TINTED);
+        check(DreamRules.feather(0)<DreamRules.feather(1)&&DreamRules.feather(1)<DreamRules.feather(2));
+        check(DreamRules.palette(DreamRules.Period.DAY)[1]!=DreamRules.palette(DreamRules.Period.NIGHT)[1]);
+        int[] uniform={0xffa06530,0xffa06530,0xffa06530,0xffa06530};
+        check(java.util.Arrays.equals(uniform,DreamRules.blurRgb(uniform,2,2,3)));
+        int[] sharp={0xff000000,0xffffffff,0xff000000};
+        int[] soft=DreamRules.blurRgb(sharp,3,1,1);
+        check((soft[0]&255)>0&&(soft[1]&255)<255&&soft[0]==soft[2]);
+        check(sharp[1]==0xffffffff);
+        check(DreamRules.blurRgb(new int[]{0xff123456},1,1,24)[0]==0xff123456);
         System.out.println("DreamRules tests passed");
     }
 }

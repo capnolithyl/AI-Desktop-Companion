@@ -17,7 +17,7 @@ final class LauncherBackup {
     private static final String ICON="iconStyle:";
     private static boolean component(String key){return key.length()<=512&&ComponentName.unflattenFromString(key)!=null&&!key.contains("\n")&&!key.contains("\r");}
     private static boolean folder(String key){return key.matches("folder:[0-9a-fA-F-]{36}");}
-    private static boolean known(String k){return BOOL.contains(k)||PAGES.contains(k)||Arrays.asList("columns","dockCount","minPages","homeRows","iconSize","sectionOrder","wallpaper","favorites","foldersV1","homeSlotsV1","mixedGridV1","drawerSort","drawerColumns","drawerHiddenV1","drawerCategoriesV1","dreamArtMode","dreamStyle","dreamClockSize","dreamArtworkSize").contains(k);}
+    private static boolean known(String k){return BOOL.contains(k)||PAGES.contains(k)||Arrays.asList("columns","dockCount","minPages","homeRows","iconSize","sectionOrder","wallpaper","favorites","foldersV1","homeSlotsV1","mixedGridV1","drawerSort","drawerColumns","drawerHiddenV1","drawerCategoriesV1","dreamArtMode","dreamStyle","dreamClockSize","dreamArtworkSize","dreamBackground","dreamBlend").contains(k);}
     private static int integer(Object value,int min,int max)throws IOException{
         if(!(value instanceof Number))throw new IOException("Expected integer");
         double n=((Number)value).doubleValue();if(n!=Math.rint(n)||n<min||n>max)throw new IOException("Out of range");
@@ -38,6 +38,8 @@ final class LauncherBackup {
             case "dreamStyle":return integer(v,0,2);
             case "dreamClockSize":return integer(v,0,2);
             case "dreamArtworkSize":return integer(v,0,2);
+            case "dreamBackground":return integer(v,0,3);
+            case "dreamBlend":return integer(v,0,2);
             case "drawerSort":return integer(v,0,3);
             case "drawerColumns":return integer(v,3,5);
             case "drawerHiddenV1":{
