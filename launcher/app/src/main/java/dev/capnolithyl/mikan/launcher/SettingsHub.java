@@ -22,6 +22,7 @@ final class SettingsHub {
         HUB("Settings","Make Mikan OS your own",MikanMark.GEAR),
         APPEARANCE("Appearance","Wallpapers and app icons",MikanMark.PALETTE),
         LOCK("Lockscreen","Separate Android lockscreen wallpaper",MikanMark.SHIELD),
+        DREAM("Dream Mode","Charging screensaver and time-aware artwork",MikanMark.SPARK),
         HOME("Home screen","Grid, dock, pages and folders",MikanMark.GRID),
         WIDGETS("Widgets","Placement and dashboard layout",MikanMark.WIDGET),
         WEATHER("Weather & calendar","Forecasts and upcoming events",MikanMark.WEATHER),

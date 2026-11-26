@@ -883,6 +883,11 @@ public class HomeActivity extends Activity {
                 settingsUi.heading(body,"APP ICONS");
                 settingsUi.choice(body,"Icon style",new String[]{"Amber","Original"},prefs.getBoolean("themed",true)?0:1,i->{prefs.edit().putBoolean("themed",i==0).apply();showSettings();});
                 break;
+            case DREAM:
+                settingsUi.row(body,"Customize Mikan Dream","Artwork, clock, display and preview",()->startActivity(new Intent(this,DreamSettingsActivity.class)));
+                settingsUi.row(body,"Android screen saver settings","Select Mikan Dream and choose when to show",()->DreamSettingsActivity.openSystemSettings(this));
+                settingsUi.note(body,"Android starts the dream while charging and idle. It does not replace secure unlock or the always-on display.");
+                break;
             case LOCK:
                 settingsUi.note(body,"Customize the real Android lockscreen wallpaper. Android retains the clock, notifications and secure unlock.");
                 settingsUi.row(body,"Choose lockscreen image","Preview locally before applying",()->pickImage(77));

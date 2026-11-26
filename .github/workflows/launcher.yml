@@ -55,6 +55,11 @@ jobs:
           mkdir -p /tmp/mikan-briefing-tests
           javac -d /tmp/mikan-briefing-tests launcher/app/src/main/java/dev/capnolithyl/mikan/launcher/LocalTasks.java launcher/app/src/main/java/dev/capnolithyl/mikan/launcher/BriefingRules.java launcher/tests/BriefingRulesTest.java
           java -cp /tmp/mikan-briefing-tests dev.capnolithyl.mikan.launcher.BriefingRulesTest
+      - name: Test Dream Mode rules
+        run: |
+          mkdir -p /tmp/mikan-dream-tests
+          javac -d /tmp/mikan-dream-tests launcher/app/src/main/java/dev/capnolithyl/mikan/launcher/MikanExpression.java launcher/app/src/main/java/dev/capnolithyl/mikan/launcher/MikanHoliday.java launcher/app/src/main/java/dev/capnolithyl/mikan/launcher/DreamRules.java launcher/tests/DreamRulesTest.java
+          java -cp /tmp/mikan-dream-tests dev.capnolithyl.mikan.launcher.DreamRulesTest
       - name: Test quick contact favorites
         run: |
           mkdir -p /tmp/mikan-contact-tests
