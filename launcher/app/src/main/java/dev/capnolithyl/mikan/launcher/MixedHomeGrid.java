@@ -132,7 +132,9 @@ final class MixedHomeGrid extends ViewGroup {
             // Measure natural content directly, not the MATCH_PARENT frame or edit handles.
             // The second pass then gives every widget its full exact rectangle.
             View content=contents.get(v);content.measure(MeasureSpec.makeMeasureSpec(childWidth,MeasureSpec.EXACTLY),MeasureSpec.makeMeasureSpec(0,MeasureSpec.UNSPECIFIED));
-            WidgetSizing.ensureHeight(heights,r.y,r.h,content.getMeasuredHeight()+dp(6));
+            MixedLayout.Spec spec=specs.get(entry.getValue());
+            int need=WidgetSizing.requiredHeight(content.getMeasuredHeight()+dp(6),r.h,spec==null?r.h:spec.h,dp(44));
+            WidgetSizing.ensureHeight(heights,r.y,r.h,need);
         }
         edges=new int[rows+1];for(int y=0;y<rows;y++)edges[y+1]=edges[y]+heights[y];
         for(Map.Entry<View,String> entry:keys.entrySet()){

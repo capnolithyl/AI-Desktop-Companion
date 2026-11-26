@@ -5,6 +5,10 @@ import java.util.Arrays;
 public final class WidgetSizingTest {
     static void check(boolean ok){if(!ok)throw new AssertionError();}
     public static void main(String[] args){
+        check(WidgetSizing.requiredHeight(350,3,3,44)==350);
+        check(WidgetSizing.requiredHeight(350,4,3,44)==394);
+        check(WidgetSizing.requiredHeight(350,2,3,44)==350);
+        check(WidgetSizing.requiredHeight(30,4,3,44)==176);
         int[] rows={44,44,44,44};
         WidgetSizing.ensureHeight(rows,0,2,130);
         check(Arrays.equals(rows,new int[]{65,65,44,44}));
