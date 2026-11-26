@@ -1,7 +1,10 @@
-/* NAS phone presentation only. Same profile, messages, API and settings panels. */
+/* NAS phone presentation only. Same profile, messages, API and settings panels.
+   The viewport stays fitted to the safe display area. Android's NAS wrapper
+   already applies system-bar and keyboard insets to its native container;
+   adding CSS safe-area insets again wastes space and shifts the controls. */
 .nas-mobile{--mobile-base:#211412;--mobile-panel:#38231f;--mobile-line:#84543c;--mobile-accent:#ffbd80;--mobile-text:#fff0e3;--mobile-muted:#d6b2a0;--mikan-font-size:15px;overflow:hidden;}
 .nas-mobile .nas-mobile-shell.mikan-workspace{inset:0;border:0;border-radius:0;box-shadow:none;gap:0;background:radial-gradient(ellipse at 90% 0%,#59301f77,transparent 35%),#211412;}
-.nas-mobile .nas-mobile-header{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:74px;flex:0 0 auto;padding:calc(10px + env(safe-area-inset-top,0px)) max(15px,env(safe-area-inset-right,0px)) 10px max(15px,env(safe-area-inset-left,0px));background:linear-gradient(110deg,#42251c,#281918);border-bottom:1px solid #a96844;box-shadow:0 4px 18px #f9952d14;}
+.nas-mobile .nas-mobile-header{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:68px;flex:0 0 auto;padding:10px 15px;background:linear-gradient(110deg,#42251c,#281918);border-bottom:1px solid #a96844;box-shadow:0 4px 18px #f9952d14;}
 .nas-mobile .nas-mobile-brand{display:flex;align-items:center;gap:11px;min-width:0;padding:0;text-align:left;border:0;background:none;}
 .nas-mobile .nas-mobile-brand img{width:48px;height:48px;object-fit:cover;border:1px solid #ffd097;border-radius:50%;box-shadow:0 0 12px #f58e4659;}
 .nas-mobile .nas-mobile-brand>span{display:grid;gap:2px;min-width:0;}
@@ -12,7 +15,7 @@
 .nas-mobile .nas-mobile-brand i.thinking{background:#ffb568;box-shadow:0 0 9px #ffad68;}
 .nas-mobile .nas-mobile-header-actions{display:flex;align-items:center;gap:7px;}
 .nas-mobile .nas-mobile-header-actions button,.nas-mobile .nas-mobile-icon-button,.nas-mobile .nas-mobile-chat-title button{display:grid;place-items:center;flex:0 0 44px;width:44px;height:44px;border:1px solid #85583f;border-radius:14px;background:#4b2e24;color:#ffd3a2;}
-.nas-mobile .nas-mobile-bottom-nav{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));flex:0 0 auto;gap:5px;padding:7px max(9px,env(safe-area-inset-right,0px)) calc(7px + env(safe-area-inset-bottom,0px)) max(9px,env(safe-area-inset-left,0px));background:linear-gradient(180deg,#35211d,#281918);border-top:1px solid #956143;z-index:4;color:var(--mobile-text);}
+.nas-mobile .nas-mobile-bottom-nav{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));flex:0 0 auto;gap:5px;padding:6px 9px;background:linear-gradient(180deg,#35211d,#281918);border-top:1px solid #956143;z-index:4;color:var(--mobile-text);}
 .nas-mobile .nas-mobile-bottom-nav button{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;min-height:53px;min-width:0;padding:5px 3px;border:1px solid transparent;border-radius:13px;background:none;color:#d6ad95;font:inherit;font-size:11px;font-weight:600;}
 .nas-mobile .nas-mobile-bottom-nav button[aria-current=page]{border-color:#c38652;background:linear-gradient(150deg,#754026,#492b21);box-shadow:inset 0 0 12px #ffb16a1f,0 0 10px #ff8b3422;color:#ffdaa7;}
 .nas-mobile .nas-mobile-chat.workspace-chat{flex:1;min-height:0;margin:0;padding:0;border:0;border-radius:0;background:transparent;box-shadow:none;}
@@ -33,7 +36,7 @@
 .nas-mobile .workspace-bubble-tail,.nas-mobile .workspace-avatar-rays,.nas-mobile .workspace-paw-seal{display:none;}
 .nas-mobile .workspace-composer{flex:0 0 auto;padding:7px 12px 10px;margin:0;background:linear-gradient(180deg,#281918,#38221d);border-top:1px solid #72463077;}
 .nas-mobile .workspace-composer .input-row{margin:0;gap:4px;border-radius:19px;padding:3px 5px 3px 10px;}
-.nas-mobile.default-layout-active .workspace-composer .input-row textarea{font-size:16px;line-height:1.45;height:52px;min-height:48px;}
+.nas-mobile.default-layout-active .workspace-composer .input-row textarea{font-size:16px;line-height:1.45;height:52px;min-height:48px;resize:none;}
 .nas-mobile .nas-thinking-row{padding:0;}
 .nas-mobile .nas-thinking-select{min-height:32px;padding:3px 9px;font-size:12px;}
 .nas-mobile .nas-thinking-select select{min-height:27px;}
@@ -64,7 +67,7 @@
 .nas-mobile .nas-mobile-system .nas-build-label{background:none;color:#d8b19b;border:1px solid #76503b;border-radius:10px;min-height:44px;display:flex;align-items:center;justify-content:center;gap:8px;}
 /* Real full-width mobile control pages; no collapsed icon-only desktop rail. */
 .nas-mobile.settings-standalone>.drawer.control-center-window{inset:0;width:100%;height:100%;max-width:none;max-height:none;border:0;border-radius:0;display:flex;flex-direction:column;overflow:hidden;}
-.nas-mobile.settings-standalone .control-center-header{flex:0 0 auto;min-height:70px;padding:calc(10px + env(safe-area-inset-top,0px)) 13px 10px;gap:10px;}
+.nas-mobile.settings-standalone .control-center-header{flex:0 0 auto;min-height:70px;padding:10px 13px;gap:10px;}
 .nas-mobile.settings-standalone .control-center-header .back-button{width:44px;height:44px;flex:0 0 44px;}
 .nas-mobile.settings-standalone .control-center-header .control-header-glyph{display:none;}
 .nas-mobile.settings-standalone .control-center-header .drawer-title{min-width:0;flex:1;}
@@ -96,8 +99,8 @@
 .nas-mobile.settings-standalone .settings-body .nas-token-usage{overflow:auto;}
 .nas-mobile.settings-standalone .settings-body .nas-save-row{position:sticky;bottom:0;z-index:2;background:linear-gradient(transparent,#21191a 30%);padding:15px 0 3px;}
 .nas-mobile.settings-standalone .settings-body .nas-save-row button{width:100%;min-height:48px;}
-.nas-mobile .nas-update-notice{bottom:calc(76px + env(safe-area-inset-bottom,0px));}
-.nas-mobile .nas-memory-toast{top:calc(8px + env(safe-area-inset-top,0px));}
+.nas-mobile .nas-update-notice{bottom:76px;}
+.nas-mobile .nas-memory-toast{top:8px;}
 .nas-mobile-control-home{display:grid;gap:20px;width:100%;min-width:0;max-width:700px;margin:0 auto;}
 .nas-mobile-control-hero{display:flex;align-items:center;gap:13px;position:relative;overflow:hidden;padding:17px;border:1px solid #bf8354;border-radius:20px;background:radial-gradient(ellipse at right top,#85442366,transparent 75%),linear-gradient(145deg,#4a2d25,#30201f);box-shadow:0 0 19px #e9812b23;}
 .nas-mobile-control-hero img{width:65px;height:65px;border-radius:19px;object-fit:cover;border:1px solid #ffce98;box-shadow:0 0 12px #f4a45a44;}
