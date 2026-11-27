@@ -67,7 +67,7 @@ export async function executeNasTurn({store,conversationId,question,selected,mod
   // A manuscript review intentionally excludes personal memories, including
   // owner anchors from unrelated earlier dialogue. Audit only sent context.
   const excludeMemory=grounded||(!researched.local&&researched.sources.length>0&&mode==="strict");
-  const answerMemory=excludeMemory?{text:"",ids:[],auditLines:[]}:memoryEngine&&!researched.local&&!researched.sources.length?await trace.measure("hindsight-context",()=>memoryEngine({question,history,base:store.library.context(question,conversationId,{ownerMode:"pinned"}),fallback:memory,signal})):memory;
+  const answerMemory=excludeMemory?{text:"",ids:[],auditLines:[]}:memoryEngine&&!researched.local&&!researched.sources.length?await trace.measure("hindsight-context",()=>memoryEngine({question,history,base:store.library.context(question,conversationId,{ownerMode:"curated"}),fallback:memory,signal})):memory;
   if(answerMemory.engine)activity({title:"Memory engine",detail:answerMemory.engine,lines:[]});
   const publicEvidence=!researched.local&&researched.sources.length>0;
   const unavailablePublicPlan=!researched.local&&mode!=="off"&&!publicEvidence&&/Research planning was unavailable|Search service unavailable|Page could not be read|Invalid search query|Direct page was not supplied/.test(researched.note??"");

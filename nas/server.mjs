@@ -83,7 +83,7 @@ export function makeServer({store,config,key,promptFile="",maintenanceFile="/dat
       if (req.method==="GET" && path==="/app.js") return serveFile(res,join(ROOT,"public/app.js"),"text/javascript; charset=utf-8");
       if (req.method==="GET" && path==="/style.css") return serveFile(res,join(ROOT,"public/style.css"),"text/css; charset=utf-8");
       if (req.method==="GET" && path==="/avatar.webp") return serveFile(res,join(ROOT,"assets/mikan-chat-avatar.webp"),"image/webp");
-      if (req.method==="GET" && path==="/api/health") return json(res,200,{ok:true,service:"mikan-nas",maintenance:maintenance(),idle:!unavailable()&&activeWrites===0});
+      if (req.method==="GET" && path==="/api/health") return json(res,200,{ok:true,service:"mikan-nas",maintenance:maintenance(),idle:!unavailable()&&activeWrites===0&&!hindsight.isWorking()});
       if (!safeEqual(req.headers.authorization?.replace(/^Bearer /i,""),key))
         return json(res,401,{error:"Enter your Mikan NAS access key"});
       if(req.method!=="GET"&&req.method!=="HEAD"){
@@ -240,7 +240,7 @@ export function makeServer({store,config,key,promptFile="",maintenanceFile="/dat
   });
   server.requestTimeout=30000;
   const timer=setInterval(()=>{
-    if(maintenance()||unavailable()||Date.now()-lastReplyAt<15000)return;
+    if(maintenance()||unavailable()||hindsight.status().busy||Date.now()-lastReplyAt<15000)return;
     let selected;try{selected=models.active();}catch{return;}
     if(!models.available(selected.provider))return;
     void store.learning.processNext(args=>{models.reserve(selected.provider);return requestModel(args);},selected).catch(()=>console.error("NAS memory worker failed"));

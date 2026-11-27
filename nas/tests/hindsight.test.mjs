@@ -33,3 +33,5 @@ test("default off, explicit consent, idle queue and daily dream caps",async()=>{
   await h.tick({idleMs:31*60000,consent:true});await h.tick({idleMs:31*60000,consent:true});assert.equal(dreamed,1);
   db.close();
 });
+
+test("empty benchmark recall is valid, not a transport failure",async()=>{const r=await recallContext({recall:async()=>({results:[]})},"test","q",{text:"",ids:[],auditLines:[]},{strict:true});assert.equal(r.engine,"hindsight");assert.deepEqual(r.auditLines,[]);});

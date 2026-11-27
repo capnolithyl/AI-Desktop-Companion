@@ -48,7 +48,7 @@ export function createBrainLab({db,models,requestModel,search,read,build,pace=pa
   async function run(report,scenarios,selected,signal){
     const bank=report.memoryEngine==="hindsight"?"mikan-brain-"+report.id:null;
     try{
-      if(bank){const seeded=await hindsight.retain(bank,[{document_id:"synthetic-fixture",content:EVAL_FACTS.map(f=>f.fact).join("\n")}],signal);if(seeded?.success!==true)throw Error("Hindsight fixture retain failed");report.hindsightSeedUsage=seeded.usage??null;save(report);}
+      if(bank){const seeded=await hindsight.retain(bank,[{document_id:"synthetic-fixture",content:EVAL_FACTS.map(f=>new Date(f.updatedAt*1000).toISOString().slice(0,10)+": "+f.fact).join("\n")}],signal);if(seeded?.success!==true)throw Error("Hindsight fixture retain failed");report.hindsightSeedUsage=seeded.usage??null;save(report);}
       for(const scenario of scenarios)for(let repeat=1;repeat<=report.repetitions;repeat++){
         signal.throwIfAborted();
         const sandbox=seedEvalStore(),row={id:scenario.id,label:scenario.label,number:scenarioInfo.find(s=>s.id===scenario.id).number,repeat,steps:[]};
@@ -64,13 +64,13 @@ export function createBrainLab({db,models,requestModel,search,read,build,pace=pa
             // Each real request is counted by the production quota ledger.
             if(!models.available(selected.provider))throw Object.assign(Error("NAS cloud request budget reached"),{status:429});
             let result;
-            try{result=await executeNasTurn({store:sandbox,conversationId:chat.id,question:step.user,selected,mode:report.mode,requestModel,search,read,signal,trace,memoryEngine:bank?({question,signal})=>recallContext(hindsight,bank,question,{text:"",ids:[],auditLines:[]},{signal,strict:true}):undefined,
+            try{result=await executeNasTurn({store:sandbox,conversationId:chat.id,question:step.user,selected,mode:report.mode,requestModel,search,read,signal,trace,memoryEngine:bank?({question,history,signal})=>recallContext(hindsight,bank,[...history.slice(0,-1).filter(m=>m.role==="user").slice(-2).map(m=>m.content),question].join("\n"),{text:"",ids:[],auditLines:[]},{signal,strict:true}):undefined,
               reserve:()=>models.reserve(selected.provider),canRequest:(slots=1)=>models.available(selected.provider,slots),activity:e=>events.push(e)});
             }catch(e){row.steps.push({user:step.user,error:signal.aborted?"Stopped":typeof e?.code==="string"?e.code:"Provider or turn failed",timing:trace.snapshot(),events,actualModel:trace.actualModel()});report.done++;save(report);if(signal.aborted||e?.status===429||e?.upstreamStatus===429)throw e;continue;}
             signal.throwIfAborted();
             sandbox.append(chat.id,"assistant",result.answer,result.researched.task?{researchTask:result.researched.task}:null);
             sandbox.library.markRecalled(result.memory.ids);
-            row.steps.push({user:step.user,answer:result.answer,timing:trace.snapshot(),actualModel:trace.actualModel(),selectedMemoryIds:result.memory.ids,...(result.researched.task?{researchTask:result.researched.task}:{}),
+            row.steps.push({user:step.user,answer:result.answer,timing:trace.snapshot(),actualModel:trace.actualModel(),selectedMemoryIds:result.memory.ids,...(bank?{hindsightEvidence:result.memory.auditLines,memoryEngine:result.memory.engine??"excluded"}:{}),...(result.researched.task?{researchTask:result.researched.task}:{}),
               sources:result.researched.sources.map(s=>({...s,content:s.content.slice(0,3500)})),events});
             report.done++;save(report);
           }
