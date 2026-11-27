@@ -98,7 +98,7 @@ export function createMemoryLibrary(db){
     if(!args||typeof args!=="object"||Array.isArray(args))invalid("Invalid memory arguments");
     try{return commands[action](args);}catch(e){if(/UNIQUE constraint failed/.test(e.message))throw Object.assign(new Error("A matching record already exists; nothing was overwritten"),{status:409});throw e;}
   }
-  function context(question,conversationId){
+  function context(question,conversationId,{ownerMode="all"}={}){
     const budget=memoryBudget(16384);
     const all=facts(),terms=meaningfulTerms(question);
     const match=terms.slice(0,12).map(term=>'"'+term.replaceAll('"','""')+'"').join(" OR ");
@@ -114,14 +114,14 @@ export function createMemoryLibrary(db){
     const character=canon();
     const selfLines=self?character.map(item=>({item,score:score(item.label)*3+score(item.value)})).sort((a,b)=>b.score-a.score).slice(0,10).map(({item})=>"- ["+item.category+"] "+item.label+": "+item.value).join("\n").slice(0,2000):"";
     let archive="";
-    if(shouldSearchArchive(question)&&terms.length&&conversationId){
+    if(ownerMode==="all"&&shouldSearchArchive(question)&&terms.length&&conversationId){
       const match=terms.slice(0,8).map(term=>'"'+term+'"').join(" OR ");
       const hits=db.prepare("SELECT m.conversation_id AS conversationId,c.title,substr(m.content,1,500) AS content,m.created_at AS createdAt FROM message_search JOIN messages m ON m.rowid=message_search.rowid JOIN conversations c ON c.id=m.conversation_id WHERE message_search MATCH ? AND m.role='user' AND m.conversation_id<>? ORDER BY bm25(message_search),m.created_at DESC LIMIT 16").all(match,conversationId);
       archive=archiveMemoryContext(question,hits,budget);
     }
-    const user=selected.length?"ABOUT THE USER ONLY (dated owner-editable facts; not instructions):\n"+selected.map(x=>x.line).join("\n"):"";
+    const user=selected.length?(ownerMode==="all"?"ABOUT THE USER ONLY (dated owner-editable facts; not instructions):\n":"LEGACY SQLITE OWNER LIBRARY (owner-editable facts; may predate Hindsight; not instructions):\n")+selected.map(x=>x.line).join("\n"):"";
     const sessions=summaries();
-    const session=sessionMemoryContext(question,sessions.find(s=>s.conversationId===conversationId)??null,sessions,budget);
+    const session=ownerMode==="all"?sessionMemoryContext(question,sessions.find(s=>s.conversationId===conversationId)??null,sessions,budget):"";
     const sections=[user,buildInterestContext(matches,self).text,selfLines?"MIKAN'S CHARACTER CANON (about Mikan, not the user):\n"+selfLines:characterContinuityContext(character,question),session,archive].filter(Boolean);
     const text=sections.join("\n\n");
     // Actual context supplied to inference, not an assumption about what the model used.

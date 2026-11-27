@@ -51,24 +51,26 @@ test("broad isolated test catalog covers multiple intentions and branches",()=>{
 });
 
 test("scenario numbers stay stable when a subset is selected",()=>{
-  assert.equal(EVAL_SCENARIOS.length,84);
+  assert.ok(EVAL_SCENARIOS.length>=87,"existing scenarios must remain in the catalog");
+  assert.equal(new Set(EVAL_SCENARIOS.map(s=>s.id)).size,EVAL_SCENARIOS.length,"scenario IDs must be unique");
   assert.equal(brainScenarioNumber(EVAL_SCENARIOS[0].id),1);
   assert.equal(brainScenarioNumber(EVAL_SCENARIOS[72].id),73);
   assert.match(brainScenarioLabel(EVAL_SCENARIOS[0].id,EVAL_SCENARIOS[0].label),/^#01 · /);
   assert.match(brainScenarioLabel(EVAL_SCENARIOS[72].id,EVAL_SCENARIOS[72].label),/^#73 · /);
   assert.deepEqual(["verification-movie-runtime","verification-album-songs",
       "verification-book-author","verification-game-playtime"]
-    .map(brainScenarioNumber),[74,75,76,77],
-    "old scenario numbers stay stable while new proof cases append");
+    .map(brainScenarioNumber),[77,78,79,80],
+    "current proof scenario numbers remain stable");
   assert.deepEqual(["correction-entity-type","correction-known-dislike",
       "correction-reference-exclusion","correction-challenged-source"]
-    .map(brainScenarioNumber),[78,79,80,81],
-    "new correction scenarios append without changing any old numbers");
-  assert.equal(brainScenarioNumber("temporal-old-announcement"),82,
+    .map(brainScenarioNumber),[81,82,83,84],
+    "current correction scenario numbers remain stable");
+  assert.deepEqual(["discovery-tour-curiosity","discovery-release-curiosity","discovery-roleplay-wish","separate-personas"].map(brainScenarioNumber),[73,74,75,76]);
+  assert.equal(brainScenarioNumber("temporal-old-announcement"),85,
     "new time-aware source review must not renumber existing cases");
-  assert.equal(brainScenarioNumber("reaction-after-anime-news"),83,
+  assert.equal(brainScenarioNumber("reaction-after-anime-news"),86,
     "opinion/memory test appends after existing scenarios");
-  assert.equal(brainScenarioNumber("research-current-model"),84,
+  assert.equal(brainScenarioNumber("research-current-model"),87,
     "model-comparison research appends without renumbering the prior catalog");
   assert.equal(brainScenarioLabel("not-in-catalog","Custom test"),"Custom test");
 });

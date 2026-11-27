@@ -13,6 +13,7 @@ import {executeNasTurn,turnTrace,currentProfile} from "./turn.mjs";
 import {createBrainLab} from "./brain-lab.mjs";
 import {researchSettings,searchWeb,readWeb} from "./research.mjs";
 import {createKnowledge} from "./knowledge.mjs";
+import {createHindsight,createHindsightClient} from "./hindsight.mjs";
 
 const ROOT=dirname(fileURLToPath(import.meta.url));
 const BUILD=runningBuildInfo();
@@ -57,16 +58,16 @@ function workspaceFile(path) {
 function sse(res,kind,value) {
   if (!res.destroyed) res.write("event: "+kind+"\ndata: "+JSON.stringify(value)+"\n\n");
 }
-export function makeServer({store,config,key,promptFile="",maintenanceFile="/data/.mikan-update-maintenance",updates=updateControl(),models=providerSettings({initial:config,db:store.db}),generate=generateReply,research=researchSettings(store.db),search=searchWeb,read=readWeb,knowledge=createKnowledge({db:store.db,read})}) {
+export function makeServer({store,config,key,promptFile="",maintenanceFile="/data/.mikan-update-maintenance",updates=updateControl(),models=providerSettings({initial:config,db:store.db}),generate=generateReply,research=researchSettings(store.db),search=searchWeb,read=readWeb,knowledge=createKnowledge({db:store.db,read}),hindsight=createHindsight({db:store.db})}) {
   if (typeof key!=="string" || key.length<32) throw new Error("MIKAN_REMOTE_KEY must be at least 32 characters");
-  let busy=false,lastReplyAt=0,activeWrites=0;
+  let busy=false,lastReplyAt=0,activeWrites=0,lastInteractionAt=Date.now();
   const maintenance=()=>existsSync(maintenanceFile);
   const unavailable=()=>busy||store.learning.isRunning()||brain.isRunning()||knowledge.isRunning();
   const requestModel=async args=>{
     try{return await generate(args);}
     catch(error){if(error?.upstreamStatus===429)models.cooldown(args.config.provider);throw error;}
   };
-  const brain=createBrainLab({db:store.db,models,requestModel,search,read,build:BUILD});
+  const brain=createBrainLab({db:store.db,models,requestModel,search,read,build:BUILD,hindsight:hindsight.client});
   const server=createServer(async(req,res)=>{
     let writing=false;
     try {
@@ -82,13 +83,16 @@ export function makeServer({store,config,key,promptFile="",maintenanceFile="/dat
       if (req.method==="GET" && path==="/app.js") return serveFile(res,join(ROOT,"public/app.js"),"text/javascript; charset=utf-8");
       if (req.method==="GET" && path==="/style.css") return serveFile(res,join(ROOT,"public/style.css"),"text/css; charset=utf-8");
       if (req.method==="GET" && path==="/avatar.webp") return serveFile(res,join(ROOT,"assets/mikan-chat-avatar.webp"),"image/webp");
-      if (req.method==="GET" && path==="/api/health") return json(res,200,{ok:true,service:"mikan-nas",maintenance:maintenance(),idle:!unavailable()&&activeWrites===0});
+      if (req.method==="GET" && path==="/api/health") return json(res,200,{ok:true,service:"mikan-nas",maintenance:maintenance(),idle:!unavailable()&&activeWrites===0&&!hindsight.isWorking()});
       if (!safeEqual(req.headers.authorization?.replace(/^Bearer /i,""),key))
         return json(res,401,{error:"Enter your Mikan NAS access key"});
       if(req.method!=="GET"&&req.method!=="HEAD"){
         if(maintenance())return json(res,503,{error:"Mikan is installing an update. Please retry shortly."});
         writing=true;activeWrites++;
       }
+      if(req.method==="GET"&&path==="/api/hindsight")return json(res,200,hindsight.status());
+      if(req.method==="POST"&&path==="/api/hindsight/probe")return json(res,200,await hindsight.probe());
+      if(req.method==="PUT"&&path==="/api/hindsight"){if(unavailable())return json(res,409,{error:"Wait for current foreground operation"});return json(res,200,await hindsight.save(await readJson(req,2048)));}
       if(req.method==="GET"&&path==="/api/updates")return json(res,200,{build:BUILD,...updates.get()});
       if(req.method==="POST"&&path==="/api/updates"){
         const body=await readJson(req,1024);
@@ -197,7 +201,7 @@ export function makeServer({store,config,key,promptFile="",maintenanceFile="/dat
         if (unavailable()) return json(res,409,{error:"Mikan is already responding"});
         const selected=models.active();
         if(!models.available(selected.provider))return json(res,429,{error:"NAS cloud request budget reached. Try again later or select another provider."});
-        busy=true;
+        busy=true;lastInteractionAt=Date.now();
         let user;const mode=research.get(),trace=turnTrace(mode);
         try {
         const prior=store.messages(conversationId,1)?.at(-1);
@@ -205,14 +209,14 @@ export function makeServer({store,config,key,promptFile="",maintenanceFile="/dat
         res.writeHead(200,{"Content-Type":"text/event-stream; charset=utf-8",
           "Cache-Control":"no-cache, no-transform","X-Accel-Buffering":"no",
           "X-Content-Type-Options":"nosniff"});
-          const {answer,memory,researched}=await executeNasTurn({store,conversationId,question,selected,mode,promptFile,requestModel,trace,search,read:(url,opts)=>knowledge.cachedRead(url,opts),knowledge,
+          const {answer,memory,researched}=await executeNasTurn({store,conversationId,question,selected,mode,promptFile,requestModel,trace,search,read:(url,opts)=>knowledge.cachedRead(url,opts),knowledge,memoryEngine:hindsight.config().mode==="hindsight"?args=>hindsight.context(args):undefined,
             canRequest:(slots=1)=>models.available(selected.provider,slots),reserve:()=>models.reserve(selected.provider),
             onDelta:part=>sse(res,"delta",{text:part}),activity:event=>{try{store.learning.recordSearch(conversationId,user.id,event);}catch{console.error("Could not record NAS research activity");}}});
           const saved=store.append(conversationId,"assistant",answer,{provider:selected.provider,requestedModel:selected.model,actualModel:trace.actualModel(),outcome:"completed",timing:trace.snapshot(),...(researched.task?{researchTask:researched.task}:{}),...(researched.sources.length?{sources:researched.sources.map(({content,...source})=>source)}:{})});
           store.library.markRecalled(memory.ids);
           try{store.learning.recordRecall(conversationId,saved.id,memory.auditLines);}catch{console.error('Could not record NAS memory recall activity');}
-          try{if(researched.local||store.messages(conversationId,80).some(m=>m.inference?.sources?.some(s=>s.kind==="notion"||s.kind==="cached-web")))store.learning.recordKnowledgeSkip(conversationId,saved.id);else store.learning.enqueue(user,saved,conversationId,prior?.role==="assistant"?prior.content:"");}catch{console.error("Could not queue NAS memory extraction");}
-          lastReplyAt=Date.now();
+          try{if(researched.local||store.messages(conversationId,80).some(m=>m.inference?.sources?.some(s=>s.kind==="notion"||s.kind==="cached-web")))store.learning.recordKnowledgeSkip(conversationId,saved.id);else {const useHindsight=hindsight.config().mode==="hindsight";if(useHindsight)hindsight.enqueue(user,conversationId,store.learning.getStatus().settings.user);store.learning.enqueue(user,saved,conversationId,prior?.role==="assistant"?prior.content:"",{skipUser:useHindsight});}}catch{console.error("Could not queue NAS memory extraction");}
+          lastReplyAt=Date.now();lastInteractionAt=lastReplyAt;
           sse(res,"done",{message:saved});
         } catch(error) {
           // Do not leak upstream response bodies or credentials to the browser.
@@ -236,12 +240,14 @@ export function makeServer({store,config,key,promptFile="",maintenanceFile="/dat
   });
   server.requestTimeout=30000;
   const timer=setInterval(()=>{
-    if(maintenance()||unavailable()||Date.now()-lastReplyAt<15000)return;
+    if(maintenance()||unavailable()||hindsight.status().busy||Date.now()-lastReplyAt<15000)return;
     let selected;try{selected=models.active();}catch{return;}
     if(!models.available(selected.provider))return;
     void store.learning.processNext(args=>{models.reserve(selected.provider);return requestModel(args);},selected).catch(()=>console.error("NAS memory worker failed"));
   },15000);
-  timer.unref();server.once("close",()=>clearInterval(timer));
+  timer.unref();
+  const dreamTimer=setInterval(()=>{if(maintenance()||busy||brain.isRunning()||knowledge.isRunning()||store.learning.isRunning()||activeWrites)return;void hindsight.tick({idleMs:Date.now()-lastInteractionAt,consent:store.learning.getStatus().settings.user}).catch(()=>console.error("Hindsight background worker failed"));},30000);
+  dreamTimer.unref();server.once("close",()=>{clearInterval(timer);clearInterval(dreamTimer);});
   return server;
 }
 
@@ -249,7 +255,8 @@ export function startServer(env=process.env) {
   const store=openStore(env.MIKAN_DB_PATH||"/data/mikan-memory.sqlite3");
   const models=providerSettings({env,db:store.db,file:join(dirname(env.MIKAN_DB_PATH||"/data/mikan-memory.sqlite3"),".mikan-provider-settings.json")});
   const knowledge=createKnowledge({db:store.db,read:readWeb,file:join(dirname(env.MIKAN_DB_PATH||"/data/mikan-memory.sqlite3"),".mikan-notion-secret")});
-  const server=makeServer({store,models,knowledge,key:env.MIKAN_REMOTE_KEY,
+  const hindsight=createHindsight({db:store.db,client:createHindsightClient({url:env.MIKAN_HINDSIGHT_URL||"http://hindsight-test:8888",key:env.MIKAN_HINDSIGHT_KEY||""})});
+  const server=makeServer({store,models,knowledge,hindsight,key:env.MIKAN_REMOTE_KEY,
     promptFile:env.MIKAN_SYSTEM_PROMPT_FILE||"/data/persona.txt"});
   const port=Number(env.PORT||3847);
   server.listen(port,"0.0.0.0",()=>console.log("Mikan NAS ready on port "+port+" ("+models.view().provider+")"));

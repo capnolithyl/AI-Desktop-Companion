@@ -18,6 +18,7 @@ import {NasUpdates} from "./NasUpdates";
 import {NasResearch} from "./NasResearch";
 import {NasKnowledge} from "./NasKnowledge";
 import {NasBrainLab} from "./NasBrainLab";
+import {NasHindsight} from "./NasHindsight";
 import {NasTiming} from "./NasTiming";
 import {NasModels} from "./NasModels";
 import type {NasModels as ModelSettings,CloudProvider} from "./nas-client";
@@ -27,7 +28,7 @@ const portrait=new URL("../../assets/iki/mikan-chat-avatar.webp",import.meta.url
 const referencePortrait=new URL("../../assets/iki/mikan-reference.png",import.meta.url).href;
 const KEY="mikan-nas-key";
 const CLIENT_BUILD=__MIKAN_NAS_BUILD__;
-type Page="chat"|"personality"|"appearance"|"memory"|"history"|"capabilities"|"models"|"research"|"knowledge"|"brain-lab"|"updates"|"log";
+type Page="chat"|"personality"|"appearance"|"memory"|"history"|"capabilities"|"models"|"research"|"knowledge"|"brain-lab"|"hindsight"|"updates"|"log";
 const tabs=[
   {id:"personality",label:"Personality",icon:WandSparkles},
   {id:"appearance",label:"Character",icon:Shirt},
@@ -38,6 +39,7 @@ const tabs=[
   {id:"research",label:"Web research",icon:Globe},
   {id:"knowledge",label:"Knowledge & Notion",icon:BookOpen},
   {id:"brain-lab",label:"Brain Lab",icon:Brain},
+  {id:"hindsight",label:"Memory engine & dreaming",icon:Brain},
   {id:"updates",label:"Software Updates",icon:RefreshCw}
 ] as const;
 function downloadProfile(profile:CompanionProfile){
@@ -348,6 +350,7 @@ export function NasApp(){
         {page==="log"&&<><div className="settings-section-title">Conversation log</div><p className="settings-note">Currently selected: {status?.provider} · {status?.model}</p>{messages.map(message=><div key={message.id} className="control-form-section"><strong>{message.role==="assistant"?"Mikan":"You"}</strong>{message.inference&&<p className="settings-note">{message.inference.provider} · {message.inference.actualModel||message.inference.requestedModel} · {message.inference.outcome}{!message.inference.actualModel?" (actual model not reported)":""}</p>}{message.inference?.timing&&<NasTiming timing={message.inference.timing}/>}<ChatMarkdown text={message.content} onOpenLink={openLink}/></div>)}</>}
         {page==="models"&&status?.providers&&<NasModels models={status} client={client} onChanged={applyModels} busy={busy||switching||status.busy}/>}
         {page==="brain-lab"&&status?.providers&&<NasBrainLab client={client} models={status} busy={busy||!!status.busy}/>}
+        {page==="hindsight"&&<NasHindsight client={client}/>}
         {page==="knowledge"&&<NasKnowledge client={client} busy={busy||!!status?.busy}/>}
         {page==="research"&&<NasResearch client={client} busy={busy||!!status?.busy}/>}
         {page==="updates"&&<NasUpdates client={client}/>}
