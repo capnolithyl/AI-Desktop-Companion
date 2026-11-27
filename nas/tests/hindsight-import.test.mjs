@@ -49,3 +49,23 @@ test("preview invalidation, changed sources, pause/resume and interrupted submis
     assert.equal(imp.preview(categories).ready,0);
   }finally{store.db.close();}
 });
+
+test("live retain failures pause the import, and switching away suspends queued imports",async()=>{
+  const store=fixture();let attempts=0;
+  try{
+    const client={health:async()=>({status:"healthy",database:"connected"}),retain:async()=>{attempts++;throw Error("transport timeout");}};
+    const h=createHindsightRouter({db:store.db,legacyClient:client,localClient:client});
+    const settings={mode:"hindsight",capture:false,dreams:false,dailyBatches:12,dailyDreams:0};
+    await h.save({...settings,backend:"local"});
+    const categories=["facts","character"],p=h.importer.preview(categories);
+    h.importer.start({categories,digest:p.digest,consent:true});
+    await h.save({...settings,backend:"legacy"});
+    await h.tick({idleMs:61000,consent:false});assert.equal(attempts,0);assert.equal(h.importer.status().enabled,false);
+    await h.save({...settings,backend:"local"});
+    await h.tick({idleMs:61000,consent:false});assert.equal(attempts,0);
+    h.importer.resume();await h.tick({idleMs:61000,consent:false});assert.equal(attempts,1);
+    assert.equal(h.importer.status().uncertain,1);assert.equal(h.importer.status().queued,1);assert.equal(h.importer.status().enabled,false);
+    await h.tick({idleMs:61000,consent:false});assert.equal(attempts,1);
+    assert.equal(h.status().batchesToday,1);
+  }finally{store.db.close();}
+});
