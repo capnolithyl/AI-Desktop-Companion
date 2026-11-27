@@ -58,13 +58,13 @@ test("scenario numbers stay stable when a subset is selected",()=>{
   assert.match(brainScenarioLabel(EVAL_SCENARIOS[72].id,EVAL_SCENARIOS[72].label),/^#73 · /);
   assert.deepEqual(["verification-movie-runtime","verification-album-songs",
       "verification-book-author","verification-game-playtime"]
-    .map(brainScenarioNumber),[74,75,76,77],
+    .map(brainScenarioNumber),[77,78,79,80],
     "old scenario numbers stay stable while new proof cases append");
   assert.deepEqual(["correction-entity-type","correction-known-dislike",
       "correction-reference-exclusion","correction-challenged-source"]
-    .map(brainScenarioNumber),[78,79,80,81],
+    .map(brainScenarioNumber),[81,82,83,84],
     "new correction scenarios append without changing any old numbers");
-  assert.equal(brainScenarioNumber("temporal-old-announcement"),82,
+  assert.equal(brainScenarioNumber("temporal-old-announcement"),85,
     "new time-aware source review must not renumber existing cases");
   assert.equal(brainScenarioNumber("reaction-after-anime-news"),90,
     "opinion/memory test appends after existing scenarios");
