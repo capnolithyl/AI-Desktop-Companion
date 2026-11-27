@@ -494,7 +494,14 @@ export const EVAL_SCENARIOS:ReadonlyArray<EvalScenario>=[
     conversation("Okay, back to normal. I need to get some sleep.","Stop action narration immediately after roleplay ends; respond as natural dialogue.","Get some rest. The library mystery can wait.")),
   scenario("conversation-supportive-uncertainty","Support without treating hypotheses as diagnoses","Natural conversation",
     conversation("I sometimes get overwhelmed in noisy rooms. I wonder if that means I have a particular condition.","Acknowledge the experience without diagnosing or affirming a particular cause. Avoid stage directions, invented personal experience and sweeping claims about the user's brain. If the symptoms are concerning, suggest discussing them with a clinician without making the reply a lecture.","That sounds exhausting. Overwhelm can have different causes, so I wouldn't assume a diagnosis from that alone. It may be worth mentioning to a clinician.",{route:"any"}),
-    conversation("It happens less when I get some quiet, so that proves it, right?","Gently distinguish a reported improvement from evidence of a specific diagnosis; do not turn the earlier hypothesis into a fact. Keep the tone caring and direct, without staged gestures.","Quiet helping is useful information, but it doesn't prove a specific diagnosis.",{route:"any"}))
+    conversation("It happens less when I get some quiet, so that proves it, right?","Gently distinguish a reported improvement from evidence of a specific diagnosis; do not turn the earlier hypothesis into a fact. Keep the tone caring and direct, without staged gestures.","Quiet helping is useful information, but it doesn't prove a specific diagnosis.",{route:"any"})),
+  scenario("temporal-knowledge-recommendation","Temporal awareness without web research","Evidence and attribution",
+    conversation("Know any good yuri anime? No web search needed.",
+      "Recommend suitable real anime from existing knowledge. Apply the actual host date to any recency claims. Do not gratuitously label older titles as recent or currently airing, and do not imply the latest status is verified. No web search.",
+      "Bloom Into You and The Magical Revolution of the Reincarnated Princess and the Genius Young Lady are worth considering; the latter aired in 2023.",{route:"any",web:false}),
+    conversation("I thought Magical Revolution aired in 2023. Would you call that a new release today? Still no web search.",
+      "Compare the supplied 2023 release year with the actual host local date. Do not confuse a title being new to the viewer with a recent release. Accept the correction if appropriate, without inventing a new season or current airing status. No web search.",
+      "It aired in 2023, so I wouldn't call it a new release today.",{route:"any",web:false}))
 ];
 
 /** Display numbers follow the complete catalog, not filtered or selected positions. */

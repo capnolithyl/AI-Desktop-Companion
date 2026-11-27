@@ -1599,3 +1599,15 @@ test("native agent receives pragmatic context guidance with optional recall and 
   assert.equal(calls,1);assert.match(result.answer,/Both dates/);
  }finally{store.db.close();}
 });
+
+test("native temporal guidance applies even with web research disabled",async()=>{
+ const {executeNasTurn}=await import("../turn.mjs"),store=openStore(":memory:");
+ try{
+  const chat=store.newConversation(),question="Recommend a good anime from your existing knowledge.";store.append(chat.id,"user",question);let calls=0;
+  const result=await executeNasTurn({store,conversationId:chat.id,question,selected:{provider:"nvidia",model:"test",historyChars:32000},mode:"off",publicAgent:true,now:new Date("2026-11-27T12:00:00Z"),reserve:()=>{},canRequest:()=>true,requestModel:async args=>{
+    calls++;assert.match(args.system,/2026-11-27/);assert.match(args.system,/Apply the host's current local date to all factual responses/);assert.match(args.system,/even when web research is disabled or unnecessary/);assert.match(args.system,/without adding unsupported time-sensitive labels/);assert.match(args.system,/Public web research is disabled/);
+    return {content:"Magical Revolution aired in 2023 and is worth considering.",toolCalls:[]};
+  }});
+  assert.equal(calls,1);assert.match(result.answer,/2023/);
+ }finally{store.db.close();}
+});
