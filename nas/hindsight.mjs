@@ -158,7 +158,7 @@ export function createHindsightRouter({db,legacyClient=createHindsightClient(),l
   db.exec("CREATE TABLE IF NOT EXISTS nas_hindsight_selection(id INTEGER PRIMARY KEY CHECK(id=1),backend TEXT NOT NULL DEFAULT 'legacy'); INSERT OR IGNORE INTO nas_hindsight_selection(id) VALUES(1)");
   const backend=()=>db.prepare("SELECT backend FROM nas_hindsight_selection WHERE id=1").get().backend==="local"?"local":"legacy";
   const active=()=>workers[backend()];
-  const choose=value=>{if(value===undefined)return backend();if(!Object.hasOwn(workers,value))throw err("Invalid Hindsight backend");return value;};
+  const choose=value=>{if(value===undefined)return backend();if(typeof value!=="string"||!Object.hasOwn(workers,value))throw err("Invalid Hindsight backend");return value;};
   const status=(id=backend(),value=workers[id].status())=>({...value,backend:id,selectedBackend:backend()});
   let switching=false;
   async function save(value){
@@ -177,5 +177,5 @@ export function createHindsightRouter({db,legacyClient=createHindsightClient(),l
     probe:async(value)=>{const id=choose(value);return status(id,await workers[id].probe());},
     enqueue:(...args)=>active().enqueue(...args),context:args=>active().context(args),
     tick:args=>switching?Promise.resolve():active().tick(args),
-    isWorking:()=>switching||active().isWorking()};
+    isSwitching:()=>switching,isWorking:()=>switching||active().isWorking()};
 }

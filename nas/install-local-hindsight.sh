@@ -8,7 +8,8 @@ local=hindsight-local
 retrieval=mikan-retrieval
 network=mikan-retrieval-private
 volume=hindsight-local-384-data
-action="$1"
+action=install
+[ "$#" -eq 0 ] || action="$1"
 if [ "$action" = test ]; then
   docker exec -i "$mikan" node --input-type=module - <<'JS'
 import {randomUUID} from "node:crypto";

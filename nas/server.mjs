@@ -63,7 +63,7 @@ export function makeServer({store,config,key,promptFile="",maintenanceFile="/dat
   if (typeof key!=="string" || key.length<32) throw new Error("MIKAN_REMOTE_KEY must be at least 32 characters");
   let busy=false,lastInteractionAt=Date.now(),activeWrites=0,memoryTask=null,memoryAbort=null;
   const maintenance=()=>existsSync(maintenanceFile);
-  const foregroundUnavailable=()=>busy||brain.isRunning()||knowledge.isRunning();
+  const foregroundUnavailable=()=>busy||brain.isRunning()||knowledge.isRunning()||!!hindsight.isSwitching?.();
   const unavailable=()=>foregroundUnavailable()||store.learning.isRunning()||!!memoryTask||hindsight.isWorking();
   const interruptMemory=async()=>{
     const task=memoryTask;
@@ -105,7 +105,7 @@ export function makeServer({store,config,key,promptFile="",maintenanceFile="/dat
       }
       if(req.method==="GET"&&path==="/api/hindsight")return json(res,200,hindsight.status());
       if(req.method==="POST"&&path==="/api/hindsight/probe"){const body=await readJson(req,1024);return json(res,200,await hindsight.probe(body?.backend));}
-      if(req.method==="PUT"&&path==="/api/hindsight"){if(unavailable())return json(res,409,{error:"Wait for current operation"});return json(res,200,await hindsight.save(await readJson(req,2048)));}
+      if(req.method==="PUT"&&path==="/api/hindsight"){const body=await readJson(req,2048);if(unavailable())return json(res,409,{error:"Wait for current operation"});return json(res,200,await hindsight.save(body));}
       if(req.method==="GET"&&path==="/api/updates")return json(res,200,{build:BUILD,...updates.get()});
       if(req.method==="POST"&&path==="/api/updates"){
         const body=await readJson(req,1024);
