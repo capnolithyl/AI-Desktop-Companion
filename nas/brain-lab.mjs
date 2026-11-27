@@ -24,7 +24,7 @@ export function createBrainLab({db,models,requestModel,search,read,build,pace=pa
   for(const r of recent())if(r.state==="running"||r.state==="stopping"){r.state="interrupted";r.finishedAt=Date.now();save(r);}
   let current=null,controller=null;
   const catalog=()=>scenarioInfo;
-  const status=()=>({running:!!controller,current,providerDiagnostics:models.diagnostics(),history:db.prepare("SELECT json_remove(report_json,'$.cases') AS report_json FROM nas_brain_reports ORDER BY created_at DESC LIMIT 20").all().map(r=>JSON.parse(r.report_json)).filter(r=>r.id!==current?.id)});
+  const status=()=>({hindsightBackend:hindsightBackend(),running:!!controller,current,providerDiagnostics:models.diagnostics(),history:db.prepare("SELECT json_remove(report_json,'$.cases') AS report_json FROM nas_brain_reports ORDER BY created_at DESC LIMIT 20").all().map(r=>JSON.parse(r.report_json)).filter(r=>r.id!==current?.id)});
   function start(body){
     if(controller)throw invalid("Brain Lab is already running",409);
     const {provider,model,scenarioIds,mode,repetitions,publicAgent=false,memoryEngine="sqlite"}=body??{};

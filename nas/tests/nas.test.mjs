@@ -536,6 +536,7 @@ test("Brain Lab uses shared fixtures in isolated SQLite, preserves owner memory 
         const answer=history.at(-1).content.includes("song")?"Winterglass":"Cobalt Harbor";
         onModel?.("test");onDelta(answer);return answer;
       }});
+    assert.equal(lab.status().hindsightBackend,"legacy");
     assert.ok(lab.catalog().length>50);
     assert.throws(()=>lab.start({provider:"nvidia",model:"test",mode:"off",repetitions:5,scenarioIds:lab.catalog().filter(s=>s.supported).map(s=>s.id)}),/at most/);
     const started=lab.start({provider:"nvidia",model:"test",mode:"off",repetitions:1,scenarioIds:["branch-b"]});
