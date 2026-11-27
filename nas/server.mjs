@@ -13,7 +13,7 @@ import {executeNasTurn,turnTrace,currentProfile} from "./turn.mjs";
 import {createBrainLab} from "./brain-lab.mjs";
 import {researchSettings,searchWeb,readWeb} from "./research.mjs";
 import {createKnowledge} from "./knowledge.mjs";
-import {createHindsight,createHindsightClient} from "./hindsight.mjs";
+import {createHindsight,createHindsightClient,createHindsightRouter} from "./hindsight.mjs";
 import {containsCredential,redactCredentials} from "./companion-agent.mjs";
 
 const ROOT=dirname(fileURLToPath(import.meta.url));
@@ -80,7 +80,7 @@ export function makeServer({store,config,key,promptFile="",maintenanceFile="/dat
       catch{console.error("Could not record provider token usage");}
     }
   };
-  const brain=createBrainLab({db:store.db,models,requestModel:args=>requestModel(args,"brain-lab"),search,read,build:BUILD,hindsight:hindsight.client});
+  const brain=createBrainLab({db:store.db,models,requestModel:args=>requestModel(args,"brain-lab"),search,read,build:BUILD,hindsight:hindsight.client,hindsightBackend:()=>hindsight.backend?.()??"legacy"});
   const server=createServer(async(req,res)=>{
     let writing=false;
     try {
@@ -104,7 +104,7 @@ export function makeServer({store,config,key,promptFile="",maintenanceFile="/dat
         writing=true;activeWrites++;
       }
       if(req.method==="GET"&&path==="/api/hindsight")return json(res,200,hindsight.status());
-      if(req.method==="POST"&&path==="/api/hindsight/probe")return json(res,200,await hindsight.probe());
+      if(req.method==="POST"&&path==="/api/hindsight/probe"){const body=await readJson(req,1024);return json(res,200,await hindsight.probe(body?.backend));}
       if(req.method==="PUT"&&path==="/api/hindsight"){if(unavailable())return json(res,409,{error:"Wait for current operation"});return json(res,200,await hindsight.save(await readJson(req,2048)));}
       if(req.method==="GET"&&path==="/api/updates")return json(res,200,{build:BUILD,...updates.get()});
       if(req.method==="POST"&&path==="/api/updates"){
@@ -318,7 +318,7 @@ export function makeServer({store,config,key,promptFile="",maintenanceFile="/dat
     });
   },memoryPollMs);
   timer.unref();
-  const dreamTimer=setInterval(()=>{if(maintenance()||unavailable()||activeWrites||!models.available("nvidia",3))return;void hindsight.tick({idleMs:Date.now()-lastInteractionAt,consent:store.learning.getStatus().settings.user}).catch(()=>console.error("Hindsight background worker failed"));},30000);
+  const dreamTimer=setInterval(()=>{if(maintenance()||unavailable()||activeWrites||!models.available(hindsight.backend?.()==="local"?models.view().provider:"nvidia",3))return;void hindsight.tick({idleMs:Date.now()-lastInteractionAt,consent:store.learning.getStatus().settings.user}).catch(()=>console.error("Hindsight background worker failed"));},30000);
   dreamTimer.unref();server.once("close",()=>{clearInterval(timer);clearInterval(dreamTimer);memoryAbort?.abort();});
   return server;
 }
@@ -327,7 +327,7 @@ export function startServer(env=process.env) {
   const store=openStore(env.MIKAN_DB_PATH||"/data/mikan-memory.sqlite3");
   const models=providerSettings({env,db:store.db,file:join(dirname(env.MIKAN_DB_PATH||"/data/mikan-memory.sqlite3"),".mikan-provider-settings.json")});
   const knowledge=createKnowledge({db:store.db,read:readWeb,file:join(dirname(env.MIKAN_DB_PATH||"/data/mikan-memory.sqlite3"),".mikan-notion-secret")});
-  const hindsight=createHindsight({db:store.db,client:createHindsightClient({url:env.MIKAN_HINDSIGHT_URL||"http://hindsight-test:8888",key:env.MIKAN_HINDSIGHT_KEY||""})});
+  const hindsight=createHindsightRouter({db:store.db,legacyClient:createHindsightClient({url:env.MIKAN_HINDSIGHT_URL||"http://hindsight-test:8888",key:env.MIKAN_HINDSIGHT_KEY||""}),localClient:createHindsightClient({url:env.MIKAN_HINDSIGHT_LOCAL_URL||"http://hindsight-local:8888",key:env.MIKAN_HINDSIGHT_LOCAL_KEY||""})});
   const server=makeServer({store,models,knowledge,hindsight,research:researchSettings(store.db),key:env.MIKAN_REMOTE_KEY,
     promptFile:env.MIKAN_SYSTEM_PROMPT_FILE||"/data/persona.txt"});
   const port=Number(env.PORT||3847);

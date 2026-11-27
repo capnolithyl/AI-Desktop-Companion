@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {DatabaseSync} from "node:sqlite";
-import {createHindsightClient,createHindsight,formatHindsight,recallContext} from "../hindsight.mjs";
+import {createHindsightClient,createHindsight,createHindsightRouter,formatHindsight,recallContext} from "../hindsight.mjs";
 test("bounded metadata preserves event and mention dates",()=>{
   const lines=formatHindsight({results:[{id:"a",type:"observation",text:"Moved to Hamburg",occurred_start:"2026-11-27",mentioned_at:"2026-11-28"}]});
   assert.equal(JSON.parse(lines[0]).occurred_start,"2026-11-27");
@@ -35,3 +35,25 @@ test("default off, explicit consent, idle queue and daily dream caps",async()=>{
 });
 
 test("empty benchmark recall is valid, not a transport failure",async()=>{const r=await recallContext({recall:async()=>({results:[]})},"test","q",{text:"",ids:[],auditLines:[]},{strict:true});assert.equal(r.engine,"hindsight");assert.deepEqual(r.auditLines,[]);});
+
+test("local backend keeps queues, configuration and dream state isolated; selected client follows switch",async()=>{
+  const db=new DatabaseSync(":memory:");
+  db.exec("CREATE TABLE conversations(id TEXT PRIMARY KEY); CREATE TABLE messages(id TEXT PRIMARY KEY,content TEXT); INSERT INTO conversations VALUES('c'); INSERT INTO messages VALUES('u','I love metal');");
+  const calls=[];
+  const make=label=>({health:async()=>({status:"healthy",database:"connected"}),recall:async()=>{calls.push(label);return {results:[]};}});
+  const router=createHindsightRouter({db,legacyClient:make("legacy"),localClient:make("local")});
+  const prefs={mode:"hindsight",capture:true,dreams:false,dailyBatches:1,dailyDreams:0};
+  await router.save(prefs);
+  router.enqueue({id:"u",content:"I love metal"},"c",true);
+  assert.equal(router.status().queued,1);
+  assert.equal((await router.probe("local")).selectedBackend,"legacy");
+  await router.save({...prefs,backend:"local"});
+  assert.equal(router.status().backend,"local");
+  assert.equal(router.status().queued,0);
+  await router.client.recall("test","query");
+  await router.save({...prefs,backend:"legacy"});
+  assert.equal(router.status().queued,1);
+  await router.client.recall("test","query");
+  assert.deepEqual(calls,["local","legacy"]);
+  db.close();
+});
