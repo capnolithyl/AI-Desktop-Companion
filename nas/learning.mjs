@@ -141,8 +141,8 @@ export function createLearning(db,library){
   const records=(s,k)=>k==="fact"?s.facts:k==="interest"?s.interests:s.characterFacts;
   const find=(k,id)=>records(snap(),k).find(x=>x.id===id);
   const display=(k,p)=>k==="fact"?p.fact:k==="interest"?p.name+" ("+p.kind+", "+p.status+")":p.label+": "+p.value;
-  function enqueue(user,assistant,conversationId,prior=""){
-    const prefs=settings(),flags=eligibleTurn(user.content,assistant.content,prefs,prior);
+  function enqueue(user,assistant,conversationId,prior="",{skipUser=false}={}){
+    const prefs=settings(),flags=eligibleTurn(user.content,assistant.content,{...prefs,user:prefs.user&&!skipUser},prior);
     return tx(db,()=>{
       const ref={conversation_id:conversationId,assistant_id:assistant.id};
       if(!flags.user&&!flags.character){

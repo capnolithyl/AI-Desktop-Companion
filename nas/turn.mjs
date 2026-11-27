@@ -41,7 +41,7 @@ export function turnTrace(mode){
     snapshot:()=>({mode,totalMs:elapsed(),firstTextMs,stages:[...stages],...(inference.length?{inference:[...inference]}:{}),modelCalls:stages.filter(s=>["planner","knowledge-planner","answer","manuscript-repair","research-repair","research-recovery"].includes(s.stage)).length})};
 }
 // Shared executor: caller owns authentication, admission, persistence and quota.
-export async function executeNasTurn({store,conversationId,question,selected,mode,promptFile="",requestModel,reserve,canRequest,search,read,trace=turnTrace(mode),onDelta=()=>{},activity=()=>{},signal,knowledge}){
+export async function executeNasTurn({store,conversationId,question,selected,mode,promptFile="",requestModel,reserve,canRequest,search,read,trace=turnTrace(mode),onDelta=()=>{},activity=()=>{},signal,knowledge,memoryEngine}){
   signal?.throwIfAborted();
   const {history,rawHistory,memory}=await trace.measure("context",()=>{
     const rawHistory=store.messages(conversationId,80);
@@ -66,7 +66,9 @@ export async function executeNasTurn({store,conversationId,question,selected,mod
   const answerHistory=grounded?groundedManuscriptHistory(rawHistory,rawHistory.filter(m=>m.role==="user").at(-1)?.id).map(({role,content})=>({role,content})):history;
   // A manuscript review intentionally excludes personal memories, including
   // owner anchors from unrelated earlier dialogue. Audit only sent context.
-  const answerMemory=grounded||(!researched.local&&researched.sources.length>0&&mode==="strict")?{text:"",ids:[],auditLines:[]}:memory;
+  const excludeMemory=grounded||(!researched.local&&researched.sources.length>0&&mode==="strict");
+  const answerMemory=excludeMemory?{text:"",ids:[],auditLines:[]}:memoryEngine&&!researched.local&&!researched.sources.length?await trace.measure("hindsight-context",()=>memoryEngine({question,history,base:store.library.context(question,conversationId,{ownerMode:"pinned"}),fallback:memory,signal})):memory;
+  if(answerMemory.engine)activity({title:"Memory engine",detail:answerMemory.engine,lines:[]});
   const publicEvidence=!researched.local&&researched.sources.length>0;
   const unavailablePublicPlan=!researched.local&&mode!=="off"&&!publicEvidence&&/Research planning was unavailable|Search service unavailable|Page could not be read|Invalid search query|Direct page was not supplied/.test(researched.note??"");
   const base=systemPrompt(promptFile,store,answerMemory,{question,history:answerHistory,mode,
