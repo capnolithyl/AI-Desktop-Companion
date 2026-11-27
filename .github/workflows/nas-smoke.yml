@@ -46,6 +46,9 @@ jobs:
           node --check nas/storage.mjs
           node --check nas/learning.mjs
           node --check nas/hindsight.mjs
+          node --check nas/hindsight-import.mjs
+          node --check nas/hindsight-archive.mjs
+          node --check nas/test-hindsight-archive.mjs
           node --check nas/semantic-recall.mjs
           sh -n nas/install-local-hindsight.sh
           python3 -m py_compile nas/embed-memory.py nas/local-retrieval.py nas/tests/local-retrieval-smoke.py
@@ -61,7 +64,7 @@ jobs:
           node --check nas/public/app.js
       - name: Run NAS smoke tests
         timeout-minutes: 2
-        run: node --test --test-timeout=20000 nas/tests/nas.test.mjs nas/tests/hindsight.test.mjs
+        run: node --test --test-timeout=20000 nas/tests/nas.test.mjs nas/tests/hindsight.test.mjs nas/tests/hindsight-import.test.mjs
       - name: Build shared React workspace and deployment bundle
         run: npm ci && npm run build:nas
       - name: Validate Docker image
@@ -77,14 +80,15 @@ jobs:
           docker exec -i mikan-retrieval-ci /opt/mikan-embeddings/venv/bin/python - < nas/tests/local-retrieval-smoke.py
       - name: Smoke test packaged workspace
         run: |
-          docker run --rm -d --memory=512m --name mikan-nas-ci -p 127.0.0.1:3847:3847 -e MIKAN_REMOTE_KEY=01234567890123456789012345678901 -e NVIDIA_API_KEY=synthetic-test-key -e MIKAN_PROVIDER=nvidia mikan-nas:ci
-          trap 'docker logs mikan-nas-ci; docker stop mikan-nas-ci' EXIT
+          docker run -d --memory=512m --name mikan-nas-ci -p 127.0.0.1:3847:3847 -e MIKAN_REMOTE_KEY=01234567890123456789012345678901 -e NVIDIA_API_KEY=synthetic-test-key -e MIKAN_PROVIDER=nvidia mikan-nas:ci
+          trap 'docker logs mikan-nas-ci; docker rm -f mikan-nas-ci' EXIT
           for i in $(seq 1 30); do
             if curl -fsS http://127.0.0.1:3847/api/health; then break; fi
             sleep 1
           done
           curl -fsS http://127.0.0.1:3847/api/health
           printf '%s' '{"question":"test","sources":[],"passages":[]}' | docker exec -i mikan-nas-ci /app/nas/mikan-research-native | grep -F '"kind":"passages"'
+          docker exec mikan-nas-ci node --check /app/nas/test-hindsight-archive.mjs
           docker exec -i mikan-nas-ci node --input-type=module <<'JS'
           import assert from "node:assert/strict";
           import {embedLocal,embeddingsAvailable} from "/app/nas/semantic-recall.mjs";
