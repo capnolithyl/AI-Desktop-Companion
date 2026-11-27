@@ -103,6 +103,9 @@ public class HomeActivity extends Activity {
     private int selectedSlot=-1;
     private static final String[] WIDGET_PAGES={"clockPage","mikanPage","musicPage","weatherPage","agendaPage","devicePage","tasksPage","briefingPage","contactsPage"};
     private MusicPanel music;
+    private final DriveRules drive=new DriveRules();
+    private DriveConnection driveConnection;
+    private boolean driveVisible;
     private final Map<TextView,String> badgeViews=new HashMap<>();
     private final Runnable refreshExtras=new Runnable(){public void run(){refreshExtras();handler.postDelayed(this,2500);}};
     private float touchX,touchY;
@@ -152,6 +155,7 @@ public class HomeActivity extends Activity {
     @Override protected void onStop(){nativeWidgets.stop();super.onStop();}
     @Override protected void onResume(){
         super.onResume();foreground=true;batteryReadAt=-1;
+        startDriveObservation();
         if(entryKind==null)beginEntry("warm resume");
         boolean media=LauncherNotifications.allowed(this),calendar=checkSelfPermission(android.Manifest.permission.READ_CALENDAR)==android.content.pm.PackageManager.PERMISSION_GRANTED;
         if(catalogRenderPending){catalogRenderPending=false;refreshScreen();}
@@ -167,11 +171,11 @@ public class HomeActivity extends Activity {
         if(catalogDirty)scheduleCatalog();
     }
     @Override protected void onPause(){
-        foreground=false;resetPageGesture();pageMotion.finish();closeQuickSearch();dashboard.pause();handler.removeCallbacks(statsRefresh);handler.removeCallbacks(tick);handler.removeCallbacks(refreshExtras);handler.removeCallbacks(progressTick);handler.removeCallbacks(delayedExtras);handler.removeCallbacks(catalogRefresh);
+        foreground=false;stopDriveObservation();resetPageGesture();pageMotion.finish();closeQuickSearch();dashboard.pause();handler.removeCallbacks(statsRefresh);handler.removeCallbacks(tick);handler.removeCallbacks(refreshExtras);handler.removeCallbacks(progressTick);handler.removeCallbacks(delayedExtras);handler.removeCallbacks(catalogRefresh);
         entryKind=null;entryGeneration++;super.onPause();
     }
     @Override protected void onDestroy(){
-        closed=true;foreground=false;resetPageGesture();pageMotion.finish();closeQuickSearch();handler.removeCallbacksAndMessages(null);catalogWorker.shutdownNow();
+        closed=true;foreground=false;stopDriveObservation();resetPageGesture();pageMotion.finish();closeQuickSearch();handler.removeCallbacksAndMessages(null);catalogWorker.shutdownNow();
         if(receiverRegistered)unregisterReceiver(packagesChanged);
         if(dashboard!=null)dashboard.close();if(contacts!=null)contacts.close();if(nativeWidgets!=null)nativeWidgets.detach();super.onDestroy();
     }
@@ -179,7 +183,9 @@ public class HomeActivity extends Activity {
         super.onNewIntent(intent);setIntent(intent);
         closeQuickSearch();if(editingHome||editingMixed){editingHome=false;editingMixed=false;mixedScrollY=0;selectedSlot=-1;homePage=0;showHome();}
         beginEntry("Home intent");
-        if(drawer||settings||homePage!=0){hideKeyboard();homePage=0;showHome();}
+        if(driveVisible){if(!drive.wants(prefs.getBoolean("driveAuto",false)))showHome();}
+        else if(drawer||settings||homePage!=0){hideKeyboard();homePage=0;showHome();}
+        else if(drive.wants(prefs.getBoolean("driveAuto",false)))showHome();
         else updateClock();
         if(foreground){observeEntry();queueExtras();queueSystemStats();}
     }
@@ -233,7 +239,7 @@ public class HomeActivity extends Activity {
             });
         });
     }
-    @Override public void onBackPressed(){if(editingMixed){finishMixedEdit();return;}if(editingHome){finishHomeEdit();return;}if(quickSearch!=null){closeQuickSearch();return;}if(settings){backFromSettings();}else if(drawer){hideKeyboard();showHome();}else if(homePage!=0){homePage=0;showHome();}}
+    @Override public void onBackPressed(){if(driveVisible){exitDrive();return;}if(editingMixed){finishMixedEdit();return;}if(editingHome){finishHomeEdit();return;}if(quickSearch!=null){closeQuickSearch();return;}if(settings){backFromSettings();}else if(drawer){hideKeyboard();showHome();}else if(homePage!=0){homePage=0;showHome();}}
     private int dp(float n){return Math.round(n*getResources().getDisplayMetrics().density);}
     private GradientDrawable shape(int color,int radius,boolean border){
         GradientDrawable d=new GradientDrawable();d.setColor(color);d.setCornerRadius(dp(radius));if(border)d.setStroke(dp(1),BORDER);return d;
@@ -253,7 +259,7 @@ public class HomeActivity extends Activity {
     }
     private Drawable homeWallpaper(){String name=prefs.getString("wallpaper","reading-nook.webp");Drawable d="custom".equals(name)?wallpaperArt.get():asset(name);return d!=null?d:asset("reading-nook.webp");}
     private void createPage(){
-        resetPageGesture();pageMotion.finish();homeScroll=null;homeViewport=null;
+        driveVisible=false;resetPageGesture();pageMotion.finish();homeScroll=null;homeViewport=null;
         nativeWidgets.detach();tasks.detach();briefing.detach();contacts.detach();
         closeQuickSearch();mixedScroll=null;results=null;drawerAdapter=null;drawerIndex=null;drawerSortButton=null;drawerCategoryButton=null;systemStats=null;deviceBattery=null;deviceMemory=null;deviceCharge=null;handler.removeCallbacks(statsRefresh);
         badgeViews.clear();music=null;mikanCard=null;clock=null;date=null;greeting=null;ampm=null;dashboard.detach();
@@ -333,6 +339,7 @@ public class HomeActivity extends Activity {
     }
     private void showHome(){
         if(editingHome){showHomeEditor();return;}
+        if(!editingMixed&&drive.wants(prefs.getBoolean("driveAuto",false))){showDrive();return;}
         boolean mixed=prefs.getBoolean("mixedHome",false);
         long buildStarted=android.os.SystemClock.elapsedRealtime();
         drawer=false;settings=false;search=null;results=null;homePage=Math.max(0,Math.min(homePage,pageCount()-1));createPage();
@@ -422,6 +429,64 @@ public class HomeActivity extends Activity {
         page.addView(dock);gap(page,7);
         if(editingMixed)page.addView(action("Manage pages & apps",this::openPageManager));else page.addView(searchBar(),new LinearLayout.LayoutParams(-1,dp(50)));
         updateClock();perf.record("home view build",buildStarted);queueExtras();
+    }
+    private void startDriveObservation(){
+        if(!foreground||closed||!prefs.getBoolean("driveAuto",false)||driveConnection!=null)return;
+        driveConnection=new DriveConnection(this,connected->{
+            if(!foreground||closed)return;
+            drive.connection(connected);
+            // Do not interrupt settings, editing, search, dialogs, or another app.
+            if(hasWindowFocus()&&!drawer&&!settings&&!editingHome&&!editingMixed&&quickSearch==null&&driveVisible!=drive.wants(prefs.getBoolean("driveAuto",false)))showHome();
+        });
+        driveConnection.start();
+    }
+    @Override public void onWindowFocusChanged(boolean hasFocus){
+        super.onWindowFocusChanged(hasFocus);
+        if(hasFocus&&foreground&&!closed&&!drawer&&!settings&&!editingHome&&!editingMixed&&quickSearch==null&&driveVisible!=drive.wants(prefs.getBoolean("driveAuto",false)))showHome();
+    }
+    private void stopDriveObservation(){
+        if(driveConnection!=null){driveConnection.stop();driveConnection=null;}
+    }
+    private void exitDrive(){drive.exit();showHome();}
+    private void showDrive(){
+        drawer=false;settings=false;search=null;results=null;
+        createPage();driveVisible=true;
+        LinearLayout head=horizontal();
+        ImageView mark=new ImageView(this);mark.setImageDrawable(new MikanMark(MikanMark.CAT,PEACH));
+        head.addView(mark,new LinearLayout.LayoutParams(dp(28),dp(28)));
+        TextView name=text("  Mikan Drive",20,CREAM,true);head.addView(name,new LinearLayout.LayoutParams(0,-2,1));
+        head.addView(action("Exit",this::exitDrive));page.addView(head);gap(page,12);
+        ScrollView scroll=new ScrollView(this);scroll.setFillViewport(true);scroll.setVerticalScrollBarEnabled(false);
+        page.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
+        boolean wide=getResources().getConfiguration().orientation==android.content.res.Configuration.ORIENTATION_LANDSCAPE;
+        LinearLayout cards=wide?horizontal():vertical();cards.setGravity(Gravity.TOP);
+        scroll.addView(cards,new ScrollView.LayoutParams(-1,-1));
+        LinearLayout maps=vertical();maps.setGravity(Gravity.CENTER);maps.setPadding(dp(16),dp(20),dp(16),dp(20));maps.setMinimumHeight(dp(156));maps.setBackground(panelShape(24));
+        ImageView icon=new ImageView(this);App target=driveMaps();
+        if(target!=null)icon.setImageDrawable(themedIcon(target));else icon.setImageDrawable(new MikanMark(MikanMark.GLOBE,PEACH));
+        icon.setScaleType(ImageView.ScaleType.FIT_CENTER);icon.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+        maps.addView(icon,new LinearLayout.LayoutParams(dp(80),dp(80)));gap(maps,12);
+        TextView nav=text("Navigation",24,CREAM,true);nav.setGravity(Gravity.CENTER);maps.addView(nav);
+        TextView hint=text(target==null?"Open navigation app":"Open Google Maps",14,PEACH,false);hint.setGravity(Gravity.CENTER);maps.addView(hint);
+        widgetLink(maps,"Open navigation",this::openDriveMaps);
+        music=new MusicPanel(this,false,true);
+        widgetLink(music.view(),"Open music app",()->{App app=widgetTarget("music");if(app!=null)launch(app);else Toast.makeText(this,"Choose a music shortcut in launcher settings.",Toast.LENGTH_SHORT).show();});
+        if(wide){
+            cards.addView(maps,new LinearLayout.LayoutParams(0,-1,1));LinearLayout.LayoutParams mp=new LinearLayout.LayoutParams(0,-1,1);mp.leftMargin=dp(12);cards.addView(music.view(),mp);
+        }else{
+            cards.addView(maps,new LinearLayout.LayoutParams(-1,-2,1));gap(cards,12);
+            cards.addView(music.view(),new LinearLayout.LayoutParams(-1,-2,1));
+        }
+        gap(page,8);TextView note=text("Drive safely ♡",13,MUTED,false);note.setGravity(Gravity.CENTER);page.addView(note);
+        music.refresh();queueExtras();
+    }
+    private App driveMaps(){
+        for(App app:apps)if(app.component!=null&&"com.google.android.apps.maps".equals(app.component.getPackageName()))return app;
+        return null;
+    }
+    private void openDriveMaps(){
+        App app=driveMaps();if(app!=null){launch(app);return;}
+        try{startActivity(new Intent(Intent.ACTION_VIEW,android.net.Uri.parse("geo:0,0")));}catch(RuntimeException ex){Toast.makeText(this,"No navigation app available.",Toast.LENGTH_SHORT).show();}
     }
     private void widgetLink(View view,String label,Runnable action){
         view.setOnClickListener(v->action.run());view.setFocusable(true);
@@ -909,6 +974,13 @@ public class HomeActivity extends Activity {
                 setting(body,"Open Android wallpaper settings",()->{try{startActivity(new Intent(Intent.ACTION_SET_WALLPAPER));}catch(Exception ex){Toast.makeText(this,"Use Android Settings > Wallpaper & style.",Toast.LENGTH_LONG).show();}});
                 break;
             case HOME:
+                settingsUi.heading(body,"MIKAN DRIVE");
+                settingsUi.toggle(body,"Activate with Android Auto","Show simplified phone Home while Android Auto is projecting; normal layout returns on disconnect",prefs.getBoolean("driveAuto",false),on->{
+                    prefs.edit().putBoolean("driveAuto",on).apply();
+                    if(on){drive.enable();startDriveObservation();}else{drive.disable();stopDriveObservation();}
+                    showSettings();
+                });
+                settingsUi.row(body,"Preview Drive mode","Try the two-card layout while parked; Exit returns to Home",()->{drive.preview();showDrive();});
                 settingsUi.heading(body,"LAYOUT");
                 setting(body,"Edit home screen",this::openHomeEditor);
                 settingsUi.toggle(body,"Mixed app & widget grid","Optional live grid; turn off to return to sections",prefs.getBoolean("mixedHome",false),on->{if(on)enableMixedLayout();else prefs.edit().putBoolean("mixedHome",false).apply();showSettings();});
@@ -1717,7 +1789,7 @@ public class HomeActivity extends Activity {
         }catch(Exception e){new AlertDialog.Builder(this).setMessage("Open Android Settings → Apps → Default apps → Home app.").setPositiveButton("OK",null).show();}
     }
     @Override public boolean dispatchTouchEvent(MotionEvent event){
-        if(quickSearch!=null||editingHome||editingMixed||drawer||settings)return super.dispatchTouchEvent(event);
+        if(driveVisible||quickSearch!=null||editingHome||editingMixed||drawer||settings)return super.dispatchTouchEvent(event);
         int action=event.getActionMasked();
         if(action==MotionEvent.ACTION_DOWN){
             pageMotion.finish();resetPageGesture();touchX=event.getX();touchY=event.getY();

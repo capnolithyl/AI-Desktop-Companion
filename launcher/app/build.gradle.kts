@@ -11,8 +11,8 @@ android {
         applicationId = "dev.capnolithyl.mikan.launcher"
         minSdk = 26
         targetSdk = 35
-        versionCode = 50
-        versionName = "1.0.3"
+        versionCode = 51
+        versionName = "1.0.4"
     }
     signingConfigs {
         if (signing.isNotEmpty()) create("personal") {
@@ -33,3 +33,6 @@ val copyMikanAssets by tasks.registering(Sync::class) {
     into(layout.buildDirectory.dir("generated/mikanAssets"))
 }
 tasks.named("preBuild") { dependsOn(copyMikanAssets) }
+
+// Official phone-side Android Auto connection API (Android 14+ receiver compatible).
+dependencies { implementation("androidx.car.app:app:1.4.0") }

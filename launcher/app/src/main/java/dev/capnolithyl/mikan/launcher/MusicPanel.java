@@ -29,6 +29,7 @@ final class MusicPanel {
     private static final int PEACH=0xffffbf88,CREAM=0xffffe9d5,MUTED=0xffe1bda9;
     private static final int STEPS=1000;
     private final Context context;
+    private final boolean drive;
     private final LinearLayout root,buttons,timeline;
     private final TextView title,artist,elapsed,total;
     private final MediaButton prev,play,next;
@@ -45,18 +46,19 @@ final class MusicPanel {
     private String track;
     private Bitmap displayedArtwork;
     MusicPanel(Context context){this(context,false);}
-    MusicPanel(Context context,boolean compact){
-        this.context=context;
+    MusicPanel(Context context,boolean compact){this(context,compact,false);}
+    MusicPanel(Context context,boolean compact,boolean drive){
+        this.context=context;this.drive=drive;
         root=new LinearLayout(context);root.setOrientation(LinearLayout.VERTICAL);root.setPadding(dp(compact?9:12),dp(9),dp(compact?9:12),dp(7));
         root.setBackground(MikanTheme.panel(context,23));root.setElevation(dp(2));
-        root.setMinimumHeight(dp(compact?148:145));
+        root.setMinimumHeight(dp(drive?200:compact?148:145));
         LinearLayout row=new LinearLayout(context);row.setGravity(Gravity.CENTER_VERTICAL);root.addView(row);
         artwork=new ImageView(context);artwork.setScaleType(ImageView.ScaleType.CENTER_CROP);
         GradientDrawable artBg=new GradientDrawable();artBg.setColor(0xff50332b);artBg.setCornerRadius(dp(8));artwork.setBackground(artBg);artwork.setClipToOutline(true);
-        row.addView(artwork,new LinearLayout.LayoutParams(dp(compact?37:48),dp(compact?37:48)));
+        row.addView(artwork,new LinearLayout.LayoutParams(dp(drive?80:compact?37:48),dp(drive?80:compact?37:48)));
         LinearLayout copy=new LinearLayout(context);copy.setOrientation(LinearLayout.VERTICAL);copy.setPadding(dp(compact?6:10),0,0,0);row.addView(copy,new LinearLayout.LayoutParams(0,-2,1));
-        title=label("Now playing",compact?13:15,CREAM);title.setTypeface(Typeface.DEFAULT,Typeface.BOLD);title.setMaxLines(1);title.setEllipsize(android.text.TextUtils.TruncateAt.END);copy.addView(title);
-        artist=label("",compact?10:12,MUTED);artist.setMaxLines(2);copy.addView(artist);
+        title=label("Now playing",drive?20:compact?13:15,CREAM);title.setTypeface(Typeface.DEFAULT,Typeface.BOLD);title.setMaxLines(1);title.setEllipsize(android.text.TextUtils.TruncateAt.END);copy.addView(title);
+        artist=label("",drive?15:compact?10:12,MUTED);artist.setMaxLines(2);copy.addView(artist);
 
         root.addView(new View(context),new LinearLayout.LayoutParams(1,0,1));
         timeline=new LinearLayout(context);timeline.setGravity(Gravity.CENTER_VERTICAL);
@@ -86,7 +88,7 @@ final class MusicPanel {
     View view(){return root;}
     private int dp(float n){return Math.round(n*context.getResources().getDisplayMetrics().density);}
     private TextView label(String s,int size,int color){TextView t=new TextView(context);t.setText(s);t.setTextSize(size);t.setTextColor(color);t.setIncludeFontPadding(false);t.setTypeface(Typeface.create("sans-serif",Typeface.NORMAL));return t;}
-    private MediaButton control(int kind,String desc,Runnable r){MediaButton button=new MediaButton(context,kind);button.setContentDescription(desc);button.setOnClickListener(v->r.run());buttons.addView(button,new LinearLayout.LayoutParams(0,dp(44),1));return button;}
+    private MediaButton control(int kind,String desc,Runnable r){MediaButton button=new MediaButton(context,kind);button.setContentDescription(desc);button.setOnClickListener(v->r.run());buttons.addView(button,new LinearLayout.LayoutParams(0,dp(drive?72:44),1));return button;}
     boolean isSeekTouch(float rawX,float rawY){
         if(timeline.getVisibility()!=View.VISIBLE||!seek.isShown()||!seek.isEnabled())return false;
         int[] xy=new int[2];seek.getLocationOnScreen(xy);
@@ -116,7 +118,7 @@ final class MusicPanel {
     }
     private static long positionFor(int progress,long length){return (long)(Math.max(0,length)*(Math.max(0,Math.min(STEPS,progress))/(double)STEPS));}
     private void seekTo(int progress,MediaSession.Token token,String key,long length){
-        MediaController c=controller;if(c==null||token==null||length<=0||!LauncherNotifications.allowed(context))return;
+        MediaController c=controller;if(drive||c==null||token==null||length<=0||!LauncherNotifications.allowed(context))return;
         try{
             PlaybackState state=c.getPlaybackState();MediaMetadata metadata=c.getMetadata();
             if(!token.equals(c.getSessionToken())||!Objects.equals(key,trackKey(metadata))||state==null||(state.getActions()&PlaybackState.ACTION_SEEK_TO)==0)return;
@@ -153,7 +155,7 @@ final class MusicPanel {
             if(bitmap==null){if(displayedArtwork!=null||artwork.getDrawable()==null)artwork.setImageResource(android.R.drawable.ic_media_play);}else if(bitmap!=displayedArtwork)artwork.setImageBitmap(bitmap);displayedArtwork=bitmap;
             buttons.setVisibility(View.VISIBLE);boolean playing=state!=null&&state.getState()==PlaybackState.STATE_PLAYING;play.setPlaying(playing);
             long actions=state==null?0:state.getActions();enable(prev,(actions&PlaybackState.ACTION_SKIP_TO_PREVIOUS)!=0);enable(next,(actions&PlaybackState.ACTION_SKIP_TO_NEXT)!=0);enable(play,(actions&(PlaybackState.ACTION_PLAY_PAUSE|(playing?PlaybackState.ACTION_PAUSE:PlaybackState.ACTION_PLAY)))!=0);
-            timeline.setVisibility(duration>0?View.VISIBLE:View.INVISIBLE);boolean canSeek=duration>0&&(actions&PlaybackState.ACTION_SEEK_TO)!=0;
+            timeline.setVisibility(duration>0?View.VISIBLE:View.INVISIBLE);boolean canSeek=!drive&&duration>0&&(actions&PlaybackState.ACTION_SEEK_TO)!=0;
             seek.setEnabled(canSeek);seek.setThumbTintList(ColorStateList.valueOf(canSeek?PEACH:0xff99765f));total.setText(format(duration));updatePosition();
         }catch(RuntimeException e){empty("Music unavailable. Check notification access.");}
     }
@@ -169,7 +171,7 @@ final class MusicPanel {
         }
         void setPlaying(boolean value){if(playing!=value){playing=value;invalidate();}setContentDescription(value?"Pause":"Play");}
         @Override protected void onDraw(Canvas c){
-            super.onDraw(c);float side=dp(kind==1?36:21);c.save();c.translate((getWidth()-side)/2f,(getHeight()-side)/2f);c.scale(side/24f,side/24f);paint.setColor(PEACH);paint.setStyle(Paint.Style.FILL);
+            super.onDraw(c);float side=Math.min(getWidth(),dp(drive?(kind==1?60:34):(kind==1?36:21)));c.save();c.translate((getWidth()-side)/2f,(getHeight()-side)/2f);c.scale(side/24f,side/24f);paint.setColor(PEACH);paint.setStyle(Paint.Style.FILL);
             if(kind==1){paint.setColor(0xffffb978);c.drawCircle(12,12,11.8f,paint);paint.setColor(0xff37231e);c.scale(.62f,.62f,12,12);if(playing){c.drawRoundRect(5,3,10,21,1.3f,1.3f,paint);c.drawRoundRect(14,3,19,21,1.3f,1.3f,paint);}else triangle(c,6,3,21,12,6,21);}
             else if(kind==0){c.drawRoundRect(3,3,6,21,1,1,paint);triangle(c,20,3,7,12,20,21);}
             else{triangle(c,4,3,17,12,4,21);c.drawRoundRect(18,3,21,21,1,1,paint);}

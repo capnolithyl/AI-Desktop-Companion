@@ -35,6 +35,11 @@ jobs:
           mkdir -p /tmp/mikan-quick-search-tests
           javac -d /tmp/mikan-quick-search-tests launcher/app/src/main/java/dev/capnolithyl/mikan/launcher/QuickAppRank.java launcher/tests/QuickAppRankTest.java
           java -cp /tmp/mikan-quick-search-tests dev.capnolithyl.mikan.launcher.QuickAppRankTest
+      - name: Test Drive mode rules
+        run: |
+          mkdir -p /tmp/mikan-drive-tests
+          javac -d /tmp/mikan-drive-tests launcher/app/src/main/java/dev/capnolithyl/mikan/launcher/DriveRules.java launcher/tests/DriveRulesTest.java
+          java -cp /tmp/mikan-drive-tests dev.capnolithyl.mikan.launcher.DriveRulesTest
       - name: Test Home page gestures
         run: |
           mkdir -p /tmp/mikan-page-tests
