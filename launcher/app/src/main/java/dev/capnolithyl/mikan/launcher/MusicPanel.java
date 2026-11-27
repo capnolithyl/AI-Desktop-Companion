@@ -20,6 +20,7 @@ import android.view.View;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.SeekBar;
+import android.widget.ProgressBar;
 import android.widget.TextView;
 import java.util.List;
 import java.util.Locale;
@@ -35,6 +36,7 @@ final class MusicPanel {
     private final MediaButton prev,play,next;
     private final ImageView artwork;
     private final SeekBar seek;
+    private final ProgressBar driveProgress;
     private MediaController controller;
     private PlaybackState playback;
     private long duration;
@@ -49,30 +51,46 @@ final class MusicPanel {
     MusicPanel(Context context,boolean compact){this(context,compact,false);}
     MusicPanel(Context context,boolean compact,boolean drive){
         this.context=context;this.drive=drive;
-        root=new LinearLayout(context);root.setOrientation(LinearLayout.VERTICAL);root.setPadding(dp(compact?9:12),dp(9),dp(compact?9:12),dp(7));
+        boolean portraitDrive=drive&&context.getResources().getConfiguration().orientation!=android.content.res.Configuration.ORIENTATION_LANDSCAPE;
+        root=new LinearLayout(context);root.setOrientation(LinearLayout.VERTICAL);root.setPadding(dp(drive?16:compact?9:12),dp(drive?18:9),dp(drive?16:compact?9:12),dp(drive?14:7));
         root.setBackground(MikanTheme.panel(context,23));root.setElevation(dp(2));
         root.setMinimumHeight(dp(drive?200:compact?148:145));
-        LinearLayout row=new LinearLayout(context);row.setGravity(Gravity.CENTER_VERTICAL);root.addView(row);
+        LinearLayout row=new LinearLayout(context);row.setOrientation(portraitDrive?LinearLayout.VERTICAL:LinearLayout.HORIZONTAL);row.setGravity(portraitDrive?Gravity.CENTER:Gravity.CENTER_VERTICAL);root.addView(row,new LinearLayout.LayoutParams(-1,-2));
         artwork=new ImageView(context);artwork.setScaleType(ImageView.ScaleType.CENTER_CROP);
         GradientDrawable artBg=new GradientDrawable();artBg.setColor(0xff50332b);artBg.setCornerRadius(dp(8));artwork.setBackground(artBg);artwork.setClipToOutline(true);
-        row.addView(artwork,new LinearLayout.LayoutParams(dp(drive?80:compact?37:48),dp(drive?80:compact?37:48)));
-        LinearLayout copy=new LinearLayout(context);copy.setOrientation(LinearLayout.VERTICAL);copy.setPadding(dp(compact?6:10),0,0,0);row.addView(copy,new LinearLayout.LayoutParams(0,-2,1));
-        title=label("Now playing",drive?20:compact?13:15,CREAM);title.setTypeface(Typeface.DEFAULT,Typeface.BOLD);title.setMaxLines(1);title.setEllipsize(android.text.TextUtils.TruncateAt.END);copy.addView(title);
-        artist=label("",drive?15:compact?10:12,MUTED);artist.setMaxLines(2);copy.addView(artist);
+        int artSize=portraitDrive?Math.max(112,Math.min(208,Math.min(context.getResources().getConfiguration().screenWidthDp-84,context.getResources().getConfiguration().screenHeightDp/4))):drive?72:compact?37:48;
+        row.addView(artwork,new LinearLayout.LayoutParams(dp(artSize),dp(artSize)));
+        LinearLayout copy=new LinearLayout(context);copy.setOrientation(LinearLayout.VERTICAL);
+        if(portraitDrive){copy.setPadding(0,dp(12),0,0);copy.setGravity(Gravity.CENTER);row.addView(copy,new LinearLayout.LayoutParams(-1,-2));}
+        else{copy.setPadding(dp(compact?6:10),0,0,0);row.addView(copy,new LinearLayout.LayoutParams(0,-2,1));}
+        title=label("Now playing",drive?20:compact?13:15,CREAM);title.setTypeface(Typeface.DEFAULT,Typeface.BOLD);title.setMaxLines(drive?2:1);title.setEllipsize(android.text.TextUtils.TruncateAt.END);if(portraitDrive)title.setGravity(Gravity.CENTER);copy.addView(title);
+        artist=label("",drive?15:compact?10:12,MUTED);artist.setMaxLines(2);if(portraitDrive)artist.setGravity(Gravity.CENTER);copy.addView(artist);
 
-        root.addView(new View(context),new LinearLayout.LayoutParams(1,0,1));
+        root.addView(new View(context),drive?new LinearLayout.LayoutParams(1,dp(14)):new LinearLayout.LayoutParams(1,0,1));
         timeline=new LinearLayout(context);timeline.setGravity(Gravity.CENTER_VERTICAL);
-        timeline.setOrientation(compact?LinearLayout.VERTICAL:LinearLayout.HORIZONTAL);
-        root.addView(timeline,new LinearLayout.LayoutParams(-1,dp(compact?39:30)));
-        elapsed=label("0:00",10,MUTED);elapsed.setGravity(Gravity.CENTER);
+        timeline.setOrientation((drive||compact)?LinearLayout.VERTICAL:LinearLayout.HORIZONTAL);
+        root.addView(timeline,new LinearLayout.LayoutParams(-1,dp(drive?36:compact?39:30)));
+        elapsed=label("0:00",drive?12:10,MUTED);elapsed.setGravity(Gravity.CENTER);
         seek=new SeekBar(context);seek.setMax(STEPS);seek.setContentDescription("Playback position");seek.setPadding(dp(5),0,dp(5),0);
         seek.setProgressTintList(ColorStateList.valueOf(PEACH));seek.setProgressBackgroundTintList(ColorStateList.valueOf(0xff72503f));seek.setThumbTintList(ColorStateList.valueOf(PEACH));
-        total=label("0:00",10,MUTED);total.setGravity(Gravity.CENTER);
-        if(compact){
+        total=label("0:00",drive?12:10,MUTED);total.setGravity(Gravity.CENTER);
+        if(drive){
+            driveProgress=new ProgressBar(context,null,android.R.attr.progressBarStyleHorizontal);
+            driveProgress.setMax(STEPS);driveProgress.setProgressTintList(ColorStateList.valueOf(PEACH));
+            driveProgress.setProgressBackgroundTintList(ColorStateList.valueOf(0xff72503f));
+            driveProgress.setContentDescription("Playback progress");
+            timeline.addView(driveProgress,new LinearLayout.LayoutParams(-1,dp(8)));
+            LinearLayout times=new LinearLayout(context);times.setGravity(Gravity.CENTER_VERTICAL);
+            timeline.addView(times,new LinearLayout.LayoutParams(-1,0,1));
+            elapsed.setGravity(Gravity.LEFT|Gravity.CENTER_VERTICAL);total.setGravity(Gravity.RIGHT|Gravity.CENTER_VERTICAL);
+            times.addView(elapsed,new LinearLayout.LayoutParams(0,-1,1));times.addView(total,new LinearLayout.LayoutParams(0,-1,1));
+        }else if(compact){
+            driveProgress=null;
             timeline.addView(seek,new LinearLayout.LayoutParams(-1,dp(24)));
             LinearLayout times=new LinearLayout(context);times.setGravity(Gravity.CENTER_VERTICAL);timeline.addView(times,new LinearLayout.LayoutParams(-1,dp(15)));
             elapsed.setGravity(Gravity.LEFT);total.setGravity(Gravity.RIGHT);times.addView(elapsed,new LinearLayout.LayoutParams(0,-1,1));times.addView(total,new LinearLayout.LayoutParams(0,-1,1));
         }else{
+            driveProgress=null;
             timeline.addView(elapsed,new LinearLayout.LayoutParams(dp(42),-1));timeline.addView(seek,new LinearLayout.LayoutParams(0,-1,1));timeline.addView(total,new LinearLayout.LayoutParams(dp(42),-1));
         }
         seek.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener(){
@@ -80,7 +98,7 @@ final class MusicPanel {
             @Override public void onStartTrackingTouch(SeekBar bar){scrubbing=true;scrubToken=controller==null?null:controller.getSessionToken();scrubTrack=track;scrubDuration=duration;bar.getParent().requestDisallowInterceptTouchEvent(true);}
             @Override public void onStopTrackingTouch(SeekBar bar){if(scrubbing)seekTo(bar.getProgress(),scrubToken,scrubTrack,scrubDuration);scrubbing=false;bar.getParent().requestDisallowInterceptTouchEvent(false);updatePosition();}
         });
-        root.addView(new View(context),new LinearLayout.LayoutParams(1,0,1));
+        root.addView(new View(context),drive?new LinearLayout.LayoutParams(1,dp(8)):new LinearLayout.LayoutParams(1,0,1));
         buttons=new LinearLayout(context);buttons.setGravity(Gravity.CENTER);root.addView(buttons);
         prev=control(0,"Previous track",()->command(0));play=control(1,"Play or pause",()->command(1));next=control(2,"Next track",()->command(2));
         empty("Loading music…");
@@ -110,7 +128,7 @@ final class MusicPanel {
     private void empty(String message){
         controller=null;playback=null;duration=0;track=null;scrubbing=false;optimisticUntil=0;displayedArtwork=null;title.setText("Now playing");artist.setText(message);artwork.setImageResource(android.R.drawable.ic_media_play);
         buttons.setVisibility(View.VISIBLE);play.setPlaying(false);enable(prev,false);enable(play,false);enable(next,false);
-        timeline.setVisibility(View.INVISIBLE);seek.setEnabled(false);seek.setProgress(0);elapsed.setText("--:--");total.setText("--:--");
+        timeline.setVisibility(View.INVISIBLE);seek.setEnabled(false);setPositionProgress(0);elapsed.setText("--:--");total.setText("--:--");
     }
     private static String trackKey(MediaMetadata m){
         if(m==null)return null;
@@ -128,14 +146,15 @@ final class MusicPanel {
     private static String format(long millis){
         long seconds=Math.max(0,millis/1000);return seconds>=3600?String.format(Locale.ROOT,"%d:%02d:%02d",seconds/3600,seconds/60%60,seconds%60):String.format(Locale.ROOT,"%d:%02d",seconds/60,seconds%60);
     }
+    private void setPositionProgress(int value){if(driveProgress!=null)driveProgress.setProgress(value);else seek.setProgress(value);}
     void updatePosition(){
         if(scrubbing||duration<=0||timeline.getVisibility()!=View.VISIBLE)return;
         PlaybackState state=playback;
-        if(state==null||state.getPosition()<0){elapsed.setText("--:--");seek.setProgress(0);return;}
+        if(state==null||state.getPosition()<0){elapsed.setText("--:--");setPositionProgress(0);return;}
         long now=SystemClock.elapsedRealtime();long position=state.getPosition();
         if(now<optimisticUntil)position=optimisticPosition;
         else if(state.getState()==PlaybackState.STATE_PLAYING&&state.getLastPositionUpdateTime()>0){position+=(long)(Math.max(0,now-state.getLastPositionUpdateTime())*state.getPlaybackSpeed());}
-        position=Math.max(0,Math.min(duration,position));elapsed.setText(format(position));seek.setProgress((int)Math.round(position/(double)duration*STEPS));
+        position=Math.max(0,Math.min(duration,position));elapsed.setText(format(position));setPositionProgress((int)Math.round(position/(double)duration*STEPS));
     }
     void refresh(){
         if(!LauncherNotifications.allowed(context)){empty("Enable notification / music access in launcher settings.");return;}

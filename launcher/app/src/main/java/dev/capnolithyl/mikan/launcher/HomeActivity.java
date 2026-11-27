@@ -459,23 +459,29 @@ public class HomeActivity extends Activity {
         ScrollView scroll=new ScrollView(this);scroll.setFillViewport(true);scroll.setVerticalScrollBarEnabled(false);
         page.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
         boolean wide=getResources().getConfiguration().orientation==android.content.res.Configuration.ORIENTATION_LANDSCAPE;
-        LinearLayout cards=wide?horizontal():vertical();cards.setGravity(Gravity.TOP);
-        scroll.addView(cards,new ScrollView.LayoutParams(-1,-1));
-        LinearLayout maps=vertical();maps.setGravity(Gravity.CENTER);maps.setPadding(dp(16),dp(20),dp(16),dp(20));maps.setMinimumHeight(dp(156));maps.setBackground(panelShape(24));
+        // Natural-height cards in a fill-viewport scroll view. Never redistribute
+        // vertical space between wrap-content children using nested weights.
+        LinearLayout cards=wide?horizontal():vertical();cards.setGravity(Gravity.CENTER);
+        scroll.addView(cards,new ScrollView.LayoutParams(-1,-2));
+        LinearLayout maps=wide?vertical():horizontal();maps.setGravity(Gravity.CENTER);
+        maps.setPadding(dp(18),dp(20),dp(18),dp(20));maps.setMinimumHeight(dp(wide?180:124));maps.setBackground(panelShape(24));
         ImageView icon=new ImageView(this);App target=driveMaps();
         if(target!=null)icon.setImageDrawable(themedIcon(target));else icon.setImageDrawable(new MikanMark(MikanMark.GLOBE,PEACH));
         icon.setScaleType(ImageView.ScaleType.FIT_CENTER);icon.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
-        maps.addView(icon,new LinearLayout.LayoutParams(dp(80),dp(80)));gap(maps,12);
-        TextView nav=text("Navigation",24,CREAM,true);nav.setGravity(Gravity.CENTER);maps.addView(nav);
-        TextView hint=text(target==null?"Open navigation app":"Open Google Maps",14,PEACH,false);hint.setGravity(Gravity.CENTER);maps.addView(hint);
+        maps.addView(icon,new LinearLayout.LayoutParams(dp(64),dp(64)));
+        LinearLayout labels=vertical();labels.setGravity(wide?Gravity.CENTER:Gravity.CENTER_VERTICAL);
+        if(wide){gap(maps,10);maps.addView(labels,new LinearLayout.LayoutParams(-1,-2));}
+        else{labels.setPadding(dp(16),0,0,0);maps.addView(labels,new LinearLayout.LayoutParams(0,-2,1));}
+        TextView nav=text("Navigation",22,CREAM,true);nav.setGravity(wide?Gravity.CENTER:Gravity.START);labels.addView(nav);
+        TextView hint=text(target==null?"Open navigation app":"Open Google Maps",15,PEACH,false);hint.setGravity(wide?Gravity.CENTER:Gravity.START);labels.addView(hint);
         widgetLink(maps,"Open navigation",this::openDriveMaps);
         music=new MusicPanel(this,false,true);
         widgetLink(music.view(),"Open music app",()->{App app=widgetTarget("music");if(app!=null)launch(app);else Toast.makeText(this,"Choose a music shortcut in launcher settings.",Toast.LENGTH_SHORT).show();});
         if(wide){
-            cards.addView(maps,new LinearLayout.LayoutParams(0,-1,1));LinearLayout.LayoutParams mp=new LinearLayout.LayoutParams(0,-1,1);mp.leftMargin=dp(12);cards.addView(music.view(),mp);
+            cards.addView(maps,new LinearLayout.LayoutParams(0,-2,1));LinearLayout.LayoutParams mp=new LinearLayout.LayoutParams(0,-2,1.45f);mp.leftMargin=dp(12);cards.addView(music.view(),mp);
         }else{
-            cards.addView(maps,new LinearLayout.LayoutParams(-1,-2,1));gap(cards,12);
-            cards.addView(music.view(),new LinearLayout.LayoutParams(-1,-2,1));
+            cards.addView(maps,new LinearLayout.LayoutParams(-1,-2));gap(cards,12);
+            cards.addView(music.view(),new LinearLayout.LayoutParams(-1,-2));
         }
         gap(page,8);TextView note=text("Drive safely ♡",13,MUTED,false);note.setGravity(Gravity.CENTER);page.addView(note);
         music.refresh();queueExtras();
