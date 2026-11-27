@@ -1,5 +1,6 @@
 import {createHash} from "node:crypto";
 import {eligibleTurn} from "./learning.mjs";
+import {createHindsightImporter,CHARACTER_BANK} from "./hindsight-import.mjs";
 
 const BANK="mikan-experimental-user";
 const HOUR=3600000, DAY=24*HOUR;
@@ -58,14 +59,16 @@ export async function recallContext(client,bank,query,base,{signal,strict=false,
 
 export function createHindsight({db,client=createHindsightClient(),now=Date.now,namespace="legacy"}){
   if(!["legacy","local"].includes(namespace))throw Error("Invalid Hindsight namespace");
+  const rawDb=db;
   if(namespace==="local"){const raw=db;const sql=s=>s.replaceAll("nas_hindsight_","nas_hindsight_local_");db={exec:s=>raw.exec(sql(s)),prepare:s=>raw.prepare(sql(s))};}
   db.exec("CREATE TABLE IF NOT EXISTS nas_hindsight_config (id INTEGER PRIMARY KEY CHECK(id=1),mode TEXT NOT NULL DEFAULT 'sqlite',capture INTEGER NOT NULL DEFAULT 0,dreams INTEGER NOT NULL DEFAULT 0,daily_batches INTEGER NOT NULL DEFAULT 12,daily_dreams INTEGER NOT NULL DEFAULT 1); INSERT OR IGNORE INTO nas_hindsight_config(id) VALUES(1);"+
     "CREATE TABLE IF NOT EXISTS nas_hindsight_queue (user_id TEXT PRIMARY KEY REFERENCES messages(id) ON DELETE CASCADE,conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,created_at INTEGER NOT NULL,status TEXT NOT NULL DEFAULT 'queued',batch TEXT);"+
     "CREATE TABLE IF NOT EXISTS nas_hindsight_runs (id INTEGER PRIMARY KEY,kind TEXT NOT NULL,day TEXT NOT NULL,at INTEGER NOT NULL,status TEXT NOT NULL,detail TEXT,model_id TEXT,operation_id TEXT,revision INTEGER NOT NULL DEFAULT 0);");
   db.exec("UPDATE nas_hindsight_queue SET status='uncertain' WHERE status='sending'; UPDATE nas_hindsight_runs SET status='uncertain' WHERE status='sending'");
+  const importer=namespace==="local"?createHindsightImporter({db:rawDb}):null;
   let running=false,cache=[],cacheLoaded=false,lastError=null,lastRecallMs=null,lastProbe=null;
   const config=()=>{const r=db.prepare("SELECT * FROM nas_hindsight_config WHERE id=1").get();return {mode:r.mode,capture:!!r.capture,dreams:!!r.dreams,dailyBatches:r.daily_batches,dailyDreams:r.daily_dreams};};
-  const count=kind=>db.prepare("SELECT count(*) AS n FROM nas_hindsight_runs WHERE day=? AND kind=?").get(day(now()),kind).n;
+  const count=kind=>kind==="retain"?db.prepare("SELECT count(*) AS n FROM nas_hindsight_runs WHERE day=? AND kind IN ('retain','import-character')").get(day(now())).n:db.prepare("SELECT count(*) AS n FROM nas_hindsight_runs WHERE day=? AND kind=?").get(day(now()),kind).n;
   const status=()=>({...config(),busy:running||!!pending(),lastError,lastRecallMs,lastProbe,queued:db.prepare("SELECT count(*) AS n FROM nas_hindsight_queue WHERE status='queued'").get().n,uncertain:db.prepare("SELECT count(*) AS n FROM nas_hindsight_queue WHERE status='uncertain'").get().n,batchesToday:count("retain"),dreamsToday:count("dream"),models:cache.map(m=>({id:m.id,name:m.name,content:m.content??"",lastRefreshedAt:m.last_refreshed_at??null})),runs:db.prepare("SELECT kind,at,status,detail,model_id AS modelId FROM nas_hindsight_runs ORDER BY id DESC LIMIT 20").all().map(r=>({...r,detail:r.detail?JSON.parse(r.detail):null}))});
   const pending=()=>db.prepare("SELECT * FROM nas_hindsight_runs WHERE status='pending' AND kind='dream' ORDER BY id LIMIT 1").get();
   const revision=()=>db.prepare("SELECT COALESCE(MAX(id),0) AS n FROM nas_hindsight_runs WHERE kind='retain' AND status='done'").get().n;
@@ -79,6 +82,7 @@ export function createHindsight({db,client=createHindsightClient(),now=Date.now,
     db.prepare("UPDATE nas_hindsight_config SET mode=?,capture=?,dreams=?,daily_batches=?,daily_dreams=? WHERE id=1").run(v.mode,+v.capture,+v.dreams,v.dailyBatches,v.dailyDreams);
     // An explicit opt-out must not leave pending owner text queued for later upload.
     if(v.mode!=="hindsight"||!v.capture)db.prepare("DELETE FROM nas_hindsight_queue WHERE status='queued'").run();
+    if(v.mode!=="hindsight")importer?.pause();
     return status();
   }
   function enqueue(user,conversationId,consent){
@@ -92,10 +96,12 @@ export function createHindsight({db,client=createHindsightClient(),now=Date.now,
     const prior=history.slice(0,-1).filter(m=>m.role==="user").at(-1)?.content;
     const query=(safe(prior)?prior.slice(0,500)+"\nCurrent question: ":"")+question;
     const started=now();
-    const result=await recallContext(client,BANK,query,base,{signal,dreams:config().dreams?cache:[]});
+    const [result,character]=await Promise.all([recallContext(client,BANK,query,base,{signal,dreams:config().dreams?cache:[]}),importer?.hasCharacter()?client.recall(CHARACTER_BANK,query,signal).then(formatHindsight).catch(()=>[]):Promise.resolve([])]);
     lastRecallMs=now()-started;
     lastError=result?null:"Hindsight empty or unavailable; used SQLite fallback";
-    return result??{...fallback,engine:"sqlite-fallback"};
+    const selected=result??{...fallback,engine:"sqlite-fallback"};
+    const canon=character.slice(0,5).join("\n").slice(0,1800);
+    return canon?{...selected,text:selected.text+"\nMIKAN CHARACTER MEMORY (fictional identity, not owner facts; existing editable canon takes priority):\n"+canon,auditLines:[...(selected.auditLines??[]),...character.slice(0,5)].slice(0,32)}:selected;
   }
   async function tick({idleMs,consent}){
     if(running)return;
@@ -130,6 +136,10 @@ export function createHindsight({db,client=createHindsightClient(),now=Date.now,
           return;
         }
       }
+      if(importer&&idleMs>=60000&&count("retain")<c.dailyBatches){
+        const batch=importer.next();
+        if(batch){const id=start(batch.bank===CHARACTER_BANK?"import-character":"retain");try{const result=await client.retain(batch.bank,batch.items);if(result?.success!==true||result.items_count!==undefined&&result.items_count!==batch.items.length)throw Error("Import not confirmed");importer.finish(batch,true);finish(id,"done",{import:true,items:batch.items.length,usage:result.usage??null});lastError=null;}catch{importer.finish(batch,false);finish(id,"uncertain",{import:true,items:batch.items.length});lastError="Import paused: submission outcome uncertain";}return;}
+      }
       if(!c.dreams||!consent||idleMs<30*60000||count("dream")>=c.dailyDreams||!revision())return;
       // Each successful retain advances the local revision. Refresh at most one
       // stale model per idle tick, no native automatic refresh loops.
@@ -147,7 +157,7 @@ export function createHindsight({db,client=createHindsightClient(),now=Date.now,
     }catch{lastError="Hindsight background status unavailable";}
     finally{running=false;}
   }
-  return {config,status,save,probe,enqueue,context,tick,client,isWorking:()=>running};
+  return {config,status,save,probe,enqueue,context,tick,client,importer,isWorking:()=>running};
 }
 
 /** Independent queue, history and mental model operation state for each index. */
@@ -167,13 +177,14 @@ export function createHindsightRouter({db,legacyClient=createHindsightClient(),l
     switching=true;
     try{
       const updated=await workers[id].save(value);
+      if(id!=="local")local.importer.pause();
       db.prepare("UPDATE nas_hindsight_selection SET backend=? WHERE id=1").run(id);
       return status(id,updated);
     }finally{switching=false;}
   }
   // Brain Lab admission prevents a backend switch while its run is active.
   const client=Object.fromEntries(Object.keys(legacyClient).map(method=>[method,(...args)=>active().client[method](...args)]));
-  return {backend,client,config:()=>active().config(),status:()=>status(),save,
+  return {backend,client,config:()=>active().config(),status:()=>status(),save,importer:local.importer,
     probe:async(value)=>{const id=choose(value);return status(id,await workers[id].probe());},
     enqueue:(...args)=>active().enqueue(...args),context:args=>active().context(args),
     tick:args=>switching?Promise.resolve():active().tick(args),

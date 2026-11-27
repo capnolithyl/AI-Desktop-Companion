@@ -33,6 +33,10 @@ export type UpdateRecord={channel?:UpdateChannel;phase:UpdatePhase;installed:str
 export type NasUpdateStatus={build:NasBuild;pending:UpdateAction|null;host:(UpdateRecord&{checkedAt:number|null;lastBackup:number|null;history:UpdateRecord[]})|null};
 export type NasStatus=NasModels&{busy:boolean;memoryBusy?:boolean;build?:NasBuild};
 export type LearningEvent={id:number;conversationId:string|null;assistantId:string|null;kind:"outcome"|"failed"|"queued"|"skipped"|"recall"|"search";createdAt:number;payload:{saved?:number;reviewQueued?:number;entries?:{description:string;status:string;kind:string}[];stage?:string;validated?:number;proposed?:number;reason?:string;lines?:string[];title?:string;detail?:string}};
+export type ImportCategory="facts"|"interests"|"character"|"summaries"|"messages";
+export type ImportCounts={queued:number;sending:number;done:number;uncertain:number;skipped:number};
+export type HindsightImportStatus=ImportCounts&{enabled:boolean;byCategory:Record<ImportCategory,ImportCounts>;issues:{key:string;status:string;reason:string;documentId:string;bank:string}[]};
+export type HindsightImportPreview={digest:string;ready:number;total:number;page:number;pages:number;counts:Partial<Record<ImportCategory,{total:number;ready:number;blocked:number}>>;rows:{key:string;category:ImportCategory;status:string;reason:string|null;text:string|null}[]};
 export type HindsightSettings={backend?:"legacy"|"local";mode:"sqlite"|"hindsight";capture:boolean;dreams:boolean;dailyBatches:number;dailyDreams:number};
 export type HindsightStatus=HindsightSettings&{selectedBackend?:"legacy"|"local";busy:boolean;lastError:string|null;lastRecallMs:number|null;lastProbe:boolean|null;queued:number;uncertain:number;batchesToday:number;dreamsToday:number;models:{id:string;name:string;content:string;lastRefreshedAt:string|null}[];runs:{kind:string;at:number;status:string;detail:unknown;modelId:string|null}[]};
 export type BrainScenario={id:string;number:number;label:string;group:string;turns:number;supported:boolean};
@@ -57,6 +61,9 @@ export class NasClient {
   }
   private async json<T>(path:string,options?:RequestInit):Promise<T>{return (await this.request(path,options)).json();}
   hindsight(){return this.json<HindsightStatus>("hindsight");}
+  hindsightImport(){return this.json<HindsightImportStatus>("hindsight/import");}
+  previewHindsightImport(categories:ImportCategory[],page=0){return this.json<HindsightImportPreview>("hindsight/import",{method:"POST",body:JSON.stringify({action:"preview",categories,page})});}
+  changeHindsightImport(action:string,args:object={}){return this.json<HindsightImportStatus>("hindsight/import",{method:"POST",body:JSON.stringify({action,...args})});}
   probeHindsight(backend?:HindsightSettings["backend"]){return this.json<HindsightStatus>("hindsight/probe",{method:"POST",body:JSON.stringify({backend})});}
   saveHindsight(settings:HindsightSettings){return this.json<HindsightStatus>("hindsight",{method:"PUT",body:JSON.stringify(settings)});}
   updates(){return this.json<NasUpdateStatus>("updates");}

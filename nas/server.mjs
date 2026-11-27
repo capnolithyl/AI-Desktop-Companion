@@ -104,6 +104,22 @@ export function makeServer({store,config,key,promptFile="",maintenanceFile="/dat
         writing=true;activeWrites++;
       }
       if(req.method==="GET"&&path==="/api/hindsight")return json(res,200,hindsight.status());
+      if(path==="/api/hindsight/import"){
+        if(!hindsight.importer)return json(res,404,{error:"Local importer unavailable"});
+        if(req.method==="GET")return json(res,200,hindsight.importer.status());
+        if(req.method==="POST"){
+          const body=await readJson(req,4096),imp=hindsight.importer;
+          if(body.action==="preview")return json(res,200,imp.preview(body.categories,body.page??0));
+          if(body.action==="pause")return json(res,200,imp.pause());
+          if(unavailable())return json(res,409,{error:"Wait for the current operation"});
+          if(body.action==="discard")return json(res,200,imp.discard());
+          if(body.action==="acknowledge")return json(res,200,imp.acknowledge(body));
+          if(hindsight.backend?.()!=="local"||hindsight.config().mode!=="hindsight")return json(res,409,{error:"Save Local retrieval + Hindsight first"});
+          if(body.action==="start")return json(res,200,imp.start(body));
+          if(body.action==="resume"&&body.consent===true)return json(res,200,imp.resume());
+          return json(res,400,{error:"Invalid import action or missing consent"});
+        }
+      }
       if(req.method==="POST"&&path==="/api/hindsight/probe"){const body=await readJson(req,1024);return json(res,200,await hindsight.probe(body?.backend));}
       if(req.method==="PUT"&&path==="/api/hindsight"){const body=await readJson(req,2048);if(unavailable())return json(res,409,{error:"Wait for current operation"});return json(res,200,await hindsight.save(body));}
       if(req.method==="GET"&&path==="/api/updates")return json(res,200,{build:BUILD,...updates.get()});
