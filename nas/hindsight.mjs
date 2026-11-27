@@ -26,6 +26,8 @@ export function createHindsightClient({url="http://hindsight-test:8888",key="",f
   const path=(bank,suffix)=>"/v1/default/banks/"+encodeURIComponent(bank)+suffix;
   return {
     health:()=>request("/health"),
+    archiveSupport:async()=>{const schema=await request("/openapi.json");const paths=schema?.paths??{};if(paths["/v1/default/banks/{bank_id}/document-transfer"]?.post)return "documents";if(paths["/v1/default/banks/{bank_id}/transfer/import"]?.post)return "bank";return null;},
+    importArchive:async(bank,zip,kind)=>{if(!["documents","bank"].includes(kind))throw err("Native Hindsight archive import unavailable",409);const form=new FormData();form.append("file",new Blob([zip],{type:"application/zip"}),"mikan-import.zip");const suffix=kind==="documents"?"/document-transfer?on_conflict=skip":"/transfer/import?mode=merge&document_conflict=skip";const r=await fetcher(new URL(path(bank,suffix),origin),{method:"POST",redirect:"error",signal:AbortSignal.timeout(30000),headers:{Accept:"application/json",...(key?{Authorization:"Bearer "+key}:{})},body:form});if(!r.ok)throw err("Hindsight archive HTTP "+r.status,r.status);return r.json();},
     recall:(bank,query,signal)=>request(path(bank,"/memories/recall"),{query,budget:"low",max_tokens:1000,types:["world","experience","observation"],prefer_observations:true},signal,10000),
     retain:(bank,items,signal)=>request(path(bank,"/memories"),{items,async:false},signal,300000),
     models:bank=>request(path(bank,"/mental-models?detail=content")),
@@ -71,7 +73,7 @@ export function createHindsight({db,client=createHindsightClient(),now=Date.now,
   const count=kind=>kind==="retain"?db.prepare("SELECT count(*) AS n FROM nas_hindsight_runs WHERE day=? AND kind IN ('retain','import-character')").get(day(now())).n:db.prepare("SELECT count(*) AS n FROM nas_hindsight_runs WHERE day=? AND kind=?").get(day(now()),kind).n;
   const status=()=>({...config(),busy:running||!!pending(),lastError,lastRecallMs,lastProbe,queued:db.prepare("SELECT count(*) AS n FROM nas_hindsight_queue WHERE status='queued'").get().n,uncertain:db.prepare("SELECT count(*) AS n FROM nas_hindsight_queue WHERE status='uncertain'").get().n,batchesToday:count("retain"),dreamsToday:count("dream"),models:cache.map(m=>({id:m.id,name:m.name,content:m.content??"",lastRefreshedAt:m.last_refreshed_at??null})),runs:db.prepare("SELECT kind,at,status,detail,model_id AS modelId FROM nas_hindsight_runs ORDER BY id DESC LIMIT 20").all().map(r=>({...r,detail:r.detail?JSON.parse(r.detail):null}))});
   const pending=()=>db.prepare("SELECT * FROM nas_hindsight_runs WHERE status='pending' AND kind='dream' ORDER BY id LIMIT 1").get();
-  const revision=()=>db.prepare("SELECT COALESCE(MAX(id),0) AS n FROM nas_hindsight_runs WHERE kind='retain' AND status='done'").get().n;
+  const revision=()=>db.prepare("SELECT COALESCE(MAX(id),0) AS n FROM nas_hindsight_runs WHERE kind IN ('retain','import-archive') AND status='done'").get().n;
   const start=(kind,modelId=null,rev=0)=>Number(db.prepare("INSERT INTO nas_hindsight_runs(kind,day,at,status,model_id,revision) VALUES(?,?,?,'sending',?,?)").run(kind,day(now()),now(),modelId,rev).lastInsertRowid);
   const finish=(id,status,detail=null)=>db.prepare("UPDATE nas_hindsight_runs SET status=?,detail=? WHERE id=?").run(status,detail?JSON.stringify(detail):null,id);
   const updateCache=async()=>{const result=await client.models(BANK);if(!Array.isArray(result?.items))throw Error("Invalid mental model list");cache=result.items.filter(m=>specs.some(s=>s[0]===m.id));cacheLoaded=true;};
@@ -103,11 +105,32 @@ export function createHindsight({db,client=createHindsightClient(),now=Date.now,
     const canon=character.slice(0,5).join("\n").slice(0,1800);
     return canon?{...selected,text:selected.text+"\nMIKAN CHARACTER MEMORY (fictional identity, not owner facts; existing editable canon takes priority):\n"+canon,auditLines:[...(selected.auditLines??[]),...character.slice(0,5)].slice(0,32)}:selected;
   }
-  async function tick({idleMs,consent}){
+  async function tick({idleMs,consent,allowLlm=true}){
     if(running)return;
-    const c=config();if(c.mode!=="hindsight"&&!pending())return;
+    const c=config();if(c.mode!=="hindsight"&&!pending()&&!importer?.pending())return;
     running=true;
     try{
+      const transfer=importer?.pending();
+      if(transfer){
+        const result=await client.operation(transfer.bank,transfer.operationId);
+        if(result.status==="completed"){
+          const counts=result.result_metadata??{};
+          const confirmed=counts.documents_imported===transfer.keys.length&&counts.facts_imported===transfer.keys.length;
+          importer.finish(transfer,confirmed);
+          if(confirmed){const id=start(transfer.bank===CHARACTER_BANK?"import-character-archive":"import-archive");finish(id,"done",{items:transfer.keys.length,operationId:transfer.operationId,extraction:false});lastError=null;}else lastError="Archive completed but counts do not confirm every document; inspect Hindsight";
+        }else if(["failed","cancelled","not_found"].includes(result.status)){importer.finish(transfer,false);lastError="Archive failed or incomplete; inspect Hindsight";}
+        return;
+      }
+      if(c.mode==="hindsight"&&importer&&idleMs>=60000&&importer.status().enabled&&importer.status().queued>0){
+        const queued=importer.status(),nativeQueued=queued.queued-queued.byCategory.messages.queued;
+        if(nativeQueued>0){
+          let kind;try{kind=await client.archiveSupport();}catch{lastError="Cannot verify native Hindsight archive endpoint";return;}
+          if(!kind){importer.pause();lastError="Installed Hindsight does not advertise native archive import; no extraction fallback";return;}
+          const batch=importer.next();
+          if(batch){try{const result=await client.importArchive(batch.bank,batch.archive,kind);importer.accepted(batch,result.operation_id);lastError=null;}catch{importer.finish(batch,false);lastError="Archive submission uncertain; no automatic retry";}return;}
+        }
+      }
+      if(!allowLlm)return;
       const op=pending();
       if(op){
         const result=await client.operation(BANK,op.operation_id);
@@ -137,8 +160,8 @@ export function createHindsight({db,client=createHindsightClient(),now=Date.now,
         }
       }
       if(importer&&idleMs>=60000&&count("retain")<c.dailyBatches){
-        const batch=importer.next();
-        if(batch){const id=start(batch.bank===CHARACTER_BANK?"import-character":"retain");try{const result=await client.retain(batch.bank,batch.items);if(result?.success!==true||result.items_count!==undefined&&result.items_count!==batch.items.length)throw Error("Import not confirmed");importer.finish(batch,true);finish(id,"done",{import:true,items:batch.items.length,usage:result.usage??null});lastError=null;}catch{importer.finish(batch,false);finish(id,"uncertain",{import:true,items:batch.items.length});lastError="Import paused: submission outcome uncertain";}return;}
+        const batch=importer.next({archive:false});
+        if(batch){const id=start("retain");try{const result=await client.retain(batch.bank,batch.items);if(result?.success!==true||result.items_count!==undefined&&result.items_count!==batch.items.length)throw Error("Import not confirmed");importer.finish(batch,true);finish(id,"done",{import:true,items:batch.items.length,usage:result.usage??null});lastError=null;}catch{importer.finish(batch,false);finish(id,"uncertain",{import:true,items:batch.items.length});lastError="Import paused: submission outcome uncertain";}return;}
       }
       if(!c.dreams||!consent||idleMs<30*60000||count("dream")>=c.dailyDreams||!revision())return;
       // Each successful retain advances the local revision. Refresh at most one
@@ -172,7 +195,7 @@ export function createHindsightRouter({db,legacyClient=createHindsightClient(),l
   const status=(id=backend(),value=workers[id].status())=>({...value,backend:id,selectedBackend:backend()});
   let switching=false;
   async function save(value){
-    if(switching||active().isWorking())throw err("Memory operation in progress",409);
+    if(switching||active().isWorking()||local.importer.pending())throw err("Memory operation in progress",409);
     const id=choose(value?.backend);
     switching=true;
     try{

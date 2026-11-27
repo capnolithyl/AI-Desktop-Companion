@@ -47,6 +47,7 @@ jobs:
           node --check nas/learning.mjs
           node --check nas/hindsight.mjs
           node --check nas/hindsight-import.mjs
+          node --check nas/hindsight-archive.mjs
           node --check nas/semantic-recall.mjs
           sh -n nas/install-local-hindsight.sh
           python3 -m py_compile nas/embed-memory.py nas/local-retrieval.py nas/tests/local-retrieval-smoke.py

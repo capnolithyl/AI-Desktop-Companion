@@ -115,7 +115,11 @@ export function makeServer({store,config,key,promptFile="",maintenanceFile="/dat
           if(body.action==="discard")return json(res,200,imp.discard());
           if(body.action==="acknowledge")return json(res,200,imp.acknowledge(body));
           if(hindsight.backend?.()!=="local"||hindsight.config().mode!=="hindsight")return json(res,409,{error:"Save Local retrieval + Hindsight first"});
-          if(body.action==="start")return json(res,200,imp.start(body));
+          if(body.action==="start"){
+            if(Array.isArray(body.categories)&&body.categories.some(c=>c!=="messages")){const supported=await hindsight.client.archiveSupport().catch(()=>null);if(!supported)return json(res,409,{error:"Installed Hindsight does not advertise native archive import. No records were sent. Check its version before importing."});}
+            if(unavailable()||hindsight.backend?.()!=="local"||hindsight.config().mode!=="hindsight")return json(res,409,{error:"Memory engine changed or became busy; retry"});
+            return json(res,200,imp.start(body));
+          }
           if(body.action==="resume"&&body.consent===true)return json(res,200,imp.resume());
           return json(res,400,{error:"Invalid import action or missing consent"});
         }
@@ -334,7 +338,7 @@ export function makeServer({store,config,key,promptFile="",maintenanceFile="/dat
     });
   },memoryPollMs);
   timer.unref();
-  const dreamTimer=setInterval(()=>{if(maintenance()||unavailable()||activeWrites||!models.available(hindsight.backend?.()==="local"?models.view().provider:"nvidia",3))return;void hindsight.tick({idleMs:Date.now()-lastInteractionAt,consent:store.learning.getStatus().settings.user}).catch(()=>console.error("Hindsight background worker failed"));},30000);
+  const dreamTimer=setInterval(()=>{if(maintenance()||unavailable()||activeWrites)return;const allowLlm=models.available(hindsight.backend?.()==="local"?models.view().provider:"nvidia",3);if(!allowLlm&&hindsight.backend?.()!=="local")return;void hindsight.tick({idleMs:Date.now()-lastInteractionAt,consent:store.learning.getStatus().settings.user,allowLlm}).catch(()=>console.error("Hindsight background worker failed"));},30000);
   dreamTimer.unref();server.once("close",()=>{clearInterval(timer);clearInterval(dreamTimer);memoryAbort?.abort();});
   return server;
 }
