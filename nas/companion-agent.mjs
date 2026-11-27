@@ -86,7 +86,7 @@ export function publicResearchURL(value){
 const webDeclined=question=>/\b(?:do not|don't|never|no need to)\s+(?:browse|search|look up|use the web|go online)\b/i.test(question);
 const suppliedWebURLs=question=>[...question.matchAll(/https?:\/\/[^\s<>"']+/gi)].map(m=>publicResearchURL(m[0].replace(/[),.!?]+$/,""))?.href).filter(Boolean);
 
-export async function companionTurn({store,conversationId,question,history,rawHistory,memory,profile,selected,mode,requestModel,reserve,canRequest,search,read,knowledge,trace,onDelta,activity,signal,now=new Date()}){
+export async function companionTurn({store,conversationId,question,history,rawHistory,memory,profile,selected,mode,requestModel,reserve,canRequest,search,read,knowledge,trace,onDelta,activity,signal,now=new Date(),memoryEngine}){
   const initial=cleanHistory(history);
   const transcript=[...initial],sources=[],publicSources=[],handles=new Map(),ids=new Set(memory.ids),auditLines=[...memory.auditLines];
   const webAllowed=mode!=="off"&&!webDeclined(question)&&!containsCredential(question);
@@ -147,9 +147,11 @@ export async function companionTurn({store,conversationId,question,history,rawHi
           if(call.function.name==="recall_memory"&&typeof a.query==="string"&&a.query.trim()&&a.query.length<=400){
             const semantic=await store.library.semanticRecall?.(a.query,{signal,explicitRecall:true});
             if(semantic&&!["unavailable","empty"].includes(semantic.status))activity({title:"Semantic memory retrieval",detail:semantic.status+" · "+semantic.indexed+"/"+semantic.total+" facts indexed",lines:semantic.ids.map(id=>"Memory #"+id)});
-            const found=store.library.context(a.query,conversationId,{modelLed:true,includeSessions:false,explicitRecall:true,semanticIds:semantic?.ids??[]});
+            const fallback=store.library.context(a.query,conversationId,{modelLed:true,includeSessions:false,explicitRecall:true,semanticIds:semantic?.ids??[]});
+            const found=memoryEngine?await trace.measure("hindsight-tool-recall",()=>memoryEngine({question:a.query,history:[],base:fallback,fallback,signal})):fallback;
+            if(found.engine)activity({title:"Memory engine",detail:found.engine,lines:[]});
             for(const id of found.ids)ids.add(id);auditLines.push(...found.auditLines);
-            out={memory:found.text||"No matching memory",dialogue:store.library.recallDialogue?.(a.query)??[],retrieval:{semantic:semantic?.status??"unavailable",indexedFacts:semantic?.indexed??0,totalFacts:semantic?.total??0,completeLibrary:false}};activity({title:"Memory retrieved",detail:"Model requested additional context",lines:[]});
+            out={memory:found.text||"No matching memory",dialogue:store.library.recallDialogue?.(a.query)??[],retrieval:{engine:found.engine??"sqlite",semantic:semantic?.status??"unavailable",indexedFacts:semantic?.indexed??0,totalFacts:semantic?.total??0,completeLibrary:false}};activity({title:"Memory retrieved",detail:"Model requested additional context",lines:[]});
           }else if(call.function.name==="find_knowledge"&&knowledge&&typeof a.query==="string"&&a.query.trim()&&a.query.length<=400){
             const matches=knowledge.candidates(a.query,initial,prior).slice(0,40);
             for(const p of matches)handles.set(p.id,p);
