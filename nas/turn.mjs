@@ -42,7 +42,7 @@ export function turnTrace(mode){
     snapshot:()=>({mode,totalMs:elapsed(),firstTextMs,stages:[...stages],...(inference.length?{inference:[...inference]}:{}),modelCalls:stages.filter(s=>["planner","knowledge-planner","answer","manuscript-repair","research-repair","research-recovery","agent","agent-answer"].includes(s.stage)).length})};
 }
 // Shared executor: caller owns authentication, admission, persistence and quota.
-export async function executeNasTurn({store,conversationId,question,selected,mode,promptFile="",requestModel,reserve,canRequest,search,read,trace=turnTrace(mode),onDelta=()=>{},activity=()=>{},signal,knowledge,publicAgent=process.env.MIKAN_PUBLIC_AGENT==="1",agentDiagnostics=false,now=new Date()}){
+export async function executeNasTurn({store,conversationId,question,selected,mode,promptFile="",requestModel,reserve,canRequest,search,read,trace=turnTrace(mode),onDelta=()=>{},activity=()=>{},signal,knowledge,publicAgent=process.env.MIKAN_PUBLIC_AGENT==="1",agentDiagnostics=false,now=new Date(),memoryEngine}){
   signal?.throwIfAborted();
   const modelLed=publicAgent&&["nvidia","groq","cerebras"].includes(selected.provider);
   const {history,rawHistory,memory}=await trace.measure("context",async()=>{
@@ -53,7 +53,9 @@ export async function executeNasTurn({store,conversationId,question,selected,mod
     const memory=store.library.context(question,conversationId,modelLed?{modelLed:true,includeSessions:false,semanticIds:semantic?.ids??[]}:undefined);
     return {history,rawHistory,memory};
   });
-  if(modelLed)return companionTurn({store,conversationId,question,history,rawHistory,memory,profile:currentProfile(promptFile,store),selected,mode,requestModel,reserve,canRequest,search,read,knowledge,trace,onDelta,activity,signal,now});
+  const initialMemory=memoryEngine?await trace.measure("hindsight-context",()=>memoryEngine({question,history,base:memory,fallback:memory,signal})):memory;
+  if(initialMemory.engine)activity({title:"Memory engine",detail:initialMemory.engine,lines:[]});
+  if(modelLed)return companionTurn({store,conversationId,question,history,rawHistory,memory:initialMemory,memoryEngine,profile:currentProfile(promptFile,store),selected,mode,requestModel,reserve,canRequest,search,read,knowledge,trace,onDelta,activity,signal,now});
   // Explicit compatibility engine for providers without native tool support.
   const recentSources=rawHistory.filter(m=>m.role==="assistant").reverse().flatMap(m=>(m.inference?.sources??[]).filter(s=>s.kind==="notion"||s.kind==="cached-web"));
   const previous=recentSources.filter((s,i)=>recentSources.findIndex(other=>other.id===s.id)===i).slice(0,12);
@@ -74,7 +76,7 @@ export async function executeNasTurn({store,conversationId,question,selected,mod
   const answerHistory=grounded?groundedManuscriptHistory(rawHistory,rawHistory.filter(m=>m.role==="user").at(-1)?.id).map(({role,content})=>({role,content})):history;
   // A manuscript review intentionally excludes personal memories, including
   // owner anchors from unrelated earlier dialogue. Audit only sent context.
-  const answerMemory=grounded||(!researched.local&&researched.sources.length>0&&mode==="strict")?{text:"",ids:[],auditLines:[]}:memory;
+  const answerMemory=grounded||(!researched.local&&researched.sources.length>0&&mode==="strict")?{text:"",ids:[],auditLines:[]}:initialMemory;
   const publicEvidence=!researched.local&&researched.sources.length>0;
   const unavailablePublicPlan=!researched.local&&mode!=="off"&&!publicEvidence&&/Research planning was unavailable|Search service unavailable|Page could not be read|Invalid search query|Direct page was not supplied/.test(researched.note??"");
   const base=systemPrompt(promptFile,store,answerMemory,{question,history:answerHistory,mode,

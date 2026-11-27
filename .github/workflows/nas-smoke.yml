@@ -45,6 +45,7 @@ jobs:
           node --check nas/server.mjs
           node --check nas/storage.mjs
           node --check nas/learning.mjs
+          node --check nas/hindsight.mjs
           node --check nas/semantic-recall.mjs
           python3 -m py_compile nas/embed-memory.py
           rm -rf nas/__pycache__
@@ -59,7 +60,7 @@ jobs:
           node --check nas/public/app.js
       - name: Run NAS smoke tests
         timeout-minutes: 2
-        run: node --test --test-timeout=20000 nas/tests/nas.test.mjs
+        run: node --test --test-timeout=20000 nas/tests/nas.test.mjs nas/tests/hindsight.test.mjs
       - name: Build shared React workspace and deployment bundle
         run: npm ci && npm run build:nas
       - name: Validate Docker image
