@@ -11,7 +11,7 @@ android {
         applicationId = "dev.capnolithyl.mikan.launcher"
         minSdk = 26
         targetSdk = 35
-        versionCode = 51
+        versionCode = 52
         versionName = "1.0.4"
     }
     signingConfigs {

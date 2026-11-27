@@ -10,6 +10,6 @@ final class DriveRules {
     void enable(){suppressed=false;}
     void disable(){projected=false;suppressed=false;preview=false;}
     void preview(){preview=true;}
-    void exit(){preview=false;suppressed=true;}
+    void exit(){preview=false;if(projected)suppressed=true;}
     boolean wants(boolean enabled){return preview||(enabled&&projected&&!suppressed);}
 }

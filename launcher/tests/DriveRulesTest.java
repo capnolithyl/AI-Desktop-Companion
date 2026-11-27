@@ -9,7 +9,8 @@ public final class DriveRulesTest {
         d.connection(null);d.connection(true);check(!d.wants(true));
         d.connection(false);d.connection(true);check(d.wants(true));
         d.disable();check(!d.wants(true));d.preview();check(d.wants(false));
-        d.exit();check(!d.wants(false));d.enable();d.connection(true);check(d.wants(true));
+        d.exit();check(!d.wants(false));d.connection(true);check(d.wants(true));
+        d.exit();d.enable();check(d.wants(true));
         d.connection(null);check(!d.wants(true));
         System.out.println("DriveRules tests passed");
     }
