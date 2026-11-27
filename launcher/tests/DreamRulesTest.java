@@ -64,6 +64,13 @@ public final class DreamRulesTest {
         check(DreamRules.alarmDay(thanksgiving,thanksgiving).equals("Today"));
         check(DreamRules.alarmDay(thanksgiving,thanksgiving.plusDays(1)).equals("Tomorrow"));
         check(!DreamRules.alarmDay(thanksgiving,thanksgiving.plusDays(3)).equals("Tomorrow"));
+        check(DreamRules.batteryPercent(0,100)==0);
+        check(DreamRules.batteryPercent(100,100)==100);
+        check(DreamRules.batteryPercent(92,100)==92);
+        check(DreamRules.batteryPercent(2,3)==67);
+        check(DreamRules.batteryPercent(-1,100)==-1);
+        check(DreamRules.batteryPercent(1,0)==-1);
+        check(DreamRules.batteryPercent(101,100)==-1);
         System.out.println("DreamRules tests passed");
     }
 }
