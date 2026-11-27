@@ -112,7 +112,7 @@ export function createHindsight({db,client=createHindsightClient(),now=Date.now,
     try{
       const transfer=importer?.pending();
       if(transfer){
-        const result=await client.operation(transfer.bank,transfer.operationId);
+        let result;try{result=await client.operation(transfer.bank,transfer.operationId);}catch(e){if(e?.status===404){importer.finish(transfer,false);lastError="Archive operation no longer available; inspect Hindsight";return;}throw e;}
         if(result.status==="completed"){
           const counts=result.result_metadata??{};
           const confirmed=counts.documents_imported===transfer.keys.length&&counts.facts_imported===transfer.keys.length;

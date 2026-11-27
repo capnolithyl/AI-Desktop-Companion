@@ -144,7 +144,10 @@ export function createHindsightImporter({db}){
         db.prepare("UPDATE nas_hindsight_local_import_entries SET status='sending',updated_at=? WHERE source_key=?").run(Date.now(),r.key);
       }
     });
-    return picked.length?{bank,keys:picked.map(r=>r.key),items:picked.map(r=>r.item),...(archive?{archive:buildArchive(picked.map(r=>archiveDocument(r.item,r.category)))}:{})}:null;
+    if(!picked.length)return null;
+    const batch={bank,keys:picked.map(r=>r.key),items:picked.map(r=>r.item)};
+    if(archive){try{batch.archive=buildArchive(picked.map(r=>archiveDocument(r.item,r.category)));}catch(e){finish(batch,false);throw e;}}
+    return batch;
   }
   function accepted(batch,operationId){
     if(typeof operationId!=="string"||!operationId||operationId.length>200)throw Error("Missing archive operation ID");
