@@ -11,10 +11,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends python3 python3
     && rm -rf /var/lib/apt/lists/* \
     && mkdir -p /opt/mikan-embeddings \
     && python3 -m venv /opt/mikan-embeddings/venv \
-    && /opt/mikan-embeddings/venv/bin/pip install --no-cache-dir numpy==1.26.4 onnxruntime==1.20.1 tokenizers==0.21.0 \
+    && /opt/mikan-embeddings/venv/bin/pip install --no-cache-dir numpy==1.26.4 onnxruntime==1.20.1 tokenizers==0.21.0 flashrank==0.2.10 \
     && curl -fsSL --retry 3 "https://huggingface.co/BAAI/bge-small-en-v1.5/resolve/${EMBEDDING_REVISION}/onnx/model_quantized.onnx" -o /opt/mikan-embeddings/model.onnx \
     && echo "6c9c6101a956d62dfb5e7190c538226c0c5bb9cb27b651234b6df063ee7dbfe4  /opt/mikan-embeddings/model.onnx" | sha256sum -c - \
     && curl -fsSL --retry 3 "https://huggingface.co/BAAI/bge-small-en-v1.5/resolve/${EMBEDDING_REVISION}/tokenizer.json" -o /opt/mikan-embeddings/tokenizer.json
+RUN mkdir -p /opt/mikan-reranker && /opt/mikan-embeddings/venv/bin/python -c 'from flashrank import Ranker; Ranker(model_name="ms-marco-MiniLM-L-12-v2",cache_dir="/opt/mikan-reranker",max_length=128)' && chmod -R a+rX /opt/mikan-reranker
 COPY nas/ /app/nas/
 COPY src/notion-reading.ts src/notion-knowledge.ts src/assistant-instructions.ts src/personal-grounding.ts src/runtime-context.ts src/conversation-engine.ts src/narration-filter.ts src/evidence-verification.ts src/brain-eval-fixtures.ts src/brain-eval-cloud.ts src/model-switcher.ts src/assistant-voice.ts src/personality.ts src/communication-preferences.ts src/companion-profile.ts src/avatar-background.ts src/avatar-viewport.ts src/memory-import.ts src/interest-import.ts src/memory-ranking.ts src/identity-memory.ts src/character-canon-routing.ts src/interest-context.ts src/archive-memory.ts src/memory-budget.ts src/memory-retrieval.ts src/session-memory.ts src/unified-planner.ts /app/src/
 COPY --from=native-builder /build/nas/research-native/target/release/mikan-research-native /app/nas/mikan-research-native

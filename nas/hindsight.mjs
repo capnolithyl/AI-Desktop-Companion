@@ -56,7 +56,9 @@ export async function recallContext(client,bank,query,base,{signal,strict=false,
   }catch(e){if(strict||signal?.aborted)throw e;return null;}
 }
 
-export function createHindsight({db,client=createHindsightClient(),now=Date.now}){
+export function createHindsight({db,client=createHindsightClient(),now=Date.now,namespace="legacy"}){
+  if(!["legacy","local"].includes(namespace))throw Error("Invalid Hindsight namespace");
+  if(namespace==="local"){const raw=db;const sql=s=>s.replaceAll("nas_hindsight_","nas_hindsight_local_");db={exec:s=>raw.exec(sql(s)),prepare:s=>raw.prepare(sql(s))};}
   db.exec("CREATE TABLE IF NOT EXISTS nas_hindsight_config (id INTEGER PRIMARY KEY CHECK(id=1),mode TEXT NOT NULL DEFAULT 'sqlite',capture INTEGER NOT NULL DEFAULT 0,dreams INTEGER NOT NULL DEFAULT 0,daily_batches INTEGER NOT NULL DEFAULT 12,daily_dreams INTEGER NOT NULL DEFAULT 1); INSERT OR IGNORE INTO nas_hindsight_config(id) VALUES(1);"+
     "CREATE TABLE IF NOT EXISTS nas_hindsight_queue (user_id TEXT PRIMARY KEY REFERENCES messages(id) ON DELETE CASCADE,conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,created_at INTEGER NOT NULL,status TEXT NOT NULL DEFAULT 'queued',batch TEXT);"+
     "CREATE TABLE IF NOT EXISTS nas_hindsight_runs (id INTEGER PRIMARY KEY,kind TEXT NOT NULL,day TEXT NOT NULL,at INTEGER NOT NULL,status TEXT NOT NULL,detail TEXT,model_id TEXT,operation_id TEXT,revision INTEGER NOT NULL DEFAULT 0);");
@@ -146,4 +148,34 @@ export function createHindsight({db,client=createHindsightClient(),now=Date.now}
     finally{running=false;}
   }
   return {config,status,save,probe,enqueue,context,tick,client,isWorking:()=>running};
+}
+
+/** Independent queue, history and mental model operation state for each index. */
+export function createHindsightRouter({db,legacyClient=createHindsightClient(),localClient=createHindsightClient({url:"http://hindsight-local:8888"}),now=Date.now}){
+  const legacy=createHindsight({db,client:legacyClient,now});
+  const local=createHindsight({db,client:localClient,now,namespace:"local"});
+  const workers={legacy,local};
+  db.exec("CREATE TABLE IF NOT EXISTS nas_hindsight_selection(id INTEGER PRIMARY KEY CHECK(id=1),backend TEXT NOT NULL DEFAULT 'legacy'); INSERT OR IGNORE INTO nas_hindsight_selection(id) VALUES(1)");
+  const backend=()=>db.prepare("SELECT backend FROM nas_hindsight_selection WHERE id=1").get().backend==="local"?"local":"legacy";
+  const active=()=>workers[backend()];
+  const choose=value=>{if(value===undefined)return backend();if(typeof value!=="string"||!Object.hasOwn(workers,value))throw err("Invalid Hindsight backend");return value;};
+  const status=(id=backend(),value=workers[id].status())=>({...value,backend:id,selectedBackend:backend()});
+  let switching=false;
+  async function save(value){
+    if(switching||active().isWorking())throw err("Memory operation in progress",409);
+    const id=choose(value?.backend);
+    switching=true;
+    try{
+      const updated=await workers[id].save(value);
+      db.prepare("UPDATE nas_hindsight_selection SET backend=? WHERE id=1").run(id);
+      return status(id,updated);
+    }finally{switching=false;}
+  }
+  // Brain Lab admission prevents a backend switch while its run is active.
+  const client=Object.fromEntries(Object.keys(legacyClient).map(method=>[method,(...args)=>active().client[method](...args)]));
+  return {backend,client,config:()=>active().config(),status:()=>status(),save,
+    probe:async(value)=>{const id=choose(value);return status(id,await workers[id].probe());},
+    enqueue:(...args)=>active().enqueue(...args),context:args=>active().context(args),
+    tick:args=>switching?Promise.resolve():active().tick(args),
+    isSwitching:()=>switching,isWorking:()=>switching||active().isWorking()};
 }

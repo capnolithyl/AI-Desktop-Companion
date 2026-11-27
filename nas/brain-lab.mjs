@@ -16,7 +16,7 @@ export function seedEvalStore(){
     return store;
   }catch(e){store.db.close();throw e;}
 }
-export function createBrainLab({db,models,requestModel,search,read,build,pace=paceCloudBrainTurn,hindsight}){
+export function createBrainLab({db,models,requestModel,search,read,build,pace=paceCloudBrainTurn,hindsight,hindsightBackend=()=>"legacy"}){
   db.exec("CREATE TABLE IF NOT EXISTS nas_brain_reports(id TEXT PRIMARY KEY,created_at INTEGER NOT NULL,report_json TEXT NOT NULL)");
   const save=report=>{db.prepare("INSERT INTO nas_brain_reports VALUES(?,?,?) ON CONFLICT(id) DO UPDATE SET report_json=excluded.report_json").run(report.id,report.startedAt,JSON.stringify(report));};
   const recent=()=>db.prepare("SELECT report_json FROM nas_brain_reports ORDER BY created_at DESC LIMIT 20").all().map(r=>JSON.parse(r.report_json));
@@ -40,7 +40,7 @@ export function createBrainLab({db,models,requestModel,search,read,build,pace=pa
     if(mode==="off"&&scenarios.some(s=>s.steps.some(t=>t.expect.web===true||t.expect.route==="research")))throw invalid("Enable Simple or Strict for web scenarios");
     if(!models.available(provider))throw models.quotaError(provider);
     controller=new AbortController();const signal=controller.signal;
-    const report={id:randomUUID(),state:"running",startedAt:Date.now(),finishedAt:null,build,provider,model,mode,repetitions,publicAgent,memoryEngine,scenarioIds,total,done:0,currentLabel:"Starting",cases:[],environment:mode==="off"?"isolated-synthetic":"isolated-synthetic+live-public-web",writesToRealMemories:false};
+    const report={id:randomUUID(),state:"running",startedAt:Date.now(),finishedAt:null,build,provider,model,mode,repetitions,publicAgent,memoryEngine,...(memoryEngine==="hindsight"?{hindsightBackend:hindsightBackend()}:{}),scenarioIds,total,done:0,currentLabel:"Starting",cases:[],environment:mode==="off"?"isolated-synthetic":"isolated-synthetic+live-public-web",writesToRealMemories:false};
     current=report;
     try{save(report);}catch(e){controller=null;current=null;throw e;}
     void run(report,scenarios,selected,signal).catch(()=>{console.error("Could not persist NAS Brain Lab report");});
@@ -49,7 +49,7 @@ export function createBrainLab({db,models,requestModel,search,read,build,pace=pa
   async function run(report,scenarios,selected,signal){
     const bank=report.memoryEngine==="hindsight"?"mikan-brain-"+report.id:null;
     try{
-      if(bank){const seeded=await hindsight.retain(bank,[{document_id:"synthetic-fixture",content:EVAL_FACTS.map(f=>new Date(f.updatedAt*1000).toISOString().slice(0,10)+": "+f.fact).join("\n")}],signal);if(seeded?.success!==true)throw Error("Hindsight fixture retain failed");report.hindsightSeedUsage=seeded.usage??null;save(report);}
+      if(bank){report.currentLabel="Preparing isolated Hindsight fixtures";report.seedStartedAt=Date.now();save(report);const seeded=await hindsight.retain(bank,[{document_id:"synthetic-fixture",content:EVAL_FACTS.map(f=>new Date(f.updatedAt*1000).toISOString().slice(0,10)+": "+f.fact).join("\n")}],signal);if(seeded?.success!==true)throw Error("Hindsight fixture retain failed");report.hindsightSeedUsage=seeded.usage??null;report.seedElapsedMs=Date.now()-report.seedStartedAt;save(report);}
       for(const scenario of scenarios)for(let repeat=1;repeat<=report.repetitions;repeat++){
         signal.throwIfAborted();
         const sandbox=bank?openStore(":memory:"):seedEvalStore(),row={id:scenario.id,label:scenario.label,number:scenarioInfo.find(s=>s.id===scenario.id).number,repeat,steps:[]};
@@ -78,7 +78,7 @@ export function createBrainLab({db,models,requestModel,search,read,build,pace=pa
         }finally{sandbox.db.close();}
       }
       report.state="finished";
-    }catch(e){report.state=signal.aborted?"stopped":e?.status===429||e?.upstreamStatus===429?"quota":"failed";if(report.state==="quota"){report.quotaFailure={origin:e?.upstreamStatus===429?"upstream":e?.code??"local-unknown",upstreamStatus:e?.upstreamStatus===429?429:null,snapshot:e?.quota??models.quota(selected.provider)};report.error=report.quotaFailure.origin==="upstream"?"Provider returned HTTP 429; no retries":"NAS quota guard: "+report.quotaFailure.origin+"; no retries";}else report.error=report.state==="failed"?"Turn or fixture execution failed":null;}
+    }catch(e){report.state=signal.aborted?"stopped":e?.status===429||e?.upstreamStatus===429?"quota":"failed";if(report.state==="quota"){report.quotaFailure={origin:e?.upstreamStatus===429?"upstream":e?.code??"local-unknown",upstreamStatus:e?.upstreamStatus===429?429:null,snapshot:e?.quota??models.quota(selected.provider)};report.error=report.quotaFailure.origin==="upstream"?"Provider returned HTTP 429; no retries":"NAS quota guard: "+report.quotaFailure.origin+"; no retries";}else report.error=report.state==="failed"?(bank&&report.done===0&&!Object.hasOwn(report,"hindsightSeedUsage")?"Hindsight fixture ingestion failed ("+(e?.name==="TimeoutError"?"timeout":Number.isInteger(e?.status)?"HTTP "+e.status:"unconfirmed or unavailable")+")":"Turn or fixture execution failed"):null;}
     finally{if(bank){try{await hindsight.removeBank(bank);}catch{report.hindsightCleanupFailed=true;}}report.finishedAt=Date.now();report.currentLabel="";controller=null;save(report);db.prepare("DELETE FROM nas_brain_reports WHERE id NOT IN (SELECT id FROM nas_brain_reports ORDER BY created_at DESC LIMIT 50)").run();}
   }
   function stop(){if(controller){current.state="stopping";controller.abort();save(current);}return {running:!!controller};}
