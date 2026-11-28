@@ -101,8 +101,8 @@ export function createMemoryLibrary(db){
     if(!args||typeof args!=="object"||Array.isArray(args))invalid("Invalid memory arguments");
     try{return commands[action](args);}catch(e){if(/UNIQUE constraint failed/.test(e.message))throw Object.assign(new Error("A matching record already exists; nothing was overwritten"),{status:409});throw e;}
   }
-  function context(question,conversationId,{includeSessions=true,explicitRecall=false,modelLed=false,semanticIds=[]}={}){
-    if(modelLed)return modelContext(question,explicitRecall,semanticIds);
+  function context(question,conversationId,{includeSessions=true,explicitRecall=false,modelLed=false,semanticIds=[],foundationalOnly=false}={}){
+    if(modelLed||foundationalOnly)return modelContext(question,explicitRecall,semanticIds,foundationalOnly);
     const budget=memoryBudget(16384);
     // Whole-word relevance, without an extra inference request. Preserve
     // broad-domain matching for explicit recall and recommendation requests.
@@ -146,7 +146,7 @@ export function createMemoryLibrary(db){
   }
   // Native companion path: retrieval ranks data, not conversational intent.
   // No "is this a personal question?" or character-canon regex gates.
-  function modelContext(query,explicitRecall,semanticIds=[]){
+  function modelContext(query,explicitRecall,semanticIds=[],foundationalOnly=false){
     const budget=memoryBudget(16384),terms=meaningfulTerms(query);
     const overlap=value=>{const words=new Set(memoryTerms(value));return terms.reduce((n,t)=>n+Number(words.has(t)),0);};
     const semantic=new Set(semanticIds);
@@ -173,14 +173,14 @@ export function createMemoryLibrary(db){
       foundations.push(row);foundationLength+=row.line.length;
     }
     const foundationIds=new Set(foundations.map(r=>r.id));
-    const matched=rankMemories(candidates.filter(f=>!foundationIds.has(f.id)&&relevant(f)),query,semanticIds);
+    const matched=foundationalOnly?[]:rankMemories(candidates.filter(f=>!foundationIds.has(f.id)&&relevant(f)),query,semanticIds);
     for(const f of matched){
       if(rows.length>=(explicitRecall?budget.maxFacts:4)||rows.length+foundations.length>=budget.maxFacts)break;
       const row=formatFact(f);
       if(foundationLength+length+row.line.length>budget.factChars)continue;
       rows.push(row);length+=row.line.length;
     }
-    const tastes=interests().map(i=>({i,score:overlap([i.name,i.notes,...i.tags].join(" "))})).filter(x=>x.score>0).sort((a,b)=>b.score-a.score).slice(0,12).map(({i})=>"- "+i.kind+": "+i.name+" ("+i.status+(i.rating!==null?", rating "+i.rating:"")+")");
+    const tastes=foundationalOnly?[]:interests().map(i=>({i,score:overlap([i.name,i.notes,...i.tags].join(" "))})).filter(x=>x.score>0).sort((a,b)=>b.score-a.score).slice(0,12).map(({i})=>"- "+i.kind+": "+i.name+" ("+i.status+(i.rating!==null?", rating "+i.rating:"")+")");
     const character=canon().map(i=>({i,score:overlap(i.label+" "+i.value)})).sort((a,b)=>b.score-a.score).slice(0,10).map(({i})=>"- "+i.label+": "+i.value);
     const sections=[foundations.length?"Owner-pinned foundational context (use only when helpful; date saved):\n"+foundations.map(r=>r.line).join("\n"):"",rows.length?"Owner facts (date saved):\n"+rows.map(r=>r.line).join("\n"):"",tastes.length?"Owner interests:\n"+tastes.join("\n").slice(0,2000):"",character.length?"Character canon:\n"+character.join("\n").slice(0,2000):""].filter(Boolean);
     return {text:sections.join("\n\n"),ids:[...foundations,...rows].map(r=>r.id),auditLines:sections.flatMap(s=>s.split("\n")).slice(0,32)};
@@ -203,4 +203,24 @@ export function createMemoryLibrary(db){
     return windows;
   }
   return {execute,context,markRecalled,recallDialogue,semanticRecall};
+}
+
+// One shared lazy retrieval path for initial turns and explicit agent recall.
+// SQLite embeddings are computed only if requested or the active engine needs
+// its compatibility fallback; pins and editable character canon remain local.
+export async function retrieveNasMemory({store,conversationId,question,history=[],modelLed=true,explicitRecall=false,scope="owner",memoryEngine,signal,activity=()=>{},trace,stage="hindsight-context"}){
+  let fallbackPromise;
+  const fallback=()=>fallbackPromise??=(async()=>{
+    signal?.throwIfAborted();
+    const semantic=modelLed?await store.library.semanticRecall?.(question,{signal,explicitRecall}):null;
+    if(semantic&&!["unavailable","empty"].includes(semantic.status))activity({title:"Semantic memory retrieval",detail:semantic.status+" · "+semantic.indexed+"/"+semantic.total+" facts indexed",lines:semantic.ids.map(id=>"Memory #"+id)});
+    return store.library.context(question,conversationId,modelLed?{modelLed:true,includeSessions:false,explicitRecall,semanticIds:semantic?.ids??[]}:undefined);
+  })();
+  if(!memoryEngine||scope==="editable")return fallback();
+  const base=store.library.context(question,conversationId,{modelLed:true,foundationalOnly:true,includeSessions:false});
+  const run=()=>memoryEngine({question,history,base,fallback,signal,scope,explicitRecall});
+  const result=trace?await trace.measure(stage,run):await run();
+  if(result.engine)activity({title:"Memory engine",detail:result.engine,lines:[]});
+  for(const item of result.recallDiagnostics??[])activity({title:"Hindsight "+item.bank+" recall",detail:item.status+" · "+item.elapsedMs+"ms · "+item.count+" memories",lines:[]});
+  return result;
 }

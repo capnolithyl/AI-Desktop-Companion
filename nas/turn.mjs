@@ -7,6 +7,7 @@ import {boundedHistory} from "./provider-settings.mjs";
 import {nativeResearchAvailable,structuredResearchPrompt,structuredResearchTool,reviewNativeResearch} from "./native-research.mjs";
 import {researchTurn,researchInstructions} from "./research.mjs";
 import {companionTurn} from "./companion-agent.mjs";
+import {retrieveNasMemory} from "./memory-library.mjs";
 import {planKnowledge} from "./knowledge-plan.mjs";
 import {auditNotionReview,groundedManuscriptHistory,deniesLoadedNotionAccess,unavailableNotionModelResponse,unverifiedNotionReviewResponse} from "../src/notion-reading.ts";
 export function currentProfile(promptFile,store) {
@@ -45,16 +46,11 @@ export function turnTrace(mode){
 export async function executeNasTurn({store,conversationId,question,selected,mode,promptFile="",requestModel,reserve,canRequest,search,read,trace=turnTrace(mode),onDelta=()=>{},activity=()=>{},signal,knowledge,publicAgent=process.env.MIKAN_PUBLIC_AGENT==="1",agentDiagnostics=false,now=new Date(),memoryEngine}){
   signal?.throwIfAborted();
   const modelLed=publicAgent&&["nvidia","groq","cerebras"].includes(selected.provider);
-  const {history,rawHistory,memory}=await trace.measure("context",async()=>{
+  const {history,rawHistory}=await trace.measure("context",async()=>{
     const rawHistory=store.messages(conversationId,80);
-    const history=boundedHistory(rawHistory,selected.historyChars);
-    const semantic=modelLed?await store.library.semanticRecall?.(question,{signal}):null;
-    if(semantic&&!["unavailable","empty"].includes(semantic.status))activity({title:"Semantic memory retrieval",detail:semantic.status+" · "+semantic.indexed+"/"+semantic.total+" facts indexed",lines:semantic.ids.map(id=>"Memory #"+id)});
-    const memory=store.library.context(question,conversationId,modelLed?{modelLed:true,includeSessions:false,semanticIds:semantic?.ids??[]}:undefined);
-    return {history,rawHistory,memory};
+    return {history:boundedHistory(rawHistory,selected.historyChars),rawHistory};
   });
-  const initialMemory=memoryEngine?await trace.measure("hindsight-context",()=>memoryEngine({question,history,base:memory,fallback:memory,signal})):memory;
-  if(initialMemory.engine)activity({title:"Memory engine",detail:initialMemory.engine,lines:[]});
+  const initialMemory=await retrieveNasMemory({store,conversationId,question,history,modelLed,memoryEngine,signal,activity,trace});
   if(modelLed)return companionTurn({store,conversationId,question,history,rawHistory,memory:initialMemory,memoryEngine,profile:currentProfile(promptFile,store),selected,mode,requestModel,reserve,canRequest,search,read,knowledge,trace,onDelta,activity,signal,now});
   // Explicit compatibility engine for providers without native tool support.
   const recentSources=rawHistory.filter(m=>m.role==="assistant").reverse().flatMap(m=>(m.inference?.sources??[]).filter(s=>s.kind==="notion"||s.kind==="cached-web"));

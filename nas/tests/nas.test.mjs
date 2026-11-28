@@ -1612,3 +1612,14 @@ test("native temporal guidance applies even with web research disabled",async()=
   assert.equal(calls,1);assert.match(result.answer,/2023/);
  }finally{store.db.close();}
 });
+
+
+test("primary memory path avoids SQLite semantic retrieval unless fallback is requested",async()=>{
+  const {retrieveNasMemory}=await import("../memory-library.mjs");
+  let semantic=0,topical=0;const library={semanticRecall:async()=>{semantic++;return null;},context:(_q,_c,o)=>{if(o?.foundationalOnly)return {text:"pins",ids:[],auditLines:[]};topical++;return {text:"sqlite",ids:[],auditLines:[]};}};
+  const args={store:{library},conversationId:"c",question:"hello"};
+  const primary=await retrieveNasMemory({...args,memoryEngine:async({base})=>({...base,engine:"hindsight"})});
+  assert.equal(primary.text,"pins");assert.equal(semantic,0);assert.equal(topical,0);
+  const fallback=await retrieveNasMemory({...args,memoryEngine:async({fallback})=>({...await fallback(),engine:"sqlite-fallback"})});
+  assert.equal(fallback.text,"sqlite");assert.equal(semantic,1);assert.equal(topical,1);
+});

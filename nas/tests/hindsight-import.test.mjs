@@ -43,8 +43,15 @@ test("local preview, explicit consent, source preservation and distinct banks",a
     assert.ok(!JSON.stringify(calls).includes("An unverified claim"));assert.ok(!JSON.stringify(calls).includes("My password"));
     assert.equal(new Set([...archives.flatMap(c=>c.docs.map(d=>d.id)),...calls.flatMap(c=>c.items.map(i=>i.document_id))]).size,5);
     assert.equal(imp.preview(categories).ready,0);assert.equal(store.listMemories().length,1);
-    const result=await h.context({question:"favorite color",history:[],base:{text:"",ids:[],auditLines:[]},fallback:{text:"fallback",ids:[],auditLines:[]}});
-    assert.match(result.text,/MIKAN CHARACTER MEMORY/);assert.match(result.text,/Mikan likes orange/);
+    let fallbackCalls=0;
+    const base={text:"Pinned context",ids:[],auditLines:[]};
+    const fallback=async()=>{fallbackCalls++;return {text:"fallback",ids:[],auditLines:[]};};
+    const result=await h.context({question:"favorite color",history:[],base,fallback});
+    assert.match(result.text,/Owner likes metal/);assert.doesNotMatch(result.text,/Mikan likes orange|fallback/);
+    assert.equal(fallbackCalls,0);assert.equal(result.recallDiagnostics[0].bank,"owner");
+    const self=await h.context({question:"favorite color",history:[],base,fallback,scope:"character",explicitRecall:true});
+    assert.match(self.text,/MIKAN CHARACTER MEMORY/);assert.match(self.text,/Mikan likes orange/);
+    assert.doesNotMatch(self.text,/Owner likes metal/);assert.equal(fallbackCalls,0);assert.equal(self.recallDiagnostics[0].bank,"character");
   }finally{store.db.close();}
 });
 test("preview invalidation, changed sources, pause/resume and interrupted submissions",()=>{

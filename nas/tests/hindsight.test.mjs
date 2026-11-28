@@ -12,6 +12,7 @@ test("recall prefers observations, no reflect or redirect",async()=>{
   await client.recall("sandbox","music");
   assert.match(call.url,/sandbox\/memories\/recall$/);
   assert.equal(JSON.parse(call.opts.body).prefer_observations,true);
+  assert.equal(JSON.parse(call.opts.body).max_tokens,500);
   assert.equal(call.opts.redirect,"error");
 });
 test("unavailable recall can fall back, strict benchmark cannot",async()=>{
