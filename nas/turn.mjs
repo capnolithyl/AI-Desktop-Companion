@@ -46,7 +46,7 @@ export function turnTrace(mode){
 // Shared executor: caller owns authentication, admission, persistence and quota.
 export async function executeNasTurn({store,conversationId,question,selected,mode,promptFile="",requestModel,reserve,canRequest,search,read,trace=turnTrace(mode),onDelta=()=>{},activity=()=>{},signal,knowledge,publicAgent=process.env.MIKAN_PUBLIC_AGENT==="1",agentDiagnostics=false,now=new Date(),memoryEngine,retrievalStrategy="automatic"}){
   signal?.throwIfAborted();
-  const modelLed=publicAgent&&["nvidia","groq","cerebras"].includes(selected.provider);
+  const modelLed=publicAgent&&["nvidia","groq","cerebras","arli"].includes(selected.provider);
   const {history,rawHistory}=await trace.measure("context",async()=>{
     const rawHistory=store.messages(conversationId,80);
     return {history:boundedHistory(rawHistory,selected.historyChars),rawHistory};

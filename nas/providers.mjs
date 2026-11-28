@@ -1,15 +1,15 @@
 // Cloud-only provider adapter. Credentials remain on the NAS, never in browser responses.
 export function providerConfig(env = process.env) {
   const provider = (env.MIKAN_PROVIDER || "nvidia").toLowerCase();
-  if (!["nvidia","openrouter","gemini","groq","cerebras"].includes(provider)) throw new Error("Unsupported MIKAN_PROVIDER");
+  if (!["nvidia","openrouter","gemini","groq","cerebras","arli"].includes(provider)) throw new Error("Unsupported MIKAN_PROVIDER");
   const defaults = {
     nvidia:"nvidia/nemotron-3-ultra-550b-a55b",
     openrouter:"openrouter/free",
-    gemini:"gemini-2.5-flash",groq:"openai/gpt-oss-120b",cerebras:"gpt-oss-120b"
+    gemini:"gemini-2.5-flash",groq:"openai/gpt-oss-120b",cerebras:"gpt-oss-120b",arli:"Qwen3.8-27B"
   };
   const model = (env.MIKAN_MODEL || defaults[provider]).trim();
   if (!/^[\w./:-]{2,120}$/.test(model)) throw new Error("Invalid MIKAN_MODEL");
-  const key = env[{nvidia:"NVIDIA_API_KEY",openrouter:"OPENROUTER_API_KEY",gemini:"GEMINI_API_KEY",groq:"GROQ_API_KEY",cerebras:"CEREBRAS_API_KEY"}[provider]];
+  const key = env[{nvidia:"NVIDIA_API_KEY",openrouter:"OPENROUTER_API_KEY",gemini:"GEMINI_API_KEY",groq:"GROQ_API_KEY",cerebras:"CEREBRAS_API_KEY",arli:"ARLIAI_API_KEY"}[provider]];
   if (!key || key.length < 12) throw new Error("Configure the selected provider API key in nas/.env");
   return { provider, model, key };
 }
@@ -29,7 +29,17 @@ function remoteError(status) {
 const safeReason=value=>typeof value==="string"&&/^[a-zA-Z0-9_-]{1,40}$/.test(value)?value:null;
 const tokenCount=value=>Number.isSafeInteger(value)&&value>=0&&value<=10000000?value:null;
 export function inferenceError(code){return Object.assign(Error(code),{code});}
-export async function generateReply({config, system, history, onDelta=()=>{}, onModel=()=>{}, onUsage=()=>{}, onResponse=()=>{}, fetchImpl=fetch, temperature=0.7, maxTokens=4096,signal,structuredTool,agentTools,agentToolChoice="auto",agentThinking=false,agentEffort,rejectTruncated=false}) {
+// Guard the entire HTTP response (including streaming), not just dispatch.
+let arliInFlight=false;
+export async function generateReply(args){
+  if(args.config.provider!=="arli")return generateCloudReply(args);
+  args.signal?.throwIfAborted();
+  if(arliInFlight)throw Object.assign(inferenceError("arli-request-in-flight"),{status:409});
+  arliInFlight=true;
+  try{return await generateCloudReply(args);}
+  finally{arliInFlight=false;}
+}
+async function generateCloudReply({config, system, history, onDelta=()=>{}, onModel=()=>{}, onUsage=()=>{}, onResponse=()=>{}, fetchImpl=fetch, temperature=0.7, maxTokens=4096,signal,structuredTool,agentTools,agentToolChoice="auto",agentThinking=false,agentEffort,rejectTruncated=false}) {
   const {provider,model,key} = config;
   const ultra=provider==="nvidia"&&model==="nvidia/nemotron-3-ultra-550b-a55b";
   // Ultra documents enable_thinking and medium_effort in chat_template_kwargs.
@@ -47,7 +57,7 @@ export async function generateReply({config, system, history, onDelta=()=>{}, on
     maxTokens=Math.min(maxTokens,agentEffort==="high"?3072:2048);
   }
   const groqEffort=agentEffort==="high"?"high":agentEffort==="medium"?"medium":"low";
-  if(agentTools&&!["nvidia","groq","cerebras"].includes(provider))throw inferenceError("agent-provider-not-supported");
+  if(agentTools&&!["nvidia","groq","cerebras","arli"].includes(provider))throw inferenceError("agent-provider-not-supported");
   if (provider === "gemini") {
     const contents = history.map(m=>({
       role:m.role==="assistant"?"model":"user", parts:[{text:m.content}]
@@ -78,12 +88,12 @@ export async function generateReply({config, system, history, onDelta=()=>{}, on
 
   const url = provider==="nvidia"
     ? "https://integrate.api.nvidia.com/v1/chat/completions"
-    : groq?"https://api.groq.com/openai/v1/chat/completions":cerebras?"https://api.cerebras.ai/v1/chat/completions":"https://openrouter.ai/api/v1/chat/completions";
+    : groq?"https://api.groq.com/openai/v1/chat/completions":cerebras?"https://api.cerebras.ai/v1/chat/completions":provider==="arli"?"https://api.arliai.com/v1/chat/completions":"https://openrouter.ai/api/v1/chat/completions";
   const response = await fetchImpl(url,{
     method:"POST",
     headers:{"Authorization":"Bearer "+key,"Content-Type":"application/json",
       ...(provider==="openrouter"?{"HTTP-Referer":"https://github.com/capnolithyl/AI-Desktop-Companion","X-Title":"Mikan NAS"}:{})},
-    body:JSON.stringify({model,stream:!structuredTool&&!agentTools,...(groq?{max_completion_tokens:maxTokens,reasoning_effort:groqEffort,include_reasoning:false,parallel_tool_calls:false}:cerebras?{max_completion_tokens:maxTokens,reasoning_effort:groqEffort,reasoning_format:"hidden",parallel_tool_calls:false}:{max_tokens:maxTokens}),temperature,
+    body:JSON.stringify({model,stream:!structuredTool&&!agentTools,...(provider==="arli"?{n:1,parallel_tool_calls:false,hide_thinking:true,include_reasoning:false}:{}),...(groq?{max_completion_tokens:maxTokens,reasoning_effort:groqEffort,include_reasoning:false,parallel_tool_calls:false}:cerebras?{max_completion_tokens:maxTokens,reasoning_effort:groqEffort,reasoning_format:"hidden",parallel_tool_calls:false}:provider==="arli"?{max_completion_tokens:maxTokens}:{max_tokens:maxTokens}),temperature,
       ...(agentTools?{tools:agentTools,tool_choice:agentToolChoice}:structuredTool?{tools:[structuredTool],tool_choice:"required"}:groq||cerebras?{}:{stream_options:{include_usage:true}}),
       // Same model-specific evidence setting used by the desktop NVIDIA adapter.
       ...(effortTemplate&&!structuredTool?{chat_template_kwargs:effortTemplate}:(structuredTool||agentTools)&&ultra?{chat_template_kwargs:agentTools&&agentThinking?{enable_thinking:true}:{enable_thinking:false,force_nonempty_content:true}}:{}),

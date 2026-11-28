@@ -1638,3 +1638,44 @@ test("on-demand native agent skips eager retrieval and can explicitly recall",as
   assert.equal(recalls,1);assert.equal(modelCalls,2);assert.equal(answer.memory.engine,"hindsight");assert.match(answer.answer,/Cobalt Harbor/);
  }finally{store.db.close();}
 });
+
+test("Arli native tool payload, one-generation guard and sequential follow-up",async()=>{
+ const config={provider:"arli",model:"Qwen3.8-27B",key:"synthetic-arli-key"};
+ const tool={type:"function",function:{name:"recall_memory",parameters:{type:"object"}}};
+ const call={id:"call_arli",type:"function",function:{name:"recall_memory",arguments:'{"query":"favorite band"}'}};
+ let release,entered;const gate=new Promise(r=>release=r),started=new Promise(r=>entered=r);
+ const base={config,system:"Test",history:[{role:"user",content:"Favorite band?"}],agentTools:[tool]};
+ const first=generateReply({...base,fetchImpl:async(url,opts)=>{
+  assert.equal(url,"https://api.arliai.com/v1/chat/completions");
+  const body=JSON.parse(opts.body);assert.equal(body.n,1);assert.equal(body.parallel_tool_calls,false);assert.equal(body.hide_thinking,true);assert.equal(body.include_reasoning,false);assert.equal(body.stream,false);assert.equal(body.max_completion_tokens,4096);assert.equal(body.tool_choice,"auto");entered();await gate;
+  return Response.json({choices:[{finish_reason:"tool_calls",message:{tool_calls:[call]}}]});
+ }});
+ await started;
+ try{await assert.rejects(generateReply({...base,fetchImpl:async()=>{throw Error("must not dispatch")}}),e=>e.code==="arli-request-in-flight");}
+ finally{release();}
+ const result=await first;assert.equal(result.toolCalls[0].id,call.id);
+ const second=await generateReply({...base,history:[...base.history,{role:"assistant",content:null,tool_calls:result.toolCalls},{role:"tool",tool_call_id:call.id,content:"Cobalt Harbor"}],fetchImpl:async(_url,opts)=>{
+  assert.equal(JSON.parse(opts.body).messages.at(-1).tool_call_id,call.id);
+  return Response.json({choices:[{finish_reason:"stop",message:{content:"Cobalt Harbor"}}]});
+ }});
+ assert.equal(second.content,"Cobalt Harbor");
+ await assert.rejects(generateReply({...base,fetchImpl:async()=>new Response("private", {status:429})}),e=>e.upstreamStatus===429);
+ assert.equal((await generateReply({...base,fetchImpl:async()=>Response.json({choices:[{finish_reason:"stop",message:{content:"Recovered"}}]})})).content,"Recovered");
+});
+test("Arli account model discovery and unlimited sequential quota",async()=>{
+ const store=openStore(":memory:");
+ try{
+  const models=providerSettings({db:store.db,fetchImpl:async(url,opts)=>{
+   assert.equal(url,"https://api.arliai.com/v1/models");assert.equal(opts.headers.Authorization,"Bearer synthetic-arli-key");
+   return Response.json({data:[{id:"Qwen3.8-27B"},{id:"Other-Model"},{id:"synthetic-arli-key"},{id:"invalid model"}]});
+  }});
+  models.save({provider:"arli",model:"Qwen3.8-27B",apiKey:"synthetic-arli-key",select:true});
+  const view=await models.refreshArliModels();assert.equal(view.provider,"arli");
+  assert.deepEqual(view.providers.find(p=>p.provider==="arli").models,["Qwen3.8-27B","Other-Model"]);
+  assert.ok(!JSON.stringify(view).includes("synthetic-arli-key"));
+  assert.equal(models.configFor("arli","Other-Model").model,"Other-Model");
+  for(let i=0;i<40;i++)models.reserve("arli");
+  assert.equal(models.quota("arli").minuteLimit,null);assert.equal(models.quota("arli").remainingMinute,null);assert.equal(models.available("arli",3),true);
+  models.cooldown("arli");assert.equal(models.available("arli"),false);
+ }finally{store.db.close();}
+});
