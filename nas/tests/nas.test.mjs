@@ -1679,3 +1679,42 @@ test("Arli account model discovery and unlimited sequential quota",async()=>{
   models.cooldown("arli");assert.equal(models.available("arli"),false);
  }finally{store.db.close();}
 });
+
+test("native streamed tool deltas assemble without showing reasoning, and complete text streams once",async()=>{
+ const config={provider:"arli",model:"DeepSeek-V4.1-Flash-1017",key:"synthetic-arli-secret"},agentTools=[{type:"function",function:{name:"recall_memory",parameters:{type:"object"}}}];
+ const packet=(delta,finish_reason=null)=>({choices:[{delta,finish_reason}]});
+ const stream=(events)=>new Response(events.map(e=>"data: "+JSON.stringify(e)+"\n\n").join("")+"data: [DONE]\n\n",{headers:{"content-type":"text/event-stream"}});
+ let text=[],tools=0,first=0,usage;
+ const answer=await generateReply({config,system:"Test",history:[{role:"user",content:"Hello"}],agentTools,agentStream:true,onAgentText:v=>text.push(v),onFirstOutput:()=>first++,onUsage:v=>usage=v,fetchImpl:async(_url,opts)=>{
+   const body=JSON.parse(opts.body);assert.equal(body.stream,true);assert.equal(body.stream_options.include_usage,true);assert.equal(body.parallel_tool_calls,false);
+   return stream([packet({reasoning_content:"private reasoning"}),packet({content:"Hello "}),packet({content:"there!"},"stop"),{choices:[],usage:{prompt_tokens:20,completion_tokens:9,completion_tokens_details:{reasoning_tokens:2}}}]);
+ }});
+ assert.deepEqual(text,["Hello ","Hello there!"]);assert.deepEqual(answer,{content:"Hello there!",toolCalls:[]});assert.equal(first,1);assert.equal(usage.outputTokens,9);
+ text=[];first=0;
+ const calls=await generateReply({config,system:"Test",history:[],agentTools,agentStream:true,onAgentText:v=>text.push(v),onAgentTools:()=>tools++,onFirstOutput:()=>first++,fetchImpl:async()=>stream([
+  packet({tool_calls:[{index:0,id:"call_1",type:"function",function:{name:"recall_memory",arguments:'{"query":'}}]}),
+  packet({tool_calls:[{index:0,function:{arguments:'"music"}'}}]}),
+  packet({content:"not an answer"},"tool_calls")
+ ])});
+ assert.deepEqual(text,[]);assert.equal(tools,1);assert.equal(first,1);assert.deepEqual(calls.toolCalls,[{id:"call_1",type:"function",function:{name:"recall_memory",arguments:'{"query":"music"}'}}]);
+ await assert.rejects(generateReply({config,system:"Test",history:[],agentTools,agentStream:true,fetchImpl:async()=>new Response("data: "+JSON.stringify(packet({tool_calls:[{index:0,id:"call_1",function:{name:"recall_memory",arguments:"{"}}]}))+"\n\n",{headers:{"content-type":"text/event-stream"}})}),e=>e.code==="incomplete-stream");
+});
+test("performance groups historical call and turn durations without prompt content",async()=>{
+ const {performanceReport,timingDistribution}=await import("../performance.mjs");
+ const store=openStore(":memory:");
+ try{
+  const time=Date.now(),models=providerSettings({db:store.db,now:()=>time});
+  models.recordUsage({provider:"arli",model:"deepseek",source:"chat",startedAt:time-10000,usage:{inputTokens:100},failed:false,headersMs:200,firstOutputMs:300,actualModel:"deepseek",kind:"agent",streamed:true});
+  models.recordUsage({provider:"arli",model:"deepseek",source:"memory",startedAt:time-3000,usage:{},failed:false});
+  models.recordUsage({provider:"arli",model:"deepseek",source:"chat",startedAt:time-500,usage:{},failed:true});
+  const chat=store.newConversation();store.append(chat.id,"user","private sample text");
+  store.append(chat.id,"assistant","private answer",{provider:"arli",requestedModel:"deepseek",actualModel:"deepseek",outcome:"completed",timing:{mode:"simple",totalMs:13000,firstTextMs:400,stages:[{stage:"agent",elapsedMs:5000,success:true},{stage:"agent",elapsedMs:6000,success:true}]}});
+  const report=performanceReport(store.db,{days:7,now:time+10000}),g=report.groups.find(g=>g.provider==="arli");
+  assert.equal(g.calls,3);assert.equal(g.failedCalls,1);assert.equal(g.turns,1);
+  assert.equal(g.metrics["Call / chat"].mean,10000);assert.equal(g.metrics["Call / chat (failed)"].mean,500);
+  assert.equal(g.metrics["Call / memory"].mean,3000);assert.equal(g.metrics["First provider output / chat"].mean,300);
+  assert.equal(g.metrics["First visible text / chat"].mean,400);assert.equal(g.metrics["Stage / chat / agent"].mean,11000);
+  assert.equal(g.metrics["Turn / chat"].p95,13000);assert.ok(!JSON.stringify(report).includes("private sample"));assert.ok(!JSON.stringify(report).includes("private answer"));
+  assert.equal(timingDistribution([null,10,20,100]).p95,100);assert.equal(timingDistribution([null]).count,0);
+ }finally{store.db.close();}
+});

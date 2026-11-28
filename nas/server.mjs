@@ -71,13 +71,13 @@ export function makeServer({store,config,key,promptFile="",maintenanceFile="/dat
     if(task){memoryAbort?.abort();await task;}
   };
   const requestModel=async(args,source="chat")=>{
-    const startedAt=Date.now();let usage=null,failed=true,headersMs=null,firstOutputMs=null,actualModel=null;
+    const startedAt=Date.now();let usage=null,failed=true,headersMs=null,firstOutputMs=null,actualModel=null,streamed=null;
     try{
-      const result=await generate({...args,system:redactCredentials(args.system),history:args.history.map(m=>({...m,content:typeof m.content==="string"?redactCredentials(m.content):m.content,...(m.tool_calls?{tool_calls:m.tool_calls.map(c=>({...c,function:{...c.function,arguments:redactCredentials(c.function.arguments)}}))}:{})})),onUsage:value=>{usage=value;args.onUsage?.(value);},onModel:value=>{actualModel=value;args.onModel?.(value);},onFirstOutput:()=>{firstOutputMs??=Date.now()-startedAt;},onResponse:response=>{headersMs??=Date.now()-startedAt;models.observe(args.config.provider,response);}});
+      const result=await generate({...args,system:redactCredentials(args.system),history:args.history.map(m=>({...m,content:typeof m.content==="string"?redactCredentials(m.content):m.content,...(m.tool_calls?{tool_calls:m.tool_calls.map(c=>({...c,function:{...c.function,arguments:redactCredentials(c.function.arguments)}}))}:{})})),onUsage:value=>{usage=value;args.onUsage?.(value);},onModel:value=>{actualModel=value;args.onModel?.(value);},onFirstOutput:()=>{firstOutputMs??=Date.now()-startedAt;},onTransport:value=>{streamed=value;},onResponse:response=>{headersMs??=Date.now()-startedAt;models.observe(args.config.provider,response);}});
       failed=false;return result;
     }catch(error){if(error?.upstreamStatus===429){models.cooldown(args.config.provider);error.quota=models.quota(args.config.provider);}throw error;}
     finally{
-      try{models.recordUsage({provider:args.config.provider,model:args.config.model,source,startedAt,usage,failed,headersMs,firstOutputMs,actualModel,kind:args.metricStage??(args.agentTools?"agent":args.structuredTool?"structured":"generation"),streamed:args.agentTools?!!args.agentStream:!args.structuredTool&&args.config.provider!=="gemini"});}
+      try{models.recordUsage({provider:args.config.provider,model:args.config.model,source,startedAt,usage,failed,headersMs,firstOutputMs,actualModel,kind:args.metricStage??(args.agentTools?"agent":args.structuredTool?"structured":"generation"),streamed});}
       catch{console.error("Could not record provider token usage");}
     }
   };

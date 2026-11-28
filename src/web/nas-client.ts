@@ -22,6 +22,9 @@ export type ReasoningEffort="auto"|"none"|"low"|"medium"|"high";
 export type TokenTotals={calls:number;input:number;output:number;reasoning:number;failed:number;missingInput:number;missingOutput:number};
 export type TokenWindows=Record<"minute"|"hour"|"day"|"utcToday",TokenTotals>;
 export type TokenUsage={observedAt:number;since:number;groups:Record<CloudProvider,{total:TokenWindows;models:Record<string,TokenWindows>;sources:Record<"chat"|"brain-lab"|"memory",TokenTotals>;quota:ProviderQuota}>};
+export type TimingDistribution={count:number;mean:number|null;p50:number|null;p95:number|null;min:number|null;max:number|null};
+export type PerformanceGroup={provider:string;model:string;actualModels:string[];calls:number;failedCalls:number;turns:number;failedTurns:number;metrics:Record<string,TimingDistribution>;daily:{date:string;metrics:Record<string,TimingDistribution>}[]};
+export type PerformanceReport={schema:string;version:number;observedAt:number;since:number;days:number;unit:string;truncated:boolean;coverage:{calls:number;chatTraces:number;brainLabTraces:number};groups:PerformanceGroup[];notes:string[]};
 export type NasModels={nativeStreaming?:boolean;provider:CloudProvider;model:string;historyChars:number;cerebrasTier?:"trial"|"paid";reasoningEffort?:ReasoningEffort|null;reasoningOptions?:ReasoningEffort[];providers:ProviderEntry[]};
 export type NasModelPatch={nativeStreaming?:boolean;provider:CloudProvider;model?:string;apiKey?:string;clearKey?:boolean;select?:boolean;historyChars?:number;cerebrasTier?:"trial"|"paid";reasoningEffort?:ReasoningEffort};
 export type NasFact={id:number;fact:string;category:string;updatedAt:number};
@@ -81,6 +84,7 @@ export class NasClient {
   testResearch(){return this.json<{ok:boolean;count:number}>("research/test",{method:"POST",body:"{}"});}
   tokenUsage(){return this.json<TokenUsage>("token-usage",{signal:AbortSignal.timeout(10000)});}
   models(){return this.json<NasModels>("models");}
+  performance(days:1|7|30){return this.json<PerformanceReport>("performance?days="+days);}
   refreshArliModels(){return this.json<NasModels>("models/arli",{signal:AbortSignal.timeout(20000)});}
   saveModels(patch:NasModelPatch){return this.json<NasModels>("models",{method:"PUT",body:JSON.stringify(patch)});}
   status(){return this.json<NasStatus>("status");}

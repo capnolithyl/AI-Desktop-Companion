@@ -22,6 +22,7 @@ import {NasBrainLab} from "./NasBrainLab";
 import {NasHindsight} from "./NasHindsight";
 import {NasTiming} from "./NasTiming";
 import {NasModels,NasTokenUsage} from "./NasModels";
+import {NasPerformance} from "./NasPerformance";
 import type {NasModels as ModelSettings,CloudProvider,ReasoningEffort} from "./nas-client";
 import {memoryNotice} from "./memory-notifications";
 import {nasActivity} from "./nas-activity";
@@ -30,7 +31,7 @@ const portrait=new URL("../../assets/iki/mikan-chat-avatar.webp",import.meta.url
 const referencePortrait=new URL("../../assets/iki/mikan-reference.png",import.meta.url).href;
 const KEY="mikan-nas-key";
 const CLIENT_BUILD=__MIKAN_NAS_BUILD__;
-type Page="control"|"chat"|"personality"|"appearance"|"memory"|"history"|"capabilities"|"models"|"research"|"knowledge"|"brain-lab"|"hindsight"|"updates"|"log";
+type Page="control"|"chat"|"personality"|"appearance"|"memory"|"history"|"capabilities"|"models"|"performance"|"research"|"knowledge"|"brain-lab"|"hindsight"|"updates"|"log";
 const tabs=[
   {id:"personality",label:"Personality",icon:WandSparkles},
   {id:"appearance",label:"Character",icon:Shirt},
@@ -38,6 +39,7 @@ const tabs=[
   {id:"history",label:"Chat history",icon:History},
   {id:"capabilities",label:"Capabilities",icon:Plug2},
   {id:"models",label:"Models & providers",icon:Cpu},
+  {id:"performance",label:"Inference performance",icon:History},
   {id:"research",label:"Web research",icon:Globe},
   {id:"knowledge",label:"Knowledge & Notion",icon:BookOpen},
   {id:"brain-lab",label:"Brain Lab",icon:Brain},
@@ -428,7 +430,7 @@ export function NasApp(){
         {page==="control"&&<div className="nas-mobile-control-home">
           <div className="nas-mobile-control-hero"><img src={portrait} alt=""/><div><small>YOUR COMPANION</small><h2>Make Mikan yours ♡</h2><p>Everything you need, right at your fingertips.</p></div><Sparkles size={24} aria-hidden="true"/></div>
           <div className="nas-mobile-control-group"><h3>Companion</h3>{tabs.filter(t=>["personality","appearance","memory","history"].includes(t.id)).map(({id,label,icon:Icon})=><button key={id} type="button" onClick={()=>openPage(id)}><span className="nas-mobile-control-icon"><Icon size={22}/></span><span>{id==="appearance"?"Wardrobe & appearance":label}</span><span aria-hidden="true">›</span></button>)}</div>
-          <div className="nas-mobile-control-group"><h3>Brain & tools</h3>{tabs.filter(t=>["models","research","knowledge","brain-lab","hindsight"].includes(t.id)).map(({id,label,icon:Icon})=><button key={id} type="button" onClick={()=>openPage(id)}><span className="nas-mobile-control-icon"><Icon size={22}/></span><span>{label}</span><span aria-hidden="true">›</span></button>)}<button type="button" onClick={()=>openPage("log")}><span className="nas-mobile-control-icon"><History size={22}/></span><span>Current conversation log</span><span aria-hidden="true">›</span></button></div>
+          <div className="nas-mobile-control-group"><h3>Brain & tools</h3>{tabs.filter(t=>["models","performance","research","knowledge","brain-lab","hindsight"].includes(t.id)).map(({id,label,icon:Icon})=><button key={id} type="button" onClick={()=>openPage(id)}><span className="nas-mobile-control-icon"><Icon size={22}/></span><span>{label}</span><span aria-hidden="true">›</span></button>)}<button type="button" onClick={()=>openPage("log")}><span className="nas-mobile-control-icon"><History size={22}/></span><span>Current conversation log</span><span aria-hidden="true">›</span></button></div>
           <div className="nas-mobile-control-group"><h3>System</h3>{tabs.filter(t=>["updates","capabilities"].includes(t.id)).map(({id,label,icon:Icon})=><button key={id} type="button" onClick={()=>openPage(id)}><span className="nas-mobile-control-icon"><Icon size={22}/></span><span>{label}</span><span aria-hidden="true">›</span></button>)}<button type="button" onClick={()=>void copyVersion()}><span className="nas-mobile-control-icon">{versionCopied?<Check size={22}/>:<Copy size={22}/>}</span><span>Copy build identity<small>v{CLIENT_BUILD.version} · {CLIENT_BUILD.commit.slice(0,8)}</small></span><span aria-hidden="true">›</span></button><button type="button" onClick={lock}><span className="nas-mobile-control-icon"><Lock size={22}/></span><span>Lock Mikan</span><span aria-hidden="true">›</span></button></div>
         </div>}
         {page==="personality"&&<>
@@ -464,6 +466,7 @@ export function NasApp(){
           onEditCharacter={(id,category,label,value)=>changeMemory("editCanon",{id,item:{category,label,value}})} onDeleteCharacter={id=>changeMemory("deleteCanon",{id})}/>}
         {page==="log"&&<><div className="settings-section-title">Conversation log</div><div className="nas-profile-actions"><button type="button" className="secondary-action" disabled={!active||exporting} onClick={()=>{if(active)void downloadChat(active);}}>{exporting?<LoaderCircle className="spin" size={16}/>:<Download size={16}/>} Download chat JSON</button></div><p className="settings-note">Includes all saved messages and private diagnostics. Review before sharing.</p><p className="settings-note">Currently selected: {status?.provider} · {status?.model}</p>{messages.map(message=><div key={message.id} className="control-form-section"><strong>{message.role==="assistant"?"Mikan":"You"}</strong>{message.inference&&<p className="settings-note">{message.inference.provider} · {message.inference.actualModel||message.inference.requestedModel} · {message.inference.outcome}{!message.inference.actualModel?" (actual model not reported)":""}</p>}{message.inference?.timing&&<NasTiming timing={message.inference.timing}/>}<ChatMarkdown text={message.content} onOpenLink={openLink}/></div>)}</>}
         {page==="models"&&status?.providers&&<NasModels models={status} client={client} onChanged={applyModels} busy={busy||switching||status.busy||!!status.memoryBusy}/>}
+        {page==="performance"&&status?.providers&&<NasPerformance models={status} client={client} onChanged={applyModels} busy={busy||switching||status.busy||!!status.memoryBusy}/>}
         {page==="brain-lab"&&status?.providers&&<NasBrainLab client={client} models={status} busy={busy||!!status.busy||!!status.memoryBusy}/>}
         {page==="hindsight"&&<NasHindsight client={client}/>}
         {page==="knowledge"&&<NasKnowledge client={client} busy={busy||!!status?.busy||!!status?.memoryBusy}/>}

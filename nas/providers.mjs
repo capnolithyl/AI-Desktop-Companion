@@ -39,7 +39,7 @@ export async function generateReply(args){
   try{return await generateCloudReply(args);}
   finally{arliInFlight=false;}
 }
-async function generateCloudReply({config, system, history, onDelta=()=>{}, onModel=()=>{}, onUsage=()=>{}, onResponse=()=>{}, fetchImpl=fetch, temperature=0.7, maxTokens=4096,signal,structuredTool,agentTools,agentToolChoice="auto",agentThinking=false,agentEffort,rejectTruncated=false,agentStream=false,onAgentText=()=>{},onAgentTools=()=>{},onFirstOutput=()=>{}}) {
+async function generateCloudReply({config, system, history, onDelta=()=>{}, onModel=()=>{}, onUsage=()=>{}, onResponse=()=>{}, fetchImpl=fetch, temperature=0.7, maxTokens=4096,signal,structuredTool,agentTools,agentToolChoice="auto",agentThinking=false,agentEffort,rejectTruncated=false,agentStream=false,onAgentText=()=>{},onAgentTools=()=>{},onFirstOutput=()=>{},onTransport=()=>{}}) {
   const {provider,model,key} = config;
   const ultra=provider==="nvidia"&&model==="nvidia/nemotron-3-ultra-550b-a55b";
   // Ultra documents enable_thinking and medium_effort in chat_template_kwargs.
@@ -59,6 +59,7 @@ async function generateCloudReply({config, system, history, onDelta=()=>{}, onMo
   const groqEffort=agentEffort==="high"?"high":agentEffort==="medium"?"medium":"low";
   if(agentTools&&!["nvidia","groq","cerebras","arli"].includes(provider))throw inferenceError("agent-provider-not-supported");
   if (provider === "gemini") {
+    onTransport(false);
     const contents = history.map(m=>({
       role:m.role==="assistant"?"model":"user", parts:[{text:m.content}]
     }));
@@ -104,6 +105,7 @@ async function generateCloudReply({config, system, history, onDelta=()=>{}, onMo
   onResponse({status:response.status,headers:quotaHeaders(response.headers)});
   if (!response.ok) throw remoteError(response.status);
   if(structuredTool||agentTools&&(!agentStream||response.headers?.get("content-type")?.includes("application/json"))){
+    onTransport(false);
     const data=await response.json(),choice=data.choices?.[0],message=choice?.message;
     const finish=safeReason(choice?.finish_reason);
     if(message?.content||message?.tool_calls?.length)onFirstOutput();
@@ -124,6 +126,7 @@ async function generateCloudReply({config, system, history, onDelta=()=>{}, onMo
     throw inferenceError("missing-structured-output");
   }
   if (!response.body) throw inferenceError("missing-stream");
+  onTransport(true);
 
   const decoder = new TextDecoder();
   let buffer = "", result = "",finishReason=null,outputTokens=null,reasoningTokens=null,inputTokens=null,sawDone=false,firstOutput=false;
