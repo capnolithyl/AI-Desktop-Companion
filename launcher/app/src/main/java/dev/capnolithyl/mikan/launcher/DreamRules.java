@@ -9,6 +9,11 @@ final class DreamRules {
     static final int BLACK=0,WARM=1,BLURRED=2,TINTED=3;
     static final int MOTION_OFF=0,MOTION_SUBTLE=1,MOTION_FULL=2;
     static int batteryPercent(int level,int scale){return level<0||scale<=0||level>scale?-1:Math.round(100f*level/scale);}
+    // BatteryManager returns -1 when no estimate is available. Do not extrapolate.
+    static long chargeFinishAt(long now,long remaining){
+        if(now<=0||remaining<=0||remaining>Long.MAX_VALUE-now)return -1;
+        return now+remaining;
+    }
     // Same 30-minute freshness threshold as the dashboard; do not present an old
     // observation as current conditions after six hours of unattended charging.
     static int weatherFreshness(long sampled,long now){

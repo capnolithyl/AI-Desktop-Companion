@@ -71,6 +71,11 @@ public final class DreamRulesTest {
         check(DreamRules.batteryPercent(-1,100)==-1);
         check(DreamRules.batteryPercent(1,0)==-1);
         check(DreamRules.batteryPercent(101,100)==-1);
+        check(DreamRules.chargeFinishAt(now,45*60000L)==now+45*60000L);
+        check(DreamRules.chargeFinishAt(now,-1)==-1);
+        check(DreamRules.chargeFinishAt(now,0)==-1);
+        check(DreamRules.chargeFinishAt(now,Long.MAX_VALUE)==-1);
+        check(DreamRules.chargeFinishAt(0,60000)==-1);
         System.out.println("DreamRules tests passed");
     }
 }

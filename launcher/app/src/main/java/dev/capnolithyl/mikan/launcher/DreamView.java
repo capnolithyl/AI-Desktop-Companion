@@ -41,7 +41,7 @@ final class DreamView extends View {
     private float previewAspect=0;
     private int artworkSize;
     private final DreamArtPack pack;
-    private String artKey="",clock="",date="",greeting="",battery="",weather="",alarm="";
+    private String artKey="",clock="",date="",greeting="",battery="",chargeEstimate="",weather="",alarm="";
     private int style,clockSize,color,batteryPercent=-1;
     private boolean showBattery,shift,night;
     private long minute;
@@ -85,11 +85,11 @@ final class DreamView extends View {
         if(holiday!=null){MikanHoliday festival=MikanHoliday.on(today);if(festival!=null)greeting=festival.text;}
         color=style==DreamRules.DEEP?0xff805d51:current.color;
         long actualNow=System.currentTimeMillis();
-        batteryPercent=-1;
-        battery=showBattery?batteryLabel():"";minute=actualNow/60000L;
+        batteryPercent=-1;chargeEstimate="";
+        battery=showBattery?batteryLabel(actualNow):"";minute=actualNow/60000L;
         weather=prefs.getBoolean("dreamWeather",false)?DreamDetails.weather(prefs,actualNow):"";
         alarm=prefs.getBoolean("dreamAlarm",true)?DreamDetails.alarm(getContext(),actualNow):"";
-        setContentDescription(clock+", "+date+(showBattery?", "+battery:"")+(weather.isEmpty()?"":", "+weather)+(alarm.isEmpty()?"":", "+alarm));
+        setContentDescription(clock+", "+date+(showBattery?", "+battery:"")+(chargeEstimate.isEmpty()?"":", "+chargeEstimate)+(weather.isEmpty()?"":", "+weather)+(alarm.isEmpty()?"":", "+alarm));
         invalidate();scheduleMotion();
     }
     void setMotionActive(boolean active){
@@ -104,7 +104,7 @@ final class DreamView extends View {
     @Override protected void onDetachedFromWindow(){removeCallbacks(motionFrame);super.onDetachedFromWindow();}
     boolean dim(){return night;}
     void release(){setMotionActive(false);portrait=null;art.clear();backdrop.clear();artKey="";}
-    private String batteryLabel(){
+    private String batteryLabel(long now){
         try{
             Intent i=getContext().registerReceiver(null,new IntentFilter(Intent.ACTION_BATTERY_CHANGED));
             if(i==null)return "Battery unavailable";
@@ -112,8 +112,23 @@ final class DreamView extends View {
             batteryPercent=DreamRules.batteryPercent(level,scale);
             if(batteryPercent<0)return "Battery unavailable";
             int status=i.getIntExtra(BatteryManager.EXTRA_STATUS,-1),plugged=i.getIntExtra(BatteryManager.EXTRA_PLUGGED,0);
+            if(level<scale&&plugged!=0&&(status==BatteryManager.BATTERY_STATUS_CHARGING||status==BatteryManager.BATTERY_STATUS_NOT_CHARGING))chargeEstimate=chargeEstimate(now);
             return batteryPercent+"% · "+(status==BatteryManager.BATTERY_STATUS_FULL?"Fully charged":status==BatteryManager.BATTERY_STATUS_CHARGING?"Charging":plugged!=0?"Plugged in":"On battery");
-        }catch(RuntimeException ex){batteryPercent=-1;return "Battery unavailable";}
+        }catch(RuntimeException ex){batteryPercent=-1;chargeEstimate="";return "Battery unavailable";}
+    }
+    private String chargeEstimate(long now){
+        if(android.os.Build.VERSION.SDK_INT<28)return "";
+        try{
+            BatteryManager manager=getContext().getSystemService(BatteryManager.class);
+            if(manager==null)return "";
+            long finish=DreamRules.chargeFinishAt(now,manager.computeChargeTimeRemaining());
+            if(finish<0)return "";
+            java.time.ZoneId zone=java.time.ZoneId.systemDefault();
+            LocalDate today=java.time.Instant.ofEpochMilli(now).atZone(zone).toLocalDate();
+            LocalDate day=java.time.Instant.ofEpochMilli(finish).atZone(zone).toLocalDate();
+            String when=(day.equals(today)?"":DreamRules.alarmDay(today,day)+" ")+android.text.format.DateFormat.getTimeFormat(getContext()).format(new Date(finish));
+            return "Est. full by "+when;
+        }catch(RuntimeException ex){return "";}
     }
     private void line(Canvas canvas,String value,float x,float baseline,float size,float maxWidth,int ink,Typeface font){
         paint.setTypeface(font);paint.setTextSize(size);paint.setColor(ink);paint.setTextAlign(Paint.Align.CENTER);
@@ -149,7 +164,7 @@ final class DreamView extends View {
         float cy=landscape?h*.43f:withArt?h*.15f:h*.44f;
         float textWidth=landscape&&withArt?w*.49f:w-2*margin;
         float size=unit*(clockSize==0?.17f:clockSize==2?.27f:.22f);
-        int extras=(weather.isEmpty()?0:1)+(alarm.isEmpty()?0:1);
+        int extras=(chargeEstimate.isEmpty()?0:1)+(weather.isEmpty()?0:1)+(alarm.isEmpty()?0:1);
         boolean withBar=showBattery&&batteryPercent>=0;
         float barSpace=withBar?unit*.036f:0;
         float step=unit*.060f;
@@ -160,7 +175,7 @@ final class DreamView extends View {
         if(extras>0||withBar){
             float end=Math.min(h-unit*.065f,bottom+((style!=DreamRules.MINIMAL&&showBattery)?unit*.065f:0));
             bottom=end-Math.max(0,rows-1)*step-barSpace;
-            if(landscape)bottom=Math.max(bottom,cy+unit*.145f);
+            if(landscape||!withArt)bottom=Math.max(bottom,cy+unit*.145f);
         }
         if(withArt){
             float factor=artworkSize==0?.78f:artworkSize==2?1.08f:1f;
@@ -191,6 +206,7 @@ final class DreamView extends View {
             if(withBar)chargeBar(canvas,cx,footer,unit,textWidth);
             footer+=step+barSpace;
         }
+        if(!chargeEstimate.isEmpty()){line(canvas,chargeEstimate,cx,footer,unit*.035f,textWidth,color,regular);footer+=step;}
         if(!weather.isEmpty()){line(canvas,weather,cx,footer,unit*.035f,textWidth,color,regular);footer+=step;}
         if(!alarm.isEmpty())line(canvas,alarm,cx,footer,unit*.035f,textWidth,color,regular);
         canvas.restore();canvas.restore();
