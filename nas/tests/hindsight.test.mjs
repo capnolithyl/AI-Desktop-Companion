@@ -12,6 +12,7 @@ test("recall prefers observations, no reflect or redirect",async()=>{
   await client.recall("sandbox","music");
   assert.match(call.url,/sandbox\/memories\/recall$/);
   assert.equal(JSON.parse(call.opts.body).prefer_observations,true);
+  assert.equal(JSON.parse(call.opts.body).max_tokens,500);
   assert.equal(call.opts.redirect,"error");
 });
 test("unavailable recall can fall back, strict benchmark cannot",async()=>{
@@ -57,3 +58,5 @@ test("local backend keeps queues, configuration and dream state isolated; select
   assert.deepEqual(calls,["local","legacy"]);
   db.close();
 });
+
+test("automatic recall evidence has a compact fact cap",()=>{const rows=Array.from({length:30},(_,i)=>({id:String(i),type:"world",text:"Fact "+i}));assert.equal(formatHindsight({results:rows}).length,8);});

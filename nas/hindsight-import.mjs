@@ -156,5 +156,5 @@ export function createHindsightImporter({db}){
   function finish(batch,success){
     tx(db,()=>{const update=db.prepare("UPDATE nas_hindsight_local_import_entries SET status=?,reason=?,updated_at=?,operation_id=NULL WHERE source_key=? AND status='sending'");for(const key of batch.keys)update.run(success?"done":"uncertain",success?null:"Submission outcome not confirmed; inspect Hindsight",Date.now(),key);if(!success||!status().queued)setEnabled(false);});
   }
-  return {status,preview,start,pause,resume,discard,acknowledge,next,accepted,pending,finish,hasCharacter:()=>!!db.prepare("SELECT 1 FROM nas_hindsight_local_import_entries WHERE category='character' AND status='done' LIMIT 1").get()};
+  return {status,preview,start,pause,resume,discard,acknowledge,next,accepted,pending,finish,hasOwner:()=>!!db.prepare("SELECT 1 FROM nas_hindsight_local_import_entries WHERE category IN ('facts','interests','summaries') AND status='done' LIMIT 1").get()&&!db.prepare("SELECT 1 FROM nas_hindsight_local_import_entries WHERE category IN ('facts','interests','summaries') AND status IN ('queued','sending','uncertain','skipped') LIMIT 1").get(),hasCharacter:()=>!!db.prepare("SELECT 1 FROM nas_hindsight_local_import_entries WHERE category='character' AND status='done' LIMIT 1").get()};
 }
