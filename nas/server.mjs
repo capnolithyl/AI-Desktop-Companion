@@ -1,8 +1,9 @@
+import {performanceReport} from "./performance.mjs";
 import { createServer } from "node:http";
 import { readFileSync, existsSync } from "node:fs";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { join, dirname, resolve, extname, sep } from "node:path";
-import { timingSafeEqual } from "node:crypto";
+import { timingSafeEqual,randomUUID } from "node:crypto";
 import { runningBuildInfo } from "./build-info.mjs";
 import { updateControl } from "./update-control.mjs";
 import { openStore } from "./storage.mjs";
@@ -61,22 +62,28 @@ function sse(res,kind,value) {
 }
 export function makeServer({store,config,key,promptFile="",maintenanceFile="/data/.mikan-update-maintenance",updates=updateControl(),models=providerSettings({initial:config,db:store.db}),generate=generateReply,research=researchSettings(store.db,{defaultEngine:"legacy"}),search=searchWeb,read=readWeb,knowledge=createKnowledge({db:store.db,read}),memoryIdleMs=90000,memoryPollMs=15000,hindsight=createHindsight({db:store.db})}) {
   if (typeof key!=="string" || key.length<32) throw new Error("MIKAN_REMOTE_KEY must be at least 32 characters");
-  let busy=false,lastInteractionAt=Date.now(),activeWrites=0,memoryTask=null,memoryAbort=null;
+  let busy=false,lastInteractionAt=Date.now(),activeWrites=0,memoryTask=null,memoryAbort=null,activeChat=null;
   const maintenance=()=>existsSync(maintenanceFile);
   const foregroundUnavailable=()=>busy||brain.isRunning()||knowledge.isRunning()||!!hindsight.isSwitching?.();
   const unavailable=()=>foregroundUnavailable()||store.learning.isRunning()||!!memoryTask||hindsight.isWorking();
-  const interruptMemory=async()=>{
-    const task=memoryTask;
-    if(task){memoryAbort?.abort();await task;}
+  const interruptMemory=async(signal)=>{
+    const task=memoryTask;if(!task)return;
+    memoryAbort?.abort();
+    if(!signal){await task;return;}
+    signal.throwIfAborted();
+    let listener;
+    try{await Promise.race([task,new Promise((_,reject)=>{listener=()=>reject(signal.reason);signal.addEventListener("abort",listener,{once:true});})]);}
+    finally{signal.removeEventListener("abort",listener);}
   };
+  const operations=()=>({busy:foregroundUnavailable(),memoryBusy:store.learning.isRunning()||!!memoryTask,activeChat:activeChat?{id:activeChat.id,stopping:activeChat.controller.signal.aborted}:null});
   const requestModel=async(args,source="chat")=>{
-    const startedAt=Date.now();let usage=null,failed=true;
+    const startedAt=Date.now();let usage=null,failed=true,headersMs=null,firstOutputMs=null,actualModel=null,streamed=null;
     try{
-      const result=await generate({...args,system:redactCredentials(args.system),history:args.history.map(m=>({...m,content:typeof m.content==="string"?redactCredentials(m.content):m.content,...(m.tool_calls?{tool_calls:m.tool_calls.map(c=>({...c,function:{...c.function,arguments:redactCredentials(c.function.arguments)}}))}:{})})),onUsage:value=>{usage=value;args.onUsage?.(value);},onResponse:response=>models.observe(args.config.provider,response)});
+      const result=await generate({...args,system:redactCredentials(args.system),history:args.history.map(m=>({...m,content:typeof m.content==="string"?redactCredentials(m.content):m.content,...(m.tool_calls?{tool_calls:m.tool_calls.map(c=>({...c,function:{...c.function,arguments:redactCredentials(c.function.arguments)}}))}:{})})),onUsage:value=>{usage=value;args.onUsage?.(value);},onModel:value=>{actualModel=value;args.onModel?.(value);},onFirstOutput:()=>{firstOutputMs??=Date.now()-startedAt;},onTransport:value=>{streamed=value;},onResponse:response=>{headersMs??=Date.now()-startedAt;models.observe(args.config.provider,response);}});
       failed=false;return result;
     }catch(error){if(error?.upstreamStatus===429){models.cooldown(args.config.provider);error.quota=models.quota(args.config.provider);}throw error;}
     finally{
-      try{models.recordUsage({provider:args.config.provider,model:args.config.model,source,startedAt,usage,failed});}
+      try{models.recordUsage({provider:args.config.provider,model:args.config.model,source,startedAt,usage,failed,headersMs,firstOutputMs,actualModel,kind:args.metricStage??(args.agentTools?"agent":args.structuredTool?"structured":"generation"),streamed});}
       catch{console.error("Could not record provider token usage");}
     }
   };
@@ -132,7 +139,14 @@ export function makeServer({store,config,key,promptFile="",maintenanceFile="/dat
         return json(res,202,updates.queue(body?.action));
       }
       if (req.method==="GET" && path==="/api/status")
-        return json(res,200,{...models.view(),busy:foregroundUnavailable(),memoryBusy:store.learning.isRunning(),build:BUILD});
+        return json(res,200,{...models.view(),...operations(),build:BUILD});
+      if(req.method==="GET"&&path==="/api/operations")return json(res,200,operations());
+      if(req.method==="POST"&&path==="/api/chat/stop"){
+        const body=await readJson(req,1024);
+        if(!activeChat||activeChat.id!==body.id)return json(res,409,{error:"That reply is no longer running."});
+        activeChat.controller.abort(Object.assign(Error("Reply stopped"),{code:"cancelled"}));
+        return json(res,200,operations());
+      }
       if(req.method==="GET"&&path==="/api/knowledge")return json(res,200,knowledge.status());
       if(req.method==="GET"&&path==="/api/knowledge/document"){
         const q=new URL(req.url,"http://localhost").searchParams;return json(res,200,knowledge.inspect(q.get("kind"),q.get("id")));
@@ -164,12 +178,15 @@ export function makeServer({store,config,key,promptFile="",maintenanceFile="/dat
         try{const results=await search("SearXNG search engine",false);return json(res,200,{ok:true,count:results.length});}catch{return json(res,503,{error:"Cannot reach SearXNG or its upstream engines"});}
       }
       if(req.method==="GET"&&path==="/api/token-usage")return json(res,200,models.tokenUsage());
+      if(req.method==="GET"&&path==="/api/performance"){const q=new URL(req.url,"http://localhost").searchParams;return json(res,200,performanceReport(store.db,{days:Number(q.get("days")??7)}));}
       if(req.method==="GET"&&path==="/api/models")return json(res,200,models.view());
       if(req.method==="GET"&&path==="/api/models/arli")return json(res,200,await models.refreshArliModels());
       if(req.method==="PUT"&&path==="/api/models"){
         const patch=await readJson(req,4096);
-        if(unavailable())return json(res,409,{error:"Wait for the current reply or memory extraction before switching models."});
-        return json(res,200,models.save(patch));
+        if(foregroundUnavailable())return json(res,409,{error:"Stop or finish the current foreground operation before switching models."});
+        const saved=models.save(patch);
+        memoryAbort?.abort();lastInteractionAt=Date.now();
+        return json(res,200,saved);
       }
       if (req.method==="GET" && path==="/api/profile")
         return json(res,200,exportCompanionProfile(currentProfile(promptFile,store)));
@@ -276,11 +293,14 @@ export function makeServer({store,config,key,promptFile="",maintenanceFile="/dat
         const selected=models.active();
         if(!models.available(selected.provider))return json(res,429,{error:"NAS cloud request budget reached. Try again later or select another provider."});
         busy=true;lastInteractionAt=Date.now();
+        const controller=new AbortController(),signal=controller.signal;
+        activeChat={id:randomUUID(),controller};
         let user,heartbeat;const mode=research.get(),trace=turnTrace(mode);
         try {
         // Claim the foreground slot before yielding. Abort and drain the
         // background worker before starting another provider request.
-        await trace.measure("memory-yield",interruptMemory);
+        await trace.measure("memory-yield",()=>interruptMemory(signal));
+        signal.throwIfAborted();
         if(!models.available(selected.provider))return json(res,429,{error:"NAS cloud request budget reached. Try again later or select another provider."});
         if(res.destroyed)return;
         const prior=retryUser?beforeLast:last;
@@ -293,9 +313,10 @@ export function makeServer({store,config,key,promptFile="",maintenanceFile="/dat
           res.flushHeaders();res.write(": connected\n\n");
           heartbeat=setInterval(()=>{if(!res.destroyed&&!res.writableEnded)res.write(": keepalive\n\n");},10000);
           res.once("close",()=>clearInterval(heartbeat));
-          const {answer,memory,researched}=await executeNasTurn({store,conversationId,question,selected,mode,promptFile,requestModel,trace,publicAgent:research.engine()==="native",search,read:(url,opts)=>knowledge.cachedRead(url,opts),knowledge,memoryEngine:hindsight.config().mode==="hindsight"?args=>hindsight.context(args):undefined,retrievalStrategy:hindsight.config().retrievalStrategy,
+          const {answer,memory,researched}=await executeNasTurn({store,conversationId,question,selected,mode,promptFile,requestModel,trace,signal,publicAgent:research.engine()==="native",search,read:(url,opts)=>knowledge.cachedRead(url,opts),knowledge,memoryEngine:hindsight.config().mode==="hindsight"?args=>hindsight.context(args):undefined,retrievalStrategy:hindsight.config().retrievalStrategy,
             canRequest:(slots=1)=>models.available(selected.provider,slots),reserve:()=>models.reserve(selected.provider),
-            onDelta:part=>sse(res,"delta",{text:part}),activity:event=>{try{store.learning.recordSearch(conversationId,user.id,event);}catch{console.error("Could not record NAS research activity");}}});
+            streamNative:body.streamNative===true&&selected.nativeStreaming!==false&&["arli","nvidia","groq","cerebras"].includes(selected.provider),onPreview:part=>sse(res,"preview",{text:part}),onDelta:part=>sse(res,"delta",{text:part}),activity:event=>{try{store.learning.recordSearch(conversationId,user.id,event);}catch{console.error("Could not record NAS research activity");}}});
+          signal.throwIfAborted();
           const saved=store.append(conversationId,"assistant",answer,{provider:selected.provider,requestedModel:selected.model,actualModel:trace.actualModel(),outcome:"completed",timing:trace.snapshot(),...(researched.task?{researchTask:researched.task}:{}),...(researched.agentEvidence?.length?{agentEvidence:researched.agentEvidence}:{}),...(researched.sources.length?{sources:researched.sources.map(({content,...source})=>source)}:{})});
           if(retryUser?.inference?.outcome==="failed")store.recordInference(user.id,null);
           store.library.markRecalled(memory.ids);
@@ -305,12 +326,13 @@ export function makeServer({store,config,key,promptFile="",maintenanceFile="/dat
         } catch(error) {
           // Do not leak upstream response bodies or credentials to the browser.
           const upstreamStatus=Number.isInteger(error?.upstreamStatus)?error.upstreamStatus:null;
-          if(user)store.recordInference(user.id,{provider:selected.provider,requestedModel:selected.model,actualModel:trace.actualModel(),outcome:"failed",upstreamStatus,...(typeof error?.code==="string"&&/^[a-zA-Z0-9_-]{1,64}$/.test(error.code)?{errorCode:error.code}:{}),timing:trace.snapshot()});
+          const errorCode=signal.aborted?"cancelled":typeof error?.code==="string"&&/^[a-zA-Z0-9_-]{1,64}$/.test(error.code)?error.code:null;
+          if(user)store.recordInference(user.id,{provider:selected.provider,requestedModel:selected.model,actualModel:trace.actualModel(),outcome:"failed",upstreamStatus,...(errorCode?{errorCode}:{}),timing:trace.snapshot()});
           console.error("NAS cloud chat failed:",selected.provider,selected.model,upstreamStatus??(typeof error?.code==="string"&&/^[a-zA-Z0-9_-]{1,64}$/.test(error.code)?error.code:"request/stream error"));
-          if (!res.headersSent) json(res,500,{error:"Could not prepare the conversation"});
-          else sse(res,"error",{error:(upstreamStatus===429||error?.status===429)?"Provider quota reached (HTTP 429). No automatic retry.":"Cloud reply failed ("+selected.provider+(upstreamStatus?" HTTP "+upstreamStatus:"")+"). Check the selected model and provider quota."});
+          if (!res.headersSent) json(res,signal.aborted?409:500,{error:signal.aborted?"Reply stopped.":"Could not prepare the conversation"});
+          else sse(res,"error",{error:signal.aborted?"Reply stopped.":(upstreamStatus===429||error?.status===429)?"Provider quota reached (HTTP 429). No automatic retry.":"Cloud reply failed ("+selected.provider+(upstreamStatus?" HTTP "+upstreamStatus:"")+"). "+(errorCode?"Reason: "+errorCode+". ":"")+"Check the selected model and provider quota."});
         } finally {
-          clearInterval(heartbeat);lastInteractionAt=Date.now();busy=false;
+          clearInterval(heartbeat);lastInteractionAt=Date.now();activeChat=null;busy=false;
           res.end();
         }
         return;

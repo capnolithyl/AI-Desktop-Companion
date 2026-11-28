@@ -16,7 +16,7 @@ export function providerSettings({initial,env={},file="",db,now=Date.now,fetchIm
   if(!PROVIDERS.includes(initialProvider))throw Error("Unsupported MIKAN_PROVIDER");
   const defaults={...DEFAULT_MODELS,[initialProvider]:initial?.model??env.MIKAN_MODEL??DEFAULT_MODELS[initialProvider]};
   const inherited=Object.fromEntries(PROVIDERS.map(p=>[p,initial?.provider===p?initial.key:env[KEY_NAMES[p]]||""]));
-  let saved={provider:initialProvider,models:defaults,keys:{},efforts:{groq:"medium",cerebras:"medium",nvidia:"auto"},cerebrasTier:"trial",historyChars:32000};
+  let saved={provider:initialProvider,models:defaults,keys:{},efforts:{groq:"medium",cerebras:"medium",nvidia:"auto"},cerebrasTier:"trial",historyChars:32000,nativeStreaming:true};
   if(file){
     try{
       const disk=JSON.parse(readFileSync(file,"utf8"));
@@ -29,6 +29,7 @@ export function providerSettings({initial,env={},file="",db,now=Date.now,fetchIm
       saved.provider=disk.provider;
       if(["trial","paid"].includes(disk.cerebrasTier))saved.cerebrasTier=disk.cerebrasTier;
       if([16000,32000,64000].includes(disk.historyChars))saved.historyChars=disk.historyChars;
+      if(typeof disk.nativeStreaming==="boolean")saved.nativeStreaming=disk.nativeStreaming;
     }catch(e){if(e.code!=="ENOENT")throw Error("Could not read NAS provider settings");}
   }
   const credential=(p,s=saved)=>s.keys[p]||inherited[p]||"";
@@ -51,7 +52,7 @@ export function providerSettings({initial,env={},file="",db,now=Date.now,fetchIm
     return view();
   }
   function view(){
-    return {provider:saved.provider,model:saved.models[saved.provider],historyChars:saved.historyChars,cerebrasTier:saved.cerebrasTier,reasoningEffort:effortOptions(saved.provider,saved.models[saved.provider]).includes(saved.efforts[saved.provider])?saved.efforts[saved.provider]:null,reasoningOptions:effortOptions(saved.provider,saved.models[saved.provider]),
+    return {provider:saved.provider,model:saved.models[saved.provider],historyChars:saved.historyChars,nativeStreaming:saved.nativeStreaming,cerebrasTier:saved.cerebrasTier,reasoningEffort:effortOptions(saved.provider,saved.models[saved.provider]).includes(saved.efforts[saved.provider])?saved.efforts[saved.provider]:null,reasoningOptions:effortOptions(saved.provider,saved.models[saved.provider]),
       providers:PROVIDERS.map(provider=>({provider,model:saved.models[provider],models:models(provider),configured:configured(provider),credentialSource:saved.keys[provider]?"nas":configured(provider)?"environment":"missing",imageInput:"unsupported",nativeTools:"unverified"}))};
   }
   function active(){return configFor(saved.provider,saved.models[saved.provider]);}
@@ -59,7 +60,7 @@ export function providerSettings({initial,env={},file="",db,now=Date.now,fetchIm
     if(!PROVIDERS.includes(p)||!models(p).includes(model))throw invalid("Select an approved configured model");
     if(!configured(p))throw invalid("Configure the selected provider API key in Models & providers.",503);
     if(!modelValid(p,model))throw invalid("Select an approved cloud model.",400);
-    return {provider:p,model,key:credential(p),historyChars:saved.historyChars,...(effortOptions(p,model).includes(saved.efforts[p])?{reasoningEffort:saved.efforts[p]}:{})};
+    return {provider:p,model,key:credential(p),historyChars:saved.historyChars,nativeStreaming:saved.nativeStreaming,...(effortOptions(p,model).includes(saved.efforts[p])?{reasoningEffort:saved.efforts[p]}:{})};
   }
   function save(patch){
     const p=patch?.provider;
@@ -82,6 +83,7 @@ export function providerSettings({initial,env={},file="",db,now=Date.now,fetchIm
       next.keys[p]=patch.apiKey;
     }
     if(patch.clearKey===true)delete next.keys[p];
+    if(patch.nativeStreaming!==undefined){if(typeof patch.nativeStreaming!=="boolean")throw invalid("Invalid streaming setting");next.nativeStreaming=patch.nativeStreaming;}
     if(patch.historyChars!==undefined){
       if(![16000,32000,64000].includes(patch.historyChars))throw invalid("Invalid history budget");
       next.historyChars=patch.historyChars;
@@ -106,10 +108,13 @@ export function providerSettings({initial,env={},file="",db,now=Date.now,fetchIm
   db.exec("CREATE TABLE IF NOT EXISTS nas_token_usage(id INTEGER PRIMARY KEY,provider TEXT NOT NULL,model TEXT NOT NULL,source TEXT NOT NULL,started_at INTEGER NOT NULL,finished_at INTEGER NOT NULL,input_tokens INTEGER,output_tokens INTEGER,reasoning_tokens INTEGER,failed INTEGER NOT NULL); CREATE INDEX IF NOT EXISTS nas_token_usage_time ON nas_token_usage(provider,model,started_at); CREATE TABLE IF NOT EXISTS nas_token_tracking(id INTEGER PRIMARY KEY CHECK(id=1),since_ms INTEGER NOT NULL)");
   db.prepare("INSERT OR IGNORE INTO nas_token_tracking VALUES(1,?)").run(now());
   const validTokens=n=>Number.isSafeInteger(n)&&n>=0&&n<=10000000?n:null;
-  function recordUsage({provider,model,source,startedAt,usage,failed}){
+  const usageCols=new Set(db.prepare("PRAGMA table_info(nas_token_usage)").all().map(c=>c.name));
+  for(const [name,type] of [["headers_ms","INTEGER"],["first_output_ms","INTEGER"],["actual_model","TEXT"],["kind","TEXT"],["streamed","INTEGER"]])if(!usageCols.has(name))db.exec("ALTER TABLE nas_token_usage ADD COLUMN "+name+" "+type);
+  const duration=v=>Number.isFinite(v)&&v>=0?Math.round(v):null;
+  function recordUsage({provider,model,source,startedAt,usage,failed,headersMs,firstOutputMs,actualModel,kind,streamed}){
     if(!PROVIDERS.includes(provider)||typeof model!=="string"||!["chat","brain-lab","memory"].includes(source))return;
     const t=now();
-    db.prepare("INSERT INTO nas_token_usage(provider,model,source,started_at,finished_at,input_tokens,output_tokens,reasoning_tokens,failed) VALUES(?,?,?,?,?,?,?,?,?)").run(provider,model,source,startedAt,t,validTokens(usage?.inputTokens),validTokens(usage?.outputTokens),validTokens(usage?.reasoningTokens),failed?1:0);
+    db.prepare("INSERT INTO nas_token_usage(provider,model,source,started_at,finished_at,input_tokens,output_tokens,reasoning_tokens,failed,headers_ms,first_output_ms,actual_model,kind,streamed) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)").run(provider,model,source,startedAt,t,validTokens(usage?.inputTokens),validTokens(usage?.outputTokens),validTokens(usage?.reasoningTokens),failed?1:0,duration(headersMs),duration(firstOutputMs),typeof actualModel==="string"&&/^[\w./:-]{1,160}$/.test(actualModel)?actualModel:null,typeof kind==="string"&&/^[a-z-]{1,40}$/.test(kind)?kind:null,typeof streamed==="boolean"?+streamed:null);
     // Thirty days of numeric request metadata is plenty for rolling windows.
     db.prepare("DELETE FROM nas_token_usage WHERE started_at<?").run(t-30*86400000);
   }

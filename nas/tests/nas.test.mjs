@@ -1679,3 +1679,92 @@ test("Arli account model discovery and unlimited sequential quota",async()=>{
   models.cooldown("arli");assert.equal(models.available("arli"),false);
  }finally{store.db.close();}
 });
+
+test("native streamed tool deltas assemble without showing reasoning, and complete text streams once",async()=>{
+ const config={provider:"arli",model:"DeepSeek-V4.1-Flash-1017",key:"synthetic-arli-secret"},agentTools=[{type:"function",function:{name:"recall_memory",parameters:{type:"object"}}}];
+ const packet=(delta,finish_reason=null)=>({choices:[{delta,finish_reason}]});
+ const stream=(events)=>new Response(events.map(e=>"data: "+JSON.stringify(e)+"\n\n").join("")+"data: [DONE]\n\n",{headers:{"content-type":"text/event-stream"}});
+ let text=[],tools=0,first=0,usage;
+ const answer=await generateReply({config,system:"Test",history:[{role:"user",content:"Hello"}],agentTools,agentStream:true,onAgentText:v=>text.push(v),onFirstOutput:()=>first++,onUsage:v=>usage=v,fetchImpl:async(_url,opts)=>{
+   const body=JSON.parse(opts.body);assert.equal(body.stream,true);assert.equal(body.stream_options.include_usage,true);assert.equal(body.parallel_tool_calls,false);
+   return stream([packet({reasoning_content:"private reasoning"}),packet({content:"Hello "}),packet({content:"there!"},"stop"),{choices:[],usage:{prompt_tokens:20,completion_tokens:9,completion_tokens_details:{reasoning_tokens:2}}}]);
+ }});
+ assert.deepEqual(text,["Hello ","Hello there!"]);assert.deepEqual(answer,{content:"Hello there!",toolCalls:[]});assert.equal(first,1);assert.equal(usage.outputTokens,9);
+ text=[];first=0;
+ const calls=await generateReply({config,system:"Test",history:[],agentTools,agentStream:true,onAgentText:v=>text.push(v),onAgentTools:()=>tools++,onFirstOutput:()=>first++,fetchImpl:async()=>stream([
+  packet({tool_calls:[{index:0,id:"call_1",type:"function",function:{name:"recall_memory",arguments:'{"query":'}}]}),
+  packet({tool_calls:[{index:0,function:{arguments:'"music"}'}}]}),
+  packet({content:"not an answer"},"tool_calls")
+ ])});
+ assert.deepEqual(text,[]);assert.equal(tools,1);assert.equal(first,1);assert.deepEqual(calls.toolCalls,[{id:"call_1",type:"function",function:{name:"recall_memory",arguments:'{"query":"music"}'}}]);
+ await assert.rejects(generateReply({config,system:"Test",history:[],agentTools,agentStream:true,fetchImpl:async()=>new Response("data: "+JSON.stringify(packet({tool_calls:[{index:0,id:"call_1",function:{name:"recall_memory",arguments:"{"}}]}))+"\n\n",{headers:{"content-type":"text/event-stream"}})}),e=>e.code==="incomplete-stream");
+});
+test("performance groups historical call and turn durations without prompt content",async()=>{
+ const {performanceReport,timingDistribution}=await import("../performance.mjs");
+ const store=openStore(":memory:");
+ try{
+  const time=Date.now(),models=providerSettings({db:store.db,now:()=>time});
+  models.recordUsage({provider:"arli",model:"deepseek",source:"chat",startedAt:time-10000,usage:{inputTokens:100},failed:false,headersMs:200,firstOutputMs:300,actualModel:"deepseek",kind:"agent",streamed:true});
+  models.recordUsage({provider:"arli",model:"deepseek",source:"memory",startedAt:time-3000,usage:{},failed:false});
+  models.recordUsage({provider:"arli",model:"deepseek",source:"chat",startedAt:time-500,usage:{},failed:true});
+  const chat=store.newConversation();store.append(chat.id,"user","private sample text");
+  store.append(chat.id,"assistant","private answer",{provider:"arli",requestedModel:"deepseek",actualModel:"deepseek",outcome:"completed",timing:{mode:"simple",totalMs:13000,firstTextMs:400,stages:[{stage:"agent",elapsedMs:5000,success:true},{stage:"agent",elapsedMs:6000,success:true}]}});
+  const report=performanceReport(store.db,{days:7,now:time+10000}),g=report.groups.find(g=>g.provider==="arli");
+  assert.equal(g.calls,3);assert.equal(g.failedCalls,1);assert.equal(g.turns,1);
+  assert.equal(g.metrics["Call / chat"].mean,10000);assert.equal(g.metrics["Call / chat (failed)"].mean,500);
+  assert.equal(g.metrics["Call / memory"].mean,3000);assert.equal(g.metrics["First provider output / chat"].mean,300);
+  assert.equal(g.metrics["First visible text / chat"].mean,400);assert.equal(g.metrics["Stage / chat / agent"].mean,11000);
+  assert.equal(g.metrics["Turn / chat"].p95,13000);assert.ok(!JSON.stringify(report).includes("private sample"));assert.ok(!JSON.stringify(report).includes("private answer"));
+  assert.equal(timingDistribution([null,10,20,100]).p95,100);assert.equal(timingDistribution([null]).count,0);
+ }finally{store.db.close();}
+});
+
+test("native streaming clears superseded provisional text and never displays tool arguments or split credentials",async()=>{
+ const {executeNasTurn}=await import("../turn.mjs"),store=openStore(":memory:");
+ try{
+  const chat=store.newConversation(),question="What is my favorite band?";store.append(chat.id,"user",question);
+  let calls=0,recalls=0;const previews=[],deltas=[];
+  const result=await executeNasTurn({store,conversationId:chat.id,question,selected:{provider:"arli",model:"test",key:"synthetic-arli-secret",historyChars:16000},mode:"off",publicAgent:true,retrievalStrategy:"on-demand",streamNative:true,onPreview:v=>previews.push(v),onDelta:v=>deltas.push(v),reserve:()=>{},canRequest:()=>true,memoryEngine:async()=>{recalls++;return {text:"Favorite band Cobalt Harbor",ids:[],auditLines:[],engine:"hindsight"};},
+  requestModel:async args=>{
+   assert.equal(args.agentStream,true);
+   if(++calls===1){args.onAgentText("Let me remember ");args.onAgentTools();return {content:"Let me remember",toolCalls:[{id:"recall",type:"function",function:{name:"recall_memory",arguments:'{"query":"favorite band"}'}}]};}
+   assert.match(args.history.at(-1).content,/Cobalt Harbor/);
+   args.onAgentText("Your favorite band is Cobalt Harbor. synthetic-arli-");
+   args.onAgentText("Your favorite band is Cobalt Harbor. synthetic-arli-secret ");
+   return {content:"Your favorite band is Cobalt Harbor.",toolCalls:[]};
+  }});
+  assert.equal(recalls,1);assert.equal(calls,2);assert.equal(previews[0],"Let me remember ");assert.equal(previews[1],"");
+  assert.equal(previews.at(-1),result.answer);assert.deepEqual(deltas,[]);
+  assert.ok(!JSON.stringify(previews).includes("synthetic-arli-"));
+  assert.ok(!JSON.stringify(previews).includes('"query"'));
+ }finally{store.db.close();}
+});
+
+test("authenticated stop aborts matching chat and releases model selection",async()=>{
+ const store=openStore(":memory:"),key="0123456789abcdef0123456789abcdef";
+ const models=providerSettings({db:store.db,env:{NVIDIA_API_KEY:"synthetic-nvidia-key",ARLIAI_API_KEY:"synthetic-arli-key"}});
+ let entered;const started=new Promise(r=>entered=r);let calls=0;
+ const server=makeServer({store,key,models,generate:async args=>{
+  if(++calls===1){entered();await new Promise((_,reject)=>{if(args.signal.aborted)reject(args.signal.reason);else args.signal.addEventListener("abort",()=>reject(args.signal.reason),{once:true});});}
+  args.onDelta("Recovered");return "Recovered";
+ }});
+ await new Promise(r=>server.listen(0,"127.0.0.1",r));
+ const base="http://127.0.0.1:"+server.address().port,headers={Authorization:"Bearer "+key,"Content-Type":"application/json"},chat=store.newConversation();
+ const post=(path,body,method="POST")=>fetch(base+path,{method,headers,body:JSON.stringify(body)});
+ let pending,opId;
+ try{
+  pending=post("/api/chat",{conversationId:chat.id,text:"Hello",messageId:"stop-test",expectedLastMessageId:null}).then(r=>r.text());
+  await Promise.race([started,pending.then(()=>{throw Error("Unexpected completion");})]);
+  const ops=await (await fetch(base+"/api/operations",{headers})).json();opId=ops.activeChat?.id;assert.equal(ops.busy,true);assert.ok(opId);
+  assert.equal((await post("/api/chat/stop",{id:"wrong"})).status,409);
+  assert.equal((await fetch(base+"/api/chat/stop",{method:"POST",body:"{}"})).status,401);
+  assert.equal((await post("/api/models",{provider:"arli",select:true},"PUT")).status,409);
+  assert.equal((await post("/api/chat/stop",{id:opId})).status,200);
+  assert.match(await pending,/Reply stopped/);
+  const after=await (await fetch(base+"/api/operations",{headers})).json();assert.equal(after.busy,false);assert.equal(after.activeChat,null);
+  assert.equal(store.messages(chat.id).length,1);assert.equal(store.messages(chat.id)[0].inference.errorCode,"cancelled");
+  assert.equal((await post("/api/models",{provider:"arli",select:true},"PUT")).status,200);
+  assert.match(await (await post("/api/chat",{conversationId:chat.id,text:"Hello",messageId:"stop-test"})).text(),/event: done/);
+  assert.equal(calls,2);
+ }finally{if(opId)await post("/api/chat/stop",{id:opId}).catch(()=>{});if(pending)await pending.catch(()=>{});await new Promise(r=>server.close(r));store.db.close();}
+});
