@@ -1718,3 +1718,24 @@ test("performance groups historical call and turn durations without prompt conte
   assert.equal(timingDistribution([null,10,20,100]).p95,100);assert.equal(timingDistribution([null]).count,0);
  }finally{store.db.close();}
 });
+
+test("native streaming clears superseded provisional text and never displays tool arguments or split credentials",async()=>{
+ const {executeNasTurn}=await import("../turn.mjs"),store=openStore(":memory:");
+ try{
+  const chat=store.newConversation(),question="What is my favorite band?";store.append(chat.id,"user",question);
+  let calls=0,recalls=0;const previews=[],deltas=[];
+  const result=await executeNasTurn({store,conversationId:chat.id,question,selected:{provider:"arli",model:"test",key:"synthetic-arli-secret",historyChars:16000},mode:"off",publicAgent:true,retrievalStrategy:"on-demand",streamNative:true,onPreview:v=>previews.push(v),onDelta:v=>deltas.push(v),reserve:()=>{},canRequest:()=>true,memoryEngine:async()=>{recalls++;return {text:"Favorite band Cobalt Harbor",ids:[],auditLines:[],engine:"hindsight"};},
+  requestModel:async args=>{
+   assert.equal(args.agentStream,true);
+   if(++calls===1){args.onAgentText("Let me remember ");args.onAgentTools();return {content:"Let me remember",toolCalls:[{id:"recall",type:"function",function:{name:"recall_memory",arguments:'{"query":"favorite band"}'}}]};}
+   assert.match(args.history.at(-1).content,/Cobalt Harbor/);
+   args.onAgentText("Your favorite band is Cobalt Harbor. synthetic-arli-");
+   args.onAgentText("Your favorite band is Cobalt Harbor. synthetic-arli-secret ");
+   return {content:"Your favorite band is Cobalt Harbor.",toolCalls:[]};
+  }});
+  assert.equal(recalls,1);assert.equal(calls,2);assert.equal(previews[0],"Let me remember ");assert.equal(previews[1],"");
+  assert.equal(previews.at(-1),result.answer);assert.deepEqual(deltas,[]);
+  assert.ok(!JSON.stringify(previews).includes("synthetic-arli-"));
+  assert.ok(!JSON.stringify(previews).includes('"query"'));
+ }finally{store.db.close();}
+});
