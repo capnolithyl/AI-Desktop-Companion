@@ -1623,3 +1623,18 @@ test("primary memory path avoids SQLite semantic retrieval unless fallback is re
   const fallback=await retrieveNasMemory({...args,memoryEngine:async({fallback})=>({...await fallback(),engine:"sqlite-fallback"})});
   assert.equal(fallback.text,"sqlite");assert.equal(semantic,1);assert.equal(topical,1);
 });
+
+test("on-demand native agent skips eager retrieval and can explicitly recall",async()=>{
+ const {executeNasTurn}=await import("../turn.mjs"),store=openStore(":memory:");
+ try{
+  let recalls=0,modelCalls=0;
+  const c=store.newConversation(),question="I'm looking forward to a quiet evening.";
+  store.append(c.id,"user",question);
+  const common={store,conversationId:c.id,selected:{provider:"nvidia",model:"test",historyChars:16000},mode:"off",publicAgent:true,retrievalStrategy:"on-demand",reserve:()=>{},canRequest:()=>true,memoryEngine:async({explicitRecall})=>{assert.equal(explicitRecall,true);recalls++;return {text:"Favorite band Cobalt Harbor",ids:[],auditLines:["Favorite band Cobalt Harbor"],engine:"hindsight"};}};
+  const casual=await executeNasTurn({...common,question,requestModel:async()=>({content:"Enjoy the quiet.",toolCalls:[]})});
+  assert.equal(casual.memory.engine,"on-demand");assert.equal(recalls,0);
+  const ask="What is my favorite band?";store.append(c.id,"user",ask);
+  const answer=await executeNasTurn({...common,question:ask,requestModel:async args=>++modelCalls===1?{content:"",toolCalls:[{id:"recall",type:"function",function:{name:"recall_memory",arguments:JSON.stringify({query:"favorite band"})}}]}:{content:"Cobalt Harbor.",toolCalls:[]}});
+  assert.equal(recalls,1);assert.equal(modelCalls,2);assert.equal(answer.memory.engine,"hindsight");assert.match(answer.answer,/Cobalt Harbor/);
+ }finally{store.db.close();}
+});

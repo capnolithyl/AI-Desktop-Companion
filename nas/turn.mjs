@@ -44,14 +44,16 @@ export function turnTrace(mode){
     snapshot:()=>({mode,totalMs:elapsed(),firstTextMs,stages:[...stages],...(inference.length?{inference:[...inference]}:{}),modelCalls:stages.filter(s=>["planner","knowledge-planner","answer","manuscript-repair","research-repair","research-recovery","agent","agent-answer"].includes(s.stage)).length})};
 }
 // Shared executor: caller owns authentication, admission, persistence and quota.
-export async function executeNasTurn({store,conversationId,question,selected,mode,promptFile="",requestModel,reserve,canRequest,search,read,trace=turnTrace(mode),onDelta=()=>{},activity=()=>{},signal,knowledge,publicAgent=process.env.MIKAN_PUBLIC_AGENT==="1",agentDiagnostics=false,now=new Date(),memoryEngine}){
+export async function executeNasTurn({store,conversationId,question,selected,mode,promptFile="",requestModel,reserve,canRequest,search,read,trace=turnTrace(mode),onDelta=()=>{},activity=()=>{},signal,knowledge,publicAgent=process.env.MIKAN_PUBLIC_AGENT==="1",agentDiagnostics=false,now=new Date(),memoryEngine,retrievalStrategy="automatic"}){
   signal?.throwIfAborted();
   const modelLed=publicAgent&&["nvidia","groq","cerebras"].includes(selected.provider);
   const {history,rawHistory}=await trace.measure("context",async()=>{
     const rawHistory=store.messages(conversationId,80);
     return {history:boundedHistory(rawHistory,selected.historyChars),rawHistory};
   });
-  const initialMemory=await retrieveNasMemory({store,conversationId,question,history,modelLed,memoryEngine,signal,activity,trace});
+  const onDemand=modelLed&&!!memoryEngine&&retrievalStrategy==="on-demand";
+  const initialMemory=onDemand?{...store.library.context(question,conversationId,{modelLed:true,foundationalOnly:true,includeSessions:false}),engine:"on-demand"}:await retrieveNasMemory({store,conversationId,question,history,modelLed,memoryEngine,signal,activity,trace});
+  if(onDemand)activity({title:"Memory engine",detail:"on-demand · no automatic recall",lines:[]});
   if(modelLed)return companionTurn({store,conversationId,question,history,rawHistory,memory:initialMemory,memoryEngine,profile:currentProfile(promptFile,store),selected,mode,requestModel,reserve,canRequest,search,read,knowledge,trace,onDelta,activity,signal,now});
   // Explicit compatibility engine for providers without native tool support.
   const recentSources=rawHistory.filter(m=>m.role==="assistant").reverse().flatMap(m=>(m.inference?.sources??[]).filter(s=>s.kind==="notion"||s.kind==="cached-web"));

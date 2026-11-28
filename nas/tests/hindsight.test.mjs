@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {DatabaseSync} from "node:sqlite";
-import {createHindsightClient,createHindsight,createHindsightRouter,formatHindsight,recallContext} from "../hindsight.mjs";
+import {createHindsightClient,createHindsight,createHindsightRouter,formatHindsight,recallContext,ownerRetainItem} from "../hindsight.mjs";
 test("bounded metadata preserves event and mention dates",()=>{
   const lines=formatHindsight({results:[{id:"a",type:"observation",text:"Moved to Hamburg",occurred_start:"2026-11-27",mentioned_at:"2026-11-28"}]});
   assert.equal(JSON.parse(lines[0]).occurred_start,"2026-11-27");
@@ -60,3 +60,19 @@ test("local backend keeps queues, configuration and dream state isolated; select
 });
 
 test("automatic recall evidence has a compact fact cap",()=>{const rows=Array.from({length:30},(_,i)=>({id:String(i),type:"world",text:"Fact "+i}));assert.equal(formatHindsight({results:rows}).length,8);});
+
+test("retain anchors original local date rather than ingestion or UTC midnight",()=>{
+ const item=ownerRetainItem({id:"source",content:"Tomorrow Rowan covers my shift.",createdAt:Date.parse("2026-11-28T00:03:31Z")});
+ assert.equal(item.timestamp,"2026-11-28T00:03:31.000Z");
+ assert.equal(item.metadata.local_date,"2026-11-27");
+ assert.match(item.context,/Friday, November 27, 2026/);
+ assert.match(item.context,/actor, recipient/);
+ assert.equal(item.content,"Tomorrow Rowan covers my shift.");
+ assert.equal(item.metadata.source_message_id,"source");
+});
+test("compact model evidence retains full bounded audit record",async()=>{
+ const fact={id:"source-id",document_id:"doc-id",type:"world",text:"Rowan covers both children. "+"A".repeat(600),mentioned_at:"2026-11-28T00:03:31Z"};
+ const r=await recallContext({recall:async()=>({results:[fact]})},"bank","q",{text:"",ids:[],auditLines:[]});
+ assert.match(r.text,/Rowan covers both children/);assert.doesNotMatch(r.text,/"occurred_start"|source-id|doc-id/);
+ assert.equal(JSON.parse(r.auditLines[0]).document_id,"doc-id");assert.equal(JSON.parse(r.auditLines[0]).text,fact.text);
+});
