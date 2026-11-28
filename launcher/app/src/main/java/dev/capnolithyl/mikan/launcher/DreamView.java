@@ -114,7 +114,10 @@ final class DreamView extends View {
             batteryPercent=DreamRules.batteryPercent(level,scale);
             if(batteryPercent<0)return "Battery unavailable";
             int status=i.getIntExtra(BatteryManager.EXTRA_STATUS,-1),plugged=i.getIntExtra(BatteryManager.EXTRA_PLUGGED,0);
-            if(level<scale&&plugged!=0&&(status==BatteryManager.BATTERY_STATUS_CHARGING||status==BatteryManager.BATTERY_STATUS_NOT_CHARGING))chargeEstimate=chargeEstimate(now);
+            if(DreamRules.showChargeEstimate(level<scale,status==BatteryManager.BATTERY_STATUS_CHARGING,plugged!=0,status==BatteryManager.BATTERY_STATUS_NOT_CHARGING)){
+                chargeEstimate=chargeEstimate(now);
+                if(chargeEstimate.isEmpty())chargeEstimate="Charge time unavailable";
+            }
             batteryStatus=status==BatteryManager.BATTERY_STATUS_FULL?"Fully charged":status==BatteryManager.BATTERY_STATUS_CHARGING?"Charging":plugged!=0?"Plugged in":"On battery";
             return batteryPercent+"% · "+batteryStatus;
         }catch(RuntimeException ex){batteryPercent=-1;chargeEstimate="";return "Battery unavailable";}

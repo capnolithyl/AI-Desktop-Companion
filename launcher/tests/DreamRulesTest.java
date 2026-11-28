@@ -93,6 +93,12 @@ public final class DreamRulesTest {
         check(paired<stacked&&paired<.35f);
         check(DreamRules.footerHeight(false,false,false,false,false,false,false)==0);
         check(DreamRules.footerHeight(true,false,false,true,true,true,false)>DreamRules.footerHeight(true,false,false,true,true,false,false));
+        check(DreamRules.showChargeEstimate(true,true,true,false));
+        check(DreamRules.showChargeEstimate(true,true,false,false));
+        check(DreamRules.showChargeEstimate(true,false,true,true));
+        check(!DreamRules.showChargeEstimate(false,true,true,false));
+        check(!DreamRules.showChargeEstimate(true,false,false,false));
+        check(!DreamRules.showChargeEstimate(true,false,true,false));
         System.out.println("DreamRules tests passed");
     }
 }

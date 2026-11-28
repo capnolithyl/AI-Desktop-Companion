@@ -196,3 +196,7 @@ Battery information now includes a separate Est. full by line below the charge b
 ## v1.0.7 Dream footer refinement
 
 Greeting remains centered above a compact two-column footer: weather and alarm on the left, battery percentage/status, progress and estimated full-charge time on the right. Theme-colored Canvas icons reflect the cached Open-Meteo code and day/night flag (sun/moon, partly cloudy, overcast, fog, rain, snow, thunderstorm or unknown); cached/unavailable text remains explicit. No emoji font or additional network calls. Single enabled group centers, constrained regions stack, footer space is reserved before sizing artwork and respects date clearance, dimming and pixel shift. Existing display toggles and data/refresh behavior unchanged. v1.0.6 launcher CI passed; owner screenshot shows progress/weather/alarm but not ETA. v1.0.7 tests expanded, CI/device layout verification pending.
+
+## v1.0.8 Dream charge estimate availability
+
+Owner screenshot confirms v1.0.7 grouped portrait footer, but no full-charge time at 93% charging. The renderer still supports ETA; Android's estimate may be unavailable, exact device cause unconfirmed. While charging below full (or plugged-paused), show Charge time unavailable if the public system API has no usable estimate instead of silently hiding the row. Query on charging status even if plugged flag is missing. Full/unplugged remain hidden. Existing minute tick retries automatically; no extrapolation, new permissions or changed footer design. v1.0.7 launcher CI passed; v1.0.8 CI/device verification pending.
