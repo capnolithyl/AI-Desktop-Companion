@@ -223,5 +223,5 @@ export async function companionTurn({store,conversationId,question,history,rawHi
   // Model output is plain dialogue. Source metadata remains in diagnostics.
   trace.firstText();onDelta(answer);
   activity({title:"Companion answer",detail:modelCalls+" model calls; "+toolCount+" tool requests",lines:[]});
-  return {answer,memory:{...memory,engine:recalledEngine,ids:[...ids],auditLines:[...new Set(auditLines)].slice(0,32)},researched:{sources:sources.map(s=>({...metadata(s),content:s.content})),local,note:"",evidence:"",agentEvidence:publicSources.slice(0,4)}};
+  return {answer,memory:{...memory,...(recalledEngine!==undefined?{engine:recalledEngine}:{}),ids:[...ids],auditLines:[...new Set(auditLines)].slice(0,32)},researched:{sources:sources.map(s=>({...metadata(s),content:s.content})),local,note:"",evidence:"",agentEvidence:publicSources.slice(0,4)}};
 }
