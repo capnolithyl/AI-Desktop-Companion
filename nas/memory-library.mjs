@@ -210,12 +210,13 @@ export function createMemoryLibrary(db){
 // its compatibility fallback; pins and editable character canon remain local.
 export async function retrieveNasMemory({store,conversationId,question,history=[],modelLed=true,explicitRecall=false,scope="owner",memoryEngine,signal,activity=()=>{},trace,stage="hindsight-context"}){
   let fallbackPromise;
-  const fallback=()=>fallbackPromise??=(async()=>{
+  const readSqlite=async()=>{
     signal?.throwIfAborted();
     const semantic=modelLed?await store.library.semanticRecall?.(question,{signal,explicitRecall}):null;
     if(semantic&&!["unavailable","empty"].includes(semantic.status))activity({title:"Semantic memory retrieval",detail:semantic.status+" · "+semantic.indexed+"/"+semantic.total+" facts indexed",lines:semantic.ids.map(id=>"Memory #"+id)});
     return store.library.context(question,conversationId,modelLed?{modelLed:true,includeSessions:false,explicitRecall,semanticIds:semantic?.ids??[]}:undefined);
-  })();
+  };
+  const fallback=()=>fallbackPromise??=(trace?trace.measure("sqlite-context",readSqlite):readSqlite());
   if(!memoryEngine||scope==="editable")return fallback();
   const base=store.library.context(question,conversationId,{modelLed:true,foundationalOnly:true,includeSessions:false});
   const run=()=>memoryEngine({question,history,base,fallback,signal,scope,explicitRecall});

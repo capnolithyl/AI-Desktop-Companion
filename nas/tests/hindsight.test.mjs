@@ -58,3 +58,5 @@ test("local backend keeps queues, configuration and dream state isolated; select
   assert.deepEqual(calls,["local","legacy"]);
   db.close();
 });
+
+test("automatic recall evidence has a compact fact cap",()=>{const rows=Array.from({length:30},(_,i)=>({id:String(i),type:"world",text:"Fact "+i}));assert.equal(formatHindsight({results:rows}).length,8);});

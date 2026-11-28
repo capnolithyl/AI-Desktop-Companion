@@ -22,9 +22,9 @@ function fixture(){
   return store;
 }
 test("local preview, explicit consent, source preservation and distinct banks",async()=>{
-  const store=fixture();const calls=[],archives=[];let current;
+  const store=fixture();const calls=[],archives=[];let current,ownerMode="ok";
   try{
-    const client={health:async()=>({status:"healthy",database:"connected"}),archiveSupport:async()=>"documents",importArchive:async(bank,zip)=>{const entries=unpack(zip);assert.equal(entries["manifest.json"].schema_version,1);const docs=Object.values(entries).filter(d=>d.facts);archives.push({bank,docs});current=docs.length;return {operation_id:"op-"+archives.length};},operation:async()=>({status:"completed",result_metadata:{documents_imported:current,facts_imported:current}}),retain:async(bank,items)=>{calls.push({bank,items});return {success:true,items_count:items.length};},recall:async(bank)=>({results:bank===CHARACTER_BANK?[{id:"c",type:"world",text:"Mikan likes orange"}]:[{id:"u",type:"world",text:"Owner likes metal"}]})};
+    const client={health:async()=>({status:"healthy",database:"connected"}),archiveSupport:async()=>"documents",importArchive:async(bank,zip)=>{const entries=unpack(zip);assert.equal(entries["manifest.json"].schema_version,1);const docs=Object.values(entries).filter(d=>d.facts);archives.push({bank,docs});current=docs.length;return {operation_id:"op-"+archives.length};},operation:async()=>({status:"completed",result_metadata:{documents_imported:current,facts_imported:current}}),retain:async(bank,items)=>{calls.push({bank,items});return {success:true,items_count:items.length};},recall:async(bank)=>{if(bank===CHARACTER_BANK)return {results:[{id:"c",type:"world",text:"Mikan likes orange"}]};if(ownerMode==="timeout")throw Object.assign(Error("timeout"),{name:"TimeoutError"});return {results:ownerMode==="empty"?[]:[{id:"u",type:"world",text:"Owner likes metal"}]};}};
     const h=createHindsightRouter({db:store.db,localClient:client});
     await h.save({backend:"local",mode:"hindsight",capture:false,dreams:false,dailyBatches:3,dailyDreams:0});
     const imp=h.importer,categories=["facts","interests","character","summaries","messages"],p=imp.preview(categories);
@@ -52,6 +52,9 @@ test("local preview, explicit consent, source preservation and distinct banks",a
     const self=await h.context({question:"favorite color",history:[],base,fallback,scope:"character",explicitRecall:true});
     assert.match(self.text,/MIKAN CHARACTER MEMORY/);assert.match(self.text,/Mikan likes orange/);
     assert.doesNotMatch(self.text,/Owner likes metal/);assert.equal(fallbackCalls,0);assert.equal(self.recallDiagnostics[0].bank,"character");
+    ownerMode="empty";const empty=await h.context({question:"unrelated topic",history:[],base,fallback});assert.equal(empty.text,"Pinned context");assert.equal(empty.engine,"hindsight");assert.equal(fallbackCalls,0);assert.equal(empty.recallDiagnostics[0].status,"empty");
+    const explicit=await h.context({question:"missing fact",history:[],base,fallback,explicitRecall:true});assert.equal(explicit.engine,"sqlite-fallback");assert.equal(fallbackCalls,1);
+    ownerMode="timeout";const timed=await h.context({question:"missing fact",history:[],base,fallback});assert.equal(timed.engine,"sqlite-fallback");assert.equal(timed.recallDiagnostics[0].status,"timeout");assert.equal(fallbackCalls,2);assert.equal(h.status().lastRecallBanks[0].status,"timeout");
   }finally{store.db.close();}
 });
 test("preview invalidation, changed sources, pause/resume and interrupted submissions",()=>{
