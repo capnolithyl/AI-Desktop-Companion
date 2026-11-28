@@ -49,6 +49,8 @@ export function createHindsightClient({url="http://hindsight-test:8888",key="",f
     importArchive:async(bank,zip,kind)=>{if(!["documents","bank"].includes(kind))throw err("Native Hindsight archive import unavailable",409);const form=new FormData();form.append("file",new Blob([zip],{type:"application/zip"}),"mikan-import.zip");const suffix=kind==="documents"?"/document-transfer?on_conflict=skip":"/transfer/import?mode=merge&document_conflict=skip";const r=await fetcher(new URL(path(bank,suffix),origin),{method:"POST",redirect:"error",signal:AbortSignal.timeout(30000),headers:{Accept:"application/json",...(key?{Authorization:"Bearer "+key}:{})},body:form});if(!r.ok)throw err("Hindsight archive HTTP "+r.status,r.status);return r.json();},
     recall:(bank,query,signal)=>request(path(bank,"/memories/recall"),{query,budget:"low",max_tokens:500,types:["world","experience","observation"],prefer_observations:true},signal,10000),
     retain:(bank,items,signal)=>request(path(bank,"/memories"),{items,async:false},signal,300000),
+    getMemory:(bank,id)=>request(path(bank,"/memories/"+encodeURIComponent(id))),
+    listMemories:(bank)=>request(path(bank,"/memories/list?limit=100")),
     models:bank=>request(path(bank,"/mental-models?detail=content")),
     create:(bank,[id,name,source_query])=>request(path(bank,"/mental-models"),{id,name,source_query,max_tokens:400,trigger:{refresh_after_consolidation:false,budget:"low"}}),
     refresh:(bank,id)=>request(path(bank,"/mental-models/"+encodeURIComponent(id)+"/refresh"),{}),
