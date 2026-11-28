@@ -1,5 +1,5 @@
 import {useState,useRef,useEffect,useMemo,type FormEvent,type ChangeEvent,type CSSProperties} from "react";
-import {ArrowLeft,Cat,Brain,Shirt,WandSparkles,Settings2,PawPrint,Sparkles,History,UserRound,Download,Upload,Plug2,Lock,LoaderCircle,Check,Copy,X,AlertTriangle,RefreshCw,Cpu,Globe,BookOpen} from "lucide-react";
+import {ArrowLeft,Cat,Brain,Shirt,WandSparkles,Settings2,PawPrint,Sparkles,History,UserRound,Download,Upload,Plug2,Lock,LoaderCircle,Check,Copy,X,AlertTriangle,RefreshCw,Cpu,Globe,BookOpen,Square} from "lucide-react";
 import {DefaultCompanionShell} from "../DefaultCompanionShell";
 import {NasMobileShell,NasMobileNav,useNasMobile,type MobileView} from "./NasMobileShell";
 import {WorkspaceAvatarRays,WorkspacePawSeal,WorkspaceSendPaw} from "../WorkspaceDecor";
@@ -119,6 +119,8 @@ export function NasApp(){
   const [menu,setMenu]=useState<{x:number;y:number}|null>(null);
   const serial=useRef(0);
   const inFlight=useRef(false);
+  const chatAbort=useRef<AbortController|null>(null);
+  const [stopping,setStopping]=useState(false);
   const client=useMemo(()=>new NasClient(key),[key]);
   const file=useRef<HTMLInputElement>(null);
   const mounted=useRef(true);
@@ -206,6 +208,15 @@ export function NasApp(){
     const resume=()=>{if(document.visibilityState==="visible")void check();};
     document.addEventListener("visibilitychange",resume);
     return ()=>{cancelled=true;window.clearInterval(timer);document.removeEventListener("visibilitychange",resume);};
+  },[authenticated,client]);
+  useEffect(()=>{
+    if(!authenticated)return;
+    let closed=false,running=false;
+    const poll=async()=>{if(closed||running)return;running=true;try{const ops=await client.operations();if(!closed)setStatus(old=>old?{...old,...ops}:old);}catch{/* Older backend or transient network failure. */}finally{running=false;}};
+    void poll();const timer=window.setInterval(()=>void poll(),3000);
+    const resume=()=>{if(document.visibilityState==="visible")void poll();};
+    document.addEventListener("visibilitychange",resume);
+    return()=>{closed=true;window.clearInterval(timer);document.removeEventListener("visibilitychange",resume);};
   },[authenticated,client]);
   const versionMismatch=!!status&&(!status.build||CLIENT_BUILD.commit!==status.build.commit||CLIENT_BUILD.backendHash!==status.build.actualBackendHash);
   const copyVersion=async()=>{try{const live=await client.status();setStatus(live);await navigator.clipboard.writeText(JSON.stringify({service:"nas",browser:CLIENT_BUILD,server:live.build??null},null,2));setVersionCopied(true);}catch(error){setNotice(error instanceof Error?error.message:String(error));}};
@@ -305,10 +316,21 @@ export function NasApp(){
     void check();
     return()=>{stopped=true;controller.abort();cancelTimer();document.removeEventListener("visibilitychange",visibility);window.removeEventListener("online",resume);};
   },[authenticated,active,busy,recoveryId,client]);
+  const stopCurrent=async()=>{
+    if(stopping)return;
+    setStopping(true);
+    try{
+      const ops=await client.operations();
+      if(ops.activeChat){const next=await client.stopChat(ops.activeChat.id);setStatus(old=>old?{...old,...next}:old);setNotice("Stopping reply…");}
+      else {chatAbort.current?.abort();setStatus(old=>old?{...old,...ops}:old);}
+    }catch(error){report(error);}
+    finally{setStopping(false);}
+  };
   const runAttempt=async(attempt:ChatAttempt)=>{
     const {conversationId:id,messageId,text,expectedLastMessageId}=attempt;
     if(id!==active||busy||switching||inFlight.current)return;
     inFlight.current=true;setBusy(true);setNotice("");setFailedAttempt(null);
+    const controller=new AbortController();chatAbort.current=controller;
     const stamp=Date.now(),pending="nas-pending-"+messageId;
     setMessages(previous=>{
       const history=previous.filter(m=>m.id!==pending);
@@ -317,7 +339,7 @@ export function NasApp(){
     });
     let full="",saved:NasMessage|undefined;
     try{
-      saved=await client.chat(id,text,delta=>{full+=delta;setMessages(previous=>previous.map(m=>m.id===pending?{...m,content:full}:m));},{messageId,expectedLastMessageId},preview=>{full=preview;setMessages(previous=>previous.map(m=>m.id===pending?{...m,content:full}:m));});
+      saved=await client.chat(id,text,delta=>{full+=delta;setMessages(previous=>previous.map(m=>m.id===pending?{...m,content:full}:m));},{messageId,expectedLastMessageId},preview=>{full=preview;setMessages(previous=>previous.map(m=>m.id===pending?{...m,content:full}:m));},controller.signal);
       const reply=saved;
       setMessages(previous=>previous.map(m=>m.id===pending?reply:m));
       const kind=reactionFromReply(reply.content);if(kind)setReaction({kind,serial:++serial.current,source:"reply"});
@@ -338,8 +360,9 @@ export function NasApp(){
           }
         }
       }catch{/* Retain the known reply or retry identity when the network is still unavailable. */}
-      try{const list=await client.chats();if(mounted.current)setChats(list);}catch{/* Conversation refresh is independent of message recovery. */}
-      inFlight.current=false;setBusy(false);
+      try{const list=await client.chats(AbortSignal.timeout(8000));if(mounted.current)setChats(list);}catch{/* Conversation refresh is independent of message recovery. */}
+      chatAbort.current=null;inFlight.current=false;setBusy(false);
+      try{const live=await client.status();if(mounted.current)setStatus(live);}catch{/* Lightweight operation poll will recover. */}
     }
   };
   const send=async(event?:FormEvent)=>{
@@ -395,6 +418,8 @@ export function NasApp(){
   const activityEntries=activity&&activity.conversationId===active?nasActivity(activity.events):[];
   const latest=[...messages].reverse().find(m=>m.role==="assistant")?.id;
   const lastMessage=messages.at(-1);
+  const canStop=!!status?.activeChat||!!chatAbort.current;
+  const stopButton=<button type="button" className="secondary-action" disabled={stopping||status?.activeChat?.stopping} onClick={()=>void stopCurrent()}><Square size={15}/> {stopping||status?.activeChat?.stopping?"Stopping…":"Stop reply"}</button>;
   const retryAttempt=!busy&&active?(failedAttempt?.conversationId===active?failedAttempt:lastMessage?.role==="user"?{conversationId:active,messageId:lastMessage.id,text:lastMessage.content}:null):null;
   return <main className={"companion nas-app "+(page==="chat"?"default-layout-active":"settings-mode settings-standalone")+(mobile?" nas-mobile":"")}
     style={{"--mikan-font":"Segoe UI, system-ui, sans-serif"} as CSSProperties}>
@@ -409,14 +434,14 @@ export function NasApp(){
       onOpenCurrentLog={()=>openPage("log")} onOpenMemory={()=>openPage("memory")} onOpenSettings={()=>openPage(mobile?"control":"personality")}
       onOpenSearch={()=>openPage("research")} onToggleVision={()=>{}} onVoice={()=>{}} onMute={()=>{}}
       onExpression={express} onOutfit={()=>openPage("appearance")}
-      modelPicker={<div className="nas-model-controls"><div className="model-switcher"><select aria-label="Select NAS model" value={status?JSON.stringify([status.provider,status.model]):""} disabled={busy||switching||!!status?.busy||!!status?.memoryBusy||!status?.providers?.length} onChange={e=>void switchModel(e.target.value)}>{status?.providers?.filter(p=>p.configured||p.provider===status.provider).map(p=><optgroup key={p.provider} label={p.provider}>{p.models.map(model=><option key={model} value={JSON.stringify([p.provider,model])} disabled={!p.configured}>{model}</option>)}</optgroup>)??<option value="">Cloud model</option>}</select></div>{status&&<NasTokenUsage client={client} models={status} compact/>}</div>}
+      modelPicker={<div className="nas-model-controls"><div className="model-switcher"><select aria-label="Select NAS model" value={status?JSON.stringify([status.provider,status.model]):""} disabled={busy||switching||!!status?.busy||!status?.providers?.length} onChange={e=>void switchModel(e.target.value)}>{status?.providers?.filter(p=>p.configured||p.provider===status.provider).map(p=><optgroup key={p.provider} label={p.provider}>{p.models.map(model=><option key={model} value={JSON.stringify([p.provider,model])} disabled={!p.configured}>{model}</option>)}</optgroup>)??<option value="">Cloud model</option>}</select></div>{canStop&&stopButton}{status&&<NasTokenUsage client={client} models={status} compact/>}</div>}
       transcript={<>{!messages.length&&<div className="workspace-greeting"><PawPrint size={42}/><strong>Ready for a little conversation?</strong><span>Beholder is awake.</span></div>}
         {messages.map(message=><Bubble key={message.id} message={message} latest={message.id===latest} busy={busy} onCopyError={report}/>)}
         {(notice||retryAttempt)&&<div className="workspace-system-feedback nas-reply-feedback" role="status"><Sparkles size={18}/><span>{notice||"Mikan hasn't answered this message yet."}</span>{retryAttempt&&<button type="button" className="nas-reply-retry" disabled={busy||switching} onClick={()=>void runAttempt(retryAttempt)}><RefreshCw size={16}/> Retry</button>}</div>}</>}
-      composer={<div className="nas-composer-stack">{!!status?.reasoningOptions?.length&&<div className="nas-thinking-row"><label className="nas-thinking-select"><Brain size={14}/><span>Thinking effort</span><select aria-label="Thinking effort" value={status.reasoningEffort??""} disabled={busy||switching||!!status.busy||!!status.memoryBusy} onChange={e=>void switchEffort(e.target.value as ReasoningEffort)}>{status.reasoningOptions.map(effort=><option key={effort} value={effort}>{({auto:"Auto",none:"Off",low:"Low",medium:"Medium",high:"High"})[effort]}</option>)}</select></label></div>}<form className="input-row" onSubmit={event=>void send(event)}>
+      composer={<div className="nas-composer-stack">{!!status?.reasoningOptions?.length&&<div className="nas-thinking-row"><label className="nas-thinking-select"><Brain size={14}/><span>Thinking effort</span><select aria-label="Thinking effort" value={status.reasoningEffort??""} disabled={busy||switching||!!status.busy} onChange={e=>void switchEffort(e.target.value as ReasoningEffort)}>{status.reasoningOptions.map(effort=><option key={effort} value={effort}>{({auto:"Auto",none:"Off",low:"Low",medium:"Medium",high:"High"})[effort]}</option>)}</select></label></div>}<form className="input-row" onSubmit={event=>void send(event)}>
         <textarea aria-label="Message Mikan" rows={2} placeholder="Message Mikan…" maxLength={4000} value={input} onChange={event=>setInput(event.target.value)}
           onKeyDown={event=>{if(event.key==="Enter"&&!event.shiftKey&&!event.nativeEvent.isComposing){event.preventDefault();void send();}}}/>
-        <button className="send-button chat-paw-send" type="submit" aria-label="Send message" disabled={busy||switching||!input.trim()}>{busy?<LoaderCircle className="spin" size={20}/>:<WorkspaceSendPaw/>}</button>
+        {canStop?<button className="send-button chat-paw-send" type="button" aria-label="Stop reply" title="Stop reply" disabled={stopping||status?.activeChat?.stopping} onClick={()=>void stopCurrent()}><Square size={20}/></button>:<button className="send-button chat-paw-send" type="submit" aria-label="Send message" disabled={busy||switching||!!status?.busy||!input.trim()}>{busy?<LoaderCircle className="spin" size={20}/>:<WorkspaceSendPaw/>}</button>}
       </form></div>}/>:<section className="drawer control-center-window" role="dialog" aria-label="Mikan Control Center">
       <header className="drawer-header control-center-header"><button type="button" className="back-button" onClick={()=>openPage(settingsBack)} title={settingsBackLabel} aria-label={settingsBackLabel}><ArrowLeft size={20}/></button>
         <span className="control-header-glyph"><Settings2 size={22}/></span><div className="drawer-title"><strong>{page==="control"?"Control Center":mobile&&page==="appearance"?"Wardrobe & appearance":tabs.find(t=>t.id===page)?.label||"Conversation log"}</strong><span>Mikan's control center · Beholder</span></div>
@@ -465,8 +490,9 @@ export function NasApp(){
           onRefresh={refreshLibrary} onAddCharacter={(category,label,value)=>changeMemory("addCanon",{item:{category,label,value}})}
           onEditCharacter={(id,category,label,value)=>changeMemory("editCanon",{id,item:{category,label,value}})} onDeleteCharacter={id=>changeMemory("deleteCanon",{id})}/>}
         {page==="log"&&<><div className="settings-section-title">Conversation log</div><div className="nas-profile-actions"><button type="button" className="secondary-action" disabled={!active||exporting} onClick={()=>{if(active)void downloadChat(active);}}>{exporting?<LoaderCircle className="spin" size={16}/>:<Download size={16}/>} Download chat JSON</button></div><p className="settings-note">Includes all saved messages and private diagnostics. Review before sharing.</p><p className="settings-note">Currently selected: {status?.provider} · {status?.model}</p>{messages.map(message=><div key={message.id} className="control-form-section"><strong>{message.role==="assistant"?"Mikan":"You"}</strong>{message.inference&&<p className="settings-note">{message.inference.provider} · {message.inference.actualModel||message.inference.requestedModel} · {message.inference.outcome}{!message.inference.actualModel?" (actual model not reported)":""}</p>}{message.inference?.timing&&<NasTiming timing={message.inference.timing}/>}<ChatMarkdown text={message.content} onOpenLink={openLink}/></div>)}</>}
-        {page==="models"&&status?.providers&&<NasModels models={status} client={client} onChanged={applyModels} busy={busy||switching||status.busy||!!status.memoryBusy}/>}
-        {page==="performance"&&status?.providers&&<NasPerformance models={status} client={client} onChanged={applyModels} busy={busy||switching||status.busy||!!status.memoryBusy}/>}
+        {page==="models"&&canStop&&stopButton}
+        {page==="models"&&status?.providers&&<NasModels models={status} client={client} onChanged={applyModels} busy={busy||switching||status.busy}/>}
+        {page==="performance"&&status?.providers&&<NasPerformance models={status} client={client} onChanged={applyModels} busy={busy||switching||status.busy}/>}
         {page==="brain-lab"&&status?.providers&&<NasBrainLab client={client} models={status} busy={busy||!!status.busy||!!status.memoryBusy}/>}
         {page==="hindsight"&&<NasHindsight client={client}/>}
         {page==="knowledge"&&<NasKnowledge client={client} busy={busy||!!status?.busy||!!status?.memoryBusy}/>}

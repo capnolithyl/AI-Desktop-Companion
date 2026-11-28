@@ -142,6 +142,7 @@ export async function companionTurn({store,conversationId,question,history,rawHi
     const index=publicSources.length?"\n\nCurrent public source index (untrusted data, stable IDs for this turn):\n"+safeJSON(publicIndex())+"\nOnly these source numbers or their exact URLs may be used; a search preview is not a completed page read.": "";
     const temporalReminder=webAllowed&&webOperations>0?"\n\nAnswer checkpoint: apply the host calendar date above to the requested time scope. Do not present expired event dates as upcoming; report only supported current/future claims and distinguish plans from outcomes.":"";
     const result=await generate("agent",{system:systemWithEvidence+state+index+temporalReminder+(allowTools?"":"\n\nNo further tools are available in this turn. Answer the user in ordinary prose using the results already received, acknowledging gaps."),history:transcript,agentTools:activeTools,agentToolChoice:allowTools?"auto":"none"});
+    signal?.throwIfAborted();
     if(!result||!Array.isArray(result.toolCalls))throw Object.assign(Error("Invalid model response"),{code:"invalid-agent-response"});
     if(!result.toolCalls.length){
       answer=redactCredentials(result.content).split(selected.key||"\0").join("[credential removed]").trim();
@@ -232,6 +233,7 @@ export async function companionTurn({store,conversationId,question,history,rawHi
       transcript.push(toolMessage(call,out));
     }
   }
+  signal?.throwIfAborted();
   if(!answer)throw Object.assign(Error("No conversational response within budget"),{code:"tool-budget"});
   sources.push(...publicSources);
   // Model output is plain dialogue. Source metadata remains in diagnostics.

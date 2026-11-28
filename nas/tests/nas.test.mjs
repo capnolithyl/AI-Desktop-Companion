@@ -1739,3 +1739,32 @@ test("native streaming clears superseded provisional text and never displays too
   assert.ok(!JSON.stringify(previews).includes('"query"'));
  }finally{store.db.close();}
 });
+
+test("authenticated stop aborts matching chat and releases model selection",async()=>{
+ const store=openStore(":memory:"),key="0123456789abcdef0123456789abcdef";
+ const models=providerSettings({db:store.db,env:{NVIDIA_API_KEY:"synthetic-nvidia-key",ARLIAI_API_KEY:"synthetic-arli-key"}});
+ let entered;const started=new Promise(r=>entered=r);let calls=0;
+ const server=makeServer({store,key,models,generate:async args=>{
+  if(++calls===1){entered();await new Promise((_,reject)=>{if(args.signal.aborted)reject(args.signal.reason);else args.signal.addEventListener("abort",()=>reject(args.signal.reason),{once:true});});}
+  args.onDelta("Recovered");return "Recovered";
+ }});
+ await new Promise(r=>server.listen(0,"127.0.0.1",r));
+ const base="http://127.0.0.1:"+server.address().port,headers={Authorization:"Bearer "+key,"Content-Type":"application/json"},chat=store.newConversation();
+ const post=(path,body,method="POST")=>fetch(base+path,{method,headers,body:JSON.stringify(body)});
+ let pending,opId;
+ try{
+  pending=post("/api/chat",{conversationId:chat.id,text:"Hello",messageId:"stop-test",expectedLastMessageId:null}).then(r=>r.text());
+  await Promise.race([started,pending.then(()=>{throw Error("Unexpected completion");})]);
+  const ops=await (await fetch(base+"/api/operations",{headers})).json();opId=ops.activeChat?.id;assert.equal(ops.busy,true);assert.ok(opId);
+  assert.equal((await post("/api/chat/stop",{id:"wrong"})).status,409);
+  assert.equal((await fetch(base+"/api/chat/stop",{method:"POST",body:"{}"})).status,401);
+  assert.equal((await post("/api/models",{provider:"arli",select:true},"PUT")).status,409);
+  assert.equal((await post("/api/chat/stop",{id:opId})).status,200);
+  assert.match(await pending,/Reply stopped/);
+  const after=await (await fetch(base+"/api/operations",{headers})).json();assert.equal(after.busy,false);assert.equal(after.activeChat,null);
+  assert.equal(store.messages(chat.id).length,1);assert.equal(store.messages(chat.id)[0].inference.errorCode,"cancelled");
+  assert.equal((await post("/api/models",{provider:"arli",select:true},"PUT")).status,200);
+  assert.match(await (await post("/api/chat",{conversationId:chat.id,text:"Hello",messageId:"stop-test"})).text(),/event: done/);
+  assert.equal(calls,2);
+ }finally{if(opId)await post("/api/chat/stop",{id:opId}).catch(()=>{});if(pending)await pending.catch(()=>{});await new Promise(r=>server.close(r));store.db.close();}
+});
