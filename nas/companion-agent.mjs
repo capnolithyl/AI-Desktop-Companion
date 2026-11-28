@@ -89,7 +89,7 @@ export function publicResearchURL(value){
 const webDeclined=question=>/\b(?:do not|don't|never|no need to)\s+(?:browse|search|look up|use the web|go online)\b/i.test(question);
 const suppliedWebURLs=question=>[...question.matchAll(/https?:\/\/[^\s<>"']+/gi)].map(m=>publicResearchURL(m[0].replace(/[),.!?]+$/,""))?.href).filter(Boolean);
 
-export async function companionTurn({store,conversationId,question,history,rawHistory,memory,profile,selected,mode,requestModel,reserve,canRequest,search,read,knowledge,trace,onDelta,activity,signal,now=new Date(),memoryEngine}){
+export async function companionTurn({store,conversationId,question,history,rawHistory,memory,profile,selected,mode,requestModel,reserve,canRequest,search,read,knowledge,trace,onDelta,activity,signal,now=new Date(),memoryEngine,onPreview,streamNative=false}){
   const initial=cleanHistory(history);
   const transcript=[...initial],sources=[],publicSources=[],handles=new Map(),ids=new Set(memory.ids),auditLines=[...memory.auditLines];
   let recalledEngine=memory.engine;
@@ -103,10 +103,23 @@ export async function companionTurn({store,conversationId,question,history,rawHi
   const system=companionSystem(profile,memory,webAllowed?mode:"off",now);
   const maxCalls=mode==="strict"?10:7;
   let modelCalls=0,toolCount=0,local=false,answer="";
+  const streaming=streamNative&&!!onPreview;
+  let preview="",lastPreviewAt=0;
+  const clearPreview=()=>{if(preview){preview="";onPreview?.("");trace.resetFirstText();}lastPreviewAt=0;};
+  const publishPreview=raw=>{
+    if(!streaming)return;
+    // Keep the unfinished word private until its boundary is known; redact
+    // credential-shaped tokens before sending any provisional text. Never
+    // display a leading tool/JSON tag as it is being assembled.
+    const safe=redactCredentials(raw.replace(/\S+$/u,"")).split(selected.key||"\0").join("[credential removed]").trimStart();
+    if(!safe||/^[<{]/.test(safe)||safe===preview)return;
+    const t=Date.now();if(preview&&t-lastPreviewAt<90)return;
+    lastPreviewAt=t;preview=safe;trace.firstText();onPreview(safe);
+  };
   const available=(slots=1)=>modelCalls+slots<=maxCalls&&canRequest(slots);
   const generate=(stage,args)=>trace.measure(stage,()=>{
     signal?.throwIfAborted();reserve();modelCalls++;
-    return requestModel({...args,config:selected,signal,agentThinking:true,agentEffort:effortFor(selected),maxTokens:4096,temperature:0.65,onModel:v=>trace.model(v),onUsage:v=>trace.usage(stage,v)});
+    return requestModel({...args,config:selected,signal,metricStage:stage,agentStream:streaming, onAgentText:publishPreview,onAgentTools:clearPreview,agentThinking:true,agentEffort:effortFor(selected),maxTokens:4096,temperature:0.65,onModel:v=>trace.model(v),onUsage:v=>trace.usage(stage,v)});
   });
   const prior=rawHistory.filter(m=>m.role==="assistant").reverse().flatMap(m=>(m.inference?.sources??[]).filter(s=>["notion","cached-web"].includes(s.kind))).slice(0,12);
   const previousEvidence=webAllowed?rawHistory.filter(m=>m.role==="assistant").at(-1)?.inference?.agentEvidence??[]:[];
@@ -131,13 +144,14 @@ export async function companionTurn({store,conversationId,question,history,rawHi
     const result=await generate("agent",{system:systemWithEvidence+state+index+temporalReminder+(allowTools?"":"\n\nNo further tools are available in this turn. Answer the user in ordinary prose using the results already received, acknowledging gaps."),history:transcript,agentTools:activeTools,agentToolChoice:allowTools?"auto":"none"});
     if(!result||!Array.isArray(result.toolCalls))throw Object.assign(Error("Invalid model response"),{code:"invalid-agent-response"});
     if(!result.toolCalls.length){
-      answer=redactCredentials(result.content).trim();
+      answer=redactCredentials(result.content).split(selected.key||"\0").join("[credential removed]").trim();
       if(!answer||/^\s*(?:\{[\s\n]*"(?:tool|arguments|function|tool_calls)"|<(?:tool_call|function_call)>)/i.test(answer)){
         activity({title:"Invalid model answer",detail:answer?"Tool syntax returned as prose":"Empty final answer",lines:[]});
         throw Object.assign(Error("Model did not return conversational prose"),{code:"invalid-agent-answer"});
       }
       break;
     }
+    clearPreview();
     if(!allowTools){activity({title:"Invalid model answer",detail:"Tool requested after budget ended",lines:[]});throw Object.assign(Error("Model requested tools after budget ended"),{code:"tool-budget"});}
     transcript.push({role:"assistant",content:null,tool_calls:result.toolCalls.map(c=>({...c,function:{...c.function,arguments:redactCredentials(c.function.arguments)}}))});
     for(const call of result.toolCalls){
@@ -221,7 +235,7 @@ export async function companionTurn({store,conversationId,question,history,rawHi
   if(!answer)throw Object.assign(Error("No conversational response within budget"),{code:"tool-budget"});
   sources.push(...publicSources);
   // Model output is plain dialogue. Source metadata remains in diagnostics.
-  trace.firstText();onDelta(answer);
+  trace.firstText();if(streaming)onPreview(answer);else onDelta(answer);
   activity({title:"Companion answer",detail:modelCalls+" model calls; "+toolCount+" tool requests",lines:[]});
   return {answer,memory:{...memory,...(recalledEngine!==undefined?{engine:recalledEngine}:{}),ids:[...ids],auditLines:[...new Set(auditLines)].slice(0,32)},researched:{sources:sources.map(s=>({...metadata(s),content:s.content})),local,note:"",evidence:"",agentEvidence:publicSources.slice(0,4)}};
 }

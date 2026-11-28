@@ -1,3 +1,4 @@
+import {performanceReport} from "./performance.mjs";
 import { createServer } from "node:http";
 import { readFileSync, existsSync } from "node:fs";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -70,13 +71,13 @@ export function makeServer({store,config,key,promptFile="",maintenanceFile="/dat
     if(task){memoryAbort?.abort();await task;}
   };
   const requestModel=async(args,source="chat")=>{
-    const startedAt=Date.now();let usage=null,failed=true;
+    const startedAt=Date.now();let usage=null,failed=true,headersMs=null,firstOutputMs=null,actualModel=null;
     try{
-      const result=await generate({...args,system:redactCredentials(args.system),history:args.history.map(m=>({...m,content:typeof m.content==="string"?redactCredentials(m.content):m.content,...(m.tool_calls?{tool_calls:m.tool_calls.map(c=>({...c,function:{...c.function,arguments:redactCredentials(c.function.arguments)}}))}:{})})),onUsage:value=>{usage=value;args.onUsage?.(value);},onResponse:response=>models.observe(args.config.provider,response)});
+      const result=await generate({...args,system:redactCredentials(args.system),history:args.history.map(m=>({...m,content:typeof m.content==="string"?redactCredentials(m.content):m.content,...(m.tool_calls?{tool_calls:m.tool_calls.map(c=>({...c,function:{...c.function,arguments:redactCredentials(c.function.arguments)}}))}:{})})),onUsage:value=>{usage=value;args.onUsage?.(value);},onModel:value=>{actualModel=value;args.onModel?.(value);},onFirstOutput:()=>{firstOutputMs??=Date.now()-startedAt;},onResponse:response=>{headersMs??=Date.now()-startedAt;models.observe(args.config.provider,response);}});
       failed=false;return result;
     }catch(error){if(error?.upstreamStatus===429){models.cooldown(args.config.provider);error.quota=models.quota(args.config.provider);}throw error;}
     finally{
-      try{models.recordUsage({provider:args.config.provider,model:args.config.model,source,startedAt,usage,failed});}
+      try{models.recordUsage({provider:args.config.provider,model:args.config.model,source,startedAt,usage,failed,headersMs,firstOutputMs,actualModel,kind:args.metricStage??(args.agentTools?"agent":args.structuredTool?"structured":"generation"),streamed:args.agentTools?!!args.agentStream:!args.structuredTool&&args.config.provider!=="gemini"});}
       catch{console.error("Could not record provider token usage");}
     }
   };
@@ -164,6 +165,7 @@ export function makeServer({store,config,key,promptFile="",maintenanceFile="/dat
         try{const results=await search("SearXNG search engine",false);return json(res,200,{ok:true,count:results.length});}catch{return json(res,503,{error:"Cannot reach SearXNG or its upstream engines"});}
       }
       if(req.method==="GET"&&path==="/api/token-usage")return json(res,200,models.tokenUsage());
+      if(req.method==="GET"&&path==="/api/performance"){const q=new URL(req.url,"http://localhost").searchParams;return json(res,200,performanceReport(store.db,{days:Number(q.get("days")??7)}));}
       if(req.method==="GET"&&path==="/api/models")return json(res,200,models.view());
       if(req.method==="GET"&&path==="/api/models/arli")return json(res,200,await models.refreshArliModels());
       if(req.method==="PUT"&&path==="/api/models"){
@@ -295,7 +297,7 @@ export function makeServer({store,config,key,promptFile="",maintenanceFile="/dat
           res.once("close",()=>clearInterval(heartbeat));
           const {answer,memory,researched}=await executeNasTurn({store,conversationId,question,selected,mode,promptFile,requestModel,trace,publicAgent:research.engine()==="native",search,read:(url,opts)=>knowledge.cachedRead(url,opts),knowledge,memoryEngine:hindsight.config().mode==="hindsight"?args=>hindsight.context(args):undefined,retrievalStrategy:hindsight.config().retrievalStrategy,
             canRequest:(slots=1)=>models.available(selected.provider,slots),reserve:()=>models.reserve(selected.provider),
-            onDelta:part=>sse(res,"delta",{text:part}),activity:event=>{try{store.learning.recordSearch(conversationId,user.id,event);}catch{console.error("Could not record NAS research activity");}}});
+            streamNative:body.streamNative===true&&selected.nativeStreaming!==false&&["arli","nvidia","groq","cerebras"].includes(selected.provider),onPreview:part=>sse(res,"preview",{text:part}),onDelta:part=>sse(res,"delta",{text:part}),activity:event=>{try{store.learning.recordSearch(conversationId,user.id,event);}catch{console.error("Could not record NAS research activity");}}});
           const saved=store.append(conversationId,"assistant",answer,{provider:selected.provider,requestedModel:selected.model,actualModel:trace.actualModel(),outcome:"completed",timing:trace.snapshot(),...(researched.task?{researchTask:researched.task}:{}),...(researched.agentEvidence?.length?{agentEvidence:researched.agentEvidence}:{}),...(researched.sources.length?{sources:researched.sources.map(({content,...source})=>source)}:{})});
           if(retryUser?.inference?.outcome==="failed")store.recordInference(user.id,null);
           store.library.markRecalled(memory.ids);

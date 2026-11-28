@@ -22,8 +22,8 @@ export type ReasoningEffort="auto"|"none"|"low"|"medium"|"high";
 export type TokenTotals={calls:number;input:number;output:number;reasoning:number;failed:number;missingInput:number;missingOutput:number};
 export type TokenWindows=Record<"minute"|"hour"|"day"|"utcToday",TokenTotals>;
 export type TokenUsage={observedAt:number;since:number;groups:Record<CloudProvider,{total:TokenWindows;models:Record<string,TokenWindows>;sources:Record<"chat"|"brain-lab"|"memory",TokenTotals>;quota:ProviderQuota}>};
-export type NasModels={provider:CloudProvider;model:string;historyChars:number;cerebrasTier?:"trial"|"paid";reasoningEffort?:ReasoningEffort|null;reasoningOptions?:ReasoningEffort[];providers:ProviderEntry[]};
-export type NasModelPatch={provider:CloudProvider;model?:string;apiKey?:string;clearKey?:boolean;select?:boolean;historyChars?:number;cerebrasTier?:"trial"|"paid";reasoningEffort?:ReasoningEffort};
+export type NasModels={nativeStreaming?:boolean;provider:CloudProvider;model:string;historyChars:number;cerebrasTier?:"trial"|"paid";reasoningEffort?:ReasoningEffort|null;reasoningOptions?:ReasoningEffort[];providers:ProviderEntry[]};
+export type NasModelPatch={nativeStreaming?:boolean;provider:CloudProvider;model?:string;apiKey?:string;clearKey?:boolean;select?:boolean;historyChars?:number;cerebrasTier?:"trial"|"paid";reasoningEffort?:ReasoningEffort};
 export type NasFact={id:number;fact:string;category:string;updatedAt:number};
 export type NasBuild={version:string;commit:string;backendHash:string|null;actualBackendHash:string};
 export type UpdatePhase="checking"|"current"|"available"|"installing"|"deferred"|"updated"|"failed"|"rolled-back";
@@ -101,8 +101,8 @@ export class NasClient {
   resolveLearning(id:number,action:"accept"|"dismiss"){return this.json("learning/review",{method:"POST",body:JSON.stringify({id,action})});}
   library(){return this.json<LibrarySnapshot>("library");}
   memoryAction<T=unknown>(action:string,args:object){return this.json<T>("library",{method:"POST",body:JSON.stringify({action,args})});}
-  async chat(id:string,text:string,onDelta:(text:string)=>void,attempt?:{messageId:string;expectedLastMessageId?:string|null}):Promise<NasMessage>{
-    const response=await this.request("chat",{method:"POST",body:JSON.stringify({conversationId:id,text,...attempt})});
+  async chat(id:string,text:string,onDelta:(text:string)=>void,attempt?:{messageId:string;expectedLastMessageId?:string|null},onPreview?:(text:string)=>void):Promise<NasMessage>{
+    const response=await this.request("chat",{method:"POST",body:JSON.stringify({conversationId:id,text,...attempt,streamNative:!!onPreview})});
     if(!response.body)throw new Error("No response stream");
     const reader=response.body.getReader(),decoder=new TextDecoder();
     let buffer="",complete:NasMessage|undefined;
@@ -112,6 +112,7 @@ export class NasClient {
       if(!payload)return;
       const data=JSON.parse(payload);
       if(kind==="delta"&&typeof data.text==="string")onDelta(data.text);
+      if(kind==="preview"&&typeof data.text==="string")onPreview?.(data.text);
       if(kind==="error")throw new Error(data.error||"Model failed");
       if(kind==="done")complete=data.message as NasMessage;
     }

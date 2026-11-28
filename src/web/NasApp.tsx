@@ -315,7 +315,7 @@ export function NasApp(){
     });
     let full="",saved:NasMessage|undefined;
     try{
-      saved=await client.chat(id,text,delta=>{full+=delta;setMessages(previous=>previous.map(m=>m.id===pending?{...m,content:full}:m));},{messageId,expectedLastMessageId});
+      saved=await client.chat(id,text,delta=>{full+=delta;setMessages(previous=>previous.map(m=>m.id===pending?{...m,content:full}:m));},{messageId,expectedLastMessageId},preview=>{full=preview;setMessages(previous=>previous.map(m=>m.id===pending?{...m,content:full}:m));});
       const reply=saved;
       setMessages(previous=>previous.map(m=>m.id===pending?reply:m));
       const kind=reactionFromReply(reply.content);if(kind)setReaction({kind,serial:++serial.current,source:"reply"});

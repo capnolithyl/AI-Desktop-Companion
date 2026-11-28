@@ -40,11 +40,11 @@ export function turnTrace(mode){
     catch(e){errorCode=typeof e?.code==="string"&&/^[a-zA-Z0-9_-]{1,64}$/.test(e.code)?e.code:undefined;throw e;}
     finally{stages.push({stage,startMs:began,elapsedMs:elapsed()-began,success,...details,...(errorCode?{errorCode}:{})});}
   }
-  return {measure,firstText(){if(firstTextMs===null)firstTextMs=elapsed();},model(value){actualModel=value;},actualModel:()=>actualModel,usage:(stage,value)=>inference.push({stage,...value}),
+  return {measure,firstText(){if(firstTextMs===null)firstTextMs=elapsed();},resetFirstText(){firstTextMs=null;},model(value){actualModel=value;},actualModel:()=>actualModel,usage:(stage,value)=>inference.push({stage,...value}),
     snapshot:()=>({mode,totalMs:elapsed(),firstTextMs,stages:[...stages],...(inference.length?{inference:[...inference]}:{}),modelCalls:stages.filter(s=>["planner","knowledge-planner","answer","manuscript-repair","research-repair","research-recovery","agent","agent-answer"].includes(s.stage)).length})};
 }
 // Shared executor: caller owns authentication, admission, persistence and quota.
-export async function executeNasTurn({store,conversationId,question,selected,mode,promptFile="",requestModel,reserve,canRequest,search,read,trace=turnTrace(mode),onDelta=()=>{},activity=()=>{},signal,knowledge,publicAgent=process.env.MIKAN_PUBLIC_AGENT==="1",agentDiagnostics=false,now=new Date(),memoryEngine,retrievalStrategy="automatic"}){
+export async function executeNasTurn({store,conversationId,question,selected,mode,promptFile="",requestModel,reserve,canRequest,search,read,trace=turnTrace(mode),onDelta=()=>{},activity=()=>{},signal,knowledge,publicAgent=process.env.MIKAN_PUBLIC_AGENT==="1",agentDiagnostics=false,now=new Date(),memoryEngine,retrievalStrategy="automatic",onPreview,streamNative=false}){
   signal?.throwIfAborted();
   const modelLed=publicAgent&&["nvidia","groq","cerebras","arli"].includes(selected.provider);
   const {history,rawHistory}=await trace.measure("context",async()=>{
@@ -54,7 +54,7 @@ export async function executeNasTurn({store,conversationId,question,selected,mod
   const onDemand=modelLed&&!!memoryEngine&&retrievalStrategy==="on-demand";
   const initialMemory=onDemand?{...store.library.context(question,conversationId,{modelLed:true,foundationalOnly:true,includeSessions:false}),engine:"on-demand"}:await retrieveNasMemory({store,conversationId,question,history,modelLed,memoryEngine,signal,activity,trace});
   if(onDemand)activity({title:"Memory engine",detail:"on-demand · no automatic recall",lines:[]});
-  if(modelLed)return companionTurn({store,conversationId,question,history,rawHistory,memory:initialMemory,memoryEngine,profile:currentProfile(promptFile,store),selected,mode,requestModel,reserve,canRequest,search,read,knowledge,trace,onDelta,activity,signal,now});
+  if(modelLed)return companionTurn({store,conversationId,question,history,rawHistory,memory:initialMemory,memoryEngine,profile:currentProfile(promptFile,store),selected,mode,requestModel,reserve,canRequest,search,read,knowledge,trace,onDelta,activity,signal,now,onPreview,streamNative});
   // Explicit compatibility engine for providers without native tool support.
   const recentSources=rawHistory.filter(m=>m.role==="assistant").reverse().flatMap(m=>(m.inference?.sources??[]).filter(s=>s.kind==="notion"||s.kind==="cached-web"));
   const previous=recentSources.filter((s,i)=>recentSources.findIndex(other=>other.id===s.id)===i).slice(0,12);

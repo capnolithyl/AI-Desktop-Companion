@@ -39,7 +39,7 @@ export async function generateReply(args){
   try{return await generateCloudReply(args);}
   finally{arliInFlight=false;}
 }
-async function generateCloudReply({config, system, history, onDelta=()=>{}, onModel=()=>{}, onUsage=()=>{}, onResponse=()=>{}, fetchImpl=fetch, temperature=0.7, maxTokens=4096,signal,structuredTool,agentTools,agentToolChoice="auto",agentThinking=false,agentEffort,rejectTruncated=false}) {
+async function generateCloudReply({config, system, history, onDelta=()=>{}, onModel=()=>{}, onUsage=()=>{}, onResponse=()=>{}, fetchImpl=fetch, temperature=0.7, maxTokens=4096,signal,structuredTool,agentTools,agentToolChoice="auto",agentThinking=false,agentEffort,rejectTruncated=false,agentStream=false,onAgentText=()=>{},onAgentTools=()=>{},onFirstOutput=()=>{}}) {
   const {provider,model,key} = config;
   const ultra=provider==="nvidia"&&model==="nvidia/nemotron-3-ultra-550b-a55b";
   // Ultra documents enable_thinking and medium_effort in chat_template_kwargs.
@@ -81,6 +81,7 @@ async function generateCloudReply({config, system, history, onDelta=()=>{}, onMo
     const result = (candidate?.content?.parts||[]).filter(part=>!part.thought)
       .map(part=>part.text||"").join("").trim();
     if (!result) throw inferenceError(finish==="MAX_TOKENS"?"output-limit":"empty-output");
+    onFirstOutput();
     if(structuredTool&&finish==="MAX_TOKENS")throw inferenceError("output-limit");
     onDelta(result);
     return result;
@@ -93,8 +94,8 @@ async function generateCloudReply({config, system, history, onDelta=()=>{}, onMo
     method:"POST",
     headers:{"Authorization":"Bearer "+key,"Content-Type":"application/json",
       ...(provider==="openrouter"?{"HTTP-Referer":"https://github.com/capnolithyl/AI-Desktop-Companion","X-Title":"Mikan NAS"}:{})},
-    body:JSON.stringify({model,stream:!structuredTool&&!agentTools,...(provider==="arli"?{n:1,parallel_tool_calls:false,hide_thinking:true,include_reasoning:false}:{}),...(groq?{max_completion_tokens:maxTokens,reasoning_effort:groqEffort,include_reasoning:false,parallel_tool_calls:false}:cerebras?{max_completion_tokens:maxTokens,reasoning_effort:groqEffort,reasoning_format:"hidden",parallel_tool_calls:false}:provider==="arli"?{max_completion_tokens:maxTokens}:{max_tokens:maxTokens}),temperature,
-      ...(agentTools?{tools:agentTools,tool_choice:agentToolChoice}:structuredTool?{tools:[structuredTool],tool_choice:"required"}:groq||cerebras?{}:{stream_options:{include_usage:true}}),
+    body:JSON.stringify({model,stream:!structuredTool&&(!agentTools||agentStream),...(provider==="arli"?{n:1,parallel_tool_calls:false,hide_thinking:true,include_reasoning:false}:{}),...(groq?{max_completion_tokens:maxTokens,reasoning_effort:groqEffort,include_reasoning:false,parallel_tool_calls:false}:cerebras?{max_completion_tokens:maxTokens,reasoning_effort:groqEffort,reasoning_format:"hidden",parallel_tool_calls:false}:provider==="arli"?{max_completion_tokens:maxTokens}:{max_tokens:maxTokens}),temperature,
+      ...(agentTools?{tools:agentTools,tool_choice:agentToolChoice,...(agentStream&&!groq&&!cerebras?{stream_options:{include_usage:true}}:{})}:structuredTool?{tools:[structuredTool],tool_choice:"required"}:groq||cerebras?{}:{stream_options:{include_usage:true}}),
       // Same model-specific evidence setting used by the desktop NVIDIA adapter.
       ...(effortTemplate&&!structuredTool?{chat_template_kwargs:effortTemplate}:(structuredTool||agentTools)&&ultra?{chat_template_kwargs:agentTools&&agentThinking?{enable_thinking:true}:{enable_thinking:false,force_nonempty_content:true}}:{}),
       messages:[{role:"system",content:system},...history.map(m=>agentTools&&m.role==="tool"?{role:"tool",tool_call_id:m.tool_call_id,content:m.content}:agentTools&&m.role==="assistant"&&m.tool_calls?{role:"assistant",content:m.content??null,tool_calls:m.tool_calls}:{role:m.role,content:m.content})]}),
@@ -102,9 +103,10 @@ async function generateCloudReply({config, system, history, onDelta=()=>{}, onMo
   });
   onResponse({status:response.status,headers:quotaHeaders(response.headers)});
   if (!response.ok) throw remoteError(response.status);
-  if(structuredTool||agentTools){
+  if(structuredTool||agentTools&&(!agentStream||response.headers?.get("content-type")?.includes("application/json"))){
     const data=await response.json(),choice=data.choices?.[0],message=choice?.message;
     const finish=safeReason(choice?.finish_reason);
+    if(message?.content||message?.tool_calls?.length)onFirstOutput();
     onUsage({finishReason:finish,outputTokens:tokenCount(data.usage?.completion_tokens),reasoningTokens:tokenCount(data.usage?.completion_tokens_details?.reasoning_tokens),maxTokens,...(effort||groq||cerebras?{reasoningEffort:effort??groqEffort}:{}),inputTokens:tokenCount(data.usage?.prompt_tokens)});
     if(typeof data.model==="string"&&data.model.length<=160&&/^[\w./:-]+$/.test(data.model)&&!data.model.includes(key))onModel(data.model);
     if(finish==="length")throw Object.assign(inferenceError("output-limit"),agentTools&&typeof message?.content==="string"&&!message?.tool_calls?.length?{partial:message.content.trim().slice(0,60000)}:{});
@@ -124,14 +126,16 @@ async function generateCloudReply({config, system, history, onDelta=()=>{}, onMo
   if (!response.body) throw inferenceError("missing-stream");
 
   const decoder = new TextDecoder();
-  let buffer = "", result = "",finishReason=null,outputTokens=null,reasoningTokens=null,inputTokens=null,sawDone=false;
+  let buffer = "", result = "",finishReason=null,outputTokens=null,reasoningTokens=null,inputTokens=null,sawDone=false,firstOutput=false;
+  const assembled=new Map();
+  const markOutput=()=>{if(!firstOutput){firstOutput=true;onFirstOutput();}};
   const readLine = line => {
     if (!line.startsWith("data:")) return;
     const data = line.slice(5).trim();
     if(data==="[DONE]"){sawDone=true;return;}
     if(!data)return;
     let event;
-    try {event=JSON.parse(data);}catch{return;}
+    try {event=JSON.parse(data);}catch{if(agentTools)throw inferenceError("invalid-agent-stream");return;}
     if (event.error){const status=Number(event.error.code)===429?429:undefined;if(status)onResponse({status,headers:quotaHeaders(response.headers),stream:true});throw Object.assign(new Error("Provider rejected the stream"),{upstreamStatus:status});}
     if(typeof event.model==="string"&&event.model.length<=160&&/^[\w./:-]+$/.test(event.model)&&!event.model.includes(key))onModel(event.model);
     finishReason=safeReason(event.choices?.[0]?.finish_reason)??finishReason;
@@ -139,13 +143,26 @@ async function generateCloudReply({config, system, history, onDelta=()=>{}, onMo
     inputTokens=tokenCount(usage?.prompt_tokens)??inputTokens;
     outputTokens=tokenCount(usage?.completion_tokens)??outputTokens;
     reasoningTokens=tokenCount(usage?.completion_tokens_details?.reasoning_tokens)??reasoningTokens;
-    const delta=event.choices?.[0]?.delta?.content;
+    const choice=event.choices?.[0],piece=choice?.delta;
+    if(agentTools&&Array.isArray(piece?.tool_calls)&&piece.tool_calls.length){
+      markOutput();if(!assembled.size)onAgentTools();
+      for(const c of piece.tool_calls){
+        if(!Number.isInteger(c.index)||c.index<0||c.index>=6)throw inferenceError("invalid-agent-tool-call");
+        const row=assembled.get(c.index)??{id:"",type:"function",function:{name:"",arguments:""}};
+        if(c.type!==undefined&&c.type!=="function")throw inferenceError("invalid-agent-tool-call");
+        for(const field of ["id","name","arguments"]){const v=field==="id"?c.id:c.function?.[field];if(v===undefined||v===null)continue;if(typeof v!=="string")throw inferenceError("invalid-agent-tool-call");if(field==="id")row.id+=v;else row.function[field]+=v;}
+        if(row.id.length>200||row.function.name.length>200||row.function.arguments.length>32000)throw inferenceError("invalid-agent-tool-call");
+        assembled.set(c.index,row);
+      }
+    }
+    const delta=piece?.content;
     const text = typeof delta==="string" ? delta :
       Array.isArray(delta) ? delta.filter(x=>x.type==="text").map(x=>x.text||"").join("") : "";
     if (text) {
       result += text;
       if (result.length > 60000) throw new Error("Reply exceeded length limit");
-      onDelta(text);
+      markOutput();
+      if(agentTools){if(!assembled.size)onAgentText(result);}else onDelta(text);
     }
   };
   for await (const chunk of response.body) {
@@ -158,8 +175,18 @@ async function generateCloudReply({config, system, history, onDelta=()=>{}, onMo
       readLine(line);
     }
   }
+  buffer+=decoder.decode();
   if (buffer.trim()) readLine(buffer.trim());
   onUsage({finishReason,outputTokens,reasoningTokens,maxTokens,sawDone,...(effort||groq||cerebras?{reasoningEffort:effort??groqEffort}:{}),inputTokens});
+  if(agentTools){
+    if(!sawDone&&!finishReason)throw inferenceError("incomplete-stream");
+    if(finishReason==="length")throw inferenceError("output-limit");
+    const calls=[...assembled.entries()].sort((a,b)=>a[0]-b[0]).map(([,c])=>c);
+    if(calls.some(c=>!c.id||!c.function.name)||new Set(calls.map(c=>c.id)).size!==calls.length||finishReason==="tool_calls"&&!calls.length)throw inferenceError("invalid-agent-tool-call");
+    if(calls.length&&!["tool_calls","stop","function_call"].includes(finishReason))throw inferenceError("incomplete-tool-stream");
+    if(!calls.length&&!result.trim())throw inferenceError("empty-output");
+    return {content:result.trim(),toolCalls:calls};
+  }
   if(rejectTruncated&&finishReason==="length")throw Object.assign(inferenceError("output-limit"),{partial:result.trim()});
   if (!result.trim()) throw inferenceError(finishReason==="length"?"output-limit":"empty-output");
   if(!sawDone&&!finishReason)throw inferenceError("incomplete-stream");
