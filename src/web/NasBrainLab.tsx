@@ -3,6 +3,8 @@ import {saveNasJson} from "./nas-json-export";
 import {BrainCircuit,Play,Square,ListChecks,ChartNoAxesCombined,Download,Search,ChevronLeft,ChevronRight,FlaskConical} from "lucide-react";
 import type {NasClient,NasModels,BrainScenario,BrainReport,BrainSummary,ResearchMode,CloudProvider,ProviderQuota} from "./nas-client";
 import {NasTiming} from "./NasTiming";
+import {NasModelPicker} from "./NasModelPicker";
+import {modelChoiceKey} from "./nas-model-catalog";
 import {NAS_CLOUD_EVAL_BUDGETS,fitCloudScenarios} from "../brain-eval-cloud";
 import "../brain-eval.css";
 type Tab="run"|"scenarios"|"results";
@@ -53,7 +55,7 @@ export function NasBrainLab({client,models,busy}:{client:NasClient;models:NasMod
     {tab==="run"&&<div className="brain-workspace-view">
       <div className="brain-section-heading"><h3>Run configuration</h3><span>One model per run</span></div>
       <div className="brain-eval-toolbar nas-brain-toolbar">
-        <label className="nas-brain-model-field">Cloud model<select value={choice} onChange={e=>setChoice(e.target.value)} disabled={locked}>{options.map(o=><option key={o.id} value={o.id}>{o.provider} · {o.model}</option>)}</select></label>
+        <div className="nas-brain-model-field"><span>Cloud model</span><NasModelPicker label="Choose Brain Lab model" entries={models.providers.filter(p=>p.configured)} current={{provider,model}} disabled={locked||busy} onSelect={c=>setChoice(modelChoiceKey(c))}/></div>
         <label>Memory engine<select value={memoryEngine} disabled={locked} onChange={e=>setMemoryEngine(e.target.value as "sqlite"|"hindsight"|"fixed"|"none")}><option value="sqlite">SQLite</option><option value="hindsight">Hindsight (synthetic bank)</option><option value="fixed">Fixed synthetic evidence (model comparison)</option><option value="none">No stored memory (baseline)</option></select></label>
         {memoryEngine==="hindsight"&&<label>Retrieval strategy<select value={retrievalStrategy} disabled={locked||!publicAgent} onChange={e=>setRetrievalStrategy(e.target.value as "automatic"|"on-demand")}><option value="on-demand">On demand</option><option value="automatic">Automatic</option></select></label>}
         {memoryEngine==="hindsight"&&<p className="settings-note">Hindsight backend: {hindsightBackend==="local"?"Local retrieval (BGE + FlashRank)":hindsightBackend==="legacy"?"Original cloud retrieval":"Not confirmed"}. Change it in Memory engine &amp; dreaming before starting.</p>}

@@ -22,6 +22,8 @@ import {NasBrainLab} from "./NasBrainLab";
 import {NasHindsight} from "./NasHindsight";
 import {NasTiming} from "./NasTiming";
 import {NasModels,NasTokenUsage} from "./NasModels";
+import {NasModelPicker} from "./NasModelPicker";
+import {modelChoiceKey} from "./nas-model-catalog";
 import type {NasModels as ModelSettings,CloudProvider,ReasoningEffort} from "./nas-client";
 import {memoryNotice} from "./memory-notifications";
 import {nasActivity} from "./nas-activity";
@@ -407,7 +409,7 @@ export function NasApp(){
       onOpenCurrentLog={()=>openPage("log")} onOpenMemory={()=>openPage("memory")} onOpenSettings={()=>openPage(mobile?"control":"personality")}
       onOpenSearch={()=>openPage("research")} onToggleVision={()=>{}} onVoice={()=>{}} onMute={()=>{}}
       onExpression={express} onOutfit={()=>openPage("appearance")}
-      modelPicker={<div className="nas-model-controls"><div className="model-switcher"><select aria-label="Select NAS model" value={status?JSON.stringify([status.provider,status.model]):""} disabled={busy||switching||!!status?.busy||!!status?.memoryBusy||!status?.providers?.length} onChange={e=>void switchModel(e.target.value)}>{status?.providers?.filter(p=>p.configured||p.provider===status.provider).map(p=><optgroup key={p.provider} label={p.provider}>{p.models.map(model=><option key={model} value={JSON.stringify([p.provider,model])} disabled={!p.configured}>{model}</option>)}</optgroup>)??<option value="">Cloud model</option>}</select></div>{status&&<NasTokenUsage client={client} models={status} compact/>}</div>}
+      modelPicker={<div className="nas-model-controls">{status?.providers?<NasModelPicker entries={status.providers.filter(p=>p.configured)} current={{provider:status.provider,model:status.model}} disabled={busy||switching||!!status.busy||!!status.memoryBusy} onSelect={choice=>void switchModel(modelChoiceKey(choice))} onRefresh={async()=>applyModels(await client.refreshArliModels())}/>:<span>Loading cloud models…</span>}{status&&<NasTokenUsage client={client} models={status} compact/>}</div>}
       transcript={<>{!messages.length&&<div className="workspace-greeting"><PawPrint size={42}/><strong>Ready for a little conversation?</strong><span>Beholder is awake.</span></div>}
         {messages.map(message=><Bubble key={message.id} message={message} latest={message.id===latest} busy={busy} onCopyError={report}/>)}
         {(notice||retryAttempt)&&<div className="workspace-system-feedback nas-reply-feedback" role="status"><Sparkles size={18}/><span>{notice||"Mikan hasn't answered this message yet."}</span>{retryAttempt&&<button type="button" className="nas-reply-retry" disabled={busy||switching} onClick={()=>void runAttempt(retryAttempt)}><RefreshCw size={16}/> Retry</button>}</div>}</>}

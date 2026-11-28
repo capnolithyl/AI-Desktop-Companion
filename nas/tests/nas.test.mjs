@@ -1679,3 +1679,17 @@ test("Arli account model discovery and unlimited sequential quota",async()=>{
   models.cooldown("arli");assert.equal(models.available("arli"),false);
  }finally{store.db.close();}
 });
+
+test("NAS model catalog keeps exact IDs, deduplicates and searches readable names",async()=>{
+ const {filterModels,readableModelName,modelChoiceKey}=await import("../../src/web/nas-model-catalog.ts");
+ const entries=[{provider:"arli",models:["DeepSeek-V4.1-Flash-1017","Gemma-4-31B-Artemis-31B-v1.2","Gemma-4-31B-Artemis-v1.1","Gemma-4-31B-Artemis-v1.1"]},{provider:"nvidia",models:["nvidia/nemotron-3-ultra-550b-a55b"]}];
+ assert.equal(readableModelName("nvidia/nemotron-3-ultra-550b-a55b"),"nemotron 3 ultra 550b a55b");
+ assert.equal(readableModelName("Gemma-4-31B-Artemis-31B-v1.2"),"Gemma 4 31B Artemis 31B v1.2");
+ const results=filterModels(entries,"arli","gemma artemis");
+ assert.equal(results.length,2);assert.ok(results.every(r=>r.provider==="arli"));
+ assert.equal(filterModels(entries,"all","deepseek flash")[0].model,"DeepSeek-V4.1-Flash-1017");
+ assert.equal(filterModels(entries,"all","deepseekv41flash")[0].model,"DeepSeek-V4.1-Flash-1017");
+ assert.equal(filterModels(entries,"nvidia","gemma").length,0);
+ const current={provider:"arli",model:"Gemma-4-31B-Artemis-v1.1"};
+ assert.equal(modelChoiceKey(filterModels(entries,"all","",current)[0]),modelChoiceKey(current));
+});
