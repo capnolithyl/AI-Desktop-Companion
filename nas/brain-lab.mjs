@@ -30,7 +30,7 @@ export function createBrainLab({db,models,requestModel,search,read,build,pace=pa
     const {provider,model,scenarioIds,mode,repetitions,publicAgent=false,memoryEngine="sqlite",retrievalStrategy="automatic"}=body??{};
     if(!["sqlite","hindsight","fixed","none"].includes(memoryEngine)||memoryEngine==="hindsight"&&!hindsight)throw invalid("Memory engine unavailable");
     if(!["automatic","on-demand"].includes(retrievalStrategy)||retrievalStrategy==="on-demand"&&(memoryEngine!=="hindsight"||!publicAgent))throw invalid("On-demand requires Hindsight and the native agent");
-    if(typeof publicAgent!=="boolean"||publicAgent&&!["nvidia","groq","cerebras"].includes(provider))throw invalid("Native agent requires NVIDIA, Groq or Cerebras");
+    if(typeof publicAgent!=="boolean"||publicAgent&&!["nvidia","groq","cerebras","arli"].includes(provider))throw invalid("Native agent requires NVIDIA, Groq, Cerebras or Arli");
     if(!["simple","strict","off"].includes(mode)||![1,2,3,5].includes(repetitions)||!Array.isArray(scenarioIds)||!scenarioIds.length||new Set(scenarioIds).size!==scenarioIds.length)throw invalid("Select scenarios, mode and repetitions");
     const selected=models.configFor(provider,model);
     const scenarios=scenarioIds.map(id=>EVAL_SCENARIOS.find(s=>s.id===id));

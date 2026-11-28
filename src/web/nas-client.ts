@@ -10,7 +10,7 @@ export type LearningStatus={
   history:{id:number;kind:string;previous:string;replacement:string;changedAt:number}[];
 };
 export type LibrarySnapshot={facts:UserFact[];characterFacts:CharacterFact[];interests:InterestItem[];sessionSummaries:SessionSummary[]};
-export type CloudProvider="nvidia"|"openrouter"|"gemini"|"groq"|"cerebras";
+export type CloudProvider="nvidia"|"openrouter"|"gemini"|"groq"|"cerebras"|"arli";
 export type ResearchMode="off"|"simple"|"strict";
 export type ResearchEngine="legacy"|"native";
 export type NasSource={url:string;title:string;kind:"preview"|"page"|"notion"|"cached-web";publishedDate:string|null;id?:string;syncedAt?:number;fetchedAt?:number;fromCache?:boolean;coverage?:string};
@@ -41,7 +41,7 @@ export type HindsightSettings={backend?:"legacy"|"local";mode:"sqlite"|"hindsigh
 export type HindsightStatus=HindsightSettings&{selectedBackend?:"legacy"|"local";busy:boolean;lastError:string|null;lastRecallMs:number|null;lastRecallBanks?:{bank:string;status:string;elapsedMs:number;count:number}[];lastProbe:boolean|null;queued:number;uncertain:number;batchesToday:number;dreamsToday:number;models:{id:string;name:string;content:string;lastRefreshedAt:string|null}[];runs:{kind:string;at:number;status:string;detail:unknown;modelId:string|null}[]};
 export type BrainScenario={id:string;number:number;label:string;group:string;turns:number;supported:boolean};
 export type BrainStep={hindsightEvidence?:string[];memoryEngine?:string;user:string;researchTask?:unknown;answer?:string;error?:string;timing:NasTiming;actualModel:string|null;selectedMemoryIds?:number[];sources?:(NasSource&{content:string})[];events:{title:string;detail:string;lines:string[]}[]};
-export type ProviderQuota={provider:CloudProvider;observedAt:number;requestsLastMinute:number;minuteLimit:number;remainingMinute:number;requestsToday:number|null;dayLimit:number|null;remainingDay:number|null;cooldownUntil:number|null;waitMs:number;reason:string|null;lastResponse:ProviderResponse|null;lastRejection:ProviderResponse|null};
+export type ProviderQuota={provider:CloudProvider;observedAt:number;requestsLastMinute:number;minuteLimit:number|null;remainingMinute:number|null;requestsToday:number|null;dayLimit:number|null;remainingDay:number|null;cooldownUntil:number|null;waitMs:number;reason:string|null;lastResponse:ProviderResponse|null;lastRejection:ProviderResponse|null};
 export type ProviderResponse={status:number;at:number;headers:Record<string,string>;stream?:boolean};
 export type BrainSummary={retrievalStrategy?:"automatic"|"on-demand";hindsightBackend?:"legacy"|"local";memoryEngine?:"sqlite"|"hindsight"|"fixed"|"none";quotaFailure?:{origin:string;upstreamStatus:number|null;snapshot:ProviderQuota};error?:string;id:string;state:string;startedAt:number;finishedAt:number|null;provider:CloudProvider;model:string;mode:ResearchMode;repetitions:number;publicAgent?:boolean;scenarioIds:string[];total:number;done:number;currentLabel:string};
 export type BrainReport=BrainSummary&{cases:{id:string;label:string;number:number;repeat:number;steps:BrainStep[]}[]};
@@ -81,6 +81,7 @@ export class NasClient {
   testResearch(){return this.json<{ok:boolean;count:number}>("research/test",{method:"POST",body:"{}"});}
   tokenUsage(){return this.json<TokenUsage>("token-usage",{signal:AbortSignal.timeout(10000)});}
   models(){return this.json<NasModels>("models");}
+  refreshArliModels(){return this.json<NasModels>("models/arli",{signal:AbortSignal.timeout(20000)});}
   saveModels(patch:NasModelPatch){return this.json<NasModels>("models",{method:"PUT",body:JSON.stringify(patch)});}
   status(){return this.json<NasStatus>("status");}
   async profile(){return importCompanionProfile(await this.json<unknown>("profile"));}

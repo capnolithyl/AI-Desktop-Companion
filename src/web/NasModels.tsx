@@ -1,7 +1,7 @@
 import {useState,useEffect} from "react";
 import {Cpu,KeyRound,Copy,Check} from "lucide-react";
 import type {NasClient,NasModels as Models,ProviderEntry,NasModelPatch,CloudProvider,TokenUsage,TokenWindows} from "./nas-client";
-const names:Record<CloudProvider,string>={nvidia:"NVIDIA",openrouter:"OpenRouter",gemini:"Gemini",groq:"Groq",cerebras:"Cerebras"};
+const names:Record<CloudProvider,string>={nvidia:"NVIDIA",openrouter:"OpenRouter",gemini:"Gemini",groq:"Groq",cerebras:"Cerebras",arli:"Arli AI"};
 function ProviderForm({entry,selected,client,onChanged,busy,cerebrasTier}:{entry:ProviderEntry;cerebrasTier?:"trial"|"paid";selected:boolean;client:NasClient;onChanged:(models:Models)=>void;busy:boolean}){
   const [model,setModel]=useState(entry.model);
   const [key,setKey]=useState("");
@@ -13,11 +13,13 @@ function ProviderForm({entry,selected,client,onChanged,busy,cerebrasTier}:{entry
     catch(e){setMessage(e instanceof Error?e.message:String(e));}
     finally{setSaving(false);}
   }
+  async function refreshArli(){setSaving(true);setMessage("");try{onChanged(await client.refreshArliModels());setMessage("Account model list refreshed.");}catch(e){setMessage(e instanceof Error?e.message:String(e));}finally{setSaving(false);}}
   const patch={provider:entry.provider,model:model.trim(),...(key.trim()?{apiKey:key.trim()}:{})};
   return <section className="control-form-section">
     <strong>{names[entry.provider]} {selected?"· Active":""}</strong>
     <p>{entry.configured?"Key configured ("+entry.credentialSource+")":"No API key configured"}</p>
-    <label className="setting-field">Model{(["nvidia","groq","cerebras"].includes(entry.provider))?<select value={model} onChange={e=>setModel(e.target.value)}>{entry.models.map(m=><option key={m}>{m}</option>)}</select>:<input value={model} onChange={e=>setModel(e.target.value)} maxLength={120}/>}</label>
+    <label className="setting-field">Model{(["nvidia","groq","cerebras"].includes(entry.provider))?<select value={model} onChange={e=>setModel(e.target.value)}>{entry.models.map(m=><option key={m}>{m}</option>)}</select>:<input value={model} onChange={e=>setModel(e.target.value)} maxLength={120} list={entry.provider==="arli"?"arli-model-list":undefined}/>}</label>
+    {entry.provider==="arli"&&<><datalist id="arli-model-list">{entry.models.map(m=><option key={m} value={m}/>)}</datalist><button className="secondary-action" disabled={saving||busy||!entry.configured} onClick={()=>void refreshArli()}>Load available Arli models</button><small>Save your key first. Type an exact model ID or select from the refreshed list. One generation at a time; no local RPM cap. Native tool behavior depends on the selected model. Keep API key overrides off for reliable tests.</small></>}
     {entry.provider==="openrouter"&&<small>Free routes only: openrouter/free or a model ending in :free.</small>}
     {entry.provider==="groq"&&<small>Use an API key from a free Groq organization. Free-tier token limits apply; no automatic upgrade or paid fallback.</small>}
     {entry.provider==="cerebras"&&<><small>GPT-OSS-120B · trial credits or paid usage, depending on your Cerebras account. No automatic purchase or fallback.</small><label className="setting-field">Local request budget<select value={cerebrasTier??"trial"} disabled={saving||busy} onChange={e=>void save({provider:"cerebras",cerebrasTier:e.target.value as "trial"|"paid"})}><option value="trial">Trial · 5 requests/min</option><option value="paid">Paid · 1,000 requests/min</option></select><small>Match your actual Cerebras plan. This only changes Beholder admission limits; it does not change your billing plan.</small></label></>}
@@ -87,7 +89,7 @@ export function NasModels({models,client,onChanged,busy}:{models:Models;client:N
     <section className="control-form-section">
       <label className="setting-field">Recent conversation character budget<select value={models.historyChars} disabled={saving||busy} onChange={async e=>{setSaving(true);setNotice("");try{onChanged(await client.saveModels({provider:models.provider,historyChars:Number(e.target.value)}));}catch(error){setNotice(String(error));}finally{setSaving(false);}}}>{[16000,32000,64000].map(n=><option key={n} value={n}>{n.toLocaleString()} characters</option>)}</select></label>
       <small>This is a history budget, not an exact model token window. Retrieved memories and instructions are additional.</small>
-      <p>NAS safeguards: NVIDIA 30 requests/min, OpenRouter 15/min and 40 per UTC day, Gemini 5/min, Groq 30/min and 1,000 per UTC day, Cerebras 5/min (trial) or 1,000/min (paid). Chat and automatic learning share these budgets. Provider limits may be lower; HTTP 429 pauses that provider for five minutes, with no automatic retry.</p>
+      <p>NAS safeguards: NVIDIA 30 requests/min, OpenRouter 15/min and 40 per UTC day, Gemini 5/min, Groq 30/min and 1,000 per UTC day, Cerebras 5/min (trial) or 1,000/min (paid), Arli one concurrent generation (no local RPM/day cap). Chat and automatic learning share these budgets. Provider limits may be lower; HTTP 429 pauses that provider for five minutes, with no automatic retry.</p>
       <p>Keys entered here are stored in a restricted server-side file on Beholder, included in private NAS backups. Gemini access depends on your API project's billing and quota settings.</p>
       {notice&&<p role="alert">{notice}</p>}
     </section>

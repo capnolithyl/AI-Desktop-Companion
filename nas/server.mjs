@@ -165,6 +165,7 @@ export function makeServer({store,config,key,promptFile="",maintenanceFile="/dat
       }
       if(req.method==="GET"&&path==="/api/token-usage")return json(res,200,models.tokenUsage());
       if(req.method==="GET"&&path==="/api/models")return json(res,200,models.view());
+      if(req.method==="GET"&&path==="/api/models/arli")return json(res,200,await models.refreshArliModels());
       if(req.method==="PUT"&&path==="/api/models"){
         const patch=await readJson(req,4096);
         if(unavailable())return json(res,409,{error:"Wait for the current reply or memory extraction before switching models."});
@@ -332,7 +333,9 @@ export function makeServer({store,config,key,promptFile="",maintenanceFile="/dat
     memoryTask=store.learning.processNext(args=>{
       controller.signal.throwIfAborted();
       models.reserve(selected.provider);
-      return requestModel({...args,signal:controller.signal},"memory");
+      // Arli permits one in-flight request. Let an already dispatched call drain;
+      // the worker still sees its abort and will not commit or start another call.
+      return requestModel({...args,signal:selected.provider==="arli"?undefined:controller.signal},"memory");
     },selected,{signal:controller.signal}).catch(()=>console.error("NAS memory worker failed")).finally(()=>{
       memoryTask=null;memoryAbort=null;
     });

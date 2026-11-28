@@ -1,9 +1,9 @@
 import {readFileSync,writeFileSync,renameSync,unlinkSync} from "node:fs";
 import {randomUUID} from "node:crypto";
 import {NVIDIA_MODELS} from "../src/model-switcher.ts";
-export const PROVIDERS=["nvidia","openrouter","gemini","groq","cerebras"];
-export const DEFAULT_MODELS={nvidia:NVIDIA_MODELS[0],openrouter:"openrouter/free",gemini:"gemini-2.5-flash",groq:"openai/gpt-oss-120b",cerebras:"gpt-oss-120b"};
-const KEY_NAMES={nvidia:"NVIDIA_API_KEY",openrouter:"OPENROUTER_API_KEY",gemini:"GEMINI_API_KEY",groq:"GROQ_API_KEY",cerebras:"CEREBRAS_API_KEY"};
+export const PROVIDERS=["nvidia","openrouter","gemini","groq","cerebras","arli"];
+export const DEFAULT_MODELS={nvidia:NVIDIA_MODELS[0],openrouter:"openrouter/free",gemini:"gemini-2.5-flash",groq:"openai/gpt-oss-120b",cerebras:"gpt-oss-120b",arli:"Qwen3.8-27B"};
+const KEY_NAMES={nvidia:"NVIDIA_API_KEY",openrouter:"OPENROUTER_API_KEY",gemini:"GEMINI_API_KEY",groq:"GROQ_API_KEY",cerebras:"CEREBRAS_API_KEY",arli:"ARLIAI_API_KEY"};
 const invalid=(message,status=400)=>Object.assign(new Error(message),{status});
 const GROQ_MODELS=["openai/gpt-oss-120b","openai/gpt-oss-20b"];
 const modelValid=(provider,model)=>typeof model==="string"&&model.length<=120&&/^[\w./:-]{2,120}$/.test(model)&&
@@ -11,7 +11,7 @@ const modelValid=(provider,model)=>typeof model==="string"&&model.length<=120&&/
   (provider!=="gemini"||model.startsWith("gemini-"))&&(provider!=="groq"||GROQ_MODELS.includes(model))&&(provider!=="cerebras"||model==="gpt-oss-120b");
 const effortOptions=(provider,model)=>["groq","cerebras"].includes(provider)?["low","medium","high"]:provider==="nvidia"&&model==="nvidia/nemotron-3-ultra-550b-a55b"?["auto","none","medium","high"]:[];
 const keyValid=key=>typeof key==="string"&&key.length>=12&&key.length<=512&&!/\s/.test(key);
-export function providerSettings({initial,env={},file="",db,now=Date.now}){
+export function providerSettings({initial,env={},file="",db,now=Date.now,fetchImpl=fetch}){
   const initialProvider=initial?.provider??env.MIKAN_PROVIDER??"nvidia";
   if(!PROVIDERS.includes(initialProvider))throw Error("Unsupported MIKAN_PROVIDER");
   const defaults={...DEFAULT_MODELS,[initialProvider]:initial?.model??env.MIKAN_MODEL??DEFAULT_MODELS[initialProvider]};
@@ -33,7 +33,23 @@ export function providerSettings({initial,env={},file="",db,now=Date.now}){
   }
   const credential=(p,s=saved)=>s.keys[p]||inherited[p]||"";
   const configured=(p,s=saved)=>keyValid(credential(p,s));
-  const models=p=>p==="nvidia"?[...new Set([...NVIDIA_MODELS,defaults.nvidia,saved.models.nvidia])]:p==="groq"?GROQ_MODELS:p==="cerebras"?["gpt-oss-120b"]:[saved.models[p]];
+  let arliCatalog=[];
+  const models=p=>p==="arli"?[...new Set([saved.models.arli,...arliCatalog])]:p==="nvidia"?[...new Set([...NVIDIA_MODELS,defaults.nvidia,saved.models.nvidia])]:p==="groq"?GROQ_MODELS:p==="cerebras"?["gpt-oss-120b"]:[saved.models[p]];
+  async function refreshArliModels(){
+    if(!configured("arli"))throw invalid("Save your Arli API key first",400);
+    const key=credential("arli");
+    let result;
+    try{
+      const response=await fetchImpl("https://api.arliai.com/v1/models",{headers:{Authorization:"Bearer "+key,Accept:"application/json"},redirect:"error",signal:AbortSignal.timeout(15000)});
+      if(!response.ok)throw invalid("Arli model discovery failed (HTTP "+response.status+")",502);
+      result=await response.json();
+    }catch(e){if(e?.status)throw e;throw invalid("Could not retrieve Arli models",502);}
+    if(!Array.isArray(result?.data))throw invalid("Unexpected Arli model list",502);
+    if(credential("arli")!==key)throw invalid("Arli key changed during discovery; refresh again",409);
+    arliCatalog=[...new Set(result.data.map(x=>x?.id).filter(m=>modelValid("arli",m)&&!m.includes(key)))].sort().slice(0,1000);
+    if(!arliCatalog.length)throw invalid("No accessible Arli models returned",502);
+    return view();
+  }
   function view(){
     return {provider:saved.provider,model:saved.models[saved.provider],historyChars:saved.historyChars,cerebrasTier:saved.cerebrasTier,reasoningEffort:effortOptions(saved.provider,saved.models[saved.provider]).includes(saved.efforts[saved.provider])?saved.efforts[saved.provider]:null,reasoningOptions:effortOptions(saved.provider,saved.models[saved.provider]),
       providers:PROVIDERS.map(provider=>({provider,model:saved.models[provider],models:models(provider),configured:configured(provider),credentialSource:saved.keys[provider]?"nas":configured(provider)?"environment":"missing",imageInput:"unsupported",nativeTools:"unverified"}))};
@@ -80,6 +96,7 @@ export function providerSettings({initial,env={},file="",db,now=Date.now}){
       try{writeFileSync(tmp,JSON.stringify(next),{mode:0o600,flag:"wx"});renameSync(tmp,file);}
       catch{try{unlinkSync(tmp);}catch{}throw invalid("Could not save NAS provider settings",500);}
     }
+    if(credential("arli",next)!==credential("arli",saved))arliCatalog=[];
     saved=next;return view();
   }
   // Count actual outbound attempts (not chat turns); retain counts across restarts.
@@ -110,12 +127,12 @@ export function providerSettings({initial,env={},file="",db,now=Date.now}){
   const limits={nvidia:30,openrouter:15,gemini:5,groq:30};
   const lastResponse=new Map(),lastRejection=new Map();
   function quota(p,slots=1){
-    const t=now(),minuteLimit=p==="cerebras"?(saved.cerebrasTier==="paid"?1000:5):limits[p],dayLimit=p==="openrouter"?40:p==="groq"?1000:null;
+    const t=now(),minuteLimit=p==="arli"?null:p==="cerebras"?(saved.cerebrasTier==="paid"?1000:5):limits[p],dayLimit=p==="openrouter"?40:p==="groq"?1000:null;
     const cooldownUntil=db.prepare("SELECT until_ms FROM nas_provider_cooldown WHERE provider=?").get(p)?.until_ms??0;
     const {n:requestsLastMinute,oldest}=db.prepare("SELECT count(*) AS n,min(started_at) AS oldest FROM nas_provider_requests WHERE provider=? AND started_at>?").get(p,t-60000);
     const requestsToday=dayLimit===null?null:db.prepare("SELECT count(*) AS n FROM nas_provider_requests WHERE provider=? AND started_at>=?").get(p,Math.floor(t/86400000)*86400000).n;
-    const remainingMinute=Math.max(0,minuteLimit-requestsLastMinute),remainingDay=dayLimit===null?null:Math.max(0,dayLimit-requestsToday);
-    const reason=cooldownUntil>t?"cooldown":remainingDay!==null&&remainingDay<slots?"local-daily":remainingMinute<slots?"local-minute":null;
+    const remainingMinute=minuteLimit===null?null:Math.max(0,minuteLimit-requestsLastMinute),remainingDay=dayLimit===null?null:Math.max(0,dayLimit-requestsToday);
+    const reason=cooldownUntil>t?"cooldown":remainingDay!==null&&remainingDay<slots?"local-daily":remainingMinute!==null&&remainingMinute<slots?"local-minute":null;
     return {provider:p,observedAt:t,requestsLastMinute,minuteLimit,remainingMinute,requestsToday,dayLimit,remainingDay,cooldownUntil:cooldownUntil>t?cooldownUntil:null,waitMs:reason==="cooldown"?cooldownUntil-t:reason==="local-minute"?Math.max(1,(oldest??t)+60000-t):reason==="local-daily"?Math.floor(t/86400000+1)*86400000-t:0,reason,lastResponse:lastResponse.get(p)??null,lastRejection:lastRejection.get(p)??null};
   }
   function available(p,slots=1){return quota(p,slots).reason===null;}
@@ -135,7 +152,7 @@ export function providerSettings({initial,env={},file="",db,now=Date.now}){
     db.prepare("INSERT INTO nas_provider_requests(provider,started_at) VALUES(?,?)").run(p,t);
   }
   function cooldown(p){db.prepare("INSERT INTO nas_provider_cooldown(provider,until_ms) VALUES(?,?) ON CONFLICT(provider) DO UPDATE SET until_ms=excluded.until_ms").run(p,now()+300000);}
-  return {view,active,configFor,save,available,reserve,cooldown,quota,quotaError,observe,recordUsage,tokenUsage,diagnostics:()=>PROVIDERS.map(p=>quota(p))};
+  return {view,active,configFor,save,refreshArliModels,available,reserve,cooldown,quota,quotaError,observe,recordUsage,tokenUsage,diagnostics:()=>PROVIDERS.map(p=>quota(p))};
 }
 export function boundedHistory(messages,budget){
   let remaining=budget;
