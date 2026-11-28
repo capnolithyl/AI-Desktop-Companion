@@ -21,7 +21,7 @@ function ProviderForm({entry,selected,client,onChanged,busy,cerebrasTier}:{entry
   return <section className="control-form-section">
     <strong>{names[entry.provider]} {selected?"· Active":""}</strong>
     <p>{entry.configured?"Key configured ("+entry.credentialSource+")":"No API key configured"}</p>
-    <div className="setting-field"><span>Model</span><NasModelPicker label={"Choose "+names[entry.provider]+" model"} entries={[entry]} current={{provider:entry.provider,model}} disabled={saving||busy} onSelect={c=>setModel(c.model)}/></div>
+    <div className="nas-model-field"><span>Model</span><NasModelPicker label={"Choose "+names[entry.provider]+" model"} entries={[entry]} current={{provider:entry.provider,model}} disabled={saving||busy} onSelect={c=>setModel(c.model)}/></div>
     {(["arli","openrouter","gemini"].includes(entry.provider))&&<label className="setting-field">Exact model ID <input value={model} onChange={e=>setModel(e.target.value)} maxLength={120} spellCheck={false} autoCapitalize="none"/></label>}
     {entry.provider==="arli"&&<><button className="secondary-action" disabled={saving||busy||!entry.configured} onClick={()=>void refreshArli()}>Load available Arli models</button><small>Save your key first. Choose a model from the searchable picker or enter an exact model ID. One generation at a time; no local RPM cap. Native tool behavior depends on the selected model. Keep API key overrides off for reliable tests.</small></>}
     {entry.provider==="openrouter"&&<small>Free routes only: openrouter/free or a model ending in :free.</small>}
