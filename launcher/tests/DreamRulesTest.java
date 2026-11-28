@@ -76,6 +76,23 @@ public final class DreamRulesTest {
         check(DreamRules.chargeFinishAt(now,0)==-1);
         check(DreamRules.chargeFinishAt(now,Long.MAX_VALUE)==-1);
         check(DreamRules.chargeFinishAt(0,60000)==-1);
+        check(DreamRules.weatherIcon(0)==DreamRules.WEATHER_CLEAR);
+        check(DreamRules.weatherIcon(2)==DreamRules.WEATHER_PARTLY);
+        check(DreamRules.weatherIcon(3)==DreamRules.WEATHER_CLOUD);
+        check(DreamRules.weatherIcon(48)==DreamRules.WEATHER_FOG);
+        check(DreamRules.weatherIcon(55)==DreamRules.WEATHER_RAIN);
+        check(DreamRules.weatherIcon(81)==DreamRules.WEATHER_RAIN);
+        check(DreamRules.weatherIcon(85)==DreamRules.WEATHER_SNOW);
+        check(DreamRules.weatherIcon(99)==DreamRules.WEATHER_STORM);
+        check(DreamRules.weatherIcon(-1)==DreamRules.WEATHER_UNKNOWN);
+        check(DreamRules.footerColumns(86,100,true,true));
+        check(!DreamRules.footerColumns(60,100,true,true));
+        check(!DreamRules.footerColumns(86,100,true,false));
+        float paired=DreamRules.footerHeight(true,true,true,true,true,true,true);
+        float stacked=DreamRules.footerHeight(true,true,true,true,true,true,false);
+        check(paired<stacked&&paired<.35f);
+        check(DreamRules.footerHeight(false,false,false,false,false,false,false)==0);
+        check(DreamRules.footerHeight(true,false,false,true,true,true,false)>DreamRules.footerHeight(true,false,false,true,true,false,false));
         System.out.println("DreamRules tests passed");
     }
 }

@@ -11,18 +11,27 @@ import org.json.JSONObject;
 
 /** Read-only screen saver details. No network, scheduled alarms or new permissions. */
 final class DreamDetails {
-    static String weather(SharedPreferences prefs,long now){
-        if(prefs.getString("weatherCoords","").isEmpty())return "Weather · Set a city on Home";
+    static final class Weather {
+        final String temperature,condition;
+        final int code;
+        final boolean day,cached;
+        Weather(String temperature,String condition,int code,boolean day,boolean cached){
+            this.temperature=temperature;this.condition=condition;this.code=code;this.day=day;this.cached=cached;
+        }
+        String description(){return (cached?"Cached · ":"")+(temperature.isEmpty()?"Weather":temperature)+" · "+condition;}
+    }
+    private static Weather unavailable(String reason){return new Weather("",reason,-1,true,false);}
+    static Weather weather(SharedPreferences prefs,long now){
+        if(prefs.getString("weatherCoords","").isEmpty())return unavailable("Set a city on Home");
         int freshness=DreamRules.weatherFreshness(prefs.getLong("weatherAt",0),now);
-        if(freshness==0)return "Weather · No recent data";
+        if(freshness==0)return unavailable("No recent data");
         try{
             JSONObject data=new JSONObject(prefs.getString("weatherJson",""));
             double c=data.getDouble("temperature");
-            if(!Double.isFinite(c)||c < -100||c > 70)return "Weather · Unavailable";
+            if(!Double.isFinite(c)||c < -100||c > 70)return unavailable("Unavailable");
             int code=data.getInt("code");
-            String condition=DashboardCards.condition(code);
-            return (freshness==2?"Cached · ":"")+DreamRules.temperature(c,prefs.getBoolean("weatherF",true))+" · "+condition;
-        }catch(Exception ignored){return "Weather · Unavailable";}
+            return new Weather(DreamRules.temperature(c,prefs.getBoolean("weatherF",true)),DashboardCards.condition(code),code,data.optBoolean("day",true),freshness==2);
+        }catch(Exception ignored){return unavailable("Unavailable");}
     }
     static String alarm(Context context,long now){
         try{

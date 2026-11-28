@@ -14,6 +14,32 @@ final class DreamRules {
         if(now<=0||remaining<=0||remaining>Long.MAX_VALUE-now)return -1;
         return now+remaining;
     }
+    static final int WEATHER_UNKNOWN=0,WEATHER_CLEAR=1,WEATHER_PARTLY=2,WEATHER_CLOUD=3,WEATHER_FOG=4,WEATHER_RAIN=5,WEATHER_SNOW=6,WEATHER_STORM=7;
+    static int weatherIcon(int code){
+        if(code==0)return WEATHER_CLEAR;
+        if(code==1||code==2)return WEATHER_PARTLY;
+        if(code==3)return WEATHER_CLOUD;
+        if(code==45||code==48)return WEATHER_FOG;
+        if((code>=51&&code<=57)||(code>=61&&code<=67)||(code>=80&&code<=82))return WEATHER_RAIN;
+        if((code>=71&&code<=77)||code==85||code==86)return WEATHER_SNOW;
+        if(code>=95&&code<=99)return WEATHER_STORM;
+        return WEATHER_UNKNOWN;
+    }
+    static boolean footerColumns(float width,float unit,boolean environment,boolean battery){
+        return environment&&battery&&unit>0&&width>=unit*.72f;
+    }
+    // Dimensions in units of the smaller screen edge; draw and reserve the same space.
+    static float footerEnvironment(boolean weather,boolean alarm){
+        return (weather?.105f:0)+(alarm?.095f:0)+(weather&&alarm?.022f:0);
+    }
+    static float footerBattery(boolean battery,boolean bar,boolean estimate){
+        return battery?.105f+(bar?.035f:0)+(estimate?.052f:0):0;
+    }
+    static float footerHeight(boolean greeting,boolean weather,boolean alarm,boolean battery,boolean bar,boolean estimate,boolean columns){
+        float env=footerEnvironment(weather,alarm),power=footerBattery(battery,bar,estimate);
+        float body=columns?Math.max(env,power):env+power+(env>0&&power>0?.025f:0);
+        return (greeting?(body>0?.078f:.055f):0)+body;
+    }
     // Same 30-minute freshness threshold as the dashboard; do not present an old
     // observation as current conditions after six hours of unattended charging.
     static int weatherFreshness(long sampled,long now){
