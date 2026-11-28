@@ -27,8 +27,9 @@ export function createBrainLab({db,models,requestModel,search,read,build,pace=pa
   const status=()=>({hindsightBackend:hindsightBackend(),running:!!controller,current,providerDiagnostics:models.diagnostics(),history:db.prepare("SELECT json_remove(report_json,'$.cases') AS report_json FROM nas_brain_reports ORDER BY created_at DESC LIMIT 20").all().map(r=>JSON.parse(r.report_json)).filter(r=>r.id!==current?.id)});
   function start(body){
     if(controller)throw invalid("Brain Lab is already running",409);
-    const {provider,model,scenarioIds,mode,repetitions,publicAgent=false,memoryEngine="sqlite"}=body??{};
+    const {provider,model,scenarioIds,mode,repetitions,publicAgent=false,memoryEngine="sqlite",retrievalStrategy="automatic"}=body??{};
     if(!["sqlite","hindsight","fixed","none"].includes(memoryEngine)||memoryEngine==="hindsight"&&!hindsight)throw invalid("Memory engine unavailable");
+    if(!["automatic","on-demand"].includes(retrievalStrategy)||retrievalStrategy==="on-demand"&&(memoryEngine!=="hindsight"||!publicAgent))throw invalid("On-demand requires Hindsight and the native agent");
     if(typeof publicAgent!=="boolean"||publicAgent&&!["nvidia","groq","cerebras"].includes(provider))throw invalid("Native agent requires NVIDIA, Groq or Cerebras");
     if(!["simple","strict","off"].includes(mode)||![1,2,3,5].includes(repetitions)||!Array.isArray(scenarioIds)||!scenarioIds.length||new Set(scenarioIds).size!==scenarioIds.length)throw invalid("Select scenarios, mode and repetitions");
     const selected=models.configFor(provider,model);
@@ -40,7 +41,7 @@ export function createBrainLab({db,models,requestModel,search,read,build,pace=pa
     if(mode==="off"&&scenarios.some(s=>s.steps.some(t=>t.expect.web===true||t.expect.route==="research")))throw invalid("Enable Simple or Strict for web scenarios");
     if(!models.available(provider))throw models.quotaError(provider);
     controller=new AbortController();const signal=controller.signal;
-    const report={id:randomUUID(),state:"running",startedAt:Date.now(),finishedAt:null,build,provider,model,mode,repetitions,publicAgent,memoryEngine,...(memoryEngine==="hindsight"?{hindsightBackend:hindsightBackend()}:{}),scenarioIds,total,done:0,currentLabel:"Starting",cases:[],environment:mode==="off"?"isolated-synthetic":"isolated-synthetic+live-public-web",writesToRealMemories:false};
+    const report={id:randomUUID(),state:"running",startedAt:Date.now(),finishedAt:null,build,provider,model,mode,repetitions,publicAgent,memoryEngine,retrievalStrategy,...(memoryEngine==="hindsight"?{hindsightBackend:hindsightBackend()}:{}),scenarioIds,total,done:0,currentLabel:"Starting",cases:[],environment:mode==="off"?"isolated-synthetic":"isolated-synthetic+live-public-web",writesToRealMemories:false};
     current=report;
     try{save(report);}catch(e){controller=null;current=null;throw e;}
     void run(report,scenarios,selected,signal).catch(()=>{console.error("Could not persist NAS Brain Lab report");});
@@ -65,7 +66,7 @@ export function createBrainLab({db,models,requestModel,search,read,build,pace=pa
             // Each real request is counted by the production quota ledger.
             if(!models.available(selected.provider))throw models.quotaError(selected.provider);
             let result;
-            try{result=await executeNasTurn({store:sandbox,conversationId:chat.id,question:step.user,selected,mode:report.mode,publicAgent:report.publicAgent,agentDiagnostics:true,requestModel,search,read,signal,trace,memoryEngine:bank?({question,history,signal})=>recallContext(hindsight,bank,[...history.slice(0,-1).filter(m=>m.role==="user").slice(-2).map(m=>m.content),question].join("\n"),{text:"",ids:[],auditLines:[]},{signal,strict:true}):report.memoryEngine==="fixed"?()=>({text:"Fixed synthetic reference (same evidence for each model):\n"+EVAL_FACTS.map(f=>f.fact).join("\n"),ids:EVAL_FACTS.map(f=>f.id),auditLines:EVAL_FACTS.map(f=>f.fact),engine:"fixed"}):report.memoryEngine==="none"?()=>({text:"",ids:[],auditLines:[],engine:"none"}):undefined,
+            try{result=await executeNasTurn({store:sandbox,conversationId:chat.id,question:step.user,selected,mode:report.mode,publicAgent:report.publicAgent,agentDiagnostics:true,retrievalStrategy:report.retrievalStrategy,requestModel,search,read,signal,trace,memoryEngine:bank?({question,history,signal})=>recallContext(hindsight,bank,[...history.slice(0,-1).filter(m=>m.role==="user").slice(-2).map(m=>m.content),question].join("\n"),{text:"",ids:[],auditLines:[]},{signal,strict:true}):report.memoryEngine==="fixed"?()=>({text:"Fixed synthetic reference (same evidence for each model):\n"+EVAL_FACTS.map(f=>f.fact).join("\n"),ids:EVAL_FACTS.map(f=>f.id),auditLines:EVAL_FACTS.map(f=>f.fact),engine:"fixed"}):report.memoryEngine==="none"?()=>({text:"",ids:[],auditLines:[],engine:"none"}):undefined,
               reserve:()=>models.reserve(selected.provider),canRequest:(slots=1)=>models.available(selected.provider,slots),activity:e=>events.push(e)});
             }catch(e){row.steps.push({user:step.user,error:signal.aborted?"Stopped":e?.upstreamStatus===429?"Upstream HTTP 429":typeof e?.code==="string"?e.code:"Provider or turn failed",...(e?.upstreamStatus===429?{upstreamStatus:429}:{}),timing:trace.snapshot(),events,actualModel:trace.actualModel()});report.done++;save(report);if(signal.aborted||e?.status===429||e?.upstreamStatus===429)throw e;continue;}
             signal.throwIfAborted();
