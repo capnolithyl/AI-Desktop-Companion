@@ -11,7 +11,7 @@ export const containsCredential=text=>redactCredentials(text)!==String(text??"")
 
 const tool=(name,description,properties={},required=[])=>({type:"function",function:{name,description,parameters:{type:"object",properties,required,additionalProperties:false}}});
 const string={type:"string"};
-const recallTool=tool("recall_memory","Retrieve relevant saved facts, interests, character canon and past conversations. Search for what would help with the practical goal of the current request, not just words in the question. When useful context is missing, query for the specific owner fact needed (e.g. current location, equipment or preferences). Do not repeat recall if the supplied context is sufficient. Use scope=character for your own fictional history, scope=editable for the owner-editable local library (including newer edits), and owner for personal memories (default).",{query:string,scope:{type:"string",enum:["owner","character","editable"]}},["query"]);
+const recallTool=tool("recall_memory","Retrieve relevant saved facts, interests, character canon and past conversations. Search for what would help with the practical goal of the current request, not just words in the question. When useful context is missing, query for the specific owner fact needed (e.g. current location, equipment or preferences). When the owner asks about remembered facts or recommendations that depend on their preferences, recall the missing information. Do not recall for self-contained conversation, or repeat recall if the supplied context is sufficient. Use scope=character for your own fictional history, scope=editable for the owner-editable local library (including newer edits), and owner for personal memories (default).",{query:string,scope:{type:"string",enum:["owner","character","editable"]}},["query"]);
 const findTool=tool("find_knowledge","Find available private Notion documents and cached webpages by topic or title. Returns document IDs.",{query:string},["query"]);
 const readTool=tool("read_knowledge","Read a document returned by find_knowledge. Choose manuscript for a complete chapter including linked scenes, scenes for scene links, full for a whole ordinary page, or excerpt for a focused question.",{id:string,scope:{type:"string",enum:["excerpt","full","manuscript","scenes"]}},["id","scope"]);
 const searchTool=tool("search_web","Search public information using concise public entity names and terms. Never send private conversation, memories, credentials or document content. Use when learning about an unfamiliar public topic or checking facts. Returns numbered public sources.",{query:string,recent:{type:"boolean"}},["query"]);
@@ -92,6 +92,7 @@ const suppliedWebURLs=question=>[...question.matchAll(/https?:\/\/[^\s<>"']+/gi)
 export async function companionTurn({store,conversationId,question,history,rawHistory,memory,profile,selected,mode,requestModel,reserve,canRequest,search,read,knowledge,trace,onDelta,activity,signal,now=new Date(),memoryEngine}){
   const initial=cleanHistory(history);
   const transcript=[...initial],sources=[],publicSources=[],handles=new Map(),ids=new Set(memory.ids),auditLines=[...memory.auditLines];
+  let recalledEngine=memory.engine;
   const webAllowed=mode!=="off"&&!webDeclined(question)&&!containsCredential(question);
   const tools=[recallTool,...(knowledge?[findTool,readTool]:[]),...(webAllowed?[searchTool,pageTool]:[])];
   const identities=webAllowed?privateIdentityFacts(store.listMemories(2000)):[];
@@ -152,7 +153,7 @@ export async function companionTurn({store,conversationId,question,history,rawHi
             if(!["owner","character","editable"].includes(scope))out=error("Invalid recall scope");
             else{
               const found=await retrieveNasMemory({store,conversationId,question:a.query,explicitRecall:true,scope,memoryEngine,signal,activity,trace,stage:"hindsight-tool-recall"});
-              for(const id of found.ids)ids.add(id);auditLines.push(...found.auditLines);
+              for(const id of found.ids)ids.add(id);auditLines.push(...found.auditLines);recalledEngine=found.engine??"sqlite";
               out={memory:found.text||"No matching memory",dialogue:scope==="editable"||scope==="owner"&&(!memoryEngine||found.engine==="sqlite-fallback")?store.library.recallDialogue?.(a.query)??[]:[],retrieval:{engine:found.engine??"sqlite",completeLibrary:false}};
               activity({title:"Memory retrieved",detail:"Model requested additional context ("+scope+")",lines:[]});
             }
@@ -222,5 +223,5 @@ export async function companionTurn({store,conversationId,question,history,rawHi
   // Model output is plain dialogue. Source metadata remains in diagnostics.
   trace.firstText();onDelta(answer);
   activity({title:"Companion answer",detail:modelCalls+" model calls; "+toolCount+" tool requests",lines:[]});
-  return {answer,memory:{...memory,ids:[...ids],auditLines:[...new Set(auditLines)].slice(0,32)},researched:{sources:sources.map(s=>({...metadata(s),content:s.content})),local,note:"",evidence:"",agentEvidence:publicSources.slice(0,4)}};
+  return {answer,memory:{...memory,engine:recalledEngine,ids:[...ids],auditLines:[...new Set(auditLines)].slice(0,32)},researched:{sources:sources.map(s=>({...metadata(s),content:s.content})),local,note:"",evidence:"",agentEvidence:publicSources.slice(0,4)}};
 }
